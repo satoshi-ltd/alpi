@@ -30,7 +30,7 @@ function Tag({ label, tone }) {
   const bg = tone === 'danger' ? `${colors.danger}22` : tone === 'warn' ? `${colors.warning}22` : colors.hover;
   const fg = tone === 'danger' ? colors.danger : tone === 'warn' ? colors.warning : colors.ink2;
   return (
-    <View style={{ paddingHorizontal: space.s3, paddingVertical: space.s1, borderRadius: radii.md, backgroundColor: bg }}>
+    <View style={{ paddingHorizontal: space.s3, paddingVertical: space.s1, borderRadius: radii.tag, backgroundColor: bg }}>
       <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: fg }}>{label}</Text>
     </View>
   );
@@ -100,7 +100,7 @@ export function ConnectionSheet({ open, onClose }) {
                       style={{
                         width: 40,
                         height: 40,
-                        borderRadius: 20,
+                        borderRadius: radii.xs,
                         backgroundColor: colors.bgSide,
                         alignItems: 'center',
                         justifyContent: 'center',

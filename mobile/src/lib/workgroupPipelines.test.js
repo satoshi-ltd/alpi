@@ -5,9 +5,11 @@ import {
   namedPipelines,
   phaseJumpable,
   phaseUnavailable,
-  runPhases,
   runStatus,
 } from './workgroupPipelines';
+import { runChips } from '../../../common/pipelinePhases.mjs';
+
+const runPhases = (run) => runChips(run, null, null).map(({ slug, state, seq }) => ({ slug, state, seq }));
 
 const WG = {
   id: 'wg1',
@@ -141,7 +143,7 @@ const ADHOC = {
   pipeline_run: null,
 };
 
-describe('runPhases', () => {
+describe('run chips', () => {
   it('keeps the daemon states of a launch run verbatim', () => {
     expect(runPhases(LAUNCH_RUN.pipeline_run)).toEqual([
       { slug: 'setup', state: 'completed', seq: 5 },
@@ -178,10 +180,10 @@ describe('runPhases', () => {
 });
 
 describe('runStatus', () => {
-  it('names the states desktop labels, tone included', () => {
-    expect(runStatus(BETWEEN_RUN.pipeline_run)).toEqual({ tone: 'off', text: 'between phases' });
-    expect(runStatus(BLOCKED_RUN.pipeline_run)).toEqual({ tone: 'err', text: 'blocked' });
-    expect(runStatus(COMPLETED_RUN.pipeline_run)).toEqual({ tone: 'on', text: 'completed' });
+  it('names the states desktop words, and leaves blocked to the phase chip', () => {
+    expect(runStatus(BETWEEN_RUN.pipeline_run)).toEqual({ text: 'between phases' });
+    expect(runStatus(COMPLETED_RUN.pipeline_run)).toEqual({ text: 'completed' });
+    expect(runStatus(BLOCKED_RUN.pipeline_run)).toBeNull();
   });
 
   it('stays silent while a phase is running — the phase chain already says it', () => {

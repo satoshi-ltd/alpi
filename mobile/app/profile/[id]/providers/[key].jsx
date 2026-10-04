@@ -10,7 +10,7 @@ import { Field } from '../../../../src/components/Field';
 import { Eyebrow } from '../../../../src/components/Eyebrow';
 import { Icon } from '../../../../src/components/Icon';
 import { Pill } from '../../../../src/components/Pill';
-import { Row, RowSeparator, SectionHeader } from '../../../../src/components/Row';
+import { Row, RowGroup, RowSeparator, SectionHeader } from '../../../../src/components/Row';
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useToast } from '../../../../src/components/Toast';
 import { Bold, Code, TypedConfirm } from '../../../../src/components/TypedConfirm';
@@ -153,7 +153,7 @@ export default function ProviderKey() {
               style={{
                 padding: space.s5,
                 backgroundColor: colors.bgInput,
-                borderRadius: radii.lg,
+                borderRadius: radii.xs,
               }}
             >
               <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink }}>{value || '—'}</Text>
@@ -307,16 +307,18 @@ function OllamaScreen({
                   </Text>
                 </View>
               ) : (
-                myModels.map((m, i) => (
-                  <View key={m}>
-                    {i > 0 ? <RowSeparator /> : null}
-                    <Row
-                      label={m}
-                      helper={`${existingName}/${m}`}
-                      chevron={false}
-                    />
-                  </View>
-                ))
+                <RowGroup>
+                  {myModels.map((m, i) => (
+                    <View key={m}>
+                      {i > 0 ? <RowSeparator /> : null}
+                      <Row
+                        label={m}
+                        helper={`${existingName}/${m}`}
+                        chevron={false}
+                      />
+                    </View>
+                  ))}
+                </RowGroup>
               )}
 
               <View style={{ padding: space.s8 }}>

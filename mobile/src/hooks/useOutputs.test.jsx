@@ -188,3 +188,55 @@ describe('useMarkAllOutputsRead', () => {
     expect(call).toHaveBeenCalledWith('host.outputs.mark_all_read', { profile: 'vera' });
   });
 });
+
+describe('useOutput runJob', () => {
+  it('fires the job behind a notification on the daemon that filed it', async () => {
+    const call = vi.fn(async (method) => (method === 'host.outputs.read' ? { output: { id: 'f1' } } : { ok: true }));
+    const { Wrapper } = makeProvider({ call });
+    const { result } = renderHook(() => useOutput('abby', 'f1'), { wrapper: Wrapper });
+    await waitFor(() => expect(result.current.row).toEqual({ id: 'f1' }));
+    await act(async () => { await result.current.runJob('j-mail'); });
+    expect(call).toHaveBeenCalledWith('host.schedule.fire', { profile: 'abby', id: 'j-mail' });
+  });
+
+  it('refuses a connection it does not know instead of firing on the active daemon', async () => {
+    const call = vi.fn(async () => ({}));
+    const { Wrapper } = makeProvider({ call });
+    const { result } = renderHook(() => useOutput('abby', 'f1', 'gone'), { wrapper: Wrapper });
+    await expect(result.current.runJob('j-mail')).rejects.toThrow('unknown connection');
+    expect(call).not.toHaveBeenCalledWith('host.schedule.fire', expect.anything());
+  });
+});
+
+describe('useOutput markUnread', () => {
+  it('marks the row unread on the active daemon and keeps the returned row', async () => {
+    const call = vi.fn(async (method, params) => (method === 'host.outputs.read'
+      ? { output: { id: params.id, status: 'read' } }
+      : { ok: true, output: { id: params.id, status: 'unread' } }));
+    const { Wrapper } = makeProvider({ call });
+    const { result } = renderHook(() => useOutput('abby', 'f1'), { wrapper: Wrapper });
+    await waitFor(() => expect(result.current.row?.status).toBe('read'));
+    await act(async () => { await result.current.markUnread(); });
+    expect(call).toHaveBeenCalledWith('host.outputs.mark_unread', { profile: 'abby', id: 'f1' });
+    expect(result.current.row?.status).toBe('unread');
+  });
+
+  it('surfaces a missing verb so the page can hide the action', async () => {
+    const call = vi.fn(async (method) => {
+      if (method === 'host.outputs.read') return { output: { id: 'f1', status: 'read' } };
+      throw Object.assign(new Error('unknown method: host.outputs.mark_unread'), { code: -32601 });
+    });
+    const { Wrapper } = makeProvider({ call });
+    const { result } = renderHook(() => useOutput('abby', 'f1'), { wrapper: Wrapper });
+    await waitFor(() => expect(result.current.row).toBeTruthy());
+    await expect(result.current.markUnread()).rejects.toMatchObject({ code: -32601 });
+  });
+
+  it('refuses a connection it does not know instead of marking the active daemon', async () => {
+    const call = vi.fn(async () => ({}));
+    const { Wrapper } = makeProvider({ call });
+    const { result } = renderHook(() => useOutput('abby', 'f1', 'gone'), { wrapper: Wrapper });
+    await expect(result.current.markUnread()).rejects.toThrow('unknown connection');
+    expect(call).not.toHaveBeenCalledWith('host.outputs.mark_unread', expect.anything());
+  });
+});

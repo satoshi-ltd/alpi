@@ -43,7 +43,7 @@ vi.mock('../../theme/ThemeContext', () => ({
     pref: 'system',
     mode: 'dark',
     setMode: vi.fn(),
-    colors: { bgPane: '#fff', bgInput: '#eee', ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', line: '#eee', selected: '#eee', danger: '#c00' },
+    colors: { bg: '#fff', accent: '#8a5a0a', bgPane: '#fff', bgInput: '#eee', ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', line: '#eee', selected: '#eee', danger: '#c00' },
     fonts: { sans: { regular: 'r', medium: 'm', semibold: 's' }, mono: 'mono', monoMedium: 'monoMedium' },
     fontSizes: { xs: 11, sm: 12, md: 14, lg: 15, xl: 18 },
     textScale: h.textScale,
@@ -54,6 +54,9 @@ vi.mock('../../theme/ThemeContext', () => ({
 vi.mock('../../components/OnOff', () => ({
   OnOff: ({ on, onLabel, offLabel }) =>
     React.createElement('span', { 'data-onoff': on ? onLabel : offLabel }),
+}));
+vi.mock('../../components/Fold', () => ({
+  Fold: ({ fold, color, size }) => React.createElement('span', { 'data-fold': fold, 'data-color': color ?? '', 'data-size': size }),
 }));
 vi.mock('../../components/Toast', () => ({ useToast: () => vi.fn() }));
 vi.mock('../../components/TypedConfirm', () => ({
@@ -100,6 +103,17 @@ describe('SettingsBody', () => {
       expect(screen.getByText(label)).toBeTruthy();
     }
     expect(screen.getByText('Alpi mobile · v0.3.1')).toBeTruthy();
+  });
+
+  it('signs the About block with the alpaca and a crease wordmark', async () => {
+    render(<SettingsBody />);
+    await waitFor(() => expect(screen.getByText('Face ID unlock')).toBeTruthy());
+    expect(document.querySelectorAll('text')).toHaveLength(1);
+    expect(document.querySelector('text').textContent).toBe('alpi');
+    expect(document.querySelectorAll('linearGradient')).toHaveLength(1);
+    const mark = document.querySelector('[data-fold]');
+    expect(mark.getAttribute('data-fold')).toBe('alpaca');
+    expect(mark.getAttribute('data-color')).toBe('');
   });
 
   it('names the theme preference without leaking the resolved colour', async () => {

@@ -1,4 +1,5 @@
 import { buttonHeights, buttonVariants } from '../../../common/button.mjs';
+import { mixHex } from '../../../common/color.mjs';
 import { buttonStateCases } from '../../../common/button.fixtures.mjs';
 import React from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -7,14 +8,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 vi.mock('react-native', () => ({
   Pressable: ({ children, onPress, disabled, accessibilityLabel, accessibilityRole, accessibilityState, style }) =>
     <button onClick={onPress} disabled={disabled} aria-label={accessibilityLabel} role={accessibilityRole}
-      data-style={JSON.stringify(Object.assign({}, ...style({ pressed: false })))} aria-busy={accessibilityState?.busy} aria-disabled={accessibilityState?.disabled}>{children}</button>,
+      data-style={JSON.stringify(Object.assign({}, ...style({ pressed: false })))} data-pressed-style={JSON.stringify(Object.assign({}, ...style({ pressed: true })))} aria-busy={accessibilityState?.busy} aria-disabled={accessibilityState?.disabled}>{children}</button>,
   Text: ({ children, style }) => <span data-label-style={JSON.stringify(Object.assign({}, ...style.filter(Boolean)))}>{children}</span>,
   View: ({ children }) => <div>{children}</div>,
   StyleSheet: { create: (styles) => styles, absoluteFillObject: { position: 'absolute', inset: 0 } },
   ActivityIndicator: () => <span data-testid="spinner" />,
 }));
 vi.mock('../theme/ThemeContext', () => ({ useTheme: () => ({
-  colors: { ink: '#111', ink2: '#333', ink4: '#aaa', bgPane: '#fff', bgInput: '#eee', danger: '#c14545', dangerText: '#b73737', onDanger: '#ffffff', hover: '#ddd' },
+  colors: { ink: '#111', ink2: '#333', ink4: '#aaa', bgPane: '#fff', bgInput: '#eee', danger: '#c14545', dangerText: '#b73737', onDanger: '#ffffff', hover: '#ddd', selected: '#ccc', line2: '#bbb' },
   fonts: { sans: { medium: 'medium', semibold: 'semibold' } }, fontSizes: { sm: 12, md: 14, lg: 15, xl: 18 },
 }) }));
 import { Button } from './Button';
@@ -52,7 +53,7 @@ describe('Button shared contract', () => {
     render(<Button title="Continue" variant={variant} />);
     const button = screen.getByRole('button', { name: 'Continue' });
     const style = JSON.parse(button.dataset.style);
-    const backgrounds = { primary: '#111', secondary: '#ddd', ghost: 'transparent', danger: '#c14545', 'danger-ghost': 'transparent' };
+    const backgrounds = { primary: '#111', secondary: '#ccc', ghost: 'transparent', danger: '#c14545', 'danger-ghost': 'transparent' };
     expect(style.backgroundColor).toBe(backgrounds[variant]);
   });
 
@@ -90,4 +91,28 @@ it('separates destructive text from a filled destructive foreground', () => {
 it('uses dark text on a light custom accent', () => {
   render(<Button title="Save" accent="#f0b447" />);
   expect(JSON.parse(screen.getByText('Save').dataset.labelStyle).color).toBe('#000000');
+});
+
+describe('Button as a paper sheet', () => {
+  it.each(['sm', 'md', 'lg', 'hero'])('cuts the %s button with 4 pt corners', (size) => {
+    render(<Button title="Go" size={size} />);
+    expect(JSON.parse(screen.getByRole('button').dataset.style).borderRadius).toBe(4);
+  });
+
+  it.each(buttonVariants.filter((v) => !v.includes('ghost')))('presses the %s button by a darker tone, never by fading', (variant) => {
+    render(<Button title="Go" variant={variant} />);
+    const button = screen.getByRole('button');
+    const idle = JSON.parse(button.dataset.style);
+    const pressed = JSON.parse(button.dataset.pressedStyle);
+    expect(pressed.backgroundColor).not.toBe(idle.backgroundColor);
+    expect(pressed.opacity).toBeUndefined();
+  });
+
+  it('darkens a pressed danger or custom-accent button instead of lightening it', () => {
+    render(<Button title="Go" variant="danger" />);
+    expect(JSON.parse(screen.getByRole('button').dataset.pressedStyle).backgroundColor).toBe(mixHex('#c14545', 0.82, '#000000'));
+    cleanup();
+    render(<Button title="Go" accent="#f0b447" />);
+    expect(JSON.parse(screen.getByRole('button').dataset.pressedStyle).backgroundColor).toBe(mixHex('#f0b447', 0.82, '#000000'));
+  });
 });

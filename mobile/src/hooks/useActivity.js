@@ -60,11 +60,14 @@ function raise(map, key, next) {
 
 export function rowStates(activity, nowSec = Date.now() / 1000) {
   const map = new Map();
+  const rerunning = new Set((activity?.running ?? []).filter((run) => run.job_id).map((run) => `${run.profile}/${run.job_id}`));
   for (const item of activity?.needsYou ?? []) {
     if (item.profile) raise(map, profileKey(item.profile), { state: 'needs-you' });
   }
   for (const job of activity?.scheduled ?? []) {
-    if (job.profile && recentlyFailed(job, nowSec)) raise(map, profileKey(job.profile), { state: 'failed' });
+    if (job.profile && recentlyFailed(job, nowSec) && !rerunning.has(`${job.profile}/${job.job_id}`)) {
+      raise(map, profileKey(job.profile), { state: 'failed' });
+    }
   }
   for (const run of activity?.running ?? []) {
     if (run.kind === 'workgroup' && run.workgroup_id) {

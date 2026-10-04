@@ -22,8 +22,8 @@ vi.mock('react-native', () => {
 
 vi.mock('react-native-reanimated', () => ({
   default: {
-    View: ({ children, pointerEvents }) =>
-      React.createElement('div', { 'data-pe': pointerEvents ?? '' }, children),
+    View: ({ children, pointerEvents, style }) =>
+      React.createElement('div', { 'data-pe': pointerEvents ?? '', 'data-shadow': [style].flat().find((x) => x?.shadowColor)?.shadowColor ?? '' }, children),
   },
   Easing: { bezier: (...points) => `bezier(${points.join(',')})` },
   useAnimatedStyle: (fn) => fn(),
@@ -42,6 +42,7 @@ vi.mock('../theme/ThemeContext', () => ({
     colors: { bgPane: '#fff', bgInput: '#fafafa', ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', line2: '#eee', danger: '#f00' },
     fonts: { sans: { regular: 'Geist_400Regular', semibold: 'Geist_600SemiBold' }, mono: 'GeistMono_400Regular', monoMedium: 'GeistMono_500Medium' },
     fontSizes: { xs: 11, sm: 12, md: 14, xl: 18 },
+    shadow: { base: { shadowColor: '#token-shadow', shadowRadius: 24 } },
   }),
 }));
 
@@ -55,6 +56,14 @@ describe('TypedConfirm rotation', () => {
     expect(container.querySelector('[data-orientations]').getAttribute('data-orientations')).toBe(
       'portrait,landscape-left,landscape-right',
     );
+  });
+});
+
+describe('TypedConfirm elevation', () => {
+  it('casts the theme shadow, not a literal one', () => {
+    const { container } = render(<TypedConfirm open onClose={() => {}} title="Delete profile" body="Permanent." expected="roma" />);
+    expect(container.querySelector('[data-shadow="#token-shadow"]')).toBeTruthy();
+    expect(container.querySelector('[data-shadow="#000"]')).toBeNull();
   });
 });
 

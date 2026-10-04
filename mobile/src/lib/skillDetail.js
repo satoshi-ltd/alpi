@@ -12,15 +12,22 @@ export function flattenTree(tree, parentPath = '') {
     const path = parentPath ? `${parentPath}/${node.name}` : node.name;
     if (node.kind === 'dir') {
       if (node.locked) {
-        out.push({ path: `${path}/`, kind: 'locked-dir', count: node.count ?? 0, mode: node.mode });
+        out.push({ path: `${path}/`, name: node.name, kind: 'locked-dir', locked: true, count: node.count ?? 0, mode: node.mode });
       } else if (Array.isArray(node.children)) {
         out.push(...flattenTree(node.children, path));
       } else {
-        out.push({ path: `${path}/`, kind: 'dir' });
+        out.push({ path: `${path}/`, name: node.name, kind: 'dir' });
       }
     } else {
-      out.push({ path, kind: 'file' });
+      out.push({ path, name: node.name, kind: 'file', size: Number(node.size) || 0 });
     }
   }
   return out;
+}
+
+export function fileSize(n) {
+  const b = Number(n) || 0;
+  if (b < 1024) return `${b}b`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)}kb`;
+  return `${(b / (1024 * 1024)).toFixed(1)}mb`;
 }

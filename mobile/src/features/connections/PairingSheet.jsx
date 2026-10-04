@@ -115,7 +115,7 @@ export function PairingSheet({ open, onClose, payload, onSettled }) {
             fontSize: fontSizes.sm,
             color: colors.ink2,
             padding: space.s5,
-            borderRadius: radii.lg,
+            borderRadius: radii.xs,
             backgroundColor: colors.bgInput,
             borderWidth: 0.5,
             borderColor: colors.line2,

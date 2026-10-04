@@ -4,7 +4,7 @@ import { Keyboard, Modal, Pressable, Text, useWindowDimensions, View } from 'rea
 import { GestureDetector } from 'react-native-gesture-handler';
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { radii, space, lineHeights, typography } from '../theme/tokens';
+import { radii, space, lineHeights, typography, veil } from '../theme/tokens';
 
 import { usePane } from '../nav/PaneContext';
 import { useTheme } from '../theme/ThemeContext';
@@ -113,7 +113,7 @@ export function Sheet({
       <Animated.View
         pointerEvents={open ? 'auto' : 'none'}
         style={[
-          { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', paddingBottom: kbHeight, justifyContent: twoPane ? 'center' : 'flex-end' },
+          { flex: 1, backgroundColor: veil(colors), paddingBottom: kbHeight, justifyContent: twoPane ? 'center' : 'flex-end' },
           backdropStyle,
         ]}
       >
@@ -123,8 +123,8 @@ export function Sheet({
             {
               maxHeight: view.maxHeight,
               backgroundColor: colors.bgPane,
-              borderTopLeftRadius: radii.sheet,
-              borderTopRightRadius: radii.sheet,
+              borderTopLeftRadius: radii.xs,
+              borderTopRightRadius: radii.xs,
               overflow: 'hidden',
               ...shadow.base,
               ...dialog,

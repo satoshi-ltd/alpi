@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 afterEach(cleanup);
 
@@ -10,8 +10,16 @@ vi.mock('react-native', () => {
   return { View, Text };
 });
 
+const nav = vi.hoisted(() => ({ calls: [], params: {} }));
 vi.mock('expo-router', () => ({
-  useRouter: () => ({ push: vi.fn(), back: vi.fn(), replace: vi.fn() }),
+  useLocalSearchParams: () => nav.params,
+  useRouter: () => ({
+    push: vi.fn(),
+    back: vi.fn(),
+    replace: (to) => nav.calls.push(['replace', to]),
+    canDismiss: () => true,
+    dismissAll: () => nav.calls.push(['dismissAll']),
+  }),
 }));
 vi.mock('react-native-safe-area-context', () => ({
   SafeAreaView: ({ children }) => React.createElement('div', {}, children),
@@ -25,10 +33,12 @@ vi.mock('../src/theme/ThemeContext', () => ({
   }),
 }));
 vi.mock('../src/components/Button', () => ({
-  Button: ({ title }) => React.createElement('button', { type: 'button' }, title),
+  Button: ({ title, onPress }) => React.createElement('button', { type: 'button', onClick: onPress }, title),
 }));
 vi.mock('../src/components/Icon', () => ({ Icon: () => null }));
-vi.mock('../src/components/AlpiMark', () => ({ AlpiMark: () => null }));
+vi.mock('../src/components/Fold', () => ({
+  Fold: ({ fold, color, size }) => React.createElement('span', { 'data-fold': fold, 'data-color': color ?? '', 'data-size': size }),
+}));
 
 import Onboarding from '../app/onboarding.jsx';
 import PairSuccess from '../app/paired.jsx';
@@ -36,9 +46,17 @@ import PairSuccess from '../app/paired.jsx';
 describe('pairing copy vocabulary', () => {
   it('keeps Alpi as the product name and profiles as the entity on onboarding', () => {
     const { container } = render(<Onboarding />);
-    expect(screen.getByText('Connect to Alpi')).toBeTruthy();
-    expect(screen.getByText(/talk to your profiles from anywhere/)).toBeTruthy();
+    expect(screen.getByText('Pair with your alpi')).toBeTruthy();
+    expect(screen.getByText(/its profiles come with you/)).toBeTruthy();
     expect(container.textContent).not.toMatch(/alpis\b/i);
+  });
+
+  it('greets with the alpaca fold in the theme ink', () => {
+    const { container } = render(<Onboarding />);
+    const mark = container.querySelector('[data-fold]');
+    expect(mark.getAttribute('data-fold')).toBe('alpaca');
+    expect(mark.getAttribute('data-color')).toBe('');
+    expect(mark.getAttribute('data-size')).toBe('88');
   });
 
   it('calls the entity a profile on the paired screen', () => {
@@ -47,3 +65,13 @@ describe('pairing copy vocabulary', () => {
     expect(container.textContent).not.toMatch(/alpis\b/i);
   });
 });
+
+describe('leaving onboarding', () => {
+  it('clears the onboarding screens before opening the inbox, so Back never returns to them', () => {
+    nav.calls.length = 0;
+    render(<PairSuccess />);
+    fireEvent.click(screen.getByText('Open inbox'));
+    expect(nav.calls).toEqual([['dismissAll'], ['replace', '/']]);
+  });
+});
+

@@ -1,84 +1,47 @@
-import { useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useRef } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../../../src/theme/tokens';
 
-import { ActionSheet } from '../../../../src/components/ActionSheet';
-import { Icon } from '../../../../src/components/Icon';
-import { Row, RowSeparator } from '../../../../src/components/Row';
-import { ScreenHeader } from '../../../../src/components/ScreenHeader';
-import { useToast } from '../../../../src/components/Toast';
-import { Bold, Code, TypedConfirm } from '../../../../src/components/TypedConfirm';
+import { Row, RowGroup, RowSeparator } from '../../../../src/components/Row';
+import { PanelHeader } from '../../../../src/features/profile/PanelHeader';
+import { StatusWord } from '../../../../src/features/profile/StatusWord';
 import { useBack } from '../../../../src/hooks/useBack';
 import { useScheduleList } from '../../../../src/hooks/useDaemonData';
 import { usePullRefresh } from '../../../../src/hooks/usePullRefresh';
 import { useEventEffect } from '../../../../src/hooks/useEvents';
-import { useEndpoint } from '../../../../src/lib/EndpointContext';
-import { scheduleSummary, formatLastRun } from '../../../../src/lib/scheduleFormat';
+import { formatLastRun, jobFailed, jobTitle } from '../../../../src/lib/scheduleFormat';
+import { describeWhen } from '../../../../../common/schedule.mjs';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 import { EMPTY } from '../../../../../common/emptyCopy.mjs';
 
 export default function ScheduleList() {
-  const { id } = useLocalSearchParams();
+  const { id, job } = useLocalSearchParams();
+  const router = useRouter();
   const goBack = useBack();
-  const toast = useToast();
-  const { call } = useEndpoint();
   const { colors, fonts, fontSizes } = useTheme();
   const pull = usePullRefresh(() => schedule.refresh?.());
   const schedule = useScheduleList(id);
-  const [target, setTarget] = useState(null);
-  const [busyId, setBusyId] = useState(null);
-  const [confirmDelete, setConfirmDelete] = useState(null);
-
   const jobs = schedule.data?.jobs ?? [];
+  const linked = useRef(false);
   const loadError = schedule.error ? String(schedule.error?.message ?? schedule.error) : null;
 
-  // schedule.changed fires on remove/pause/resume from any client — without it, a desktop pause wouldn't update this screen until manual pull-to-refresh.
+  const open = (jid) => router.push({ pathname: `/profile/${id}/schedule/[job]`, params: { job: String(jid) } });
+
+  useEffect(() => {
+    if (linked.current || !job) return;
+    linked.current = true;
+    open(job);
+  }, [job]);
+
   useEventEffect(['schedule.done', 'schedule.failed', 'schedule.changed'], (ev) => {
     if (ev.data?.profile === id) schedule.refresh();
   });
 
-  const fire = async (jid) => {
-    setBusyId(jid);
-    try {
-      await call('host.schedule.fire', { profile: id, id: jid });
-      // iOS drops a Modal presented while another is dismissing; defer past the ~220ms ActionSheet close.
-      setTimeout(() => toast({ message: `Schedule ${jid} started`, kind: 'success', duration: 2000 }), 350);
-    } catch (e) {
-      setTimeout(() => toast({ message: `Fire failed: ${String(e)}`, kind: 'danger', duration: 4000 }), 350);
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const remove = async (jid) => {
-    try {
-      await call('host.schedule.remove', { profile: id, id: jid });
-      toast({ title: 'Deleted', message: jid, duration: 1500 });
-      schedule.refresh();
-    } catch (e) {
-      toast({ title: 'Delete failed', message: String(e) });
-    }
-  };
-
-  const togglePaused = async (job) => {
-    try {
-      await call('host.schedule.set_paused', { profile: id, id: job.id, paused: !job.paused });
-      schedule.refresh();
-    } catch (e) {
-      toast({ title: 'Toggle failed', message: String(e) });
-    }
-  };
-
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-      <ScreenHeader
-        title="Schedule"
-        subtitle={`@${id} · CRON JOBS · ${jobs.length}`}
-        onBack={goBack}
-        // Schedules are created via chat (ask the agent to set one up) — no in-app "New" affordance. List + manage (fire/pause/delete) live here, creation does not.
-      />
+      <PanelHeader profile={id} section="SCHEDULES" count={jobs.length} onBack={goBack} />
       <ScrollView refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />} contentContainerStyle={{ paddingBottom: space.s9 }}>
         {schedule.loading && jobs.length === 0 && !loadError ? (
           <View style={{ padding: space.s10, alignItems: 'center' }}>
@@ -93,103 +56,50 @@ export default function ScheduleList() {
               {loadError}
             </Text>
           </View>
-        ) : jobs.length === 0 ? (
-          <Row label={EMPTY.schedule.title} helper={EMPTY.schedule.hint} chevron={false} />
         ) : (
-          jobs.map((j, i) => {
-            const summary = scheduleSummary(j);
-            const desc = j.prompt || '—';
-            const paused = !!j.paused;
-            return (
-              <View key={j.id}>
-                {i > 0 ? <RowSeparator /> : null}
-                <Pressable
-                  onPress={() => setTarget(j)}
-                  android_ripple={{ color: colors.selected }}
-                  style={({ pressed }) => ({
-                    paddingHorizontal: space.s8,
-                    paddingVertical: space.s6,
-                    gap: space.s1,
-                    backgroundColor: pressed ? colors.selected : 'transparent',
-                    opacity: paused ? 0.55 : 1,
-                  })}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s5 }}>
-                    <Text
-                      style={{ flex: 1, fontFamily: fonts.monoMedium, fontSize: fontSizes.md, color: colors.ink }}
-                      numberOfLines={1}
+          <RowGroup style={{ marginTop: space.s5 }}>
+            {jobs.length === 0 ? (
+              <Row label={EMPTY.schedule.title} helper={EMPTY.schedule.hint} chevron={false} />
+            ) : (
+              jobs.map((j, i) => {
+                const paused = !!j.paused;
+                const failed = jobFailed(j);
+                return (
+                  <View key={j.id}>
+                    {i > 0 ? <RowSeparator /> : null}
+                    <Pressable
+                      onPress={() => open(j.id)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${jobTitle(j)}, ${describeWhen(j)}${paused ? ', paused' : failed ? ', last run failed' : ''}`}
+                      android_ripple={{ color: colors.selected }}
+                      style={({ pressed }) => ({
+                        minHeight: 44,
+                        paddingHorizontal: space.s8,
+                        paddingVertical: space.s5,
+                        gap: space.s1,
+                        backgroundColor: pressed ? colors.selected : 'transparent',
+                      })}
                     >
-                      {summary}
-                    </Text>
-                    {busyId === j.id ? (
-                      <ActivityIndicator color={colors.ink3} size="small" />
-                    ) : (
-                      <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }} numberOfLines={1}>
-                        {j.id}
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s4 }}>
+                        <StatusWord word="" on={!paused} />
+                        <Text style={{ flex: 1, fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, color: paused ? colors.ink3 : colors.ink }} numberOfLines={1}>
+                          {jobTitle(j)}
+                        </Text>
+                        <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: failed && !paused ? colors.dangerText : colors.ink3 }} numberOfLines={1}>
+                          {paused ? 'paused' : failed ? 'failed' : j.last_run_at ? formatLastRun(j.last_run_at, j.last_run_status).replace(/^ran /, '') : ''}
+                        </Text>
+                      </View>
+                      <Text style={{ marginLeft: space.s6, fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }} numberOfLines={1}>
+                        {describeWhen(j)}
                       </Text>
-                    )}
+                    </Pressable>
                   </View>
-                  <Text
-                    style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3, lineHeight: fontSizes.sm * 1.4 }}
-                    numberOfLines={2}
-                  >
-                    {j.title || desc}
-                  </Text>
-                  <Text
-                    style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }}
-                    numberOfLines={1}
-                  >
-                    {formatLastRun(j.last_run_at, j.last_run_status)}
-                  </Text>
-                </Pressable>
-              </View>
-            );
-          })
+                );
+              })
+            )}
+          </RowGroup>
         )}
       </ScrollView>
-      <ActionSheet
-        open={!!target}
-        onClose={() => setTarget(null)}
-        title={target ? scheduleSummary(target) : ''}
-        subtitle={target?.id}
-        description={target?.prompt ?? null}
-        actions={
-          target
-            ? [
-                { id: 'fire', label: 'Fire now', icon: <Icon name="play" size="lg" color={colors.ink2} />, onPress: () => fire(target.id) },
-                {
-                  id: 'toggle',
-                  label: target.paused ? 'Resume' : 'Pause',
-                  icon: <Icon name={target.paused ? 'power' : 'pause'} size="lg" color={colors.ink2} />,
-                  onPress: () => togglePaused(target),
-                },
-                { divider: true },
-                { id: 'delete', label: 'Delete', danger: true, icon: <Icon name="trash" size="lg" color={colors.danger} />, onPress: () => {
-                  const job = target;
-                  setTarget(null);
-                  setConfirmDelete(job);
-                } },
-              ]
-            : []
-        }
-      />
-      <TypedConfirm
-        open={!!confirmDelete}
-        onClose={() => setConfirmDelete(null)}
-        title="Delete scheduled job"
-        body={
-          <>
-            Removes <Code>{confirmDelete?.id ?? ''}</Code> from the daemon's schedule. <Bold>It will never fire again unless you recreate it via chat.</Bold>
-          </>
-        }
-        expected={confirmDelete?.id ?? ''}
-        confirmLabel="Delete job"
-        onConfirm={() => {
-          const jid = confirmDelete?.id;
-          setConfirmDelete(null);
-          if (jid) remove(jid);
-        }}
-      />
     </SafeAreaView>
   );
 }

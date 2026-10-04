@@ -7,7 +7,8 @@ import { cleanup, render } from '@testing-library/react';
 afterEach(cleanup);
 
 vi.mock('react-native', () => ({
-  View: ({ children, style, ...p }) => React.createElement('div', p, children),
+  View: ({ children, style, ...p }) =>
+    React.createElement('div', style?.opacity != null ? { ...p, 'data-opacity': String(style.opacity) } : p, children),
   Pressable: ({ children, onPress, style, hitSlop, accessibilityLabel, accessibilityRole, ...p }) =>
     React.createElement('button', { type: 'button', onClick: onPress, 'aria-label': accessibilityLabel, ...p }, children),
 }));
@@ -17,11 +18,11 @@ vi.mock('react-native-safe-area-context', () => ({
 }));
 
 vi.mock('../../theme/ThemeContext', () => ({
-  useTheme: () => ({ colors: { bg: '#fff', line2: 'rgba(11,17,23,0.14)', accent: '#c90', ink2: '#333', selected: '#eee' } }),
+  useTheme: () => ({ colors: { bg: '#fff', line2: 'rgba(20,20,20,0.14)', accent: '#c90', ink2: '#333', selected: '#eee' } }),
 }));
 
-vi.mock('../../components/AlpiMark', () => ({
-  AlpiMark: ({ color, size }) => React.createElement('span', { 'data-mark': color, 'data-size': size }),
+vi.mock('../../components/Fold', () => ({
+  Fold: ({ fold, color, size }) => React.createElement('span', { 'data-mark': fold, 'data-color': color ?? '', 'data-size': size }),
 }));
 
 vi.mock('../../components/Icon', () => ({
@@ -43,11 +44,18 @@ describe('HomePane', () => {
     expect(container.textContent).toBe('');
   });
 
-  it('tints the mark with the hairline token so it reads as a watermark, not an action', () => {
+  it('draws the alpaca fold so it takes the brand ink of the theme', () => {
     const { container } = render(<HomePane />);
-    expect(container.querySelector('[data-mark]').getAttribute('data-mark')).toBe(
-      'rgba(11,17,23,0.14)',
-    );
+    const mark = container.querySelector('[data-mark]');
+    expect(mark.getAttribute('data-mark')).toBe('alpaca');
+    expect(mark.getAttribute('data-color')).toBe('');
+    expect(mark.getAttribute('data-size')).toBe('96');
+  });
+
+  it('keeps the watermark quiet through opacity rather than a grey tint', () => {
+    const { container } = render(<HomePane />);
+    const wrapper = container.querySelector('[data-mark]').parentElement;
+    expect(Number(wrapper.getAttribute('data-opacity'))).toBeLessThan(0.5);
   });
 });
 

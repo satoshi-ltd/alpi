@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { flattenTree, statusLabel } from './skillDetail';
+import { fileSize, flattenTree, statusLabel } from './skillDetail';
 
 describe('statusLabel', () => {
   it.each([
@@ -44,8 +44,14 @@ describe('flattenTree', () => {
     ];
     const flat = flattenTree(tree);
     expect(flat).toEqual([
-      { path: 'secrets/', kind: 'locked-dir', count: 3, mode: '0700' },
-      { path: 'plain.txt', kind: 'file' },
+      { path: 'secrets/', name: 'secrets', kind: 'locked-dir', locked: true, count: 3, mode: '0700' },
+      { path: 'plain.txt', name: 'plain.txt', kind: 'file', size: 0 },
     ]);
+  });
+
+  it('carries each file name and size so the page can type and size it', () => {
+    const flat = flattenTree([{ name: 'state', kind: 'dir', children: [{ name: 'db.sqlite', kind: 'file', size: 49152 }] }]);
+    expect(flat).toEqual([{ path: 'state/db.sqlite', name: 'db.sqlite', kind: 'file', size: 49152 }]);
+    expect(fileSize(49152)).toBe('48.0kb');
   });
 });

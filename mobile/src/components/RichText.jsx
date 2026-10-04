@@ -27,12 +27,12 @@ function MarkdownImage({ path, alt, note, profile, theme }) {
         {uri ? (
           <Image
             source={{ uri }}
-            style={{ width: '100%', aspectRatio: aspect, borderRadius: radii.lg, borderWidth: 0.5, borderColor: colors.line, backgroundColor: colors.hover }}
+            style={{ width: '100%', aspectRatio: aspect, borderRadius: radii.xs, borderWidth: 0.5, borderColor: colors.line, backgroundColor: colors.hover }}
             resizeMode="cover"
             accessibilityLabel={alt}
           />
         ) : (
-          <View style={{ height: 160, borderRadius: radii.lg, borderWidth: 0.5, borderColor: colors.line, backgroundColor: colors.hover, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ height: 160, borderRadius: radii.xs, borderWidth: 0.5, borderColor: colors.line, backgroundColor: colors.hover, alignItems: 'center', justifyContent: 'center' }}>
             <ActivityIndicator color={colors.ink3} />
           </View>
         )}
@@ -117,7 +117,7 @@ function CodeBlock({ lang, code, theme }) {
     <View
       style={{
         marginVertical: space.s3,
-        borderRadius: radii.lg,
+        borderRadius: radii.xs,
         borderWidth: 0.5,
         borderColor: colors.line,
         backgroundColor: colors.hover,
@@ -162,7 +162,7 @@ function MdTable({ header, rows, theme, inlineOpts }) {
     <View
       style={{
         marginVertical: space.s3,
-        borderRadius: radii.lg,
+        borderRadius: radii.xs,
         borderWidth: 0.5,
         borderColor: colors.line2,
         overflow: 'hidden',

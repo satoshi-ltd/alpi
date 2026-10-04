@@ -3,7 +3,7 @@ import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 
 import { Icon } from '../../components/Icon';
 import { usePresence } from '../../lib/usePresence';
-import { mobile, motionMs, space } from '../../theme/tokens';
+import { mobile, motionMs, radii, space } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeContext';
 
 // Inverted lists scroll away from the newest message towards the past; past this offset the tail is out of sight.
@@ -34,10 +34,8 @@ export function JumpToLatest({ visible, onPress }) {
           gap: space.s3,
           paddingHorizontal: space.s6,
           height: mobile.tap,
-          borderRadius: 999,
+          borderRadius: radii.xs,
           backgroundColor: pressed ? colors.selected : colors.bgPane,
-          borderWidth: 0.5,
-          borderColor: colors.line2,
           ...shadow.base,
         })}
       >

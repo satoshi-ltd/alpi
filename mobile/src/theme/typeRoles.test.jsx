@@ -33,7 +33,7 @@ vi.mock('expo-router', () => ({
 }));
 
 vi.mock('../components/Glyph', () => ({ Glyph: () => React.createElement('span') }));
-vi.mock('../components/Diamond', () => ({ Diamond: () => React.createElement('span') }));
+vi.mock('../components/Fold', () => ({ Fold: () => React.createElement('span') }));
 vi.mock('../features/inbox/Pip', () => ({ Pip: () => null }));
 
 vi.mock('./ThemeContext', () => ({

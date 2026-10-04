@@ -38,7 +38,7 @@ vi.mock('react-native', () => {
     });
   const SectionList = (props) => {
     h.list = props;
-    const { sections = [], renderItem, renderSectionHeader, keyExtractor, ListEmptyComponent, ListFooterComponent } = props;
+    const { sections = [], renderItem, renderSectionHeader, renderSectionFooter, keyExtractor, ListEmptyComponent, ListFooterComponent } = props;
     const el = (c) => (typeof c === 'function' ? React.createElement(c) : c);
     return React.createElement(
       'div',
@@ -52,6 +52,7 @@ vi.mock('react-native', () => {
               ...section.data.map((item, index) =>
                 React.createElement('div', { key: keyExtractor(item, index) }, renderItem({ item, index, section })),
               ),
+              renderSectionFooter?.({ section }) ?? null,
             ),
           )
         : el(ListEmptyComponent),
@@ -166,18 +167,36 @@ describe('Roster sections', () => {
     expect(screen.getByText('pixel')).toBeTruthy();
   });
 
-  it('fills the filter like the connection trigger above it, not like a recessed input', () => {
+  it('fills the filter as a borderless well, like every field', () => {
     render(<Roster items={ITEMS} query="" onQueryChange={() => {}} renderRow={plainRow} searchOpen />);
     const field = screen.getByLabelText('Filter list').parentElement;
-    expect(field.getAttribute('data-bg')).toBe('#ffffff');
-    expect(field.getAttribute('data-border')).toBe('#eee');
-    expect(field.getAttribute('data-bg')).not.toBe('#f1f3f5');
+    expect(field.getAttribute('data-bg')).toBe('#f1f3f5');
+    expect(field.getAttribute('data-border')).toBe('transparent');
   });
 
   it('calls the entity a profile in the filter, so the @alpi row stays unambiguous', () => {
     render(<Roster items={ITEMS} query="" onQueryChange={() => {}} renderRow={plainRow} searchOpen />);
     expect(screen.getByPlaceholderText('Filter profiles & workgroups')).toBeTruthy();
     expect(screen.queryByPlaceholderText(/alpis/i)).toBeNull();
+  });
+});
+
+describe('Roster front door', () => {
+  const host = { kind: 'profile', id: 'default', name: 'default', label: 'alpi', preview: 'quiet', raw: { name: 'default', is_default: true } };
+
+  it('draws the default profile first, above pinned, with no label and a seam under it', () => {
+    render(<Roster items={[pixel, roma, host, alpi]} query="" onQueryChange={() => {}} renderRow={plainRow} />);
+    expect(sections()).toEqual(['front', 'pinned', 'profiles']);
+    expect(rows()[0]).toBe('default');
+    const front = document.querySelector('[data-section="front"]');
+    expect(front.textContent).toBe('alpi');
+    expect(front.querySelector('[testid="front-seam"]')).toBeTruthy();
+  });
+
+  it('drops the seam when the default profile is the only row', () => {
+    render(<Roster items={[host]} query="" onQueryChange={() => {}} renderRow={plainRow} />);
+    expect(sections()).toEqual(['front']);
+    expect(document.querySelector('[testid="front-seam"]')).toBeNull();
   });
 });
 
@@ -203,9 +222,10 @@ describe('Roster empty states', () => {
     expect(screen.getByText('Create one to begin.')).toBeTruthy();
   });
 
-  it('keeps the empty verdict neutral for a reader who cannot create', () => {
-    render(<Roster items={[]} query="" onQueryChange={() => {}} renderRow={plainRow} />);
-    expect(screen.getByText('No profiles or workgroups yet')).toBeTruthy();
+  it('tells a reader who cannot create that nothing is shared with this device yet', () => {
+    render(<Roster items={[]} query="" onQueryChange={() => {}} renderRow={plainRow} device="phone" />);
+    expect(screen.getByText('Nothing shared with this device yet')).toBeTruthy();
+    expect(screen.getByText('Ask the host admin to share a profile with this phone.')).toBeTruthy();
     expect(screen.queryByText('Create one to begin.')).toBeNull();
   });
 
@@ -321,7 +341,7 @@ describe('Roster creation reachability', () => {
   it('holds no heading for a reader who cannot create', () => {
     render(<Roster items={[]} query="" onQueryChange={() => {}} renderRow={plainRow} />);
     expect(sections()).toEqual([]);
-    expect(screen.getByText('No profiles or workgroups yet')).toBeTruthy();
+    expect(screen.getByText('Nothing shared with this device yet')).toBeTruthy();
   });
 
   it('drops the held headings while a filter is on, so a miss reads as a miss', () => {

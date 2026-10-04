@@ -21,6 +21,12 @@ export class RpcError extends Error {
   }
 }
 
+export function transportError(code, message) {
+  const err = new RpcError(code, message);
+  err.transport = true;
+  return err;
+}
+
 export const AUTH_FAILED = -32000;
 export const TOO_MANY_CONNECTIONS = -32029;
 const TOO_MANY_RETRY_MS = 1500;
@@ -129,7 +135,7 @@ function settleEntry(entry, reason) {
   entry.closed = true;
   for (const p of entry.pending.values()) {
     clearTimeout(p.timer);
-    p.reject(reason || new RpcError(-32002, 'connection closed before response'));
+    p.reject(reason || transportError(-32002, 'connection closed before response'));
   }
   entry.pending.clear();
   try { entry.ws.close(); } catch { /* */ }
@@ -154,7 +160,7 @@ function ensureEntry(endpoint) {
   if (entry && !entry.closed) {
     _pool.delete(key);
     if (entry.pending.size > 0) entry.retired = true;
-    else settleEntry(entry, new RpcError(-32002, `connection to ${entry.url} went stale`));
+    else settleEntry(entry, transportError(-32002, `connection to ${entry.url} went stale`));
   }
 
   const url = endpointUrl(endpoint);
@@ -231,7 +237,7 @@ function ensureEntry(endpoint) {
   // onerror arrives before the close frame is parsed; settling here would drop the daemon's close reason, so it only arms a fallback.
   ws.onerror = () => {
     if (entry.closed) return;
-    entry.pendingError = new RpcError(-32001, `connection failed to ${url}`);
+    entry.pendingError = transportError(-32001, `connection failed to ${url}`);
     entry.graceTimer = setTimeout(() => finish(entry.pendingError), CLOSE_AFTER_ERROR_GRACE_MS);
   };
 
@@ -245,7 +251,7 @@ function ensureEntry(endpoint) {
   };
 
   ws.onclose = (event) => {
-    finish(closeError(event, entry.pendingError ?? new RpcError(-32002, 'connection closed before response')));
+    finish(closeError(event, entry.pendingError ?? transportError(-32002, 'connection closed before response')));
   };
 
   return entry;
@@ -282,7 +288,7 @@ function callOnce(endpoint, method, params = {}, options = {}) {
       entry.pending.delete(id);
       closeIfDrained(entry);
       // A single timeout doesn't condemn the socket — only the call.
-      reject(new RpcError(-32000, `request timed out after ${timeoutMs}ms`));
+      reject(transportError(-32000, `request timed out after ${timeoutMs}ms`));
     }, timeoutMs);
 
     entry.pending.set(id, { resolve, reject, timer, method, endpoint });
@@ -290,7 +296,7 @@ function callOnce(endpoint, method, params = {}, options = {}) {
     if (entry.closed) {
       entry.pending.delete(id);
       clearTimeout(timer);
-      reject(new RpcError(-32002, 'connection closed before response'));
+      reject(transportError(-32002, 'connection closed before response'));
       return;
     }
     if (entry.opened) {
@@ -299,7 +305,7 @@ function callOnce(endpoint, method, params = {}, options = {}) {
       } catch (e) {
         entry.pending.delete(id);
         clearTimeout(timer);
-        reject(new RpcError(-32001, `send failed: ${e?.message || e}`));
+        reject(transportError(-32001, `send failed: ${e?.message || e}`));
       }
     } else {
       entry.sendQueue.push({ id, payload });
@@ -393,7 +399,7 @@ function openStream(endpoint, method, params, handlers) {
 
   openTimer = setTimeout(() => {
     if (opened || closed) return;
-    fail(new RpcError(-32001, `stream open timed out after ${STREAM_OPEN_TIMEOUT_MS}ms`));
+    fail(transportError(-32001, `stream open timed out after ${STREAM_OPEN_TIMEOUT_MS}ms`));
   }, STREAM_OPEN_TIMEOUT_MS);
 
   ws.onopen = () => {
@@ -440,13 +446,13 @@ function openStream(endpoint, method, params, handlers) {
   ws.onerror = () => {
     clearTimeout(openTimer);
     if (closed) return;
-    pendingError = new RpcError(-32001, `connection failed to ${url}`);
+    pendingError = transportError(-32001, `connection failed to ${url}`);
     graceTimer = setTimeout(() => fail(pendingError), CLOSE_AFTER_ERROR_GRACE_MS);
   };
 
   ws.onclose = (event) => {
     clearTimeout(openTimer);
-    fail(closeError(event, pendingError ?? new RpcError(-32002, 'connection closed before done')));
+    fail(closeError(event, pendingError ?? transportError(-32002, 'connection closed before done')));
   };
 
   return {

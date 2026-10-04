@@ -7,7 +7,7 @@ import { ActionSheet } from '../../../../src/components/ActionSheet';
 import { Button } from '../../../../src/components/Button';
 import { Icon } from '../../../../src/components/Icon';
 import { Pill } from '../../../../src/components/Pill';
-import { Row, RowSeparator } from '../../../../src/components/Row';
+import { Row, RowGroup, RowSeparator } from '../../../../src/components/Row';
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useBack } from '../../../../src/hooks/useBack';
 import { useEmailAccounts } from '../../../../src/hooks/useDaemonData';
@@ -50,41 +50,45 @@ export default function EmailList() {
           </View>
         ) : accounts.error && !accounts.data ? (
           <LoadFailed inline label="email accounts" error={accounts.error} onRetry={() => accounts.refresh?.()} />
-        ) : list.length === 0 ? (
-          <Row label={EMPTY.email.title} helper={EMPTY.email.hint} chevron={false} />
         ) : (
-          list.map((a, i) => {
-            const type = EMAIL_TYPE_LABELS[a.type] ?? a.type;
-            return (
-              <View key={a.id}>
-                {i > 0 ? <RowSeparator /> : null}
-                <Pressable
-                  onPress={() => router.push(`/profile/${id}/email/${a.id}`)}
-                  android_ripple={{ color: colors.selected }}
-                  style={({ pressed }) => ({
-                    paddingHorizontal: space.s8,
-                    paddingVertical: space.s6,
-                    gap: space.s1,
-                    backgroundColor: pressed ? colors.selected : 'transparent',
-                  })}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
-                    <Text
-                      numberOfLines={1}
-                      ellipsizeMode="middle"
-                      style={{ flex: 1, fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.ink }}
+          <RowGroup style={{ marginTop: space.s5 }}>
+            {list.length === 0 ? (
+              <Row label={EMPTY.email.title} helper={EMPTY.email.hint} chevron={false} />
+            ) : (
+              list.map((a, i) => {
+                const type = EMAIL_TYPE_LABELS[a.type] ?? a.type;
+                return (
+                  <View key={a.id}>
+                    {i > 0 ? <RowSeparator /> : null}
+                    <Pressable
+                      onPress={() => router.push(`/profile/${id}/email/${a.id}`)}
+                      android_ripple={{ color: colors.selected }}
+                      style={({ pressed }) => ({
+                        paddingHorizontal: space.s8,
+                        paddingVertical: space.s6,
+                        gap: space.s1,
+                        backgroundColor: pressed ? colors.selected : 'transparent',
+                      })}
                     >
-                      {a.address}
-                    </Text>
-                    {a.configured ? <Pill tone="on">on</Pill> : <Pill off>off</Pill>}
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
+                        <Text
+                          numberOfLines={1}
+                          ellipsizeMode="middle"
+                          style={{ flex: 1, fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.ink }}
+                        >
+                          {a.address}
+                        </Text>
+                        {a.configured ? <Pill tone="on">on</Pill> : <Pill off>off</Pill>}
+                      </View>
+                      <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3, letterSpacing: 0.6 }}>
+                        {type}
+                      </Text>
+                    </Pressable>
                   </View>
-                  <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3, letterSpacing: 0.6 }}>
-                    {type}
-                  </Text>
-                </Pressable>
-              </View>
-            );
-          })
+                );
+              })
+            )}
+          </RowGroup>
         )}
       </ScrollView>
       <ActionSheet

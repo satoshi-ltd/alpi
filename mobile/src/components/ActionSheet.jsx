@@ -4,7 +4,7 @@ import { Modal, Pressable, ScrollView, Text, useWindowDimensions, View } from 'r
 import { GestureDetector } from 'react-native-gesture-handler';
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { alpha, radii, space, lineHeights, typography } from '../theme/tokens';
+import { alpha, radii, space, lineHeights, typography, veil } from '../theme/tokens';
 
 import { selection } from '../lib/haptics';
 import { usePane } from '../nav/PaneContext';
@@ -17,7 +17,7 @@ import { useSheetGesture } from './useSheetGesture';
 
 // Action list caps at 60vh, scrolls internally above the cap.
 export function ActionSheet({ open, onClose, title, subtitle, description, actions = [] }) {
-  const { colors, fonts, fontSizes } = useTheme();
+  const { colors, fonts, fontSizes, shadow } = useTheme();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const { twoPane } = usePane();
@@ -41,15 +41,16 @@ export function ActionSheet({ open, onClose, title, subtitle, description, actio
     >
       <Animated.View
         pointerEvents={open ? 'auto' : 'none'}
-        style={[{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: twoPane ? 'center' : 'flex-end' }, backdropStyle]}
+        style={[{ flex: 1, backgroundColor: veil(colors), justifyContent: twoPane ? 'center' : 'flex-end' }, backdropStyle]}
       >
         <Pressable style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} onPress={onClose} accessible={false} />
         <Animated.View
           style={[
             {
               backgroundColor: colors.bgPane,
-              borderTopLeftRadius: radii.sheet,
-              borderTopRightRadius: radii.sheet,
+              ...shadow.base,
+              borderTopLeftRadius: radii.xs,
+              borderTopRightRadius: radii.xs,
               overflow: 'hidden',
               ...dialog,
             },

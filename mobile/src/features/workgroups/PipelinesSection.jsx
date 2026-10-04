@@ -1,9 +1,10 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { lineHeights, radii, space } from '../../theme/tokens';
+import { lineHeights, space } from '../../theme/tokens';
 
-import { Pill } from '../../components/Pill';
-import { RowSeparator, SectionHeader } from '../../components/Row';
-import { isLaunchless, namedPipelines } from '../../lib/workgroupPipelines';
+import { RowGroup, SectionHeader } from '../../components/Row';
+import { PhaseChip } from './PhaseChip';
+import { isLaunchless } from '../../lib/workgroupPipelines';
+import { chainChips, orderedPipelines, pipelineTrigger, runSummary, runSummaryLine } from '../../../../common/pipelinePhases.mjs';
 import { useTheme } from '../../theme/ThemeContext';
 import { EMPTY } from '../../../../common/emptyCopy.mjs';
 
@@ -25,14 +26,10 @@ const STYLES = StyleSheet.create({
     paddingHorizontal: space.s8,
     paddingVertical: space.s4,
   },
-  chip: {
+  step: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.s2,
-    paddingHorizontal: space.s4,
-    paddingVertical: space.s2,
-    borderWidth: 0.5,
-    borderRadius: radii.lg,
   },
   note: {
     paddingHorizontal: space.s8,
@@ -51,23 +48,23 @@ function Note({ children }) {
   );
 }
 
-function Phases({ phases }) {
+function Phases({ chips, profileOf }) {
   const { colors, fonts, fontSizes } = useTheme();
   return (
     <View style={STYLES.chips}>
-      {phases.map((slug, i) => (
-        <View key={slug} style={[STYLES.chip, { borderColor: colors.line2, backgroundColor: colors.bgInput }]}>
-          <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }}>{i + 1}</Text>
-          <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink }}>#{slug}</Text>
+      {chips.map((chip, i) => (
+        <View key={chip.slug} style={STYLES.step}>
+          <PhaseChip chip={chip} profileOf={profileOf} />
+          {i < chips.length - 1 ? <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>→</Text> : null}
         </View>
       ))}
     </View>
   );
 }
 
-export function PipelinesSection({ workgroup }) {
+export function PipelinesSection({ workgroup, run = null, profileOf = null }) {
   const { colors, fonts, fontSizes } = useTheme();
-  const chains = namedPipelines(workgroup);
+  const chains = orderedPipelines(workgroup?.pipelines, workgroup?.launch_pipeline);
 
   return (
     <>
@@ -79,18 +76,24 @@ export function PipelinesSection({ workgroup }) {
             : `${EMPTY.noPipelines.title}. ${EMPTY.noPipelines.hint}`}
         </Note>
       ) : (
-        chains.map((chain, i) => (
-          <View key={chain.key}>
-            {i > 0 ? <RowSeparator indent={0} /> : null}
-            <View style={STYLES.head}>
-              <Text style={[STYLES.key, { fontFamily: fonts.monoSemibold, fontSize: fontSizes.md, color: colors.ink }]}>
-                #{chain.key}
-              </Text>
-              {chain.isLaunch ? <Pill tone="on">launch</Pill> : <Pill off>on demand</Pill>}
-            </View>
-            <Phases phases={chain.phases} />
-          </View>
-        ))
+        <View style={{ gap: space.s4 }}>
+          {chains.map((chain) => (
+            <RowGroup key={chain.key}>
+              <View style={STYLES.head}>
+                <Text style={{ fontFamily: fonts.monoSemibold, fontSize: fontSizes.md, color: colors.ink }}>{chain.key}</Text>
+                <Text style={[STYLES.key, { fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }]}>
+                  {pipelineTrigger(chain.isLaunch)}
+                </Text>
+              </View>
+              {runSummary(run, chain.key) ? (
+                <Text style={{ paddingHorizontal: space.s8, paddingTop: space.s2, fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink2 }}>
+                  {runSummaryLine(runSummary(run, chain.key))}
+                </Text>
+              ) : null}
+              <Phases chips={chainChips(chain.phases, workgroup?.phase_map, run)} profileOf={profileOf} />
+            </RowGroup>
+          ))}
+        </View>
       )}
       {isLaunchless(workgroup) ? (
         <Note>{EMPTY.launchPipeline.title}. {EMPTY.launchPipeline.hint}</Note>

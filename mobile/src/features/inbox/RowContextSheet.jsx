@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import { useEffect } from 'react';
 
 import { ActionSheet } from '../../components/ActionSheet';
 import { Icon } from '../../components/Icon';
@@ -7,6 +8,7 @@ import { useCanAdminEarly } from '../../hooks/useActiveRole';
 import { seedCache } from '../../hooks/useDaemonData';
 import { useEndpoint } from '../../lib/EndpointContext';
 import { useTheme } from '../../theme/ThemeContext';
+import { isDefaultProfile } from '../../../../common/rosterOrder.mjs';
 
 export function RowContextSheet({ target, onClose, onPin, onOpenSettings }) {
   const { colors } = useTheme();
@@ -40,15 +42,21 @@ export function RowContextSheet({ target, onClose, onPin, onOpenSettings }) {
   const settingsPath = (row, intent) =>
     `${row.kind === 'workgroup' ? `/wg/${row.id}` : `/profile/${row.id}`}/settings${intent ? `?intent=${intent}` : ''}`;
 
+  const pinnable = !!target && !(target.kind === 'profile' && isDefaultProfile(target.raw ?? target));
+
   const actions = target
     ? [
-        {
-          id: 'pin',
-          label: target.pinned ? 'Unpin' : 'Pin',
-          icon: <Icon name="pin" size={20} color={colors.ink2} />,
-          onPress: () => onPin?.(target),
-        },
-        ...(canAdmin ? [{ id: 'sep-actions', divider: true }] : []),
+        ...(pinnable
+          ? [
+              {
+                id: 'pin',
+                label: target.pinned ? 'Unpin' : 'Pin',
+                icon: <Icon name="pin" size={20} color={colors.ink2} />,
+                onPress: () => onPin?.(target),
+              },
+              ...(canAdmin ? [{ id: 'sep-actions', divider: true }] : []),
+            ]
+          : []),
         ...(canAdmin && target.kind === 'profile'
           ? [
               {
@@ -71,7 +79,7 @@ export function RowContextSheet({ target, onClose, onPin, onOpenSettings }) {
               },
             ]
           : []),
-        ...(canAdmin
+        ...(canAdmin && pinnable
           ? [
               { id: 'sep-danger', divider: true },
               {
@@ -86,5 +94,10 @@ export function RowContextSheet({ target, onClose, onPin, onOpenSettings }) {
       ]
     : [];
 
-  return <ActionSheet open={open} onClose={onClose} title={title} subtitle={subtitle} actions={actions} />;
+  const empty = open && actions.length === 0;
+  useEffect(() => {
+    if (empty) onClose?.();
+  }, [empty, onClose]);
+
+  return <ActionSheet open={open && actions.length > 0} onClose={onClose} title={title} subtitle={subtitle} actions={actions} />;
 }

@@ -1,3 +1,4 @@
+import { defaultAsAlpaca } from '../../../common/folds.mjs';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useEndpoint } from '../lib/EndpointContext';
@@ -5,6 +6,7 @@ import { endpointUrl } from '../lib/endpoint.js';
 import { call as rpcCall } from '../lib/rpc';
 import { useDebouncedCallback } from './useDebouncedCallback';
 import { useEventEffect } from './useEvents';
+import { useTheme } from '../theme/ThemeContext';
 import { EMPTY } from '../../../common/emptyCopy.mjs';
 
 const LIMIT = 100;
@@ -26,16 +28,16 @@ export function isMemberOnly(endpoint, connections, roleState) {
   return !!endpoint && list.length > 0 && list.every((c) => roleState?.get?.(c.id) === 'member');
 }
 
-export async function fetchConnectionOutputs(connection, status, rpc = rpcCall) {
+export async function fetchConnectionOutputs(connection, status, rpc = rpcCall, defaultAccent = null) {
   if (!endpointUrl(connection)) return { rows: [], ok: false };
   let profiles;
   try {
     const res = await rpc(connection, 'host.profile.summaries', {}, { timeoutMs: PER_CALL_TIMEOUT_MS });
-    profiles = (res?.profiles ?? []).map((p) => ({ name: p.name, accent: p.accent ?? null }));
+    profiles = (res?.profiles ?? []).map(defaultAsAlpaca(defaultAccent)).map((p) => ({ name: p.name, accent: p.accent ?? null, fold: p.fold }));
   } catch {
     return { rows: [], ok: false };
   }
-  if (profiles.length === 0) profiles = [{ name: 'default', accent: null }];
+  if (profiles.length === 0) profiles = [defaultAsAlpaca(defaultAccent)({ name: 'default' })];
   const lists = await Promise.all(
     profiles.map((p) =>
       rpc(
@@ -49,6 +51,7 @@ export async function fetchConnectionOutputs(connection, status, rpc = rpcCall) 
             ...o,
             profile: o.profile || p.name,
             accent: p.accent,
+            fold: p.fold,
             connectionId: connection.id,
             connectionName: connection.name,
           })),
@@ -70,6 +73,7 @@ export function connectionsSignature(connections, probeState) {
 
 export function useUnifiedOutputs({ status } = {}) {
   const { connections, probeState, roleState } = useEndpoint();
+  const { colors } = useTheme();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [unreachable, setUnreachable] = useState(false);
@@ -99,7 +103,7 @@ export function useUnifiedOutputs({ status } = {}) {
     try {
       const results = await Promise.all(
         adminConnections.map((c) =>
-          fetchConnectionOutputs(c, status).catch(() => ({ rows: [], ok: false })),
+          fetchConnectionOutputs(c, status, rpcCall, colors.accent).catch(() => ({ rows: [], ok: false })),
         ),
       );
       if (reqId !== reqRef.current) return;
@@ -109,7 +113,7 @@ export function useUnifiedOutputs({ status } = {}) {
     } finally {
       if (reqId === reqRef.current) setLoading(false);
     }
-  }, [connSig, status]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [connSig, status, colors.accent]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     refresh();

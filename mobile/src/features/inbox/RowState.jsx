@@ -1,54 +1,31 @@
-import { useEffect, useRef } from 'react';
-import { Animated, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
-import { useReduceMotion } from '../../lib/reduceMotion';
-import { lineHeights, pulseDuration, space } from '../../theme/tokens';
+import { lineHeights, space } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeContext';
+import { mixHex } from '../../../../common/color.mjs';
 
 const DOT = 6;
 
 export const STATE_TEXT = { 'needs-you': 'needs you', failed: 'failed', working: 'working' };
 
-export function stateColor(state, colors) {
+export function stateColor(state, colors, accent) {
   if (state === 'needs-you') return colors.warningText ?? colors.warning;
   if (state === 'failed') return colors.dangerText ?? colors.danger;
-  return colors.accent;
+  return /^#[0-9a-f]{6}$/i.test(accent ?? '') && /^#[0-9a-f]{6}$/i.test(colors.ink ?? '') ? mixHex(accent, 0.5, colors.ink) : accent ?? colors.ink2;
 }
 
-function PulseDot({ color, pulse }) {
-  const opacity = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    if (!pulse) {
-      opacity.setValue(1);
-      return undefined;
-    }
-    const half = pulseDuration / 2;
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, { toValue: 0.3, duration: half, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 1, duration: half, useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [pulse, opacity]);
-  return (
-    <Animated.View
-      testID={pulse ? 'state-pulse' : 'state-dot'}
-      style={{ width: DOT, height: DOT, borderRadius: DOT / 2, backgroundColor: color, opacity }}
-    />
-  );
+function StateDot({ color }) {
+  return <View testID="state-dot" style={{ width: DOT, height: DOT, borderRadius: DOT / 2, backgroundColor: color }} />;
 }
 
-export function RowState({ state, phases }) {
+export function RowState({ state, phases, color: accent }) {
   const { colors, fonts, fontSizes } = useTheme();
-  const reduceMotion = useReduceMotion();
   if (!state) return null;
-  const color = stateColor(state, colors);
+  const color = stateColor(state, colors, accent);
   const text = phases ?? STATE_TEXT[state];
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
-      <PulseDot color={color} pulse={state === 'working' && !reduceMotion} />
+      {state === 'working' ? null : <StateDot color={color} />}
       <Text
         numberOfLines={1}
         style={{

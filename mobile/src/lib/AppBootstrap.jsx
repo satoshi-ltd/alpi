@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { radii, space } from '../theme/tokens';
 
-import { AlpiMark } from '../components/AlpiMark';
+import { ALPACA_FOLD } from '../../../common/folds.mjs';
+import { Fold } from '../components/Fold';
 import { ensureRegistered as ensureAlnRegistered } from '../features/aln/backgroundTask';
 import { authenticate, biometricCapabilities, getBiometricPref } from './biometric';
 import { useEndpoint } from './EndpointContext';
@@ -64,7 +65,7 @@ export function AppBootstrap({ children }) {
           gap: space.s9,
         }}
       >
-        <AlpiMark color={colors.ink} size={64} />
+        <Fold fold={ALPACA_FOLD} size={64} />
         <ActivityIndicator color={colors.ink2} />
         <Text
           style={{
@@ -91,7 +92,7 @@ export function AppBootstrap({ children }) {
           gap: space.s9,
         }}
       >
-        <AlpiMark color={colors.ink} size={72} />
+        <Fold fold={ALPACA_FOLD} size={72} />
         <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.xxl, color: colors.ink }}>Locked</Text>
         <Text
           style={{
@@ -113,7 +114,7 @@ export function AppBootstrap({ children }) {
             paddingHorizontal: space.s9,
             paddingVertical: space.s6,
             backgroundColor: colors.ink,
-            borderRadius: radii.lg,
+            borderRadius: radii.xs,
           }}
         >
           <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.bgPane }}>

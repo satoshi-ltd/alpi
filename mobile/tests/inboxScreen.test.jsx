@@ -135,7 +135,7 @@ vi.mock('../src/components/Banner', () => ({
     ),
 }));
 vi.mock('../src/components/Icon', () => ({ Icon: ({ name }) => React.createElement('span', { 'data-icon': name }) }));
-vi.mock('../src/components/Glyph', () => ({ Glyph: () => React.createElement('span', { 'data-glyph': 'true' }) }));
+vi.mock('../src/components/Glyph', () => ({ Glyph: ({ offline }) => React.createElement('span', { 'data-glyph': 'true', 'data-offline': String(!!offline) }) }));
 vi.mock('../src/components/Dot', () => ({ Dot: () => React.createElement('span', { 'data-dot': 'true' }) }));
 vi.mock('../src/features/inbox/ConnHeader', () => ({
   ConnHeader: ({ name, host, onBellPress, onGearPress }) =>
@@ -361,7 +361,7 @@ describe('Inbox screen creation', () => {
     h.items = [];
     h.role = 'member';
     render(<Index />);
-    expect(screen.getByText('No profiles or workgroups yet')).toBeTruthy();
+    expect(screen.getByText('Nothing shared with this device yet')).toBeTruthy();
     expect(screen.queryByLabelText('New profile')).toBeNull();
     expect(screen.queryByLabelText('New workgroup')).toBeNull();
   });
@@ -525,5 +525,18 @@ describe('Inbox screen activity', () => {
     const { container } = render(<Index />);
     expect(container.querySelector('[data-state]')).toBeNull();
     expect(screen.queryByLabelText(/^Activity/)).toBeNull();
+  });
+});
+
+describe('phone roster while the daemon is away', () => {
+  it('unfolds every roster object and folds them back when it answers', () => {
+    h.status = 'offline';
+    const { rerender } = render(<Index />);
+    const glyphs = [...document.querySelectorAll('[data-glyph]')];
+    expect(glyphs.length).toBeGreaterThan(0);
+    expect(glyphs.every((g) => g.getAttribute('data-offline') === 'true')).toBe(true);
+    h.status = 'online';
+    rerender(<Index />);
+    expect(document.querySelector('[data-offline="true"]')).toBeNull();
   });
 });

@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { radii, space, typography } from '../../src/theme/tokens';
 
 import { ActionSheet } from '../../src/components/ActionSheet';
-import { AlpiMark } from '../../src/components/AlpiMark';
+import { FOLD_SIZES } from '../../../common/folds.mjs';
 import { Button } from '../../src/components/Button';
 import { DaemonBanner, isDaemonDown } from '../../src/components/DaemonBanner';
 import { Meter } from '../../src/components/Meter';
@@ -36,7 +36,7 @@ import { EmptyThread } from '../../src/features/chat/EmptyThread';
 import { JumpToLatest, JUMP_THRESHOLD } from '../../src/features/chat/JumpToLatest';
 import { LoadFailed } from '../../src/components/LoadFailed';
 import { askUserNoAnswerTag } from '../../src/features/chat/askUserAnswer';
-import { Diamond } from '../../src/components/Diamond';
+import { Fold } from '../../src/components/Fold';
 import { SessionsSheet } from '../../src/features/sheets/SessionsSheet';
 import { useChatSend } from '../../src/hooks/useChatSend';
 import { oversizeError, resolveAttachmentMime, stageAttachment } from '../../src/lib/attachments';
@@ -80,7 +80,7 @@ function PaneColumn({ children }) {
   return <View style={twoPane ? TURN_STYLES.contentColumn : undefined}>{children}</View>;
 }
 
-const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profileModel, accent, colors, fonts, fontSizes, onActionTarget, inFlight = false }) {
+const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profileModel, accent, fold, colors, fonts, fontSizes, onActionTarget, inFlight = false }) {
   const ts = turn.at ? relativeTime(turn.at * 1000) : '';
   const answeredTs = turn.ended_at ? relativeTime(turn.ended_at * 1000) : ts;
   const parts = turnParts(turn);
@@ -97,7 +97,6 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profil
         <ProfileUserMessage
           text={turn.user}
           ts={ts}
-          accent={accent}
           attachments={turn.attachments}
           profile={profileName}
           onLongPress={() => onActionTarget({ kind: 'user', text: turn.user, turnIndex })}
@@ -112,6 +111,7 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profil
         answered={showAssistant}
         showReasoning={!!parts.reasoning || active}
         accent={accent}
+        fold={fold}
       />
       {parts.askUsers.map((a, i) => (
         <AskUserAnswer
@@ -119,6 +119,7 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profil
           result={a.result}
           question={a.question}
           accent={accent}
+          fold={fold}
           colors={colors}
           fonts={fonts}
           fontSizes={fontSizes}
@@ -162,14 +163,14 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profil
   );
 });
 
-function AskUserAnswer({ result, question, accent, colors, fonts, fontSizes }) {
+function AskUserAnswer({ result, question, accent, fold, colors, fonts, fontSizes }) {
   const noAnswerTag = askUserNoAnswerTag(result);
   if (noAnswerTag) {
     return (
       <View style={{ paddingHorizontal: PANE_PAD_X }}>
         <View
           style={{
-            borderRadius: radii.lg,
+            borderRadius: radii.xs,
             borderWidth: 0.5,
             borderColor: colors.line,
             paddingHorizontal: space.s5,
@@ -192,7 +193,7 @@ function AskUserAnswer({ result, question, accent, colors, fonts, fontSizes }) {
   }
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3, paddingHorizontal: PANE_PAD_X }}>
-      <Diamond color={accent ?? colors.ink3} size="md" />
+      <Fold fold={fold} color={accent} />
       <Text
         style={{
           flex: 1,
@@ -207,7 +208,7 @@ function AskUserAnswer({ result, question, accent, colors, fonts, fontSizes }) {
   );
 }
 
-function ChatList({ turns, pendingTurn, hydrating, profileName, model, accent, onActionTarget, colors, fonts, fontSizes, turnsBase = 0, hasMoreRemote = false, onLoadOlder, sessionInFlight = false, loadError = null, onRetryLoad }) {
+function ChatList({ turns, pendingTurn, hydrating, profileName, model, accent, fold, onActionTarget, colors, fonts, fontSizes, turnsBase = 0, hasMoreRemote = false, onLoadOlder, sessionInFlight = false, loadError = null, onRetryLoad }) {
   const [pageSize, setPageSize] = useState(INITIAL_PAGE);
   const [farFromLatest, setFarFromLatest] = useState(false);
   const listRef = useRef(null);
@@ -241,6 +242,7 @@ function ChatList({ turns, pendingTurn, hydrating, profileName, model, accent, o
           profileName={profileName}
           profileModel={model}
           accent={accent}
+          fold={fold}
           colors={colors}
           fonts={fonts}
           fontSizes={fontSizes}
@@ -249,7 +251,7 @@ function ChatList({ turns, pendingTurn, hydrating, profileName, model, accent, o
         />
       </EnterOnce>
     ),
-    [profileName, model, accent, colors, fonts, fontSizes, onActionTarget, lastTurnInFlight, lastTurnIndex, reduceMotion, isFresh, markSeen],
+    [profileName, model, accent, fold, colors, fonts, fontSizes, onActionTarget, lastTurnInFlight, lastTurnIndex, reduceMotion, isFresh, markSeen],
   );
 
   if (hydrating && full.length === 0) {
@@ -261,9 +263,10 @@ function ChatList({ turns, pendingTurn, hydrating, profileName, model, accent, o
   if (full.length === 0) {
     return (
       <EmptyThread
-        heading={`Start a thread with ${profileLabel(profileName)}`}
+        heading="Start a new thread"
         detail={modelLabel(model)}
         accent={accent}
+        fold={fold}
       />
     );
   }
@@ -303,13 +306,13 @@ function ChatList({ turns, pendingTurn, hydrating, profileName, model, accent, o
   );
 }
 
-function NeedsSetup({ name, accent, state, onSetupProvider, onPickModel }) {
+function NeedsSetup({ name, accent, fold, state, onSetupProvider, onPickModel }) {
   const { colors, fonts, fontSizes, lineHeights } = useTheme();
   const isModel = state === 'needs-model';
   const action = isModel ? onPickModel : onSetupProvider;
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.s10, gap: space.s6 }}>
-      <AlpiMark size={80} color={accent} />
+      <Fold fold={fold} color={accent} size={FOLD_SIZES.hero} />
       <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.xl, color: colors.ink, marginTop: space.s3 }}>
         @{profileLabel(name)} needs {isModel ? 'a model' : 'a provider'}
       </Text>
@@ -342,7 +345,7 @@ function NeedsSetup({ name, accent, state, onSetupProvider, onPickModel }) {
 }
 
 export default function ProfileChat() {
-  const { id, connectionId, sid } = useLocalSearchParams();
+  const { id, connectionId, sid, fresh } = useLocalSearchParams();
   const goBack = useBack();
   const { colors, fonts } = useTheme();
   const { activeId } = useEndpoint();
@@ -358,11 +361,15 @@ export default function ProfileChat() {
       </SafeAreaView>
     );
   }
-  return <ProfileChatInner key={`${activeId ?? ''}:${id}:${sid ?? ''}`} />;
+  return <ProfileChatInner key={`${activeId ?? ''}:${id}:${sid ?? ''}:${fresh ?? ''}`} />;
 }
 
+const SPENT_REPLIES = new Set();
+
 function ProfileChatInner() {
-  const { id, sid } = useLocalSearchParams();
+  const { id, sid, fresh, draft } = useLocalSearchParams();
+  const replyPending = !!fresh && !SPENT_REPLIES.has(fresh);
+  const startFresh = !sid && replyPending;
   const router = useRouter();
   const goBack = useBack();
   const { colors, fonts, fontSizes } = useTheme();
@@ -388,8 +395,8 @@ function ProfileChatInner() {
     return sessions.find((s) => (s.kind ?? 'chat') === 'chat')?.id ?? null;
   }, [latestChatId, sessionsList.data]);
 
-  const [sessionId, setSessionId] = useState(sid || latestChatId);
-  const [sessionPicked, setSessionPicked] = useState(false);
+  const [sessionId, setSessionId] = useState(startFresh ? null : sid || latestChatId);
+  const [sessionPicked, setSessionPicked] = useState(startFresh);
   // Seed-only — once sessionId is set we stop watching latestChatId so a later session_changed can't yank the user into a different chat mid-conversation.
   useEffect(() => {
     if (sessionPicked || sessionId || !seedSessionId) return;
@@ -539,6 +546,7 @@ function ProfileChatInner() {
     sendMessage(text, opts);
   };
   const [attachments, setAttachments] = useState([]);
+  const [draftText, setDraftText] = useState(() => (typeof draft === 'string' && (replyPending || !fresh) ? draft : ''));
   const pickAttachment = async () => {
     if (!profile?.name || !endpoint) return;
     try {
@@ -571,6 +579,8 @@ function ProfileChatInner() {
     if (atts?.length) opts.attachments = atts;
     setPendingRewriteIndex(null);
     setAttachments([]);
+    setDraftText('');
+    if (fresh) SPENT_REPLIES.add(fresh);
     sendMessage(text, opts);
   };
 
@@ -696,6 +706,9 @@ function ProfileChatInner() {
       <ChatHeader
         kind="profile"
         accent={accent}
+        creased
+        paused={!!paused}
+        fold={profile.fold}
         title={profileLabel(profile.name)}
         meta={headerMeta}
         onBack={goBack}
@@ -716,6 +729,7 @@ function ProfileChatInner() {
         <NeedsSetup
           name={profile.name}
           accent={accent}
+          fold={profile.fold}
           state={emptyState}
           onSetupProvider={canAdmin ? () => router.push(`/profile/${profile.name}/providers`) : null}
           onPickModel={canAdmin ? () => router.push(`/profile/${profile.name}/settings`) : null}
@@ -729,6 +743,7 @@ function ProfileChatInner() {
             profileName={profile.name}
             model={baselineModelFor(sessionData, profile.model)}
             accent={accent}
+            fold={profile.fold}
             onActionTarget={setActionTarget}
             colors={colors}
             fonts={fonts}
@@ -751,6 +766,7 @@ function ProfileChatInner() {
               onSend={onComposerSend}
               seedText={composerSeed?.text}
               seedKey={composerSeed?.key}
+              initialText={draftText}
               attachments={attachments}
               onPickAttachment={pickAttachment}
               onRemoveAttachment={(i) => setAttachments((p) => p.filter((_, j) => j !== i))}

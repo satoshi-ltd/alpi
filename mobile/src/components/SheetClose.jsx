@@ -18,7 +18,7 @@ export function SheetClose({ onPress, color, hint = 'Dismisses this sheet — yo
         height: mobile.tap,
         marginTop: -space.s2,
         marginRight: -space.s3,
-        borderRadius: radii.pill,
+        borderRadius: radii.xs,
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: pressed ? colors.selected : 'transparent',

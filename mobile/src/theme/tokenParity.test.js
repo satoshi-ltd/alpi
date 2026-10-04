@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import { ACCENT_HEXES } from '../../../common/accents.mjs';
 import * as shared from '../../../common/tokens.mjs';
-import { profileAccents } from './accents';
 import {
   alpha,
   FONT_SIZE_ADDS,
@@ -21,7 +20,7 @@ import {
 const MODES = ['light', 'dark'];
 
 const MOBILE_ONLY = {
-  radii: ['bubble', 'sheet'],
+  radii: [],
   // Not mobile-only in name: desktop declares s10/s11 too, with its own values.
   // common/tokens.mjs records both sides; this asserts mobile matches its own row.
   space: ['s10', 's11'],
@@ -29,8 +28,8 @@ const MOBILE_ONLY = {
 
 const EXPECTED_DIVERGENCES = {
   'light.bg': '#ffffff',
-  'light.bgInput': '#f1f3f5',
-  'dark.bgInput': '#1a1f26',
+  'light.bgInput': '#f2f2f2',
+  'dark.bgInput': '#1f1f1f',
 };
 
 function paletteMismatches() {
@@ -167,17 +166,5 @@ describe('palette parity with the shared module', () => {
     const { hover, selected, line } = palettes[mode];
     expect(alphaOf(hover)).toBeLessThan(alphaOf(selected));
     expect(alphaOf(selected)).toBeLessThan(alphaOf(line));
-  });
-});
-
-describe('profile accents', () => {
-  it('draws every profile colour from the shared choosable set', () => {
-    const outside = Object.entries(profileAccents).filter(([, hex]) => !ACCENT_HEXES.includes(hex));
-    expect(outside).toEqual([]);
-  });
-
-  it('spends the whole choosable set, so no swatch is unreachable by a profile', () => {
-    const used = new Set(Object.values(profileAccents));
-    expect(ACCENT_HEXES.filter((hex) => !used.has(hex))).toEqual([]);
   });
 });

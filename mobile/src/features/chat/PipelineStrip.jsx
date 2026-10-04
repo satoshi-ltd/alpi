@@ -1,22 +1,15 @@
-import { useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { radii, space } from '../../theme/tokens';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { lineHeights, space } from '../../theme/tokens';
 
-import { Dot } from '../../components/Dot';
 import { EdgeFade } from '../../components/EdgeFade';
 import { Eyebrow } from '../../components/Eyebrow';
-import { Icon } from '../../components/Icon';
 import { Pill } from '../../components/Pill';
-import {
-  phaseJumpable,
-  phaseUnavailable,
-  activePhaseIndex,
-  runPhases,
-  runStatus,
-} from '../../lib/workgroupPipelines';
+import { Sheet } from '../../components/Sheet';
+import { PhaseChip, PhaseMark } from '../workgroups/PhaseChip';
+import { phaseJumpable, phaseUnavailable, runStatus } from '../../lib/workgroupPipelines';
+import { phaseCostLine, runChips } from '../../../../common/pipelinePhases.mjs';
 import { useTheme } from '../../theme/ThemeContext';
-
-const SCROLL_LEAD = 24;
 
 const STYLES = StyleSheet.create({
   strip: {
@@ -28,78 +21,81 @@ const STYLES = StyleSheet.create({
     alignItems: 'center',
     gap: space.s3,
     paddingHorizontal: space.s7,
-    paddingVertical: space.s4,
+    paddingVertical: space.s1,
   },
-  separator: {
-    marginRight: space.s3,
-  },
-  phaseWrap: {
+  step: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: space.s3,
   },
-  phase: {
+  who: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.s1,
+    gap: space.s3,
   },
-  phaseBlocked: {
-    borderRadius: radii.pill,
-    paddingHorizontal: space.s3,
-    paddingVertical: 2,
-  },
-  slugSkipped: {
-    textDecorationLine: 'line-through',
+  detail: {
+    gap: space.s5,
+    paddingBottom: space.s4,
   },
 });
 
-function Phase({ phase, accent, hint, onPress }) {
+const PHASE_WORD = { completed: 'completed', current: 'running', skipped: 'skipped', blocked: 'blocked', pending: 'pending' };
+
+export function centreOffset(chip, viewport) {
+  return Math.max(0, chip.x + chip.width / 2 - viewport / 2);
+}
+
+export function focusIndex(chips) {
+  const live = chips.findIndex((c) => c.state === 'current' || c.state === 'blocked');
+  if (live >= 0) return live;
+  let last = -1;
+  chips.forEach((c, i) => { if (c.state === 'completed' || c.state === 'skipped') last = i; });
+  return Math.max(0, last);
+}
+
+function Who({ name, note, profileOf }) {
   const { colors, fonts, fontSizes } = useTheme();
-  const { slug, state } = phase;
-  const icon =
-    state === 'completed' ? <Icon name="check" size="xs" color={colors.success} />
-    : state === 'skipped' ? <Icon name="x" size="xs" color={colors.warning} />
-    : state === 'blocked' ? <Icon name="ban" size="xs" color={colors.danger} />
-    : state === 'current' ? <Dot color={accent ?? colors.ink} pulse />
-    : null;
-  const textColor =
-    state === 'blocked' ? colors.danger
-    : state === 'current' ? accent
-    : state === 'skipped' ? colors.ink4 ?? colors.ink3
-    : state === 'pending' ? colors.ink3
-    : colors.ink2;
-  const Wrapper = onPress ? Pressable : View;
   return (
-    <Wrapper
-      onPress={onPress}
-      accessibilityLabel={`#${slug} ${state}`}
-      accessibilityHint={hint}
-      accessibilityState={onPress ? undefined : { disabled: true }}
-      style={[
-        STYLES.phase,
-        state === 'blocked' && STYLES.phaseBlocked,
-        state === 'blocked' && { backgroundColor: `${colors.danger}17` },
-      ]}
-    >
-      {icon}
-      <Text
-        style={[
-          state === 'skipped' && STYLES.slugSkipped,
-          { fontFamily: fonts.mono, fontSize: fontSizes.sm, color: textColor },
-        ]}
-      >
-        #{slug}
-      </Text>
-    </Wrapper>
+    <View style={STYLES.who}>
+      <PhaseMark name={name} profileOf={profileOf} size={16} />
+      <Text style={{ fontFamily: fonts.monoSemibold, fontSize: fontSizes.md, color: colors.ink }}>@{name}</Text>
+      <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}>{note}</Text>
+    </View>
   );
 }
 
-export function PipelineStrip({ run, accent, loadedSeqs, onPickSeq }) {
+function PhaseDetail({ chip, profileOf, jumpable }) {
   const { colors, fonts, fontSizes } = useTheme();
+  const cost = phaseCostLine(chip.cost);
+  const meta = { fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink2 };
+  return (
+    <View style={STYLES.detail}>
+      {chip.owner ? <Who name={chip.owner} note="declared owner" profileOf={profileOf} /> : null}
+      {chip.assignee ? <Who name={chip.assignee} note="assigned by the hub" profileOf={profileOf} /> : null}
+      {chip.task ? (
+        <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, lineHeight: fontSizes.md * lineHeights.normal, color: colors.ink }}>{chip.task}</Text>
+      ) : null}
+      {cost ? <Text style={meta}>{cost}</Text> : null}
+      <Text style={meta}>{jumpable ? `opened at post #${chip.seq}` : phaseUnavailable(chip)}</Text>
+    </View>
+  );
+}
+
+export function PipelineStrip({ run, phaseMap = null, active = null, profileOf = null, loadedSeqs, onPickSeq }) {
+  const { colors, fontSizes } = useTheme();
   const surface = colors.bgPane ?? colors.bg;
-  const phases = useMemo(() => runPhases(run), [run]);
-  const active = useMemo(() => activePhaseIndex(phases), [phases]);
+  const chips = useMemo(() => runChips(run, phaseMap, active), [run, phaseMap, active]);
+  const focus = focusIndex(chips);
   const scrollRef = useRef(null);
+  const viewport = useRef(0);
+  const focusLayout = useRef(null);
+  const centre = () => {
+    if (!focusLayout.current || !viewport.current) return;
+    scrollRef.current?.scrollTo?.({ x: centreOffset(focusLayout.current, viewport.current), animated: false });
+  };
   const [edges, setEdges] = useState({ left: false, right: false });
+  const [picked, setPicked] = useState(null);
+  useEffect(() => { setPicked(null); }, [run?.pipeline, run?.started_seq, !!run]);
   const onScrollFrame = (e) => {
     const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
     const overflow = contentSize.width - layoutMeasurement.width;
@@ -107,7 +103,9 @@ export function PipelineStrip({ run, accent, loadedSeqs, onPickSeq }) {
   };
   const status = runStatus(run);
 
-  if (!run || phases.length === 0) return null;
+  if (!run || chips.length === 0) return null;
+  const pickedLive = picked ? chips.find((c) => c.slug === picked.slug) ?? null : null;
+  const pickedJumpable = !!pickedLive && !!onPickSeq && phaseJumpable(pickedLive, loadedSeqs);
 
   return (
     <View testID="strip">
@@ -117,51 +115,56 @@ export function PipelineStrip({ run, accent, loadedSeqs, onPickSeq }) {
         showsHorizontalScrollIndicator={false}
         scrollEventThrottle={16}
         onScroll={onScrollFrame}
+        onLayout={(e) => { viewport.current = e.nativeEvent.layout.width; centre(); }}
         onContentSizeChange={(w, h) => onScrollFrame({ nativeEvent: {
-          contentOffset: { x: 0 }, contentSize: { width: w, height: h }, layoutMeasurement: { width: 0 },
+          contentOffset: { x: 0 }, contentSize: { width: w, height: h }, layoutMeasurement: { width: viewport.current },
         } })}
         style={STYLES.strip}
         contentContainerStyle={STYLES.content}
       >
-      <Eyebrow>{`pipeline · ${run.pipeline}`}</Eyebrow>
-      {phases.map((p, i) => {
-        const canJump = !!onPickSeq && phaseJumpable(p, loadedSeqs);
-        return (
+        <Eyebrow>{`pipeline · ${run.pipeline}`}</Eyebrow>
+        {chips.map((chip, i) => (
           <View
-            key={p.slug}
-            style={STYLES.phaseWrap}
+            key={chip.slug}
+            style={STYLES.step}
             onLayout={(e) => {
-              if (i !== active) return;
-              const x = Math.max(0, e.nativeEvent.layout.x - SCROLL_LEAD);
-              scrollRef.current?.scrollTo?.({ x, animated: false });
+              if (i !== focus) return;
+              focusLayout.current = e.nativeEvent.layout;
+              centre();
             }}
           >
             {i > 0 ? (
               <Text
                 accessibilityElementsHidden
                 importantForAccessibility="no-hide-descendants"
-                style={[STYLES.separator, { fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink4 ?? colors.ink3 }]}
+                style={{ fontSize: fontSizes.xs, color: colors.ink4 ?? colors.ink3 }}
               >
                 ›
               </Text>
             ) : null}
-            <Phase
-              phase={p}
-              accent={accent}
-              hint={canJump ? `Jump to #${p.slug}` : phaseUnavailable(p)}
-              onPress={canJump ? () => onPickSeq(p.seq) : undefined}
-            />
+            <PhaseChip chip={chip} profileOf={profileOf} height={44} hint="Shows the phase" onPress={() => setPicked(chip)} />
           </View>
-        );
-      })}
-        {status ? (
-          <Pill tone={status.tone === 'off' ? undefined : status.tone} off={status.tone === 'off'}>
-            {status.text}
-          </Pill>
-        ) : null}
+        ))}
+        {status ? <Pill off>{status.text}</Pill> : null}
       </ScrollView>
       {edges.left ? <EdgeFade side="left" color={surface} /> : null}
       {edges.right ? <EdgeFade side="right" color={surface} /> : null}
+      <Sheet
+        open={!!pickedLive}
+        onClose={() => setPicked(null)}
+        title={pickedLive ? `#${pickedLive.slug}` : ''}
+        subtitle={pickedLive ? `${PHASE_WORD[pickedLive.state] ?? pickedLive.state} · ${run.pipeline}` : ''}
+        primaryAction={pickedJumpable ? {
+          label: `Jump to #${pickedLive.slug}`,
+          onPress: () => {
+            const seq = pickedLive.seq;
+            setPicked(null);
+            onPickSeq(seq);
+          },
+        } : undefined}
+      >
+        {pickedLive ? <PhaseDetail chip={pickedLive} profileOf={profileOf} jumpable={pickedJumpable} /> : null}
+      </Sheet>
     </View>
   );
 }

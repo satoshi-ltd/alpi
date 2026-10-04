@@ -1,11 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { notificationKey } from '../../../common/notificationTriage.mjs';
 import { useEndpoint } from '../lib/EndpointContext';
+import { cancelDelete, noteUnreadMissing, scheduleDelete } from '../lib/notificationStore';
 import { call as rpcCall } from '../lib/rpc';
+import { isMissingVerb } from './useActivity';
 import { useDebouncedCallback } from './useDebouncedCallback';
 import { useEventEffect } from './useEvents';
 
 const DEFAULT_LIMIT = 100;
+
+export function isGone(error) {
+  const text = String(error?.message ?? error ?? '').toLowerCase();
+  return /-32004\b/.test(text) || (/\bnot[-_ ]found\b/.test(text) && !/method[-_ ]not[-_ ]found/.test(text));
+}
 
 export function useOutputs({ profile, status, profiles } = {}) {
   const { endpoint, call } = useEndpoint();
@@ -70,6 +78,12 @@ export function resolveReadTarget(connections, connectionId) {
   return connection ? { mode: 'connection', connection } : { mode: 'unknown' };
 }
 
+export function outputCall(connections, call, connectionId, method, params) {
+  const target = resolveReadTarget(connections, connectionId);
+  if (target.mode === 'unknown') return Promise.reject(new Error(`unknown connection: ${connectionId}`));
+  return target.mode === 'connection' ? rpcCall(target.connection, method, params) : call(method, params);
+}
+
 export function useOutput(profile, id, connectionId) {
   const { endpoint, call, connections } = useEndpoint();
   const [row, setRow] = useState(null);
@@ -120,7 +134,19 @@ export function useOutput(profile, id, connectionId) {
     }
   }, [endpoint, call, connections, connectionId, profile, id]);
 
-  return { row, loading, error, reload: load, markRead };
+  const markUnread = useCallback(async () => {
+    if (!profile || !id) return null;
+    const res = await outputCall(connections, call, connectionId, 'host.outputs.mark_unread', { profile, id });
+    if (res?.output) setRow(res.output);
+    return res?.output ?? null;
+  }, [call, connections, connectionId, profile, id]);
+
+  const runJob = useCallback(
+    (jobId) => outputCall(connections, call, connectionId, 'host.schedule.fire', { profile, id: jobId }),
+    [call, connections, connectionId, profile],
+  );
+
+  return { row, loading, error, reload: load, markRead, markUnread, runJob };
 }
 
 
@@ -135,4 +161,37 @@ export function useMarkAllOutputsRead() {
       return 0;
     }
   }, [endpoint, call]);
+}
+
+
+export const unreadMissingKey = (connectionId, activeId) => connectionId || activeId || 'active';
+
+export function useNotificationActions() {
+  const { call, connections, activeId } = useEndpoint();
+  const send = useCallback(
+    (row, method) => outputCall(connections, call, row.connectionId, method, { profile: row.profile, id: row.id }),
+    [connections, call],
+  );
+  const markRead = useCallback((row) => send(row, 'host.outputs.mark_read'), [send]);
+  const markUnread = useCallback(async (row) => {
+    try {
+      await send(row, 'host.outputs.mark_unread');
+      return true;
+    } catch (e) {
+      if (!isMissingVerb(e)) throw e;
+      noteUnreadMissing(unreadMissingKey(row.connectionId, activeId));
+      return false;
+    }
+  }, [send, activeId]);
+  const remove = useCallback((row, { onError } = {}) => {
+    scheduleDelete(notificationKey(row), async () => {
+      try {
+        await send(row, 'host.outputs.delete');
+      } catch (error) {
+        if (!isGone(error)) throw error;
+      }
+    }, { onError });
+  }, [send]);
+  const undoRemove = useCallback((row) => cancelDelete(notificationKey(row)), []);
+  return { markRead, markUnread, remove, undoRemove };
 }

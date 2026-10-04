@@ -1,25 +1,7 @@
 const RUN_STATUS = {
-  between: { tone: 'off', text: 'between phases' },
-  blocked: { tone: 'err', text: 'blocked' },
-  completed: { tone: 'on', text: 'completed' },
+  between: { text: 'between phases' },
+  completed: { text: 'completed' },
 };
-
-export function runPhases(run) {
-  const phases = Array.isArray(run?.phases) ? run.phases : [];
-  const blocked = run?.status === 'blocked';
-  return phases.map((p) => ({
-    slug: String(p?.slug ?? ''),
-    state: blocked && p?.state === 'current' ? 'blocked' : String(p?.state ?? 'pending'),
-    seq: typeof p?.seq === 'number' ? p.seq : null,
-  }));
-}
-
-export function activePhaseIndex(phases) {
-  const current = phases.findIndex((p) => p.state === 'current');
-  if (current >= 0) return current;
-  const lastDone = phases.map((p) => p.state).lastIndexOf('done');
-  return lastDone >= 0 ? lastDone : 0;
-}
 
 export function runStatus(run) {
   return RUN_STATUS[String(run?.status ?? '')] ?? null;

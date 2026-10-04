@@ -27,6 +27,8 @@ vi.mock('expo-router', () => ({
   useFocusEffect: () => {},
 }));
 vi.mock('../src/components/ScreenHeader', () => ({ ScreenHeader: ({ title }) => React.createElement('h1', {}, title) }));
+vi.mock('../src/hooks/useDaemonData', () => ({ useProfileSummaries: () => ({ data: { profiles: [{ name: 'doc', fold: 'heart', accent: '#f36a8a' }] } }) }));
+vi.mock('../src/components/Fold', () => ({ Fold: ({ fold, pulse }) => React.createElement('i', { 'data-fold': fold ?? 'none', 'data-pulse': String(!!pulse) }) }));
 vi.mock('../src/components/Icon', () => ({ Icon: ({ name }) => React.createElement('i', { 'data-icon': name }) }));
 vi.mock('../src/components/Eyebrow', () => ({ Eyebrow: ({ children }) => React.createElement('h2', {}, children) }));
 vi.mock('../src/hooks/useBack', () => ({ useBack: () => vi.fn() }));
@@ -88,9 +90,16 @@ describe('activity screen', () => {
     expect(heads).toEqual(['Needs you · 2', 'Running · 2', 'Scheduled']);
   });
 
+  it('leads each row with the profile object, the workgroup with its honeycomb rippling while it runs', () => {
+    render(<ActivityScreen />);
+    const folds = [...document.querySelectorAll('[data-fold]')];
+    expect(folds.some((n) => n.getAttribute('data-fold') === 'heart' && n.getAttribute('data-pulse') === 'false')).toBe(true);
+    expect(folds.some((n) => n.getAttribute('data-fold') === 'honeycomb' && n.getAttribute('data-pulse') === 'true')).toBe(true);
+  });
+
   it('opens the approval sheet and the question sheet from a needs-you row', () => {
     render(<ActivityScreen />);
-    fireEvent.click(screen.getByLabelText(/^builder · run a shell command, approval · 12s ago, Review$/));
+    fireEvent.click(screen.getByLabelText(/^builder · run a shell command, approval · 1\ds ago, Review$/));
     expect(h.focus).toHaveBeenCalledWith('approval', 'r1');
     fireEvent.click(screen.getByLabelText(/^doc · Which hotel first\?, question/));
     expect(h.focus).toHaveBeenLastCalledWith('clarification', 'q1');

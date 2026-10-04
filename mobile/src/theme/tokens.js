@@ -43,6 +43,7 @@ export const fonts = {
   mono: nativeFace('mono', '400Regular'),
   monoMedium: nativeFace('mono', '500Medium'),
   monoSemibold: nativeFace('mono', '600SemiBold'),
+  crease: 'BricolageGrotesque_800ExtraBold',
 };
 
 // em multipliers — apply as fontSize * tracking.<tier>
@@ -71,7 +72,7 @@ export const space = { ...sharedSpace, ...spaceExtra.mobile };
 
 export const pulseDuration = 1600;
 
-export const radii = { ...sharedRadii, bubble: 18, sheet: 28 };
+export const radii = { ...sharedRadii };
 
 export const motion = {
   ease: 'easeInOut',
@@ -95,11 +96,11 @@ export const PALETTE_OVERRIDES = {
     'desktop bg is the canvas its floating panes sit on; every mobile screen is edge-to-edge, so bg doubles as the pane',
   ],
   'light.bgInput': [
-    '#f1f3f5',
+    '#f2f2f2',
     'mobile consumers fill borderless buttons and chips with bgInput, which desktop white would erase on a white ground',
   ],
   'dark.bgInput': [
-    '#1a1f26',
+    '#1f1f1f',
     'follows light.bgInput: mobile raises the input above bgElev where desktop recesses it below',
   ],
 };
@@ -120,35 +121,13 @@ export const palettes = {
 
 export const shadows = {
   light: {
-    base: {
-      shadowColor: '#0b1117',
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.08,
-      shadowRadius: 24,
-      elevation: 8,
-    },
-    sm: {
-      shadowColor: '#0b1117',
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.06,
-      shadowRadius: 2,
-      elevation: 1,
-    },
+    base: { shadowColor: '#141414', shadowOpacity: 0, shadowRadius: 0, elevation: 0, borderWidth: 0.5, borderColor: palettes.light.line2 },
+    sm: { shadowColor: '#141414', shadowOpacity: 0, shadowRadius: 0, elevation: 0, borderWidth: 0.5, borderColor: palettes.light.line },
   },
   dark: {
-    base: {
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.6,
-      shadowRadius: 30,
-      elevation: 8,
-    },
-    sm: {
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 0 },
-      shadowOpacity: 0.4,
-      shadowRadius: 0.5,
-      elevation: 1,
-    },
+    base: { shadowColor: '#000', shadowOpacity: 0, shadowRadius: 0, elevation: 0, borderWidth: 0.5, borderColor: palettes.dark.line2 },
+    sm: { shadowColor: '#000', shadowOpacity: 0, shadowRadius: 0, elevation: 0, borderWidth: 0.5, borderColor: palettes.dark.line },
   },
 };
+
+export const veil = (colors) => `${colors.bg}b8`;

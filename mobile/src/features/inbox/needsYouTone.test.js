@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { palettes } from '../../theme/tokens';
 import { activitySections, activityTint } from '../shell/ActivityList';
 import { stateColor } from './RowState';
+import { mixHex } from '../../../../common/color.mjs';
 
 const norm = (hex) => String(hex).toLowerCase();
 
@@ -15,7 +16,8 @@ describe.each(['light', 'dark'])('needs you vs working in %s', (mode) => {
 
   it('paints the inbox row state apart', () => {
     expect(stateColor('needs-you', colors)).toBe(colors.warningText);
-    expect(stateColor('working', colors)).toBe(colors.accent);
+    expect(stateColor('working', colors)).toBe(colors.ink2);
+    expect(stateColor('working', colors, '#3ac9f3')).toBe(mixHex('#3ac9f3', 0.5, colors.ink));
     expect(norm(stateColor('needs-you', colors))).not.toBe(norm(stateColor('working', colors)));
   });
 

@@ -1,18 +1,23 @@
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { space } from '../../../../../src/theme/tokens';
+import { lineHeights, radii, space } from '../../../../../src/theme/tokens';
 
-import { ScreenHeader } from '../../../../../src/components/ScreenHeader';
+import { Icon } from '../../../../../src/components/Icon';
+import { RichText } from '../../../../../src/components/RichText';
+import { PanelHeader } from '../../../../../src/features/profile/PanelHeader';
+import { StatusWord } from '../../../../../src/features/profile/StatusWord';
 import { useBack } from '../../../../../src/hooks/useBack';
 import { useEndpoint } from '../../../../../src/lib/EndpointContext';
-import { flattenTree, statusLabel } from '../../../../../src/lib/skillDetail';
+import { fileSize, flattenTree, statusLabel } from '../../../../../src/lib/skillDetail';
+import { skillFileIcon } from '../../../../../../common/fileKind.mjs';
 import { useTheme } from '../../../../../src/theme/ThemeContext';
 
 export default function SkillDetail() {
-  const { id, name, path, category } = useLocalSearchParams();
+  const { id, name, category } = useLocalSearchParams();
   const goBack = useBack();
+  const router = useRouter();
   const { colors, fonts, fontSizes } = useTheme();
   const { call } = useEndpoint();
   const [detail, setDetail] = useState(null);
@@ -42,22 +47,16 @@ export default function SkillDetail() {
     };
   }, [id, name, category, call]);
 
-  const subtitle = (category ? String(category).toUpperCase() : 'SKILL') + ` · @${id}`;
   const status = detail ? statusLabel(detail.status) : null;
   const reason = detail?.reason ?? '';
   const requires = Array.isArray(detail?.requires) ? detail.requires : [];
-  const files = useMemo(() => flattenTree(detail?.tree), [detail?.tree]);
-
-  const statusBg = status === 'active'
-    ? colors.successBg ?? colors.hover
-    : status === 'invalid' ? colors.dangerBg ?? colors.hover : colors.hover;
-  const statusFg = status === 'active'
-    ? colors.success ?? colors.ink2
-    : status === 'invalid' ? colors.danger : colors.ink3;
+  const tools = Array.isArray(detail?.tools) ? detail.tools : [];
+  const files = useMemo(() => flattenTree(detail?.tree).filter((f) => f.path !== 'SKILL.md'), [detail?.tree]);
+  const meta = { fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 };
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-      <ScreenHeader title={String(name ?? 'Skill')} subtitle={subtitle} onBack={goBack} />
+      <PanelHeader profile={id} section={category ? `SKILLS · ${String(category).toUpperCase()}` : 'SKILLS'} onBack={goBack} />
       {loading ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator color={colors.ink3} />
@@ -69,119 +68,83 @@ export default function SkillDetail() {
           </Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ padding: space.s8, gap: space.s5, paddingBottom: space.s10 }}>
-          {(path || detail.path) ? (
-            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }} numberOfLines={1}>
-              {String(path ?? detail.path)}
-            </Text>
-          ) : null}
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3, flexWrap: 'wrap' }}>
-            <View
-              style={{
-                paddingHorizontal: space.s3,
-                paddingVertical: space.s1,
-                borderRadius: space.s2,
-                backgroundColor: statusBg,
-              }}
-              accessibilityRole="text"
-              accessibilityLabel={`status ${status}`}
-            >
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: statusFg, letterSpacing: 0.6 }}>
-                {status?.toUpperCase()}
-              </Text>
+        <ScrollView contentContainerStyle={{ padding: space.s8, gap: space.s6, paddingBottom: space.s10 }}>
+          <View style={{ gap: space.s3 }}>
+            <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.xl, color: colors.ink }}>{detail.name ?? String(name)}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s4, flexWrap: 'wrap' }}>
+              <StatusWord word={status} on={status === 'active'} danger={status === 'invalid'} />
+              {detail.version ? <Text style={meta}>v{detail.version}</Text> : null}
+              <Text style={meta}>{detail.origin || 'agent'}</Text>
             </View>
-            {detail.version ? (
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>v{detail.version}</Text>
-            ) : null}
-            {detail.origin ? (
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>· {detail.origin}</Text>
-            ) : null}
           </View>
 
           {status !== 'active' && reason ? (
-            <View
-              style={{
-                padding: space.s4,
-                borderRadius: space.s2,
-                borderWidth: 0.5,
-                borderColor: status === 'invalid' ? colors.danger : colors.line,
-                gap: space.s1,
-              }}
+            <Text
               accessibilityRole="alert"
+              style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * lineHeights.normal, color: status === 'invalid' ? colors.dangerText : colors.ink2 }}
             >
-              <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.sm, color: status === 'invalid' ? colors.dangerText : colors.ink2 }}>
-                {status === 'invalid' ? 'Invalid' : 'Inactive'}
-              </Text>
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3 }}>
-                {reason}
-              </Text>
-            </View>
+              {reason}
+            </Text>
           ) : null}
 
           {detail.description ? (
-            <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink, lineHeight: fontSizes.md * 1.5 }}>
+            <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink, lineHeight: fontSizes.md * lineHeights.normal }}>
               {detail.description}
             </Text>
           ) : null}
 
+          {tools.length > 0 ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.s2 }}>
+              {tools.map((t) => (
+                <View key={t} style={{ paddingHorizontal: space.s3, paddingVertical: 2, borderRadius: radii.xs, backgroundColor: colors.hover }}>
+                  <Text style={meta}>{String(t).replace('__', '.')}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
           {requires.length > 0 ? (
             <View style={{ gap: space.s2 }}>
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3, letterSpacing: 0.6 }}>
-                REQUIRES
-              </Text>
               {requires.map((r) => (
                 <View key={`${r.kind}:${r.name}`} style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
-                  <View
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: 4,
-                      backgroundColor: r.resolved ? (colors.success ?? colors.ink2) : colors.danger,
-                    }}
-                    accessibilityLabel={r.resolved ? 'resolved' : 'missing'}
-                  />
-                  <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: r.resolved ? colors.ink2 : colors.danger }}>
-                    {r.name}
-                  </Text>
-                  <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }}>
-                    {r.kind}
-                  </Text>
+                  <StatusWord word={r.name} on={!!r.resolved} danger={!r.resolved} />
+                  <Text style={meta}>{r.resolved ? r.kind : `${r.kind} · missing`}</Text>
                 </View>
               ))}
             </View>
           ) : null}
 
           {files.length > 0 ? (
-            <View style={{ gap: space.s2 }}>
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3, letterSpacing: 0.6 }}>
-                FILES · {files.length}
-              </Text>
-              {files.map((f) => (
-                <View key={f.path} style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
-                  <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3 }} numberOfLines={1}>
-                    {f.path}
-                  </Text>
-                  {f.kind === 'locked-dir' ? (
-                    <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }}>
-                      locked · {f.count} {f.mode ? `· ${f.mode}` : ''}
-                    </Text>
-                  ) : null}
-                </View>
-              ))}
+            <View style={{ borderRadius: radii.xs, backgroundColor: colors.bgPane ?? colors.hover, overflow: 'hidden' }}>
+              {files.map((f, i) => {
+                const openable = f.kind === 'file';
+                const Wrapper = openable ? Pressable : View;
+                return (
+                  <Wrapper
+                    key={f.path}
+                    accessibilityRole={openable ? 'button' : undefined}
+                    accessibilityLabel={f.path}
+                    onPress={openable ? () => router.push({
+                      pathname: `/profile/${id}/brain/skill-file`,
+                      params: { name: String(name), category: category ? String(category) : '', file: f.path },
+                    }) : undefined}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3, minHeight: 44, paddingHorizontal: space.s5, borderTopWidth: i ? 0.5 : 0, borderTopColor: colors.line }}
+                  >
+                    <Icon name={skillFileIcon(f)} size="sm" color={colors.ink2} />
+                    <Text style={{ flex: 1, fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink }} numberOfLines={1}>{f.path}</Text>
+                    <Text style={meta}>{f.locked ? `${f.count} · ${f.mode ?? ''}` : f.kind === 'file' ? fileSize(f.size) : ''}</Text>
+                    {openable ? <Icon name="chevron-right" size="sm" color={colors.ink4 ?? colors.ink3} /> : null}
+                  </Wrapper>
+                );
+              })}
             </View>
           ) : null}
 
-          <Text
-            style={{
-              fontFamily: fonts.mono,
-              fontSize: fontSizes.sm,
-              lineHeight: fontSizes.sm * 1.55,
-              color: colors.ink,
-            }}
-          >
-            {detail.body || '(empty)'}
-          </Text>
+          {detail.body ? (
+            <RichText size={fontSizes.md} color={colors.ink}>{detail.body}</RichText>
+          ) : (
+            <Text style={meta}>(empty)</Text>
+          )}
         </ScrollView>
       )}
     </SafeAreaView>

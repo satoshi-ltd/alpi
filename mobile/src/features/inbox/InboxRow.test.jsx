@@ -50,7 +50,7 @@ vi.mock('../../theme/ThemeContext', async () => {
     useTheme: () => ({
       colors: {
         ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999',
-        accent: '#b8954a', bg: '#fff', danger: '#c14545', hover: '#eee', selected: '#eee',
+        accent: '#b8954a', bg: '#fff', bgPane: '#fafafa', danger: '#c14545', hover: '#eee', selected: '#eee',
       },
       fonts: {
         sans: {
@@ -71,7 +71,15 @@ vi.mock('../../theme/ThemeContext', async () => {
 
 vi.mock('../../components/Dot', () => ({ Dot: () => React.createElement('span', { 'data-dot': 'true' }) }));
 vi.mock('../../components/Glyph', () => ({
-  Glyph: ({ kind }) => React.createElement('span', { 'data-glyph': kind }),
+  Glyph: ({ kind, fold, needsProvider, working, paused, offline }) =>
+    React.createElement('span', {
+      'data-glyph': kind,
+      'data-offline': String(!!offline),
+      'data-fold': fold ?? '',
+      'data-needs-provider': String(!!needsProvider),
+      'data-working': String(!!working),
+      'data-paused': String(!!paused),
+    }),
 }));
 vi.mock('../../components/Icon', () => ({
   Icon: ({ name, color }) => React.createElement('span', { 'data-icon': name, 'data-color': color }),
@@ -79,7 +87,7 @@ vi.mock('../../components/Icon', () => ({
 vi.mock('./Pip', () => ({ Pip: ({ kind }) => React.createElement('span', { 'data-pip': kind }) }));
 vi.mock('./RowState', async (importOriginal) => ({
   ...(await importOriginal()),
-  RowState: ({ state, phases }) => React.createElement('span', { 'data-state': state }, phases ?? state),
+  RowState: ({ state, phases, color }) => React.createElement('span', { 'data-state': state, 'data-color': color ?? '' }, phases ?? state),
 }));
 
 vi.mock('expo-router', () => ({ useRouter: () => ({ push: h.push }) }));
@@ -170,6 +178,36 @@ describe('InboxRow name line', () => {
   });
 });
 
+describe('InboxRow profile fold', () => {
+  it('hands the profile fold to the glyph', () => {
+    const { container } = renderRow({ item: { ...PROFILE, fold: 'shield' } });
+    expect(container.querySelector('[data-glyph]').getAttribute('data-fold')).toBe('shield');
+  });
+
+  it('drops the stale working state of a row whose daemon is away', () => {
+    const { container } = renderRow({ item: { ...PROFILE, state: 'working', activity: { state: 'working' } }, showState: true, offline: true });
+    expect(container.querySelector('[data-glyph]').getAttribute('data-working')).toBe('false');
+    expect(container.textContent).not.toMatch(/working/i);
+  });
+
+  it('unfolds the glyph while the daemon is away', () => {
+    const { container } = renderRow({ item: { ...PROFILE, fold: 'shield' }, offline: true });
+    expect(container.querySelector('[data-glyph]').getAttribute('data-offline')).toBe('true');
+  });
+
+  it('hands over no fold for a profile that never chose one', () => {
+    const { container } = renderRow({ item: PROFILE });
+    expect(container.querySelector('[data-glyph]').getAttribute('data-fold')).toBe('');
+  });
+
+  it('keeps the needs-a-model outline with the fold', () => {
+    const { container } = renderRow({ item: { ...PROFILE, fold: 'shield', needsProvider: true } });
+    const glyph = container.querySelector('[data-glyph]');
+    expect(glyph.getAttribute('data-fold')).toBe('shield');
+    expect(glyph.getAttribute('data-needs-provider')).toBe('true');
+  });
+});
+
 describe('InboxRow working state', () => {
   it('pips a workgroup the daemon is posting into', () => {
     const { container } = sidebarRow({ item: { ...WORKGROUP, state: 'working' }, showState: true });
@@ -189,6 +227,25 @@ describe('InboxRow working state', () => {
     expect(container.querySelector('[data-dot]')).toBeNull();
   });
 
+  it('ripples the workgroup glyph while it works, even on the phone row', () => {
+    const { container } = renderRow({ item: { ...WORKGROUP, state: 'working' } });
+    expect(container.querySelector('[data-glyph]').getAttribute('data-working')).toBe('true');
+  });
+
+  it('ripples the glyph from the activity state too', () => {
+    const { container } = renderRow({ item: { ...WORKGROUP, activity: { state: 'working', phases: '2/4' } } });
+    expect(container.querySelector('[data-glyph]').getAttribute('data-working')).toBe('true');
+  });
+
+  it('keeps an idle workgroup glyph still and hands the paused flag to it', () => {
+    const idle = renderRow({ item: WORKGROUP }).container.querySelector('[data-glyph]');
+    expect(idle.getAttribute('data-working')).toBe('false');
+    expect(idle.getAttribute('data-paused')).toBe('false');
+    cleanup();
+    const paused = renderRow({ item: { ...WORKGROUP, paused: true } }).container.querySelector('[data-glyph]');
+    expect(paused.getAttribute('data-paused')).toBe('true');
+  });
+
   it('shows no pip on the phone row even while the workgroup works', () => {
     const { container } = renderRow({ item: { ...WORKGROUP, state: 'working' } });
     expect(container.querySelector('[data-pip]')).toBeNull();
@@ -202,17 +259,20 @@ describe('InboxRow sidebar variant', () => {
     expect(container.textContent).not.toContain('status?');
   });
 
-  it('rounds the row into an inset pill so the selection reads as a nav item', () => {
+  it('insets an idle row with the 4 pt sheet corner', () => {
     const { container } = sidebarRow({ item: WORKGROUP });
     const style = styleOf(pressable(container));
-    expect(style.borderRadius).toBe(radii.lg);
+    expect(style.borderRadius).toBe(radii.xs);
     expect(style.marginHorizontal).toBe(space.s5);
     expect(style.minHeight).toBe(mobile.tap);
   });
 
-  it('paints the selection on the pill', () => {
+  it('draws the selected row as the pane\'s own sheet, square and edge to edge', () => {
     const { container } = sidebarRow({ item: WORKGROUP, selected: true });
-    expect(styleOf(pressable(container)).backgroundColor).toBe('#eee');
+    const style = styleOf(pressable(container));
+    expect(style.backgroundColor).toBe('#fafafa');
+    expect(style.marginHorizontal).toBe(0);
+    expect(style.borderRadius).toBe(0);
   });
 
   it('keeps the phone row two-line, full-bleed and square', () => {
@@ -312,6 +372,11 @@ describe('InboxRow unread mark', () => {
     const side = sidebarRow({ item: { ...WORKGROUP, state: 'working', activity: { state: 'working', phases: '2/4' } }, showState: true });
     expect(side.container.querySelector('[data-state="working"]').textContent).toBe('2/4');
     expect(side.container.querySelector('[data-pip]')).toBeNull();
+  });
+
+  it('hands the row state its profile colour', () => {
+    const { container } = sidebarRow({ item: { ...WORKGROUP, accent: '#3ac9f3', activity: { state: 'working' } }, showState: true });
+    expect(container.querySelector('[data-state="working"]').getAttribute('data-color')).toBe('#3ac9f3');
   });
 });
 
@@ -416,6 +481,24 @@ describe('RowContextSheet profile actions', () => {
     expect(action('delete').icon.props.color).toBe('#c14545');
     expect(action('pause').danger).toBeUndefined();
     expect(action('pin').danger).toBeUndefined();
+  });
+});
+
+describe('RowContextSheet default profile', () => {
+  const HOST = { kind: 'profile', id: 'default', name: 'default', label: 'alpi', pinned: true, raw: { name: 'default', is_default: true } };
+
+  it('offers no pin and no delete for the default profile, which the daemon never removes', () => {
+    render(<RowContextSheet target={HOST} onOpenSettings={() => {}} />);
+    expect(actionIds()).toEqual(['pause', 'settings']);
+  });
+
+  it('stays closed for a member and lets go of the long-pressed row', () => {
+    h.canAdmin = false;
+    const onClose = vi.fn();
+    render(<RowContextSheet target={HOST} onClose={onClose} />);
+    expect(actionIds()).toEqual([]);
+    expect(sheet.props.open).toBe(false);
+    expect(onClose).toHaveBeenCalled();
   });
 });
 

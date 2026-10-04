@@ -15,6 +15,8 @@ const h = vi.hoisted(() => ({
   status: 'online',
   profile: null,
   ctxTokens: 0,
+  params: { id: 'doc' },
+  sessionIds: [],
 }));
 
 vi.mock('react-native', () => {
@@ -53,7 +55,7 @@ vi.mock('react-native', () => {
 vi.mock('expo-router', () => ({
   usePathname: () => '/chat/doc',
   useRouter: () => ({ push: h.push, back: h.back, canGoBack: () => true }),
-  useLocalSearchParams: () => ({ id: 'doc' }),
+  useLocalSearchParams: () => h.params,
 }));
 
 vi.mock('react-native-safe-area-context', () => ({
@@ -97,13 +99,13 @@ vi.mock('../src/components/ActionSheet', () => ({
         )
       : null,
 }));
-vi.mock('../src/components/AlpiMark', () => ({ AlpiMark: () => React.createElement('span', { 'data-mark': 'true' }) }));
 vi.mock('../src/components/Banner', () => ({
   Banner: ({ kind, children, action }) =>
     React.createElement('div', { 'data-banner': kind, 'data-banner-action': action }, children),
 }));
 vi.mock('../src/components/Button', () => ({ Button: ({ title }) => React.createElement('button', { type: 'button' }, title) }));
 vi.mock('../src/components/Diamond', () => ({ Diamond: () => React.createElement('span', { 'data-diamond': 'true' }) }));
+vi.mock('../src/components/Fold', () => ({ Fold: ({ fold, color, size, outlined }) => React.createElement('span', { 'data-fold': fold ?? 'diamond', 'data-color': color, 'data-size': size, 'data-outlined': String(!!outlined) }) }));
 vi.mock('../src/components/Icon', () => ({ Icon: ({ name }) => React.createElement('span', { 'data-icon': name }) }));
 vi.mock('../src/components/Meter', () => ({
   Meter: ({ label, value, tail, pct }) =>
@@ -117,11 +119,12 @@ vi.mock('../src/features/chat/Bubble', () => ({
 }));
 vi.mock('../src/features/chat/ChatSkeleton', () => ({ ChatSkeleton: () => React.createElement('div', { 'data-skeleton': 'chat' }) }));
 vi.mock('../src/features/chat/Composer', () => ({
-  Composer: ({ disabled, placeholder, modelChip }) =>
+  Composer: ({ disabled, placeholder, modelChip, initialText, onSend }) =>
     React.createElement(
       'div',
-      { 'data-composer': placeholder, 'data-disabled': String(!!disabled) },
+      { 'data-composer': placeholder, 'data-disabled': String(!!disabled), 'data-initial': initialText ?? '' },
       modelChip ? React.createElement('button', { type: 'button', 'data-chip': modelChip.label, onClick: modelChip.onPress }, modelChip.label) : null,
+      React.createElement('button', { type: 'button', 'data-send': '', onClick: () => onSend?.('thanks', []) }, 'send'),
     ),
 }));
 vi.mock('../src/features/chat/ModelEffortSheets', () => ({
@@ -156,7 +159,8 @@ vi.mock('../src/hooks/useDaemonData', () => ({
 vi.mock('../src/hooks/useDebouncedCallback', () => ({ useDebouncedCallback: (fn) => fn }));
 vi.mock('../src/hooks/useEvents', () => ({ useEventEffect: () => {} }));
 vi.mock('../src/hooks/useSessionTranscript', () => ({
-  useSessionTranscript: () => ({
+  isMissingSession: () => false,
+  useSessionTranscript: (_profile, sid) => (h.sessionIds.push(sid ?? null), {
     data: { turns: [], last_ctx_tokens: h.ctxTokens },
     loading: false,
     turnsOffset: 0,
@@ -211,6 +215,8 @@ beforeEach(() => {
   h.status = 'online';
   h.ctxTokens = 0;
   h.profile = { ...READY };
+  h.params = { id: 'doc' };
+  h.sessionIds = [];
 });
 
 describe('Profile chat header menu', () => {
@@ -335,6 +341,21 @@ describe('Profile chat meters', () => {
   it('omits the budget meter when no cap is set', () => {
     render(<ProfileChat />);
     expect(document.querySelector('[data-meter="Daily budget"]')).toBeNull();
+  });
+});
+
+describe('Profile chat fold', () => {
+  it('carries the profile fold into the header at header size', () => {
+    h.profile = { ...READY, fold: 'shield' };
+    render(<ProfileChat />);
+    const fold = document.querySelector('[data-fold="shield"]');
+    expect(fold.getAttribute('data-color')).toBe('#abc123');
+    expect(fold.getAttribute('data-size')).toBe('md');
+  });
+
+  it('draws the diamond for a profile with no fold', () => {
+    render(<ProfileChat />);
+    expect(document.querySelector('[data-fold="diamond"]')).not.toBeNull();
   });
 });
 
@@ -467,5 +488,37 @@ describe('Profile chat daemon health', () => {
       expect(document.querySelector('[data-composer]').getAttribute('data-disabled'), status).toBe('true');
       view.unmount();
     }
+  });
+});
+
+describe('Reply from a notification', () => {
+  const LATEST = { ...READY, latest_session: { kind: 'chat', id: 's-latest', updated_at: 1 } };
+
+  it('opens a fresh session with the quote waiting in the composer', () => {
+    h.profile = LATEST;
+    h.params = { id: 'doc', fresh: '1', draft: '> **Daily mail digest**\n\n' };
+    const { container } = render(<ProfileChat />);
+    expect(container.querySelector('[data-composer]').getAttribute('data-initial')).toBe('> **Daily mail digest**\n\n');
+    expect(h.sessionIds).not.toContain('s-latest');
+    expect(h.sessionIds.at(-1)).toBeNull();
+  });
+
+  it('does not start over or quote again when the chat remounts after the reply was sent', () => {
+    h.profile = LATEST;
+    h.params = { id: 'doc', fresh: 'spent-1', draft: '> **Daily mail digest**\n\n' };
+    const first = render(<ProfileChat />);
+    fireEvent.click(first.container.querySelector('[data-send]'));
+    first.unmount();
+    h.sessionIds.length = 0;
+    const { container } = render(<ProfileChat />);
+    expect(container.querySelector('[data-composer]').getAttribute('data-initial')).toBe('');
+    expect(h.sessionIds.at(-1)).toBe('s-latest');
+  });
+
+  it('resumes the latest session with an empty composer otherwise', () => {
+    h.profile = LATEST;
+    const { container } = render(<ProfileChat />);
+    expect(container.querySelector('[data-composer]').getAttribute('data-initial')).toBe('');
+    expect(h.sessionIds.at(-1)).toBe('s-latest');
   });
 });

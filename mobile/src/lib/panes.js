@@ -106,6 +106,7 @@ export function backFallback(pathname) {
   if (kind === 'outputs') return OUTPUTS_PATH;
   if (kind === 'wg') return `/wg/${id}`;
   if (kind !== 'profile') return '/';
+  if (rest.join('/') === 'brain/skill-file') return `/profile/${id}/brain/skills`;
   const section = rest.slice(0, -1).join('/');
   return PROFILE_SECTIONS.includes(section) ? `/profile/${id}/${section}` : `/chat/${id}`;
 }

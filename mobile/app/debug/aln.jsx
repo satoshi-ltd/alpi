@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Row, RowSeparator, SectionHeader } from '../../src/components/Row';
+import { Row, RowGroup, RowSeparator, SectionHeader } from '../../src/components/Row';
 import { ScreenHeader } from '../../src/components/ScreenHeader';
 import { useToast } from '../../src/components/Toast';
 import { formatNotification } from '../../src/features/aln/kinds';
@@ -65,19 +65,21 @@ function AlnTestScreenInner() {
           </Text>
         </View>
         <SectionHeader>Send sample</SectionHeader>
-        {SAMPLE_KINDS.map((kind, i) => {
-          const preview = formatNotification(sampleEvent(kind) || {}, conn || { name: 'alpi' });
-          return (
-            <View key={kind}>
-              {i > 0 && <RowSeparator />}
-              <Row
-                label={kind}
-                helper={preview.body}
-                onPress={() => onSend(kind)}
-              />
-            </View>
-          );
-        })}
+        <RowGroup>
+          {SAMPLE_KINDS.map((kind, i) => {
+            const preview = formatNotification(sampleEvent(kind) || {}, conn || { name: 'alpi' });
+            return (
+              <View key={kind}>
+                {i > 0 && <RowSeparator />}
+                <Row
+                  label={kind}
+                  helper={preview.body}
+                  onPress={() => onSend(kind)}
+                />
+              </View>
+            );
+          })}
+        </RowGroup>
       </ScrollView>
     </SafeAreaView>
   );

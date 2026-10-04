@@ -7,6 +7,7 @@ import { radii, space } from '../../../../../src/theme/tokens';
 import { Pill } from '../../../../../src/components/Pill';
 import { Eyebrow } from '../../../../../src/components/Eyebrow';
 import { ScreenHeader } from '../../../../../src/components/ScreenHeader';
+import { PanelHeader } from '../../../../../src/features/profile/PanelHeader';
 import { useBack } from '../../../../../src/hooks/useBack';
 import { useTools } from '../../../../../src/hooks/useDaemonData';
 import { useTheme } from '../../../../../src/theme/ThemeContext';
@@ -53,18 +54,15 @@ export default function ToolDetail() {
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-      <ScreenHeader
-        title={tool.name}
-        subtitle={`${tool.category ?? 'TOOL'} · @${id}`}
-        onBack={goBack}
-      />
+      <PanelHeader profile={id} section={tool.category ? `TOOLS · ${String(tool.category).toUpperCase()}` : 'TOOLS'} onBack={goBack} />
       <ScrollView contentContainerStyle={{ padding: space.s8, gap: space.s6, paddingBottom: space.s10 }}>
+        <Text style={{ fontFamily: fonts.monoSemibold ?? fonts.mono, fontSize: fontSizes.xl, color: colors.ink }}>{tool.name}</Text>
         {tool.denied ? (
           <View
             style={{
               padding: space.s5,
               backgroundColor: `${colors.warning}1f`,
-              borderRadius: radii.lg,
+              borderRadius: radii.xs,
               borderWidth: 0.5,
               borderColor: `${colors.warning}66`,
             }}
@@ -100,7 +98,7 @@ export default function ToolDetail() {
                 padding: space.s5,
                 gap: space.s2,
                 backgroundColor: colors.bgInput,
-                borderRadius: radii.lg,
+                borderRadius: radii.xs,
               }}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>

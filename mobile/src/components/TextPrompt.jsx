@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Keyboard, Modal, Pressable, Text, TextInput, View } from 'react-native';
-import { radii, space, tracking, typography } from '../theme/tokens';
+import { radii, space, tracking, typography, veil } from '../theme/tokens';
 
 import { useTheme } from '../theme/ThemeContext';
 import { Button } from './Button';
+import { useWell } from './well';
 
 export function TextPrompt({
   open,
@@ -18,7 +19,8 @@ export function TextPrompt({
   allowEmpty = false,
   keyboardType = 'default',
 }) {
-  const { colors, fonts, fontSizes } = useTheme();
+  const { colors, fonts, fontSizes, shadow } = useTheme();
+  const [well, focus] = useWell(colors);
   const [value, setValue] = useState(initialValue);
   const [kbHeight, setKbHeight] = useState(0);
   useEffect(() => {
@@ -44,7 +46,7 @@ export function TextPrompt({
       <Pressable
         onPress={onClose}
         accessible={false}
-        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', padding: space.s9, paddingBottom: space.s9 + kbHeight }}
+        style={{ flex: 1, backgroundColor: veil(colors), alignItems: 'center', justifyContent: 'center', padding: space.s9, paddingBottom: space.s9 + kbHeight }}
       >
         <Pressable
           onPress={() => {}}
@@ -53,7 +55,8 @@ export function TextPrompt({
             width: '100%',
             maxWidth: 420,
             backgroundColor: colors.bgPane,
-            borderRadius: radii.sheet,
+            ...shadow.base,
+            borderRadius: radii.xs,
             padding: space.s9,
             gap: space.s7,
           }}
@@ -85,13 +88,11 @@ export function TextPrompt({
               autoCapitalize="none"
               autoCorrect={false}
               spellCheck={false}
+              {...focus}
               returnKeyType="done"
               onSubmitEditing={() => { if (ready) onSubmit?.(clean); }}
               style={{
-                backgroundColor: colors.bgInput,
-                borderRadius: radii.xl,
-                borderWidth: 0.5,
-                borderColor: colors.line2,
+                ...well,
                 paddingHorizontal: space.s5,
                 height: 44,
                 fontFamily: fonts.mono,

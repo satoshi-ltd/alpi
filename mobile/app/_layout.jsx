@@ -149,6 +149,7 @@ export default function RootLayout() {
     GeistMono_400Regular,
     GeistMono_500Medium,
     GeistMono_600SemiBold,
+    BricolageGrotesque_800ExtraBold: require('../assets/fonts/BricolageGrotesque-800.ttf'),
   });
 
   useEffect(() => {

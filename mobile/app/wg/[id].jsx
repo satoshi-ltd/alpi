@@ -8,7 +8,7 @@ import { radii, space } from '../../src/theme/tokens';
 import { ActionSheet } from '../../src/components/ActionSheet';
 import { Banner } from '../../src/components/Banner';
 import { DaemonBanner, isDaemonDown } from '../../src/components/DaemonBanner';
-import { Diamond } from '../../src/components/Diamond';
+import { Fold } from '../../src/components/Fold';
 import { Dot } from '../../src/components/Dot';
 import { Meter } from '../../src/components/Meter';
 import { useToast } from '../../src/components/Toast';
@@ -20,6 +20,7 @@ import { enqueueReadAloud } from '../../src/lib/readAloud';
 import { useCanAdminEarly } from '../../src/hooks/useActiveRole';
 import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
 import { Composer } from '../../src/features/chat/Composer';
+import { FALLBACK_ACCENT, WORKGROUP_FOLD } from '../../../common/folds.mjs';
 import { EmptyThread } from '../../src/features/chat/EmptyThread';
 import { JumpToLatest, JUMP_THRESHOLD } from '../../src/features/chat/JumpToLatest';
 import { LoadFailed } from '../../src/components/LoadFailed';
@@ -30,6 +31,8 @@ import { useReduceMotion } from '../../src/lib/reduceMotion';
 import { postsOf, unlandedPosts } from '../../src/features/chat/optimisticPosts';
 import { buildTasks, classifyMessage } from '../../src/features/chat/parseMarkers';
 import { PipelineStrip } from '../../src/features/chat/PipelineStrip';
+import { PhaseMark } from '../../src/features/workgroups/PhaseChip';
+import { liveChip, runChips, runProgress, sameName } from '../../../common/pipelinePhases.mjs';
 import { TasksSheet } from '../../src/features/sheets/TasksSheet';
 import {
   useProfileSummaries,
@@ -47,7 +50,6 @@ import { CONTENT_MAX_W, PANE_PAD_X } from '../../src/lib/panes';
 import { markWorkgroupRead } from '../../src/lib/readState';
 import { usePane } from '../../src/nav/PaneContext';
 import { resolveMembers } from '../../src/lib/workgroupMembers';
-import { accentForProfile } from '../../src/theme/accents';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { EMPTY, postsHint } from '../../../common/emptyCopy.mjs';
 
@@ -80,9 +82,10 @@ function PaneColumn({ children }) {
   return <View style={twoPane ? WG_STYLES.contentColumn : undefined}>{children}</View>;
 }
 
-const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, accent, accentFor, setActionTarget, colors, fonts, fontSizes, imageProfile }) {
+const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, accent, accentFor, foldFor, setActionTarget, colors, fonts, fontSizes, imageProfile }) {
   const speakerName = m.from?.startsWith('@') ? m.from.slice(1) : m.from || '';
   const speakerAccent = accentFor(speakerName, accent);
+  const speakerFold = foldFor(speakerName);
   const isFromHub = hubPubkey != null && m.from_pubkey === hubPubkey;
   const isOwn = ownPubkey != null && m.from_pubkey === ownPubkey;
   const c = classifyMessage(m.body);
@@ -97,6 +100,7 @@ const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, acc
         variant="task"
         side={isFromHub ? 'right' : 'left'}
         hubColor={speakerAccent}
+        hubFold={speakerFold}
         speakerName={speakerName}
         isFromHub={isFromHub}
         seq={m.seq}
@@ -114,6 +118,7 @@ const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, acc
         stale={isStaleWorking}
         side={isFromHub ? 'right' : 'left'}
         hubColor={speakerAccent}
+        hubFold={speakerFold}
         speakerName={speakerName}
         isFromHub={isFromHub}
         seq={m.seq}
@@ -129,6 +134,7 @@ const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, acc
         body={m.body}
         speakerName={speakerName}
         speakerAccent={speakerAccent}
+        speakerFold={speakerFold}
         isFromHub={isFromHub}
         seq={m.seq > 0 ? m.seq : null}
         cost={m.cost}
@@ -145,7 +151,7 @@ const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, acc
 });
 
 const WgList = forwardRef(function WgList(
-  { messages, hubPubkey, ownPubkey, workingStale, accent, accentFor, setActionTarget, hubLabel, colors, fonts, fontSizes, hydrating, imageProfile, loadError = null, onRetryLoad },
+  { messages, hubPubkey, ownPubkey, workingStale, accent, accentFor, foldFor, setActionTarget, hubLabel, colors, fonts, fontSizes, hydrating, imageProfile, loadError = null, onRetryLoad },
   ref,
 ) {
   const reduceMotion = useReduceMotion();
@@ -189,6 +195,7 @@ const WgList = forwardRef(function WgList(
           workingStale={workingStale}
           accent={accent}
           accentFor={accentFor}
+          foldFor={foldFor}
           setActionTarget={setActionTarget}
           colors={colors}
           fonts={fonts}
@@ -197,7 +204,7 @@ const WgList = forwardRef(function WgList(
         />
       </EnterOnce>
     ),
-    [hubPubkey, ownPubkey, workingStale, accent, accentFor, setActionTarget, colors, fonts, fontSizes, imageProfile, reduceMotion, isFresh, markSeen],
+    [hubPubkey, ownPubkey, workingStale, accent, accentFor, foldFor, setActionTarget, colors, fonts, fontSizes, imageProfile, reduceMotion, isFresh, markSeen],
   );
 
   if (hydrating && messages.length === 0) {
@@ -212,6 +219,7 @@ const WgList = forwardRef(function WgList(
         heading={EMPTY.posts.title}
         detail={postsHint(hubLabel)}
         accent={accent}
+        fold={WORKGROUP_FOLD}
       />
     );
   }
@@ -253,32 +261,42 @@ const WgList = forwardRef(function WgList(
   );
 });
 
-function TasksHeaderButton({ tasks, accent, onPress }) {
+function TasksHeaderButton({ tasks, accent, phase, profileOf, onPress }) {
   const { colors, fonts, fontSizes } = useTheme();
   const closed = tasks.filter((t) => t.status === 'done' || t.status === 'skip').length;
   const total = tasks.length;
   const last = tasks[tasks.length - 1];
+  const worker = phase?.chip ? phase.chip.assignee ?? phase.chip.owner : null;
   const dotColor =
-    last?.status === 'done' ? colors.success
-    : last?.status === 'skip' ? colors.warning
+    last?.status === 'done' ? colors.ink
     : last?.status === 'working' ? accent
     : colors.ink3;
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={phase
+        ? [phase.chip ? `#${phase.chip.slug}` : 'pipeline', worker ? `@${worker}` : null, phase.count].filter(Boolean).join(' · ')
+        : `${closed} of ${total} tasks`}
       style={({ pressed }) => ({
         flexDirection: 'row',
         alignItems: 'center',
         gap: space.s2,
         paddingHorizontal: space.s4,
-        minHeight: 30,
+        minHeight: 44,
         backgroundColor: pressed ? colors.selected : colors.bgInput,
-        borderRadius: radii.lg,
+        borderRadius: radii.xs,
       })}
     >
-      <Dot color={dotColor} pulse={last?.status === 'working'} />
+      {phase?.chip ? (
+        <PhaseMark name={worker} profileOf={profileOf} pulse={phase.chip.state === 'current'} size={14} />
+      ) : phase ? (
+        <Dot color={colors.ink} />
+      ) : (
+        <Dot color={dotColor} pulse={last?.status === 'working'} />
+      )}
       <Text style={{ fontFamily: fonts.monoSemibold, fontSize: fontSizes.xs, color: colors.ink }}>
-        {closed}/{total}
+        {phase ? phase.count : `${closed}/${total}`}
       </Text>
     </Pressable>
   );
@@ -398,6 +416,7 @@ function WorkgroupChatInner() {
   const tasks = useMemo(() => buildTasks(messages, hubPubkey), [messages, hubPubkey]);
   const loadedSeqs = useMemo(() => new Set(messages.map((m) => m.seq)), [messages]);
   const pipelineRun = taskState.data?.pipeline_run ?? null;
+  const activeTask = taskState.data?.active ?? null;
   const blocked = taskState.data?.blocked ?? null;
 
   const autoRead = !!wg?.auto_read;
@@ -452,7 +471,7 @@ function WorkgroupChatInner() {
   }, [blocked]);
 
   // Workgroups borrow hub profile's accent — daemon shape has no wg.accent.
-  const accent = hub?.accent ?? accentForProfile(wg?.hub_id) ?? colors.ink3;
+  const accent = hub?.accent ?? FALLBACK_ACCENT;
   const paused = wg?.paused;
   const [tasksOpen, setTasksOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -465,6 +484,22 @@ function WorkgroupChatInner() {
     },
     [summaries.data],
   );
+  const foldFor = useCallback(
+    (name) => summaries.data?.profiles?.find((x) => x.name === name)?.fold,
+    [summaries.data],
+  );
+  const profileOf = useCallback(
+    (name) => {
+      const p = summaries.data?.profiles?.find((x) => sameName(x.name, name));
+      return p ? { fold: p.fold, accent: p.accent } : null;
+    },
+    [summaries.data],
+  );
+  const livePhase = useMemo(() => {
+    const chip = liveChip(runChips(pipelineRun, wg?.phase_map, activeTask));
+    const progress = runProgress(pipelineRun);
+    return progress ? { chip, count: progress.label } : null;
+  }, [pipelineRun, wg?.phase_map, activeTask]);
 
   const sendMessage = async (text) => {
     const trimmed = text.trim();
@@ -534,7 +569,7 @@ function WorkgroupChatInner() {
   const meta = (
     <>
       <Text style={metaTextStyle}>hub</Text>
-      <Diamond color={accent} />
+      <Fold fold={hub?.fold} color={accent} />
       <Text style={metaTextStyle}>
         {`@${wg.hub_id} · ${memberCount} members`}
       </Text>
@@ -587,6 +622,8 @@ function WorkgroupChatInner() {
       <ChatHeader
         kind="workgroup"
         accent={accent}
+        creased
+        paused={!!paused}
         title={wg.name || wg.id}
         meta={meta}
         onBack={goBack}
@@ -594,7 +631,7 @@ function WorkgroupChatInner() {
         right={(
           <View style={WG_STYLES.headerRight}>
             <SoundWave accent={accent} />
-            {tasks.length ? <TasksHeaderButton tasks={tasks} accent={accent} onPress={() => setTasksOpen(true)} /> : null}
+            {tasks.length || livePhase ? <TasksHeaderButton tasks={tasks} accent={accent} phase={livePhase} profileOf={profileOf} onPress={() => setTasksOpen(true)} /> : null}
           </View>
         )}
       />
@@ -627,7 +664,9 @@ function WorkgroupChatInner() {
       ) : null}
       <PipelineStrip
         run={pipelineRun}
-        accent={accent}
+        phaseMap={wg?.phase_map}
+        active={activeTask}
+        profileOf={profileOf}
         loadedSeqs={loadedSeqs}
         onPickSeq={(seq) => listApiRef.current?.scrollToSeq?.(seq)}
       />
@@ -640,6 +679,7 @@ function WorkgroupChatInner() {
           workingStale={workingStale}
           accent={accent}
           accentFor={accentFor}
+          foldFor={foldFor}
           setActionTarget={setActionTarget}
           hubLabel={wg.hub_id}
           colors={colors}

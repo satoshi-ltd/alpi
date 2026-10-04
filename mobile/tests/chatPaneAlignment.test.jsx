@@ -61,6 +61,7 @@ vi.mock('../src/theme/ThemeContext', async () => {
 });
 
 vi.mock('../src/components/Diamond', () => ({ Diamond: () => React.createElement('span', {}) }));
+vi.mock('../src/components/Fold', () => ({ Fold: ({ fold, color, size, outlined }) => React.createElement('span', { 'data-fold': fold ?? 'diamond', 'data-color': color, 'data-size': size, 'data-outlined': String(!!outlined) }) }));
 vi.mock('../src/components/Icon', () => ({ Icon: () => React.createElement('span', {}) }));
 vi.mock('../src/components/RichText', () => ({
   RichText: ({ children }) => React.createElement('span', { 'data-body': 'true' }, children),

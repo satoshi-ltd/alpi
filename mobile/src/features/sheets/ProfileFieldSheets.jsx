@@ -565,7 +565,7 @@ export function VoiceSheet({ open, onClose, profileName, accent, initialValue, o
                     style={({ pressed }) => ({
                       paddingHorizontal: space.s5,
                       paddingVertical: space.s2,
-                      borderRadius: radii.pill,
+                      borderRadius: radii.xs,
                       borderWidth: 0.5,
                       borderColor: isPlaying ? colors.ink : colors.line2,
                       backgroundColor: pressed ? colors.selected : isPlaying ? colors.bgInput : 'transparent',

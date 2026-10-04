@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 
 import { EndpointContext } from './EndpointContext';
 import { clearImageCache } from '../hooks/useCachedImage';
@@ -9,6 +10,9 @@ import { clearAll, loadConnections, removeConnection, renameConnection, rolesFro
 import { RATE_LIMITED_REPROBE_MS, RATE_LIMITED_STATUS } from './rateLimit';
 
 const OFFLINE_REPROBE_MS = 4000;
+export function isTransportFailure(error) {
+  return error?.transport === true;
+}
 
 // Rejected-token handling lives in <AuthFailedBridge> because it needs router and toast context.
 export function EndpointProvider({ children }) {
@@ -134,6 +138,22 @@ export function EndpointProvider({ children }) {
     return () => clearInterval(timer);
   }, [activeId, activeStatus, probeByIdFrom]);
 
+  const reprobingRef = useRef(false);
+  const reprobeActive = useCallback(() => {
+    if (!activeId || reprobingRef.current) return;
+    reprobingRef.current = true;
+    probeByIdFrom(connectionsRef.current, activeId)
+      .catch(() => {})
+      .finally(() => { reprobingRef.current = false; });
+  }, [activeId, probeByIdFrom]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') reprobeActive();
+    });
+    return () => sub?.remove?.();
+  }, [reprobeActive]);
+
   const setActive = useCallback(async (id) => {
     if (id === activeId) return;
     let list = connectionsRef.current;
@@ -219,9 +239,12 @@ export function EndpointProvider({ children }) {
       if (!activeEndpoint) {
         return Promise.reject(new Error('No active daemon endpoint'));
       }
-      return rpcCall(activeEndpoint, method, params, options);
+      return rpcCall(activeEndpoint, method, params, options).catch((error) => {
+        if (isTransportFailure(error)) reprobeActive();
+        throw error;
+      });
     },
-    [activeEndpoint],
+    [activeEndpoint, reprobeActive],
   );
 
   const callStream = useCallback(
@@ -230,9 +253,15 @@ export function EndpointProvider({ children }) {
         handlers?.onError?.(new Error('No active daemon endpoint'));
         return { cancel: () => {} };
       }
-      return rpcCallStream(activeEndpoint, method, params, handlers);
+      return rpcCallStream(activeEndpoint, method, params, {
+        ...handlers,
+        onError: (error) => {
+          if (isTransportFailure(error)) reprobeActive();
+          handlers?.onError?.(error);
+        },
+      });
     },
-    [activeEndpoint],
+    [activeEndpoint, reprobeActive],
   );
 
   const activeRole = activeId ? (roleState.get(activeId) ?? null) : null;

@@ -15,19 +15,24 @@ vi.mock('react-native', () => {
 
 vi.mock('../../theme/ThemeContext', () => ({
   useTheme: () => ({
-    colors: { ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', line2: '#eee', bgInput: '#fafafa' },
+    colors: { ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', line2: '#eee', bgInput: '#fafafa', hover: '#f4f4f4', danger: '#c00' },
     fonts: { mono: 'm', monoSemibold: 'ms', monoMedium: 'mm', sans: { regular: 's' } },
     fontSizes: { xs: 11, sm: 12, md: 14, lg: 15 },
   }),
 }));
 
-vi.mock('../../components/Pill', () => ({
-  Pill: ({ children, tone, off }) =>
-    React.createElement('span', { 'data-pill': tone ?? (off ? 'off' : 'plain') }, children),
+vi.mock('../../components/Fold', () => ({
+  Fold: ({ fold, unfolded, pulse }) =>
+    React.createElement('i', { 'data-fold': fold, 'data-unfolded': unfolded ? '1' : undefined, 'data-pulse': pulse ? '1' : undefined }),
+}));
+
+vi.mock('../../components/Icon', () => ({
+  Icon: ({ name }) => React.createElement('i', { 'data-icon': name }),
 }));
 
 vi.mock('../../components/Row', () => ({
   SectionHeader: ({ children }) => React.createElement('h2', null, children),
+  RowGroup: ({ children }) => React.createElement('section', null, children),
   RowSeparator: () => React.createElement('hr', null),
   Row: ({ label, helper, onPress, disabled }) =>
     React.createElement(
@@ -43,6 +48,9 @@ vi.mock('../../components/Row', () => ({
 }));
 
 import { PipelinesSection } from './PipelinesSection';
+
+const PROFILES = { scout: { fold: 'house', accent: '#f05940' }, pixel: { fold: 'rocket', accent: '#2cb3b5' } };
+const profileOf = (name) => PROFILES[name] ?? null;
 
 const WG = {
   id: 'wg1',
@@ -65,11 +73,48 @@ describe('PipelinesSection', () => {
   it('lists every declared chain, launch first, phases in order', () => {
     render(<PipelinesSection workgroup={WG} />);
     expect(screen.getAllByText(/^#/).map((n) => n.textContent)).toEqual([
-      '#setup', '#setup', '#enrich', '#build', '#qa',
-      '#media-update', '#media-update', '#media-config', '#media-build', '#media-qa',
+      '#setup', '#enrich', '#build', '#qa',
+      '#media-update', '#media-config', '#media-build', '#media-qa',
     ]);
-    expect(screen.getByText('launch')).toBeTruthy();
+    expect(screen.getByText('setup')).toBeTruthy();
+    expect(screen.getByText('starts at launch')).toBeTruthy();
     expect(screen.getByText('on demand')).toBeTruthy();
+  });
+
+  it('marks each phase with its declared owner and the run state, on the run chain only', () => {
+    const run = {
+      pipeline: 'setup',
+      status: 'running',
+      cost: { usd: 1.5 },
+      phases: [
+        { slug: 'setup', state: 'completed' },
+        { slug: 'enrich', state: 'current' },
+        { slug: 'build', state: 'pending' },
+        { slug: 'qa', state: 'pending' },
+      ],
+    };
+    const { container } = render(<PipelinesSection workgroup={WG} run={run} profileOf={profileOf} />);
+    expect(screen.getByText('last run running · 1 of 4 · $1.50')).toBeTruthy();
+    const setupChip = container.querySelector('[testID="phase-setup"]');
+    expect(setupChip.querySelector('[data-fold="house"]')).toBeTruthy();
+    expect(setupChip.querySelector('[data-icon="check"]')).toBeTruthy();
+    expect(container.querySelector('[testID="phase-enrich"]').textContent).toContain('running');
+    expect(container.querySelector('[testID="phase-enrich"]').querySelector('[data-fold]')).toBeNull();
+    expect(container.querySelector('[testID="phase-media-update"]').querySelector('[data-fold="rocket"]')).toBeTruthy();
+    expect(screen.getAllByText(/^last run/)).toHaveLength(1);
+  });
+
+  it('draws an owner with no local profile as the grey unfolded object, and a blocked phase in words', () => {
+    const run = { pipeline: 'setup', status: 'blocked', phases: [{ slug: 'setup', state: 'current' }] };
+    const { container } = render(<PipelinesSection workgroup={WG} run={run} profileOf={() => null} />);
+    const chip = container.querySelector('[testID="phase-setup"]');
+    expect(chip.querySelector('[data-unfolded="1"]')).toBeTruthy();
+    expect(chip.textContent).toContain('blocked');
+  });
+
+  it('lists chains in recipe order after the launch chain, like desktop', () => {
+    render(<PipelinesSection workgroup={{ ...WG, launch_pipeline: null, pipelines: { 'z-last': ['z-last'], 'a-first': ['a-first'] }, phase_map: {} }} />);
+    expect(screen.getAllByText(/^#/).map((n) => n.textContent)).toEqual(['#z-last', '#a-first']);
   });
 
   it('says the chains come from the recipe and are read-only', () => {
@@ -101,7 +146,7 @@ describe('PipelinesSection', () => {
 
   it('explains the launchless case instead of looking empty', () => {
     render(<PipelinesSection workgroup={{ ...WG, launch_pipeline: null }} />);
-    expect(screen.queryByText('launch')).toBeNull();
+    expect(screen.queryByText('starts at launch')).toBeNull();
     expect(screen.getByText(/Nothing starts until a trigger\./)).toBeTruthy();
     expect(screen.getAllByText('on demand')).toHaveLength(2);
   });

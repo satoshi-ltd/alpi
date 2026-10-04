@@ -13,6 +13,7 @@ const h = vi.hoisted(() => ({
   params: {},
   profiles: {},
   wg: null,
+  members: [],
 }));
 
 const sheet = vi.hoisted(() => ({ props: null }));
@@ -93,6 +94,7 @@ vi.mock('../src/theme/ThemeContext', () => ({
       mono: 'mono', monoMedium: 'monoMedium', monoSemibold: 'monoSemibold',
     },
     fontSizes: { xxs: 9, xs: 11, sm: 12, base: 13, md: 14, lg: 15, xl: 18, '2xl': 22, display: 28 },
+    shadow: { base: {} },
     lineHeights: { tight: 1, cozy: 1.3, normal: 1.5, relaxed: 1.65 },
     mobile: { tap: 44, inputH: 44 },
     alpha: { muted: 0.55 },
@@ -103,6 +105,7 @@ vi.mock('../src/components/ActionSheet', () => ({
   ActionSheet: (props) => { sheet.props = props; return null; },
 }));
 vi.mock('../src/components/Diamond', () => ({ Diamond: () => React.createElement('span') }));
+vi.mock('../src/components/Fold', () => ({ Fold: ({ fold, color, size, outlined }) => React.createElement('span', { 'data-fold': fold ?? 'diamond', 'data-color': color, 'data-size': size, 'data-outlined': String(!!outlined) }) }));
 vi.mock('../src/components/Eyebrow', () => ({ Eyebrow: ({ children }) => React.createElement('span', {}, children) }));
 vi.mock('../src/components/Icon', () => ({ Icon: ({ name }) => React.createElement('span', { 'data-icon': name }) }));
 vi.mock('../src/components/OnOff', () => ({ OnOff: ({ on }) => React.createElement('span', {}, on ? 'on' : 'off') }));
@@ -118,6 +121,7 @@ vi.mock('../src/components/Toast', () => ({ useToast: () => h.toast }));
 vi.mock('../src/components/Row', () => ({
   SectionHeader: ({ children }) => React.createElement('h2', {}, children),
   SettingsBand: ({ children }) => React.createElement('section', {}, children),
+  RowGroup: ({ children }) => React.createElement('div', { 'data-row-group': '' }, children),
   RowSeparator: () => React.createElement('hr'),
   Row: ({ label, helper, value, onPress }) =>
     React.createElement(
@@ -131,7 +135,7 @@ vi.mock('../src/components/Row', () => ({
     ),
 }));
 
-vi.mock('../src/features/sheets/AccentSheet', () => ({ AccentSheet: () => null }));
+vi.mock('../src/features/sheets/AppearanceSheet', () => ({ AppearanceSheet: () => null }));
 vi.mock('../src/features/sheets/EditBudgetSheet', () => ({ EditBudgetSheet: () => null }));
 vi.mock('../src/features/sheets/ProfileFieldSheets', () => ({
   BudgetSheet: () => null,
@@ -154,7 +158,8 @@ vi.mock('../src/hooks/useDaemonData', () => ({
   useProfileStorage: () => ({ data: null, loading: false }),
   useScheduleList: () => ({ data: null, loading: false }),
   useProfileSummaries: () => ({ data: { profiles: [] }, loading: false, refresh: vi.fn() }),
-  useWorkgroupMembers: () => ({ data: { members: [] }, loading: false, refresh: vi.fn() }),
+  useWorkgroupMembers: () => ({ data: { members: h.members }, loading: false, refresh: vi.fn() }),
+  useWorkgroupTasks: () => ({ data: null, loading: false, refresh: vi.fn() }),
   useWorkgroupUsage: () => ({ data: null, loading: false, refresh: vi.fn() }),
 }));
 vi.mock('../src/hooks/useSubject', () => ({
@@ -301,5 +306,22 @@ describe('delete intent on a workgroup this profile does not hub', () => {
     expect(document.querySelector('[data-row="Delete workgroup"]')).toBeNull();
     expect(document.querySelector('[data-row="Leave workgroup"]')).toBeTruthy();
     expect(h.call).not.toHaveBeenCalled();
+  });
+});
+
+describe('workgroup members', () => {
+  it('names a remote member by its alias, matches its phases by peer id and offers its public key', () => {
+    h.members = [{ pubkey: 'remote', joined: true, bio: 'Remote builder.' }];
+    h.profiles = { doc: { name: 'doc', pubkey_b64: 'hubpk', peers: [{ id: 'pixel', alias: 'Builder (casa)', pubkey: 'remote' }] } };
+    h.wg = { ...WG, pipelines: { setup: ['setup', 'qa'] }, launch_pipeline: 'setup', phase_map: { setup: { owner: 'pixel' }, qa: { owner: 'lens' } } };
+    h.params = { id: 'alpha' };
+    render(<WorkgroupSettings />);
+    expect(screen.getByText('#setup')).toBeTruthy();
+    expect(screen.queryByText('#qa')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'More for @Builder (casa)' }));
+    const labels = sheet.props.actions.map((a) => a.label);
+    expect(labels).toEqual(['Copy public key', 'Remove from workgroup…']);
+    h.members = [];
+    h.profiles = {};
   });
 });

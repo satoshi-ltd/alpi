@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 
 const h = vi.hoisted(() => ({ toast: vi.fn(), call: vi.fn() }));
+vi.mock("../theme/ThemeContext", () => ({ useTheme: () => ({ colors: { accent: "#14110c" } }) }));
 vi.mock('../components/Toast', () => ({ useToast: () => h.toast }));
 vi.mock('../lib/haptics', () => ({ selection: vi.fn() }));
 

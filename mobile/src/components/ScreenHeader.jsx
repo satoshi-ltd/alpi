@@ -1,6 +1,7 @@
 import { Pressable, Text, View } from 'react-native';
 import { lineHeights, radii, space, tracking } from '../theme/tokens';
 
+import { Crease } from './Crease';
 import { Icon } from './Icon';
 import { MetaStrip, metaItems } from './MetaStrip';
 import { useShowBack } from '../hooks/useShowBack';
@@ -8,7 +9,7 @@ import { CHROME_BTN, tapSlop } from '../lib/panes';
 import { usePane } from '../nav/PaneContext';
 import { useTheme } from '../theme/ThemeContext';
 
-const STRIPE_H = 1.5;
+const CREASE_MIN_SIZE = 28;
 
 function ChromeButton({ label, onPress, children }) {
   const { colors } = useTheme();
@@ -21,7 +22,7 @@ function ChromeButton({ label, onPress, children }) {
       style={({ pressed }) => ({
         width: CHROME_BTN,
         height: CHROME_BTN,
-        borderRadius: radii.md,
+        borderRadius: radii.xs,
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: pressed ? colors.selected : 'transparent',
@@ -43,6 +44,7 @@ export function ScreenHeader({ title, subtitle, meta, onBack, right, leadingGlyp
   const showBack = useShowBack(onBack);
   const showSidebarToggle = twoPane && !sidebarOpen;
   const titleSize = fontSizes.xl;
+  const creased = typeof accent === 'string' && typeof title === 'string' && title.length > 0;
   const metaList = twoPane ? metaItems(meta) : [];
   return (
     <View
@@ -79,18 +81,22 @@ export function ScreenHeader({ title, subtitle, meta, onBack, right, leadingGlyp
       <View style={{ flex: 1, minWidth: 0, flexDirection: 'column' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: twoPane ? space.s4 : space.s2 }}>
           {leadingGlyph}
-          <Text
-            numberOfLines={1}
-            style={{
-              fontFamily: fonts.sans.semibold,
-              fontSize: titleSize,
-              lineHeight: titleSize * lineHeights.cozy,
-              color: colors.ink,
-              flexShrink: 1,
-            }}
-          >
-            {title}
-          </Text>
+          {creased ? (
+            <Crease text={title} accent={accent} size={Math.max(CREASE_MIN_SIZE, titleSize)} />
+          ) : (
+            <Text
+              numberOfLines={1}
+              style={{
+                fontFamily: fonts.sans.semibold,
+                fontSize: titleSize,
+                lineHeight: titleSize * lineHeights.cozy,
+                color: colors.ink,
+                flexShrink: 1,
+              }}
+            >
+              {title}
+            </Text>
+          )}
           {twoPane && typeof subtitle === 'string' ? (
             <Text
               numberOfLines={1}
@@ -131,18 +137,6 @@ export function ScreenHeader({ title, subtitle, meta, onBack, right, leadingGlyp
         <ChromeButton label="Back" onPress={onBack}>
           <Icon name="arrow-left" size="md" color={colors.ink2} />
         </ChromeButton>
-      ) : null}
-      {twoPane ? (
-        <View
-          style={{
-            position: 'absolute',
-            left: space.s9,
-            bottom: -0.5,
-            height: STRIPE_H,
-            width: space.s11,
-            backgroundColor: accent ?? colors.accent,
-          }}
-        />
       ) : null}
     </View>
   );

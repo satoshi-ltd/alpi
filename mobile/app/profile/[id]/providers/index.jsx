@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../../../src/theme/tokens';
 
 import { Pill } from '../../../../src/components/Pill';
-import { Row, RowSeparator, SectionHeader } from '../../../../src/components/Row';
+import { Row, RowGroup, RowSeparator, SectionHeader } from '../../../../src/components/Row';
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useBack } from '../../../../src/hooks/useBack';
 import { useOllamaModels } from '../../../../src/hooks/useDaemonData';
@@ -51,49 +51,53 @@ export default function ProvidersList() {
       <ScreenHeader title="Providers" subtitle={`@${id} · LLM API KEYS + LOCAL`} onBack={goBack} />
       <ScrollView>
         <SectionHeader>Ollama · local</SectionHeader>
-        {ollamas.length === 0 ? (
-          <Row label="No Ollama instance" helper="Local LLMs run on the daemon host." chevron={false} />
-        ) : (
-          ollamas.map((o, i) => {
-            const reachableCount = modelsByName.get(o.name);
-            const err = errorsByName.get(o.name);
-            const value = ollamaModels.loading
-              ? <ActivityIndicator color={colors.ink3} size="small" />
-              : reachableCount != null && reachableCount > 0
-                ? <Pill tone="on">{reachableCount} model{reachableCount === 1 ? '' : 's'}</Pill>
-                : <Pill off>unreachable</Pill>;
-            const helper = err ? `${o.url} · ${err.detail}` : o.url;
+        <RowGroup>
+          {ollamas.length === 0 ? (
+            <Row label="No Ollama instance" helper="Local LLMs run on the daemon host." chevron={false} />
+          ) : (
+            ollamas.map((o, i) => {
+              const reachableCount = modelsByName.get(o.name);
+              const err = errorsByName.get(o.name);
+              const value = ollamaModels.loading
+                ? <ActivityIndicator color={colors.ink3} size="small" />
+                : reachableCount != null && reachableCount > 0
+                  ? <Pill tone="on">{reachableCount} model{reachableCount === 1 ? '' : 's'}</Pill>
+                  : <Pill off>unreachable</Pill>;
+              const helper = err ? `${o.url} · ${err.detail}` : o.url;
+              return (
+                <View key={o.name}>
+                  {i > 0 ? <RowSeparator /> : null}
+                  <Row
+                    label={`ollama/${o.name}`}
+                    helper={helper}
+                    value={value}
+                    onPress={() => router.push(`/profile/${id}/providers/ollama-${o.name}`)}
+                  />
+                </View>
+              );
+            })
+          )}
+          <RowSeparator />
+          <Row label="+ Add Ollama instance" onPress={() => router.push(`/profile/${id}/providers/ollama-new`)} />
+        </RowGroup>
+
+        <SectionHeader>Cloud providers</SectionHeader>
+        <RowGroup>
+          {CLOUD_PROVIDERS.map((p, i) => {
+            const set = keySet.has(p.env);
             return (
-              <View key={o.name}>
+              <View key={p.id}>
                 {i > 0 ? <RowSeparator /> : null}
                 <Row
-                  label={`ollama/${o.name}`}
-                  helper={helper}
-                  value={value}
-                  onPress={() => router.push(`/profile/${id}/providers/ollama-${o.name}`)}
+                  label={p.label}
+                  helper={p.env}
+                  value={set ? <Pill tone="on">set</Pill> : <Pill off>not set</Pill>}
+                  onPress={() => router.push(`/profile/${id}/providers/${p.id}`)}
                 />
               </View>
             );
-          })
-        )}
-        <RowSeparator />
-        <Row label="+ Add Ollama instance" onPress={() => router.push(`/profile/${id}/providers/ollama-new`)} />
-
-        <SectionHeader>Cloud providers</SectionHeader>
-        {CLOUD_PROVIDERS.map((p, i) => {
-          const set = keySet.has(p.env);
-          return (
-            <View key={p.id}>
-              {i > 0 ? <RowSeparator /> : null}
-              <Row
-                label={p.label}
-                helper={p.env}
-                value={set ? <Pill tone="on">set</Pill> : <Pill off>not set</Pill>}
-                onPress={() => router.push(`/profile/${id}/providers/${p.id}`)}
-              />
-            </View>
-          );
-        })}
+          })}
+        </RowGroup>
 
         <View style={{ height: 16 }} />
         <Text style={{ paddingHorizontal: space.s8, fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4, lineHeight: fontSizes.xs * 1.5 }}>

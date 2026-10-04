@@ -321,7 +321,7 @@ describe("openVerb", () => {
 });
 
 const APP_DIR = resolve(process.cwd(), "app");
-const SAMPLE = { id: "doc", name: "MEMORY.md", profile: "doc", aid: "acct-1", pid: "peer-1", key: "openai" };
+const SAMPLE = { id: "doc", name: "MEMORY.md", profile: "doc", aid: "acct-1", pid: "peer-1", key: "openai", job: "45188eab" };
 
 function concreteSegment(raw) {
   const dynamic = raw.match(/^\[(?:\.\.\.)?(.+)\]$/);
@@ -359,6 +359,8 @@ describe("backFallback", () => {
     ["/profile/doc/brain/memory", "/chat/doc"],
     ["/profile/doc/brain/memory/MEMORY.md", "/profile/doc/brain/memory"],
     ["/profile/doc/brain/skills/compose", "/profile/doc/brain/skills"],
+    ["/profile/doc/brain/skill-file", "/profile/doc/brain/skills"],
+    ["/profile/doc/schedule/45188eab", "/profile/doc/schedule"],
     ["/profile/doc/brain/tools/schedule", "/profile/doc/brain/tools"],
     ["/profile/doc/email/new", "/profile/doc/email"],
     ["/profile/doc/mcp/new", "/profile/doc/mcp"],

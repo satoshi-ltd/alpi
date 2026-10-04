@@ -254,9 +254,9 @@ describe('useTwoPane', () => {
 const ITEM = { kind: 'profile', id: 'doc', name: 'doc', label: 'doc', preview: 'hey', ts: '2m' };
 
 describe('InboxRow selection', () => {
-  it('tints the selected row', () => {
+  it('draws the selected row on the pane\'s own sheet', () => {
     render(<InboxRow item={ITEM} selected />);
-    expect(screen.getByRole('button').getAttribute('data-bg')).toBe('#eaeaea');
+    expect(screen.getByRole('button').getAttribute('data-bg')).toBe('#fff');
   });
 
   it('leaves the row transparent when the prop is omitted', () => {

@@ -87,6 +87,7 @@ vi.mock('../src/theme/ThemeContext', () => ({
 vi.mock('../src/components/ActionSheet', () => ({ ActionSheet: () => null }));
 vi.mock('../src/components/Banner', () => ({ Banner: ({ kind, children }) => React.createElement('div', { 'data-banner': kind }, children) }));
 vi.mock('../src/components/Diamond', () => ({ Diamond: () => null }));
+vi.mock('../src/components/Fold', () => ({ Fold: () => null }));
 vi.mock('../src/components/Dot', () => ({ Dot: () => null }));
 vi.mock('../src/components/Icon', () => ({ Icon: () => null }));
 vi.mock('../src/components/Meter', () => ({ Meter: () => null }));

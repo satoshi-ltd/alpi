@@ -1,16 +1,16 @@
 import { Pressable, Text, View } from 'react-native';
 import { radii, space } from '../../theme/tokens';
 
-import { Diamond } from '../../components/Diamond';
+import { FALLBACK_ACCENT } from '../../../../common/folds.mjs';
+import { Fold } from '../../components/Fold';
 import { Pill } from '../../components/Pill';
 import { useProfileSummaries } from '../../hooks/useDaemonData';
-import { accentForProfile } from '../../theme/accents';
 import { modelLabel } from '../../lib/modelLabel';
 import { profileLabel } from '../../lib/profileName';
 import { useTheme } from '../../theme/ThemeContext';
 
 export function MentionPopover({ candidates = [], onPick }) {
-  const { colors, fonts, fontSizes } = useTheme();
+  const { colors, fonts, fontSizes, shadow } = useTheme();
   const summaries = useProfileSummaries();
   const profiles = summaries.data?.profiles ?? [];
   if (!candidates.length) return null;
@@ -20,19 +20,15 @@ export function MentionPopover({ candidates = [], onPick }) {
         marginHorizontal: space.s5,
         marginBottom: space.s3,
         backgroundColor: colors.bgElev,
-        borderRadius: radii.bubble,
+        borderRadius: radii.xs,
         overflow: 'hidden',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.16,
-        shadowRadius: 16,
-        elevation: 6,
+        ...shadow.base,
       }}
     >
       {candidates.map((c, i) => {
         const isHub = c.role === 'hub';
         const profile = profiles.find((p) => p.name === c.id);
-        const accent = profile?.accent ?? accentForProfile(c.id);
+        const accent = profile?.accent ?? FALLBACK_ACCENT;
         return (
           <Pressable
             key={c.id}
@@ -49,7 +45,7 @@ export function MentionPopover({ candidates = [], onPick }) {
               borderTopColor: colors.line,
             })}
           >
-            <Diamond color={accent} />
+            <Fold fold={profile?.fold} color={accent} />
             <Text style={{ flex: 1, fontFamily: fonts.mono, fontSize: fontSizes.md, color: colors.ink }}>
               @{profileLabel(c.id)}
             </Text>

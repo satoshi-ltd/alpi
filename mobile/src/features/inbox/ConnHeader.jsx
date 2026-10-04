@@ -34,7 +34,7 @@ export function ConnHeader({
       style={({ pressed }) => ({
         width: CHROME_BTN,
         height: CHROME_BTN,
-        borderRadius: radii.lg,
+        borderRadius: radii.xs,
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: pressed || searchOpen ? colors.selected : 'transparent',
@@ -54,7 +54,7 @@ export function ConnHeader({
     paddingVertical: space.s2,
     borderWidth: 0.5,
     borderColor: colors.line,
-    borderRadius: radii.xl,
+    borderRadius: radii.xs,
     backgroundColor: pressed ? colors.selected : colors.bgElev,
   });
 
@@ -117,7 +117,7 @@ export function ConnHeader({
             style={({ pressed }) => ({
               width: CHROME_BTN,
               height: CHROME_BTN,
-              borderRadius: radii.lg,
+              borderRadius: radii.xs,
               alignItems: 'center',
               justifyContent: 'center',
               backgroundColor: pressed ? colors.selected : 'transparent',

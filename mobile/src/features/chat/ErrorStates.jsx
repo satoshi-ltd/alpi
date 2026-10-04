@@ -41,8 +41,7 @@ export function FailedVoice({ duration, onRetry }) {
           gap: space.s4,
           paddingHorizontal: space.s6,
           paddingVertical: space.s4,
-          borderRadius: radii.bubble,
-          borderTopRightRadius: radii.md,
+          borderRadius: radii.xs,
           backgroundColor: `${colors.danger}1c`,
         }}
       >

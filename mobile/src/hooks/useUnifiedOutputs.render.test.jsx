@@ -4,6 +4,7 @@ import { renderHook, waitFor, act } from '@testing-library/react';
 
 vi.mock('../lib/rpc', () => ({ call: vi.fn() }));
 vi.mock('./useEvents', () => ({ useEventEffect: () => {} }));
+vi.mock('../theme/ThemeContext', () => ({ useTheme: () => ({ colors: { accent: '#14110c' } }) }));
 
 import { call as rpcCall } from '../lib/rpc';
 import { EndpointContext } from '../lib/EndpointContext';

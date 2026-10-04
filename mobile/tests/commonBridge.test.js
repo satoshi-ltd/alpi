@@ -46,18 +46,14 @@ describe("common/ shared source directory", () => {
   it("loads every shared logic module under bare node with syntax detection off", () => {
     const mjs = readdirSync(commonDir).filter((f) => f.endsWith(".mjs"));
     expect(mjs.length).toBeGreaterThan(1);
-    for (const file of mjs) {
-      const target = pathToFileURL(path.join(commonDir, file)).href;
-      expect(() => execFileSync(
-        process.execPath,
-        [
-          "--no-experimental-detect-module",
-          "--input-type=module",
-          "-e",
-          `await import(${JSON.stringify(target)});`,
-        ],
-        { encoding: "utf8", stdio: "pipe" },
-      ), file).not.toThrow();
+    const targets = mjs.map((file) => pathToFileURL(path.join(commonDir, file)).href);
+    const script = `for (const t of ${JSON.stringify(targets)}) { try { await import(t); } catch (e) { console.log(t + ": " + e.message); process.exitCode = 1; } }`;
+    let failed = "";
+    try {
+      execFileSync(process.execPath, ["--no-experimental-detect-module", "--input-type=module", "-e", script], { encoding: "utf8", stdio: "pipe" });
+    } catch (e) {
+      failed = String(e.stdout || e.message);
     }
-  });
+    expect(failed).toBe("");
+  }, 30000);
 });

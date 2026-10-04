@@ -1,11 +1,39 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 
+vi.mock("../theme/ThemeContext", () => ({ useTheme: () => ({ colors: { accent: "#14110c" } }) }));
+
 import { EndpointContext } from "../lib/EndpointContext";
 import { _resetDaemonDataCache, useProfileMemory, useProfileSnapshot, useProfileSummaries } from "./useDaemonData";
 
 beforeEach(() => {
   _resetDaemonDataCache();
+});
+
+describe("useProfileSummaries and the default profile", () => {
+  it("shows the default profile as the alpaca even when an older daemon reports a diamond", async () => {
+    const call = vi.fn(async () => ({ profiles: [{ name: "default", is_default: true, fold: "diamond", accent: null }, { name: "doc", fold: "shield", accent: "#3899e2" }] }));
+    const wrapper = ({ children }) => (
+      <EndpointContext.Provider value={{ endpoint: { id: "old", name: "old" }, call }}>{children}</EndpointContext.Provider>
+    );
+    const { result } = renderHook(() => useProfileSummaries(), { wrapper });
+    await waitFor(() => expect(result.current.data?.profiles).toHaveLength(2));
+    const [alpi, doc] = result.current.data.profiles;
+    expect(alpi).toMatchObject({ fold: "alpaca", accent: "#14110c" });
+    expect(doc).toMatchObject({ fold: "shield", accent: "#3899e2" });
+  });
+
+  it("returns the same data reference across renders while the snapshot is unchanged", async () => {
+    const call = vi.fn(async () => ({ profiles: [{ name: "default", is_default: true }] }));
+    const wrapper = ({ children }) => (
+      <EndpointContext.Provider value={{ endpoint: { id: "stable", name: "stable" }, call }}>{children}</EndpointContext.Provider>
+    );
+    const { result, rerender } = renderHook(() => useProfileSummaries(), { wrapper });
+    await waitFor(() => expect(result.current.data?.profiles).toHaveLength(1));
+    const first = result.current.data;
+    rerender();
+    expect(result.current.data).toBe(first);
+  });
 });
 
 describe("usePolledCall (via useProfileSummaries) endpoint switch", () => {

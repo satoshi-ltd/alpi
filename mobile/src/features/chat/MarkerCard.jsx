@@ -3,7 +3,7 @@ import { formatCostLine } from "../../../../common/format.mjs";
 import { StyleSheet, Text, View } from 'react-native';
 import { radii, space, lineHeights, tracking } from '../../theme/tokens';
 
-import { Diamond } from '../../components/Diamond';
+import { Fold } from '../../components/Fold';
 import { Icon } from '../../components/Icon';
 import { Dot } from '../../components/Dot';
 import { RichText } from '../../components/RichText';
@@ -28,7 +28,7 @@ const S = StyleSheet.create({
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: space.s2, marginBottom: space.s2 },
   iconSlot: { width: 14, alignItems: 'center', justifyContent: 'center' },
   title: { marginBottom: space.s2 },
-  skipDot: { width: 10, height: 10, borderRadius: 5, borderWidth: 1.5, overflow: 'hidden' },
+  skipDot: { width: 10, height: 10, borderRadius: radii.pill, borderWidth: 1.5, overflow: 'hidden' },
   skipBar: { position: 'absolute', width: 14, height: 1.5, top: 3.5, left: -2.5, transform: [{ rotate: '45deg' }] },
   taskDot: { width: 6, height: 6, borderRadius: 3 },
 });
@@ -53,7 +53,7 @@ function MarkerIcon({ variant, color, stale }) {
   return <View style={[S.taskDot, { backgroundColor: color }]} />;
 }
 
-export function MarkerCard({ variant = 'task', side = 'left', hubColor, speakerName, isFromHub, seq, cost, title, children, label, stale = false }) {
+export function MarkerCard({ variant = 'task', side = 'left', hubColor, hubFold, speakerName, isFromHub, seq, cost, title, children, label, stale = false }) {
   const { colors, fonts, fontSizes } = useTheme();
   const { twoPane } = usePane();
   const pct = TINTS[variant] ?? 0.11;
@@ -62,9 +62,7 @@ export function MarkerCard({ variant = 'task', side = 'left', hubColor, speakerN
   const isRight = side === 'right';
   const hasBody = Boolean(children);
   const compact = !title && !hasBody;
-  const corner = isRight
-    ? { borderTopLeftRadius: radii.bubble, borderTopRightRadius: radii.xs, borderBottomRightRadius: radii.bubble, borderBottomLeftRadius: radii.bubble }
-    : { borderTopLeftRadius: radii.xs, borderTopRightRadius: radii.bubble, borderBottomRightRadius: radii.bubble, borderBottomLeftRadius: radii.bubble };
+  const corner = { borderRadius: radii.xs };
 
   const costStr = cost?.tokens > 0 || cost?.usd > 0 ? formatCostLine(cost) : null;
 
@@ -72,9 +70,9 @@ export function MarkerCard({ variant = 'task', side = 'left', hubColor, speakerN
 
   const SpeakerEl = speakerName ? (
     <View style={S.row}>
-      {!isRight ? <Diamond color={baseAccent} /> : null}
+      {!isRight ? <Fold fold={hubFold} color={baseAccent} /> : null}
       <Text style={metaStyle}>{speakerName}</Text>
-      {isRight ? <Diamond color={baseAccent} /> : null}
+      {isRight ? <Fold fold={hubFold} color={baseAccent} /> : null}
     </View>
   ) : null;
 

@@ -67,7 +67,7 @@ describe('Pair screen under a throttled daemon', () => {
     const pairButton = screen.getAllByRole('button').find((b) => /^pair$/i.test(b.textContent.trim()));
     fireEvent.click(pairButton);
 
-    await waitFor(() => expect(screen.getByText(RATE_LIMITED_MESSAGE)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Too many attempts')).toBeTruthy());
     expect(callMock).toHaveBeenCalledTimes(1);
     expect(callMock.mock.calls[0][1]).toBe('host.connections.exchange_pairing');
     expect(document.querySelector('[data-pair-input]').value).toBe(LINK);

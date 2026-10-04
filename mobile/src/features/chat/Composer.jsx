@@ -13,6 +13,7 @@ import { sendHaptic } from './chatHaptics';
 import { canComposerSend } from './composerSend';
 import { MentionPopover } from './MentionPopover';
 import { validateTaskShape } from './parseMarkers';
+import { wellStyle } from '../../components/well';
 
 const HAIRLINE = 0.5;
 const SEND_D = 30;
@@ -34,8 +35,8 @@ function ModelChip({ label, onPress, disabled }) {
         gap: space.s2,
         height: CHIP_H,
         paddingHorizontal: space.s5,
-        borderRadius: CHIP_H / 2,
-        backgroundColor: pressed ? colors.selected : colors.bgInput,
+        borderRadius: radii.tag,
+        backgroundColor: pressed ? colors.line2 : colors.selected,
       })}
     >
       <Icon name="sparkle" size="xs" color={colors.ink3} />
@@ -60,6 +61,7 @@ export function Composer({
   mentionSource,
   seedText,
   seedKey,
+  initialText = '',
   attachments = [],
   onPickAttachment,
   onRemoveAttachment,
@@ -76,7 +78,7 @@ export function Composer({
   const rideKeyboard = useAnimatedStyle(() => ({
     paddingBottom: Math.max(COMPOSER_PAD_Y, bottomInset - keyboard.height.value),
   }));
-  const [text, setText] = useState('');
+  const [text, setText] = useState(initialText);
   const [focused, setFocused] = useState(false);
   const lastSeedKeyRef = useRef(seedKey);
   useEffect(() => {
@@ -162,10 +164,7 @@ export function Composer({
       >
         <View
           style={{
-            backgroundColor: colors.bgElev,
-            borderWidth: HAIRLINE,
-            borderColor: focused ? colors.ink3 : colors.line2,
-            borderRadius: radii['3xl'],
+            ...wellStyle(colors, { focused }),
             paddingTop: space.s6,
             paddingHorizontal: space.s7,
             paddingBottom: space.s4,
@@ -231,7 +230,7 @@ export function Composer({
               style={({ pressed }) => ({
                 width: SEND_D,
                 height: SEND_D,
-                borderRadius: radii.lg,
+                borderRadius: radii.xs,
                 backgroundColor: !stoppable && !canSend ? colors.line : actionBg,
                 opacity: pressed ? 0.85 : 1,
                 alignItems: 'center',

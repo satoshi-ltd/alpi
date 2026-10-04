@@ -105,12 +105,12 @@ vi.mock('../src/components/ActionSheet', () => ({
         )
       : null,
 }));
-vi.mock('../src/components/AlpiMark', () => ({ AlpiMark: () => React.createElement('span', { 'data-mark': 'true' }) }));
 vi.mock('../src/components/Banner', () => ({
   Banner: ({ kind, children, action }) =>
     React.createElement('div', { 'data-banner': kind, 'data-banner-action': action }, children),
 }));
 vi.mock('../src/components/Diamond', () => ({ Diamond: () => React.createElement('span', { 'data-diamond': 'true' }) }));
+vi.mock('../src/components/Fold', () => ({ Fold: ({ fold, color, size, outlined }) => React.createElement('span', { 'data-fold': fold ?? 'diamond', 'data-color': color, 'data-size': size, 'data-outlined': String(!!outlined) }) }));
 vi.mock('../src/components/Dot', () => ({ Dot: () => React.createElement('span', { 'data-dot': 'true' }) }));
 vi.mock('../src/components/Icon', () => ({ Icon: ({ name }) => React.createElement('span', { 'data-icon': name }) }));
 vi.mock('../src/components/Meter', () => ({
@@ -450,5 +450,35 @@ describe('Workgroup dead-end screens', () => {
     h.foreign = false;
     h.endpoint = null;
     expect(unfamilied(render(<WorkgroupChat />).container)).toEqual([]);
+  });
+});
+
+describe('Workgroup header phase button', () => {
+  it('shows the live phase, who works it and the strip count', () => {
+    h.wg = { ...WG, phase_map: { build: { owner: 'pixel' }, qa: { owner: 'lens' } } };
+    h.tasks = {
+      active: { slug: 'qa', title: 'audit', opened_seq: 9, assignees: ['lens', 'lingua'] },
+      closed: [],
+      blocked: null,
+      pipeline_run: { pipeline: 'setup', status: 'running', phases: [{ slug: 'build', state: 'completed', seq: 5 }, { slug: 'qa', state: 'current', seq: 9 }] },
+    };
+    render(<WorkgroupChat />);
+    const button = screen.getByLabelText('#qa · @lingua · 1 of 2');
+    expect(button.textContent).toContain('1 of 2');
+    expect(button.querySelector('[data-fold="diamond"]')).toBeTruthy();
+  });
+});
+
+describe('Workgroup header between phases', () => {
+  it('keeps the strip count when no phase is live', () => {
+    h.wg = { ...WG, phase_map: { build: { owner: 'pixel' }, qa: { owner: 'lens' } } };
+    h.tasks = {
+      active: null,
+      closed: [],
+      blocked: null,
+      pipeline_run: { pipeline: 'setup', status: 'between', phases: [{ slug: 'build', state: 'completed', seq: 5 }, { slug: 'qa', state: 'pending', seq: null }] },
+    };
+    render(<WorkgroupChat />);
+    expect(screen.getByLabelText('pipeline · 1 of 2').textContent).toContain('1 of 2');
   });
 });

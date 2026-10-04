@@ -77,7 +77,7 @@ export function ShellFooter({ unread = 0, onNotificationsPress, onSettingsPress,
     gap: space.s2,
     minHeight: ENTRY_H,
     paddingHorizontal: space.s3,
-    borderRadius: radii.lg,
+    borderRadius: radii.xs,
     backgroundColor: pressed ? colors.selected : 'transparent',
   });
   return (

@@ -8,7 +8,7 @@ import { formatUsd } from '../../../common/format.mjs';
 import { AdminGuard } from '../../src/components/AdminGuard';
 import { Button } from '../../src/components/Button';
 import { Pill } from '../../src/components/Pill';
-import { Row, RowSeparator, SectionHeader } from '../../src/components/Row';
+import { Row, RowGroup, RowSeparator, SectionHeader } from '../../src/components/Row';
 import { ScreenHeader } from '../../src/components/ScreenHeader';
 import { SyncBar } from '../../src/components/SyncBar';
 import { NewConnectionSheet } from '../../src/features/connections/NewConnectionSheet';
@@ -77,40 +77,44 @@ function ConnectionsScreen() {
           {host ? (
             <>
               <SectionHeader first kicker="local socket · setup, TUI, CLI">Host</SectionHeader>
-              <Row
-                label="Local host"
-                item
-                helper={`${host.sessions ?? 0} sessions · seen ${relativeSeen(host.last_seen)}`}
-                value={formatUsd(host.cost_14d)}
-                onPress={() => router.push('/connections/host')}
-              />
+              <RowGroup>
+                <Row
+                  label="Local host"
+                  item
+                  helper={`${host.sessions ?? 0} sessions · seen ${relativeSeen(host.last_seen)}`}
+                  value={formatUsd(host.cost_14d)}
+                  onPress={() => router.push('/connections/host')}
+                />
+              </RowGroup>
             </>
           ) : null}
           <SectionHeader first={!host} kicker={`${paired.length} paired`}>Connections</SectionHeader>
-          {paired.length === 0 ? (
-            <Row
-              label={EMPTY.connections.title}
-              helper={EMPTY.connections.hint}
-              chevron={false}
-            />
-          ) : (
-            paired.map((row, i) => (
-              <View key={row.id}>
-                {i > 0 ? <RowSeparator /> : null}
-                <Row
-                  label={row.label || row.id}
-                  item
-                  helper={connectionMeta(row)}
-                  value={
-                    row.status === 'disabled'
-                      ? <Pill tone="warn">disabled</Pill>
-                      : formatUsd(row.cost_14d)
-                  }
-                  onPress={() => router.push(`/connections/${row.id}`)}
-                />
-              </View>
-            ))
-          )}
+          <RowGroup>
+            {paired.length === 0 ? (
+              <Row
+                label={EMPTY.connections.title}
+                helper={EMPTY.connections.hint}
+                chevron={false}
+              />
+            ) : (
+              paired.map((row, i) => (
+                <View key={row.id}>
+                  {i > 0 ? <RowSeparator /> : null}
+                  <Row
+                    label={row.label || row.id}
+                    item
+                    helper={connectionMeta(row)}
+                    value={
+                      row.status === 'disabled'
+                        ? <Pill tone="warn">disabled</Pill>
+                        : formatUsd(row.cost_14d)
+                    }
+                    onPress={() => router.push(`/connections/${row.id}`)}
+                  />
+                </View>
+              ))
+            )}
+          </RowGroup>
         </ScrollView>
         </SettingsSurface>
       )}

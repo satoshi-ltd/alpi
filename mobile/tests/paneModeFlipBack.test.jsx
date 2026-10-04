@@ -81,10 +81,10 @@ vi.mock('../src/theme/ThemeContext', () => ({
 }));
 
 vi.mock('../src/components/ActionSheet', () => ({ ActionSheet: () => null }));
-vi.mock('../src/components/AlpiMark', () => ({ AlpiMark: () => null }));
 vi.mock('../src/components/Banner', () => ({ Banner: ({ children }) => React.createElement('div', {}, children) }));
 vi.mock('../src/components/Button', () => ({ Button: ({ title }) => React.createElement('button', { type: 'button' }, title) }));
 vi.mock('../src/components/Diamond', () => ({ Diamond: () => null }));
+vi.mock('../src/components/Fold', () => ({ Fold: () => null }));
 vi.mock('../src/components/Icon', () => ({ Icon: ({ name }) => React.createElement('span', { 'data-icon': name }) }));
 vi.mock('../src/components/Meter', () => ({ Meter: () => null }));
 vi.mock('../src/components/Toast', () => ({ useToast: () => vi.fn() }));

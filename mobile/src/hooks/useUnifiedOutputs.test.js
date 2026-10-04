@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../lib/rpc', () => ({ call: vi.fn() }));
 vi.mock('./useEvents', () => ({ useEventEffect: () => {} }));
+vi.mock('../theme/ThemeContext', () => ({ useTheme: () => ({ colors: { accent: '#14110c' } }) }));
 
 import { EndpointContext } from '../lib/EndpointContext';
 import { call as rpcCall } from '../lib/rpc';
@@ -54,6 +55,18 @@ describe('fetchConnectionOutputs', () => {
     expect(listCall[2]).toMatchObject({ profile: 'vera', status: 'unread' });
   });
 
+  it('carries each profile fold onto its rows and leaves older daemons undefined', async () => {
+    const rpc = vi.fn(async (_c, method, params) => {
+      if (method === 'host.profile.summaries') {
+        return { profiles: [{ name: 'vera', accent: '#f00', fold: 'shield' }, { name: 'abby', accent: '#0f0' }] };
+      }
+      return { outputs: [{ id: `${params.profile}-1`, created_at: 5 }] };
+    });
+    const { rows } = await fetchConnectionOutputs(conn, undefined, rpc);
+    expect(rows.find((r) => r.profile === 'vera').fold).toBe('shield');
+    expect(rows.find((r) => r.profile === 'abby').fold).toBeUndefined();
+  });
+
   it('falls back to the default profile when summaries is empty', async () => {
     const rpc = vi.fn(async (_c, method) => {
       if (method === 'host.profile.summaries') return { profiles: [] };
@@ -62,6 +75,26 @@ describe('fetchConnectionOutputs', () => {
     const { rows } = await fetchConnectionOutputs(conn, undefined, rpc);
     expect(rows).toHaveLength(1);
     expect(rows[0].profile).toBe('default');
+  });
+
+  it('draws the default profile as the alpaca in the accent it is handed', async () => {
+    const rpc = vi.fn(async (_c, method, params) => {
+      if (method === 'host.profile.summaries') return { profiles: [{ name: 'default', accent: '#f0b447' }, { name: 'vera', accent: '#f00' }] };
+      return { outputs: [{ id: `${params.profile}-1`, created_at: 1 }] };
+    });
+    const { rows } = await fetchConnectionOutputs(conn, undefined, rpc, '#14110c');
+    const own = rows.find((r) => r.profile === 'default');
+    expect(own).toMatchObject({ accent: '#14110c', fold: 'alpaca' });
+    expect(rows.find((r) => r.profile === 'vera').accent).toBe('#f00');
+  });
+
+  it('draws the empty-summaries fallback as the alpaca too', async () => {
+    const rpc = vi.fn(async (_c, method) => {
+      if (method === 'host.profile.summaries') return { profiles: [] };
+      return { outputs: [{ id: 'd1', created_at: 1 }] };
+    });
+    const { rows } = await fetchConnectionOutputs(conn, undefined, rpc, '#14110c');
+    expect(rows[0]).toMatchObject({ profile: 'default', accent: '#14110c', fold: 'alpaca' });
   });
 
   it('reports ok=false when the daemon is unreachable (summaries throws)', async () => {
@@ -189,6 +222,17 @@ describe('useUnifiedOutputs · unreachable', () => {
     await waitFor(() => expect(result.current.unreachable).toBe(true));
     expect(result.current.rows).toEqual([]);
     expect(result.current.unreachableCount).toBe(1);
+  });
+
+  it('paints the default profile with the theme accent, as the profile summaries do', async () => {
+    rpcCall.mockImplementation(async (_c, method) => {
+      if (method === 'host.profile.summaries') return { profiles: [{ name: 'default', is_default: true }] };
+      return { outputs: [{ id: 'o1', created_at: 1 }] };
+    });
+    const { result } = renderHook(() => useUnifiedOutputs(), { wrapper: wrap(adminValue(['c1'])) });
+
+    await waitFor(() => expect(result.current.rows).toHaveLength(1));
+    expect(result.current.rows[0]).toMatchObject({ accent: '#14110c', fold: 'alpaca' });
   });
 
   it('a reachable daemon with nothing to show is a plain empty inbox', async () => {

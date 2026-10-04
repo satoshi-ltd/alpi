@@ -1,7 +1,10 @@
-import { ScrollView, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import { Eyebrow } from './Eyebrow';
-import { inlineSegments, parseNotificationBody } from '../../../common/notificationBody.mjs';
+import { groupTone } from './groupTone';
+import { Icon } from './Icon';
+import { errorParts, failedTitle, inlineSegments, parseNotificationBody } from '../../../common/notificationBody.mjs';
 import { useTheme } from '../theme/ThemeContext';
 import { lineHeights, radii, space } from '../theme/tokens';
 
@@ -83,7 +86,36 @@ function Inline({ text, theme }) {
   });
 }
 
+function Entry({ entry, last, theme }) {
+  return (
+    <View style={{ gap: space.s1, paddingVertical: space.s4, borderBottomWidth: last ? 0 : 0.5, borderBottomColor: theme.colors.line }}>
+      <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: space.s3 }}>
+        <Text style={{ flexShrink: 0, fontFamily: theme.fonts.sans.semibold, fontSize: theme.fontSizes.md, lineHeight: theme.fontSizes.md * lineHeights.normal, color: theme.colors.ink }}>
+          {entry.name}
+        </Text>
+        {entry.meta ? (
+          <Text numberOfLines={1} style={{ flex: 1, fontFamily: theme.fonts.mono, fontSize: theme.fontSizes.xs, color: theme.colors.ink3 }}>
+            {entry.meta}
+          </Text>
+        ) : null}
+      </View>
+      {entry.text ? (
+        <Text style={{ fontFamily: theme.fonts.sans.regular, fontSize: theme.fontSizes.md, lineHeight: theme.fontSizes.md * lineHeights.normal, color: theme.colors.ink2 }}>
+          <Inline text={entry.text} theme={theme} />
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 function List({ block, theme }) {
+  if (block.items.every((it) => it.entry)) {
+    return (
+      <View>
+        {block.items.map((it, j) => <Entry key={j} entry={it.entry} last={j === block.items.length - 1} theme={theme} />)}
+      </View>
+    );
+  }
   return (
     <View style={{ paddingLeft: space.s4, gap: space.s2 }}>
       {block.items.map((it, j) => (
@@ -104,7 +136,7 @@ function CodeBlock({ text, theme }) {
   return (
     <View
       style={{
-        borderRadius: radii.lg,
+        borderRadius: radii.xs,
         borderWidth: 0.5,
         borderColor: theme.colors.line,
         backgroundColor: theme.colors.hover,
@@ -124,7 +156,7 @@ function ReportTable({ block, theme }) {
   const rows = [block.headers, ...block.rows];
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-      <View style={{ borderWidth: 0.5, borderColor: theme.colors.line, borderRadius: radii.lg, overflow: 'hidden' }}>
+      <View style={{ borderWidth: 0.5, borderColor: theme.colors.line, borderRadius: radii.xs, overflow: 'hidden' }}>
         {rows.map((row, i) => (
           <View
             key={i}
@@ -204,4 +236,64 @@ export function NotificationBody({ body, lead = false }) {
   });
 
   return <View>{children}</View>;
+}
+
+function Details({ blocks, theme }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <View style={{ borderRadius: radii.xs, backgroundColor: theme.colors.hover, overflow: 'hidden' }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityLabel="Details"
+        onPress={() => setOpen((v) => !v)}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2, minHeight: 44, paddingHorizontal: space.s5 }}
+      >
+        <Icon name={open ? 'chevron-down' : 'chevron-right'} size="sm" color={theme.colors.ink3} />
+        <Text style={{ fontFamily: theme.fonts.mono, fontSize: theme.fontSizes.sm, color: theme.colors.ink2 }}>Details</Text>
+      </Pressable>
+      {open ? blocks.map((b, i) => (
+        <ScrollView key={i} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: space.s5, paddingBottom: space.s4 }}>
+          <Text selectable style={{ fontFamily: theme.fonts.mono, fontSize: theme.fontSizes.sm, lineHeight: theme.fontSizes.sm * lineHeights.normal, color: theme.colors.ink2 }}>
+            {b.text}
+          </Text>
+        </ScrollView>
+      )) : null}
+    </View>
+  );
+}
+
+export function ErrorCard({ title, body, actions = null }) {
+  const theme = useTheme();
+  const { colors, fonts, fontSizes, mode } = theme;
+  const { lead, failed } = failedTitle(title);
+  const { facts, details, rest } = errorParts(parseNotificationBody(body));
+  return (
+    <View style={{ gap: space.s5, padding: space.s6, borderRadius: radii.xs, backgroundColor: groupTone(colors, mode) }}>
+      <View accessibilityRole="header" style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
+        <Icon name="triangle-alert" size="md" color={colors.danger} />
+        <Text style={{ flex: 1, fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, lineHeight: fontSizes.lg * lineHeights.cozy, color: colors.ink }}>
+          {lead ? lead : <Text style={{ color: colors.dangerText }}>Failed</Text>}
+          {failed ? <Text style={{ color: colors.dangerText }}>{' failed'}</Text> : null}
+        </Text>
+      </View>
+      {facts.length ? (
+        <View>
+          {facts.map((f, i) => (
+            <View key={i} style={{ flexDirection: 'row', gap: space.s5, paddingVertical: space.s3, borderBottomWidth: i === facts.length - 1 ? 0 : 0.5, borderBottomColor: colors.line }}>
+              <Text style={{ minWidth: 64, flexShrink: 0, paddingTop: 2, fontFamily: fonts.mono, fontSize: fontSizes.xs, letterSpacing: 0.6, color: colors.ink3 }}>
+                {f.label.toUpperCase()}
+              </Text>
+              <Text selectable style={{ flex: 1, fontFamily: fonts.sans.regular, fontSize: fontSizes.md, lineHeight: fontSizes.md * lineHeights.normal, color: i === 0 ? colors.ink : colors.ink2 }}>
+                <Inline text={f.body} theme={theme} />
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+      {rest.map((b, i) => <View key={i}>{renderBlock(b, theme)}</View>)}
+      {details.length ? <Details blocks={details} theme={theme} /> : null}
+      {actions ? <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.s3 }}>{actions}</View> : null}
+    </View>
+  );
 }

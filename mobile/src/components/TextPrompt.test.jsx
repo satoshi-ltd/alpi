@@ -23,13 +23,15 @@ vi.mock('react-native', () => {
 });
 vi.mock('../theme/ThemeContext', () => ({
   useTheme: () => ({
+    shadow: { base: {} },
     colors: { bgPane: '#fff', ink: '#000', ink3: '#333', ink4: '#444', bgInput: '#eee', line2: '#ddd' },
     fonts: { mono: 'mono', sans: { semibold: 'sans-semibold' } },
     fontSizes: { xs: 11, md: 15, lg: 18 },
   }),
 }));
 vi.mock('../theme/tokens', () => ({
-  radii: { sheet: 16, xl: 12 },
+  radii: { xs: 4, xl: 12 },
+  veil: () => 'rgba(255,255,255,0.72)',
   space: { s1: 4, s3: 8, s5: 12, s7: 16, s9: 24 },
   tracking: { snug: -0.005 },
   typography: { dialogTitle: { size: 'lg' } },

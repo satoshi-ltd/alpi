@@ -62,6 +62,7 @@ vi.mock('./useSheetGesture', () => ({
 
 vi.mock('../theme/ThemeContext', () => ({
   useTheme: () => ({
+    shadow: { base: { borderWidth: 0.5, borderColor: '#ddd' } },
     colors: { bgPane: '#fff', ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', line: '#ddd', danger: '#f00', selected: '#eee' },
     fonts: {
       sans: { regular: 'Geist_400Regular', semibold: 'Geist_600SemiBold' },
@@ -134,8 +135,10 @@ describe('ActionSheet wide form', () => {
     const { container } = renderSheet();
     expect(sheetStyleOf(container)).toEqual({
       backgroundColor: '#fff',
-      borderTopLeftRadius: radii.sheet,
-      borderTopRightRadius: radii.sheet,
+      borderWidth: 0.5,
+      borderColor: '#ddd',
+      borderTopLeftRadius: radii.xs,
+      borderTopRightRadius: radii.xs,
       overflow: 'hidden',
     });
   });
@@ -144,10 +147,12 @@ describe('ActionSheet wide form', () => {
     const { container } = renderInTwoPane();
     expect(sheetStyleOf(container)).toEqual({
       backgroundColor: '#fff',
-      borderTopLeftRadius: radii.sheet,
-      borderTopRightRadius: radii.sheet,
-      borderBottomLeftRadius: radii.sheet,
-      borderBottomRightRadius: radii.sheet,
+      borderWidth: 0.5,
+      borderColor: '#ddd',
+      borderTopLeftRadius: radii.xs,
+      borderTopRightRadius: radii.xs,
+      borderBottomLeftRadius: radii.xs,
+      borderBottomRightRadius: radii.xs,
       overflow: 'hidden',
       alignSelf: 'center',
       width: '100%',

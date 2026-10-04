@@ -92,6 +92,18 @@ describe('row states', () => {
     expect(rowStateFor(states, { kind: 'profile', id: 'abby' })).toBeNull();
   });
 
+  it('reads a failed job that is running again as working, but not another failed job of the profile', () => {
+    const failed = (job_id) => ({ profile: 'smith', job_id, last_run_status: 'error', last_run_at: NOW - 600 });
+    const rerun = { kind: 'turn', source: 'schedule', profile: 'smith', job_id: 'audit', started_at: NOW - 60 };
+    const state = (raw) => rowStateFor(rowStates(normalizeActivity(raw), NOW), { kind: 'profile', id: 'smith' });
+    expect(state({ running: [rerun], scheduled: [failed('audit')] })).toEqual({ state: 'working' });
+    expect(state({ running: [rerun], scheduled: [failed('audit'), failed('digest')] })).toEqual({ state: 'failed' });
+    expect(state({ needs_you: [{ kind: 'approval', profile: 'smith' }], running: [rerun], scheduled: [failed('audit')] })).toEqual({ state: 'needs-you' });
+    expect(state({ running: [{ ...rerun, profile: 'doc' }], scheduled: [failed('audit')] })).toEqual({ state: 'failed' });
+    const { job_id: _, ...older } = rerun;
+    expect(state({ running: [older], scheduled: [failed('audit')] })).toEqual({ state: 'failed' });
+  });
+
   it('keeps a failure older than a day off the row', () => {
     const states = rowStates(normalizeActivity(LIST), NOW);
     expect(states.has('profile:abby')).toBe(false);

@@ -8,6 +8,7 @@ import { warning } from '../../lib/haptics';
 import { lineHeights, mobile, radii, space } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeContext';
 import { useClarificationQueue } from './useClarificationQueue';
+import { useWell } from '../../components/well';
 
 function modeFor(current) {
   if (!current) return 'single';
@@ -177,7 +178,7 @@ function Radio({ filled, color }) {
       style={{
         width: 24,
         height: 24,
-        borderRadius: 12,
+        borderRadius: radii.pill,
         borderWidth: 1.5,
         borderColor: color,
         alignItems: 'center',
@@ -187,7 +188,7 @@ function Radio({ filled, color }) {
       {filled ? (
         <View
           style={{
-            width: 12, height: 12, borderRadius: 6, backgroundColor: color,
+            width: 12, height: 12, borderRadius: radii.pill, backgroundColor: color,
           }}
         />
       ) : null}
@@ -202,7 +203,7 @@ function Checkbox({ checked, color, fonts }) {
       style={{
         width: 24,
         height: 24,
-        borderRadius: 5,
+        borderRadius: radii.xs,
         borderWidth: 1.5,
         borderColor: color,
         alignItems: 'center',
@@ -220,14 +221,12 @@ function Checkbox({ checked, color, fonts }) {
 function OtherInline({ otherText, setOtherText, onSend, onCancel, busy, colors, fonts }) {
   const { fontSizes } = useTheme();
   const canSend = !busy && otherText.trim().length > 0;
+  const [well, focus] = useWell(colors);
   return (
     <View
       style={{
         marginTop: space.s2,
-        borderRadius: radii.xl,
-        borderWidth: 0.5,
-        borderColor: colors.line,
-        backgroundColor: colors.bgInput,
+        ...well,
         paddingHorizontal: space.s5,
         paddingTop: space.s4,
         paddingBottom: space.s3,
@@ -238,6 +237,7 @@ function OtherInline({ otherText, setOtherText, onSend, onCancel, busy, colors, 
         onChangeText={setOtherText}
         placeholder="Type your answer…"
         placeholderTextColor={colors.ink3}
+        {...focus}
         autoFocus
         multiline
         editable={!busy}
@@ -267,7 +267,7 @@ function OtherInline({ otherText, setOtherText, onSend, onCancel, busy, colors, 
           style={{
             paddingVertical: space.s3,
             paddingHorizontal: space.s6,
-            borderRadius: radii.lg,
+            borderRadius: radii.xs,
             backgroundColor: colors.ink,
             opacity: canSend ? 1 : 0.35,
           }}
@@ -370,10 +370,10 @@ function ConfirmChoices({ choices, onPick, busy, colors, fonts }) {
         onPress={() => onPick(primary.label)}
         style={({ pressed }) => ({
           paddingVertical: space.s6,
-          borderRadius: radii.lg,
-          backgroundColor: colors.ink,
+          borderRadius: radii.xs,
+          backgroundColor: pressed && !busy ? colors.ink2 : colors.ink,
           alignItems: 'center',
-          opacity: busy ? 0.5 : pressed ? 0.85 : 1,
+          opacity: busy ? 0.5 : 1,
         })}
       >
         <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.bgPane }}>
@@ -415,7 +415,7 @@ function Footer({ picked, busy, onContinue, colors, fonts }) {
         style={{
           paddingVertical: space.s4,
           paddingHorizontal: space.s7,
-          borderRadius: radii.lg,
+          borderRadius: radii.xs,
           backgroundColor: colors.ink,
           opacity: canContinue ? 1 : 0.4,
         }}

@@ -120,14 +120,14 @@ older daemons that contain a final `token` remain readable.
 - `src/features/` — composite components: ChatHeader, Bubble, MarkerCard,
   ThinkingDots, ToolCallRow, MessageActionsSheet, Composer; inbox
   features (InboxRow, PinnedRow, ConnHeader, RowContextSheet,
-  SegmentedFilter); sheets (Model, Voice, Accent, Budget, Workspace,
+  SegmentedFilter); sheets (Model, Voice, Appearance, Budget, Workspace,
   Sessions, Compose, Connection, Settings, Activity).
 - `src/theme/` — design tokens (`space`, `radii`, `fontSizes`,
   `lineHeights`, `fonts`, `alpha`, `motion`, `palettes`, `shadows`,
   `mobile`) live in `tokens.js` and are imported directly. Theme-
   dependent values (`colors`, `shadow`) come from `useTheme()`.
-  `accents.js` exports `profileAccents` + `accentForProfile()` + a
-  picker palette `namedAccents`.
+  Profile colours come only from `host.profile.summaries`; a profile
+  without one falls back to `FALLBACK_ACCENT` from `common/folds.mjs`.
 
 ## Performance notes
 

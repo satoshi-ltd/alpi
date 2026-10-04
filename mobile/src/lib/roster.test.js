@@ -79,6 +79,37 @@ describe('rosterSections creation reachability', () => {
   });
 });
 
+describe('rosterSections front door', () => {
+  const host = { kind: 'profile', id: 'default', name: 'default', label: 'alpi', preview: 'quiet week', paused: true, raw: { name: 'default', is_default: true } };
+  const wgDefault = { kind: 'workgroup', id: 'default', name: 'default', label: 'default', preview: 'brief' };
+
+  it('leads with an unlabelled section holding only the default profile, above pinned', () => {
+    const sections = rosterSections([pixel, host, alpi, roma, abad], '');
+    expect(sections.map((s) => s.key)).toEqual(['front', 'pinned', 'profiles', 'workgroups']);
+    expect(sections[0]).toEqual({ key: 'front', label: '', data: [host] });
+    expect(sections[1].data).toEqual([alpi, roma]);
+  });
+
+  it('ignores a stale pin on the default profile', () => {
+    const sections = rosterSections([{ ...host, pinned: true }, pixel], '');
+    expect(sections.map((s) => s.key)).toEqual(['front', 'profiles']);
+  });
+
+  it('keeps it under a filter only when it matches its name or its label', () => {
+    expect(rosterSections([host, pixel], 'alp').map((s) => s.key)).toEqual(['front']);
+    expect(rosterSections([host, pixel], 'defa').map((s) => s.key)).toEqual(['front']);
+    expect(rosterSections([host, pixel], 'pixel').map((s) => s.key)).toEqual(['profiles']);
+  });
+
+  it('never takes a workgroup named default for the front door', () => {
+    expect(rosterSections([wgDefault, pixel], '').map((s) => s.key)).toEqual(['profiles', 'workgroups']);
+  });
+
+  it('has no front section on a connection without the default profile', () => {
+    expect(rosterSections([pixel, mira], '').map((s) => s.key)).toEqual(['profiles']);
+  });
+});
+
 describe('matchesQuery', () => {
   it('is case-insensitive and ignores surrounding blanks', () => {
     expect(matchesQuery(pixel, '  PIXEL ')).toBe(true);

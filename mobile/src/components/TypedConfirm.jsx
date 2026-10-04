@@ -6,12 +6,13 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import { radii, space, lineHeights, typography } from '../theme/tokens';
+import { radii, space, lineHeights, typography, veil } from '../theme/tokens';
 
 import { selection, warning } from '../lib/haptics';
 import { useTheme } from '../theme/ThemeContext';
 import { Button } from './Button';
 import { useExitSnapshot } from './useExitSnapshot';
+import { useWell } from './well';
 
 // EASE_OUT is the time-reverse of EASE_IN, not EASE_IN replayed backwards — that front-loads the exit and the dialog is gone in one frame.
 const EASE_IN = Easing.bezier(0.2, 0.7, 0.2, 1);
@@ -57,7 +58,8 @@ export function TypedConfirm({
   tone = 'danger',
   typed = true,
 }) {
-  const { colors, fonts, fontSizes } = useTheme();
+  const { colors, fonts, fontSizes, shadow } = useTheme();
+  const [well, focus] = useWell(colors);
   const [value, setValue] = useState('');
   const [kbHeight, setKbHeight] = useState(0);
   const danger = tone === 'danger';
@@ -112,7 +114,7 @@ export function TypedConfirm({
       supportedOrientations={['portrait', 'landscape-left', 'landscape-right']}
       onRequestClose={onClose}
     >
-      <Animated.View style={[{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', paddingBottom: kbHeight }, backdropStyle]}>
+      <Animated.View style={[{ flex: 1, backgroundColor: veil(colors), paddingBottom: kbHeight }, backdropStyle]}>
         <Pressable
           onPress={onClose}
           accessible={false}
@@ -130,12 +132,8 @@ export function TypedConfirm({
                 width: '100%',
                 maxWidth: 420,
                 backgroundColor: colors.bgPane,
-                borderRadius: radii.sheet,
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 20 },
-                shadowOpacity: 0.3,
-                shadowRadius: 60,
-                elevation: 24,
+                borderRadius: radii.xs,
+                ...shadow.base,
               },
               dialogStyle,
             ]}
@@ -190,11 +188,9 @@ export function TypedConfirm({
               autoCapitalize="none"
               autoCorrect={false}
               spellCheck={false}
+              {...focus}
               style={{
-                backgroundColor: colors.bgInput,
-                borderRadius: radii.xl,
-                borderWidth: 0.5,
-                borderColor: colors.line2,
+                ...well,
                 paddingHorizontal: space.s5,
                 height: 44,
                 fontFamily: fonts.mono,

@@ -11,40 +11,78 @@ import { radii, space, lineHeights } from '../src/theme/tokens';
 import { Button } from '../src/components/Button';
 import { Eyebrow } from '../src/components/Eyebrow';
 import { Icon } from '../src/components/Icon';
-import { useToast } from '../src/components/Toast';
 import { useBack } from '../src/hooks/useBack';
 import { useEndpoint } from '../src/lib/EndpointContext';
-import { exchangePairing, pairingLinkFromParams, parsePairing, PairingError } from '../src/lib/pairing';
-import { RATE_LIMITED_MESSAGE, RATE_LIMITED_STATUS } from '../src/lib/rateLimit';
+import { exchangePairing, pairingLinkFromParams, parsePairing } from '../src/lib/pairing';
+import { RATE_LIMITED_STATUS } from '../src/lib/rateLimit';
 import { probe } from '../src/lib/probe';
 import { call } from '../src/lib/rpc';
 import { useTheme } from '../src/theme/ThemeContext';
+import { useWell } from '../src/components/well';
+import { StepLadder, ladderSteps } from '../src/components/StepLadder';
+import { PAIRING_STEPS, failedStep, pairingFailure, pairingFailureKind, pairingLinkHost, pairingStepLabel } from '../../common/onboarding.mjs';
 
 export default function Pair() {
   const { colors, fonts, fontSizes, mobile } = useTheme();
+  const [well, focus] = useWell(colors);
   const router = useRouter();
   const goBack = useBack();
-  const toast = useToast();
   // addConnection keeps SecureStore and the provider's live connection list in sync.
   const { addConnection } = useEndpoint();
   const params = useLocalSearchParams();
   const routedLink = pairingLinkFromParams(params);
-  const [mode, setMode] = useState('paste');
+  const [mode, setMode] = useState(params.mode === 'scan' && !routedLink ? 'scan' : 'paste');
   const [text, setText] = useState(routedLink);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
+  const [current, setCurrent] = useState(null);
+  const [failure, setFailure] = useState(null);
   const [permission, requestPermission] = useCameraPermissions();
 
   useEffect(() => {
     if (routedLink) setText(routedLink);
   }, [routedLink]);
 
+  const fail = (kind, host, failedAt, savedNote) => {
+    const next = pairingFailure(kind, host);
+    setFailure(savedNote
+      ? { ...next, hint: `${next.hint} This phone kept the connection.`, action: 'Open inbox', saved: true, host, at: failedAt ?? failedStep(next.kind) }
+      : { ...next, host, at: failedAt ?? failedStep(next.kind) });
+    if (!next.keepLink && !savedNote) setText('');
+  };
+
+  const editLink = (value) => {
+    setText(value);
+    setFailure(null);
+    setCurrent(null);
+  };
+
+  const onPrimary = () => {
+    if (failure?.saved) {
+      if (router.canDismiss?.()) router.dismissAll();
+      router.replace('/');
+    } else if (!text.trim()) {
+      setMode('scan');
+    } else {
+      tryPair(text);
+    }
+  };
+
   const tryPair = async (input) => {
     setBusy(true);
-    setError(null);
+    setFailure(null);
+    setCurrent('read');
+    const host = pairingLinkHost(input);
     let exchangedCredentialSaved = false;
+    let endpoint;
     try {
-      let endpoint = parsePairing(input);
+      endpoint = parsePairing(input);
+    } catch {
+      fail('invalid', host, 'read');
+      setBusy(false);
+      return;
+    }
+    try {
+      setCurrent('reach');
       const usesOneTimeGrant = Boolean(endpoint.pairingToken);
       const clientName = Platform.constants?.Model || Platform.OS;
       const appVersion = Constants.expoConfig?.version || '';
@@ -55,22 +93,13 @@ export default function Pair() {
       if (usesOneTimeGrant) {
         exchangedCredentialSaved = true;
       }
-      const { status, deviceName, deviceId } = await probe(endpoint);
-      if (status === 'auth-failed') {
-        throw new PairingError('Token rejected by daemon. Generate a fresh pairing link on the daemon and try again.');
-      }
-      if (status === 'disabled') {
-        throw new PairingError('Connection disabled by host. Ask an admin to enable it in Settings → Connections.');
-      }
-      if (status === RATE_LIMITED_STATUS) {
-        throw new PairingError(RATE_LIMITED_MESSAGE);
-      }
-      if (status !== 'online') {
-        throw new PairingError(`Daemon unreachable at ${endpoint.url}. Make sure the daemon is running, the route is reachable, and the port is open.`);
-      }
-      if (!deviceId) {
-        throw new PairingError('Daemon too old or host.version unavailable. Update alpi to v0.6.6 or newer and retry.');
-      }
+      const { status, deviceName, deviceId, role, summaries } = await probe(endpoint);
+      if (status === 'auth-failed') return fail('link-used', host, 'sign-in', exchangedCredentialSaved);
+      if (status === 'disabled') return fail('disabled', host, 'sign-in', exchangedCredentialSaved);
+      if (status === RATE_LIMITED_STATUS) return fail('rate-limited', host, 'reach', exchangedCredentialSaved);
+      if (status !== 'online') return fail('unreachable', host, 'reach', exchangedCredentialSaved);
+      if (!deviceId) return fail('too-old', host, 'sign-in', exchangedCredentialSaved);
+      setCurrent('sign-in');
       await call(endpoint, 'host.connections.register_device', {
         client: 'mobile',
         name: clientName,
@@ -78,13 +107,14 @@ export default function Pair() {
       }).catch(() => {});
       const finalEndpoint = { ...endpoint, deviceId, ...(deviceName ? { name: deviceName } : {}) };
       await addConnection(finalEndpoint);
-      toast({ title: 'Paired', message: `Connected to ${finalEndpoint.name}`, duration: 2200 });
-      router.replace('/paired');
+      setCurrent('done');
+      const shared = Array.isArray(summaries?.profiles) ? summaries.profiles.length : Array.isArray(summaries) ? summaries.length : null;
+      router.replace({
+        pathname: '/paired',
+        params: { host: finalEndpoint.name ?? host ?? '', role: role ?? '', ...(shared != null ? { shared: String(shared) } : {}) },
+      });
     } catch (e) {
-      const message = e?.message ?? 'Pairing failed';
-      setError(exchangedCredentialSaved
-        ? `Pairing credential saved. ${message}`
-        : message);
+      fail(pairingFailureKind(e), host, null, exchangedCredentialSaved);
     } finally {
       setBusy(false);
     }
@@ -92,7 +122,7 @@ export default function Pair() {
 
   const handlePaste = async () => {
     const clip = await Clipboard.getStringAsync();
-    if (clip) setText(clip);
+    if (clip) editLink(clip);
   };
 
   const handleScan = async ({ data }) => {
@@ -101,6 +131,11 @@ export default function Pair() {
     setText(data);
     await tryPair(data);
   };
+
+  const ladderHost = pairingLinkHost(text) ?? failure?.host;
+  const steps = current
+    ? ladderSteps(PAIRING_STEPS, current, failure ? failure.at : null, (id) => pairingStepLabel(id, ladderHost))
+    : null;
 
   if (mode === 'scan') {
     const ready = permission?.granted;
@@ -155,7 +190,7 @@ export default function Pair() {
               onPress={() => setMode('paste')}
               style={({ pressed }) => ({
                 padding: space.s6,
-                borderRadius: radii.xl,
+                borderRadius: radii.xs,
                 backgroundColor: pressed ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.12)',
                 alignItems: 'center',
               })}
@@ -198,18 +233,16 @@ export default function Pair() {
           <Eyebrow>or paste link</Eyebrow>
           <View
             style={{
-              backgroundColor: colors.bgPane,
-              borderRadius: radii.xl,
-              borderWidth: 0.5,
-              borderColor: colors.line2,
+              ...well,
               padding: space.s5,
             }}
           >
             <TextInput
               value={text}
-              onChangeText={setText}
+              onChangeText={editLink}
               placeholder="alpi://device?url=wss://…&name=…&pairing_token=…"
               placeholderTextColor={colors.ink4}
+              {...focus}
               multiline
               numberOfLines={3}
               autoCapitalize="none"
@@ -230,25 +263,23 @@ export default function Pair() {
           </Pressable>
         </View>
 
-        {error ? (
-          <View
-            style={{
-              padding: space.s5,
-              borderRadius: radii.lg,
-              backgroundColor: `${colors.danger}1a`,
-            }}
-          >
-            <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.dangerText }}>
-              {error}
-            </Text>
+        {steps ? (
+          <View style={{ padding: space.s6, borderRadius: radii.xs, backgroundColor: colors.hover, gap: space.s5 }}>
+            <StepLadder steps={steps} />
+            {failure ? (
+              <View accessibilityRole="alert" style={{ gap: space.s2 }}>
+                <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.ink }}>{failure.title}</Text>
+                <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, lineHeight: fontSizes.md * lineHeights.normal, color: colors.ink2 }}>{failure.hint}</Text>
+              </View>
+            ) : null}
           </View>
         ) : null}
 
         <Button
-          title={busy ? 'Pairing…' : 'Pair'}
-          onPress={() => tryPair(text)}
+          title={busy ? 'Pairing…' : failure ? failure.action : 'Pair'}
+          onPress={onPrimary}
           loading={busy}
-          disabled={!text.trim() || busy}
+          disabled={busy || (!text.trim() && !failure)}
           fullWidth
         />
       </ScrollView>
