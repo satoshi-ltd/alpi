@@ -313,3 +313,22 @@ async def test_delete_unknown_id_returns_404(tmp_path: Path, monkeypatch) -> Non
     })
     assert resp["error"]["code"] == -32004
     assert "deadbeefcafe" in resp["error"]["data"]["detail"]
+
+
+@pytest.mark.asyncio
+async def test_mark_unread_flips_a_read_row_back_and_tells_every_device(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "h"
+    home.mkdir()
+    out = _seed(home, body="hi")
+    outputs_mod.mark_read(home, out["id"])
+    captured: list = []
+    from alpi.host import events as host_events
+    monkeypatch.setattr(host_events, "emit", lambda kind, data=None: captured.append((kind, dict(data or {}))))
+    srv = _bind(monkeypatch, home)
+
+    resp = await srv._dispatch({"id": "r", "method": "host.outputs.mark_unread", "params": {"profile": "default", "id": out["id"]}})
+    assert resp["result"]["ok"] is True
+    assert outputs_mod.read(home, out["id"])["status"] == "unread"
+    assert [d for k, d in captured if k == "output.updated"] == [{"profile": "default", "id": out["id"], "status": "unread"}]
+    missing = await srv._dispatch({"id": "m", "method": "host.outputs.mark_unread", "params": {"profile": "default", "id": "0" * 12}})
+    assert missing["error"]["code"] == -32004

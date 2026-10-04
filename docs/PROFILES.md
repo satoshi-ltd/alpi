@@ -25,7 +25,9 @@ The active profile is resolved in this order:
 4. Default (`~/.alpi/`).
 
 `alpi profile list` shows all profiles with their model, size on
-disk, and active marker.
+disk, and active marker (the profile's object glyph; a plain diamond on
+terminals without truecolor and UTF-8). `alpi profile show [name]` draws
+the profile's object as half-block art with its model and path.
 
 ## What's isolated per profile
 
@@ -84,6 +86,7 @@ Not isolated (shared globally by design):
 ```bash
 alpi profile create work       # bootstraps the tree with defaults
 alpi profile list              # shows all profiles, active one flagged
+alpi profile show work         # the profile's object, model and path
 alpi profile remove work       # archives to .trash after confirmation
 ```
 

@@ -32,7 +32,7 @@ _SENSITIVE_PATH_REGEX: tuple[re.Pattern[str], ...] = (
     re.compile(r"(?:^|/)\.(?:bashrc|zshrc|bash_profile|zprofile|zlogin|profile)$", re.I),
     re.compile(r"(?:^|/)Library/Launch(?:Agents|Daemons)/", re.I),
     # Profile secrets and config must only be edited by hand or setup.
-    re.compile(r"(?:^|/)\.alpi(?:/profiles/[^/]+)?/config\.yaml$"),
+    re.compile(r"(?:^|/)\.alpi(?:/profiles/[^/]+)?/config\.yaml$", re.I),
     # .env* blocked except .env.example/.sample/.template/.dist
     re.compile(r"(?:^|/)\.env(?!\.(?:example|sample|template|dist)$)[^/]*$", re.I),
     # Skill secrets dir (mode 0700, scanner-skipped) — never via file tools.
@@ -43,34 +43,68 @@ _SENSITIVE_PATH_REGEX: tuple[re.Pattern[str], ...] = (
 # Off-limits to members for READ as well as write — reading host/ would leak an admin token and escalate.
 _MEMBER_HOME_AREA: frozenset[str] = frozenset({
     "host", "secrets", "gateway", "cache", "logs", "outputs",
-    "sessions", "memories", "schedule", "skills", "alp", "runs", "mentions",
+    "sessions", "memories", "schedule", "skills", "alp", "runs", "mentions", "run", "browser", "recipes",
 })
+_MEMBER_HOME_FILE_PREFIXES = ("knowledge.sqlite", "config.yaml")
 _MEMBER_HOME_REGEX = re.compile(
-    r"(?:^|/)\.alpi(?:/profiles/[^/]+)?/"
-    r"(host|secrets|gateway|cache|logs|outputs|sessions|memories|schedule|skills|alp|runs|mentions)(?:/|$)"
+    r"(?:^|/)\.alpi(?:/profiles/[^/]+)?/(" + "|".join(sorted(_MEMBER_HOME_AREA)) + r")(?:/|$)",
+    re.IGNORECASE,
 )
-_ALP_SECRETS_RE = re.compile(r"(?:^|/)alp/secrets(?:/|$)")
+_ALP_SECRETS_RE = re.compile(r"(?:^|/)alp/secrets(?:/|$)", re.IGNORECASE)
+
+
+def _profile_homes() -> list[str]:
+    from alpi.home import alpi_root, get_home
+    root = alpi_root()
+    homes = [root, get_home()]
+    try:
+        homes += [p for p in (root / "profiles").iterdir() if p.is_dir()]
+    except OSError:
+        pass
+    forms: list[str] = []
+    for home in homes:
+        for form in (home.absolute(), home.resolve()):
+            forms.append(str(form).lower().rstrip("/"))
+    return list(dict.fromkeys(forms))
+
+
+def _area_of(parts: list[str]) -> str | None:
+    if not parts:
+        return None
+    if parts[0] in _MEMBER_HOME_AREA:
+        return parts[0]
+    if len(parts) == 1 and parts[0].startswith(_MEMBER_HOME_FILE_PREFIXES):
+        return parts[0]
+    if parts[0] == "profiles" and len(parts) >= 3:
+        return _area_of(parts[2:])
+    return None
 
 
 def _member_home_area(*paths: Path | str) -> str | None:
     for p in paths:
         m = _MEMBER_HOME_REGEX.search(str(p))
         if m:
-            return m.group(1)
-    # Fallback for a custom ALPI_HOME whose dir is not literally named ``.alpi``.
-    from alpi.home import get_home
-    try:
-        home = get_home().resolve()
-    except Exception:
-        return None
+            return m.group(1).lower()
+    homes = _profile_homes()
     for p in paths:
+        forms = {str(Path(p).absolute()).lower()}
         try:
-            rel = Path(p).resolve().relative_to(home)
-        except (ValueError, OSError):
-            continue
-        if rel.parts and rel.parts[0] in _MEMBER_HOME_AREA:
-            return rel.parts[0]
+            forms.add(str(Path(p).resolve()).lower())
+        except OSError:
+            pass
+        for form in forms:
+            for home in homes:
+                if form.startswith(home + "/"):
+                    area = _area_of(form[len(home) + 1:].split("/"))
+                    if area is not None:
+                        return area
     return None
+
+
+def private_areas_fenced() -> bool:
+    from alpi.host.connection_context import current
+    from alpi.tools import _policy
+    return current().role != "admin" or _policy.fences_private_areas()
 
 
 def _member_denied_area(p: Path | str, resolved: Path, *, for_write: bool) -> str | None:
@@ -107,6 +141,15 @@ DISPATCH_FILE_MUTATION_TOOLS = frozenset({
 
 PIPELINE_SIDE_CHANNEL_TOOLS = frozenset({"peer"})
 
+SESSION_HISTORY_TOOLS = frozenset({
+    "session_search",
+    "session_read",
+    "recall_sessions",
+    "index_sessions",
+})
+
+PEER_HISTORY_TOOLS = SESSION_HISTORY_TOOLS | {"workgroup_search", "index_workgroups"}
+
 PIPELINE_HISTORY_TOOLS = frozenset({
     "memory",
     "session_search",
@@ -123,6 +166,7 @@ def dispatch_tool_denies() -> frozenset[str]:
     denied: set[str] = (
         set(PIPELINE_HISTORY_TOOLS) | set(PIPELINE_SIDE_CHANNEL_TOOLS)
         if os.environ.get("ALPI_WORKGROUP_PIPELINE")
+        else set(SESSION_HISTORY_TOOLS) if os.environ.get("ALPI_WORKGROUP_DISPATCH")
         else set()
     )
     if raw is None:
@@ -157,6 +201,14 @@ def dispatch_tool_deny_reasons(
         phase, owner = "the active phase", ""
     profile_denies = frozenset(profile_denies or ())
     reasons: dict[str, str] = {}
+    if not os.environ.get("ALPI_WORKGROUP_PIPELINE"):
+        for name in denied & SESSION_HISTORY_TOOLS:
+            reasons[name] = (
+                "session history is unavailable in workgroup turns: other members' posts steer "
+                "this turn, so this profile's other conversations stay out of it. This is a "
+                "workgroup boundary, not tools.deny in config.yaml"
+            )
+        denied = denied - SESSION_HISTORY_TOOLS
     for name in denied:
         if name in PIPELINE_HISTORY_TOOLS:
             phase_reason = (
@@ -221,8 +273,7 @@ def is_read_denied(path: Path | str) -> bool:
         resolved = typed
     if _is_sensitive(typed, resolved) is not None:
         return True
-    from alpi.host.connection_context import current
-    return current().role != "admin" and _member_denied_area(typed, resolved, for_write=False) is not None
+    return private_areas_fenced() and _member_denied_area(typed, resolved, for_write=False) is not None
 
 
 def resolve_path(path: str, *, for_write: bool = False) -> Path:
@@ -241,14 +292,13 @@ def resolve_path(path: str, *, for_write: bool = False) -> Path:
     hit = _is_sensitive(p, resolved)
     if hit is not None:
         raise ValueError(f"refusing to touch sensitive path: {path}")
-    from alpi.host.connection_context import current
-    if current().role != "admin":
+    if private_areas_fenced():
         area = _member_denied_area(p, resolved, for_write=for_write)
         if area is not None:
             verb = "write to" if for_write else "read"
             raise ValueError(
-                f"members cannot {verb} the profile {area}/ area; "
-                f"this requires an admin device: {path}"
+                f"member devices and peers without a tool policy cannot {verb} the profile "
+                f"{area}/ area; this requires an admin device: {path}"
             )
     if for_write:
         _enforce_dispatch_write_scope(resolved, path)

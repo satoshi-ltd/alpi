@@ -295,9 +295,25 @@ def test_fold_task_state_active(short_tmp: Path) -> None:
     home = short_tmp / "hub"
     wg_id = _seed_workgroup_with_posts(home, [b"@quill #task #content write the copy"])
     state = data_workgroup.fold_task_state(home, wg_id)
-    assert state["active"] == {"slug": "content", "title": "write the copy", "opened_seq": 1}
+    assert state["active"] == {"slug": "content", "title": "write the copy", "opened_seq": 1, "assignees": ["quill"]}
     assert state["closed"] == []
     assert state["blocked"] is None
+
+
+def test_fold_task_state_names_who_a_routed_repair_is_addressed_to(short_tmp: Path) -> None:
+    home = short_tmp / "hub"
+    wg_id = _seed_workgroup_with_posts(home, [
+        b"@lens #task #qa audit the dist",
+        b"#done fr strings missing",
+        b"@lens @lingua @Lens #task #qa restore the fr strings @quill wrote",
+    ])
+    assert data_workgroup.fold_task_state(home, wg_id)["active"]["assignees"] == ["lens", "lingua"]
+
+
+def test_fold_task_state_leaves_an_untargeted_task_without_assignees(short_tmp: Path) -> None:
+    home = short_tmp / "hub"
+    wg_id = _seed_workgroup_with_posts(home, [b"#task #retro everyone shares one lesson"])
+    assert data_workgroup.fold_task_state(home, wg_id)["active"]["assignees"] == []
 
 
 def test_fold_task_state_blocked(short_tmp: Path) -> None:
@@ -346,4 +362,4 @@ def test_fold_survives_rekey_midtask(short_tmp: Path) -> None:
     # Kick the member → group key rotates to v2; the v1 #task must survive the fold.
     wg_mod.kick(home, wg.meta.id, other_pk)
     state = data_workgroup.fold_task_state(home, wg.meta.id)
-    assert state["active"] == {"slug": "build", "title": "wire it", "opened_seq": 1}
+    assert state["active"] == {"slug": "build", "title": "wire it", "opened_seq": 1, "assignees": ["x"]}

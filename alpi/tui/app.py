@@ -149,6 +149,11 @@ class AlpiApp(App):
         self.home = home_dir
         self.continue_last = continue_last
         self.cfg = config.load(home_dir)
+        from alpi import fold_art
+        from alpi.tui import list_row
+        self._fold_art = fold_art.supports_fold_art()
+        self._fold_marker = self._marker_for(home_dir)
+        list_row.set_marker(self._fold_marker)
         super().__init__()
         # Child widgets read theme_variables in their own on_mount, which fires before ours.
         self._install_theme()
@@ -241,7 +246,8 @@ class AlpiApp(App):
         from alpi.tui.themes import build_theme
         tui = self.cfg.tui or {}
         dark = str(tui.get("theme") or "dark").lower() != "light"
-        theme = build_theme(accent=tui.get("accent"), dark=dark)
+        from alpi import appearance
+        theme = build_theme(accent=None if appearance.is_default(self.home) else tui.get("accent"), dark=dark)
         self.register_theme(theme)
         self.theme = theme.name
         # Setting self.theme refreshes asynchronously, after child on_mount; force it now.
@@ -856,6 +862,35 @@ class AlpiApp(App):
     def _cmd_diff(self, arg: str = "") -> None:
         self._show_panel(DiffPanel(self.home, since=arg or "24h"))
 
+    def _marker_for(self, home_dir: Path) -> str:
+        from alpi import fold_art
+
+        fold, _accent = fold_art.identity(home_dir, self.cfg.tui)
+        return fold_art.glyph(fold) if self._fold_art else fold_art.FALLBACK_GLYPH
+
+    def _cmd_fold(self, arg: str = "") -> None:
+        from alpi import appearance
+
+        if not arg.strip():
+            if appearance.is_default(self.home):
+                self._mount_message(DimLine(f"fold: {appearance.pair_name(self.cfg.tui, self.home)}\n{appearance.LOCKED_MESSAGE}"))
+                return
+            self._mount_message(DimLine(f"fold: {appearance.pair_name(self.cfg.tui)}\n{appearance.listing()}"))
+            return
+        try:
+            fold, colour = appearance.parse(arg)
+            if fold is None and colour is None:
+                raise ValueError("name an object, a colour or both")
+            name = appearance.apply(self.home, fold, colour)
+        except ValueError as exc:
+            self._mount_message(DimLine(str(exc)))
+            return
+        self.cfg.tui = config.load(self.home).tui
+        from alpi.tui import list_row
+        self._fold_marker = self._marker_for(self.home)
+        list_row.set_marker(self._fold_marker)
+        self._mount_message(DimLine(f"fold set: {name} (the apps pick it up on their next refresh)"))
+
     def _cmd_activity(self, _arg: str = "") -> None:
         from alpi.tui.activity import ActivityPanel
         self._show_panel(ActivityPanel())
@@ -1147,6 +1182,7 @@ class AlpiApp(App):
             unread=self._unread_count(),
             waiting=len(self._prompts) + self._remote_waiting,
             hints=self.key_hints(),
+            marker=self._fold_marker,
         )
 
     def _resolve_ctx_window(self, model: str) -> int:

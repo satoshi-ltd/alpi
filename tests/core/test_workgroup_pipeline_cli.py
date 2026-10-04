@@ -65,15 +65,38 @@ def _run(monkeypatch, home: Path, args: list[str]):
     return CliRunner().invoke(cli.main, args)
 
 
-def test_show_prints_every_pipeline_with_the_launch_marker(short_tmp: Path, monkeypatch) -> None:
+def test_show_prints_every_pipeline_with_each_phase_owner_and_the_launch_marker(short_tmp: Path, monkeypatch) -> None:
     home = short_tmp / "profiles" / "hub"
     wg = _hub(home)
     out = _run(monkeypatch, home, ["workgroup", "show", wg.meta.id]).output
     assert "Pipelines" in out
     flat = " ".join(out.split())
-    assert "setup setup → build → qa launch" in flat
-    assert "media-update media-update → media-qa" in flat
+    assert "setup setup @scout → build @pixel → qa @lens launch" in flat
+    assert "media-update media-update @muse → media-qa @lens" in flat
     assert flat.count("launch") == 1
+
+
+def test_show_leaves_a_phase_without_a_declared_owner_unnamed() -> None:
+    from click.testing import CliRunner as Runner
+
+    @cli.click.command()
+    def probe() -> None:
+        cli._echo_pipelines({"setup": ["setup", "loose"]}, "setup", {"setup": {"owner": "scout"}})
+
+    flat = " ".join(Runner().invoke(probe).output.split())
+    assert "setup setup @scout → loose launch" in flat
+
+
+def test_show_never_prints_control_characters_a_hub_put_in_an_owner() -> None:
+    from click.testing import CliRunner as Runner
+
+    @cli.click.command()
+    def probe() -> None:
+        cli._echo_pipelines({"setup": ["setup"]}, "setup", {"setup": {"owner": "scout\x1b[2J\x07"}})
+
+    out = Runner().invoke(probe).output
+    assert "\x1b" not in out and "\x07" not in out
+    assert "setup @scout[2J" in out
 
 
 def test_show_reports_a_launchless_workgroup_as_such(short_tmp: Path, monkeypatch) -> None:
@@ -111,6 +134,15 @@ async def test_show_prints_the_transcript_selected_run_not_the_launch_chain(
     out = _run(monkeypatch, home, ["workgroup", "show", wg.meta.id]).output
     assert "Active pipeline: media-update [running]" in out
     assert "media-update current" in out
+
+
+@pytest.mark.asyncio
+async def test_show_names_who_the_live_task_is_addressed_to(short_tmp: Path, monkeypatch) -> None:
+    home = short_tmp / "profiles" / "hub"
+    wg = _hub(home)
+    await wc.trigger_pipeline(home, wg.meta.id, "media-update")
+    out = _run(monkeypatch, home, ["workgroup", "show", wg.meta.id]).output
+    assert "Active task: #media-update → @muse" in out
 
 
 @pytest.mark.asyncio
@@ -229,6 +261,7 @@ def test_subscriber_show_lists_the_hydrated_chains(short_tmp: Path, monkeypatch)
     out = _run(monkeypatch, home, ["workgroup", "show", "wg_abc"]).output
     assert "Pipelines" in out
     assert "media-update → media-qa" in out
+    assert "setup @scout" in out
     assert "launch" in out
 
 

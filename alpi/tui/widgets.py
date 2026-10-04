@@ -753,6 +753,7 @@ class StatusLine(Static):
         self.unread = 0
         self.waiting = 0
         self.hints = ""
+        self.marker = "◆"
 
     def on_mount(self) -> None:
         self._refresh()
@@ -787,7 +788,7 @@ class StatusLine(Static):
         width = self.size.width or 80
         t = Text(no_wrap=True, overflow="ellipsis")
         model = self.model if width >= 110 else self.model.split("/")[-1]
-        t.append("◆ ", style=accent)
+        t.append(f"{self.marker} ", style=accent)
         t.append(model or "no model", style=f"bold {accent}")
 
         def seg(label: str, style: str = muted) -> None:

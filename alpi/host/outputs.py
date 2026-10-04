@@ -22,6 +22,7 @@ def register(server: host_server.Server) -> None:
     server.register("host.outputs.list", _list)
     server.register("host.outputs.read", _read)
     server.register("host.outputs.mark_read", _mark_read)
+    server.register("host.outputs.mark_unread", _mark_unread)
     server.register("host.outputs.mark_all_read", _mark_all_read)
     server.register("host.outputs.delete", _delete)
 
@@ -108,6 +109,25 @@ async def _mark_read(
             "id": output_id,
             "status": item.get("status", "read"),
         })
+    except Exception:  # noqa: BLE001
+        pass
+    return {"ok": True, "output": item}
+
+
+async def _mark_unread(
+    params: dict[str, Any], _server: host_server.Server,
+) -> dict[str, Any]:
+    profile = str((params or {}).get("profile") or "")
+    output_id = str((params or {}).get("id") or "").strip()
+    _check_output_id(output_id)
+    home = _resolve_home(profile)
+    item = await asyncio.to_thread(outputs_mod.mark_unread, home, output_id)
+    if item is None:
+        raise host_server.HandlerError(
+            -32004, "not-found", data={"detail": f"no output {output_id!r}"},
+        )
+    try:
+        host_events.emit("output.updated", {"profile": profile, "id": output_id, "status": "unread"})
     except Exception:  # noqa: BLE001
         pass
     return {"ok": True, "output": item}

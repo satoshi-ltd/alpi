@@ -711,7 +711,20 @@ project root the gate runs in, and its turn budget, because the owner needs
 them to stay inside its lane. Every successful pull refreshes them,
 so a hub-side edit reaches existing subscriptions without a rejoin,
 and the member's agent context renders the chains directly instead of
-depending on a briefing that narrates them by hand.
+depending on a briefing that narrates them by hand. `alpi workgroup show`
+prints each phase with its declared owner (`setup @pixel → enrich @scout`),
+and the apps' workgroup settings draw every phase chip with its owner's
+object (a grey unfolded one for an owner with no local profile, none for a
+phase without a declared step), mark the current run's chain with each
+phase's state from `pipeline_run` (completed, skipped, running, blocked)
+and list under every member the phases it owns. The chat's pipeline strip
+uses the same chip: each phase of the visible run with its owner, `→ @member`
+on the live phase when `active.assignees` names someone besides the owner, and
+the phase's task, owner and cost on hover (desktop) or in a sheet on tap
+(mobile), from where it jumps to the post. The header button shows who works
+the live phase (desktop also names the phase and its task line, or the block in
+red) and the same `done of total` count as the strip, which it keeps between
+phases and after the run completes.
 
 **Pipeline turns are project-local.** A declared pipeline dispatch keeps the
 profile's identity, user preferences, skills and active workgroup context, but
@@ -861,7 +874,12 @@ without decrypting anything by default. Inventory clients can request
 `include_pipeline_status: true`; the daemon then uses the same cached
 task-ledger fold as `host.workgroup.tasks` and adds its status to each
 row, plus `pipeline_note` when the run has finished phases (`setup done ·
-media next`; a long list of finished phases collapses to a count). The full task response adds `pipeline_run`:
+media next`; a long list of finished phases collapses to a count). In the full task response, `active` is
+`{slug, title, opened_seq, assignees}`: `assignees` are the `@` handles around the live `#task` (before the marker
+and right after the slug), in post order and without repeats (ignoring case) — the roster the daemon wakes. An owned
+phase always lists its declared owner, so a repair the hub routes to another member shows up as the owner plus that
+member; a task addressed to the whole workgroup has none, and `alpi workgroup show` prints them as
+`Active task: #<slug> → @<handle> …`. The full task response also adds `pipeline_run`:
 
 ```json
 {

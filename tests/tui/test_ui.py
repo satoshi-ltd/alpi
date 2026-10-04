@@ -316,3 +316,67 @@ def test_ok_and_wait_calls_press_enter(monkeypatch) -> None:
     monkeypatch.setattr(ui, "press_enter", lambda *a, **kw: events.append("wait"))
     ui.ok_and_wait("done")
     assert events == ["ok:done", "wait"]
+
+
+def _capture(monkeypatch, height: int = 40):
+    import io
+
+    from rich.console import Console
+
+    buffer = io.StringIO()
+    monkeypatch.setattr(ui, "_console", Console(file=buffer, width=100, height=height, highlight=False))
+    return buffer
+
+
+def test_banner_draws_the_profile_object_beside_the_title(monkeypatch, tmp_path) -> None:
+    from alpi import fold_art
+
+    monkeypatch.setattr(fold_art, "supports_fold_art", lambda *a, **k: True)
+    buffer = _capture(monkeypatch)
+    ui.banner("alpi setup", subtitle="profile: default", hint="hint text", home=tmp_path, art=True)
+    lines = buffer.getvalue().split("\n")
+    assert "▀" in buffer.getvalue()
+    assert any("alpi" in line and "setup" in line and "profile: default" in line for line in lines)
+    assert any("hint text" in line for line in lines)
+    assert sum(1 for line in lines if set(line.strip()) & {"▀", "▄"}) >= 4
+
+
+def test_banner_stays_text_only_without_art_or_support_or_height(monkeypatch, tmp_path) -> None:
+    from alpi import fold_art
+
+    monkeypatch.setattr(fold_art, "supports_fold_art", lambda *a, **k: True)
+    buffer = _capture(monkeypatch)
+    ui.banner("alpi setup", home=tmp_path)
+    assert buffer.getvalue().split() == ["alpi", "setup"]
+
+    monkeypatch.setattr(fold_art, "supports_fold_art", lambda *a, **k: False)
+    buffer = _capture(monkeypatch)
+    ui.banner("alpi setup", home=tmp_path, art=True)
+    assert buffer.getvalue().split() == ["alpi", "setup"]
+
+    monkeypatch.setattr(fold_art, "supports_fold_art", lambda *a, **k: True)
+    buffer = _capture(monkeypatch, height=8)
+    ui.banner("alpi setup", home=tmp_path, art=True)
+    assert buffer.getvalue().split() == ["alpi", "setup"]
+
+
+def test_header_art_needs_room_for_the_whole_menu_and_enough_width(monkeypatch, tmp_path) -> None:
+    from alpi import fold_art
+
+    monkeypatch.setattr(fold_art, "supports_fold_art", lambda *a, **k: True)
+    buffer = _capture(monkeypatch, height=34)
+    ui._print_header("alpi setup", "hint", tmp_path, True, reserve=29 + 2)
+    assert "▀" not in buffer.getvalue()
+
+    buffer = _capture(monkeypatch, height=40)
+    ui._print_header("alpi setup", "hint", tmp_path, True, reserve=29 + 2)
+    assert "▀" in buffer.getvalue()
+
+    import io
+
+    from rich.console import Console
+
+    narrow = io.StringIO()
+    monkeypatch.setattr(ui, "_console", Console(file=narrow, width=20, height=40, highlight=False))
+    ui._print_header("alpi setup", "(↑↓ navigate  ENTER select  ESC cancel)", tmp_path, True)
+    assert "▀" not in narrow.getvalue()

@@ -13,11 +13,11 @@ import time
 import uuid
 from pathlib import Path
 
-from alpi.home import get_home
+from alpi.home import alpi_root, get_home
 from alpi.tools import _state as tool_state_mod
 from alpi.tools._approval import check as approval_check
 from alpi.tools._sandbox import (
-    SandboxUnavailable, phase_write_rules, scoped_temp_dir, wrap_command,
+    SandboxUnavailable, member_root_paths, phase_write_rules, scoped_temp_dir, wrap_command,
 )
 from alpi.tools.base import Tool, ToolResult
 
@@ -48,7 +48,7 @@ def _build_subprocess_env() -> dict[str, str]:
         if key.startswith("LC_") and key not in out:
             out[key] = parent[key]
     # Intentional: an active skill's *declared* env reaches ad-hoc terminal so prose-mode skills (no scripts/run.py) can run their CLI steps; scoped to declared keys, not all secrets.
-    for key in _state.get_active_skills_env():
+    for key in () if _is_member() else _state.get_active_skills_env():
         if key in parent and key not in out:
             out[key] = parent[key]
     out["ALPI_HOME"] = str(get_home())
@@ -86,6 +86,54 @@ def _default_cwd() -> str:
     return os.getcwd()
 
 
+_MEMBER_NO_SANDBOX = (
+    "terminal is unavailable here to member devices and to peers without a tool policy: their "
+    "commands run only inside an OS "
+    "sandbox that hides the whole alpi home and every other process, which only Linux bubblewrap "
+    "provides outside Docker (the macOS sandbox cannot hide other processes' arguments and "
+    "environment). An admin device can run it."
+)
+_MEMBER_INSIDE_HOME = (
+    "terminal is unavailable to member devices and peers without a tool policy for {what} {path}: "
+    "it is inside the alpi home or a credentials folder, or contains one, which their commands never "
+    "see. Set the profile's workspace outside them, or run it from an admin device."
+)
+
+
+def _overlaps(path: Path, root: Path) -> bool:
+    return path == root or root in path.parents or path in root.parents
+
+
+def _is_member() -> bool:
+    from alpi.tools._paths import private_areas_fenced
+    return private_areas_fenced()
+
+
+def _owner() -> str:
+    from alpi.host.connection_context import current
+    ctx = current()
+    return f"{ctx.connection_id}:{ctx.device_id or ''}"
+
+
+def _proc_start(stat: str) -> str | None:
+    fields = stat.rpartition(")")[2].split()
+    return f"proc:{fields[19]}" if len(fields) > 19 else None
+
+
+def _process_identity(pid: int) -> str | None:
+    try:
+        return _proc_start(Path(f"/proc/{pid}/stat").read_text(encoding="utf-8"))
+    except OSError:
+        pass
+    try:
+        out = subprocess.run(
+            ["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True, text=True, timeout=5,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out or None
+
+
 def _sandbox_config() -> tuple[bool, bool]:
     try:
         from alpi import config as cfg_mod
@@ -120,13 +168,34 @@ def _resolve_popen_args(
             "use native file and search tools. Daemon gates still run"
         )
     write_rules = phase_write_rules(wp)
+    member_root = alpi_root().resolve() if _is_member() else None
+    if member_root is not None:
+        home_dir = Path(os.path.expanduser("~"))
+        hidden = (*member_root_paths(alpi_root()), *(home_dir / d for d in (".ssh", ".aws", ".gnupg")))
+        for what, path in (("workspace", wp), ("cwd", Path(cwd or _default_cwd()))):
+            for form in (path.absolute(), path.resolve()):
+                if any(_overlaps(form, root) for root in hidden):
+                    raise SandboxUnavailable(_MEMBER_INSIDE_HOME.format(what=what, path=path))
     if world is not None and world.backend != "local":
         return world.command(
             command, Path(cwd or _default_cwd()).resolve(),
             _SAFE_ENV_KEYS + ("ALPI_HOME", "ALPI_WORKSPACE", "WORKSPACE"),
             container_name=docker_container_name, write_rules=write_rules,
+            member=member_root is not None,
         )
     sandbox_enabled, allow_network = _sandbox_config()
+    if member_root is not None:
+        try:
+            return wrap_command(
+                command,
+                workspace=wp,
+                alpi_home=get_home(),
+                allow_network=allow_network if sandbox_enabled else True,
+                write_rules=write_rules,
+                member_root=member_root,
+            )
+        except SandboxUnavailable as exc:
+            raise SandboxUnavailable(_MEMBER_NO_SANDBOX) from exc
     if not sandbox_enabled and write_rules is None:
         return command
     if not sandbox_enabled:
@@ -300,15 +369,23 @@ class Terminal(Tool):
         if timeout < 1:
             return ToolResult(ok=False, output="", error="timeout must be at least 1 second")
         effective_cwd = cwd or _default_cwd()
+        docker_container_name = _docker_container_name()
+        fenced_args = None
+        if _is_member():
+            try:
+                fenced_args = _resolve_popen_args(
+                    command, effective_cwd, docker_container_name=docker_container_name,
+                )
+            except (SandboxUnavailable, RuntimeError) as e:
+                return ToolResult(ok=False, output="", error=str(e))
         decision = approval_check(command, cwd=effective_cwd)
         if not decision.allowed:
             return ToolResult(
                 ok=False, output="",
                 error=f"refused ({decision.severity.value}): {decision.reason}",
             )
-        docker_container_name = _docker_container_name()
         try:
-            popen_args = _resolve_popen_args(
+            popen_args = fenced_args if fenced_args is not None else _resolve_popen_args(
                 command, effective_cwd, docker_container_name=docker_container_name,
             )
         except (SandboxUnavailable, RuntimeError) as e:
@@ -396,6 +473,12 @@ class Terminal(Tool):
                 error="background commands are unavailable in the ephemeral Docker execution world",
             )
         effective_cwd = cwd or _default_cwd()
+        fenced_args = None
+        if _is_member():
+            try:
+                fenced_args = _resolve_popen_args(command, effective_cwd)
+            except SandboxUnavailable as e:
+                return ToolResult(ok=False, output="", error=str(e))
         decision = approval_check(command, cwd=effective_cwd)
         if not decision.allowed:
             return ToolResult(
@@ -403,7 +486,7 @@ class Terminal(Tool):
                 error=f"refused ({decision.severity.value}): {decision.reason}",
             )
         try:
-            popen_args = _resolve_popen_args(command, effective_cwd)
+            popen_args = fenced_args if fenced_args is not None else _resolve_popen_args(command, effective_cwd)
         except SandboxUnavailable as e:
             return ToolResult(ok=False, output="", error=str(e))
         use_shell = isinstance(popen_args, str)
@@ -421,7 +504,8 @@ class Terminal(Tool):
         _record_detached_child(proc.pid)
         registry = _bg_dir() / f"{proc.pid}.meta"
         registry.write_text(
-            f"log={log.name}\nstarted={int(time.time())}\n"
+            f"log={log.name}\nstarted={int(time.time())}\nowner={_owner()}\n"
+            f"ident={_process_identity(proc.pid) or ''}\n"
         )
         _record_terminal_run(
             outcome="ok", at=time.time(), elapsed=0.0, pid=proc.pid,
@@ -440,13 +524,21 @@ class Terminal(Tool):
             if "=" in line:
                 k, v = line.split("=", 1)
                 out[k] = v
+        if _is_member() and out.get("owner") != _owner():
+            return {}
         return out
+
+    def _same_process(self, pid: int, meta: dict[str, str]) -> bool:
+        ident = meta.get("ident")
+        if not ident:
+            return not _is_member()
+        return _process_identity(pid) == ident
 
     def _status(self, pid: int) -> ToolResult:
         meta = self._meta(pid)
         if not meta:
             return ToolResult(ok=False, output="", error=f"no background job with pid {pid}")
-        alive = _pid_alive(pid)
+        alive = _pid_alive(pid) and self._same_process(pid, meta)
         started = int(meta.get("started", "0"))
         elapsed = int(time.time()) - started if started else 0
         return ToolResult(ok=True, output=(
@@ -465,7 +557,10 @@ class Terminal(Tool):
         return ToolResult(ok=True, output=data or "(no output yet)")
 
     def _kill(self, pid: int) -> ToolResult:
-        if not _pid_alive(pid):
+        meta = self._meta(pid)
+        if _is_member() and not meta:
+            return ToolResult(ok=False, output="", error=f"no background job with pid {pid}")
+        if not _pid_alive(pid) or (meta and not self._same_process(pid, meta)):
             return ToolResult(ok=True, output=f"pid {pid} not running")
         try:
             os.kill(pid, 15)

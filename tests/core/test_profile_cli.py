@@ -50,6 +50,9 @@ def test_profile_create_bootstraps_directory(monkeypatch, tmp_path: Path) -> Non
     result = CliRunner().invoke(cli.main, ["profile", "create", "experiment"])
     assert result.exit_code == 0, result.output
     assert "created profile 'experiment'" in result.output
+    assert "it wears the amber diamond" in result.output
+    second = CliRunner().invoke(cli.main, ["profile", "create", "second"])
+    assert "it wears the blue shield" in second.output
     exp = tmp_path / "profiles" / "experiment"
     assert (exp / "memories").is_dir()
     assert (exp / "schedule" / "output").is_dir()
@@ -165,3 +168,133 @@ def test_profile_remove_deletes_when_confirmed(
     archived = list((tmp_path / ".trash").glob("trash-*"))
     assert len(archived) == 1
     assert (archived[0] / "config.yaml").exists()
+
+
+def _alpi_root(monkeypatch, tmp_path: Path) -> Path:
+    root = tmp_path / ".alpi"
+    root.mkdir()
+    monkeypatch.setattr(home, "_ROOT", root)
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    monkeypatch.delenv("ALPI_HOME", raising=False)
+    monkeypatch.setenv("ALPI_PROFILE", "restore-on-teardown")
+    monkeypatch.delenv("ALPI_PROFILE")
+    cli._bootstrap(root)
+    return root
+
+
+def _styled_profile(root: Path, name: str, fold: str, accent: str) -> Path:
+    from alpi import config
+
+    path = root / "profiles" / name
+    path.mkdir(parents=True)
+    cli._bootstrap(path)
+    cfg = config.load(path)
+    cfg.tui = {"fold": fold, "accent": accent}
+    config.save(cfg)
+    return path
+
+
+def _fold_art_on(monkeypatch, supported: bool) -> None:
+    from alpi import fold_art
+
+    monkeypatch.setattr(fold_art, "supports_fold_art", lambda *a, **k: supported)
+
+
+def test_profile_show_draws_the_alpaca_for_the_default_profile(monkeypatch, tmp_path: Path) -> None:
+    _alpi_root(monkeypatch, tmp_path)
+    _fold_art_on(monkeypatch, True)
+
+    result = CliRunner().invoke(cli.main, ["profile", "show"])
+
+    assert result.exit_code == 0, result.output
+    assert "▀" in result.output
+    assert "default" in result.output
+    assert "alpaca (brand accent)" in result.output
+    assert result.output.count("\n") == 8
+
+
+def test_profile_show_draws_a_named_profile_object(monkeypatch, tmp_path: Path) -> None:
+    root = _alpi_root(monkeypatch, tmp_path)
+    _styled_profile(root, "work", "shield", "#3899e2")
+    _fold_art_on(monkeypatch, True)
+
+    result = CliRunner().invoke(cli.main, ["profile", "show", "work"])
+
+    assert result.exit_code == 0, result.output
+    assert "▀" in result.output
+    assert "blue shield" in result.output
+    assert "work" in result.output
+
+
+def test_profile_show_falls_back_to_the_diamond_without_truecolor(monkeypatch, tmp_path: Path) -> None:
+    root = _alpi_root(monkeypatch, tmp_path)
+    _styled_profile(root, "work", "shield", "#3899e2")
+    _fold_art_on(monkeypatch, False)
+
+    result = CliRunner().invoke(cli.main, ["profile", "show", "work"])
+
+    assert result.exit_code == 0, result.output
+    assert "◆ work" in result.output
+    assert "blue shield" in result.output
+    assert "▀" not in result.output and "▄" not in result.output
+
+
+def test_profile_show_reports_an_unreadable_config_instead_of_a_traceback(monkeypatch, tmp_path: Path) -> None:
+    root = _alpi_root(monkeypatch, tmp_path)
+    broken = root / "profiles" / "bad"
+    broken.mkdir(parents=True)
+    (broken / "config.yaml").write_text("tui: [unclosed\n")
+
+    result = CliRunner().invoke(cli.main, ["profile", "show", "bad"])
+
+    assert result.exit_code == 1
+    assert "unreadable config.yaml" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_profile_show_rejects_a_missing_profile(monkeypatch, tmp_path: Path) -> None:
+    _alpi_root(monkeypatch, tmp_path)
+
+    result = CliRunner().invoke(cli.main, ["profile", "show", "ghost"])
+
+    assert result.exit_code != 0
+    assert "does not exist" in result.output
+
+
+def test_profile_list_marks_the_active_profile_with_its_glyph(monkeypatch, tmp_path: Path) -> None:
+    root = _alpi_root(monkeypatch, tmp_path)
+    _styled_profile(root, "work", "heart", "#f36a8a")
+    _fold_art_on(monkeypatch, True)
+
+    result = CliRunner().invoke(cli.main, ["profile", "list"])
+    marks = {line.split()[1]: line.split()[0] for line in result.output.strip().split("\n")}
+
+    assert marks == {"default": "❖", "work": "◇"}
+
+    result = CliRunner().invoke(cli.main, ["-p", "work", "profile", "list"])
+    marks = {line.split()[1]: line.split()[0] for line in result.output.strip().split("\n")}
+
+    assert marks == {"default": "◇", "work": "❥"}
+
+
+def test_profile_list_keeps_the_diamonds_without_truecolor(monkeypatch, tmp_path: Path) -> None:
+    root = _alpi_root(monkeypatch, tmp_path)
+    _styled_profile(root, "work", "heart", "#f36a8a")
+    _fold_art_on(monkeypatch, False)
+
+    result = CliRunner().invoke(cli.main, ["-p", "work", "profile", "list"])
+    marks = {line.split()[1]: line.split()[0] for line in result.output.strip().split("\n")}
+
+    assert marks == {"default": "◇", "work": "◆"}
+
+
+def test_profile_list_keeps_default_as_the_first_row(monkeypatch, tmp_path: Path) -> None:
+    root = _alpi_root(monkeypatch, tmp_path)
+    _styled_profile(root, "abby", "plane", "#3899e2")
+    _styled_profile(root, "zeta", "heart", "#f36a8a")
+    _fold_art_on(monkeypatch, False)
+
+    result = CliRunner().invoke(cli.main, ["-p", "zeta", "profile", "list"])
+    names = [line.split()[1] for line in result.output.strip().split("\n")]
+
+    assert names == ["default", "abby", "zeta"]

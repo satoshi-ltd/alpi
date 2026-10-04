@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from alpi import config, ui
+from alpi import config, palette, ui
 from alpi.tui import themes
 
 TOKENS = Path(__file__).resolve().parents[2] / "common" / "tokens.mjs"
@@ -50,10 +50,10 @@ def test_built_theme_uses_the_token_values(dark: bool) -> None:
     assert theme.error.lower() == status["danger"]
 
 
-@pytest.mark.parametrize("configured", [None, "", "#f0b447", "#c8a24e", "#8A5A0A"])
+@pytest.mark.parametrize("configured", [None, "", "#c8a24e", "#8A5A0A"])
 def test_brand_accents_follow_the_mode_token(configured) -> None:
-    assert themes.resolve_accent(configured, dark=True) == "#f0b447"
-    assert themes.resolve_accent(configured, dark=False) == "#8a5a0a"
+    assert themes.resolve_accent(configured, dark=True) == "#f3efe6"
+    assert themes.resolve_accent(configured, dark=False) == "#14110c"
 
 
 def test_a_custom_accent_is_kept() -> None:
@@ -62,7 +62,7 @@ def test_a_custom_accent_is_kept() -> None:
 
 
 def test_console_defaults_use_the_brand_accent() -> None:
-    assert config.DEFAULT_CONFIG["tui"]["accent"] == _object("dark")["accent"]
+    assert config.DEFAULT_CONFIG["tui"]["accent"] == palette.DEFAULT_PROFILE_COLOUR
     assert ui.DEFAULT_ACCENT == _object("dark")["accent"]
 
 
@@ -74,10 +74,11 @@ def test_token_parser_tolerates_formatting(tmp_path, monkeypatch) -> None:
 
 
 @pytest.mark.parametrize("tui,expected", [
-    ({}, "#f0b447"),
-    ({"accent": "#c8a24e"}, "#f0b447"),
-    ({"accent": "#c8a24e", "theme": "light"}, "#8a5a0a"),
-    ({"theme": "light"}, "#8a5a0a"),
+    ({}, "#f3efe6"),
+    ({"accent": "#c8a24e"}, "#f3efe6"),
+    ({"accent": "#c8a24e", "theme": "light"}, "#14110c"),
+    ({"theme": "light"}, "#14110c"),
+    ({"accent": "#f0b447"}, "#f0b447"),
     ({"accent": "#123456", "theme": "light"}, "#123456"),
 ])
 def test_console_accent_goes_through_the_same_resolver(tui, expected, tmp_path) -> None:
@@ -86,10 +87,23 @@ def test_console_accent_goes_through_the_same_resolver(tui, expected, tmp_path) 
     from alpi import palette
 
     assert palette.profile_accent(tui) == expected
-    (tmp_path / "config.yaml").write_text(yaml.safe_dump({"tui": tui}))
-    assert ui._accent_hex(tmp_path) == expected
+    profile = tmp_path / "profiles" / "doc"
+    profile.mkdir(parents=True)
+    (profile / "config.yaml").write_text(yaml.safe_dump({"tui": tui}))
+    assert ui._accent_hex(profile) == palette.profile_accent({**config.DEFAULT_CONFIG["tui"], **tui})
 
 
 def test_cli_has_no_legacy_accent_fallback() -> None:
     src = (Path(__file__).resolve().parents[2] / "alpi" / "cli.py").read_text()
     assert "#c8a24e" not in src
+
+
+def test_the_console_greys_are_neutral_like_the_apps() -> None:
+    from alpi import ui
+    from alpi.palette import DARK, LIGHT
+
+    for theme in (DARK, LIGHT):
+        for key in ("bg", "bgPane", "bgElev", "ink", "ink2", "ink3"):
+            r, g, b = (theme[key][i:i + 2] for i in (1, 3, 5))
+            assert r == g == b, (key, theme[key])
+    assert ui._MUTED_STYLE == f"fg:{DARK['ink3']}"

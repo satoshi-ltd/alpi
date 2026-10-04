@@ -530,7 +530,7 @@ def run_job(job: dict, home: Path) -> JobOutcome:
         )
 
     parsed = _parse_events(proc.stdout or "")
-    _emit_agent_messages(home, parsed.agent_messages)
+    _emit_agent_messages(home, parsed.agent_messages, job_id=str(job.get("id") or ""), run_id=run_id)
     reply = parsed.reply
 
     # The child exits 0 whether the turn succeeded or died, so its error event is the only failure signal.
@@ -594,7 +594,7 @@ def _parse_events(stdout: str) -> ParsedEvents:
     return ParsedEvents(notified_natively, reply, agent_messages, errored, error, error_detail)
 
 
-def _emit_agent_messages(home: Path, messages: list[dict]) -> None:
+def _emit_agent_messages(home: Path, messages: list[dict], *, job_id: str = "", run_id: str = "") -> None:
     if not messages:
         return
     try:
@@ -602,7 +602,7 @@ def _emit_agent_messages(home: Path, messages: list[dict]) -> None:
     except Exception:  # noqa: BLE001
         return
     for args in messages:
-        outputs_mod.record_child_native_message(home, args)
+        outputs_mod.record_child_native_message(home, args, job_id=job_id, run_id=run_id)
 
 
 # Tick + main loop
@@ -629,9 +629,7 @@ def fire_by_id(home: Path, job_id: str) -> tuple[bool, str]:
         hint = f". Did you mean {hit[0]!r}?" if hit else ""
         return False, f"no job with id {job_id!r}{hint}"
     log.info("firing job %s ad-hoc (%s)", job_id, target.get("kind", "?"))
-    from alpi.host.activity import scheduled_run
-    with scheduled_run(home, target):
-        outcome = run_job(target, home)
+    outcome = _run_guarded(target, home)
     log.info("job %s ad-hoc %s — %s", job_id,
              "OK" if outcome.ok else "FAIL", outcome.message)
     _emit_schedule_event(home, target, outcome)
@@ -645,6 +643,77 @@ def fire_by_id(home: Path, job_id: str) -> tuple[bool, str]:
         return None
     jobs_store.update(home, _stamp)
     return outcome.ok, outcome.message
+
+
+RAISED_MESSAGE_CAP = 500
+
+
+def _run_guarded(job: dict, home: Path) -> JobOutcome:
+    from alpi._redact import redact
+    from alpi.host.activity import scheduled_run
+    outcome: JobOutcome | None = None
+    try:
+        with scheduled_run(home, job):
+            outcome = run_job(job, home)
+    except Exception as exc:  # noqa: BLE001
+        import traceback
+        log.error("job %s raised: %s", job.get("id", "?"), redact(traceback.format_exc()))
+        if outcome is None:
+            detail = str(exc)
+            message = f"the run raised {type(exc).__name__}" + (f": {detail}" if detail else "")
+            outcome = JobOutcome(False, redact(message)[:RAISED_MESSAGE_CAP])
+    return outcome
+
+
+FAILURE_BODY_CAP = 2000
+REPLY_BODY_CAP = 8000
+FENCE = "`" * 3
+
+
+def reply_body(reply: str) -> str:
+    text = (reply or "").strip()
+    if len(text) <= REPLY_BODY_CAP:
+        return text
+    kept = text[:REPLY_BODY_CAP].rstrip()
+    if sum(line.lstrip().startswith(FENCE) for line in kept.splitlines()) % 2:
+        kept += f"\n{FENCE}"
+    return f"{kept}\n\n*Cut at {REPLY_BODY_CAP:,} of {len(text):,} characters.*"
+
+
+REASON_CAP = 300
+
+
+def failure_reason(outcome: JobOutcome) -> str:
+    lines = [line.strip() for line in (outcome.message or "").splitlines() if line.strip()]
+    if not lines:
+        return "unknown error"
+    if any("Traceback (most recent call last)" in line for line in lines):
+        return lines[-1][:REASON_CAP]
+    return lines[0][:REASON_CAP]
+
+
+def failure_summary(outcome: JobOutcome) -> str:
+    parts = [failure_reason(outcome)]
+    if outcome.exit_code is not None:
+        parts.append(f"exit {outcome.exit_code}")
+    if outcome.timeout_reason:
+        parts.append(f"timeout: {outcome.timeout_reason}")
+    return "; ".join(parts)
+
+
+def failure_body(outcome: JobOutcome) -> str:
+    lines = [f"**Reason:** {failure_reason(outcome)}"]
+    if outcome.exit_code is not None:
+        lines.append(f"**Exit:** {outcome.exit_code}")
+    if outcome.timeout_reason:
+        lines.append(f"**Timeout:** {outcome.timeout_reason}")
+    body = "\n".join(lines)
+    _, _, trace = (outcome.message or "").partition("\n")
+    trace = trace.strip("\n").rstrip().replace(FENCE, "'''")
+    room = FAILURE_BODY_CAP - len(body) - len(f"\n\n{FENCE}text\n\n{FENCE}")
+    if trace and room >= 40:
+        body += f"\n\n{FENCE}text\n{trace[:room]}\n{FENCE}"
+    return body
 
 
 def _emit_schedule_event(home: Path, job: dict, outcome: JobOutcome) -> None:
@@ -677,21 +746,18 @@ def _emit_schedule_event(home: Path, job: dict, outcome: JobOutcome) -> None:
         out_type = ""
         fail_body = ""
         if not outcome.ok:
-            parts = [outcome.message or "unknown error"]
-            if outcome.timeout_reason:
-                parts.append(f"timeout: {outcome.timeout_reason}")
-            if outcome.exit_code is not None:
-                parts.append(f"exit code: {outcome.exit_code}")
-            fail_body = "\n".join(parts)[:2000]
-            payload["body"] = fail_body
+            fail_body = failure_body(outcome)
+            payload["body"] = failure_summary(outcome)
             try:
                 output = outputs_mod.append(
                     home,
                     profile=profile,
                     body=fail_body,
                     type="error",
-                    title=title,
+                    title=f"{title} failed",
                     delivered_to=[],
+                    job_id=str(job.get("id") or ""),
+                    run_id=outcome.run_id or "",
                 )
                 output_id = output["id"]
                 out_type = "error"
@@ -709,10 +775,12 @@ def _emit_schedule_event(home: Path, job: dict, outcome: JobOutcome) -> None:
                 output = outputs_mod.append(
                     home,
                     profile=profile,
-                    body=(outcome.reply or "")[:2000],
+                    body=reply_body(outcome.reply),
                     type="info",
                     title=str(job.get("title") or ""),
                     delivered_to=delivered_to_list,
+                    job_id=str(job.get("id") or ""),
+                    run_id=outcome.run_id or "",
                 )
                 output_id = output["id"]
                 out_type = "info"
@@ -816,9 +884,7 @@ def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]
         job_id = str(job.get("id", "?"))
         log.info("firing job %s (%s)", job_id, job.get("kind", "cron"))
         _started = time.time()
-        from alpi.host.activity import scheduled_run
-        with scheduled_run(home, job):
-            outcome = run_job(job, home)
+        outcome = _run_guarded(job, home)
         _elapsed = time.time() - _started
         # Stamp even on failure to avoid a tight re-fire loop; keep it ahead of the I/O below.
         _stamp({job_id: (str(job.get("kind", "cron")), outcome.ok)})

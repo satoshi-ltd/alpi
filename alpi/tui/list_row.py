@@ -24,8 +24,13 @@ from textual.widgets.option_list import Option
 _FLOOR = 14
 _MUTED = "dim"
 _SEP = "  · "
-_ACTIVE_GLYPH = "◆ "
+_marker = "◆"
 _INACTIVE_PAD = "  "
+
+
+def set_marker(glyph: str) -> None:
+    global _marker
+    _marker = glyph
 
 
 def name_width(names: list[str], floor: int = _FLOOR) -> int:
@@ -40,7 +45,7 @@ def row_text(name: str, description: str, *, active: bool = False,
     """Render one row as Rich Text in the CLI list shape.
 
     If ``with_marker`` is True, every row starts with a two-character
-    prefix slot so the active one (``◆`` in the profile accent) aligns
+    prefix slot so the active one (the profile mark in its accent) aligns
     with the inactive ones (two spaces). If the list has no concept of
     active (``/help`` command palette), pass ``with_marker=False`` so
     rows start at column 0 and align with the section header.
@@ -52,7 +57,7 @@ def row_text(name: str, description: str, *, active: bool = False,
     t = Text(no_wrap=True, overflow="ellipsis")
     if with_marker:
         if active and accent:
-            t.append(_ACTIVE_GLYPH, style=accent)
+            t.append(f"{_marker} ", style=accent)
         else:
             t.append(_INACTIVE_PAD)
     t.append(name.ljust(width))

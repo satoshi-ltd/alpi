@@ -213,3 +213,48 @@ def test_delivered_to_round_trips(home: Path) -> None:
     out = _append(home, delivered_to=["alpi", "telegram"])
     got = outputs_mod.read(home, out["id"])
     assert got["delivered_to"] == ["alpi", "telegram"]
+
+
+def test_cli_marks_one_output_unread_and_shows_its_source(tmp_path, monkeypatch) -> None:
+    from click.testing import CliRunner
+
+    from alpi import cli, home as home_mod
+    from alpi import outputs as outputs_mod
+
+    monkeypatch.setattr(home_mod, "_ROOT", tmp_path)
+    monkeypatch.delenv("ALPI_HOME", raising=False)
+    monkeypatch.delenv("ALPI_PROFILE", raising=False)
+    out = outputs_mod.append(tmp_path, profile="default", body="digest", job_id="daily", run_id="r" * 32)
+    shown = CliRunner().invoke(cli.main, ["outputs", "show", out["id"]])
+    assert shown.exit_code == 0, shown.output
+    assert "job_id daily" in shown.output and f"run_id {'r' * 32}" in shown.output
+    assert outputs_mod.read(tmp_path, out["id"])["status"] == "read"
+    unread = CliRunner().invoke(cli.main, ["outputs", "unread", out["id"]])
+    assert unread.exit_code == 0, unread.output
+    assert outputs_mod.read(tmp_path, out["id"])["status"] == "unread"
+    assert CliRunner().invoke(cli.main, ["outputs", "unread", "0" * 12]).exit_code == 1
+
+
+def test_cli_unread_goes_through_the_daemon_when_it_runs(tmp_path, monkeypatch) -> None:
+    from click.testing import CliRunner
+
+    from alpi import cli, home as home_mod
+    from alpi import outputs as outputs_mod
+    from alpi.tui import host_client
+
+    monkeypatch.setattr(home_mod, "_ROOT", tmp_path)
+    monkeypatch.delenv("ALPI_HOME", raising=False)
+    monkeypatch.delenv("ALPI_PROFILE", raising=False)
+    out = outputs_mod.append(tmp_path, profile="default", body="digest")
+    outputs_mod.mark_read(tmp_path, out["id"])
+    calls = []
+
+    async def fake(method, params=None, **kw):
+        calls.append((method, params))
+        return {"ok": True}
+
+    monkeypatch.setattr(host_client, "acall", fake)
+    result = CliRunner().invoke(cli.main, ["outputs", "unread", out["id"]])
+    assert result.exit_code == 0, result.output
+    assert calls == [("host.outputs.mark_unread", {"profile": "default", "id": out["id"]})]
+    assert outputs_mod.read(tmp_path, out["id"])["status"] == "read"

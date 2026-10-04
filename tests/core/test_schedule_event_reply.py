@@ -250,7 +250,7 @@ def test_failed_job_enriches_schedule_failed_no_duplicate(
     assert p["title"] == "Nightly sync"
     assert "rc=1" in p["body"]
     assert "connection refused" in p["body"]
-    assert "exit code: 1" in p["body"]
+    assert "exit 1" in p["body"] and "**" not in p["body"] and "\n" not in p["body"]
     assert [d for k, d in emits if k == "agent.message"] == []
 
 
@@ -276,7 +276,7 @@ def test_timed_out_job_enriches_schedule_failed_no_duplicate(
     p = failed[0]
     assert p["title"] == "Heavy report"
     assert "timed out" in p["body"]
-    assert "timeout:" in p["body"]
+    assert "timeout:" in p["body"] and "**" not in p["body"]
     assert [d for k, d in emits if k == "agent.message"] == []
 
 

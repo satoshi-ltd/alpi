@@ -54,6 +54,7 @@ def test_a_dead_scheduled_run_files_an_error_and_raises_schedule_failed(tmp_path
     from alpi import outputs as outputs_mod
     filed = outputs_mod.read(home, payload["output_id"])
     assert filed["type"] == "error" and filed["title"] == "Sentinel PR review did not finish"
+    assert filed["job_id"] == "35cbf2b8" and filed["run_id"] == "dba55843"
 
 
 def test_a_dead_run_that_recorded_no_pid_is_not_described_as_having_one(tmp_path: Path, monkeypatch) -> None:

@@ -1,6 +1,7 @@
 # alpi roadmap
 
-Updated 2026-09-30. Current versions live in the changelogs.
+Updated 2026-10-04. Current versions live in the changelogs. v0.17 takes the tasks in Queue (the
+workgroup and profile boards); the rest of the pool targets v0.18.
 
 This is the task pool. [ARCHITECTURE.md](ARCHITECTURE.md) owns current state and
 contracts; [CHANGELOG.md](../CHANGELOG.md), [desktop/CHANGELOG.md](../desktop/CHANGELOG.md)
@@ -60,23 +61,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **TERM.3** — Profile environment for `terminal`
-  `feature · alpi · agent · normal`
-  note: a skill toolchain installed in the volume (JDK and Maven under
-  `/data/toolchains`) is exported only to the skill runner's own subprocesses;
-  [terminal.py](../alpi/tools/terminal.py) builds its environment itself and the
-  sandbox refuses discovery as `dangerous pattern: dump environment`.
-  accept: a `tools.terminal.env` map of plain strings in the profile config is
-  applied on top of the environment the tool builds, with `PATH` prepended to the
-  backend's own PATH (not a host PATH absent from the image); no secret
-  expansion, no `.env` keys, internal execution/ownership markers cannot be
-  overridden, sandbox and allowlist unchanged. A profile with the map runs
-  `java -version` through `terminal` and finds the volume JDK; a profile without
-  it is byte-for-byte unchanged. Tests cover foreground, background, the native
-  sandbox, the Docker backend's explicit forwarding list, invalid values and
-  protected variables. The map is listed in the takes-effect table of
-  [CONFIG.md](CONFIG.md#tools) and in the packaged config reference.
-
 ## In progress
 
 _None._
@@ -85,9 +69,9 @@ _None._
 
 ### Builds and deployments
 
-- **BUILD-MOBILE** — EAS build of mobile 0.6.1
+- **BUILD-MOBILE** — EAS build of mobile 0.7.0
   `deploy · mobile · creator · high`
-  accept: an EAS build of mobile 0.6.1 or later installed on the Fold and on an
+  accept: an EAS build of mobile 0.7.0 or later installed on the Fold and on an
   iPhone.
 - **OPS-CRED-SWEEP** — Credential hygiene on every daemon
   `deploy · alpi · creator · normal`
@@ -97,13 +81,48 @@ _None._
 
 ### Device checks
 
-- **VERIFY-MOBILE-061** — Mobile 0.6.1 on device
+- **VERIFY-MOBILE-070** — Mobile 0.7.0 on device
   `verify · mobile · creator · high · depends: BUILD-MOBILE`
   accept: on device, the process block sits at 12 pt flush with the answer; the
   Fold sidebar slides; expand/collapse and the Latest button animate; a long
   press pulses only after 350 ms and a tap never moves a bubble; the notification
   count shows its number at large text sizes; approval notification actions
-  answer on the right connection from a cold start.
+  answer on the right connection from a cold start. Pairing from a fresh install:
+  Scan QR opens the camera at once, a reachable host walks the three steps to
+  Paired with its name and role, Open inbox leaves no way Back to onboarding, an
+  unreachable host keeps the link with Try again, a used link is cleared; with the
+  daemon stopped the header goes offline and the roster unfolds within seconds,
+  and comes back on its own; a member with nothing shared sees whom to ask.
+
+- **VERIFY-DESKTOP-FIRSTRUN** — Desktop 0.8.0 first run on a Mac
+  `verify · desktop · creator · high`
+  accept: on a Mac without alpi, the window opens on Set up alpi with the install
+  commands and the link field, and installing alpi and pressing Check again lands
+  on the roster with the one-time phone card; with alpi installed and stopped, it
+  starts on its own (Starting alpi…) and lands on the roster; a broken config shows
+  alpi didn't start with the log tail, the command and Retry; stopping the daemon
+  mid-session keeps the open view under the banner and Retry starts it again;
+  connecting with a used link names the failure and clears the field.
+
+- **VERIFY-BRAND-GLYPHS** — One-cell glyphs in the terminals alpi supports
+  `verify · alpi · creator · low · `
+  accept: the twelve one-cell glyphs of the console (⌂ ♥ ➤ ⬟ ⌃ ★ ♣ ▣ ♛ ✒ ☼ and the diamond) were
+  seen in Terminal, iTerm2 and one Linux terminal; any that fails is replaced or falls back to the
+  diamond.
+
+- **VERIFY-BRAND-ICONS** — The new icons on a Mac, an iPhone and an Android
+  `verify · desktop, mobile · creator · low`
+  accept: the Tauri app's dock and window icon, an EAS iOS build in light, dark and tinted home
+  screens, and an Android build with the adaptive mask all show the flat ink alpaca without clipping,
+  and the splash and adaptive background are neutral grey (no blue tint) in light and dark.
+
+- **VERIFY-NOTIF-PHONE** — Notifications on the phone, on device
+  `verify · mobile · creator · normal`
+  accept: on an iPhone and an Android build, a row swipes left to Unread/Read and Delete and back; the
+  Undo toast after a delete leaves the list scrollable and tappable and Back working for its 5 s (it is
+  a transparent Modal: if it blocks touches, the toast becomes an overlay); up and down on a
+  notification page step through the list across connections; Reply opens a new session with the
+  quote in the composer; large text keeps rows and the bottom bar readable, on the phone and the Fold.
 
 ### Decisions
 
@@ -123,18 +142,80 @@ _None._
   `profile_scope`, one device per physical device, the old row revoked on
   re-pairing, a profile's tools reviewed before granting scope) is confirmed and
   applied to every deployed daemon; any code it needs becomes an agent task.
+- **BRAND.D1** — Brand choices still open
+  `decision · alpi · creator · normal`
+  note: decided by the creator: the brand accent is ink (cream on dark, black on light); the alpaca is
+  one flat ink and only its name carries tones (T3 crease); objects are established origami models (the
+  gate); object and colour are two stored values and every new profile takes the next pair of the roulette; the honeycomb
+  marks a workgroup; the default profile is the alpaca. Still open, none blocking: the unit's name
+  ("profile", with "fold" only the look); whether the box stays or becomes a paper hat.
+  accept: a written answer to each; a different answer becomes an edit to the task it touches
+  before that task ships.
 
 ## Proposed
 
-- **SCHED.7** — A job whose run raises is never stamped and starves the rest of the pass
+- **WG.FLOW-LATENCY** — The pipeline strip appears as soon as a workgroup opens
+  `bug · desktop, mobile · agent · normal`
+  note: opening a pipeline workgroup shows "Loading flow…" for seconds, yet `fold_task_state` takes about 5 ms
+  on a 37-post transcript in process (decrypt plus fold, cold). The wait is elsewhere: the three calls the view
+  fires at once (`workgroup_members`, `workgroup_tasks`, the transcript), the Tauri bridge and its socket, or a
+  busy daemon loop. Board UI-LOADING covers drawing the chain before the run arrives; this task is the latency.
+  accept: a measurement of each hop (client call, bridge, socket, handler) on a pipeline workgroup names where the
+  time goes; the fix brings the run state on screen without waiting for the transcript, and a test proves
+  `workgroup_tasks` is not queued behind it.
+
+- **BRAND.EMPTY** — A blank chat that introduces the profile
+  `decision · desktop, mobile · creator · normal`
+  note: today an empty chat is the profile's origami at 72 px, "Start a new thread" and the model. Ideas to
+  weigh with the copy pass: the profile's own one-line bio under the origami, the pair name ("blue shield")
+  beside the model as the Brand board shows, up to three starter chips drawn from the profile's skills or
+  its recent sessions (one tap fills the composer), and a short fold-in of the origami on first paint that
+  stops under reduced motion. Needs a board before any code, and the copy of every empty state decided together.
+  accept: the creator picks which of these ideas ship and the copy of the empty states; the answer becomes a
+  `ui` task with its board.
+
+- **BRAND.SPLASH** — Mount the boot splash with the crease wordmark
+  `feature · desktop · creator · low`
+  note: `BootSplash` in [desktop/src/primitives](../desktop/src/primitives/) is exported but nothing renders
+  it; startup shows only the connecting banner. Decide where a splash belongs (first paint before the
+  daemon answers) before drawing the alpaca beside the crease "alpi" there.
+
+- **TERM.3** — Profile environment for `terminal`
+  `feature · alpi · agent · low`
+  note: a skill toolchain installed in the volume (JDK and Maven under
+  `/data/toolchains`) is exported only to the skill runner's own subprocesses;
+  [terminal.py](../alpi/tools/terminal.py) builds its environment itself and the
+  sandbox refuses discovery as `dangerous pattern: dump environment`.
+  accept: a `tools.terminal.env` map of plain strings in the profile config is
+  applied on top of the environment the tool builds, with `PATH` prepended to the
+  backend's own PATH (not a host PATH absent from the image); no secret
+  expansion, no `.env` keys, internal execution/ownership markers cannot be
+  overridden, sandbox and allowlist unchanged. A profile with the map runs
+  `java -version` through `terminal` and finds the volume JDK; a profile without
+  it is byte-for-byte unchanged. Tests cover foreground, background, the native
+  sandbox, the Docker backend's explicit forwarding list, invalid values and
+  protected variables. The map is listed in the takes-effect table of
+  [CONFIG.md](CONFIG.md#tools) and in the packaged config reference.
+- **RUN.1** — A lone surrogate in tool output crashes the journal write
   `bug · alpi · agent · normal`
-  note: found while reviewing SCHED.6. `tick` in [scheduler/run.py](../alpi/scheduler/run.py)
-  does not catch an exception from `run_job` or `scheduled_run` (a `PermissionError` or
-  `FileNotFoundError` from the agent subprocess; only the timeout is caught): the job gets no
-  `last_run_at`, the pass aborts and the jobs after it never run, and it fires again every tick.
-  accept: an exception from `run_job` becomes a failed outcome stamped like any failure, the pass
-  goes on with the next job, and a test with three jobs where the second raises shows all three
-  handled and the second not re-fired on the next tick.
+  note: `runs.append` in [runs.py](../alpi/runs.py) measures
+  `json.dumps(record, ensure_ascii=False).encode()`, which raises `UnicodeEncodeError` on an
+  unpaired surrogate, and `ToolExecutor._record` catches only `OSError`. Model-sent arguments are
+  refused since 0.16.22, but tool output (a non-UTF-8 filename decoded with `surrogateescape`) and
+  an expanded `${step.output}` still reach the write. Reproduced with
+  `runs.append(home, "r1", "tool.finished", {"output": "name \udcff.txt"})`.
+  accept: a tool whose output holds a lone surrogate finishes its turn; the journal line and the
+  saved session carry U+FFFD in its place; tests drive it through `ToolExecutor` and through
+  `runs.append`.
+- **SESS.1** — Saved tool arguments keep every key
+  `bug · alpi · agent · low`
+  note: [session.py](../alpi/session.py) saves a turn's tool arguments as one sorted JSON string
+  clipped at `TOOL_ARGS_CAP` (16 KiB), so a large call loses every key that sorts after its big
+  value, and reloading turns the clip into `{"preview": …}`. An audit of an MCP write tool whose
+  object sorts before `sources` and `summary` read 295 of 1008 saved writes as unsourced, while
+  712 of the 713 complete ones cite sources.
+  accept: long values are clipped one by one so every key survives within the cap; reloading
+  returns a dict with all keys; a test with a 40 KB nested value keeps the small keys after it.
 - **SCHED.8** — A long pass fires jobs from a stale snapshot
   `bug · alpi · agent · low`
   note: found while reviewing SCHED.6. `tick` iterates the jobs read at the start of the pass; a
@@ -142,6 +223,36 @@ _None._
   fired from the old copy.
   accept: each job is re-read from `jobs.json` just before it fires and skipped if it is gone,
   paused or no longer due; a test removes the second job during the first run and it does not fire.
+- **SCHED.9** — A successful rerun fired by hand reads failed until the next event
+  `bug · alpi · agent · low`
+  note: found while reviewing ACT.1. `fire_by_id` in [scheduler/run.py](../alpi/scheduler/run.py)
+  ends the run and emits `schedule.done` before `jobs_store.update` stamps `ok`, and the stamp emits
+  nothing, so a client that refetches on `activity.changed` can still read `last_run_status: "error"`
+  and draw the profile failed again. `tick` stamps right after the run and is not affected.
+  accept: `fire_by_id` stamps the outcome before it emits; a test fires a previously failed job by
+  hand and the first `host.activity.list` after `activity.changed` reads it `ok`.
+- **ACT.2** — Jobs fired from the console never show as running
+  `bug · alpi · agent · low`
+  note: found while reviewing ACT.1. `alpi schedule fire`, `alpi setup → Fire now` and the TUI's
+  in-process `schedule(action="fire")` run `scheduled_run` in their own process, where the activity
+  registry is off, so `host.activity.list` never lists the run and the apps never show it working.
+  The apps' Fire button (`host.schedule.fire`) and cron fires are listed.
+  accept: a job fired from the CLI or the TUI appears as a running row with its `job_id` while it
+  runs (handed to the daemon when one answers); a test fires through the CLI path against a daemon.
+- **SCHED.10** — A job whose due check or stamp raises still stops the pass
+  `bug · alpi · agent · low`
+  note: found while reviewing SCHED.7. `is_due` runs outside any guard in `tick`, so an inactivity job
+  with a non-numeric `after_hours` or a session file deleted between glob and `stat` aborts the pass
+  every tick; so does `jobs_store.update` raising mid-pass (disk full, permissions).
+  accept: a due check that raises skips that job with a logged reason and the pass goes on; a stamp that
+  fails is logged and retried on the next tick; tests cover both.
+- **SCOPE.12** — The `db` tool and `out/` sit outside the member fence
+  `bug · alpi · agent · low`
+  note: found while reviewing SCOPE.8. The `db` tool runs arbitrary SQL on any skill's `state/db.sqlite`,
+  around the `skills/` file fence and the rule that fenced turns change no skill, and the fenced file tools
+  still read `<home>/out/`, where every session's produced files land.
+  accept: a fenced turn (member device or peer without `tools.allow`) gets only read queries on the active
+  skill's database, or none, and cannot read another connection's files under `out/`; tests cover both.
 - **CHART.1** — The mobile Usage chart follows the cost too
   `feature · mobile, common · agent · normal`
   note: found while reviewing UX.8. Desktop sizes bars by dollars when any day cost something, with the
@@ -152,28 +263,8 @@ _None._
   accept: `byCost` and `sizeOf` live in `common/usage.mjs` and both clients use them; mobile gets the same
   thin-bar minimum, split and a "bars by" footer; a window with no cost on any day (a local model) sizes bars by
   total tokens; a component test renders a mixed window and a free window on each client.
-- **SCOPE.8** — A member device's `terminal` reads every session of the profile
-  `bug · alpi · agent · high`
-  note: found by the SCOPE.4 inventory. Members keep the `terminal` tool, it exports
-  `ALPI_HOME` and `_approval.classify` rates `cat $ALPI_HOME/sessions/*.json`,
-  `grep -r … $ALPI_HOME/sessions` and `cat $ALPI_HOME/runs/*.jsonl` safe, so a turn run
-  from device B can read device A's sessions, run journals and replay sidecars, and other
-  connections' too. The file tools are fenced by `_member_home_area` in
-  [_paths.py](../alpi/tools/_paths.py); `terminal` is not.
-  accept: a member's `terminal` cannot read the profile's `sessions/`, `runs/` and `host/`
-  areas; a matrix row in `tests/host/test_device_scope_matrix.py` runs `cat` on A's session
-  file as device B and gets no text, with the owner or admin control reading it.
-- **SCOPE.9** — Peer and host-context turns can search every session
-  `bug · alpi · agent · high`
-  note: found by the SCOPE.4 inventory. A turn answering an ALP peer runs as `peer:<id>`
-  with the default admin role and no tool allow-list unless the peer has `tools.allow`, so
-  `session_search`, `session_read` and `recall_sessions` see every session of every
-  connection; a workgroup post that mentions the agent can paste that text into the shared
-  transcript. Only the workgroup pipeline denies them (`PIPELINE_HISTORY_TOOLS`).
-  accept: peer turns deny the history tools unless the peer's config allows them; a test
-  asks as a peer and gets none of a member's session text.
 - **ATT.3** — `host.attachments.fetch` ignores the caller's connection
-  `bug · alpi · agent · normal`
+  `bug · alpi · agent · low`
   note: found while reviewing ATT.2. `_fetch` in [attachments_rpc.py](../alpi/host/attachments_rpc.py)
   checks roots, the denylist and, since ATT.2, the device under `session_scope: device`; under
   `session_scope: connection` and for any non-admin member it never compares the path with the
@@ -201,6 +292,19 @@ _None._
 
 Demand-gated entries name the condition that promotes them.
 
+- **SCOPE.11** — Turns a workgroup post wakes run unfenced
+  `bug · alpi · agent · low`
+  note: found while reviewing SCOPE.9. `_dispatch_workgroup_turn` in [service.py](../alpi/service.py) runs a
+  `chat --once` child as the profile (admin) for every member or hub turn a post wakes; the session history
+  tools are denied there since v0.17.0, but `read_file`, `search` and `terminal` still read `sessions/`,
+  `runs/` and `host/`, so a member device or a peer without `tools.allow` driving any profile of the
+  workgroup can `workgroup_post` a request for another conversation and get it posted back.
+  promote when: a profile that member devices or peers without `tools.allow` drive joins a workgroup.
+  accept: a turn woken by a post whose author is a member device or a peer without `tools.allow` gets the
+  member fence (file tools and `search` out of the private areas, `terminal` only in Linux bubblewrap and
+  refused elsewhere, no skill scripts or skill/memory/job changes); a test posts as a member asking for
+  another session's text and the turn gets none of it; a pipeline of local profiles with admin posts keeps
+  terminal and skill scripts.
 - **SK.2** — Safe skill import
   `feature · alpi · agent · low`
   promote when: users repeatedly exchange skills outside their own profile.

@@ -345,6 +345,16 @@ def _fold_stamp(home: Path, wg_id: str, defs: _Defs) -> tuple:
     )
 
 
+def _assignees(handles: tuple[str, ...]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for handle in handles:
+        if handle.lower() not in seen:
+            seen.add(handle.lower())
+            out.append(handle)
+    return out
+
+
 def fold_task_state(home: Path, wg_id: str) -> dict[str, Any]:
     # Canonical host-side fold (active/closed/blocked/pipeline_run); the apps consume it, they do not re-derive which pipeline is active.
     defs = pipeline_defs(home, wg_id)
@@ -373,7 +383,7 @@ def fold_task_state(home: Path, wg_id: str) -> dict[str, Any]:
     closed: list[dict[str, Any]] = []
     for t in ledger:
         if t.is_open:
-            active = {"slug": t.slug, "title": t.description, "opened_seq": t.opened_seq}
+            active = {"slug": t.slug, "title": t.description, "opened_seq": t.opened_seq, "assignees": _assignees(t.participants)}
         else:
             closed.append({
                 "slug": t.slug,

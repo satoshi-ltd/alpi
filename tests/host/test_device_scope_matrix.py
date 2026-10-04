@@ -4,6 +4,8 @@ import asyncio
 import base64
 import contextlib
 import json
+import shutil
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -295,3 +297,21 @@ async def test_an_event_without_an_owner_is_not_shown_to_a_member_device(world, 
 
     for device in (world.a, world.b):
         assert SECRET not in await _call(world, device, "host.events.history", limit=200)
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    not (sys.platform.startswith("linux") and shutil.which("bwrap")),
+    reason="needs bwrap (Linux)",
+)
+def test_a_sibling_devices_terminal_never_reads_what_device_a_wrote(world) -> None:
+    from alpi.tools.terminal import Terminal
+
+    sessions = world.root.resolve() / "sessions"
+    command = f"cat {sessions}/*.json"
+    sibling_sees = _run_tool(world, world.b, Terminal(), command=command, timeout=30)
+    with use(ConnectionContext(world.conn, world.a["id"], "remote", "admin")):
+        admin_sees = Terminal().run(command=command, timeout=30).output
+
+    assert SECRET in admin_sees, "the admin control must read the session or this row proves nothing"
+    assert SECRET not in sibling_sees

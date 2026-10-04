@@ -233,3 +233,23 @@ def test_the_policy_reaches_parallel_calls_and_sub_agent_threads(tmp_path: Path)
         with ThreadPoolExecutor(max_workers=1) as pool:
             names, result = pool.submit(contextvars.copy_context().run, in_thread).result()
         assert names == {"plain"} and _refused(result)
+
+
+def test_a_workgroup_turn_has_no_session_history_but_keeps_its_workgroup_tools(monkeypatch, tmp_home) -> None:
+    from alpi import tools
+    from alpi.tools import _policy
+    from alpi.tools._paths import dispatch_tool_deny_reasons
+
+    monkeypatch.delenv("ALPI_WORKGROUP_PIPELINE", raising=False)
+    monkeypatch.setenv("ALPI_WORKGROUP_DISPATCH", "wg_1")
+    deny = _policy.effective_denies(())
+    names = {s["function"]["name"] for s in tools.schemas(deny=deny)}
+    assert not names & {"session_search", "session_read", "recall_sessions", "index_sessions"}
+    assert "workgroup_search" in names
+    result = tools.execute("session_read", {"session": "x"}, deny=deny)
+    assert result.ok is False
+    reason = dispatch_tool_deny_reasons(frozenset())["session_read"]
+    assert "workgroup boundary" in reason and "pipeline" not in reason
+
+    monkeypatch.delenv("ALPI_WORKGROUP_DISPATCH")
+    assert "session_read" in {s["function"]["name"] for s in tools.schemas(deny=_policy.effective_denies(()))}

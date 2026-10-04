@@ -210,6 +210,19 @@ def test_spawn_keeps_connection_context(
     assert seen == [("conn_javi", "dev_phone")]
 
 
+def test_spawn_keeps_a_peer_fence(bootstrapped_home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from alpi.host.connection_context import ConnectionContext, use
+    from alpi.tools import _policy
+    from alpi.tools._paths import PEER_HISTORY_TOOLS, private_areas_fenced
+    seen = []
+    monkeypatch.setattr(review, "_run_review", lambda *a, **k: seen.append(private_areas_fenced()))
+    with use(ConnectionContext(connection_id="peer:carol", source="peer")), \
+            _policy.use(None, "peer 'carol'", PEER_HISTORY_TOOLS, fence_without_policy=True):
+        thread = review.spawn_review(bootstrapped_home, config.load(bootstrapped_home), [{"role": "user", "content": "x"}])
+    thread.join(timeout=5)
+    assert seen == [True]
+
+
 # Engine integration — counter and gating.
 
 def test_engine_does_not_spawn_review_when_disabled(

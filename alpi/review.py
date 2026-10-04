@@ -15,6 +15,7 @@ parent.
 
 from __future__ import annotations
 
+import contextvars
 import copy
 import threading
 from pathlib import Path
@@ -169,6 +170,6 @@ def spawn_review(
         finally:
             reset_active_home(token)
 
-    t = threading.Thread(target=_worker, daemon=True, name="alpi-memory-review")
+    t = threading.Thread(target=contextvars.copy_context().run, args=(_worker,), daemon=True, name="alpi-memory-review")
     t.start()
     return t

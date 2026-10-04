@@ -298,7 +298,7 @@ and filters the rows it returns to what your connection may see:
 | `host.workgroups.list` | `profile?`, `include_pipeline_status?` | `{ workgroups: [{ id, profile, name, members, is_hub, hub_id, pipeline_status?, queued_pipeline?, queue_position?, pipeline_note?, … }] }` |
 | `host.workgroup.post` | `profile`, `wg_id`, `text` | `{ ok, seq }` |
 | `host.workgroup.transcript` | `profile`, `wg_id`, `after_seq?`, `limit?`, `tail?` | `{ posts: [{ seq, at, from, body, cost }], next_seq, limit }` |
-| `host.workgroup.tasks` | `profile`, `wg_id` | `{ active, closed, blocked, pipeline_run }` |
+| `host.workgroup.tasks` | `profile`, `wg_id` | `{ active, closed, blocked, pipeline_run }`; `active` = `{ slug, title, opened_seq, assignees }` |
 
 `pipeline_note` (with `include_pipeline_status`) is one display string for a row whose current run has finished phases: `intake, content done`, plus `· shoot next` when a queued pipeline or the next phase of the run waits; a note longer than 24 characters shows the count of finished phases instead (`3 done · edit next`). The row omits it when nothing finished; the desktop list and `alpi workgroup list` print it as the row's caption.
 

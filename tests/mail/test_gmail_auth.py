@@ -249,3 +249,50 @@ def test_first_run_falls_back_to_paste_when_browser_open_fails(
     monkeypatch.setattr(gmail_auth, "_paste_flow", fake_paste)
 
     assert gmail_auth.first_run(tmp_path) is sentinel
+
+
+def test_an_oauth_refusal_keeps_only_its_error_and_description() -> None:
+    from alpi.mail import gmail_auth
+
+    class Response:
+        def __init__(self, body, text):
+            self._body, self.text = body, text
+
+        def json(self):
+            if self._body is None:
+                raise ValueError("not json")
+            return self._body
+
+    assert gmail_auth._oauth_reason(Response({"error": "invalid_grant", "error_description": "Bad Request"}, "{...}")) == "invalid_grant (Bad Request)"
+    assert gmail_auth._oauth_reason(Response({"error": "invalid_client"}, "{...}")) == "invalid_client"
+    assert gmail_auth._oauth_reason(Response(None, "<html>\n  gateway   down\n</html>")) == "<html> gateway down </html>"
+
+
+def test_a_refused_refresh_says_why_without_the_raw_response(tmp_path, monkeypatch) -> None:
+    import httpx
+    import pytest
+
+    from alpi.mail import gmail_auth
+
+    raw = '{"error": "invalid_grant", "error_description": "Bad Request", "trace": "SECRET-ish raw body"}'
+
+    class Client:
+        def __init__(self, *a, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def post(self, *a, **kw):
+            return httpx.Response(400, text=raw, request=httpx.Request("POST", "https://oauth2.googleapis.com/token"))
+
+    monkeypatch.setattr(gmail_auth, "_client_credentials", lambda home: ("id", "secret"))
+    monkeypatch.setattr(gmail_auth.httpx, "Client", Client)
+    token = gmail_auth.GmailToken(email="me@example.com", access_token="a", refresh_token="r", expires_at=0)
+    with pytest.raises(gmail_auth.GmailAuthError) as caught:
+        gmail_auth._refresh(tmp_path, "acct", token)
+    assert "invalid_grant (Bad Request)" in str(caught.value)
+    assert "SECRET-ish" not in str(caught.value)

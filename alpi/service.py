@@ -489,6 +489,8 @@ def _alert_stale_runs(home: Path, profile: str, closed: list[dict[str, Any]]) ->
                 home, profile=profile, body=body, type="error",
                 title=f"{title} {'went silent' if silent else 'did not finish'}",
                 delivered_to=[],
+                job_id=job_id or "",
+                run_id=str(row.get("run_id") or ""),
             )
             output_id = str(output["id"])
         except Exception:  # noqa: BLE001

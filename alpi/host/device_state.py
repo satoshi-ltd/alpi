@@ -17,6 +17,7 @@ from alpi.alp import pipeline_queue as _pipeline_queue
 from alpi import __version__ as _alpi_version
 from alpi import config as cfg_mod
 from alpi import home as home_mod
+from alpi import palette
 from alpi.host import sessions as host_sessions
 from alpi.host import server as host_server
 from alpi.host.connection_context import owns_session_row, session_view_key
@@ -172,13 +173,15 @@ def _profile_summary(row: dict[str, Any]) -> dict[str, Any]:
     cfg = cfg_mod.load(home)
     used_usd, used_tokens = _today_ledger(home)
     latest = _latest_chat_for(home)
+    default = bool(row.get("is_default"))
     return {
         **row,
         "running": _daemon_running(),
         "pid": _daemon_pid(),
         "installed_via": _installed_via(),
         "model": cfg.model or None,
-        "accent": cfg.tui.get("accent"),
+        "accent": None if default else palette.canonical_accent(cfg.tui.get("accent")),
+        "fold": palette.ALPACA_FOLD if default else palette.resolve_fold(cfg.tui.get("fold")),
         "voice_id": cfg.tools.tts.voice,
         "bio": cfg.public_bio or None,
         "paused": cfg.paused,
@@ -564,6 +567,18 @@ async def _cleanup_apply(
     return {"results": results}
 
 
+def _reject_locked_appearance(profile: str, key: str) -> None:
+    from alpi import appearance
+
+    if profile not in ("", "default"):
+        return
+    path = ".".join(part for part in key.split(".") if part)
+    if path == "tui" or path in appearance.LOCKED_KEYS:
+        raise host_server.HandlerError(
+            -32602, "invalid-params", data={"detail": appearance.LOCKED_MESSAGE},
+        )
+
+
 async def _config_set_field(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
@@ -581,6 +596,7 @@ async def _config_set_field(
                 ),
             },
         )
+    _reject_locked_appearance(str(params.get("profile") or ""), key)
     value = params.get("value")
     data = _load_user_yaml(home)
     coerced = _coerce_config_value(key, value)
@@ -647,6 +663,7 @@ async def _config_unset_field(
     home = _resolve_home(str(params.get("profile") or ""))
     key = str(params.get("key") or "")
     _reject_removed_config_key(key)
+    _reject_locked_appearance(str(params.get("profile") or ""), key)
     data = _load_user_yaml(home)
     _unset_dotted(data, key)
     _prune_empty_tiers(data)
@@ -1081,6 +1098,14 @@ def _coerce_config_value(key: str, value: Any) -> Any:
         return parsed
     if key in {"budget.daily_usd"}:
         return float(value)
+    if key == "tui.fold":
+        fold = str(value or "").strip().lower()
+        if fold not in palette.FOLDS:
+            raise host_server.HandlerError(
+                -32602, "invalid-params",
+                data={"detail": f"tui.fold must be one of {', '.join(palette.FOLDS)}"},
+            )
+        return fold
     if str(value).lower() == "true":
         return True
     if str(value).lower() == "false":

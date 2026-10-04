@@ -346,6 +346,13 @@ fixed.
 | `reset_state` | Wipes `state/` (including `db.sqlite`) and nothing else. |
 | `run`, `test`, `invoke` | Execute the skill (below). |
 
+A turn from a member device, or from an ALP peer without `tools.allow`, gets
+only `list`, `view` and `validate`: a skill's scripts run outside the OS
+sandbox with the profile's environment, so they are refused there (nested
+calls included), and so is every mutation. Prose skills keep working through
+`view`. An admin device, or a peer whose `tools.allow` grants `skill`, keeps
+the full set.
+
 Mutations on a user-written skill (`origin: user`) require
 `confirm_user_skill=true`; agent-created skills are provisional and the agent
 may change them freely. The agent can hold at most **40** agent-created

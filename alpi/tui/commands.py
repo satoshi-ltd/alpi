@@ -41,6 +41,7 @@ COMMANDS: tuple[SlashCommand, ...] = (
     SlashCommand("mcps", "running MCP servers", "_cmd_mcps"),
     SlashCommand("peers", "ALP peers — pick one to address it with @id", "_cmd_peers"),
     SlashCommand("diff", "what changed in this profile (default 24h)", "_cmd_diff", usage="[since]"),
+    SlashCommand("fold", "this profile's origami object and colour for the apps", "_cmd_fold", usage="[object] [colour]"),
     SlashCommand("attach", "attach an image, PDF or text file to the next message", "_cmd_attach", usage="<path>"),
     SlashCommand("attachments", "list pending attachments", "_cmd_attachments"),
     SlashCommand("clear-attachments", "drop pending attachments", "_cmd_clear_attachments"),

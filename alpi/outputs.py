@@ -9,6 +9,8 @@ Row schema (one JSON object per line):
     type         ``info`` | ``warning`` | ``error``
     status       ``unread`` | ``read``
     session_id   originating chat session, or ``""``
+    job_id       scheduled job that produced it (omitted when not set)
+    run_id       run journal of that job execution (omitted when not set)
     delivered_to channels the matching notification went out on
 """
 
@@ -80,8 +82,32 @@ def normalize_notification_title(text: str) -> str:
 def normalize_notification_body(text: str) -> str:
     if not text:
         return text or ""
-    out: list[str] = []
+    blocks: list[str] = []
+    prose: list[str] = []
+    fence: list[str] | None = None
     for raw in text.split("\n"):
+        if fence is None and raw.lstrip().startswith("```"):
+            if prose:
+                blocks.append(_normalize_prose(prose))
+                prose = []
+            fence = [raw.rstrip()]
+        elif fence is not None:
+            fence.append(raw.rstrip())
+            if raw.strip().startswith("```"):
+                blocks.append("\n".join(fence))
+                fence = None
+        else:
+            prose.append(raw)
+    if fence is not None:
+        blocks.append("\n".join(fence))
+    if prose:
+        blocks.append(_normalize_prose(prose))
+    return "\n".join(block for block in blocks if block).strip("\n")
+
+
+def _normalize_prose(lines: list[str]) -> str:
+    out: list[str] = []
+    for raw in lines:
         line = raw.rstrip()
         if _HR_RE.match(line):
             continue
@@ -171,6 +197,8 @@ def append(
     session_id: str = "",
     delivered_to: list[str] | None = None,
     title: str = "",
+    job_id: str = "",
+    run_id: str = "",
 ) -> dict[str, Any]:
     if type not in VALID_TYPE:
         type = "info"
@@ -189,6 +217,10 @@ def append(
     }
     if title:
         output["title"] = title
+    if job_id:
+        output["job_id"] = job_id
+    if run_id:
+        output["run_id"] = run_id
 
     path = _store_path(home)
     with _lock:
@@ -250,6 +282,12 @@ def mark_read(home: Path, output_id: str) -> dict[str, Any] | None:
     return _mutate(home, output_id, _apply)
 
 
+def mark_unread(home: Path, output_id: str) -> dict[str, Any] | None:
+    def _apply(it: dict[str, Any]) -> None:
+        it["status"] = "unread"
+    return _mutate(home, output_id, _apply)
+
+
 def delete(home: Path, output_id: str) -> bool:
     """Remove one output by id. Returns True iff a row was actually dropped."""
     with _lock:
@@ -290,7 +328,7 @@ def normalize_native_notification_args(args: dict) -> dict | None:
     }
 
 
-def record_child_native_message(home: Path, args: dict) -> str:
+def record_child_native_message(home: Path, args: dict, *, job_id: str = "", run_id: str = "") -> str:
     """Files a child agent's native notification and emits output.created + agent.message so the parent's client wakes."""
     record = normalize_native_notification_args(args)
     if record is None:
@@ -313,6 +351,8 @@ def record_child_native_message(home: Path, args: dict) -> str:
             type=type,
             delivered_to=["alpi"],
             title=record["notification_title"],
+            job_id=job_id,
+            run_id=run_id,
         )
     except Exception:  # noqa: BLE001
         return ""
@@ -418,6 +458,7 @@ __all__ = [
     "VALID_TYPE",
     "VALID_STATUS",
     "append",
+    "mark_unread",
     "list_outputs",
     "read",
     "mark_read",
