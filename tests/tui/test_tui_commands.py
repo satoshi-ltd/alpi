@@ -122,6 +122,18 @@ async def test_fold_command_shows_and_sets_the_pair(tui_profile_home) -> None:
 
 
 @pytest.mark.asyncio
+async def test_fold_recolours_the_running_console(tui_profile_home) -> None:
+    from alpi.tui.app import AlpiApp
+
+    app = AlpiApp(home_dir=tui_profile_home)
+    async with app.run_test(size=(120, 40)) as pilot:
+        app._cmd_fold("shield blue")
+        await pilot.pause()
+        assert app.current_theme.accent == "#3899e2"
+        assert app.get_css_variables()["accent"].lower() == "#3899e2"
+
+
+@pytest.mark.asyncio
 async def test_fold_keeps_a_session_only_model_switch(tui_profile_home) -> None:
     from alpi import config
     from alpi.tui.app import AlpiApp

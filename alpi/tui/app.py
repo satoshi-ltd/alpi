@@ -249,7 +249,10 @@ class AlpiApp(App):
         from alpi import appearance
         theme = build_theme(accent=None if appearance.is_default(self.home) else tui.get("accent"), dark=dark)
         self.register_theme(theme)
-        self.theme = theme.name
+        if self.theme == theme.name:
+            self.refresh_css(animate=False)
+        else:
+            self.theme = theme.name
         # Setting self.theme refreshes asynchronously, after child on_mount; force it now.
         self.get_css_variables()
 
@@ -886,6 +889,7 @@ class AlpiApp(App):
             self._mount_message(DimLine(str(exc)))
             return
         self.cfg.tui = config.load(self.home).tui
+        self._install_theme()
         from alpi.tui import list_row
         self._fold_marker = self._marker_for(self.home)
         list_row.set_marker(self._fold_marker)
