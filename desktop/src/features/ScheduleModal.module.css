@@ -12,7 +12,7 @@
 }
 
 .dot[data-on="on"] {
-  background: var(--c-success);
+  background: var(--ink);
 }
 
 .dot[data-on="off"] {
@@ -109,3 +109,36 @@
 }
 
 .emptyNote { color: var(--ink-3); }
+
+.failed {
+  color: var(--c-danger-text);
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--ink-2);
+}
+
+.lead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  margin-bottom: var(--space-5);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+.leadWhen {
+  color: var(--ink);
+}
+
+.leadNext {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--ink-3);
+}

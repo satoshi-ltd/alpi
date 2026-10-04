@@ -60,3 +60,17 @@ describe("error notifications use plain words", () => {
     expect(screen.getByText("label required")).toBeTruthy();
   });
 });
+
+describe("toast de-duplication", () => {
+  it("drops a repeated plain toast but keeps every toast that carries an action", () => {
+    mount();
+    act(() => {
+      notifyRef({ message: "Saved" });
+      notifyRef({ message: "Saved" });
+      notifyRef({ message: "Deleted", action: "Undo", onAction: () => {} });
+      notifyRef({ message: "Deleted", action: "Undo", onAction: () => {} });
+    });
+    expect(screen.getAllByText("Saved")).toHaveLength(1);
+    expect(screen.getAllByText("Deleted")).toHaveLength(2);
+  });
+});

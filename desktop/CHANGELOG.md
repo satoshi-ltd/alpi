@@ -11,6 +11,36 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.8.0 — 2026-10-02 — profiles wear their origami
+
+- **A profile wears an origami object in its colour** in the sidebar, lists, headers, mentions and every empty chat at
+  hero size; one that has not chosen shows the kite-base diamond. Settings have an appearance row that picks an object
+  and one of twelve colours in a six-by-two grid. The default profile is always the first row of the sidebar, above
+  Pinned and never pinned, and ⌘1 opens it; every launch opens the first row of the roster, and a new session starts
+  from a profile (its row menu or ⌘N) instead of a start screen, with recent sessions on ⌘K. Names in the chat and
+  settings headers take the crease type in the profile's colour, and the version panel opens with the alpaca and the
+  crease wordmark. Workgroup settings show who owns what: every pipeline phase carries its owner's object and the
+  current run's state, every member lists the phases it owns, and Remove waits behind a row menu. The chat's pipeline
+  strip does the same: every phase in the chat carries its owner's object, a repair the hub routes to someone else
+  reads `→ @member`, hovering shows the task, owner and cost, and the header shows the live phase with the same count
+  as the strip. Memories, skills, tools and schedules open as one window headed by the profile's object and name, the four
+  as tabs: a schedule says when it runs in words and shows a broken timeout, a memory reads as entries with when each
+  was captured and reinforced, skill files show their type, and prose reads in the app's sans.
+- **First run knows where alpi is:** when this computer does not answer, the window shows one welcome instead of an
+  error. An installed alpi starts on its own, with Start alpi, its steps, and the error, the command and Retry when it
+  fails; without alpi it gives the install commands beside an alpi:// link. Connecting elsewhere names each step and
+  failure with its next action, and a one-time card says how to add a phone.
+- **A working profile ripples its own object facet by facet**, its thinking line leads with that object and its colour, and a workgroup is a honeycomb in its hub's colour that ripples the same way and is an outline when paused; a paused profile or workgroup, and every object while its daemon is away, unfolds into its grey dashed crease pattern, and a paused name reads in grey; a profile running a job again after it failed reads working, not failed.
+- **The accent is ink** (cream on dark, black on light) on neutral greys and flat surfaces (headers end on their seam without a coloured stripe, your messages are a neutral 4 px sheet without the profile's tint, toasts are flat cards, an approval opens with the asking profile's object and name and keeps red for the warning mark, activity rows lead with the profile's object, the selected row is the pane's own sheet and chips are tags; menus, popovers, buttons, cards, code blocks and images are 4 px sheets with no blur anywhere, the image viewer included; menus keep a seam instead of a blurred shadow, buttons press by tone, fields and the composer are borderless wells that deepen and ring on focus, dialogs are sheets on a paper veil with their actions on a footer band; a destructive action confirms inside the sheet it was in instead of opening another), and the default profile is the alpaca in it, also on
+  older daemons, with a read-only
+  appearance row; the Tauri icons are the alpaca in one flat ink (nine facets at small sizes).
+- **Notifications are a daily pass:** unread errors and warnings pin to a Needs you group, All / Needs you / Unread
+  narrow the list, an ink dot marks unread and a word the severity; the reader leads with Reply (a new session with
+  the notification attached), Open chat or Open job and Mark unread; a digest reads as entries and a failed run as a
+  flat card with Run again; ↑↓ ⏎ R U ⌫ / and 1–3 work from the list.
+
+  Requires alpi 0.17.0.
+
 ## v0.7.9 — 2026-10-01 — empty states speak in one voice
 
 - **Every empty state now has a sentence-case title and at most one hint sentence ending in a full stop,**

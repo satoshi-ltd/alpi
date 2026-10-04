@@ -12,7 +12,6 @@ export { EmailCell } from "./EmailCell.jsx";
 export { DevicesField } from "./devices.jsx";
 export { DaemonField } from "./DaemonField.jsx";
 export {
-  AccentField,
   BudgetField,
   SandboxField,
   WorkspaceField,

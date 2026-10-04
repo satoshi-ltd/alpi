@@ -7,9 +7,13 @@
  "title": "Alpi desktop and mobile parity",
  "launch": {
   "view": "canvas",
-  "page": "system"
+  "page": "brand"
  },
  "pages": [
+  {
+   "id": "brand",
+   "name": "Brand"
+  },
   {
    "id": "system",
    "name": "System"
@@ -48,7 +52,7 @@
    "x": 0,
    "y": 3060,
    "w": 1280,
-   "h": 2250,
+   "h": 2600,
    "title": "Desktop \u00b7 controls and feedback",
    "page": "system"
   },
@@ -56,21 +60,21 @@
    "x": 1360,
    "y": 3060,
    "w": 1280,
-   "h": 3140,
+   "h": 3450,
    "title": "Mobile \u00b7 controls and feedback",
    "page": "system"
   },
   "System-DesktopConversation.dc.html": {
    "x": 0,
-   "y": 6440,
+   "y": 6750,
    "w": 1280,
-   "h": 2900,
+   "h": 2520,
    "title": "Desktop \u00b7 conversation",
    "page": "system"
   },
   "System-MobileConversation.dc.html": {
    "x": 1360,
-   "y": 6440,
+   "y": 6750,
    "w": 1280,
    "h": 1400,
    "title": "Mobile \u00b7 conversation",
@@ -78,17 +82,17 @@
   },
   "System-DesktopWorkgroup.dc.html": {
    "x": 0,
-   "y": 9580,
+   "y": 9510,
    "w": 1280,
-   "h": 1200,
+   "h": 1880,
    "title": "Desktop \u00b7 workgroups",
    "page": "system"
   },
   "System-MobileWorkgroup.dc.html": {
    "x": 1360,
-   "y": 9580,
+   "y": 9510,
    "w": 1280,
-   "h": 760,
+   "h": 1290,
    "title": "Mobile \u00b7 workgroups",
    "page": "system"
   },
@@ -112,13 +116,21 @@
    "x": 0,
    "y": 3920,
    "w": 1280,
-   "h": 1760,
+   "h": 2480,
    "title": "Desktop \u00b7 workgroup settings",
+   "page": "desktop"
+  },
+  "Desktop-ProfilePanels.dc.html": {
+   "x": 0,
+   "y": 6640,
+   "w": 1280,
+   "h": 1330,
+   "title": "Desktop \u00b7 profile panels",
    "page": "desktop"
   },
   "Desktop-Workgroups.dc.html": {
    "x": 0,
-   "y": 5920,
+   "y": 8210,
    "w": 1280,
    "h": 560,
    "title": "Desktop \u00b7 workgroups",
@@ -126,7 +138,7 @@
   },
   "Desktop-Connections.dc.html": {
    "x": 0,
-   "y": 6720,
+   "y": 9010,
    "w": 1280,
    "h": 820,
    "title": "Desktop \u00b7 connections",
@@ -134,23 +146,79 @@
   },
   "Desktop-AppSettings.dc.html": {
    "x": 0,
-   "y": 7780,
+   "y": 10070,
    "w": 1280,
    "h": 740,
    "title": "Desktop \u00b7 app settings",
    "page": "desktop"
   },
+  "Desktop-FirstRun.dc.html": {
+   "x": 0,
+   "y": 11050,
+   "w": 1280,
+   "h": 2400,
+   "title": "Desktop \u00b7 first run",
+   "page": "desktop"
+  },
   "Desktop-Overlays.dc.html": {
    "x": 0,
-   "y": 8760,
+   "y": 13690,
    "w": 1280,
-   "h": 2090,
+   "h": 2660,
    "title": "Desktop \u00b7 overlays",
    "page": "desktop"
   },
+  "Phone-PairWelcome.dc.html": {
+   "x": 932,
+   "y": 240,
+   "w": 390,
+   "h": 844,
+   "title": "Phone \u00b7 pair with your alpi",
+   "page": "mobile"
+  },
+  "Phone-Pairing.dc.html": {
+   "x": 1402,
+   "y": 240,
+   "w": 390,
+   "h": 844,
+   "title": "Phone \u00b7 pairing, each step named",
+   "page": "mobile"
+  },
+  "Phone-Paired.dc.html": {
+   "x": 1872,
+   "y": 240,
+   "w": 390,
+   "h": 844,
+   "title": "Phone \u00b7 paired, host and role",
+   "page": "mobile"
+  },
+  "Phone-PairUnreachable.dc.html": {
+   "x": 932,
+   "y": 1324,
+   "w": 390,
+   "h": 844,
+   "title": "Phone \u00b7 host unreachable, link kept",
+   "page": "mobile"
+  },
+  "Phone-PairLinkUsed.dc.html": {
+   "x": 1402,
+   "y": 1324,
+   "w": 390,
+   "h": 844,
+   "title": "Phone \u00b7 link used, cleared",
+   "page": "mobile"
+  },
+  "Phone-NothingShared.dc.html": {
+   "x": 1872,
+   "y": 1324,
+   "w": 390,
+   "h": 844,
+   "title": "Phone \u00b7 member with nothing shared",
+   "page": "mobile"
+  },
   "Fold-Chat.dc.html": {
    "x": 0,
-   "y": 240,
+   "y": 2408,
    "w": 852,
    "h": 884,
    "title": "Fold \u00b7 chat",
@@ -158,7 +226,7 @@
   },
   "Phone-Chat.dc.html": {
    "x": 932,
-   "y": 240,
+   "y": 2408,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 chat",
@@ -166,7 +234,7 @@
   },
   "Fold-ProfileSettings.dc.html": {
    "x": 0,
-   "y": 1364,
+   "y": 3532,
    "w": 852,
    "h": 2000,
    "title": "Fold \u00b7 profile settings",
@@ -174,7 +242,7 @@
   },
   "Phone-ProfileSettings.dc.html": {
    "x": 932,
-   "y": 1364,
+   "y": 3532,
    "w": 390,
    "h": 2360,
    "title": "Phone \u00b7 profile settings",
@@ -182,23 +250,31 @@
   },
   "Fold-WorkgroupSettings.dc.html": {
    "x": 0,
-   "y": 3964,
+   "y": 6132,
    "w": 852,
-   "h": 1300,
+   "h": 2320,
    "title": "Fold \u00b7 workgroup settings",
    "page": "mobile"
   },
   "Phone-WorkgroupSettings.dc.html": {
    "x": 932,
-   "y": 3964,
+   "y": 6132,
    "w": 390,
-   "h": 1700,
+   "h": 2960,
    "title": "Phone \u00b7 workgroup settings",
+   "page": "mobile"
+  },
+  "Phone-ProfilePanels.dc.html": {
+   "x": 0,
+   "y": 9332,
+   "w": 1280,
+   "h": 1720,
+   "title": "Phone \u00b7 profile panels",
    "page": "mobile"
   },
   "Fold-ConnectionDetail.dc.html": {
    "x": 0,
-   "y": 5904,
+   "y": 11292,
    "w": 852,
    "h": 1300,
    "title": "Fold \u00b7 connection detail",
@@ -206,7 +282,7 @@
   },
   "Phone-Connections.dc.html": {
    "x": 932,
-   "y": 5904,
+   "y": 11292,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 connections",
@@ -214,7 +290,7 @@
   },
   "Phone-ConnectionDetail.dc.html": {
    "x": 1402,
-   "y": 5904,
+   "y": 11292,
    "w": 390,
    "h": 1500,
    "title": "Phone \u00b7 connection detail",
@@ -222,15 +298,31 @@
   },
   "Phone-Settings.dc.html": {
    "x": 932,
-   "y": 7644,
+   "y": 13032,
    "w": 390,
    "h": 1100,
    "title": "Phone \u00b7 app settings",
    "page": "mobile"
   },
+  "Phone-Notifications.dc.html": {
+   "x": 932,
+   "y": 14372,
+   "w": 390,
+   "h": 844,
+   "title": "Phone \u00b7 notifications, filters and swipe",
+   "page": "mobile"
+  },
+  "Phone-NotificationPage.dc.html": {
+   "x": 1402,
+   "y": 14372,
+   "w": 390,
+   "h": 844,
+   "title": "Phone \u00b7 notification page, actions at the thumb",
+   "page": "mobile"
+  },
   "Fold-Activity.dc.html": {
    "x": 0,
-   "y": 8984,
+   "y": 15456,
    "w": 852,
    "h": 700,
    "title": "Fold \u00b7 activity",
@@ -238,7 +330,7 @@
   },
   "Phone-Roster.dc.html": {
    "x": 932,
-   "y": 8984,
+   "y": 15456,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 roster",
@@ -246,7 +338,7 @@
   },
   "Phone-Activity.dc.html": {
    "x": 1402,
-   "y": 8984,
+   "y": 15456,
    "w": 390,
    "h": 540,
    "title": "Phone \u00b7 activity",
@@ -254,7 +346,7 @@
   },
   "Fold-Sheet.dc.html": {
    "x": 0,
-   "y": 10068,
+   "y": 16540,
    "w": 852,
    "h": 884,
    "title": "Fold \u00b7 sheet as a centred dialog",
@@ -262,7 +354,7 @@
   },
   "Phone-Sheet.dc.html": {
    "x": 932,
-   "y": 10068,
+   "y": 16540,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 sheet",
@@ -270,7 +362,7 @@
   },
   "Phone-ActionSheet.dc.html": {
    "x": 1402,
-   "y": 10068,
+   "y": 16540,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 action sheet",
@@ -278,7 +370,7 @@
   },
   "Phone-TypedConfirm.dc.html": {
    "x": 1872,
-   "y": 10068,
+   "y": 16540,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 typed confirm",
@@ -286,7 +378,7 @@
   },
   "Phone-ToolSheet.dc.html": {
    "x": 932,
-   "y": 11192,
+   "y": 17664,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 tool step sheet",
@@ -294,7 +386,7 @@
   },
   "Phone-SelectText.dc.html": {
    "x": 1402,
-   "y": 11192,
+   "y": 17664,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 select text",
@@ -302,11 +394,43 @@
   },
   "Phone-MessageActions.dc.html": {
    "x": 1872,
-   "y": 11192,
+   "y": 17664,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 message actions",
    "page": "mobile"
+  },
+  "Brand-Mark.dc.html": {
+   "x": 0,
+   "y": 240,
+   "w": 1280,
+   "h": 2180,
+   "title": "Brand \u00b7 logo and mark",
+   "page": "brand"
+  },
+  "Brand-Pairs.dc.html": {
+   "x": 0,
+   "y": 2660,
+   "w": 1280,
+   "h": 1700,
+   "title": "Brand \u00b7 pairs",
+   "page": "brand"
+  },
+  "Brand-Palette.dc.html": {
+   "x": 0,
+   "y": 4600,
+   "w": 1280,
+   "h": 1400,
+   "title": "Brand \u00b7 palette",
+   "page": "brand"
+  },
+  "Brand-Motion.dc.html": {
+   "x": 0,
+   "y": 6240,
+   "w": 1280,
+   "h": 1270,
+   "title": "Brand \u00b7 states and motion",
+   "page": "brand"
   },
   "Proposals-UI-MOB.LIVE-ACTIVITY.dc.html": {
    "x": 0,
@@ -314,6 +438,14 @@
    "w": 1280,
    "h": 870,
    "title": "Proposals \u00b7 ui-mob.live-activity \u00b7 a running workgroup and an approval reach a locked phone",
+   "page": "proposals"
+  },
+  "Proposals-UI-LOADING.dc.html": {
+   "x": 0,
+   "y": 1350,
+   "w": 1280,
+   "h": 2140,
+   "title": "Proposals \u00b7 ui-loading \u00b7 waiting looks like alpi, and the pipeline never waits for what it already knows",
    "page": "proposals"
   }
  },
@@ -329,20 +461,31 @@
   "Desktop-Chat.dc.html",
   "Desktop-ProfileSettings.dc.html",
   "Desktop-WorkgroupSettings.dc.html",
+  "Desktop-ProfilePanels.dc.html",
   "Desktop-Workgroups.dc.html",
   "Desktop-Connections.dc.html",
   "Desktop-AppSettings.dc.html",
+  "Desktop-FirstRun.dc.html",
   "Desktop-Overlays.dc.html",
+  "Phone-PairWelcome.dc.html",
+  "Phone-Pairing.dc.html",
+  "Phone-Paired.dc.html",
+  "Phone-PairUnreachable.dc.html",
+  "Phone-PairLinkUsed.dc.html",
+  "Phone-NothingShared.dc.html",
   "Fold-Chat.dc.html",
   "Phone-Chat.dc.html",
   "Fold-ProfileSettings.dc.html",
   "Phone-ProfileSettings.dc.html",
   "Fold-WorkgroupSettings.dc.html",
   "Phone-WorkgroupSettings.dc.html",
+  "Phone-ProfilePanels.dc.html",
   "Fold-ConnectionDetail.dc.html",
   "Phone-Connections.dc.html",
   "Phone-ConnectionDetail.dc.html",
   "Phone-Settings.dc.html",
+  "Phone-Notifications.dc.html",
+  "Phone-NotificationPage.dc.html",
   "Fold-Activity.dc.html",
   "Phone-Roster.dc.html",
   "Phone-Activity.dc.html",
@@ -353,7 +496,12 @@
   "Phone-ToolSheet.dc.html",
   "Phone-SelectText.dc.html",
   "Phone-MessageActions.dc.html",
-  "Proposals-UI-MOB.LIVE-ACTIVITY.dc.html"
+  "Brand-Mark.dc.html",
+  "Brand-Pairs.dc.html",
+  "Brand-Palette.dc.html",
+  "Brand-Motion.dc.html",
+  "Proposals-UI-MOB.LIVE-ACTIVITY.dc.html",
+  "Proposals-UI-LOADING.dc.html"
  ],
  "notes": {
   "s-Foundations": {
@@ -374,7 +522,7 @@
   },
   "s-Conversation": {
    "x": 0,
-   "y": 6217,
+   "y": 6527,
    "text": "Conversation",
    "kind": "title1",
    "maxW": 2600,
@@ -382,7 +530,7 @@
   },
   "s-Workgroups": {
    "x": 0,
-   "y": 9357,
+   "y": 9287,
    "text": "Workgroups",
    "kind": "title1",
    "maxW": 2600,
@@ -412,9 +560,17 @@
    "maxW": 2600,
    "page": "desktop"
   },
+  "d-Profile panels": {
+   "x": 0,
+   "y": 6417,
+   "text": "Profile panels",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "desktop"
+  },
   "d-Workgroups": {
    "x": 0,
-   "y": 5697,
+   "y": 7987,
    "text": "Workgroups",
    "kind": "title1",
    "maxW": 2600,
@@ -422,7 +578,7 @@
   },
   "d-Connections": {
    "x": 0,
-   "y": 6497,
+   "y": 8787,
    "text": "Connections",
    "kind": "title1",
    "maxW": 2600,
@@ -430,23 +586,47 @@
   },
   "d-App settings": {
    "x": 0,
-   "y": 7557,
+   "y": 9847,
    "text": "App settings",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "desktop"
+  },
+  "d-First run": {
+   "x": 0,
+   "y": 10827,
+   "text": "First run",
    "kind": "title1",
    "maxW": 2600,
    "page": "desktop"
   },
   "d-Overlays": {
    "x": 0,
-   "y": 8537,
+   "y": 13467,
    "text": "Overlays",
    "kind": "title1",
    "maxW": 2600,
    "page": "desktop"
   },
-  "m-Chat": {
+  "m-First run": {
    "x": 0,
    "y": 17,
+   "text": "First run",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "mobile"
+  },
+  "m-Pairing failures": {
+   "x": 0,
+   "y": 1101,
+   "text": "Pairing failures",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "mobile"
+  },
+  "m-Chat": {
+   "x": 0,
+   "y": 2185,
    "text": "Chat",
    "kind": "title1",
    "maxW": 2600,
@@ -454,7 +634,7 @@
   },
   "m-Profile settings": {
    "x": 0,
-   "y": 1141,
+   "y": 3309,
    "text": "Profile settings",
    "kind": "title1",
    "maxW": 2600,
@@ -462,15 +642,23 @@
   },
   "m-Workgroup settings": {
    "x": 0,
-   "y": 3741,
+   "y": 5909,
    "text": "Workgroup settings",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "mobile"
+  },
+  "m-Profile panels": {
+   "x": 0,
+   "y": 9109,
+   "text": "Profile panels",
    "kind": "title1",
    "maxW": 2600,
    "page": "mobile"
   },
   "m-Connections": {
    "x": 0,
-   "y": 5681,
+   "y": 11069,
    "text": "Connections",
    "kind": "title1",
    "maxW": 2600,
@@ -478,15 +666,23 @@
   },
   "m-App settings": {
    "x": 0,
-   "y": 7421,
+   "y": 12809,
    "text": "App settings",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "mobile"
+  },
+  "m-Notifications": {
+   "x": 0,
+   "y": 14149,
+   "text": "Notifications",
    "kind": "title1",
    "maxW": 2600,
    "page": "mobile"
   },
   "m-Activity": {
    "x": 0,
-   "y": 8761,
+   "y": 15233,
    "text": "Activity",
    "kind": "title1",
    "maxW": 2600,
@@ -494,7 +690,7 @@
   },
   "m-Overlays": {
    "x": 0,
-   "y": 9845,
+   "y": 16317,
    "text": "Overlays",
    "kind": "title1",
    "maxW": 2600,
@@ -502,16 +698,56 @@
   },
   "m-Sheets": {
    "x": 0,
-   "y": 10969,
+   "y": 17441,
    "text": "Sheets",
    "kind": "title1",
    "maxW": 2600,
    "page": "mobile"
   },
+  "b-Logo and mark": {
+   "x": 0,
+   "y": 17,
+   "text": "Logo and mark",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "brand"
+  },
+  "b-Pairs": {
+   "x": 0,
+   "y": 2437,
+   "text": "Pairs",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "brand"
+  },
+  "b-Palette": {
+   "x": 0,
+   "y": 4377,
+   "text": "Palette",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "brand"
+  },
+  "b-States and motion": {
+   "x": 0,
+   "y": 6017,
+   "text": "States and motion",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "brand"
+  },
   "p-UI-MOB.LIVE-ACTIVITY \u00b7 A running workgroup and an approval reach a locked phone": {
    "x": 0,
    "y": 17,
    "text": "UI-MOB.LIVE-ACTIVITY \u00b7 A running workgroup and an approval reach a locked phone",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "proposals"
+  },
+  "p-UI-LOADING \u00b7 Waiting looks like alpi, and the pipeline never waits for what it already knows": {
+   "x": 0,
+   "y": 1127,
+   "text": "UI-LOADING \u00b7 Waiting looks like alpi, and the pipeline never waits for what it already knows",
    "kind": "title1",
    "maxW": 2600,
    "page": "proposals"

@@ -83,6 +83,7 @@ export default function Settings({
             setTarget(first ? { kind: "profile", id: first } : null);
           }}
           onOpenChat={onOpenChat}
+          onNavigate={setTarget}
         />
       )}
       {target?.kind === "connections" && canManageConnections && (

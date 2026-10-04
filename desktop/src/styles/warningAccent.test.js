@@ -25,9 +25,9 @@ describe("needs-you warning vs working accent", () => {
   });
 
   it.each([
-    ["features/Sidebar.module.css", /\.stateChip\[data-state="needs-you"\] \{[^}]*var\(--c-warning-text\)/, /\.stateChip\[data-state="working"\] \{[^}]*var\(--accent\)/],
-    ["features/ActivityPanel.module.css", /\.glyph\[data-tone="warning"\] \{[^}]*var\(--c-warning-text\)/, /\.glyph\[data-tone="accent"\] \{[^}]*var\(--accent\)/],
-  ])("%s paints needs-you with the warning token and working with the accent", (file, needs, working) => {
+    ["features/Sidebar.module.css", /\.stateChip\[data-state="needs-you"\] \{[^}]*var\(--c-warning-text\)/, /\.stateChip\[data-state="working"\] \{[^}]*var\(--c, var\(--ink-2\)\)/],
+    ["features/ActivityPanel.module.css", /\.glyph\[data-tone="warning"\] \{[^}]*var\(--c-warning-text\)/, /\.glyph\[data-tone="accent"\] \{[^}]*var\(--c, var\(--ink-2\)\)/],
+  ])("%s paints needs-you with the warning token and working with the profile colour", (file, needs, working) => {
     const css = read(file);
     expect(css).toMatch(needs);
     expect(css).toMatch(working);

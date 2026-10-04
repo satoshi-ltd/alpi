@@ -1,11 +1,14 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { BrowseModal, Eyebrow, Icon, LockIcon, StatusPill as DSStatusPill } from "../primitives/index.js";
+import { Eyebrow, Icon } from "../primitives/index.js";
 import Markdown from "../primitives/Markdown.jsx";
 import CodeView from "../primitives/CodeView.jsx";
 import shell from "../primitives/BrowseModal.module.css";
+import { BrowseBody, BrowseShell } from "../primitives/BrowseModal.jsx";
+import { PROFILE_PANELS } from "../lib/profilePanels.js";
 import styles from "./SkillsModal.module.css";
 import { EMPTY } from "../../../common/emptyCopy.mjs";
+import { skillFileIcon } from "../../../common/fileKind.mjs";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -17,11 +20,8 @@ export function formatBytes(n) {
   return `${(kb / 1024).toFixed(1)}mb`;
 }
 
-export function fileIconName(ftype) {
-  if (ftype === "skill") return "sparkle";
-  if (ftype === "py") return "cpu";
-  if (ftype === "md" || ftype === "text") return "eye";
-  return "folder";
+export function fileIconName(node) {
+  return skillFileIcon(node);
 }
 
 export function formatSkillDate(iso) {
@@ -75,7 +75,7 @@ function sameSkill(a, b) {
   return !!a && !!b && a.name === b.name && (a.category || null) === (b.category || null);
 }
 
-export default function SkillsModal({ open, onClose, profile, connectionId }) {
+export function SkillsPanel({ open = true, profile, connectionId, owner = null, onSection = null }) {
   const [skills, setSkills] = useState([]);
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState(null);
@@ -205,9 +205,11 @@ export default function SkillsModal({ open, onClose, profile, connectionId }) {
   );
 
   return (
-    <BrowseModal
-      open={open}
-      onClose={onClose}
+    <BrowseBody
+      owner={owner}
+      sections={owner ? PROFILE_PANELS : null}
+      section="skills"
+      onSection={onSection}
       title="Skills"
       count={skills.length}
       kicker="instructions the agent loads on demand"
@@ -231,7 +233,7 @@ export default function SkillsModal({ open, onClose, profile, connectionId }) {
       ) : (
         <div className={shell.detailEmpty}>Select a skill.</div>
       )}
-    </BrowseModal>
+    </BrowseBody>
   );
 }
 
@@ -254,6 +256,7 @@ function SkillRow({ skill, active, onSelect }) {
         <span className={styles.rowHead}>
           <StatusDot status={skill.status} />
           <span className={styles.rowId}>{skill.name}</span>
+          {skill.status !== "active" ? <span className={styles.rowStatus} data-status={skill.status}>{skill.status}</span> : null}
           <span className={shell.sizeTag}>{formatBytes(skill.size)}</span>
         </span>
         {skill.description ? <span className={styles.rowBlurb}>{skill.description}</span> : null}
@@ -311,12 +314,12 @@ function DetailPane({ detail, selectedPath, openDirs, onToggleDir, onSelectFile,
 }
 
 function StatusPill({ status, reason }) {
-  const tone = status === "active" ? "on" : status === "invalid" ? "bad" : "off";
   const label = status === "active" ? "active" : status === "invalid" ? "invalid" : "inactive";
   return (
-    <DSStatusPill tone={tone} title={status === "active" ? undefined : reason || undefined}>
+    <span className={styles.status} data-status={label} title={status === "active" ? undefined : reason || undefined}>
+      <StatusDot status={status} />
       {label}
-    </DSStatusPill>
+    </span>
   );
 }
 
@@ -410,7 +413,7 @@ function SkillTree({ tree, selectedPath, openDirs, onToggle, onSelectFile }) {
         if (node.locked) {
           return (
             <div key={node.name} className={`${styles.treeRow} ${styles.treeSecrets}`}>
-              <LockIcon className={styles.treeIcon} size="sm" />
+              <Icon name={fileIconName(node)} size="sm" className={styles.treeIcon} />
               <span className={styles.treeName}>{node.name}/</span>
               <span className={styles.treeMeta}>{node.count ? `${node.count} · ${node.mode}` : "Empty"}</span>
             </div>
@@ -458,7 +461,7 @@ function FileRow({ node, path, active, nested, onSelect }) {
       className={`${styles.treeRow} ${styles.treeFile} ${active ? styles.treeFileActive : ""} ${nested ? styles.treeFileNested : ""}`.trim()}
       onClick={() => onSelect(path)}
     >
-      <Icon name={fileIconName(node.ftype)} size="sm" className={styles.treeIcon} />
+      <Icon name={fileIconName(node)} size="sm" className={styles.treeIcon} />
       <span className={styles.treeName}>{node.name}</span>
     </button>
   );
@@ -470,7 +473,7 @@ function FileViewer({ file, loading }) {
   if (kind === "binary") {
     return (
       <div className={styles.viewerBinary}>
-        <Icon name="folder" size="lg" />
+        <Icon name={file.name ? fileIconName(file) : "file"} size="lg" />
         <span>binary · {formatBytes(file.size)}</span>
       </div>
     );
@@ -488,4 +491,12 @@ function FileViewer({ file, loading }) {
   }
   if (kind === "code") return <CodeView text={file.text || ""} lang={file.ftype} />;
   return <div className={styles.viewerLoading}>Select a file.</div>;
+}
+
+export default function SkillsModal({ open, onClose, ...panel }) {
+  return (
+    <BrowseShell open={open} onClose={onClose} label="Skills">
+      <SkillsPanel {...panel} />
+    </BrowseShell>
+  );
 }

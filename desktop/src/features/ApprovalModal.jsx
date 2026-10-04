@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { profileLabel } from "../lib/profile-display.js";
 import { invoke } from "@tauri-apps/api/core";
 
-import { DialogFooter, Diamond, IconBtn, Modal, Tip } from "../primitives/index.js";
+import { DialogFooter, Fold, Icon, IconBtn, Modal, Tip } from "../primitives/index.js";
 import { XIcon } from "../primitives/icons.jsx";
 import styles from "./ApprovalModal.module.css";
 
@@ -13,7 +13,7 @@ const ALLOW_CHOICES = [
 ];
 
 // Closing the modal maps to "deny" — the safe default for an unattended caution/dangerous command.
-export default function ApprovalModal({ requests, onResolved }) {
+export default function ApprovalModal({ requests, onResolved, profiles = [] }) {
   const current = requests[0] ?? null;
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
@@ -62,30 +62,26 @@ export default function ApprovalModal({ requests, onResolved }) {
     }
   }
 
+  const asker = profiles.find((p) => p.name === current.profile);
   const deny = () => choose("deny");
 
   return (
     <Modal open onClose={busy ? undefined : deny} closeOnBackdrop={false} width="var(--modal-md)" aria-label="Allow this command?">
       <div className={styles.head}>
         <div className={styles.headText}>
-          <div className={styles.eyebrow}>
-            <span className={styles.alertLabel}>ALERT</span>
-            <span className={styles.sep}> · </span>
-            <span className={styles.diamondWrap}>
-              <Diamond color={`var(--c-danger)`} />
-            </span>
+          <div className={styles.who}>
             {current.profile ? (
-              <span className={styles.profile}>@{profileLabel(current.profile).toUpperCase()}</span>
-            ) : null}
-            <span className={styles.sep}> · </span>
-            <span className={styles.surface}>SHELL</span>
-            {eyebrow.tail ? (
               <>
-                <span className={styles.sep}> · </span>
-                <span>{eyebrow.tail}</span>
+                <Fold fold={asker?.fold} color={asker?.accent || undefined} />
+                <span className={styles.profile}>{profileLabel(current.profile)}</span>
               </>
             ) : null}
+            <span className={styles.surface}>wants to run a command</span>
+            <span className={styles.dangerWrap} role="img" aria-label="needs your approval">
+              <Icon name="triangle-alert" size="sm" color="var(--c-danger-text)" />
+            </span>
           </div>
+          {eyebrow.tail ? <div className={styles.deadline}>{eyebrow.tail.toLowerCase()}</div> : null}
           <div className={styles.title}>Allow this command?</div>
         </div>
         <Tip text="Close" side="down">
@@ -113,9 +109,9 @@ export default function ApprovalModal({ requests, onResolved }) {
         ))}
       </div>
 
-      <DialogFooter primaryLabel="Deny" destructive primaryLoading={busy} onPrimary={deny} />
-
       {err ? <div className={styles.error}>{err}</div> : null}
+
+      <DialogFooter primaryLabel="Deny" destructive primaryLoading={busy} onPrimary={deny} />
     </Modal>
   );
 }

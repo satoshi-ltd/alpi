@@ -1,3 +1,4 @@
+import React from "react";
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
@@ -46,9 +47,10 @@ describe("ConfirmDeleteAction", () => {
     expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
   });
 
-  it("keeps the confirm reachable from inside a modal even when it asks to be anchored", () => {
+  it("confirms inside the modal it lives in instead of stacking a second sheet", () => {
     render(
       <Modal title="Account">
+        <p>Account body</p>
         <ConfirmDeleteAction
           anchored
           label="Remove account"
@@ -58,11 +60,30 @@ describe("ConfirmDeleteAction", () => {
         />
       </Modal>,
     );
-    const trigger = openConfirm();
-    const confirm = screen.getByRole("button", { name: "Remove" });
-    const scrollingBody = trigger.closest("div[class*='content']");
-    expect(scrollingBody).not.toBeNull();
-    expect(scrollingBody.contains(confirm)).toBe(false);
+    openConfirm();
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(screen.getByText("Account body").closest('[style*="display: none"]')).not.toBeNull();
+    expect(screen.getByRole("group", { name: "Remove it?" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByText("Account body")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Remove account" })).toBeTruthy();
+  });
+
+  it("confirms inside a popover or any ConfirmSheet, never chaining a floating sheet", async () => {
+    const onConfirm = vi.fn();
+    const { ConfirmSheet } = await import("./ConfirmDelete.jsx");
+    const { container } = render(
+      <ConfirmSheet inset="12px">
+        <span>Peer details</span>
+        <ConfirmDeleteAction label="Remove peer" title="Remove peer @pulse?" confirmLabel="Remove" onConfirm={onConfirm} />
+      </ConfirmSheet>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Remove peer" }));
+    expect(screen.getByText("Peer details").closest('[style*="display: none"]')).not.toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(container.querySelector("[data-dialog-footer]")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -137,5 +158,42 @@ describe("ConfirmDelete surfaces", () => {
     fireEvent.keyDown(field, { key: "Enter" });
     expect(onConfirm).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ConfirmSheet keeps the sheet it borrows", () => {
+  function Form() {
+    const [value, setValue] = React.useState("");
+    return <input aria-label="Key" value={value} onChange={(e) => setValue(e.target.value)} />;
+  }
+
+  it("keeps what was typed when the confirm is cancelled", async () => {
+    const { ConfirmSheet } = await import("./ConfirmDelete.jsx");
+    render(
+      <ConfirmSheet>
+        <Form />
+        <ConfirmDeleteAction label="Remove provider" title="Remove it?" confirmLabel="Remove" onConfirm={vi.fn()} />
+      </ConfirmSheet>,
+    );
+    fireEvent.change(screen.getByLabelText("Key"), { target: { value: "sk-typed" } });
+    fireEvent.click(screen.getByRole("button", { name: "Remove provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByLabelText("Key").value).toBe("sk-typed");
+  });
+
+  it("closes only the confirm on Escape and moves focus into it", async () => {
+    const { ConfirmSheet } = await import("./ConfirmDelete.jsx");
+    const onClose = vi.fn();
+    render(
+      <Modal open onClose={onClose} title="Account">
+        <p>Account body</p>
+        <ConfirmDeleteAction label="Remove account" title="Remove it?" confirmLabel="Remove" onConfirm={vi.fn()} />
+      </Modal>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Remove account" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByText("Account body")).toBeTruthy();
   });
 });

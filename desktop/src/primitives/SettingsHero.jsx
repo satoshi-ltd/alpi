@@ -1,7 +1,9 @@
+import { WORKGROUP_FOLD } from "../../../common/folds.mjs";
+import { palettes } from "../../../common/tokens.mjs";
 import {
   ArrowLeftIcon,
-  Diamond,
-  DiamondStack,
+  Crease,
+  Fold,
   IconBtn,
   PauseIcon,
   PlayIcon,
@@ -15,6 +17,7 @@ export default function SettingsHero({
   kind = "profile",
   id,
   accent,
+  fold,
   bio,
   meta,
   onOpenChat,
@@ -27,8 +30,8 @@ export default function SettingsHero({
   const isConnections = kind === "connections";
   const trimmedBio = (bio || "").trim();
   const glyph = isWg
-    ? <DiamondStack color={accent} size="md" className={styles.stackGlyph} />
-    : <Diamond color={accent} size="md" />;
+    ? <Fold fold={WORKGROUP_FOLD} color={accent} size="md" unfolded={paused} />
+    : <Fold fold={fold} color={accent} size="md" unfolded={paused} />;
   const titleGlyph = !isConnections && trimmedBio
     ? <Tip text={trimmedBio} side="l" escape>{glyph}</Tip>
     : glyph;
@@ -42,7 +45,7 @@ export default function SettingsHero({
         <div className={`col ${styles.titleCol}`}>
           <div className="title-row">
             {titleGlyph}
-            <h1>{id}</h1>
+            <h1>{isConnections ? id : <Crease text={id} accent={paused ? palettes.light.ink3 : accent} />}</h1>
             <span className="eyebrow">{isConnections ? "connections" : "settings"}</span>
           </div>
           {meta && <div className="meta-row">{meta}</div>}
@@ -71,7 +74,6 @@ export default function SettingsHero({
           )}
         </div>
       </div>
-      <span className="stripe" aria-hidden />
     </header>
   );
 }

@@ -41,6 +41,16 @@ describe("ActivityPanel", () => {
     expect(screen.getByText("Running · 2")).toBeInTheDocument();
   });
 
+  it("leads every row with the profile's object, still unless it runs, and keeps the state word's colour", () => {
+    mount({ foldByProfile: { builder: "box", doc: "heart", alpi: "alpaca" }, accentByProfile: { builder: "#3ac9f3", doc: "#f36a8a" } });
+    const folds = [...document.querySelectorAll("[data-fold]")].map((n) => n.dataset.fold);
+    expect(folds).toEqual(expect.arrayContaining(["box", "heart", "honeycomb"]));
+    const builder = document.querySelector("[data-fold='box']");
+    expect(builder.querySelector("polygon[class*='cell']")).toBeNull();
+    expect(screen.getByText(/^approval · /).dataset.tone).toBe("warning");
+    expect(screen.getByText(/^failed /).dataset.tone).toBe("danger");
+  });
+
   it("Review hands the request to the approval flow and closes the panel", () => {
     const props = mount();
     fireEvent.click(screen.getByRole("button", { name: "Review" }));
@@ -74,5 +84,15 @@ describe("ActivityPanel iconography", () => {
   it("heads the panel with the shared Activity role glyph", () => {
     render(<ActivityPanel open onClose={vi.fn()} activity={{ needs_you: [], running: [], scheduled: [] }} />);
     expect(screen.getByText("Activity").parentElement.querySelector("svg").getAttribute("data-icon")).toBe(ICON_ROLES.activity);
+  });
+
+  it("draws a running workgroup as the rippling honeycomb in its hub's colour", () => {
+    mount({ accentByProfile: { alpi: "#3899e2" } });
+    const running = screen.getByRole("region", { name: "Running" });
+    const glyph = within(running).getByText("launch-crew · #analyze").closest("button").querySelector("[data-fold]");
+    expect(glyph.dataset.fold).toBe("honeycomb");
+    const cells = [...glyph.querySelectorAll("polygon")];
+    expect(cells.map((c) => c.getAttribute("fill"))).toContain("#3899e2");
+    expect(cells.every((c) => c.style.animationDelay !== "")).toBe(true);
   });
 });

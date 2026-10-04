@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
+import { WORKGROUP_FOLD } from "../../../common/folds.mjs";
 import {
   Button,
-  DiamondStack,
+  Fold,
   Mono,
   PlusIcon,
   RelativeTime,
@@ -126,7 +127,7 @@ export default function WorkgroupsView({
       <header className={`ds-chat-header ${styles.header}`} data-drag>
         <div className={styles.titleBlock}>
           <div className="title-row">
-            <DiamondStack size="md" />
+            <Fold fold={WORKGROUP_FOLD} size="md" />
             <h1>Workgroups</h1>
           </div>
           <div className="meta-row">
@@ -138,7 +139,6 @@ export default function WorkgroupsView({
         {onNewWorkgroup && (
           <Button icon={<PlusIcon />} onClick={onNewWorkgroup}>New workgroup</Button>
         )}
-        <span className="stripe" aria-hidden />
       </header>
 
       <div className={styles.body}>
@@ -192,7 +192,7 @@ export default function WorkgroupsView({
                   onClick={() => onOpenWorkgroup?.(workgroup)}
                 >
                   <span className={styles.identity}>
-                    <DiamondStack color={accent} />
+                    <Fold fold={WORKGROUP_FOLD} color={accent} pulse={state.id === "active"} unfolded={state.id === "paused"} />
                     <strong>{workgroup.name ?? workgroup.id}</strong>
                   </span>
                   <span className={styles.statusCell}>
@@ -220,7 +220,7 @@ export default function WorkgroupsView({
           {workgroups.length === 0 && (syncing ? (
             <div className={styles.empty}>Syncing workgroups…</div>
           ) : (
-            <EmptyState glyph="hash" heading={EMPTY.workgroups.title} subtitle={EMPTY.workgroups.hint}>
+            <EmptyState fold={WORKGROUP_FOLD} heading={EMPTY.workgroups.title} subtitle={EMPTY.workgroups.hint}>
               {onNewWorkgroup && <Button onClick={onNewWorkgroup}>New workgroup</Button>}
             </EmptyState>
           ))}

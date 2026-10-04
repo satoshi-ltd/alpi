@@ -1,12 +1,12 @@
 export function pendingTurnForView({ pendingTurns, view, activeProfileName, activeConnectionId }) {
-  if (!pendingTurns || !activeProfileName) return null;
-  const viewSessionId = view?.kind === "profile" ? (view.sessionId ?? null) : null;
+  if (!pendingTurns || !activeProfileName || view?.kind !== "profile") return null;
+  const viewSessionId = view.sessionId ?? null;
   let exact = null;
   let newChat = null;
   for (const turn of Object.values(pendingTurns)) {
     if (turn.profile !== activeProfileName) continue;
     if (activeConnectionId != null && (turn.connectionId ?? null) !== activeConnectionId) continue;
-    if ((turn.sessionId ?? null) === viewSessionId) {
+    if (viewSessionId !== null && (turn.sessionId ?? null) === viewSessionId) {
       exact = turn;
       continue;
     }

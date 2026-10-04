@@ -28,12 +28,16 @@ describe("formatBytes", () => {
 });
 
 describe("fileIconName", () => {
-  it("maps ftype to an icon", () => {
-    expect(fileIconName("skill")).toBe("sparkle");
-    expect(fileIconName("py")).toBe("cpu");
-    expect(fileIconName("md")).toBe("eye");
-    expect(fileIconName("text")).toBe("eye");
-    expect(fileIconName("binary")).toBe("folder");
+  it("gives every file its type, never the folder icon", () => {
+    expect(fileIconName({ name: "SKILL.md", kind: "file", ftype: "skill" })).toBe("file-text");
+    expect(fileIconName({ name: "normalize.py", kind: "file", ftype: "py" })).toBe("file-code");
+    expect(fileIconName({ name: "fields.json", kind: "file", ftype: "text" })).toBe("file-code");
+    expect(fileIconName({ name: "rules.yaml", kind: "file", ftype: "text" })).toBe("file-code");
+    expect(fileIconName({ name: "db.sqlite", kind: "file", ftype: "binary" })).toBe("database");
+    expect(fileIconName({ name: "cache.db", kind: "file", ftype: "binary" })).toBe("database");
+    expect(fileIconName({ name: "photo.png", kind: "file", ftype: "binary" })).toBe("file");
+    expect(fileIconName({ name: "state", kind: "dir" })).toBe("folder");
+    expect(fileIconName({ name: "secrets", kind: "dir", locked: true })).toBe("lock");
   });
 });
 

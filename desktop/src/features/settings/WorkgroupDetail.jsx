@@ -13,7 +13,7 @@ import { profileLabel } from "../../lib/profile-display.js";
 import { Section, Row, CopyButton } from "./primitives.jsx";
 import { ConfirmDelete, ConfirmDeleteAction } from "../../primitives/index.js";
 import { RefreshBar, SettingsHero } from "../../primitives/index.js";
-import { Diamond, Dot, LoadFailed, Mono } from "../../primitives/index.js";
+import { Fold, Dot, LoadFailed, Mono } from "../../primitives/index.js";
 import { BudgetEdit } from "../../primitives/index.js";
 import { useProfileDetail } from "../../hooks/useProfileDetail.js";
 import { useWorkgroupUsageDaily } from "../../hooks/useUsage.js";
@@ -25,22 +25,72 @@ import styles from "./Settings.module.css";
 import { shortPubkey } from "../../lib/pubkey.js";
 import { EMPTY, emptyLine } from "../../../../common/emptyCopy.mjs";
 import { useSettingsDirty } from "../../lib/settingsDirty.js";
+import { copyText } from "../../lib/clipboard.js";
+import { chainChips, hasPhaseOwners, orderedPipelines, ownedPhases, pipelineTrigger, runSummary, runSummaryLine, sameName } from "../../../../common/pipelinePhases.mjs";
+import { settingsMatch, useSectionTitleHit, useSettingsQuery } from "./SettingsNav.jsx";
 
-function renderMemberRow(m, profiles, workgroup, hubPubkey, onRemove) {
+function renderMemberRow(m, profiles, workgroup, hub, { onRemove, onOpen, notify } = {}) {
   const local = profiles.find((p) => p.pubkey_b64 === m.pubkey);
-  const id = local ? profileLabel(local.name) : (m.pubkey || "").slice(0, 8);
+  const peer = (hub?.peers ?? []).find((p) => p.pubkey === m.pubkey);
+  const ownerKey = local?.name || peer?.id || null;
+  const id = local ? profileLabel(local.name) : peer?.alias || peer?.id || (m.pubkey || "").slice(0, 8);
   const bio = m.bio || local?.bio || `${id} — no description.`;
-  const isHub = hubPubkey ? m.pubkey === hubPubkey : local?.name === workgroup.hub_id;
+  const isHub = hub?.pubkey_b64 ? m.pubkey === hub.pubkey_b64 : sameName(local?.name, workgroup.hub_id);
+  const owns = hasPhaseOwners(workgroup.phase_map) && (ownerKey || isHub)
+    ? ownedPhases(workgroup.phase_map, workgroup.pipelines, workgroup.launch_pipeline, ownerKey ?? workgroup.hub_id)
+    : null;
   return (
     <DsMemberRow
       key={m.pubkey}
-      member={{ id, color: local?.accent || "var(--ink-3)" }}
+      member={{ id, color: local?.accent || "var(--ink-3)", accent: local?.accent, fold: local?.fold }}
       isHub={isHub}
       note={bio}
-      onRemove={() => onRemove?.(m)}
+      owns={owns}
+      onRemove={onRemove ? () => onRemove(m) : undefined}
+      onOpen={local && onOpen ? () => onOpen(local.name) : undefined}
+      copyLabel={local ? "Copy profile id" : "Copy public key"}
+      onCopyId={notify ? async () => {
+        const value = local?.name ?? m.pubkey;
+        if (await copyText(value)) notify({ message: local ? "Profile id copied" : "Public key copied", variant: "success" });
+        else notify({ message: "Copy failed", variant: "error" });
+      } : undefined}
     />
   );
 }
+
+function PipelineBlock({ pipelineKey, phases, isLaunch, workgroup, run, profileOf }) {
+  const query = useSettingsQuery();
+  const titleHit = useSectionTitleHit();
+  const hidden = !!query && !titleHit && !settingsMatch(pipelineKey, query) && !phases.some((slug) => settingsMatch(slug, query));
+  const summary = runSummary(run, pipelineKey);
+  return (
+    <div className={styles.pipelineBlock} data-settings-row="" hidden={hidden}>
+      <div className={styles.pipelineHead}>
+        <span className={styles.pipelineKey}>{pipelineKey}</span>
+        <span className={styles.pipelineTrigger}>{pipelineTrigger(isLaunch)}</span>
+        {summary && <span className={styles.pipelineRun}>{runSummaryLine(summary)}</span>}
+      </div>
+      <PipelineStages chips={chainChips(phases, workgroup.phase_map, run)} profileOf={profileOf} />
+    </div>
+  );
+}
+
+const _tasksCache = createSwrCache({
+  fetcher: ({ profile, wgId, connectionId }) =>
+    invoke("workgroup_tasks", {
+      profile,
+      wgId,
+      ...(connectionId ? { connectionId } : {}),
+    }).then((res) => (res && typeof res === "object" ? res : null)),
+  events: {
+    kinds: new Set(["wg.post", "wg.done", "wg.task", "wg.skip", "workgroup_changed"]),
+    match: (key, frame, payload) => {
+      const wgId = frame?.data?.wg_id;
+      if (!wgId || !key.endsWith(`|${wgId}`)) return false;
+      return !payload.connection_id || key.startsWith(`${payload.connection_id}|`);
+    },
+  },
+});
 
 function membersCacheKey(connectionId, profile, wgId) {
   return `${connectionId || "local"}|${profile}|${wgId}`;
@@ -65,6 +115,7 @@ const _membersCache = createSwrCache({
 
 export function _clearWorkgroupMembersCache() {
   _membersCache.clear();
+  _tasksCache.clear();
 }
 
 export default function WorkgroupDetail({
@@ -75,6 +126,7 @@ export default function WorkgroupDetail({
   onSaved,
   onGone,
   onOpenChat,
+  onNavigate,
 }) {
   const membersKey = membersCacheKey(connectionId, workgroup.profile, workgroup.id);
   const {
@@ -87,6 +139,17 @@ export default function WorkgroupDetail({
     wgId: workgroup.id,
     connectionId,
   });
+  const hasPipelines = orderedPipelines(workgroup.pipelines, workgroup.launch_pipeline).length > 0;
+  const { data: taskState } = useSwrValue(_tasksCache, membersKey, {
+    profile: workgroup.profile,
+    wgId: workgroup.id,
+    connectionId,
+  }, { enabled: hasPipelines });
+  const run = taskState?.pipeline_run ?? null;
+  const profileOf = (name) => {
+    const p = profiles.find((x) => sameName(x.name, name));
+    return p ? { fold: p.fold, accent: p.accent } : null;
+  };
   const members = membersData ?? null;
   const membersFailed = !membersData && !!membersError;
   const [busyAction, setBusyAction] = useState(null);
@@ -234,10 +297,7 @@ export default function WorkgroupDetail({
     <>
       <span className={styles.heroMetaGroup}>
         <span className={styles.heroMetaLabel}>hub</span>
-        <span
-          className={`diamond ${styles.heroMetaDiamond}`}
-          style={{ "--c": hub?.accent || "var(--accent)" }}
-        />
+        <Fold fold={hub?.fold} color={hub?.accent || "var(--accent)"} />
         <Mono className={styles.heroMetaValue}>@{profileLabel(hubName)}</Mono>
       </span>
       <span aria-hidden className={styles.heroMetaSep} />
@@ -296,7 +356,7 @@ export default function WorkgroupDetail({
           <Section title="Overview">
             <Row label="hub">
               <span className={styles.inlineRow}>
-                <Diamond color={hub?.accent} />
+                <Fold fold={hub?.fold} color={hub?.accent} />
                 <span className={styles.mono}>@{profileLabel(hubName)}</span>
               </span>
             </Row>
@@ -474,14 +534,17 @@ export default function WorkgroupDetail({
             </Row>
           </Section>
 
-          <Section title="Pipelines" tooltip="declared chains the hub runs">
-            {pipelineEntries.map(([key, chain]) => (
-              <Row key={key} label={key} alignTop>
-                <div className={styles.stagesRow}>
-                  {key === launchPipeline && <Chip size="sm" state="on">launch</Chip>}
-                  <PipelineStages phases={chain} />
-                </div>
-              </Row>
+          <Section title="Pipelines" tooltip="declared by the recipe · read-only">
+            {orderedPipelines(workgroup.pipelines, launchPipeline).map(({ key, phases, isLaunch }) => (
+              <PipelineBlock
+                key={key}
+                pipelineKey={key}
+                phases={phases}
+                isLaunch={isLaunch}
+                workgroup={workgroup}
+                run={run}
+                profileOf={profileOf}
+              />
             ))}
             {pipelineEntries.length > 0 && !launchPipeline && (
               <Row label="no launch" alignTop>
@@ -515,9 +578,11 @@ export default function WorkgroupDetail({
               members
                 .filter((m) => m.joined)
                 .map((m) =>
-                  renderMemberRow(m, profiles, workgroup, hub?.pubkey_b64, (target) =>
-                    act("kick", target.pubkey),
-                  ),
+                  renderMemberRow(m, profiles, workgroup, hub, {
+                    onRemove: workgroup.is_hub ? (target) => act("kick", target.pubkey) : undefined,
+                    onOpen: onNavigate ? (name) => onNavigate({ kind: "profile", id: name }) : undefined,
+                    notify,
+                  }),
                 )
             )}
             {workgroup.is_hub && members && (() => {
@@ -546,7 +611,7 @@ export default function WorkgroupDetail({
                             <Dropdown.Row
                               key={p.id}
                               caption={shortPubkey(p.pubkey)}
-                              leading={<Diamond color={local?.accent} />}
+                              leading={<Fold fold={local?.fold} color={local?.accent} />}
                               onClick={() => {
                                 close();
                                 addMember(p.id, label);
@@ -581,7 +646,7 @@ export default function WorkgroupDetail({
               )}
               {members
                 .filter((m) => !m.joined)
-                .map((m) => renderMemberRow(m, profiles, workgroup, hub?.pubkey_b64))}
+                .map((m) => renderMemberRow(m, profiles, workgroup, hub, { notify }))}
             </Section>
           )}
 

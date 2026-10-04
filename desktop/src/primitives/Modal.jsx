@@ -6,6 +6,7 @@ import IconBtn from "./IconBtn.jsx";
 import Tip from "./Tip.jsx";
 import { XIcon } from "./icons.jsx";
 import styles from "./Modal.module.css";
+import { ConfirmSheet } from "./ConfirmDelete.jsx";
 
 const EXIT_FALLBACK_MS = 160;
 
@@ -85,7 +86,7 @@ export default function Modal({
             )}
           </div>
         )}
-        <div className={styles.content}>{shownChildren}</div>
+        <div className={styles.content}><ConfirmSheet flush>{shownChildren}</ConfirmSheet></div>
       </div>
     </div>
   );

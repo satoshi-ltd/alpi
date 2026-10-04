@@ -7,17 +7,8 @@ import { useNotify } from "../primitives/Notification.jsx";
 import {
   RATE_LIMITED,
   RATE_LIMITED_MESSAGE,
-  isRateLimitedError,
 } from "../lib/connection-status.js";
 import styles from "./ConnectionSwitcher.module.css";
-
-export function pairingFailureNotice(error) {
-  const text = String(error);
-  if (isRateLimitedError(text)) {
-    return { message: RATE_LIMITED_MESSAGE, variant: "warning", duration: 5000 };
-  }
-  return { message: `Pairing failed: ${text}`, variant: "error", duration: 5000 };
-}
 
 function tooltipFor(_connection, status) {
   if (status === "disabled") return "Connection disabled by host";
@@ -71,7 +62,7 @@ export default function ConnectionSwitcher({
   const active =
     connections.find((c) => c.id === activeId) ??
     connections.find((c) => c.kind === "local");
-  const label = active?.kind === "remote" ? active.name : "Local";
+  const label = active?.kind === "remote" ? active.name : "This computer";
   const caption = connectionEndpoint(active);
   const activeStatus = active?.status ?? "unknown";
 
@@ -119,7 +110,7 @@ export default function ConnectionSwitcher({
         connections={orderConnections(connections, readLastActive()).map((c) => ({
           id: c.id,
           kind: c.kind,
-          name: c.kind === "remote" ? c.name : "Local daemon",
+          name: c.kind === "remote" ? c.name : "This computer",
           host: connectionEndpoint(c),
           status: c.status,
           revoked: c.revoked ?? false,
@@ -143,18 +134,12 @@ export default function ConnectionSwitcher({
             : undefined
         }
         onPair={async (payload) => {
-          try {
-            const { name } = (await onAddRemote?.(payload)) ?? {};
-            notify({
-              message: name ? `Paired ${name}` : "Device paired",
-              variant: "success",
-            });
-            closePanel();
-            return true;
-          } catch (e) {
-            notify(pairingFailureNotice(e));
-            return false;
-          }
+          const { name } = (await onAddRemote?.(payload)) ?? {};
+          notify({
+            message: name ? `Connected to ${name}` : "Connected",
+            variant: "success",
+          });
+          closePanel();
         }}
       />
     </div>

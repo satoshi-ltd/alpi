@@ -6,11 +6,11 @@ import Chip from "../../../primitives/Chip.jsx";
 import Dropdown from "../../../primitives/Dropdown.jsx";
 import Textarea from "../../../primitives/Textarea.jsx";
 import useAutoPosition from "../../../primitives/useAutoPosition.js";
-import { Diamond, IconBtn, Tip, XIcon } from "../../../primitives/index.js";
+import { Fold, IconBtn, Tip, XIcon } from "../../../primitives/index.js";
 import Field from "../../../primitives/Field.jsx";
 import { useNotify } from "../../../primitives/Notification.jsx";
 import { useDismissOnOutside } from "../../../hooks/useDismissOnOutside.js";
-import { ConfirmDeleteAction, DialogFooter } from "../../../primitives/index.js";
+import { ConfirmDeleteAction, ConfirmSheet, DialogFooter } from "../../../primitives/index.js";
 import { ALLOW_METHODS, isValidEd25519Pubkey } from "../util.js";
 import styles from "../Settings.module.css";
 import { shortPubkey } from "../../../lib/pubkey.js";
@@ -203,7 +203,7 @@ export function PeersField({ profile, profiles, onSaved, onRefresh, onLoadingCha
                         close?.();
                         setSelectedPeerId(p.id);
                       }}
-                      leading={<Diamond color={accent} />}
+                      leading={<Fold fold={localProfile?.fold} color={accent} />}
                       caption={shortPubkey(p.pubkey)}
                       trailing={renderPeerStatusChip(status, reasonById[p.id])}
                     >
@@ -333,22 +333,15 @@ function PeerDetailPopover({ peer, status, reason, anchorRef, onClose, onRemove 
         visibility: pos.ready ? "visible" : "hidden",
       }}
     >
-      <div className={styles.popoverCloseRow}>
+      <ConfirmSheet inset="var(--space-5)">
+      <div className={styles.popoverHead}>
+        <span className={styles.peerRowName}>@{peer.alias || peer.id}</span>
+        {renderPeerStatusChip(status, reason)}
         <Tip text="Close" side="down">
-          <IconBtn aria-label="Close" onClick={onClose}><XIcon /></IconBtn>
+          <IconBtn aria-label="Close" onClick={onClose} className={styles.popoverClose}><XIcon /></IconBtn>
         </Tip>
       </div>
-      <div className={styles.field}>
-        <Eyebrow as="label">peer</Eyebrow>
-        <span className={styles.peerRowName}>@{peer.alias || peer.id}</span>
-      </div>
-      <div className={styles.field}>
-        <Eyebrow as="label">status</Eyebrow>
-        <span>{renderPeerStatusChip(status, reason)}</span>
-        {reason && status !== "on" && (
-          <span className={styles.muted} style={{ marginTop: "var(--space-2)" }}>{reason}</span>
-        )}
-      </div>
+      {reason && status !== "on" && <span className={styles.muted}>{reason}</span>}
       <div className={styles.field}>
         <Eyebrow as="label">pubkey</Eyebrow>
         <span className={styles.mono}>{peer.pubkey}</span>
@@ -385,6 +378,7 @@ function PeerDetailPopover({ peer, status, reason, anchorRef, onClose, onRemove 
           }}
         />
       </div>
+      </ConfirmSheet>
     </div>
   );
 }

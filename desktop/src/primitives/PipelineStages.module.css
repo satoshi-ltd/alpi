@@ -1,17 +1,94 @@
 .row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-  overflow-x: auto;
-  scrollbar-width: thin;
-  padding-bottom: var(--space-1);
+  min-width: 0;
 }
 
-.row > * {
-  flex: none;
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 var(--space-2);
+  border-radius: var(--r-tag);
+  background: var(--hover);
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.slug {
+  color: var(--ink);
+}
+
+.chip[data-state="pending"] .slug {
+  color: var(--ink-2);
+}
+
+.chip[data-state="current"],
+.chip[data-state="blocked"] {
+  background: var(--selected);
+}
+
+.chip[data-state="current"] .slug {
+  font-weight: 600;
+}
+
+.chip[data-state="skipped"] .slug {
+  text-decoration: line-through;
+  color: var(--ink-3);
+}
+
+.check {
+  color: var(--ink);
+}
+
+.word {
+  color: var(--ink-3);
+  font-size: 0.92em;
+}
+
+.chip[data-state="blocked"] {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-danger) 45%, transparent);
+}
+
+.chip[data-state="blocked"] .word {
+  color: var(--c-danger-text);
 }
 
 .arrow {
   color: var(--ink-3);
   font-size: var(--text-meta);
+}
+
+.button {
+  border: 0;
+  cursor: pointer;
+}
+
+.button:hover {
+  box-shadow: inset 0 0 0 1px var(--focus-border);
+}
+
+.row :global(.ds-tip):focus-within > :global(.ds-tip-body) {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring), inset 0 0 0 1px var(--focus-border);
+}
+
+.handoff {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.assignee {
+  color: var(--ink);
 }

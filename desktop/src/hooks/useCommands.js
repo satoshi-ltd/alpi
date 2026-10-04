@@ -14,7 +14,7 @@ export function useCommands({
   onCycleTheme = null,
   onNewProfile,
   onNewWorkgroup,
-  onNewChat,
+  onNewSession,
   onRefreshThread,
   canRefreshThread = false,
   onToggleReadAloud,
@@ -89,13 +89,13 @@ export function useCommands({
       });
     }
 
-    if (view.kind !== "empty" && onNewChat) {
+    if (onNewSession) {
       cmds.push({
         id: "create:chat",
         group: "Chat",
         label: "New session",
         hint: keys("new-session"),
-        action: () => onNewChat(),
+        action: () => onNewSession(),
       });
     }
 
@@ -279,7 +279,7 @@ export function useCommands({
     sidebarSearchOpen,
     onNewProfile,
     onNewWorkgroup,
-    onNewChat,
+    onNewSession,
     onRefreshThread,
     canRefreshThread,
     onToggleReadAloud,

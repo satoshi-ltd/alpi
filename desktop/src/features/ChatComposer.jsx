@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import AttachmentChips from "../primitives/AttachmentChips.jsx";
 import { PaperclipIcon } from "../primitives/icons.jsx";
-import AlpiPicker from "./AlpiPicker.jsx";
 import ModelPicker from "./ModelPicker.jsx";
 import Composer from "../primitives/Composer.jsx";
 import { IconBtn, Kbd, Mono } from "../primitives/index.js";
@@ -16,13 +15,10 @@ export default function ChatComposer({
   profiles,
   activeProfile,
   availableModels = [],
-  onSelectProfile,
   onConfigureProfile,
   onSend,
   onCancel,
   stopping = false,
-  showPicker,
-  embedded,
   disabled,
   daemonOffline = false,
   paused = false,
@@ -159,7 +155,7 @@ export default function ChatComposer({
     () =>
       baseMentions.map((m) => {
         const profile = profiles.find((p) => p.name === m.id);
-        return { ...m, accent: profile?.accent ?? null };
+        return { ...m, accent: profile?.accent ?? null, fold: profile?.fold };
       }),
     [baseMentions, profiles],
   );
@@ -201,7 +197,6 @@ export default function ChatComposer({
       stopping={stopping}
       canSend={canSend}
       disabled={paused}
-      embedded={embedded}
       minHeight={minHeight}
       accent={activeProfile?.accent ?? null}
       placeholder={placeholder}
@@ -221,22 +216,11 @@ export default function ChatComposer({
         </>
       }
       topBar={
-        (showPicker || attachments.length > 0) ? (
-          <>
-            {showPicker ? (
-              <AlpiPicker
-                profiles={profiles}
-                activeAlpi={activeProfile?.name ?? null}
-                onChange={onSelectProfile}
-                variant="bar"
-                modelLabel={activeProfile?.model}
-              />
-            ) : null}
-            <AttachmentChips
-              items={attachments}
-              onRemove={(i) => setAttachments((p) => p.filter((_, j) => j !== i))}
-            />
-          </>
+        attachments.length > 0 ? (
+          <AttachmentChips
+            items={attachments}
+            onRemove={(i) => setAttachments((p) => p.filter((_, j) => j !== i))}
+          />
         ) : null
       }
       leftActions={
@@ -256,7 +240,7 @@ export default function ChatComposer({
           >
             <PaperclipIcon />
           </IconBtn>
-          {!showPicker && activeProfile && (
+          {activeProfile && (
             <ModelPicker
               profile={activeProfile.name}
               models={availableModels}

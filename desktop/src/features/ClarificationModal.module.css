@@ -32,7 +32,7 @@
   text-align: left;
   background: transparent;
   border: 0;
-  border-radius: var(--r-md);
+  border-radius: var(--r-xs);
   padding: var(--space-4) var(--space-5);
   cursor: pointer;
   display: flex;
@@ -107,9 +107,9 @@
   gap: var(--space-3);
   margin-top: var(--space-2);
   padding: var(--space-5) var(--space-6);
-  border: 0.5px solid var(--line-2);
-  border-radius: var(--r-xl);
-  background: var(--bg-input);
+  border: .5px solid transparent;
+  border-radius: var(--r-xs);
+  background: var(--well);
 }
 
 .otherInput {
@@ -136,4 +136,11 @@
   font-family: var(--font-sans);
   font-size: var(--text-meta);
   color: var(--c-danger-text);
+}
+
+.otherBlock:focus-within {
+  outline: none;
+  border-color: transparent;
+  background: var(--well-focus);
+  box-shadow: var(--well-ring);
 }

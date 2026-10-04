@@ -1,20 +1,24 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { BrowseModal, IconBtn, EditIcon, I } from "../primitives/index.js";
+import { IconBtn, EditIcon, I } from "../primitives/index.js";
 import { useNotify } from "../primitives/Notification.jsx";
 import { subscribeDaemonEvent } from "../lib/daemon-bus.js";
 import CodeView from "../primitives/CodeView.jsx";
 import shell from "../primitives/BrowseModal.module.css";
+import { BrowseBody, BrowseShell, useBrowseCloseGuard } from "../primitives/BrowseModal.jsx";
+import { PROFILE_PANELS } from "../lib/profilePanels.js";
 import MarkdownBody from "../primitives/MarkdownBody.jsx";
 import { shortDate } from "../lib/time.js";
 import styles from "./MemoryModal.module.css";
 import { EMPTY } from "../../../common/emptyCopy.mjs";
+import { MEMORY_FILES, entryNote, memoryEntries } from "../../../common/memoryEntries.mjs";
 
-const FILES = [
-  { name: "AGENT.md", label: "Things alpi is" },
-  { name: "MEMORY.md", label: "Things alpi has learned" },
-  { name: "USER.md", label: "Things alpi knows about you" },
-];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+export function entryDate(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
+  return m ? `${MONTHS[Number(m[2]) - 1]} ${Number(m[3])}` : String(iso || "");
+}
 
 export function humanBytes(n) {
   const b = Number(n) || 0;
@@ -31,24 +35,35 @@ export function stripMemoryDelimiters(text) {
 export function matchesFile(file, query) {
   const needle = String(query || "").trim().toLowerCase();
   if (!needle) return true;
-  return [file.name, file.label, file.content].filter(Boolean).join(" ").toLowerCase().includes(needle);
+  return [file.name, file.label, file.caption, file.content].filter(Boolean).join(" ").toLowerCase().includes(needle);
 }
 
-export default function MemoryModal({ open, onClose, profile, connectionId, canEdit = false }) {
+function Usage({ file, wide = false }) {
+  if (file.used == null || !file.limit) return <span className={shell.sizeTag}>{file.size}</span>;
+  const pct = Math.min(100, Math.round((file.used / file.limit) * 100));
+  return (
+    <span className={`${styles.usage} ${wide ? styles.usageWide : ""}`.trim()} data-over={file.over ? "" : undefined}>
+      <span className={styles.meter} aria-hidden><span style={{ width: `${pct}%` }} /></span>
+      <span className={styles.usageText}>{`${file.used.toLocaleString("en-US")} / ${file.limit.toLocaleString("en-US")}`}{wide ? ` · ${pct}%` : ""}</span>
+    </span>
+  );
+}
+
+export function MemoryPanel({ open = true, profile, connectionId, canEdit = false, owner = null, onSection = null }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(null);
   const [reloadTick, setReloadTick] = useState(0);
-  const [editing, setEditing] = useState(false);
+  const [editingName, setEditingName] = useState(null);
   const [draft, setDraft] = useState("");
   const [rev, setRev] = useState(null);
   const [baseline, setBaseline] = useState("");
   const [saving, setSaving] = useState(false);
   const [conflicted, setConflicted] = useState(false);
+  const ownerName = owner?.name ?? profile;
   const editingRef = useRef(false);
-  useEffect(() => { editingRef.current = editing; }, [editing]);
   const notify = useNotify();
 
   useEffect(() => {
@@ -63,11 +78,12 @@ export default function MemoryModal({ open, onClose, profile, connectionId, canE
     ])
       .then(([data, usage]) => {
         if (cancelled) return;
-        setFiles(FILES.map(({ name, label }) => {
+        setFiles(MEMORY_FILES.map(({ file: name, label, caption }) => {
           const raw = data?.[name] || "";
           const u = usage?.[name];
           return {
-            name, label, raw, content: stripMemoryDelimiters(raw), size: humanBytes(raw.length),
+            name, label, caption: caption(ownerName), raw, content: stripMemoryDelimiters(raw), entries: memoryEntries(raw),
+            size: humanBytes(raw.length), used: u?.used ?? null, limit: u?.limit ?? null,
             pct: u?.pct ?? null, over: u?.over ?? false, updatedAt: u?.updated_at ?? null,
           };
         }));
@@ -80,9 +96,8 @@ export default function MemoryModal({ open, onClose, profile, connectionId, canE
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [open, profile, connectionId, reloadTick]);
+  }, [open, profile, connectionId, reloadTick, ownerName]);
 
-  useEffect(() => { setEditing(false); }, [selected?.name, open]);
 
   useEffect(() => {
     if (!open || !profile) return undefined;
@@ -102,11 +117,18 @@ export default function MemoryModal({ open, onClose, profile, connectionId, canE
 
   const filtered = useMemo(() => files.filter((f) => matchesFile(f, query)), [files, query]);
   const active = files.find((f) => f.name === selected?.name) || null;
+  const editing = editingName != null && editingName === active?.name;
+  useEffect(() => { editingRef.current = editing; }, [editing]);
   const dirty = editing && draft !== baseline;
 
-  function requestClose() {
-    if (dirty && !globalThis.confirm?.("Discard your unsaved edits?")) return;
-    onClose?.();
+  const closeGuard = useCallback(() => !dirty || !!globalThis.confirm?.("Discard your unsaved edits?"), [dirty]);
+  useBrowseCloseGuard(closeGuard);
+
+  function pickFile(f) {
+    if (f.name === selected?.name) return;
+    if (!closeGuard()) return;
+    setEditingName(null);
+    setSelected(f);
   }
 
   async function startEdit() {
@@ -117,14 +139,14 @@ export default function MemoryModal({ open, onClose, profile, connectionId, canE
       setBaseline(res?.text ?? "");
       setRev(res?.rev ?? null);
       setConflicted(false);
-      setEditing(true);
+      setEditingName(active.name);
     } catch (e) {
       notify?.({ message: `Couldn't open ${active.name}: ${e}`, variant: "error" });
     }
   }
 
   function cancelEdit() {
-    setEditing(false);
+    setEditingName(null);
     setConflicted(false);
     setReloadTick((t) => t + 1);
   }
@@ -140,7 +162,7 @@ export default function MemoryModal({ open, onClose, profile, connectionId, canE
         setRev(useRev);
       }
       await invoke("memory_write", { profile, name: active.name, text: draft, rev: useRev, connectionId });
-      setEditing(false);
+      setEditingName(null);
       setConflicted(false);
       setReloadTick((t) => t + 1);
       notify?.({ message: `Saved ${active.name} — live next message`, variant: "success" });
@@ -182,14 +204,15 @@ export default function MemoryModal({ open, onClose, profile, connectionId, canE
           <button
             type="button"
             className={`${shell.row} ${styles.fileRow} ${f.name === selected?.name ? shell.rowActive : ""}`}
-            onClick={() => setSelected(f)}
+            onClick={() => pickFile(f)}
             role="option"
             aria-selected={f.name === selected?.name}
           >
-            <span className={styles.fileName}>{f.name}</span>
-            <span className={`${shell.sizeTag} ${f.over ? styles.over : ""}`}>
-              {f.pct != null ? `${f.pct}%` : f.size}
+            <span className={styles.fileHead}>
+              <span className={styles.fileLabel}>{f.label}</span>
+              <span className={styles.fileName}>{f.name}</span>
             </span>
+            <Usage file={f} />
           </button>
         </li>
       ))}
@@ -197,9 +220,11 @@ export default function MemoryModal({ open, onClose, profile, connectionId, canE
   );
 
   return (
-    <BrowseModal
-      open={open}
-      onClose={requestClose}
+    <BrowseBody
+      owner={owner}
+      sections={owner ? PROFILE_PANELS : null}
+      section="memory"
+      onSection={onSection}
       title="Memory"
       count={files.length}
       kicker="files read on every turn"
@@ -211,8 +236,8 @@ export default function MemoryModal({ open, onClose, profile, connectionId, canE
       {active ? (
         <>
           <div className={shell.detailMeta}>
-            <span className={styles.fileNameLg}>{active.name}</span>
-            <span className={shell.sizeTag}>{active.size}</span>
+            <span className={styles.fileLabelLg}>{active.label}</span>
+            <span className={styles.fileName}>{active.name}</span>
             <span className={shell.detailMetaSpacer} />
             {editing ? (
               <>
@@ -231,8 +256,21 @@ export default function MemoryModal({ open, onClose, profile, connectionId, canE
           <div className={shell.detailScroll}>
             {editing ? (
               <CodeView editable text={draft} onChange={setDraft} ariaLabel={`Edit ${active.name}`} />
-            ) : active.content ? (
-              <MarkdownBody source={active.content} mono />
+            ) : active.entries.length ? (
+              <>
+                <div className={styles.caption}>
+                  <span>{active.caption}</span>
+                  <Usage file={active} wide />
+                </div>
+                <ol className={styles.entries}>
+                  {active.entries.map((entry, i) => (
+                    <li key={i} className={styles.entry}>
+                      <MarkdownBody source={entry.text} />
+                      {entryNote(entry, entryDate) ? <span className={styles.entryNote}>{entryNote(entry, entryDate)}</span> : null}
+                    </li>
+                  ))}
+                </ol>
+              </>
             ) : (
               <em className={styles.emptyNote}>(empty)</em>
             )}
@@ -243,6 +281,14 @@ export default function MemoryModal({ open, onClose, profile, connectionId, canE
       ) : (
         <div className={shell.detailEmpty}>Select a file.</div>
       )}
-    </BrowseModal>
+    </BrowseBody>
+  );
+}
+
+export default function MemoryModal({ open, onClose, ...panel }) {
+  return (
+    <BrowseShell open={open} onClose={onClose} label="Memory">
+      <MemoryPanel {...panel} />
+    </BrowseShell>
   );
 }

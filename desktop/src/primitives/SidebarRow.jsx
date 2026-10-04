@@ -1,10 +1,12 @@
-import { Diamond, Hash, MuteIcon } from "./index.js";
+import { WORKGROUP_FOLD } from "../../../common/folds.mjs";
+import { Fold, MuteIcon } from "./index.js";
 import styles from "./SidebarRow.module.css";
 
 export default function SidebarRow({
   kind = "profile",
   id,
   color,
+  fold,
   sel = false,
   unread = false,
   colorWash = false,
@@ -21,7 +23,7 @@ export default function SidebarRow({
   const background = tinted
     ? `color-mix(in srgb, ${color} ${kind === "workgroup" ? "14%" : "18%"}, var(--bg-side))`
     : sel
-      ? "var(--selected)"
+      ? "var(--bg-pane)"
       : null;
   const tintedColor = tinted
     ? kind === "profile"
@@ -33,6 +35,7 @@ export default function SidebarRow({
     <button
       type="button"
       className="ds-sb-row"
+      data-sel={sel || undefined}
       data-state={state || undefined}
       aria-label={ariaLabel || undefined}
       onClick={onClick}
@@ -47,7 +50,7 @@ export default function SidebarRow({
         leading
       ) : (
         <span className={styles.glyphSlot}>
-          {kind === "workgroup" ? <Hash /> : <Diamond color={color} />}
+          <Fold fold={kind === "workgroup" ? WORKGROUP_FOLD : fold} color={color} outlined={isNeedsProvider} />
         </span>
       )}
       <span

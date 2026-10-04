@@ -5,9 +5,9 @@
   transform: translateY(var(--space-3));
   width: var(--ctrl-md);
   height: var(--ctrl-md);
-  border-radius: var(--r-pill);
+  border-radius: var(--r-xs);
   background: var(--bg-elev);
-  border: .5px solid var(--line-2);
+  border: 0;
   color: var(--ink-2);
   display: inline-flex;
   align-items: center;
@@ -19,8 +19,7 @@
   transition:
     opacity var(--dur-1) var(--ease),
     transform var(--dur-1) var(--ease),
-    background var(--dur-1) var(--ease),
-    border-color var(--dur-1) var(--ease);
+    background var(--dur-1) var(--ease);
   z-index: 4;
 }
 
@@ -32,12 +31,10 @@
 
 .btn:hover {
   background: color-mix(in srgb, var(--ink) 4%, var(--bg-elev));
-  border-color: color-mix(in srgb, var(--ink) 24%, transparent);
   color: var(--ink);
 }
 
 .btn:focus-visible {
   outline: none;
-  border-color: var(--focus-border);
-  box-shadow: var(--shadow), var(--focus-ring);
+  box-shadow: var(--shadow), var(--well-ring);
 }

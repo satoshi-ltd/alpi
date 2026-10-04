@@ -11,7 +11,6 @@
 }
 
 .glyph {
-  color: var(--ink-4);
   animation: bootPulse var(--dur-loop) ease-in-out infinite;
 }
 

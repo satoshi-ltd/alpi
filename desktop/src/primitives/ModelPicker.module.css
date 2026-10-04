@@ -2,14 +2,25 @@
 
 .modelPickerTriggerField {
   height: var(--ctrl-md);
-  border: .5px solid var(--line-2);
-  border-radius: var(--r-md);
-  background: var(--bg-input);
+  border: .5px solid transparent;
+  border-radius: var(--r-xs);
+  background: var(--well);
   padding: 0 var(--space-5);
 }
-.modelPickerTriggerField:hover {
-  background: var(--bg-input);
-  border-color: color-mix(in srgb, var(--ink) 24%, transparent);
+.modelPickerTriggerField.modelPickerTriggerField:not(:disabled):hover,
+.modelPickerTriggerField.modelPickerTriggerField:not(:disabled):active {
+  background: var(--well);
+}
+.modelPickerTriggerField.modelPickerTriggerField:focus-visible,
+.modelPickerTriggerField.modelPickerTriggerField[aria-expanded="true"],
+.modelPickerTriggerField.modelPickerTriggerField[aria-expanded="true"]:not(:disabled):hover,
+.modelPickerTriggerField.modelPickerTriggerField[aria-expanded="true"]:not(:disabled):active {
+  outline: none;
+  border-color: transparent;
+  border-radius: var(--r-xs);
+  background: var(--well-focus);
+  color: var(--ink);
+  box-shadow: var(--well-ring);
 }
 
 .modelPickerIcon { color: var(--ink-3); }
@@ -24,7 +35,7 @@
   width: var(--pop-md);
   background: var(--bg-elev);
   border: .5px solid var(--line-2);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-xs);
   box-shadow: var(--shadow);
   z-index: var(--z-modal);
   overflow: hidden;
@@ -46,7 +57,7 @@
 
 .modelPickerOption {
   padding: var(--space-3) var(--space-4);
-  border-radius: var(--r-md);
+  border-radius: var(--r-xs);
   gap: var(--space-4);
   text-align: left;
   background: transparent;

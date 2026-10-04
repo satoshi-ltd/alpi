@@ -42,7 +42,7 @@ describe("WorkgroupView empty state", () => {
     );
     await waitFor(() => expect(screen.getByText("No posts yet")).toBeInTheDocument());
     expect(screen.getByText("Direct @hub to open a #task.")).toBeInTheDocument();
-    expect(container.querySelector("svg")).toBeTruthy();
+    expect(container.querySelector("[data-fold='honeycomb']")).toBeTruthy();
   });
 
   it("drops a deleted workgroup when its transcript returns not-found", async () => {

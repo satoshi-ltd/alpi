@@ -23,7 +23,6 @@ vi.mock("../hooks/useProfileDetail.js", () => ({
 
 import WorkgroupView, { _resetTaskStateCache } from "./WorkgroupView.jsx";
 import styles from "./WorkgroupView.module.css";
-import chipStyles from "../primitives/Chip.module.css";
 import markerStyles from "../primitives/MarkerCard.module.css";
 
 globalThis.ResizeObserver ??= class {
@@ -215,8 +214,8 @@ describe("WorkgroupView pipeline strip", () => {
       wgId: "launch",
       connectionId: "local",
     });
-    expect(phaseEl("setup").dataset.phaseState).toBe("completed");
-    expect(phaseEl("enrich").dataset.phaseState).toBe("current");
+    expect(phaseEl("setup").dataset.state).toBe("completed");
+    expect(phaseEl("enrich").dataset.state).toBe("current");
   });
 
   it("never renders the workgroup's declared launch chain when the run is another pipeline", async () => {
@@ -244,7 +243,7 @@ describe("WorkgroupView pipeline strip", () => {
     expect(screen.queryByText("pipeline · setup")).toBeNull();
     expect(phaseEl("setup")).toBeNull();
     expect(phaseEl("enrich")).toBeNull();
-    expect(phaseEl("media-qa").dataset.phaseState).toBe("current");
+    expect(phaseEl("media-qa").dataset.state).toBe("current");
   });
 
   it("a maintenance run replaces the launch run on refresh", async () => {
@@ -273,7 +272,7 @@ describe("WorkgroupView pipeline strip", () => {
       />,
     );
     await waitFor(() => expect(screen.getByText("pipeline · setup")).toBeInTheDocument());
-    expect(screen.getByText("completed")).toBeInTheDocument();
+    expect(document.querySelector(`.${styles.runStatus}`)).toHaveTextContent("completed");
 
     tasksReply({
       active: { slug: "media-update", title: "swap photos", opened_seq: 50 },
@@ -330,7 +329,7 @@ describe("WorkgroupView pipeline strip", () => {
         refreshCommandTick={1}
       />,
     );
-    await waitFor(() => expect(phaseEl("media-qa").dataset.phaseState).toBe("completed"));
+    await waitFor(() => expect(phaseEl("media-qa").dataset.state).toBe("completed"));
 
     tasksReply({
       active: { slug: "media-update", title: "again", opened_seq: 60 },
@@ -356,8 +355,8 @@ describe("WorkgroupView pipeline strip", () => {
       />,
     );
 
-    await waitFor(() => expect(phaseEl("media-qa").dataset.phaseState).toBe("pending"));
-    expect(phaseEl("media-update").dataset.phaseState).toBe("current");
+    await waitFor(() => expect(phaseEl("media-qa").dataset.state).toBe("pending"));
+    expect(phaseEl("media-update").dataset.state).toBe("current");
   });
 
   it("an ad-hoc task opened after a finished run drops the strip", async () => {
@@ -429,17 +428,11 @@ describe("WorkgroupView pipeline strip", () => {
     render(<WorkgroupView workgroup={workgroup} profiles={profiles} connectionId="local" />);
 
     await waitFor(() => expect(screen.getByText("Blocked at #enrich.")).toBeInTheDocument());
-    expect(screen.getByText(/no source photos/)).toBeInTheDocument();
-    expect(phaseEl("enrich").dataset.phaseState).toBe("blocked");
-    expect(screen.getByText("blocked")).toBeInTheDocument();
-
-    const blocked = phaseEl("enrich");
-    const completed = phaseEl("setup");
-    expect(blocked.querySelector(`.${chipStyles.errorState}`)).not.toBeNull();
-    expect(completed.querySelector(`.${chipStyles.errorState}`)).toBeNull();
-    expect(blocked.querySelector("svg circle")).not.toBeNull();
-    expect(completed.querySelector("svg circle")).toBeNull();
-    expect(completed.querySelectorAll("svg path")).toHaveLength(1);
+    expect(screen.getByText("Blocked at #enrich.").closest("span")).toHaveTextContent(/no source photos/);
+    expect(phaseEl("enrich").dataset.state).toBe("blocked");
+    expect(within(phaseEl("enrich")).getByText("blocked")).toBeInTheDocument();
+    expect(phaseEl("enrich").querySelector("svg")).toBeNull();
+    expect(phaseEl("setup").querySelector("svg")).not.toBeNull();
   });
 
   it("a between run says so in words and leaves no current phase", async () => {
@@ -462,9 +455,9 @@ describe("WorkgroupView pipeline strip", () => {
 
     await waitFor(() => expect(screen.getByText("between phases")).toBeInTheDocument());
     expect(screen.queryByText("between")).toBeNull();
-    expect(document.querySelector('[data-phase-state="current"]')).toBeNull();
+    expect(document.querySelector('[data-phase][data-state="current"]')).toBeNull();
     expect(phaseEl("enrich").querySelector("svg")).toBeNull();
-    expect(phaseEl("enrich")).not.toHaveClass(styles.phaseSkipped);
+    expect(phaseEl("enrich").textContent).toBe("#enrich");
   });
 
   it("a skipped middle phase is visually distinct from a completed and a pending one", async () => {
@@ -498,13 +491,12 @@ describe("WorkgroupView pipeline strip", () => {
     await waitFor(() => expect(phaseEl("qa")).not.toBeNull());
     const completed = phaseEl("setup");
     const skipped = phaseEl("enrich");
-    expect(skipped.dataset.phaseState).toBe("skipped");
-    expect(skipped).toHaveClass(styles.phaseSkipped);
-    expect(completed).not.toHaveClass(styles.phaseSkipped);
-    expect(skipped.querySelectorAll("svg path")).toHaveLength(2);
-    expect(skipped.querySelector("svg circle")).toBeNull();
-    expect(completed.querySelectorAll("svg path")).toHaveLength(1);
-    expect(phaseEl("qa").querySelector("svg")).toBeNull();
+    expect(skipped.dataset.state).toBe("skipped");
+    expect(within(skipped).getByText("skipped")).toBeInTheDocument();
+    expect(skipped.querySelector("svg")).toBeNull();
+    expect(completed.dataset.state).toBe("completed");
+    expect(completed.querySelector("svg")).not.toBeNull();
+    expect(within(phaseEl("qa")).getByText("running")).toBeInTheDocument();
   });
 
   it("a chain that finishes by skipping its last phase reads completed", async () => {
@@ -528,10 +520,9 @@ describe("WorkgroupView pipeline strip", () => {
     });
     render(<WorkgroupView workgroup={workgroup} profiles={profiles} connectionId="local" />);
 
-    await waitFor(() => expect(screen.getByText("completed")).toBeInTheDocument());
-    expect(phaseEl("enrich")).toHaveClass(styles.phaseSkipped);
-    expect(phaseEl("enrich").querySelectorAll("svg path")).toHaveLength(2);
-    expect(document.querySelector('[data-phase-state="current"]')).toBeNull();
+    await waitFor(() => expect(document.querySelector(`.${styles.runStatus}`)).toHaveTextContent("completed"));
+    expect(phaseEl("enrich").dataset.state).toBe("skipped");
+    expect(document.querySelector('[data-phase][data-state="current"]')).toBeNull();
   });
 
   it("a seq outside the loaded transcript window says why it cannot be opened", async () => {
@@ -553,12 +544,12 @@ describe("WorkgroupView pipeline strip", () => {
     render(<WorkgroupView workgroup={workgroup} profiles={profiles} connectionId="local" />);
 
     await waitFor(() => expect(phaseEl("setup")).not.toBeNull());
-    expect(phaseEl("setup").querySelector("button")).toBeNull();
+    expect(phaseEl("setup").tagName).toBe("SPAN");
     expect(phaseEl("setup").getAttribute("aria-disabled")).toBe("true");
-    expect(phaseEl("setup").getAttribute("title")).toMatch(/outside the loaded history/);
-    expect(phaseEl("enrich").querySelector("button")).not.toBeNull();
+    expect(phaseEl("setup").closest(".ds-tip")).toHaveTextContent(/outside the loaded history/);
+    expect(phaseEl("enrich").tagName).toBe("BUTTON");
     expect(phaseEl("enrich").getAttribute("aria-disabled")).toBeNull();
-    expect(phaseEl("enrich").getAttribute("title")).toBeNull();
+    expect(phaseEl("enrich").closest(".ds-tip")).toHaveTextContent(/Click to jump to the post/);
   });
 
   it("a phase that has not opened yet says so instead of staying silent", async () => {
@@ -580,7 +571,7 @@ describe("WorkgroupView pipeline strip", () => {
     render(<WorkgroupView workgroup={workgroup} profiles={profiles} connectionId="local" />);
 
     await waitFor(() => expect(phaseEl("enrich")).not.toBeNull());
-    expect(phaseEl("enrich").getAttribute("title")).toMatch(/has not opened yet/);
+    expect(phaseEl("enrich").closest(".ds-tip")).toHaveTextContent(/has not opened yet/);
     expect(phaseEl("enrich").getAttribute("aria-disabled")).toBe("true");
   });
 
@@ -657,13 +648,13 @@ describe("WorkgroupView canonical state availability", () => {
         connectionId={null}
       />,
     );
-    await waitFor(() => expect(phaseEl("enrich")?.dataset.phaseState).toBe("blocked"));
+    await waitFor(() => expect(phaseEl("enrich")?.dataset.state).toBe("blocked"));
     expect(screen.queryByTestId("pipeline-stale")).toBeNull();
 
     tasksFail();
     poke();
     await waitFor(() => expect(screen.getByTestId("pipeline-stale")).toBeTruthy());
-    expect(phaseEl("enrich")?.dataset.phaseState).toBe("blocked");
+    expect(phaseEl("enrich")?.dataset.state).toBe("blocked");
   });
 
   it("drops the stale marker as soon as the fold answers again", async () => {
@@ -802,3 +793,86 @@ const HUB_WG = {
 };
 
 const IDLE = { active: null, closed: [], blocked: null, pipeline_run: null };
+
+describe("WorkgroupView pipeline strip owners", () => {
+  const owned = {
+    ...workgroup,
+    phase_map: { setup: { owner: "pixel", task: "initialise the project" }, enrich: { owner: "scout", task: "enrich the brief" } },
+  };
+  const crew = [
+    ...profiles,
+    { name: "pixel", accent: "#119988", fold: "rocket" },
+    { name: "scout", accent: "#cc4422", fold: "house" },
+    { name: "lingua", accent: "#bb2299", fold: "plane" },
+  ];
+  const running = (active) => ({
+    active,
+    closed: [],
+    blocked: null,
+    pipeline_run: {
+      pipeline: "setup",
+      status: "running",
+      started_seq: 40,
+      current_phase: "enrich",
+      phases: [
+        { slug: "setup", state: "completed", seq: 41, cost: { usd: 0.02, tokens: 8310 } },
+        { slug: "enrich", state: "current", seq: 42 },
+      ],
+    },
+  });
+
+  it("draws each phase with its declared owner and the header counts the same phases as the strip", async () => {
+    tasksReply(running({ slug: "enrich", title: "go", opened_seq: 42, assignees: ["scout"] }));
+    render(<WorkgroupView workgroup={owned} profiles={crew} connectionId="local" />);
+
+    await waitFor(() => expect(phaseEl("enrich")).not.toBeNull());
+    expect(phaseEl("setup").querySelector('[data-fold="rocket"]')).not.toBeNull();
+    expect(phaseEl("enrich").querySelector('[data-fold="house"]')).not.toBeNull();
+    expect(within(phaseEl("enrich")).queryByText(/→/)).toBeNull();
+    const trigger = document.querySelector("[data-phase-trigger]");
+    expect(trigger).toHaveTextContent("#enrich");
+    expect(trigger).toHaveTextContent("@scout");
+    expect(trigger).toHaveTextContent("1 of 2");
+    expect(phaseEl("setup").closest(".ds-tip")).toHaveTextContent("initialise the project");
+    expect(phaseEl("setup").closest(".ds-tip")).toHaveTextContent("$0.02 · 8,310 tokens");
+  });
+
+  it("names the member a routed repair is addressed to, on the chip and in the header", async () => {
+    tasksReply(running({ slug: "enrich", title: "restore the fr strings", opened_seq: 42, assignees: ["lingua"] }));
+    render(<WorkgroupView workgroup={owned} profiles={crew} connectionId="local" />);
+
+    await waitFor(() => expect(within(phaseEl("enrich")).getByText("@lingua")).toBeInTheDocument());
+    expect(phaseEl("enrich").querySelector('[data-fold="plane"]')).not.toBeNull();
+    expect(phaseEl("enrich").closest(".ds-tip")).toHaveTextContent("assigned by the hub");
+    expect(document.querySelector("[data-phase-trigger]")).toHaveTextContent("@lingua");
+  });
+
+  it("keeps the strip's count in the header between phases and once the run completes", async () => {
+    const run = running(null).pipeline_run;
+    tasksReply({ active: null, closed: [], blocked: null, pipeline_run: { ...run, status: "between", phases: [run.phases[0], { slug: "enrich", state: "pending", seq: null }] } });
+    render(<WorkgroupView workgroup={owned} profiles={crew} connectionId="local" />);
+    await waitFor(() => expect(document.querySelector('[data-phase-trigger="idle"]')).not.toBeNull());
+    expect(document.querySelector('[data-phase-trigger="idle"]')).toHaveTextContent("setup · between phases");
+    expect(document.querySelector('[data-phase-trigger="idle"]')).toHaveTextContent("1 of 2");
+  });
+
+  it("puts a blocked phase and its reason in red on the header, with nothing rippling", async () => {
+    const run = running(null).pipeline_run;
+    tasksReply({ active: null, closed: [], blocked: { slug: "enrich", reason: "BLOCKED enrich · no source photos" }, pipeline_run: { ...run, status: "blocked" } });
+    render(<WorkgroupView workgroup={owned} profiles={crew} connectionId="local" />);
+    await waitFor(() => expect(document.querySelector('[data-phase-trigger="blocked"]')).not.toBeNull());
+    const trigger = document.querySelector('[data-phase-trigger="blocked"]');
+    expect(trigger).toHaveTextContent("blocked · no source photos");
+    expect(trigger).toHaveTextContent("1 of 2");
+    expect(trigger.querySelector('[data-fold="house"]')).not.toBeNull();
+  });
+
+  it("draws no owner object for a daemon without phase_map", async () => {
+    tasksReply(running({ slug: "enrich", title: "go", opened_seq: 42 }));
+    render(<WorkgroupView workgroup={workgroup} profiles={crew} connectionId="local" />);
+
+    await waitFor(() => expect(phaseEl("enrich")).not.toBeNull());
+    expect(phaseEl("enrich").querySelector("[data-fold]")).toBeNull();
+    expect(document.querySelector("[data-phase-trigger]")).toHaveTextContent("1 of 2");
+  });
+});

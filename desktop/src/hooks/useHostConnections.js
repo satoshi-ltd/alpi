@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { defaultAsAlpaca } from "../../../common/folds.mjs";
 import { RATE_LIMITED, RATE_LIMITED_RETRY_MS } from "../lib/connection-status.js";
 import { stampLastActive } from "../lib/connection-recency.js";
 import { invoke } from "@tauri-apps/api/core";
@@ -14,6 +15,7 @@ import {
 import { invalidateSessionCache } from "../lib/session-cache.js";
 import { invalidateProfileDetailCache } from "./useProfileDetail.js";
 import { purgeConnectionReadState } from "./useReadState.js";
+import { LANDING_VIEW } from "../lib/landing.js";
 
 const PROFILES_CACHE_PREFIX = "alf:profiles:v1:";
 const WORKGROUPS_CACHE_PREFIX = "alf:workgroups:v1:";
@@ -66,8 +68,10 @@ export function useHostConnections({
   });
   const [profiles, setProfiles] = useState([]);
   const [workgroups, setWorkgroups] = useState([]);
-  const [pickerAlpi, setPickerAlpi] = useState(null);
   const [connectionSyncing, setConnectionSyncing] = useState(false);
+  const [rosterAnsweredId, setRosterAnsweredId] = useState(null);
+  const [rosterSettledId, setRosterSettledId] = useState(null);
+  const [rosterGeneration, setRosterGeneration] = useState(0);
   const [switchTargetId, setSwitchTargetId] = useState(null);
   useEffect(() => {
     if (!connectionSyncing) setSwitchTargetId(null);
@@ -121,14 +125,6 @@ export function useHostConnections({
     setProfiles(ps);
     setWorkgroups(ws);
     pruneCachedMessages(hostConnectionsRef.current?.active_id, ws);
-    setPickerAlpi((prev) => {
-      if (prev && ps.some((p) => p.name === prev && !p.paused)) return prev;
-      const def = ps.find((p) => p.is_default && p.model && !p.paused);
-      if (def) return def.name;
-      const firstWithModel = ps.find((p) => p.model && !p.paused);
-      if (firstWithModel) return firstWithModel.name;
-      return ps.find((p) => !p.paused)?.name ?? null;
-    });
   }, []);
 
   const clearConnectionContent = useCallback(() => {
@@ -137,7 +133,7 @@ export function useHostConnections({
     clearTurnsForConnection(hostConnectionsRef.current?.active_id ?? null);
     setRewriteDraft(null);
     setActiveTask(null);
-    setView((v) => (v.kind === "settings" ? v : { kind: "empty" }));
+    setView((v) => (v.kind === "settings" ? v : LANDING_VIEW));
   }, [
     applyProfilesAndWorkgroups,
     setSessionData,
@@ -274,6 +270,7 @@ export function useHostConnections({
           ps = fallbackProfiles;
         }
       }
+      if (Array.isArray(ps)) ps = ps.map(defaultAsAlpaca("var(--accent)"));
       // switchId guards A→B→A races where active_id alone would match
       if (
         hostConnectionsRef.current?.active_id !== activeId ||
@@ -292,6 +289,8 @@ export function useHostConnections({
         if (workgroupList.status === "fulfilled") reloadAttemptRef.current = 0;
         applyProfilesAndWorkgroups(ps, ws);
         saveToCache(activeId, ps, ws);
+        setRosterAnsweredId(activeId);
+        setRosterGeneration((n) => n + 1);
       }
     } catch {
       if (stillCurrent()) {
@@ -305,6 +304,7 @@ export function useHostConnections({
         connectionSwitchRef.current === switchId
       ) {
         setConnectionSyncing(false);
+        setRosterSettledId(activeId);
       }
       reloadConnections();
     }
@@ -441,8 +441,9 @@ export function useHostConnections({
       setRewriteDraft(null);
       setSessionData(null);
       setActiveTask(null);
-      setView((v) => (v.kind === "settings" ? v : { kind: "empty" }));
-      setPickerAlpi(null);
+      setView((v) => (v.kind === "settings" ? v : LANDING_VIEW));
+      setRosterAnsweredId(null);
+      setRosterSettledId(null);
       loadFromCache(id);
       setSwitchTargetId(id);
       setConnectionSyncing(true);
@@ -467,8 +468,8 @@ export function useHostConnections({
           if (connectionSwitchRef.current === switchId) {
             hostConnectionsRef.current = previousState;
             setHostConnections(previousState);
-            setPickerAlpi(null);
             loadFromCache(previousState.active_id);
+            setView((v) => (v.kind === "settings" ? v : LANDING_VIEW));
             setConnectionSyncing(false);
             notify?.({
               message: String(e).includes("revoked")
@@ -541,6 +542,12 @@ export function useHostConnections({
     await invoke("host_connections_probe_all");
   }, []);
 
+  const onLocalDaemonStarted = useCallback(async () => {
+    await invoke("host_connections_probe_active").catch(() => {});
+    await reloadConnections();
+    await reload();
+  }, [reloadConnections, reload]);
+
   return {
     hostConnections,
     hostConnectionsRef,
@@ -550,9 +557,11 @@ export function useHostConnections({
     dropWorkgroup,
     connectionSyncing,
     connectionSwitching: switchTargetId != null && connectionSyncing,
+    rosterAnswered: rosterAnsweredId != null && rosterAnsweredId === hostConnections.active_id,
+    rosterSettled: rosterSettledId != null && rosterSettledId === hostConnections.active_id,
+    rosterGeneration,
+    onLocalDaemonStarted,
     touchWorkgroup,
-    pickerAlpi,
-    setPickerAlpi,
     reload,
     onSetHostConnection,
     onAddHostConnection,

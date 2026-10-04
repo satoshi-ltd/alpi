@@ -2,8 +2,10 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 
+const hubDetail = vi.hoisted(() => ({ value: {} }));
+
 vi.mock("../../hooks/useProfileDetail.js", () => ({
-  useProfileDetail: () => ({ detail: {}, loading: false }),
+  useProfileDetail: () => ({ detail: hubDetail.value, loading: false }),
 }));
 
 vi.mock("../../hooks/useUsage.js", () => ({
@@ -13,6 +15,7 @@ vi.mock("../../hooks/useUsage.js", () => ({
 import WorkgroupDetail, { _clearWorkgroupMembersCache } from "./WorkgroupDetail.jsx";
 
 beforeEach(() => {
+  hubDetail.value = {};
   _clearWorkgroupMembersCache();
   invoke.mockReset();
 });
@@ -44,7 +47,7 @@ describe("WorkgroupDetail", () => {
     const items = () => within(rail).getAllByRole("button").map((b) => b.textContent);
     await waitFor(() => expect(items()).toEqual(expect.arrayContaining(["Overview", "Budget", "Briefing", "Members", "Danger zone"])));
     fireEvent.change(within(rail).getByRole("searchbox", { name: "Search settings" }), { target: { value: "brief" } });
-    await waitFor(() => expect(items()).toEqual(["Briefing"]));
+    await waitFor(() => expect(items()).toEqual(["Briefing"]), { timeout: 3000 });
   });
 
   it("routes member reads to the selected connection", async () => {
@@ -94,7 +97,7 @@ function mockHost() {
 }
 
 function pipelineRow(key) {
-  return screen.getByText(key).closest("div.row");
+  return screen.getByText(key, { selector: "span" }).closest("[data-settings-row]");
 }
 
 function pipelineSection() {
@@ -102,15 +105,55 @@ function pipelineSection() {
 }
 
 describe("WorkgroupDetail — pipelines", () => {
-  it("renders every declared chain read-only with exactly one launch marker", async () => {
+  it("renders every declared chain read-only, keyed as written, with the trigger in words", async () => {
     mockHost();
     render(<WorkgroupDetail workgroup={PIPELINE_WG} profiles={PROFILES} connectionId="casa" />);
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Pipelines" })).toBeInTheDocument());
     expect(within(pipelineRow("setup")).getByText("#enrich")).toBeInTheDocument();
     expect(within(pipelineRow("media-update")).getByText("#media-qa")).toBeInTheDocument();
-    expect(screen.getAllByText("launch")).toHaveLength(1);
-    expect(within(pipelineRow("setup")).getAllByText("launch")).toHaveLength(1);
+    expect(screen.getAllByText("starts at launch")).toHaveLength(1);
+    expect(within(pipelineRow("setup")).getByText("starts at launch")).toBeInTheDocument();
+    expect(within(pipelineRow("media-update")).getByText("on demand")).toBeInTheDocument();
+  });
+
+  it("marks every phase with its declared owner and the run's state, on the run's chain only", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "workgroup_members") return [];
+      if (cmd === "workgroup_tasks") {
+        return {
+          pipeline_run: {
+            pipeline: "setup",
+            status: "blocked",
+            cost: { usd: 0.42 },
+            phases: [{ slug: "setup", state: "completed" }, { slug: "enrich", state: "current" }],
+          },
+        };
+      }
+      return null;
+    });
+    const profiles = [...PROFILES, { name: "pixel", pubkey_b64: "px", accent: "#2cb3b5", fold: "rocket" }];
+    render(<WorkgroupDetail workgroup={PIPELINE_WG} profiles={profiles} connectionId="casa" />);
+
+    await waitFor(() => expect(screen.getByText("last run blocked · 1 of 2 · $0.42")).toBeInTheDocument());
+    const setupChip = within(pipelineRow("setup")).getByText("#setup").closest("[data-state]");
+    expect(setupChip.dataset.state).toBe("completed");
+    expect(setupChip.querySelector('[data-fold="rocket"]')).not.toBeNull();
+    const enrichChip = within(pipelineRow("setup")).getByText("#enrich").closest("[data-state]");
+    expect(enrichChip.dataset.state).toBe("blocked");
+    expect(enrichChip.querySelector("[data-fold]")).toBeNull();
+    const mediaChip = within(pipelineRow("media-update")).getByText("#media-update").closest("[data-state]");
+    expect(mediaChip.dataset.state).toBe("pending");
+    expect(within(pipelineRow("media-update")).queryByText(/last run/)).toBeNull();
+  });
+
+  it("draws an owner that is not a local profile as the grey unfolded object", async () => {
+    mockHost();
+    render(<WorkgroupDetail workgroup={PIPELINE_WG} profiles={PROFILES} connectionId="casa" />);
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Pipelines" })).toBeInTheDocument());
+    const chip = within(pipelineRow("setup")).getByText("#setup").closest("[data-state]");
+    expect(chip.querySelector("[data-unfolded]")).not.toBeNull();
   });
 
   it("offers no control at all inside the pipelines section", async () => {
@@ -124,12 +167,12 @@ describe("WorkgroupDetail — pipelines", () => {
     expect(pipelineSection().querySelectorAll("input, select")).toHaveLength(0);
   });
 
-  it("never reads the workgroup run state for the pipelines section", async () => {
+  it("only reads the run state for the pipelines section, never triggers one", async () => {
     mockHost();
     render(<WorkgroupDetail workgroup={PIPELINE_WG} profiles={PROFILES} connectionId="casa" />);
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Pipelines" })).toBeInTheDocument());
-    expect(invoke).not.toHaveBeenCalledWith("workgroup_tasks", expect.anything());
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("workgroup_tasks", { profile: "mira", wgId: "wg-1", connectionId: "casa" }));
     expect(invoke).not.toHaveBeenCalledWith("workgroup_trigger", expect.anything());
   });
 
@@ -344,5 +387,119 @@ describe("WorkgroupDetail budget cap", () => {
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("workgroup_update", {
       profile: "mira", wgId: "wg-1", budgetUsd: null, clearBudget: true, connectionId: "casa",
     }));
+  });
+});
+
+describe("WorkgroupDetail — members", () => {
+  const PROFILES_WITH_MEMBERS = [
+    { name: "mira", pubkey_b64: "hub", accent: "#6572e4", fold: "crown" },
+    { name: "pixel", pubkey_b64: "px", accent: "#2cb3b5", fold: "rocket", bio: "Builds the site." },
+  ];
+
+  function mockMembers() {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "workgroup_members") {
+        return [
+          { pubkey: "hub", joined: true },
+          { pubkey: "px", joined: true },
+        ];
+      }
+      return null;
+    });
+  }
+
+  function memberRow(name) {
+    return screen.getByText(name, { selector: "span" }).closest(".col");
+  }
+
+  it("lists what each member owns, and says the hub routes every phase", async () => {
+    mockMembers();
+    render(<WorkgroupDetail workgroup={PIPELINE_WG} profiles={PROFILES_WITH_MEMBERS} connectionId="casa" />);
+
+    await waitFor(() => expect(screen.getByText("Builds the site.")).toBeInTheDocument());
+    expect(within(memberRow("pixel")).getByText("#setup")).toBeInTheDocument();
+    expect(within(memberRow("mira")).getByText("hub")).toBeInTheDocument();
+    expect(within(memberRow("mira")).getByText("#media-update")).toBeInTheDocument();
+  });
+
+  it("keeps Remove behind the row menu and a confirmation, and opens the profile from there", async () => {
+    mockMembers();
+    const onNavigate = vi.fn();
+    render(
+      <WorkgroupDetail
+        workgroup={PIPELINE_WG}
+        profiles={PROFILES_WITH_MEMBERS}
+        connectionId="casa"
+        onNavigate={onNavigate}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText("Builds the site.")).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: "Remove from workgroup" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "More for @pixel" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Open @pixel" }));
+    expect(onNavigate).toHaveBeenCalledWith({ kind: "profile", id: "pixel" });
+
+    fireEvent.click(screen.getByRole("button", { name: "More for @pixel" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Remove from workgroup…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("workgroup_action", expect.objectContaining({ action: "kick", memberPubkey: "px" })),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "More for @mira" }));
+    expect(screen.getByRole("menuitem", { name: "Copy profile id" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Remove from workgroup…" })).toBeNull();
+  });
+
+  it("offers Remove only to the hub", async () => {
+    mockMembers();
+    render(<WorkgroupDetail workgroup={{ ...PIPELINE_WG, is_hub: false }} profiles={PROFILES_WITH_MEMBERS} connectionId="casa" />);
+    await waitFor(() => expect(screen.getByText("Builds the site.")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "More for @pixel" }));
+    expect(screen.getByRole("menuitem", { name: "Copy profile id" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Remove from workgroup…" })).toBeNull();
+  });
+});
+
+
+describe("WorkgroupDetail — pipelines and members under search and older daemons", () => {
+  it("lets the settings search hide the pipelines that do not match", async () => {
+    invoke.mockImplementation(async (cmd) => (cmd === "workgroup_members" ? [] : null));
+    render(<WorkgroupDetail workgroup={PIPELINE_WG} profiles={PROFILES} connectionId="casa" />);
+    const rail = screen.getByRole("navigation", { name: "Settings sections" });
+    const items = () => within(rail).getAllByRole("button").map((b) => b.textContent);
+    await waitFor(() => expect(items()).toContain("Pipelines"), { timeout: 3000 });
+    fireEvent.change(within(rail).getByRole("searchbox", { name: "Search settings" }), { target: { value: "brief" } });
+    await waitFor(() => expect(items()).toEqual(["Briefing"]), { timeout: 3000 });
+    fireEvent.change(within(rail).getByRole("searchbox", { name: "Search settings" }), { target: { value: "media-qa" } });
+    await waitFor(() => expect(items()).toContain("Pipelines"), { timeout: 3000 });
+    expect(pipelineRow("setup").hidden).toBe(true);
+    expect(pipelineRow("media-update").hidden).toBe(false);
+  });
+
+  it("names a remote member by its peer alias, matches its phases by peer id, and shows no owns line without a phase_map", async () => {
+    hubDetail.value = { peers: [{ id: "pixel", alias: "Builder (casa)", pubkey: "remote-px" }] };
+    invoke.mockImplementation(async (cmd) => (cmd === "workgroup_members" ? [{ pubkey: "remote-px", joined: true, bio: "Remote builder." }] : null));
+    const { unmount } = render(<WorkgroupDetail workgroup={PIPELINE_WG} profiles={PROFILES} connectionId="casa" />);
+    await waitFor(() => expect(screen.getByText("Remote builder.")).toBeInTheDocument());
+    const row = screen.getByText("Remote builder.").closest(".col");
+    expect(within(row).getByText("#setup")).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "More for @Builder (casa)" })).toBeInTheDocument();
+    unmount();
+    _clearWorkgroupMembersCache();
+
+    render(<WorkgroupDetail workgroup={{ ...PIPELINE_WG, phase_map: {} }} profiles={PROFILES} connectionId="casa" />);
+    await waitFor(() => expect(screen.getByText("Remote builder.")).toBeInTheDocument());
+    expect(screen.queryByText("owns")).toBeNull();
+  });
+
+  it("falls back to the peer id when the alias is empty", async () => {
+    hubDetail.value = { peers: [{ id: "pixel", alias: "", pubkey: "remote-px" }] };
+    invoke.mockImplementation(async (cmd) => (cmd === "workgroup_members" ? [{ pubkey: "remote-px", joined: true, bio: "Remote builder." }] : null));
+    render(<WorkgroupDetail workgroup={PIPELINE_WG} profiles={PROFILES} connectionId="casa" />);
+    await waitFor(() => expect(screen.getByText("Remote builder.")).toBeInTheDocument());
+    const row = screen.getByText("Remote builder.").closest(".col");
+    expect(within(row).getByRole("button", { name: "More for @pixel" })).toBeInTheDocument();
+    expect(within(row).getByText("#setup")).toBeInTheDocument();
   });
 });

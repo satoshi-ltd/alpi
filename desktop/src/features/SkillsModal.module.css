@@ -39,7 +39,7 @@
   border-radius: 50%;
   flex-shrink: 0;
 }
-.dotActive { background: var(--c-success); }
+.dotActive { background: var(--ink); }
 .dotInactive { border: 1px solid var(--ink-4); }
 .dotInvalid { border: 1px solid var(--c-danger); }
 
@@ -82,7 +82,7 @@
   gap: var(--space-3);
   background: color-mix(in srgb, var(--c-warning) 11%, transparent);
   border: 0.5px solid color-mix(in srgb, var(--c-warning) 28%, transparent);
-  border-radius: var(--r-sm);
+  border-radius: var(--r-xs);
   padding: var(--space-3) var(--space-4);
   color: var(--ink-2);
   font-size: var(--fs-sm);
@@ -129,7 +129,7 @@
 .reqName { font-family: var(--font-mono); font-size: var(--text-meta); color: var(--ink-2); }
 .reqMissing { color: var(--ink-3); }
 .reqDot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-.reqOk { background: var(--c-success); }
+.reqOk { background: var(--ink); }
 .reqNo { border: 1px solid var(--ink-4); }
 
 .kwFlow { display: flex; flex-wrap: wrap; gap: var(--space-2); }
@@ -138,7 +138,7 @@
   font-size: var(--text-meta);
   color: var(--ink-3);
   background: var(--hover);
-  border-radius: var(--r-sm);
+  border-radius: var(--r-tag);
   padding: var(--space-1) var(--space-3);
 }
 
@@ -148,7 +148,7 @@
   display: grid;
   grid-template-columns: 184px 1fr;
   border: 0.5px solid var(--line);
-  border-radius: var(--r-md);
+  border-radius: var(--r-xs);
   overflow: hidden;
 }
 
@@ -172,7 +172,7 @@
   width: 100%;
   padding: var(--space-2) var(--space-3);
   border: 0;
-  border-radius: var(--r-sm);
+  border-radius: var(--r-xs);
   background: transparent;
   cursor: pointer;
   text-align: left;
@@ -213,14 +213,28 @@
   padding: var(--space-6) var(--space-7);
 }
 
-.mdBox :global(.alpi-md),
-.mdBox :global(.alpi-md) * {
-  font-family: var(--font-mono);
+.mdBox :global(.alpi-md) {
+  font-size: var(--text-chat);
+  line-height: var(--lh-normal);
 }
 
-.mdBox :global(.alpi-md) {
-  font-size: var(--fs-sm);
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--ink-2);
 }
+.status[data-status="invalid"] { color: var(--c-danger-text); }
+
+.rowStatus {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--ink-3);
+}
+.rowStatus[data-status="invalid"] { color: var(--c-danger-text); }
 
 .viewerBinary {
   display: flex;

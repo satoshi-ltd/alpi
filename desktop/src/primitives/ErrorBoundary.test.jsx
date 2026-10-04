@@ -35,6 +35,7 @@ describe("ErrorBoundary", () => {
       </ErrorBoundary>,
     );
     expect(screen.getByText("Something broke on screen")).toBeTruthy();
+    expect(document.querySelector("[data-fold='alpaca']").style.width).toBe("64px");
     expect(screen.getAllByText(/kaboom from render/).length).toBeGreaterThan(0);
     expect(screen.getByText(/unsaved interface changes/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Reload" })).toBeTruthy();

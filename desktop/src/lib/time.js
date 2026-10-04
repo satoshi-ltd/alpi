@@ -1,3 +1,7 @@
+import { dateBucket, groupByDate } from "../../../common/notificationTriage.mjs";
+
+export { dateBucket, groupByDate };
+
 const SHORT = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
 const LONG = new Intl.DateTimeFormat(undefined, {
   month: "short",
@@ -6,30 +10,6 @@ const LONG = new Intl.DateTimeFormat(undefined, {
 });
 const CLOCK = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
 const WEEKDAY = new Intl.DateTimeFormat(undefined, { weekday: "short" });
-
-const DATE_BUCKETS = ["Today", "Yesterday", "This week", "This month", "Earlier"];
-
-export function dateBucket(unixSeconds, nowMs = Date.now()) {
-  const now = new Date(nowMs);
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const day = 86400000;
-  const ts = (unixSeconds || 0) * 1000;
-  if (ts >= startOfToday) return "Today";
-  if (ts >= startOfToday - day) return "Yesterday";
-  if (ts >= startOfToday - 7 * day) return "This week";
-  if (ts >= startOfToday - 30 * day) return "This month";
-  return "Earlier";
-}
-
-export function groupByDate(rows, getTs, nowMs = Date.now()) {
-  const buckets = new Map();
-  for (const r of rows || []) {
-    const label = dateBucket(getTs(r), nowMs);
-    if (!buckets.has(label)) buckets.set(label, []);
-    buckets.get(label).push(r);
-  }
-  return DATE_BUCKETS.filter((l) => buckets.has(l)).map((label) => ({ label, rows: buckets.get(label) }));
-}
 
 export function notificationTime(unixSeconds, nowMs = Date.now()) {
   if (!unixSeconds) return "";

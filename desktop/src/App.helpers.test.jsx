@@ -69,7 +69,7 @@ describe("settingsTargetForChatView", () => {
       kind: "workgroup",
       id: "build",
     });
-    expect(settingsTargetForChatView({ kind: "empty" }, "default")).toEqual({
+    expect(settingsTargetForChatView({ kind: "landing" }, "default")).toEqual({
       kind: "profile",
       id: "default",
     });

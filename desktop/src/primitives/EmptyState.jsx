@@ -1,8 +1,9 @@
-import { Logo, DisplayHeading, Mono } from "./index.js";
+import { ALPACA_FOLD, FOLD_SIZES } from "../../../common/folds.mjs";
+import { DisplayHeading, Fold, Mono } from "./index.js";
 import styles from "./EmptyState.module.css";
 
 export default function EmptyState({
-  glyph = "logo",
+  fold = ALPACA_FOLD,
   accent,
   heading,
   subtitle,
@@ -11,19 +12,7 @@ export default function EmptyState({
   return (
     <div className={styles.shell}>
       <div className={styles.col}>
-        {glyph === "logo" && <Logo />}
-        {glyph === "diamond" && (
-          <span
-            aria-hidden
-            className={styles.diamond}
-            style={accent ? { "--c": accent } : undefined}
-          />
-        )}
-        {glyph === "hash" && (
-          <span aria-hidden className={styles.hash}>
-            #
-          </span>
-        )}
+        <Fold fold={fold} color={accent || undefined} size={FOLD_SIZES.hero} />
         <DisplayHeading hero>{heading}</DisplayHeading>
         {subtitle && (
           <Mono className={`tnum ${styles.subtitle}`}>{subtitle}</Mono>

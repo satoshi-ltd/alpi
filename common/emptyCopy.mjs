@@ -15,6 +15,7 @@ export const EMPTY = {
   workgroupUsage: { title: "No usage yet", hint: "Spend appears once the hub posts or settles a task." },
   workgroups: { title: "No workgroups yet", hint: "A workgroup is a hub profile plus the members it directs." },
   roster: { title: "No profiles or workgroups yet", hint: "Create one to begin." },
+  rosterMember: { title: "Nothing shared with this device yet", hint: "Ask the host admin to share a profile with this device." },
   profiles: { title: "No profiles yet", hint: "" },
   skills: { title: "No skills installed", hint: "Ask the agent to build one." },
   tools: { title: "No tools registered", hint: "The daemon exposes none to this profile." },

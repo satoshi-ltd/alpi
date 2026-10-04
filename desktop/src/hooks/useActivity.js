@@ -46,8 +46,11 @@ export function rosterStates(activity, { pendingProfiles = null, nowS = Date.now
     if ((rank[state] ?? 0) > (rank[profiles[name]] ?? 0)) profiles[name] = state;
   };
   const a = activity ?? EMPTY;
+  const rerunning = new Set(a.running.filter((run) => run.job_id).map((run) => `${run.profile}/${run.job_id}`));
   for (const item of a.needs_you) bump(item.profile, "needs-you");
-  for (const job of a.scheduled) if (recentlyFailed(job, nowS)) bump(job.profile, "failed");
+  for (const job of a.scheduled) {
+    if (recentlyFailed(job, nowS) && !rerunning.has(`${job.profile}/${job.job_id}`)) bump(job.profile, "failed");
+  }
   for (const run of a.running) {
     if (run.kind === "workgroup") {
       if (!run.profile || !run.workgroup_id) continue;

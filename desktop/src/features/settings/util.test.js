@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 
-import { formatLastRun, providerPills } from "./util.js";
+import { FIELD_KEYS, formatLastRun, providerPills } from "./util.js";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -63,5 +63,12 @@ describe("providerPills", () => {
 
   it("handles profiles without providers", () => {
     expect(providerPills({})).toEqual([]);
+  });
+});
+
+describe("FIELD_KEYS", () => {
+  it("saves the origami object beside the accent colour", () => {
+    expect(FIELD_KEYS.fold).toBe("tui.fold");
+    expect(FIELD_KEYS.accent).toBe("tui.accent");
   });
 });

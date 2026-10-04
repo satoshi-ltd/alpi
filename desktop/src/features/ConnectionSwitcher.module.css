@@ -17,9 +17,9 @@
   margin: 0 var(--space-3) var(--space-3);
   padding: var(--space-3);
   resize: vertical;
-  border: .5px solid var(--line-2);
-  border-radius: var(--r-md);
-  background: var(--bg-input);
+  border: .5px solid transparent;
+  border-radius: var(--r-xs);
+  background: var(--well);
   color: var(--ink);
   font-family: var(--font-mono);
   font-size: var(--text-meta);
@@ -31,14 +31,12 @@
     background var(--dur-1) var(--ease);
 }
 
-.payload:hover {
-  border-color: color-mix(in srgb, var(--ink) 24%, transparent);
-}
-
 .payload:focus,
 .payload:focus-visible {
-  border-color: color-mix(in srgb, var(--ink) 30%, transparent);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ink) 6%, transparent);
+  outline: none;
+  border-color: transparent;
+  background: var(--well-focus);
+  box-shadow: var(--well-ring);
 }
 
 .add {
@@ -47,7 +45,7 @@
   height: var(--space-10);
   margin: 0 var(--space-3) var(--space-3);
   border: .5px solid var(--line-2);
-  border-radius: var(--r-md);
+  border-radius: var(--r-xs);
   background: var(--bg-input);
   color: var(--ink);
   font-size: var(--text-ui);
@@ -63,7 +61,7 @@
   align-items: center;
   gap: var(--space-4);
   padding: var(--space-3) var(--space-4);
-  border-radius: var(--r-md);
+  border-radius: var(--r-xs);
 }
 
 .rowLead {

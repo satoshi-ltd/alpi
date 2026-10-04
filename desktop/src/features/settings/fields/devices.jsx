@@ -1,3 +1,4 @@
+import { defaultAsAlpaca } from "../../../../../common/folds.mjs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { profileLabel } from "../../../lib/profile-display.js";
 import { invoke } from "@tauri-apps/api/core";
@@ -9,7 +10,7 @@ import SelectField from "../../../primitives/SelectField.jsx";
 import Modal from "../../../primitives/Modal.jsx";
 import Skeleton from "../../../primitives/Skeleton.jsx";
 import { CopyIcon } from "../../../primitives/icons.jsx";
-import { Checkbox, Diamond, Radio } from "../../../primitives/index.js";
+import { Checkbox, Fold, Radio } from "../../../primitives/index.js";
 import Tip from "../../../primitives/Tip.jsx";
 import useAutoPosition from "../../../primitives/useAutoPosition.js";
 import { useNotify } from "../../../primitives/Notification.jsx";
@@ -356,9 +357,10 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
     invoke("profile_summaries", connectionArg)
       .then((rows) => setProfiles(
         Array.isArray(rows)
-          ? rows.filter((r) => r && r.name).map((r) => ({
+          ? rows.filter((r) => r && r.name).map(defaultAsAlpaca("var(--accent)")).map((r) => ({
               name: r.name,
               accent: r.accent || null,
+              fold: r.fold,
             }))
           : [],
       ))
@@ -698,7 +700,7 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
                         onClick={() => toggleScope(p.name)}
                       >
                         <span className={styles.scopeRowName}>
-                          <Diamond color={p.accent || "var(--accent)"} />
+                          <Fold fold={p.fold} color={p.accent || "var(--accent)"} />
                           <span className={styles.mono}>@{profileLabel(p.name)}</span>
                         </span>
                       </Dropdown.Row>

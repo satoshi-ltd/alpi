@@ -1,5 +1,6 @@
 import React from "react";
-import AlpiSilhouette from "./AlpiSilhouette.jsx";
+import { ALPACA_FOLD } from "../../../common/folds.mjs";
+import Fold from "./Fold.jsx";
 import { clearCrash, describeError, formatCrash, recordCrash } from "../lib/crashLog.js";
 import styles from "./ErrorBoundary.module.css";
 
@@ -51,7 +52,7 @@ export default class ErrorBoundary extends React.Component {
     return (
       <div className={styles.wrap}>
         <div className={styles.card}>
-          <AlpiSilhouette className={styles.mark} />
+          <Fold fold={ALPACA_FOLD} size={64} className={styles.mark} />
           <div className={styles.heading}>
             <h1 className={styles.title}>
               {recovery ? "Alpi recovered from a crash" : "Something broke on screen"}

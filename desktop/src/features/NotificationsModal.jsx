@@ -1,28 +1,29 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   BrowseModal,
   Button,
   Chip,
   CopyIcon,
-  Diamond,
+  Fold,
   DownloadIcon,
-  GearIcon,
+  Icon,
   IconBtn,
+  Kbd,
   Mono,
-  SendToChatIcon,
+  Popover,
   SpinnerIcon as DSSpinnerIcon,
   Tip,
   VolumeIcon,
   XIcon,
 } from "../primitives/index.js";
-import NotificationBody from "./NotificationBody.jsx";
+import NotificationBody, { ErrorCard } from "./NotificationBody.jsx";
 import WaveBars from "../primitives/WaveBars.jsx";
 import Eyebrow from "../primitives/Eyebrow.jsx";
 import { playTts, subscribeTts, VOICE_POOL } from "../lib/tts.js";
 import { useOnline } from "../lib/useOnline.js";
 import { useNotify } from "../primitives/Notification.jsx";
-import { groupByDate, notificationTime } from "../lib/time.js";
+import { notificationTime } from "../lib/time.js";
 import { profileLabel } from "../lib/profile-display.js";
 import {
   pendingDeleteKeys,
@@ -33,10 +34,18 @@ import {
   useOutput,
 } from "../hooks/useOutputs.js";
 import { useProfileDetail } from "../hooks/useProfileDetail.js";
+import { isMissingVerb } from "../hooks/useActivity.js";
 import styles from "./NotificationsModal.module.css";
 import { copyText } from "../lib/clipboard.js";
 import { headlineParts } from "../lib/notificationHeadline.js";
 import { EMPTY } from "../../../common/emptyCopy.mjs";
+import {
+  NOTIFICATION_FILTERS,
+  filterNotifications,
+  groupNotifications,
+  isNeedsYou,
+  triageCounts,
+} from "../../../common/notificationTriage.mjs";
 
 
 function fmtAbsolute(ts) {
@@ -68,13 +77,13 @@ function typeTag(row) {
 }
 
 
-function contextAction(row) {
-  if (!row) return null;
-  if (row.session_id) {
-    return { label: "Open chat", target: { kind: "chat", profile: row.profile, sessionId: row.session_id } };
-  }
-  return null;
-}
+export const READ_DWELL_MS = 600;
+
+const FILTERS = NOTIFICATION_FILTERS.map((f, i) => ({ ...f, key: String(i + 1) }));
+
+const KEYS = [["↑↓", "move"], ["⏎", "open"], ["R", "reply"], ["U", "unread"], ["⌫", "delete"], ["/", "search"], ["1–3", "filter"]];
+
+const clip = (text, max) => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text);
 
 export function unreachableTitle(names) {
   const shown = names.slice(0, 3).join(", ");
@@ -92,7 +101,8 @@ export default function NotificationsModal({
   selectedConnectionId,
   onSelect,
   onOpenChat,
-  onSendToChat: onSendToChatProp,
+  onOpenJob,
+  onSendToChat: onReplyProp,
 }) {
   const notify = useNotify();
   const multi = connections.length > 1;
@@ -108,10 +118,59 @@ export default function NotificationsModal({
   const [query, setQuery] = useState("");
   const [hiddenIds, setHiddenIds] = useState(() => new Set());
   const [readIds, setReadIds] = useState(() => new Set());
+  const [unreadIds, setUnreadIds] = useState(() => new Set());
+  const [heldUnread, setHeldUnread] = useState(null);
+  const [filter, setFilter] = useState("all");
+  const [unreadMissing, setUnreadMissing] = useState(() => new Set());
+  const [frozen, setFrozen] = useState(null);
+  const listRef = useRef(null);
 
-  const activeId = pendingId ?? selectedId ?? rows[0]?.id ?? null;
-  const activeProfile = pendingProfile ?? selectedProfile ?? rows[0]?.profile ?? null;
-  const activeConnId = pendingConnectionId ?? selectedConnectionId ?? rows[0]?.connectionId ?? null;
+  const isUnread = useCallback((r) => {
+    const key = rowKey(r);
+    return unreadIds.has(key) || (r.status === "unread" && !readIds.has(key));
+  }, [unreadIds, readIds]);
+  const needsYou = useCallback((r) => isNeedsYou(r, isUnread(r)), [isUnread]);
+
+  const visibleRows = useMemo(
+    () => rows.filter((r) => !hiddenIds.has(rowKey(r))),
+    [rows, hiddenIds],
+  );
+  const unreadCount = useMemo(() => visibleRows.filter(isUnread).length, [visibleRows, isUnread]);
+
+  const filteredRows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return visibleRows;
+    return visibleRows.filter((row) => {
+      const hay = [
+        row.body,
+        row.title,
+        row.profile,
+        row.type,
+      ].filter(Boolean).join(" ").toLowerCase();
+      return hay.includes(q);
+    });
+  }, [visibleRows, query]);
+
+  const counts = useMemo(() => triageCounts(filteredRows, isUnread), [filteredRows, isUnread]);
+  const shownRows = useMemo(
+    () => filterNotifications(filteredRows, filter, { isUnread, frozen }),
+    [filteredRows, filter, isUnread, frozen],
+  );
+
+  const grouped = useMemo(
+    () => groupNotifications(shownRows, { filter, isUnread, frozen }),
+    [shownRows, filter, isUnread, frozen],
+  );
+  const orderedRows = useMemo(() => grouped.flatMap((g) => g.rows), [grouped]);
+
+  const chosen = pendingId !== null
+    ? { id: pendingId, profile: pendingProfile, connectionId: pendingConnectionId }
+    : selectedId ? { id: selectedId, profile: selectedProfile, connectionId: selectedConnectionId ?? null } : null;
+  const picked = chosen && !hiddenIds.has(rowKey(chosen)) ? chosen : null;
+  const fallback = orderedRows[0] ?? null;
+  const activeId = picked?.id ?? fallback?.id ?? null;
+  const activeProfile = picked?.profile ?? fallback?.profile ?? null;
+  const activeConnId = picked?.connectionId ?? fallback?.connectionId ?? null;
   const activeRow = useMemo(
     () =>
       rows.find(
@@ -141,6 +200,10 @@ export default function NotificationsModal({
       setPendingConnectionId(null);
       setQuery("");
       setReadIds(new Set());
+      setUnreadIds(new Set());
+      setHeldUnread(null);
+      setFilter("all");
+      setFrozen(null);
       return;
     }
     // hiddenIds reseeds from in-flight pending deletes so a row in its undo window stays hidden across modal reopens.
@@ -155,64 +218,52 @@ export default function NotificationsModal({
     }
   }, [selectedId, selectedProfile, selectedConnectionId]);
 
-  const { row: fetchedDetail, markRead } = useOutput(activeProfile, activeId, activeConnId);
-  const detail = activeRow ?? fetchedDetail;
+  const { row: fetchedDetail, markRead, markUnread } = useOutput(activeProfile, activeId, activeConnId);
+  const detail = activeRow ?? (activeId ? fetchedDetail : null);
+  const activeKey = rowKey({ connectionId: activeConnId, profile: activeProfile, id: activeId });
+  const detailUnread = detail ? isUnread({ ...detail, connectionId: activeConnId, profile: activeProfile, id: activeId }) : false;
+  const canMarkUnread = !unreadMissing.has(activeConnId ?? "local");
 
-  // Only EXPLICIT selection marks read — passive default to rows[0] must not silently consume the topmost unread on mere modal open.
-  const explicitlySelected = pendingId !== null || selectedId !== undefined;
+  // Only EXPLICIT selection marks read — passive default to the first row must not silently consume it on mere modal open.
+  const explicitlySelected = picked !== null;
+
   useEffect(() => {
-    if (!explicitlySelected) return;
-    if (detail && detail.status === "unread") {
-      const key = rowKey({ connectionId: activeConnId, profile: activeProfile, id: activeId });
-      setReadIds((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
-      markRead();
-    }
-  }, [detail, markRead, explicitlySelected, activeConnId, activeProfile, activeId]);
+    if (!explicitlySelected || !activeRow) return;
+    setFrozen((cur) => (cur?.key === activeKey ? cur : { key: activeKey, pinned: needsYou(activeRow), unread: isUnread(activeRow) }));
+  }, [explicitlySelected, activeRow, activeKey, needsYou, isUnread]);
 
-  const unreadCount = useMemo(
-    () => rows.filter(
-      (r) => r.status === "unread" && !readIds.has(rowKey(r)) && !hiddenIds.has(rowKey(r)),
-    ).length,
-    [rows, readIds, hiddenIds],
-  );
-
-  const visibleRows = useMemo(
-    () => rows.filter((r) => !hiddenIds.has(rowKey(r))),
-    [rows, hiddenIds],
-  );
-
-  const filteredRows = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return visibleRows;
-    return visibleRows.filter((row) => {
-      const hay = [
-        row.body,
-        row.title,
-        row.profile,
-        row.type,
-      ].filter(Boolean).join(" ").toLowerCase();
-      return hay.includes(q);
+  const commitRead = useCallback((acted = false) => {
+    if (!(explicitlySelected || acted) || !detailUnread || heldUnread === activeKey) return;
+    setReadIds((prev) => (prev.has(activeKey) ? prev : new Set(prev).add(activeKey)));
+    setUnreadIds((prev) => {
+      if (!prev.has(activeKey)) return prev;
+      const next = new Set(prev);
+      next.delete(activeKey);
+      return next;
     });
-  }, [visibleRows, query]);
+    markRead();
+  }, [explicitlySelected, detailUnread, heldUnread, activeKey, markRead]);
 
-  const grouped = useMemo(
-    () => groupByDate(filteredRows, (r) => r.created_at),
-    [filteredRows],
-  );
+  useEffect(() => {
+    if (!explicitlySelected || !detailUnread || heldUnread === activeKey) return undefined;
+    const timer = setTimeout(() => commitRead(), READ_DWELL_MS);
+    return () => clearTimeout(timer);
+  }, [commitRead, explicitlySelected, detailUnread, heldUnread, activeKey]);
 
   const onSelectRow = useCallback((row) => {
-    const key = rowKey(row);
-    setReadIds((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
+    if (rowKey(row) !== heldUnread) setHeldUnread(null);
     setPendingId(row.id);
     setPendingProfile(row.profile);
     setPendingConnectionId(row.connectionId ?? null);
     onSelect?.(row);
-  }, [onSelect]);
+  }, [onSelect, heldUnread]);
 
   const onMarkAll = useCallback(async () => {
+    setUnreadIds(new Set());
+    setHeldUnread(null);
     setReadIds((prev) => {
       const next = new Set(prev);
-      for (const r of rows) if (r.status === "unread") next.add(rowKey(r));
+      for (const r of rows) next.add(rowKey(r));
       return next;
     });
     const pairs = new Map();
@@ -240,7 +291,7 @@ export default function NotificationsModal({
     }
     scheduleDelete(row.profile, row.id, { connectionId: row.connectionId });
     notify({
-      message: "Notification deleted",
+      message: `Deleted “${clip(headlineParts(row).title || "notification", 48)}”`,
       action: "Undo",
       onAction: () => {
         cancelDelete(row.profile, row.id, row.connectionId);
@@ -269,18 +320,18 @@ export default function NotificationsModal({
     return `# ${title}\n_${meta}_\n\n${detail.body || ""}\n`;
   }, [detail, activeConnId, activeRow]);
 
-  const onSendToChat = useCallback(async () => {
+  const onReply = useCallback(async () => {
     if (!detail) return;
+    commitRead(true);
     const name = `${slugify(detail.title)}.md`;
     try {
       const meta = await invoke("save_text_file", { name, content: buildMarkdown(), dest: "temp" });
-      onSendToChatProp?.(detail.profile, activeConnId, { path: meta.path, name, size: meta.size, mime: "text/markdown" });
-      notify({ message: `Attached to @${profileLabel(detail.profile)}` });
+      onReplyProp?.(detail.profile, activeConnId, { path: meta.path, name, size: meta.size, mime: "text/markdown" });
       onClose?.();
     } catch (e) {
-      notify({ message: `Send to chat failed: ${e}`, variant: "error" });
+      notify({ message: `Reply failed: ${e}`, variant: "error" });
     }
-  }, [detail, activeConnId, buildMarkdown, onSendToChatProp, notify, onClose]);
+  }, [detail, activeConnId, buildMarkdown, onReplyProp, notify, onClose, commitRead]);
 
   const onDownload = useCallback(async () => {
     if (!detail) return;
@@ -293,17 +344,125 @@ export default function NotificationsModal({
     }
   }, [detail, buildMarkdown, notify]);
 
-  const onAction = useCallback(() => {
-    const action = contextAction(detail);
-    if (!action) return;
-    if (action.target.kind === "chat") {
-      onOpenChat?.(action.target.profile, action.target.sessionId);
-    }
+  const onOpenChatRow = useCallback(() => {
+    if (!detail?.session_id) return;
+    commitRead(true);
+    onOpenChat?.(detail.profile, detail.session_id, activeConnId);
     onClose?.();
-  }, [detail, onClose, onOpenChat]);
+  }, [detail, onClose, onOpenChat, activeConnId, commitRead]);
+
+  const onMarkUnread = useCallback(async () => {
+    if (!detail) return;
+    if (detailUnread) {
+      setHeldUnread(activeKey);
+      return;
+    }
+    if (!canMarkUnread) return;
+    const connKey = activeConnId ?? "local";
+    try {
+      await markUnread();
+      setReadIds((prev) => {
+        if (!prev.has(activeKey)) return prev;
+        const next = new Set(prev);
+        next.delete(activeKey);
+        return next;
+      });
+      setUnreadIds((prev) => new Set(prev).add(activeKey));
+      setHeldUnread(activeKey);
+    } catch (e) {
+      if (isMissingVerb(e)) setUnreadMissing((prev) => new Set(prev).add(connKey));
+      else notify({ message: `Mark unread failed: ${e}`, variant: "error" });
+    }
+  }, [detail, canMarkUnread, detailUnread, markUnread, activeKey, activeConnId, notify]);
+
+  const jobOf = (row) => (row?.job_id ? String(row.job_id) : null);
+
+  const [runningJob, setRunningJob] = useState(null);
+  const runningRef = useRef(false);
+  const onRunAgain = useCallback(async () => {
+    const jobId = jobOf(detail);
+    if (!jobId || runningRef.current) return;
+    runningRef.current = true;
+    setRunningJob(jobId);
+    try {
+      await invoke("schedule_fire", { profile: detail.profile, ...(activeConnId ? { connectionId: activeConnId } : {}), id: jobId });
+      notify({ message: "Running again", variant: "success", duration: 2000 });
+    } catch (e) {
+      notify({ message: `Run failed: ${e}`, variant: "error", duration: 4000 });
+    } finally {
+      runningRef.current = false;
+      setRunningJob(null);
+    }
+  }, [detail, activeConnId, notify]);
+
+  const canOpenJob = Boolean(onOpenJob && jobOf(detail) && (!activeConnectionId || activeConnId === activeConnectionId));
+  const onOpenJobRow = useCallback(() => {
+    const jobId = jobOf(detail);
+    if (!jobId) return;
+    commitRead(true);
+    onOpenJob?.(detail.profile, jobId);
+    onClose?.();
+  }, [detail, onOpenJob, onClose, commitRead]);
+
+  const focusRow = useCallback((row) => {
+    requestAnimationFrame(() => {
+      listRef.current?.querySelector(`[data-key="${CSS.escape(rowKey(row))}"]`)?.focus();
+    });
+  }, []);
+
+  const onListKey = useCallback((e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.repeat) {
+      if (e.key.length === 1 || e.key === "Backspace" || e.key === "Delete") e.preventDefault();
+      return;
+    }
+    if (e.target !== e.currentTarget && e.target.getAttribute?.("role") !== "option") return;
+    const filterKey = FILTERS.find((f) => f.key === e.key);
+    if (filterKey) setFilter(filterKey.id);
+    else if (e.key === "/") e.currentTarget.closest('[role="dialog"]')?.querySelector('input[type="text"]')?.focus();
+    else if (e.key === "r" || e.key === "R") onReply();
+    else if (e.key === "u" || e.key === "U") onMarkUnread();
+    else if ((e.key === "Backspace" || e.key === "Delete") && activeRow) {
+      const at = orderedRows.findIndex((r) => rowKey(r) === rowKey(activeRow));
+      const next = orderedRows[at + 1] ?? orderedRows[at - 1] ?? null;
+      onDeleteRow(activeRow);
+      if (next) {
+        onSelectRow(next);
+        focusRow(next);
+      }
+    } else return;
+    e.preventDefault();
+  }, [onReply, onMarkUnread, activeRow, orderedRows, onDeleteRow, onSelectRow, focusRow]);
+
+  const filters = visibleRows.length > 0 ? (
+    <div className={styles.filters}>
+      <div className={styles.filterRow} role="group" aria-label="Show">
+        {FILTERS.map((f) => (
+          <Button
+            key={f.id}
+            size="sm"
+            variant={filter === f.id ? "primary" : "ghost"}
+            aria-pressed={filter === f.id}
+            onClick={() => setFilter(f.id)}
+          >
+            {f.label}
+            <span className={styles.filterCount}>{counts[f.id]}</span>
+          </Button>
+        ))}
+      </div>
+    </div>
+  ) : null;
+
+  const keys = visibleRows.length > 0 ? (
+    <div className={styles.keys} aria-hidden="true">
+      {KEYS.map(([k, what]) => <span key={k} className={styles.keyItem}><Kbd>{k}</Kbd>{what}</span>)}
+    </div>
+  ) : null;
 
   const list = (
-    <ul className={styles.list} role="listbox">
+    <>
+    {filters}
+    <ul ref={listRef} className={styles.list} role="listbox" aria-label="Notifications" onKeyDown={onListKey}>
       {rows.length > 0 && unreachable.length > 0 && (
         <li className={styles.partial} role="presentation">
           {unreachableTitle(unreachable)}. Their notifications are missing from this list.
@@ -320,36 +479,37 @@ export default function NotificationsModal({
             Their notifications show up here once the daemon answers again.
           </span>
         </li>
-      ) : rows.length === 0 ? (
+      ) : visibleRows.length === 0 ? (
         <li className={styles.empty}>
           <span className={styles.emptyTitle}>{EMPTY.notifications.title}</span>
           <span className={styles.emptyHint}>{EMPTY.notifications.hint}</span>
         </li>
-      ) : filteredRows.length === 0 ? (
+      ) : shownRows.length === 0 ? (
         <li className={styles.empty}>
           <span className={styles.emptyTitle}>{EMPTY.matches.title}</span>
           <span className={styles.emptyHint}>{EMPTY.matches.hint}</span>
         </li>
       ) : (
-        grouped.map((group) => (
-          <Fragment key={group.label}>
-            <Eyebrow as="li" className={styles.groupHeader} role="presentation">{group.label}</Eyebrow>
-            {group.rows.map((row) => (
-              <NotificationRow
-                key={`${row.connectionId}:${row.profile}:${row.id}`}
-                row={row}
-                accent={row.accent}
-                multi={multi}
-                unread={row.status === "unread" && !readIds.has(rowKey(row))}
-                active={row.id === activeId && row.profile === activeProfile && row.connectionId === activeConnId}
-                onSelect={onSelectRow}
-                onDelete={onDeleteRow}
-              />
-            ))}
-          </Fragment>
-        ))
+        grouped.flatMap((group) => [
+          <Eyebrow key={`h:${group.id}`} as="li" className={styles.groupHeader} role="presentation">{group.label}</Eyebrow>,
+          ...group.rows.map((row) => (
+            <NotificationRow
+              key={rowKey(row)}
+              row={row}
+              accent={row.accent}
+              fold={row.fold}
+              multi={multi}
+              unread={isUnread(row)}
+              active={row.id === activeId && row.profile === activeProfile && row.connectionId === activeConnId}
+              onSelect={onSelectRow}
+              onDelete={onDeleteRow}
+            />
+          )),
+        ])
       )}
     </ul>
+    {keys}
+    </>
   );
 
   return (
@@ -368,14 +528,18 @@ export default function NotificationsModal({
         <DetailPane
           row={detail}
           accent={activeRow?.accent}
+          fold={activeRow?.fold}
           connId={activeConnId}
           connectionName={activeRow?.connectionName}
           voiceId={activeVoiceId}
           onCopy={onCopy}
-          onSendToChat={onSendToChat}
+          onReply={onReply}
           onDownload={onDownload}
-          onAction={onAction}
-          action={contextAction(detail)}
+          onOpenChat={detail.session_id ? onOpenChatRow : null}
+          onMarkUnread={canMarkUnread && !detailUnread ? onMarkUnread : null}
+          onRunAgain={jobOf(detail) ? onRunAgain : null}
+          running={runningJob !== null && runningJob === jobOf(detail)}
+          onOpenJob={canOpenJob ? onOpenJobRow : null}
         />
       ) : (
         <div className={styles.detailEmpty}>Select a notification.</div>
@@ -385,7 +549,7 @@ export default function NotificationsModal({
 }
 
 
-function NotificationRow({ row, accent, multi, unread, active, onSelect, onDelete }) {
+function NotificationRow({ row, accent, fold, multi, unread, active, onSelect, onDelete }) {
   const label = profileLabel(row.profile);
   const { title, preview } = headlineParts(row);
   const sev = typeTag(row);
@@ -397,18 +561,29 @@ function NotificationRow({ row, accent, multi, unread, active, onSelect, onDelet
     <li
       role="option"
       aria-selected={active}
+      tabIndex={0}
+      data-key={rowKey(row)}
       className={`${styles.row} ${active ? styles.rowActive : ""} ${unread ? styles.rowUnread : ""}`}
       onClick={() => onSelect?.(row)}
+      onFocus={(e) => { if (e.target === e.currentTarget) onSelect?.(row); }}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return;
+        e.preventDefault();
+        onSelect?.(row);
+      }}
     >
+      <span className={styles.rowGutter}>
+        {unread ? <span className={styles.unreadDot} role="img" aria-label="Unread" /> : null}
+      </span>
+      <span className={styles.rowFold}><Fold fold={fold} color={accent} /></span>
       <div className={styles.rowBody}>
         <div className={styles.rowMeta}>
           <span className={styles.rowMetaLead}>
-            <span className={styles.rowDiamond}><Diamond color={accent} /></span>
             <Mono className={styles.rowProfile}>@{label}</Mono>
             {multi && row.connectionName ? <Mono className={styles.rowConn}>· {row.connectionName}</Mono> : null}
           </span>
           <span className={styles.rowSlot}>
-            {sev ? <span className={`${styles.rowSev} ${sev === "error" ? styles.rowSevError : styles.rowSevWarning}`} aria-hidden /> : null}
+            {sev ? <span className={`${styles.rowSev} ${sev === "error" ? styles.rowSevError : styles.rowSevWarning}`}>{sev}</span> : null}
             <Mono className={styles.rowTs}>{notificationTime(row.created_at)}</Mono>
             <span className={styles.rowDelete}>
               <Tip text="Delete" side="up">
@@ -427,11 +602,13 @@ function NotificationRow({ row, accent, multi, unread, active, onSelect, onDelet
 }
 
 
-function DetailPane({ row, accent, connId, connectionName, voiceId, onCopy, onSendToChat, onDownload, onAction, action }) {
+function DetailPane({ row, accent, fold, connId, connectionName, voiceId, onCopy, onReply, onDownload, onOpenChat, onMarkUnread, onRunAgain, onOpenJob, running = false }) {
   const label = profileLabel(row.profile);
-  const tag = typeTag(row);
+  const failure = row.type === "error";
+  const tag = failure ? null : typeTag(row);
   const isHost = connId === "local";
   const externalDelivery = (row.delivered_to || []).filter((c) => c !== "alpi");
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const [ttsState, setTtsState] = useState(null);
   useEffect(() => subscribeTts(setTtsState), []);
@@ -441,12 +618,16 @@ function DetailPane({ row, accent, connId, connectionName, voiceId, onCopy, onSe
   const isLoading = ttsKind === "loading";
   const isPlaying = ttsKind === "playing";
   const ttsDisabled = (!online && !isPlaying) || !row.body;
-  const speakTip = !online && !isPlaying
+  const speakLabel = !online && !isPlaying
     ? "Offline — TTS unavailable"
-    : isLoading ? "Loading…" : isPlaying ? "Stop" : "Read aloud";
+    : isLoading ? "Loading…" : isPlaying ? "Stop reading" : "Read aloud";
   const onSpeak = () => {
     if (!row.body) return;
     playTts({ key: ttsKey, profile: row.profile, voice: voiceId ?? row.voice_id ?? VOICE_POOL[0], text: row.body, accent });
+  };
+  const run = (fn) => () => {
+    setMenuOpen(false);
+    fn?.();
   };
 
   return (
@@ -454,59 +635,73 @@ function DetailPane({ row, accent, connId, connectionName, voiceId, onCopy, onSe
       <div className={styles.detailMeta}>
         <span className={styles.detailMetaProfile}>
           {!isHost && connectionName ? <span className={styles.detailMetaConn}>{connectionName}/</span> : null}
-          <Diamond color={accent} />
+          <Fold fold={fold} color={accent} />
           <span className={styles.detailMetaName}>@{label}</span>
           <span className={styles.detailMetaDot}>·</span>
           <span className={styles.detailMetaDate}>{fmtAbsolute(row.created_at)}</span>
         </span>
         {tag ? <Chip state={tag === "error" ? "error" : "warn"} size="sm">{tag}</Chip> : null}
         <span className={styles.detailMetaSpacer} />
-        <Tip text={speakTip} side="l" escape>
-          <IconBtn aria-label={speakTip} disabled={ttsDisabled} onClick={onSpeak}>
-            {isLoading ? (
-              <DSSpinnerIcon />
-            ) : isPlaying ? (
-              <WaveBars accent={accent} active />
-            ) : (
-              <VolumeIcon />
-            )}
+        {isLoading || isPlaying ? (
+          <Tip text={speakLabel} side="l" escape>
+            <IconBtn aria-label={speakLabel} onClick={onSpeak}>
+              {isLoading ? <DSSpinnerIcon /> : <WaveBars accent={accent} active />}
+            </IconBtn>
+          </Tip>
+        ) : null}
+        <span className={styles.overflow}>
+          <IconBtn tip="More" tipSide="l" aria-label="More" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>
+            <Icon name="ellipsis" />
           </IconBtn>
-        </Tip>
-        <Tip text="Send to chat" side="l" escape>
-          <IconBtn aria-label="Send to chat" onClick={onSendToChat}>
-            <SendToChatIcon />
-          </IconBtn>
-        </Tip>
-        <Tip text="Download .md" side="l" escape>
-          <IconBtn aria-label="Download as markdown" onClick={onDownload}>
-            <DownloadIcon />
-          </IconBtn>
-        </Tip>
-        <Tip text="Copy" side="l" escape>
-          <IconBtn aria-label="Copy notification" onClick={onCopy}>
-            <CopyIcon />
-          </IconBtn>
-        </Tip>
+          <Popover open={menuOpen} onClose={() => setMenuOpen(false)} align="right" navigable role="menu">
+            <div className={styles.menu}>
+              <Button role="menuitem" fullWidth className={styles.menuItem} disabled={ttsDisabled} onClick={run(onSpeak)}>
+                <VolumeIcon className={styles.menuIcon} />
+                <span className={styles.menuLabel}>{speakLabel}</span>
+              </Button>
+              <Button role="menuitem" fullWidth className={styles.menuItem} onClick={run(onCopy)}>
+                <CopyIcon className={styles.menuIcon} />
+                <span className={styles.menuLabel}>Copy</span>
+              </Button>
+              <Button role="menuitem" fullWidth className={styles.menuItem} onClick={run(onDownload)}>
+                <DownloadIcon className={styles.menuIcon} />
+                <span className={styles.menuLabel}>Download .md</span>
+              </Button>
+            </div>
+          </Popover>
+        </span>
       </div>
 
-      {(row.title || "").trim() ? (
-        <h2 className={styles.detailTitle}>{row.title}</h2>
-      ) : null}
+      <div className={styles.actions}>
+        <Button variant={failure ? "secondary" : "primary"} onClick={onReply}>Reply</Button>
+        {onOpenChat ? <Button variant="secondary" onClick={onOpenChat}>Open chat</Button> : null}
+        {onOpenJob && !failure ? <Button variant="secondary" onClick={onOpenJob}>Open job</Button> : null}
+        {onMarkUnread ? <Button variant="ghost" onClick={onMarkUnread}>Mark unread</Button> : null}
+      </div>
 
-      <NotificationBody body={row.body || ""} lead={!(row.title || "").trim()} />
+      {failure ? (
+        <ErrorCard
+          title={(row.title || "").trim()}
+          body={row.body || ""}
+          actions={onRunAgain || onOpenJob ? (
+            <>
+              {onRunAgain ? <Button variant="primary" onClick={onRunAgain} disabled={running}>Run again</Button> : null}
+              {onOpenJob ? <Button variant="secondary" onClick={onOpenJob}>Open job</Button> : null}
+            </>
+          ) : null}
+        />
+      ) : (
+        <>
+          {(row.title || "").trim() ? (
+            <h2 className={styles.detailTitle}>{row.title}</h2>
+          ) : null}
+          <NotificationBody body={row.body || ""} lead={!(row.title || "").trim()} />
+        </>
+      )}
 
       {externalDelivery.length ? (
         <div className={styles.detailMetaSecondary}>
           <Mono>delivered: {externalDelivery.join(", ")}</Mono>
-        </div>
-      ) : null}
-
-      {action ? (
-        <div className={styles.actions}>
-          <Button variant="ghost" onClick={onAction}>
-            <GearIcon />
-            <span>{action.label}</span>
-          </Button>
         </div>
       ) : null}
     </article>

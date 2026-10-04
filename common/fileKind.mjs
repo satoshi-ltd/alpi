@@ -25,3 +25,17 @@ export function fmtSize(n) {
   if (n >= 1024) return `${(n / 1024).toFixed(0)} KB`;
   return `${n || 0} B`;
 }
+
+const DATA_EXT = new Set(["sqlite", "sqlite3", "db"]);
+const SKILL_CODE_EXT = new Set([...CODE_EXT, "toml", "ini", "cfg"]);
+
+export function skillFileIcon(node) {
+  if (node?.locked) return "lock";
+  if (node?.kind === "dir") return "folder";
+  const name = String(node?.name || "").toLowerCase();
+  const ext = name.includes(".") ? name.split(".").pop() : "";
+  if (DATA_EXT.has(ext)) return "database";
+  if (name === "skill.md" || TEXT_EXT.has(ext)) return "file-text";
+  if (SKILL_CODE_EXT.has(ext)) return "file-code";
+  return "file";
+}

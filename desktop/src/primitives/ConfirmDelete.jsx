@@ -1,14 +1,32 @@
 import Button from "./Button.jsx";
-import { useEffect, useState } from "react";
-import { useInsideOverlay } from "../hooks/useOverlay.js";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { useInsideOverlay, useOverlay } from "../hooks/useOverlay.js";
 import Modal from "./Modal.jsx";
 import Popover from "./Popover.jsx";
 import DialogFooter from "./DialogFooter.jsx";
 import { Field } from "./index.js";
 import styles from "./ConfirmDelete.module.css";
 
-export default function ConfirmDelete({
-  open,
+const SheetHost = createContext(null);
+
+export function ConfirmSheet({ children, flush = false, inset = "0px" }) {
+  const [request, setRequest] = useState(null);
+  const ref = useRef(null);
+  const close = useCallback(() => setRequest(null), []);
+  useOverlay({ open: !!request, onClose: close, ref, modal: true });
+  return (
+    <SheetHost.Provider value={setRequest}>
+      <div className={styles.hostContent} style={{ display: request ? "none" : "contents" }}>{children}</div>
+      {request && (
+        <div ref={ref} className={styles.hostContent}>
+          <ConfirmBody {...request} inModal={flush} inSheet={!flush} inset={inset} onClose={close} />
+        </div>
+      )}
+    </SheetHost.Provider>
+  );
+}
+
+function ConfirmBody({
   onClose,
   onConfirm,
   title,
@@ -16,23 +34,14 @@ export default function ConfirmDelete({
   confirmLabel = "Delete",
   cancelLabel = "Cancel",
   typeToConfirm,
-  anchored = true,
-  width,
+  inModal = false,
+  inSheet = false,
+  inset = "0px",
 }) {
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    if (!open) {
-      setTyped("");
-      setBusy(false);
-    }
-  }, [open]);
-
   const needsTyping = !!typeToConfirm;
-  // A modal body scrolls and clips, so an anchored popover inside any overlay becomes the centered dialog.
-  const asModal = !anchored || needsTyping || useInsideOverlay();
   const armed = needsTyping ? typed === typeToConfirm : true;
-  const resolvedWidth = width ?? (asModal ? "var(--pop-xl)" : "var(--pop-md)");
 
   async function confirm() {
     if (!armed || busy) return;
@@ -49,8 +58,8 @@ export default function ConfirmDelete({
     onClose?.();
   }
 
-  const body = (
-    <div className={`${styles.body} ${asModal ? styles.inModal : ""}`}>
+  return (
+    <div className={`${styles.body} ${inModal ? styles.inModal : ""} ${inSheet ? styles.inSheet : ""}`} role={inSheet || inModal ? "group" : undefined} aria-label={title} style={inSheet ? { "--sheet-inset": inset } : undefined}>
       <div className={styles.heading}>
         <div className={styles.title}>{title}</div>
         {consequence && <div className={styles.consequence}>{consequence}</div>}
@@ -84,10 +93,21 @@ export default function ConfirmDelete({
       />
     </div>
   );
+}
+
+export default function ConfirmDelete({ open, onClose, anchored = true, width, ...request }) {
+  const [round, setRound] = useState(0);
+  useEffect(() => {
+    if (!open) setRound((r) => r + 1);
+  }, [open]);
+  const insideOverlay = useInsideOverlay();
+  const asModal = !anchored || !!request.typeToConfirm || insideOverlay;
+  const resolvedWidth = width ?? (asModal ? "var(--pop-xl)" : "var(--pop-md)");
+  const body = <ConfirmBody key={round} {...request} onClose={onClose} inModal={asModal} />;
 
   if (asModal) {
     return (
-      <Modal open={open} onClose={onClose} width={resolvedWidth} aria-label={title}>
+      <Modal open={open} onClose={onClose} width={resolvedWidth} aria-label={request.title}>
         {body}
       </Modal>
     );
@@ -113,7 +133,9 @@ export function ConfirmDeleteAction({
   anchored = true,
 }) {
   const [open, setOpen] = useState(false);
+  const host = useContext(SheetHost);
   const Trigger = triggerVariant === "ghost" ? Button : "button";
+  const request = { title, consequence, typeToConfirm, confirmLabel, cancelLabel, onConfirm };
   const triggerClass =
     triggerVariant === "ghost"
       ? styles.triggerGhost
@@ -123,12 +145,12 @@ export function ConfirmDeleteAction({
       <Trigger
         type="button"
         className={triggerClass}
-        onClick={() => setOpen(true)}
+        onClick={() => (host ? host(request) : setOpen(true))}
         disabled={disabled || loading}
       >
         {loading ? "Working…" : label}
       </Trigger>
-      <ConfirmDelete
+      {!host && <ConfirmDelete
         anchored={anchored}
         open={open}
         onClose={() => setOpen(false)}
@@ -138,7 +160,7 @@ export function ConfirmDeleteAction({
         typeToConfirm={typeToConfirm}
         confirmLabel={confirmLabel}
         cancelLabel={cancelLabel}
-      />
+      />}
     </span>
   );
 }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Button,
   CheckIcon,
+  Fold,
   ChevDownIcon,
   Dot,
   Eyebrow,
@@ -73,6 +74,35 @@ function StatusGlyph({ status, color }) {
   return <Dot pulse color={color} />;
 }
 
+function PhaseTrigger({ phase }) {
+  const { chip, worker, count, line, idle } = phase;
+  if (!chip) {
+    return (
+      <span className={styles.phaseBody} data-phase-trigger="idle">
+        <span className={styles.phaseTop}>
+          <CheckIcon style={{ width: 13, height: 13, color: "var(--ink)" }} />
+          <span className={styles.phaseOwner}>{idle}</span>
+          <Mono className={`tnum ${styles.phaseCount}`}>{count}</Mono>
+        </span>
+      </span>
+    );
+  }
+  const name = chip.assignee ?? chip.owner;
+  return (
+    <span className={styles.phaseBody} data-phase-trigger={chip.state}>
+      <span className={styles.phaseTop}>
+        {name && (worker
+          ? <Fold fold={worker.fold} color={worker.accent} size={13} pulse={chip.state === "current"} />
+          : <Fold fold="diamond" size={13} unfolded />)}
+        <Mono className={styles.phaseSlug}>#{chip.slug}</Mono>
+        {name && <Mono className={styles.phaseOwner}>@{name}</Mono>}
+        <Mono className={`tnum ${styles.phaseCount}`}>{count}</Mono>
+      </span>
+      {line && <span className={chip.state === "blocked" ? styles.phaseLineBlocked : styles.phaseLine}>{line}</span>}
+    </span>
+  );
+}
+
 export default function TasksButton({
   thread = [],
   tasks: folded = null,
@@ -81,6 +111,7 @@ export default function TasksButton({
   openTick = 0,
   onJump,
   historyCapped = false,
+  phase = null,
 }) {
   const [open, setOpen] = useState(false);
   const mountedRef = useRef(false);
@@ -132,8 +163,10 @@ export default function TasksButton({
   return (
     <span className={styles.root}>
       <Tip text={tipText} side="r">
-        <Button variant="ghost" onClick={() => setOpen((o) => !o)} className={styles.trigger}>
-          {active ? (
+        <Button variant="ghost" onClick={() => setOpen((o) => !o)} className={`${styles.trigger} ${phase ? styles.phaseTrigger : ""}`.trim()}>
+          {phase ? (
+            <PhaseTrigger phase={phase} />
+          ) : active ? (
             <Dot pulse color={hubColor} />
           ) : outcome ? (
             <StatusGlyph
@@ -143,8 +176,8 @@ export default function TasksButton({
           ) : (
             <span className={styles.openRing} aria-hidden />
           )}
-          <span className={styles.triggerLabel}>{triggerLabel}</span>
-          {total > 0 && (
+          {!phase && <span className={styles.triggerLabel}>{triggerLabel}</span>}
+          {!phase && total > 0 && (
             <Mono className={`tnum ${styles.triggerCount}`}>
               {closedCount}/{total}
             </Mono>

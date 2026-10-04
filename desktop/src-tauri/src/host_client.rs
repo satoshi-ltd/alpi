@@ -499,6 +499,10 @@ fn is_revocation_error(err: &str) -> bool {
         && !err.contains("socket-identity-changed")
 }
 
+pub fn local_answers() -> bool {
+    call_local_inner("host.version", Value::Object(Default::default()), Duration::from_millis(PROBE_LOCAL_TIMEOUT_MS)).is_ok()
+}
+
 fn probe_timeout_for(conn: &HostConnection) -> Duration {
     match conn {
         HostConnection::Local { .. } => Duration::from_millis(PROBE_LOCAL_TIMEOUT_MS),

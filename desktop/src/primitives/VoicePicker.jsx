@@ -13,7 +13,7 @@ export default function VoicePicker({
   const selected = voices.find((v) => v.id === current) || null;
   return (
     <span className={styles.root}>
-      <Selectish onClick={() => setOpen((o) => !o)}>
+      <Selectish onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         {selected ? `${selected.name} · ${selected.desc}` : "—"}
       </Selectish>
       <Popover open={open} onClose={() => setOpen(false)} width="var(--pop-sm)" navigable role="listbox">

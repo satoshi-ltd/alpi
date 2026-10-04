@@ -5,7 +5,7 @@ import Eyebrow from "../../../primitives/Eyebrow.jsx";
 import useAutoPosition from "../../../primitives/useAutoPosition.js";
 import { useNotify } from "../../../primitives/Notification.jsx";
 import { useDismissOnOutside } from "../../../hooks/useDismissOnOutside.js";
-import { ConfirmDeleteAction, DialogFooter } from "../../../primitives/index.js";
+import { ConfirmDeleteAction, ConfirmSheet, DialogFooter } from "../../../primitives/index.js";
 import ProviderPickerForm, {
   applyProvider,
   defaultProviderValue,
@@ -52,11 +52,13 @@ export function AddProviderField({ profile, onSaved }) {
             visibility: pos.ready ? "visible" : "hidden",
           }}
         >
-          <ProviderEditor
-            profile={profile}
-            onClose={() => setOpen(false)}
-            onSaved={onSaved}
-          />
+          <ConfirmSheet inset="var(--space-5)">
+            <ProviderEditor
+              profile={profile}
+              onClose={() => setOpen(false)}
+              onSaved={onSaved}
+            />
+          </ConfirmSheet>
         </div>
       )}
     </span>

@@ -170,7 +170,13 @@ describe("process block typography", () => {
   const steps = read("ToolSteps.module.css");
   const reasoning = read("../primitives/Reasoning.module.css");
 
-  it.each([[steps, "head"], [steps, "bucket"], [reasoning, "row"]])("every row is a 22 px mono 12 px line", (css, sel) => {
+  it("leads the thinking row in sans at the same 22 px height, under the profile's object", () => {
+    const rule = block(reasoning, "row");
+    expect(rule).toMatch(/height: var\(--ctrl-xs\)/);
+    expect(rule).toMatch(/font-family: var\(--font-sans\)/);
+  });
+
+  it.each([[steps, "head"], [steps, "bucket"]])("every tool row is a 22 px mono 12 px line", (css, sel) => {
     const rule = block(css, sel);
     expect(rule).toMatch(/height: var\(--ctrl-xs\)/);
     expect(rule).toMatch(/font-family: var\(--font-mono\)/);
@@ -181,7 +187,7 @@ describe("process block typography", () => {
     expect(block(steps, "summary")).toMatch(/color: var\(--ink-3\)/);
     expect(block(steps, "status")).toMatch(/color: var\(--ink-3\)/);
     expect(block(steps, "name")).toMatch(/color: var\(--ink-2\)/);
-    expect(block(reasoning, "label")).toMatch(/color: var\(--ink-3\)/);
+    expect(block(reasoning, "label")).toMatch(/color: color-mix\(in srgb, var\(--c, var\(--ink-3\)\) 50%, var\(--ink\)\)/);
     const para = block(reasoning, "para");
     expect(para).toMatch(/font-family: var\(--font-mono\)/);
     expect(para).toMatch(/font-size: var\(--fs-sm\)/);
@@ -201,5 +207,13 @@ describe("process block typography", () => {
     expect(block(reasoning, "body")).toMatch(/margin: var\(--space-1\) 0 var\(--space-1\) calc\(var\(--space-6\) - var\(--space-4\)\)/);
     expect(block(steps, "bucketReveal")).toMatch(/margin: 0 calc\(-1 \* var\(--space-4\)\)/);
     expect(block(steps, "bucketList")).toMatch(/calc\(var\(--space-6\) \+ var\(--space-4\)\)/);
+  });
+});
+
+describe("ProcessBlock hands the profile to its reasoning", () => {
+  it("leads the thinking row with the profile's fold in its colour", () => {
+    render(<ProcessBlock entries={[{ kind: "reasoning", key: "r0", text: "plan", seconds: 3 }]} fold="shield" accent="#3899e2" />);
+    expect(document.querySelector("[data-fold]").dataset.fold).toBe("shield");
+    expect(document.querySelector("[data-fold] polygon").getAttribute("fill")).toBeTruthy();
   });
 });

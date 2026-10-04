@@ -2,19 +2,13 @@ import styles from "./ProfileMessage.module.css";
 
 export default function ProfileMessage({
   role = "assistant",   // "user" | "assistant"
-  accent,
   children,
   footer,
 }) {
   if (role === "user") {
     return (
       <div className={`msg-row ${styles.userRow}`}>
-        <div
-          className={styles.userBubble}
-          style={{
-            background: `color-mix(in srgb, ${accent || "var(--accent)"} 12%, var(--bg-pane))`,
-          }}
-        >
+        <div className={styles.userBubble}>
           {children}
         </div>
         {footer && <div className={styles.userFooter}>{footer}</div>}

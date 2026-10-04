@@ -53,6 +53,17 @@ beforeEach(() => {
 });
 
 describe("VersionButton", () => {
+  it("crowns the panel with the alpaca and a crease wordmark", () => {
+    const { container } = render(<VersionButton />);
+    fireEvent.click(screen.getByText("0.0.0"));
+    const mark = container.querySelector("[data-fold='alpaca']");
+    expect(mark.getAttribute("aria-hidden")).not.toBeNull();
+    expect(mark.style.getPropertyValue("--alp-d")).toBe("#f3efe6");
+    expect(mark.style.width).toBe("26px");
+    expect(screen.getByText("alpi").className).toMatch(/crease/);
+    expect(container.querySelector("[class*='brand']").style.getPropertyValue("--crease-l1")).toMatch(/^#[0-9a-f]{6}$/);
+  });
+
   it("offers the update and starts the install from the popover", () => {
     render(<VersionButton />);
     push({ available: true, version: "0.6.3" });

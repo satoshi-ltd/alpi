@@ -10,6 +10,7 @@ import KeyHint from "./KeyHint.jsx";
 import { fuzzyMatch, splitByRanges } from "../lib/fuzzy.js";
 import { canSelfUpdate, updateHint } from "../../../common/updateHint.mjs";
 import styles from "./Panels.module.css";
+import ConnectElsewhere from "./ConnectElsewhere.jsx";
 
 export function Scrim({ onClose, children, align = "flex-start", top = 96, dismissable = true }) {
   const ref = useRef(null);
@@ -54,21 +55,9 @@ export function ConnectionPanel({
   onPair,
   locked = false,
 }) {
-  const [pairing, setPairing] = useState("");
-  const [pairBusy, setPairBusy] = useState(false);
   const [renaming, setRenaming] = useState(null);
   const [forgetFor, setForgetFor] = useState(null);
   const renameCancelled = useRef(false);
-  async function submitPair() {
-    if (!pairing.startsWith("alpi://") || pairBusy) return;
-    setPairBusy(true);
-    try {
-      const ok = await onPair?.(pairing);
-      if (ok !== false) setPairing("");
-    } finally {
-      setPairBusy(false);
-    }
-  }
   function beginRename(r) {
     renameCancelled.current = false;
     setRenaming({ id: r.id, value: r.name });
@@ -233,30 +222,14 @@ export function ConnectionPanel({
 
         <div className={styles.pairFoot}>
           <div className={`row between ${styles.pairFootHead}`}>
-            <span className="eyebrow">Pair a new device</span>
+            <span className="eyebrow">Connect to another computer</span>
             <span className={styles.pairFootHint}>
               Paste an{" "}
               <code className={`mono ${styles.pairCode}`}>alpi://</code> link
               from another machine
             </span>
           </div>
-          <div className={`row row-gap ${styles.pairRow}`}>
-            <input
-              className={`field field-mono ${styles.pairInput}`}
-              value={pairing}
-              onChange={(e) => setPairing(e.target.value)}
-              placeholder="alpi://device?url=wss%3A%2F%2Fclient.example.com&name=home&pairing_token=…"
-            />
-            <Button
-              type="button"
-              variant="primary"
-          className={pairing.startsWith("alpi://") ? "" : styles.pairBtnDisabled}
-              disabled={!pairing.startsWith("alpi://") || pairBusy}
-              onClick={submitPair}
-            >
-              {pairBusy ? "Pairing…" : "Pair"}
-            </Button>
-          </div>
+          <ConnectElsewhere onConnect={async (link) => { await onPair?.(link); }} />
         </div>
       </PanelShell>
     </Scrim>
@@ -266,8 +239,10 @@ export function ConnectionPanel({
 export function paletteRows(groups, query) {
   const q = query.trim();
   const out = [];
-  for (const g of groups) {
-    if (g.searchOnly && !q) continue;
+  const ordered = q ? groups : [...groups.filter((g) => g.leadWhenIdle), ...groups.filter((g) => !g.leadWhenIdle)];
+  for (const g of ordered) {
+    const idle = !q && g.idle;
+    if (g.searchOnly && !q && !idle) continue;
     let items = g.items.map((it) => {
       if (!q) return { ...it, ranges: [], score: 0 };
       const hit = fuzzyMatch(it.label, q);
@@ -277,9 +252,10 @@ export function paletteRows(groups, query) {
       return { ...it, ranges: [], score: Math.max(...extra.map((x) => x.score)) - 400 };
     }).filter(Boolean);
     if (q) items.sort((a, b) => b.score - a.score);
-    if (g.limit) items = items.slice(0, g.limit);
+    const limit = idle ? idle.limit : g.limit;
+    if (limit) items = items.slice(0, limit);
     if (!items.length) continue;
-    out.push({ kind: "header", label: g.label });
+    out.push({ kind: "header", label: idle ? idle.label : g.label });
     for (const it of items) out.push({ kind: "item", ...it });
   }
   return out;

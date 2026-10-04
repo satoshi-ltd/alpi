@@ -1,8 +1,8 @@
-from gen import DANGER, DOC_ACCENT, diamond, ic, page
-from desktop_boards import (ALPI_ACCENT, AMBER, HOVER, INK, INK2, INK3, INK4, LINE, LINE2, MONO, PANE, SELECTED, SIDE, button, d_sidebar, diamond_stack, eyebrow, field_input,
+from gen import DANGER, DOC_ACCENT, diamond, ic, identity_glyph, page, profile_mark
+from desktop_boards import (ALPI_ACCENT, AMBER, HOVER, INK, INK2, INK3, INK4, LINE, LINE2, MONO, PANE, SELECTED, SIDE, button, d_sidebar, wg_mark, eyebrow, field_input,
                             iconbtn, kbd, key_hint, palette, palette_row, selectish, small_diamond)
 
-SHADOW = "0 0 0 0.5px rgba(11,17,23,0.08), 0 18px 50px rgba(11,17,23,0.10)"
+SHADOW = "0 0 0 0.5px rgba(20,20,20,0.14)"
 
 
 def panel(title, inner, w, h, bg=SIDE):
@@ -18,7 +18,7 @@ def raw_select(value, w=200):
 
 def native_select(value):
     return (f'<span style="display: inline-flex; align-items: center; gap: 18px; height: 22px; padding: 0 8px; border-radius: 5px; border: 1px solid #8f8f8f; '
-            f'background: linear-gradient(#ffffff, #ededed); font-family: -apple-system, system-ui, sans-serif; font-size: 13px; color: #000000">{value}{ic("chev-d", 10, "#000000")}</span>')
+            f'background: linear-gradient(#ffffff, #EDEDED); font-family: -apple-system, system-ui, sans-serif; font-size: 13px; color: #000000">{value}{ic("chev-d", 10, "#000000")}</span>')
 
 
 def dropdown_trigger(label):
@@ -26,8 +26,8 @@ def dropdown_trigger(label):
 
 
 def ds_field(value, w=200):
-    return (f'<span style="display: inline-flex; align-items: center; width: {w}px; height: 32px; padding: 0 12px; box-sizing: border-box; border-radius: 8px; '
-            f'background: #ffffff; border: 0.5px solid {LINE2}; font-size: 13px; color: {INK}">{value}</span>')
+    return (f'<span style="display: inline-flex; align-items: center; width: {w}px; height: 32px; padding: 0 12px; box-sizing: border-box; border-radius: 4px; '
+            f'background: rgba(20,20,20,0.04); font-size: 13px; color: {INK}">{value}</span>')
 
 
 def checkbox(on=False):
@@ -40,12 +40,13 @@ def label_row(label, control):
 
 
 def dialog_footer(primary, secondary="Cancel", variant="primary"):
-    return f'<div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px">{button(secondary, "ghost")}{button(primary, variant)}</div>'
+    return (f'<div style="display: flex; justify-content: flex-end; gap: 8px; margin: 10px -24px -24px; padding: 12px 24px; background: {SIDE}; box-shadow: inset 0 0.5px 0 {LINE}">'
+            f'{button(secondary, "ghost")}{button(primary, variant)}</div>')
 
 
 def modal(title, body, footer, w=520, x=40, y=28):
-    return (f'<div style="position: absolute; inset: 0; background: rgba(11,17,23,0.32)"></div>'
-            f'<div style="position: absolute; left: {x}px; top: {y}px; width: {w}px; box-sizing: border-box; border-radius: 14px; padding: 24px; background: {PANE}; '
+    return (f'<div style="position: absolute; inset: 0; background: color-mix(in srgb, #f0f0f0 72%, transparent)"></div>'
+            f'<div style="position: absolute; left: {x}px; top: {y}px; width: {w}px; box-sizing: border-box; border-radius: 4px; padding: 24px; overflow: hidden; background: {PANE}; '
             f'border: 0.5px solid {LINE2}; box-shadow: {SHADOW}; display: flex; flex-direction: column; gap: 8px">'
             f'<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px"><span style="font-size: 18px; font-weight: 600; letter-spacing: -0.005em; color: {INK}">{title}</span></div>'
             f'{body}{footer}</div>')
@@ -66,7 +67,7 @@ def edit_connection_panel():
 
 def dropdown_row(label, caption="", active=False):
     cap = f'<span style="font-family: {MONO}; font-size: 11px; color: {INK3}; margin-top: 4px">{caption}</span>' if caption else ""
-    return (f'<div style="display: flex; flex-direction: column; padding: 8px 10px; border-radius: 8px; background: {SELECTED if active else "transparent"}">'
+    return (f'<div style="display: flex; flex-direction: column; padding: 8px 10px; border-radius: 4px; background: {SELECTED if active else "transparent"}">'
             f'<span style="font-size: 13px; color: {INK}">{label}</span>{cap}</div>')
 
 
@@ -77,13 +78,13 @@ def dropdown_panel():
              f'<div style="display: flex; align-items: center; gap: 24px"><span style="width: 120px; font-family: {MONO}; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: {INK3}">Fast model</span>{model}{dropdown_trigger("medium")}</div>'
              f'<div style="display: flex; align-items: center; gap: 24px"><span style="width: 120px; font-family: {MONO}; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: {INK3}">Reasoning</span>'
              f'<div style="position: relative">{dropdown_trigger("medium")}'
-             f'<div style="position: absolute; left: 0; top: 38px; width: 280px; padding: 6px; box-sizing: border-box; border-radius: 12px; background: {PANE}; border: 0.5px solid {LINE2}; box-shadow: {SHADOW}">{menu}</div>'
+             f'<div style="position: absolute; left: 0; top: 38px; width: 280px; padding: 6px; box-sizing: border-box; border-radius: 4px; background: {PANE}; border: 0.5px solid {LINE2}; box-shadow: {SHADOW}">{menu}</div>'
              f'</div></div></div>')
     return panel("Dropdown field · open, current choice highlighted, beside a ModelPicker", inner, 600, 360)
 
 
 def menu_item(icon, label, danger=False, hint=""):
-    return (f'<div style="display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 6px; font-size: 13px; color: {DANGER if danger else INK}">'
+    return (f'<div style="display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 4px; font-size: 13px; color: {DANGER if danger else INK}">'
             f'{ic(icon, 14, DANGER if danger else INK3)}<span style="flex: 1">{label}</span>{key_hint(hint) if hint else ""}</div>')
 
 
@@ -92,10 +93,18 @@ def menu_sep():
 
 
 def context_menu_panel():
-    menu = (f'<div style="position: absolute; left: 130px; top: 150px; width: 210px; padding: 4px; box-sizing: border-box; border-radius: 10px; background: {PANE}; border: 0.5px solid {LINE2}; box-shadow: {SHADOW}">'
+    menu = (f'<div style="position: absolute; left: 130px; top: 150px; width: 210px; padding: 4px; box-sizing: border-box; border-radius: 4px; background: {PANE}; border: 0.5px solid {LINE2}; box-shadow: {SHADOW}">'
             f'{menu_item("pin", "Pin to top")}{menu_sep()}{menu_item("gear", "Open settings", hint="⌘,")}{menu_sep()}{menu_item("trash", "Delete workgroup…", danger=True)}</div>')
     inner = f'<div style="display: flex; height: 100%">{d_sidebar(300, selected="", wg_selected=True)}<div style="flex: 1; background: {PANE}"></div></div>{menu}'
-    return panel("Context menu · pin, settings, delete", inner, 356, 300)
+    return panel("Context menu · a workgroup row", inner, 356, 300)
+
+
+def profile_menu_panel():
+    menu = (f'<div style="position: absolute; left: 150px; top: 292px; width: 220px; padding: 4px; box-sizing: border-box; border-radius: 4px; background: {PANE}; border: 0.5px solid {LINE2}; box-shadow: {SHADOW}">'
+            f'{menu_item("plus", "New session", hint="⌘N")}{menu_sep()}{menu_item("pin", "Pin to top")}{menu_sep()}'
+            f'{menu_item("pause", "Pause profile")}{menu_item("gear", "Open settings", hint="⌘,")}{menu_sep()}{menu_item("trash", "Delete profile…", danger=True)}</div>')
+    inner = f'<div style="display: flex; height: 100%">{d_sidebar(520, selected="alpi")}<div style="flex: 1; background: {PANE}"></div></div>{menu}'
+    return panel("Context menu · a profile row: New session ⌘N on top", inner, 600, 520)
 
 
 def confirm_panel():
@@ -112,13 +121,13 @@ def ask_panel():
 
 
 def scrim_frame(title, shell, w, h, top=28):
-    inner = (f'<div style="position: absolute; inset: 0; background: {SIDE}"></div><div style="position: absolute; inset: 0; background: rgba(11,17,23,0.20)"></div>'
+    inner = (f'<div style="position: absolute; inset: 0; background: {SIDE}"></div><div style="position: absolute; inset: 0; background: rgba(20,20,20,0.20)"></div>'
              f'<div style="position: absolute; left: 0; right: 0; top: {top}px; display: flex; justify-content: center">{shell}</div>')
     return panel(title, inner, w, h)
 
 
 def shell(inner, w):
-    return (f'<div style="width: {w}px; border-radius: 14px; background: #ffffff; border: 0.5px solid {LINE2}; box-shadow: {SHADOW}; overflow: hidden; display: flex; flex-direction: column">{inner}</div>')
+    return (f'<div style="width: {w}px; border-radius: 4px; background: #ffffff; border: 0.5px solid {LINE2}; box-shadow: {SHADOW}; overflow: hidden; display: flex; flex-direction: column">{inner}</div>')
 
 
 def sheet_head(icon, title, keys, pad_left=16):
@@ -129,7 +138,7 @@ def sheet_head(icon, title, keys, pad_left=16):
 
 def activity_row(glyph, title, sub, tone=None, action=""):
     color = {"warning": "#b3470e", "danger": DANGER, "accent": ALPI_ACCENT}.get(tone, INK3)
-    return (f'<li style="display: flex; align-items: center; gap: 8px; padding-right: 8px; border-radius: 8px">'
+    return (f'<li style="display: flex; align-items: center; gap: 8px; padding-right: 8px; border-radius: 4px">'
             f'<span style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 8px 10px">'
             f'<span style="width: 16px; display: inline-flex; justify-content: center; flex-shrink: 0; color: {color}">{glyph(color)}</span>'
             f'<span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; color: {INK}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{title}</span>'
@@ -143,16 +152,15 @@ def activity_group(label, rows):
 
 def activity_panel_shell():
     review = button("Review", "primary", "sm")
-    icon = lambda name: lambda c: ic(name, 14, c)
     body = (activity_group("Needs you · 2", [
-                activity_row(icon("alert"), "abby · wants to run a command", "approval · 2m ago", "warning", review),
-                activity_row(icon("alert"), "doc · Which lab should I book with?", "question · just now", "warning", review)])
+                activity_row(lambda c: identity_glyph("abby", "#df4b9d", 16), "abby · wants to run a command", "approval · 2m ago", "warning", review),
+                activity_row(lambda c: identity_glyph("doc", DOC_ACCENT, 16), "doc · Which lab should I book with?", "question · just now", "warning", review)])
             + activity_group("Running · 2", [
-                activity_row(lambda c: diamond_stack(DOC_ACCENT), "alpha · #collect", "phase 3 of 4", "accent"),
-                activity_row(lambda c: small_diamond(AMBER, 8), "alpi · Summarize yesterday’s deploys", "4m", "accent")])
+                activity_row(lambda c: wg_mark(DOC_ACCENT), "alpha · #collect", "phase 3 of 4", "accent"),
+                activity_row(lambda c: identity_glyph("alpi", AMBER, 16), "alpi · Summarize yesterday’s deploys", "4m", "accent")])
             + activity_group("Scheduled", [
-                activity_row(icon("x"), "clonara · weekly labs", "failed 3h ago", "danger"),
-                activity_row(icon("clock"), "doc · Daily brief", "tomorrow 07:00")]))
+                activity_row(lambda c: identity_glyph("clonara", "#f05940", 16), "clonara · weekly labs", "failed 3h ago", "danger"),
+                activity_row(lambda c: identity_glyph("doc", DOC_ACCENT, 16), "doc · Daily brief", "tomorrow 07:00")]))
     return shell(sheet_head("role:activity", "Activity", "⌘J") + f'<div style="padding: 0 8px 12px">{body}</div>', 460)
 
 
@@ -175,19 +183,23 @@ def shortcuts_shell():
     return shell(sheet_head("", "Keyboard shortcuts", "⌘/", 20) + body, 620)
 
 
+RECENT_SESSIONS = (("Draft the Q3 incident review", "@doc · 3h"), ("Summarize yesterday’s deploys", "@alpi · 1d"), ("Reply to Lucy about the October shoot", "@abby · 2d"),
+                   ("Translate the letter from the bank", "@yuri · 4d"), ("Lipid panel review", "@doc · 5d"))
+
+
 def palette_idle():
     glyph = lambda name: ic(name, 14, INK3)
     return palette("", [
-        ("General", [palette_row(glyph("search"), "Command palette", hint="⌘K", selected=True), palette_row(glyph("more"), "Keyboard shortcuts", hint="⌘/"),
-                     palette_row(glyph("role:activity"), "Activity", hint="⌘J"), palette_row(glyph("search"), "Filter profiles &amp; workgroups", hint="⌘S")]),
-        ("Chat", [palette_row(glyph("plus"), "New session", hint="⌘N"), palette_row(glyph("search"), "Find in transcript", hint="⌘F"), palette_row(glyph("refresh"), "Refresh thread", hint="⇧⌘R")]),
+        ("Chat", [palette_row(glyph("plus"), "New session", hint="⌘N", selected=True), palette_row(glyph("search"), "Find in transcript", hint="⌘F")]),
+        ("Recent sessions", [palette_row(glyph("clock"), title, sub) for title, sub in RECENT_SESSIONS]),
+        ("General", [palette_row(glyph("search"), "Command palette", hint="⌘K")]),
     ])
 
 
 def palette_search():
     return palette("doc", [
-        ("Profiles", [palette_row(small_diamond(DOC_ACCENT, 8), "doc", "profile", "⌘1", selected=True, hit="doc")]),
-        ("Workgroups", [palette_row(diamond_stack(INK3), "alpha", "#doc", "⌘9")]),
+        ("Profiles", [palette_row(profile_mark(DOC_ACCENT), "doc", "profile", "⌘2", selected=True, hit="doc")]),
+        ("Workgroups", [palette_row(wg_mark(INK3), "alpha", "#doc", "⌘9")]),
         ("Sessions", [palette_row(ic("clock", 14, INK3), "Draft the doctor letter", "@doc · 2h", hit="doc"), palette_row(ic("clock", 14, INK3), "Lipid panel review", "@doc · 3d")]),
     ])
 
@@ -196,11 +208,12 @@ def desktop_overlays():
     body = (f'<div style="padding: 28px 32px; display: flex; flex-direction: column; gap: 24px; box-sizing: border-box">'
             f'<div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 22px; font-weight: 600; letter-spacing: -0.018em">Desktop overlays</span>'
             f'<span style="font-size: 13px; color: {INK3}; max-width: 900px; line-height: 1.5">Palette, Activity and shortcuts share one Scrim and PanelShell; shortcuts render as KeyHint chips everywhere. Modals, dropdowns and menus register on useOverlay so Escape, focus and layering behave the same.</span></div>'
-            f'<div style="display: flex; gap: 16px">{scrim_frame("Command palette ⌘K · commands with KeyHint chips", palette_idle(), 600, 400)}{scrim_frame("Command palette · a query searches profiles, workgroups and sessions", palette_search(), 600, 400)}</div>'
+            f'<div style="display: flex; gap: 16px">{scrim_frame("Command palette ⌘K · New session first, recent sessions below", palette_idle(), 600, 400)}{scrim_frame("Command palette · a query searches profiles, workgroups and sessions", palette_search(), 600, 400)}</div>'
             f'<div style="display: flex; gap: 16px">{scrim_frame("Activity ⌘J · needs you, running, scheduled", activity_panel_shell(), 520, 700)}{scrim_frame("Keyboard shortcuts ⌘/", shortcuts_shell(), 680, 700)}</div>'
             f'<div style="display: flex; gap: 16px">{edit_connection_panel()}{dropdown_panel()}</div>'
-            f'<div style="display: flex; gap: 14px">{context_menu_panel()}{confirm_panel()}{ask_panel()}</div></div>')
+            f'<div style="display: flex; gap: 16px">{profile_menu_panel()}{context_menu_panel()}</div>'
+            f'<div style="display: flex; gap: 14px">{confirm_panel()}{ask_panel()}</div></div>')
     return page("Desktop · overlays", 1280, OVERLAYS_H, body)
 
 
-OVERLAYS_H = 2090
+OVERLAYS_H = 2660

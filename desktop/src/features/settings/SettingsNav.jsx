@@ -3,7 +3,7 @@ import NavRow from "../../primitives/NavRow.jsx";
 import { SearchIcon } from "../../primitives/icons.jsx";
 import styles from "./Settings.module.css";
 
-const QueryCtx = createContext("");
+export const QueryCtx = createContext("");
 const SectionHitCtx = createContext(false);
 
 export const useSettingsQuery = () => useContext(QueryCtx);

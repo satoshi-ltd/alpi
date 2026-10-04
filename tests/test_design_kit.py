@@ -9,7 +9,7 @@ REPO = Path(__file__).resolve().parents[1]
 
 def test_design_kit_builds_every_page_from_the_shipped_tokens(tmp_path):
     subprocess.run([sys.executable, str(REPO / "design" / "build.py"), "--out", str(tmp_path)], check=True, capture_output=True)
-    pages = {name: (tmp_path / name).read_text() for name in ("index.html", "desktop.html", "mobile.html", "proposals.html")}
+    pages = {name: (tmp_path / name).read_text() for name in ("index.html", "desktop.html", "mobile.html", "brand.html", "proposals.html")}
     for html in pages.values():
         assert 'href="kit.css"' in html
         assert 'src="kit.js"' in html and 'data-kit-theme="dark"' in html
@@ -21,7 +21,7 @@ def test_design_kit_builds_every_page_from_the_shipped_tokens(tmp_path):
     versions = {name: json.loads((REPO / name / "package.json").read_text())["version"] for name in ("desktop", "mobile")}
     assert f"desktop {versions['desktop']} · mobile {versions['mobile']}" in pages["index.html"]
     index = json.loads((tmp_path / "canvas" / "project" / "canvas.json").read_text())
-    assert {p["id"] for p in index["pages"]} == {"system", "desktop", "mobile", "proposals"}
+    assert [p["id"] for p in index["pages"]] == ["brand", "system", "desktop", "mobile", "proposals"]
     assert all("page" in frame for frame in index["boards"].values())
 
 
@@ -29,7 +29,7 @@ def test_every_design_page_links_a_favicon_copied_inside_design(tmp_path):
     subprocess.run([sys.executable, str(REPO / "design" / "build.py"), "--out", str(tmp_path)], check=True, capture_output=True)
     source = (REPO / "site" / "assets" / "alpi-favicon.svg").read_bytes()
     pages = sorted(tmp_path.glob("*.html")) + sorted((tmp_path / "canvas" / "project").glob("*.html"))
-    assert len(list(tmp_path.glob("*.html"))) == 4 and len(pages) > 4
+    assert len(list(tmp_path.glob("*.html"))) == 5 and len(pages) > 5
     for page in pages:
         href = re.search(r'<link rel="icon" href="([^"]+)" type="image/svg\+xml">', page.read_text()).group(1)
         assert not href.startswith(("/", "http"))
@@ -46,9 +46,9 @@ def test_design_boards_follow_the_theme_except_the_literal_swatches(tmp_path):
     desktop = (tmp_path / "desktop.html").read_text()
     assert "var(--ink)" in desktop and "var(--bg-pane)" in desktop
     body = desktop.split('<main class="kit-main">', 1)[1]
-    assert "#0b1117" not in body and "#626e7d" not in body
+    assert "#141414" not in body and "#6b6b6b" not in body
     system = (tmp_path / "index.html").read_text()
-    assert "#0b1117" in system
+    assert "#141414" in system
     assert 'class="logo-dark"' in system and (tmp_path / "boards.css").read_text().count("var(--") >= 2
 
 
@@ -151,9 +151,74 @@ def test_design_has_no_open_work_tab(tmp_path):
     subprocess.run([sys.executable, str(REPO / "design" / "build.py"), "--out", str(tmp_path)], check=True, capture_output=True)
     assert not (tmp_path / "audit.html").exists()
     assert not (REPO / "design" / "audit.html").exists()
-    for name in ("index.html", "desktop.html", "mobile.html", "proposals.html"):
+    for name in ("index.html", "desktop.html", "mobile.html", "brand.html", "proposals.html"):
         nav = re.search(r"<nav[^>]*>(.*?)</nav>", (tmp_path / name).read_text(), re.S).group(1)
-        assert re.findall(r">([^<]+)</a>", nav) == ["System", "Desktop", "Mobile", "Proposals"]
+        assert re.findall(r">([^<]+)</a>", nav) == ["Brand", "System", "Desktop", "Mobile", "Proposals"]
+
+
+def test_brand_tab_draws_every_pair_from_the_shipped_accents_and_mark(tmp_path):
+    subprocess.run([sys.executable, str(REPO / "design" / "build.py"), "--out", str(tmp_path)], check=True, capture_output=True)
+    project = tmp_path / "canvas" / "project"
+    boards = json.loads((project / "canvas.json").read_text())["boards"]
+    brand = sorted(name for name, frame in boards.items() if frame["page"] == "brand")
+    assert brand == sorted(f"Brand-{n}.dc.html" for n in ("Mark", "Pairs", "Palette", "Motion"))
+    accents = re.findall(r'\["\w+", "(#[0-9a-f]{6})"\]', (REPO / "common" / "accents.mjs").read_text())
+    assert len(accents) == 12 and len(set(accents)) == 12
+    palette = (project / "Brand-Palette.dc.html").read_text()
+    assert all(hexv in palette for hexv in accents)
+    pairs = (project / "Brand-Pairs.dc.html").read_text()
+    assert all(f'aria-label="{name}"' in pairs for name in ("diamond", "house", "heart", "plane", "shield", "rocket", "star", "tree", "box", "crown", "feather", "bulb"))
+    source_facets = len(re.findall(r'<path d="', (REPO / "site" / "assets" / "alpi-black.svg").read_text()))
+    assert source_facets == 12 and (project / "Brand-Mark.dc.html").read_text().count('aria-label="alpaca"') >= 1
+    html = (tmp_path / "brand.html").read_text()
+    assert "#141414" not in html.split('<main class="kit-main">', 1)[1]
+    nav = re.search(r"<nav[^>]*>(.*?)</nav>", html, re.S).group(1)
+    assert nav.index("Brand") < nav.index("System") < nav.index("Proposals")
+
+
+def test_the_daemon_knows_exactly_the_folds_the_design_kit_draws():
+    sys.path.insert(0, str(REPO))
+    sys.path.insert(0, str(REPO / "design" / "src"))
+    import folds
+    from alpi import palette
+    assert list(palette.FOLDS) == list(folds.SHAPE_ORDER)
+
+
+def test_the_system_views_draw_their_sample_profiles_from_the_shipped_palette(tmp_path):
+    subprocess.run([sys.executable, str(REPO / "design" / "build.py"), "--out", str(tmp_path)], check=True, capture_output=True)
+    shipped = set(re.findall(r'\["\w+", "(#[0-9a-f]{6})"\]', (REPO / "common" / "accents.mjs").read_text()))
+    for name in ("desktop.html", "mobile.html"):
+        html = (tmp_path / name).read_text()
+        assert "#3d7ea6" not in html and "#3899e2" in html, name
+        assert "#3899e2" in shipped
+
+
+def test_the_brand_palette_is_the_one_in_common_accents():
+    sys.path.insert(0, str(REPO / "design" / "src"))
+    import folds
+    shipped = dict(re.findall(r'\["(\w+)", "(#[0-9a-f]{6})"\]', (REPO / "common" / "accents.mjs").read_text()))
+    assert dict(folds.palette("bath")) == shipped
+
+
+def test_every_brand_object_passes_the_origami_gate(tmp_path):
+    sys.path.insert(0, str(REPO / "design" / "src"))
+    import folds
+    assert set(folds.SHAPES) == set(folds.MODELS)
+    for name, make in folds.SHAPES.items():
+        shapes = folds.facets(name)
+        assert 2 <= len(shapes) <= folds.MAX_FACETS, name
+        pts = [p for poly, _ in shapes for p in poly]
+        w = max(p[0] for p in pts) - min(p[0] for p in pts)
+        h = max(p[1] for p in pts) - min(p[1] for p in pts)
+        assert min(w, h) / max(w, h) >= folds.MIN_ASPECT, name
+        assert {tone for _, tone in shapes} <= {folds.LIGHT, folds.BASE, folds.SHADE}, name
+        assert not folds.four_fold_chiral(name), name
+        assert folds.one_piece(name), name
+    subprocess.run([sys.executable, str(REPO / "design" / "build.py"), "--out", str(tmp_path)], check=True, capture_output=True)
+    for board in (tmp_path / "canvas" / "project").glob("Brand-*.dc.html"):
+        html = board.read_text()
+        assert "drop-shadow" not in html and "filter: blur" not in html, board.name
+        assert "<linearGradient" not in html and "<radialGradient" not in html, board.name
 
 
 def test_every_ui_task_has_a_board_on_the_proposals_page(tmp_path):

@@ -51,7 +51,7 @@
   align-items: center;
   gap: var(--space-3);
   padding-right: var(--space-3);
-  border-radius: var(--r-md);
+  border-radius: var(--r-xs);
 }
 
 .row:hover {
@@ -84,11 +84,6 @@ button.rowMain {
   color: var(--ink-3);
 }
 
-.glyph svg {
-  width: var(--icon-sm);
-  height: var(--icon-sm);
-}
-
 .glyph[data-tone="warning"] {
   color: var(--c-warning-text);
 }
@@ -98,7 +93,7 @@ button.rowMain {
 }
 
 .glyph[data-tone="accent"] {
-  color: var(--accent);
+  color: var(--c, var(--ink-2));
 }
 
 .text {
@@ -121,4 +116,12 @@ button.rowMain {
   font-family: var(--font-mono);
   font-size: var(--text-meta);
   color: var(--ink-3);
+}
+
+.sub[data-tone="warning"] {
+  color: var(--c-warning-text);
+}
+
+.sub[data-tone="danger"] {
+  color: var(--c-danger-text);
 }

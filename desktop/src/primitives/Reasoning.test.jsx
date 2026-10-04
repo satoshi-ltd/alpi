@@ -30,21 +30,21 @@ describe("Reasoning", () => {
     expect(status.textContent).toContain("Thinking…");
   });
 
-  it("the live row without a trace has no tinted bar and shows the same chevron as a settled row", () => {
-    render(<Reasoning text="" streaming />);
+  it("leads the live row with the profile's object rippling and no tinted bar", () => {
+    render(<Reasoning text="" streaming fold="shield" accent="#3899e2" />);
     const status = screen.getByRole("status");
     expect(status.className).toContain("rowStatic");
-    expect(status.className).not.toContain("rowLive");
-    expect(screen.getByText("Thinking…").className).toContain("shimmer");
-    const chevron = status.querySelector("svg");
-    expect(chevron.getAttribute("class")).toContain("chev");
-    expect(chevron.getAttribute("class")).not.toContain("chevIdle");
+    const object = status.querySelector("[data-fold]");
+    expect(object.dataset.fold).toBe("shield");
+    expect(object.querySelectorAll("polygon[class*='cell']").length).toBeGreaterThan(0);
+    expect(status.closest("[style]").style.getPropertyValue("--c")).toBe("#3899e2");
   });
 
-  it("a settled span with no text keeps its chevron slot hidden because there is nothing to toggle", () => {
-    render(<Reasoning text="" seconds={4} />);
-    const chevron = screen.getByText("Thought for 4s").parentElement.querySelector("svg");
-    expect(chevron.getAttribute("class")).toContain("chevIdle");
+  it("a settled span with no text shows the still object and no toggle", () => {
+    render(<Reasoning text="" seconds={4} fold="shield" accent="#3899e2" />);
+    const row = screen.getByText("Thought for 4s").parentElement;
+    expect(row.querySelector("polygon[class*='cell']")).toBeNull();
+    expect(row.querySelector("[class*='chev']")).toBeNull();
   });
 
   it("each row is named by its visible label and carries state in aria-expanded", () => {

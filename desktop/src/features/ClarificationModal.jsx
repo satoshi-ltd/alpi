@@ -113,6 +113,8 @@ export default function ClarificationModal({ requests, onResolved }) {
         />
       )}
 
+      {err ? <div className={styles.error}>{err}</div> : null}
+
       {mode === "multi" ? (
         <DialogFooter
           primaryLabel={picked.length > 0 ? `Continue · ${picked.length}` : "Continue"}
@@ -129,8 +131,6 @@ export default function ClarificationModal({ requests, onResolved }) {
           onPrimary={() => respond(current.choices[0].label)}
         />
       ) : null}
-
-      {err ? <div className={styles.error}>{err}</div> : null}
     </Modal>
   );
 }

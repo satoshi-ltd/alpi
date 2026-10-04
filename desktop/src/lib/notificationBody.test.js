@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { inlineSegments, parseNotificationBody } from "../../../common/notificationBody.mjs";
+import { errorParts, failedTitle, inlineSegments, parseNotificationBody } from "../../../common/notificationBody.mjs";
 import { INLINE_CORPUS, NOTIFICATION_CORPUS } from "../../../common/notificationBody.fixtures.mjs";
 
 describe("parseNotificationBody — labels & paragraphs", () => {
@@ -156,5 +156,70 @@ describe("real-world corpus", () => {
     expect(inlineSegments(text).map((s) => (s.t === "text" ? s.v : "")).join("").length)
       .toBeLessThanOrEqual(text.length);
     expect(inlineSegments(text).every((s) => typeof s.v === "string")).toBe(true);
+  });
+});
+
+describe("parseNotificationBody — digest entries and raw payloads", () => {
+  it("splits an item that opens with a bold name into name, meta and text", () => {
+    const [list] = parseNotificationBody("- **Ana Ruiz** <ana@example.com> — Can we move Friday?\n- **Bob** — Invoice");
+    expect(list.items.map((it) => it.entry)).toEqual([
+      { name: "Ana Ruiz", meta: "ana@example.com", text: "Can we move Friday?" },
+      { name: "Bob", meta: "", text: "Invoice" },
+    ]);
+  });
+
+  it("leaves labelled, status, ranked, prose and mixed lists as lists", () => {
+    const lists = [
+      "- **Status:** green\n- **Disk**: 80%",
+      "🔴 **Prod** down — 5xx\n🟢 **Stage** fine — ok",
+      "1. **Ana** — hi\n2. **Bob** — yo",
+      "- **Fixed** the login bug",
+      "- **Backup** completed in three minutes today — 2.1 GB copied",
+      "- **Ana** <ana@example.com> — hi\n- plain item",
+      "- **Tests** — green",
+      "- **Ana** *urgent* — hi\n- **Bob** `x` — yo",
+      "- **Ana** and **Bob** — met\n- **Cy** — hi",
+    ];
+    for (const body of lists) {
+      const [list] = parseNotificationBody(body);
+      expect(list.items.some((it) => it.entry), body).toBe(false);
+    }
+  });
+
+  it("reads a brace-delimited run of lines as code and an unclosed one as text", () => {
+    expect(parseNotificationBody("refresh failed (400)\n{\n  \"error\": \"invalid_grant\",\n  \"scopes\": [1]\n}\nexit 1")).toEqual([
+      { kind: "p", text: "refresh failed (400)" },
+      { kind: "code", text: "{\n  \"error\": \"invalid_grant\",\n  \"scopes\": [1]\n}" },
+      { kind: "p", text: "exit 1" },
+    ]);
+    expect(parseNotificationBody("see {\nno close").map((b) => b.kind)).toEqual(["p", "p"]);
+    expect(parseNotificationBody("## Section {\nx\n}").map((b) => b.kind)).toEqual(["heading", "p", "p"]);
+    expect(parseNotificationBody("Results [\n- one\n]").map((b) => b.kind)).toEqual(["p", "list", "p"]);
+    expect(parseNotificationBody("x {\n  \"a\": 1\n}. If revoked, run setup again.").map((b) => b.kind)).toEqual(["p", "p", "p"]);
+    expect(parseNotificationBody("**Payload:** {\n  \"a\": 1\n}")[0]).toEqual({ kind: "labelBody", label: "Payload", body: "{" });
+    expect(parseNotificationBody("call(x, {\n  \"a\": 1\n})").map((b) => b.kind)).toEqual(["code"]);
+    expect(parseNotificationBody("data {\n```\nraw\n```\n}").some((b) => b.kind === "code" && b.text.includes("```"))).toBe(false);
+  });
+});
+
+describe("error parts", () => {
+  it("splits a failure body into labelled facts, folded details and the rest", () => {
+    const parts = errorParts(parseNotificationBody("**Reason:** token revoked\n**Exit:** 1\n\nReconnect the account.\n\n```text\nTraceback\n```"));
+    expect(parts.facts.map((f) => f.label)).toEqual(["Reason", "Exit"]);
+    expect(parts.details).toEqual([{ kind: "code", text: "Traceback" }]);
+    expect(parts.rest).toEqual([{ kind: "p", text: "Reconnect the account." }]);
+  });
+
+  it("keeps an agent's own error body in order and folds only the code it ends with", () => {
+    const parts = errorParts(parseNotificationBody("Prod is down.\n\n**Impact:** checkout\n\n```\nkubectl rollout undo\n```\nThen retry."));
+    expect(parts.facts).toEqual([]);
+    expect(parts.details).toEqual([]);
+    expect(parts.rest.map((b) => b.kind)).toEqual(["p", "labelBody", "code", "p"]);
+  });
+
+  it("finds the word failed at the end of a title", () => {
+    expect(failedTitle("Daily mail digest failed")).toEqual({ lead: "Daily mail digest", failed: true });
+    expect(failedTitle("failed")).toEqual({ lead: "failed", failed: false });
+    expect(failedTitle("Backup")).toEqual({ lead: "Backup", failed: false });
   });
 });

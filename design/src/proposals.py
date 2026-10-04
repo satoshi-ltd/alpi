@@ -1,6 +1,7 @@
 from gen import ic, page
-from desktop_boards import AMBER, HOVER, INK, INK2, INK3, LINE2, PANE, MONO, SIDE, diamond_stack
+from desktop_boards import AMBER, HOVER, INK, INK2, INK3, LINE2, PANE, MONO, SIDE, wg_mark
 from conversation_boards import h1, label, mono, spec
+from loading_studies import loading_now, loading_proposed
 
 PAGE_W = 1280
 COLUMN_PAD = 20
@@ -34,7 +35,7 @@ def glass(inner, pad=14):
 
 
 def app_icon():
-    return f'<span style="width: 34px; height: 34px; border-radius: 8px; background: #fff; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">{diamond_stack(AMBER, 10)}</span>'
+    return f'<span style="width: 34px; height: 34px; border-radius: 8px; background: #fff; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">{wg_mark(AMBER, 16)}</span>'
 
 
 def push_banner(actions):
@@ -51,7 +52,7 @@ def push_banner(actions):
 
 def live_activity():
     seg = lambda on: f'<span style="flex: 1; height: 5px; border-radius: 999px; background: {AMBER if on else "rgba(255,255,255,0.25)"}"></span>'
-    top = (f'<div style="display: flex; align-items: center; gap: 10px">{diamond_stack(AMBER, 10)}<span style="flex: 1; font-size: 15px; font-weight: 600; color: #fff">alpha · #collect</span>'
+    top = (f'<div style="display: flex; align-items: center; gap: 10px">{wg_mark(AMBER, 16)}<span style="flex: 1; font-size: 15px; font-weight: 600; color: #fff">alpha · #collect</span>'
            f'<span style="font-family: {MONO}; font-size: 13px; color: #fff">4:12</span></div>')
     bar = f'<div style="display: flex; gap: 4px">{seg(True)}{seg(True)}{seg(False)}{seg(False)}</div>'
     foot = (f'<div style="display: flex; justify-content: space-between; font-family: {MONO}; font-size: 12px; color: rgba(255,255,255,0.7)"><span>phase 2 of 4</span><span>doc · alpi · yuri</span></div>')
@@ -71,7 +72,7 @@ def live_now():
                            f'<div style="flex: 1; display: flex; flex-direction: column; gap: 4px"><span style="font-weight: 500; font-size: 15px; color: {INK}">alpha · #collect</span>'
                            f'<span style="font-family: {MONO}; font-size: 12px; color: {INK3}">phase 2 of 4 · daily-digest</span></div></div>')
     banner = (f'<div style="width: 350px; box-sizing: border-box; padding: 12px; border-radius: 18px; background: {SIDE}; border: 0.5px solid {LINE2}; display: flex; flex-direction: column; gap: 10px">'
-              f'<div style="display: flex; gap: 10px; align-items: flex-start"><span style="width: 34px; height: 34px; border-radius: 8px; background: {PANE}; border: 0.5px solid {LINE2}; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">{diamond_stack(AMBER, 10)}</span>'
+              f'<div style="display: flex; gap: 10px; align-items: flex-start"><span style="width: 34px; height: 34px; border-radius: 8px; background: {PANE}; border: 0.5px solid {LINE2}; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">{wg_mark(AMBER, 16)}</span>'
               f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="display: flex; justify-content: space-between; font-size: 12px; color: {INK3}"><span>ALPI</span><span>now</span></span>'
               f'<span style="font-size: 14px; font-weight: 600; color: {INK}">remote-casa · abby · approval needed</span><span style="font-family: {MONO}; font-size: 12px; color: {INK2}">rm -rf dist &amp;&amp; npm run build</span></div></div>'
               f'<div style="display: flex; gap: 8px"><span style="flex: 1; text-align: center; padding: 9px 0; border-radius: 12px; background: {HOVER}; font-size: 14px; font-weight: 600; color: #b73737">Deny</span>'
@@ -100,7 +101,21 @@ PROPOSALS = [
         "accept": "A running workgroup shows as a Live Activity with its name and task, phase segments, elapsed time and the members working; an approval arrives as a push with the app closed, carrying Deny and Allow once as actions. Both draw in the light and dark lock screens and stay within the system's Live Activity height.",
         "h": 870,
     },
+    {
+        "id": "UI-LOADING",
+        "client": "desktop",
+        "area": "Every wait · spinners, the pipeline strip and lists, desktop and mobile",
+        "title": "Waiting looks like alpi, and the pipeline never waits for what it already knows",
+        "why": "Desktop waits four ways: <code>SpinnerIcon</code> (a line arc, in Send, attachments, read aloud and the workgroup’s “Loading flow…” chip), the <code>chipSpin</code> and <code>btnSpin</code> CSS arcs, and the bare word “Loading…” in the skill viewer and the email cell. Mobile uses the platform <code>ActivityIndicator</code> in 25 screens, centred on an empty page, so every list jumps when its rows land. None of them is alpi’s, although <code>folds.mjs</code> already gives every profile an object with three tones and the alpaca a busy cycle through the profile colours. The workgroup strip shows “Loading flow…” until <code>host.workgroup.tasks</code> answers, but the workgroup row already carries <code>pipelines</code>, <code>launch</code> and <code>phase_map</code>, so the chain and its owners are known before the run state. Recommendation: the alpaca busy cycle when nobody owns the wait, the owner’s object sweeping when a profile does, placeholder rows and chips in the shape of what will land, and the strip drawn from the row at once. Alternative: one shared spinner restyled in ink on both clients, which unifies the look but keeps the empty pages and the strip’s wait.",
+        "now": loading_now,
+        "proposed": loading_proposed,
+        "accept": "Shared: a <code>Busy</code> mark on both clients (the alpaca through the busy cycle, or a given fold sweeping its tones) built on the existing <code>Fold</code> components and <code>common/folds.mjs</code>, shown only after 300 ms, labelled “Loading” for screen readers, static with the word under reduced motion. Desktop: <code>SpinnerIcon</code>, the <code>Button</code> and <code>Chip</code> spinners and the <code>ChatPane</code> spinners become it at their current sizes; “Loading…” alone is gone; lists use <code>primitives/Skeleton</code> rows. Mobile: every <code>ActivityIndicator</code> becomes it and lists draw placeholder rows inside their cards. Workgroup strip: with one pipeline, or a cached run, the chain draws at once from the row with every phase pending and its owner, filled in place when the run arrives; otherwise the hub’s object sweeps beside placeholder chips; never the word. Tests cover the delay, reduced motion and the strip before and after the run on both clients; no green; light and dark match this board; the views are regenerated and the board is deleted.",
+        "h": 2140,
+    },
 ]
+
+
+
 
 
 def proposal_board(p):

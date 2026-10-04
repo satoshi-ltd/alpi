@@ -1,7 +1,7 @@
 import { useDismissOnOutside } from "../hooks/useDismissOnOutside.js";
 import Button from "../primitives/Button.jsx";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Dot, Tip, Mono, CheckIcon } from "../primitives/index.js";
+import { Dot, Fold, Tip, Mono, CheckIcon } from "../primitives/index.js";
 import {
   applyPendingUpdate,
   checkForUpdates,
@@ -9,10 +9,14 @@ import {
   quitForUpdate,
   subscribeUpdater,
 } from "../lib/updater.js";
+import Crease, { creaseInk, creaseVars } from "../primitives/Crease.jsx";
+import { ALPACA_FOLD } from "../../../common/folds.mjs";
 import styles from "./VersionButton.module.css";
 
 // eslint-disable-next-line no-undef
 const APP_VERSION = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
+
+const BRAND_VARS = creaseVars(null);
 
 export default function VersionButton() {
   const [state, setState] = useState({
@@ -62,6 +66,10 @@ export default function VersionButton() {
       </Tip>
       {open && (
         <div className={`anim-pop ${styles.popover}`}>
+          <div className={`${styles.brand} ${creaseInk}`} style={BRAND_VARS}>
+            <Fold fold={ALPACA_FOLD} size={26} />
+            <Crease text="alpi" accent={null} className={styles.brandMark} />
+          </div>
           <VersionPanel
             state={state}
             current={APP_VERSION}

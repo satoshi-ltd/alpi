@@ -1,7 +1,9 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { BrowseModal, Eyebrow } from "../primitives/index.js";
+import { Eyebrow } from "../primitives/index.js";
 import shell from "../primitives/BrowseModal.module.css";
+import { BrowseBody, BrowseShell } from "../primitives/BrowseModal.jsx";
+import { PROFILE_PANELS } from "../lib/profilePanels.js";
 import MarkdownBody from "../primitives/MarkdownBody.jsx";
 import styles from "./ToolsModal.module.css";
 import { EMPTY } from "../../../common/emptyCopy.mjs";
@@ -36,7 +38,7 @@ export function groupTools(tools, order) {
     .map((cat) => ({ cat, tools: byCat.get(cat) }));
 }
 
-export default function ToolsModal({ open, onClose, profile, connectionId }) {
+export function ToolsPanel({ open = true, profile, connectionId, owner = null, onSection = null }) {
   const [tools, setTools] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -115,9 +117,11 @@ export default function ToolsModal({ open, onClose, profile, connectionId }) {
   );
 
   return (
-    <BrowseModal
-      open={open}
-      onClose={onClose}
+    <BrowseBody
+      owner={owner}
+      sections={owner ? PROFILE_PANELS : null}
+      section="tools"
+      onSection={onSection}
       title="tools"
       count={tools.length}
       kicker="native callable functions"
@@ -133,7 +137,7 @@ export default function ToolsModal({ open, onClose, profile, connectionId }) {
       ) : (
         <div className={shell.detailEmpty}>Select a tool.</div>
       )}
-    </BrowseModal>
+    </BrowseBody>
   );
 }
 
@@ -156,7 +160,7 @@ function ToolDetail({ tool }) {
             Denied for this profile via <code>tools.deny</code> in <code>config.yaml</code>. The agent does not see this tool.
           </div>
         ) : null}
-        {tool.description ? <MarkdownBody source={tool.description} mono /> : null}
+        {tool.description ? <MarkdownBody source={tool.description} /> : null}
         {rows.length > 0 ? (
           <table className={styles.params}>
             <thead>
@@ -178,5 +182,13 @@ function ToolDetail({ tool }) {
         )}
       </div>
     </>
+  );
+}
+
+export default function ToolsModal({ open, onClose, ...panel }) {
+  return (
+    <BrowseShell open={open} onClose={onClose} label="Tools">
+      <ToolsPanel {...panel} />
+    </BrowseShell>
   );
 }

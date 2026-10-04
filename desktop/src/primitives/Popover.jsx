@@ -1,6 +1,7 @@
 import { OverlayScope, useOverlay } from "../hooks/useOverlay.js";
 import { navigateMenu } from "../lib/menuNavigation.js";
 import { useEffect, useRef } from "react";
+import { ConfirmSheet } from "./ConfirmDelete.jsx";
 
 // Action menus size to their content; forms and pickers pass a --pop-* token because inputs stretch to fill.
 export default function Popover({
@@ -60,14 +61,14 @@ export default function Popover({
           maxWidth: "min(var(--pop-lg), calc(100vw - 16px))",
           background: "var(--bg-elev)",
           border: ".5px solid var(--line-2)",
-          borderRadius: "var(--r-xl)",
+          borderRadius: "var(--r-xs)",
           boxShadow: "var(--shadow)",
           zIndex: 50,
           overflow: "hidden",
           ...style,
         }}
       >
-        {children}
+        <ConfirmSheet>{children}</ConfirmSheet>
       </div>
     </OverlayScope>
   );

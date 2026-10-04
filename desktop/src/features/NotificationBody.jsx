@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import Eyebrow from "../primitives/Eyebrow.jsx";
-import { inlineSegments, parseNotificationBody } from "../../../common/notificationBody.mjs";
+import Icon from "../primitives/Icon.jsx";
+import { errorParts, failedTitle, inlineSegments, parseNotificationBody } from "../../../common/notificationBody.mjs";
 import styles from "./NotificationBody.module.css";
 
 function Inline({ text }) {
@@ -44,8 +45,16 @@ function Block({ b }) {
   if (b.kind === "list") {
     const Tag = b.ordered ? "ol" : "ul";
     return (
-      <Tag className={styles.list}>
-        {b.items.map((it, j) => (
+      <Tag className={b.items.every((it) => it.entry) ? styles.entries : styles.list}>
+        {b.items.map((it, j) => it.entry ? (
+          <li key={j} className={styles.entry}>
+            <span className={styles.entryHead}>
+              <span className={styles.entryName}>{it.entry.name}</span>
+              {it.entry.meta ? <span className={styles.entryMeta}>{it.entry.meta}</span> : null}
+            </span>
+            {it.entry.text ? <span className={styles.entryText}><Inline text={it.entry.text} /></span> : null}
+          </li>
+        ) : (
           <li key={j} className={styles.item}>
             <span className={styles.marker} aria-hidden="true">{it.marker}</span>
             <span className={styles.itemText}><Inline text={it.text} /></span>
@@ -70,5 +79,39 @@ export default function NotificationBody({ body, lead = false, className = "" })
       {leadText != null ? <div className={styles.lead}><Inline text={leadText} /></div> : null}
       {blocks.map((b, i) => <Block key={i} b={b} />)}
     </div>
+  );
+}
+
+export function ErrorCard({ title, body, actions = null }) {
+  const { lead, failed } = failedTitle(title);
+  const { facts, details, rest } = errorParts(parseNotificationBody(body));
+  return (
+    <section className={styles.errorCard} aria-label={title || "Failure"}>
+      <h2 className={styles.errorHead}>
+        <Icon name="triangle-alert" size={14} color="var(--c-danger)" />
+        <span className={styles.errorTitle}>
+          {lead ? lead : <span className={styles.failed}>Failed</span>}
+          {failed ? <> <span className={styles.failed}>failed</span></> : null}
+        </span>
+      </h2>
+      {facts.length ? (
+        <dl className={styles.facts}>
+          {facts.map((f, i) => (
+            <div key={i} className={styles.fact}>
+              <dt className={styles.factLabel}>{f.label}</dt>
+              <dd className={styles.factValue}><Inline text={f.body} /></dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+      {rest.length ? <div className={styles.body}>{rest.map((b, i) => <Block key={i} b={b} />)}</div> : null}
+      {details.length ? (
+        <details className={styles.details}>
+          <summary className={styles.detailsSummary}>Details</summary>
+          {details.map((b, i) => <pre key={i} className={styles.detailsTrace}><code>{b.text}</code></pre>)}
+        </details>
+      ) : null}
+      {actions ? <div className={styles.errorActions}>{actions}</div> : null}
+    </section>
   );
 }

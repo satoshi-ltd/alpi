@@ -14,7 +14,7 @@ export default function DialogFooter({
   const hasPrimary = Boolean(primaryLabel);
   const secondaryLabel = cancelLabel || (hasPrimary ? "Cancel" : "Close");
   return (
-    <div className={styles.root}>
+    <div className={styles.root} data-dialog-footer>
       {leading && <span className={styles.leading}>{leading}</span>}
       {onCancel && (
         <Button variant="ghost" onClick={onCancel} disabled={primaryLoading}>

@@ -5,7 +5,7 @@
   width: 100%;
   height: var(--ctrl-sm);
   padding: 0 var(--space-4);
-  border-radius: var(--r-md);
+  border-radius: var(--r-xs);
   background: transparent;
   text-align: left;
   font-size: var(--text-ui);

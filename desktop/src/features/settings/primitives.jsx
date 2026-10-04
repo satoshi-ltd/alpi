@@ -33,10 +33,10 @@ export function Section({ title, tooltip, kicker, children }) {
   );
 }
 
-export function Row({ label, alignTop, hidden = false, children }) {
+export function Row({ label, keywords, alignTop, hidden = false, children }) {
   const query = useSettingsQuery();
   const titleHit = useSectionTitleHit();
-  const filtered = !!query && !titleHit && !settingsMatch(label, query);
+  const filtered = !!query && !titleHit && !settingsMatch(label, query) && !settingsMatch(keywords, query);
   return (
     <DSField label={label} align={alignTop ? "top" : "center"} hidden={hidden || filtered} searchable>
       {children}

@@ -1,4 +1,4 @@
-import { Fragment, memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { profileLabel } from "../lib/profile-display.js";
 import { useStickyScroll } from "../lib/useStickyScroll.js";
 import { useScrollProgress } from "../lib/useScrollProgress.js";
@@ -37,16 +37,17 @@ import {
   saveCachedMessages,
 } from "../lib/workgroup-cache.js";
 import { fetchWorkgroupTranscript } from "../lib/workgroup-fetch.js";
-import { WorkgroupChatHeader, TasksButton, Eyebrow, AlpiSilhouette, LoadFailed } from "../primitives/index.js";
+import { FOLD_SIZES, WORKGROUP_FOLD } from "../../../common/folds.mjs";
+import { liveChip, phaseCostLine, runChips, runProgress, sameName } from "../../../common/pipelinePhases.mjs";
+import PipelineStages from "../primitives/PipelineStages.jsx";
+import { WorkgroupChatHeader, TasksButton, Eyebrow, LoadFailed } from "../primitives/index.js";
 import { ChatLoadSkeleton } from "./ChatSkeletons.jsx";
 import { JumpToLatest, MarkerCard, MessageBubble } from "../primitives/index.js";
 import {
   Banner,
   Chip,
   CopyIcon,
-  Diamond,
-  Dot,
-  Icon,
+  Fold,
   IconBtn,
   Kbd,
   Mono,
@@ -180,6 +181,29 @@ export default function WorkgroupView({
   }, [blocked]);
   const run = taskState?.pipeline_run ?? null;
   const hostActive = taskState?.active ?? null;
+  const stripChips = useMemo(
+    () => runChips(run, workgroup.phase_map, hostActive),
+    [run, workgroup.phase_map, hostActive],
+  );
+  const profileOf = (name) => {
+    const p = (profiles ?? []).find((x) => sameName(x.name, name));
+    return p ? { fold: p.fold, accent: p.accent } : null;
+  };
+  const live = liveChip(stripChips);
+  const progress = runProgress(run);
+  const livePhase = progress
+    ? {
+      chip: live,
+      worker: live ? profileOf(live.assignee ?? live.owner) : null,
+      count: progress.label,
+      idle: run.status === "completed" ? `${run.pipeline} completed` : `${run.pipeline} · between phases`,
+      line: !live
+        ? ""
+        : live.state === "blocked"
+          ? ["blocked", blockedReason].filter(Boolean).join(" · ")
+          : hostActive?.slug === live.slug ? hostActive.title ?? "" : "",
+    }
+    : null;
   const foldedTasks = useMemo(() => tasksFromFold(taskState), [taskState]);
   // The local derivation only sees the loaded tail, so it is the fallback, never a second answer.
   const activeTask = useMemo(() => {
@@ -462,6 +486,7 @@ export default function WorkgroupView({
       <WorkgroupChatHeader
         workgroup={workgroup}
         hubAccent={ownerProfile?.accent}
+        hubFold={ownerProfile?.fold}
         hubName={hubName}
         hubBio={ownerProfile?.bio || ownerProfile?.public_bio}
         memberCount={members.length || workgroup.members || 0}
@@ -493,6 +518,7 @@ export default function WorkgroupView({
             thread={messages ?? []}
             tasks={foldedTasks}
             historyCapped={(taskState?.closed?.length ?? 0) >= FOLD_CLOSED_CAP}
+            phase={livePhase}
             hubColor={ownerProfile?.accent}
             hubPubkey={hubPubkey}
             openTick={taskHistoryOpenTick}
@@ -510,45 +536,17 @@ export default function WorkgroupView({
           <Chip size="sm" ghost icon={<SpinnerIcon />}>Loading flow…</Chip>
         </div>
       )}
-      {run && Array.isArray(run.phases) && run.phases.length > 0 && (
+      {run && stripChips.length > 0 && (
         <div className={styles.pipeline}>
           <Eyebrow className={styles.pipelineLabel}>pipeline · {run.pipeline}</Eyebrow>
-          {run.phases.map((p, i) => {
-            const state = phaseVisual(p, run.status);
-            const canJump = p.seq != null && loadedSeqs.has(p.seq);
-            const tip = canJump
-              ? [`Jump to #${p.slug}`, state === "current" ? hostActive?.title : null]
-                .filter(Boolean).join(" · ")
-              : phaseUnavailable(p);
-            return (
-              <Fragment key={p.slug}>
-                {i > 0 && <span className={styles.pipelineSep} aria-hidden>›</span>}
-                <span
-                  className={`${styles.phase} ${state === "skipped" ? styles.phaseSkipped : ""}`.trim()}
-                  data-phase={p.slug}
-                  data-phase-state={state}
-                  title={canJump ? undefined : tip}
-                  aria-disabled={canJump ? undefined : "true"}
-                >
-                  <Chip
-                    size="sm"
-                    ghost={state !== "blocked"}
-                    state={state === "blocked" ? "error" : undefined}
-                    icon={state === "pending" ? undefined : <PhaseIcon state={state} accent={ownerProfile?.accent} />}
-                    tooltip={canJump ? tip || undefined : undefined}
-                    onClick={canJump ? () => jumpToSeq(p.seq) : undefined}
-                    disabled={!canJump}
-                  >
-                    #{p.slug}
-                  </Chip>
-                </span>
-              </Fragment>
-            );
-          })}
-          {RUN_STATUS[run.status] && (
-            <Chip size="sm" state={RUN_STATUS[run.status]}>{runStatusText(run.status)}</Chip>
-          )}
-
+          <PipelineStages
+            chips={stripChips}
+            profileOf={profileOf}
+            onJump={(chip) => jumpToSeq(chip.seq)}
+            canJump={(chip) => chip.seq != null && loadedSeqs.has(chip.seq)}
+            detail={(chip, jumpable) => <PhaseDetail chip={chip} jumpable={jumpable} profileOf={profileOf} />}
+          />
+          {RUN_STATUS_TEXT[run.status] && <Mono className={styles.runStatus}>{RUN_STATUS_TEXT[run.status]}</Mono>}
         </div>
       )}
       {searchOpen && (
@@ -583,7 +581,7 @@ export default function WorkgroupView({
           <>
             {messages.length === 0 && (
               <div className={styles.empty}>
-                <AlpiSilhouette color={ownerProfile?.accent || "var(--accent)"} />
+                <Fold fold={WORKGROUP_FOLD} color={ownerProfile?.accent || "var(--accent)"} size={FOLD_SIZES.hero} />
                 <div className={styles.emptyHeading}>{EMPTY.posts.title}</div>
                 <div className={styles.emptyModel}>{postsHint(profileLabel(hubName))}</div>
               </div>
@@ -603,6 +601,7 @@ export default function WorkgroupView({
                       isFromHub={Boolean(hubPubkey && m.from_pubkey === hubPubkey)}
                       speakerName={speaker.name}
                       speakerAccent={speaker.accent}
+                      speakerFold={speaker.fold}
                       speakerBio={speaker.bio}
                       costTokens={cost?.tokens ?? 0}
                       costUsd={cost?.usd ?? 0}
@@ -630,6 +629,7 @@ export default function WorkgroupView({
         mentions={mentionsForWorkgroup(members, peers, profiles, ownPubkey)}
         hubName={hubName}
         hubAccent={ownerProfile?.accent}
+        hubFold={ownerProfile?.fold}
         onSend={async (text) => {
           const tempSeq = Date.now();
           const optimistic = {
@@ -722,28 +722,10 @@ function renderWgFooter({
   );
 }
 
-const PHASE_ICON = {
-  completed: { name: "check", color: "var(--c-success)" },
-  skipped: { name: "x", color: "var(--c-warning)" },
-  blocked: { name: "ban", color: "var(--c-danger)" },
-};
-
-const RUN_STATUS = {
-  blocked: "error",
-  completed: "on",
-  between: "off",
-};
-
 const RUN_STATUS_TEXT = {
-  running: "running",
   between: "between phases",
-  blocked: "blocked",
   completed: "completed",
 };
-
-function runStatusText(status) {
-  return RUN_STATUS_TEXT[status] ?? "unfinished";
-}
 
 function phaseUnavailable(phase) {
   if (phase.seq == null) {
@@ -752,19 +734,39 @@ function phaseUnavailable(phase) {
   return `#${phase.slug} opened at post #${phase.seq}, outside the loaded history`;
 }
 
-// A blocked run keeps its phase `current`; the strip shows that phase as the block.
-function phaseVisual(phase, status) {
-  return status === "blocked" && phase.state === "current" ? "blocked" : phase.state;
+const PHASE_WORD = { completed: "completed", current: "running", skipped: "skipped", blocked: "blocked", pending: "pending" };
+
+function PhaseWho({ name, profileOf, note }) {
+  const profile = profileOf(name);
+  return (
+    <span className={styles.phaseWho}>
+      {profile ? <Fold fold={profile.fold} color={profile.accent} size={13} /> : <Fold fold="diamond" size={13} unfolded />}
+      <span className={styles.phaseWhoName}>@{name}</span>
+      <span className={styles.phaseNote}>{note}</span>
+    </span>
+  );
 }
 
-function PhaseIcon({ state, accent }) {
-  if (state === "current") return <Dot pulse color={accent || "var(--accent)"} />;
-  const def = PHASE_ICON[state];
-  return def ? <Icon name={def.name} size="xs" color={def.color} /> : null;
+function PhaseDetail({ chip, jumpable, profileOf }) {
+  const cost = phaseCostLine(chip.cost);
+  return (
+    <span className={styles.phaseDetail}>
+      <span className={styles.phaseDetailHead}>
+        <Mono>#{chip.slug}</Mono>
+        <span className={styles.phaseNote}>{PHASE_WORD[chip.state] ?? chip.state}</span>
+        {chip.seq != null && <Mono className={styles.phaseNote}>post #{chip.seq}</Mono>}
+      </span>
+      {chip.owner && <PhaseWho name={chip.owner} profileOf={profileOf} note="declared owner" />}
+      {chip.assignee && <PhaseWho name={chip.assignee} profileOf={profileOf} note="assigned by the hub" />}
+      {chip.task && <span className={styles.phaseTask}>{chip.task}</span>}
+      {cost && <Mono className={styles.phaseNote}>{cost}</Mono>}
+      <span className={styles.phaseNote}>{jumpable ? "Click to jump to the post" : phaseUnavailable(chip)}</span>
+    </span>
+  );
 }
 
 function renderWgMeta({ seq, cost, speaker, isFromHub, styles }) {
-  const rawDiamond = <Diamond color={speaker.accent} />;
+  const rawDiamond = <Fold fold={speaker.fold} color={speaker.accent} />;
   const diamond = speaker.bio
     ? <Tip text={speaker.bio} side={isFromHub ? "up-r" : "up-l"}>{rawDiamond}</Tip>
     : rawDiamond;
@@ -801,6 +803,7 @@ const WgMessage = memo(function WgMessage({
   isFromHub,
   speakerName,
   speakerAccent,
+  speakerFold,
   speakerBio,
   costTokens,
   costUsd,
@@ -811,7 +814,7 @@ const WgMessage = memo(function WgMessage({
   voice,
   profile,
 }) {
-  const speaker = { name: speakerName, accent: speakerAccent, bio: speakerBio };
+  const speaker = { name: speakerName, accent: speakerAccent, fold: speakerFold, bio: speakerBio };
   const cls = classifyMessage(body);
   const task = cls.variant === "task" ? cls.task : null;
   const working = cls.variant === "working" ? { content: cls.text } : null;
@@ -897,12 +900,12 @@ function mentionsForWorkgroup(members, peers, profiles, ownPubkey) {
     const profile = profiles.find(
       (p) => p.pubkey_b64 === m.pubkey || p.name === id,
     );
-    out.push({ id, accent: profile?.accent ?? null });
+    out.push({ id, accent: profile?.accent ?? null, fold: profile?.fold });
   }
   return out;
 }
 
-function WorkgroupComposer({ paused, offline, mentions, onSend, hubName, hubAccent, draftKey }) {
+function WorkgroupComposer({ paused, offline, mentions, onSend, hubName, hubAccent, hubFold, draftKey }) {
   const [text, setText] = useState(() => getDraft(draftKey));
   useEffect(() => {
     setText(getDraft(draftKey));
@@ -944,7 +947,7 @@ function WorkgroupComposer({ paused, offline, mentions, onSend, hubName, hubAcce
     <>
       <span className={styles.metaGroup}>
         <span className={styles.hintArrow}>→</span>
-        <Diamond color={hubAccent} />
+        <Fold fold={hubFold} color={hubAccent} />
         <span>
           <Mono className={styles.hintMono}>@{profileLabel(hubName)}</Mono>
           {" formulates as "}

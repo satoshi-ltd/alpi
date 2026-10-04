@@ -65,13 +65,13 @@ export const ToolStep = memo(function ToolStep({ tool, accent, open: openProp, o
   const summary = toolSummary(tool);
   const argsText = prettyArgs(tool.args);
   const result = toolResult(tool);
-  const iconColor = status === "fail" ? "var(--c-danger)" : status === "running" ? (accent || "var(--accent)") : "var(--ink-3)";
+  const iconColor = status === "fail" ? "var(--c-danger)" : status === "running" ? (accent || "var(--ink-2)") : "var(--ink-3)";
   const statusText = status === "fail"
     ? (dur ? `failed · ${dur}` : "failed")
     : status === "running" ? `${dur ? `${dur} ` : ""}…` : dur;
 
   return (
-    <div className={`${styles.step} ${styles[`step_${status}`]}`}>
+    <div className={`${styles.step} ${styles[`step_${status}`]}`} style={accent ? { "--c": accent } : undefined}>
       <button
         type="button"
         className={`${styles.head} ${open ? styles.headOpen : ""}`}
@@ -118,7 +118,7 @@ export const ToolStep = memo(function ToolStep({ tool, accent, open: openProp, o
   );
 });
 
-export const ProcessBlock = memo(function ProcessBlock({ entries, accent, thinking = false, answered = false }) {
+export const ProcessBlock = memo(function ProcessBlock({ entries, accent, fold, thinking = false, answered = false }) {
   const [bucketChoice, setBucketChoice] = useState(null);
   const [overrides, setOverrides] = useState({});
   const setStep = useCallback((key, value) => setOverrides((prev) => ({ ...prev, [key]: value })), []);
@@ -139,6 +139,8 @@ export const ProcessBlock = memo(function ProcessBlock({ entries, accent, thinki
   ) : (
     <Reasoning
       key={e.key}
+      accent={accent}
+      fold={fold}
       text={e.text}
       seconds={e.seconds}
       timeline={e.timeline}

@@ -13,6 +13,14 @@ const INLINE_LABEL_COLON_IN = /^\*\*\s*([^*]+?)\s*:\s*\*\*\s+(\S.*)$/;
 const INLINE_LABEL_COLON_OUT = /^\*\*\s*([^*]+?)\s*\*\*\s*:\s+(\S.*)$/;
 const INLINE_MD = /(`([^`]+?)`|\*\*([^*]+?)\*\*|\*([^*]+?)\*)/g;
 const SEP_CELL = /^:?-+:?$/;
+const ENTRY = /^\*\*([^*]+?)\*\*\s*(.*)$/;
+const ENTRY_META_WORDS = 4;
+const DASH = /^(.*?)(?:^|\s)—\s+(.*)$/;
+const ANGLED = /<([^<>\s]+@[^<>\s]+)>/g;
+const OPENS = /[{[]/g;
+const CLOSES = /[}\]]/g;
+const CLOSER = /^\s*[}\]][)}\]]*[,;]?\s*$/;
+const FAILED = /^(.*\S)\s+failed$/;
 
 const wordCount = (s) => s.trim().split(/\s+/).filter(Boolean).length;
 
@@ -36,6 +44,22 @@ function labelBody(line) {
   return { kind: "labelBody", label, body: m[2] };
 }
 
+function entryOf(text) {
+  const m = text.match(ENTRY);
+  if (!m || /:\s*$/.test(m[1]) || /^:/.test(m[2])) return null;
+  const split = m[2].trim().match(DASH);
+  if (!split) return null;
+  const meta = split[1].replace(ANGLED, "$1").trim();
+  if (wordCount(meta) > ENTRY_META_WORDS || /[*`]/.test(meta)) return null;
+  return { name: m[1].trim(), meta, text: split[2].trim() };
+}
+
+function withEntries(items) {
+  if (items.length < 2 || items.some((it) => it.marker !== "•")) return items;
+  const entries = items.map((it) => entryOf(it.text));
+  return entries.every(Boolean) ? items.map((it, j) => ({ ...it, entry: entries[j] })) : items;
+}
+
 function listItem(line, ordered) {
   if (ordered) {
     const m = line.match(ORDERED);
@@ -45,6 +69,20 @@ function listItem(line, ordered) {
   if (p) return { marker: "•", text: p[1].trim() };
   const e = line.match(EMOJI_BULLET);
   return { marker: e[1], text: e[2].trim() };
+}
+
+const depth = (line) => (line.match(OPENS) || []).length - (line.match(CLOSES) || []).length;
+
+function bracedRunEnd(lines, start) {
+  const first = lines[start];
+  if (!/[{[]\s*$/.test(first) || depth(first) <= 0 || HEADING.test(first) || isListLine(first) || QUOTE.test(first) || /^\s*\*\*/.test(first)) return -1;
+  let level = 0;
+  for (let j = start; j < lines.length; j += 1) {
+    if (j > start && (isListLine(lines[j]) || HEADING.test(lines[j]) || FENCE.test(lines[j]))) return -1;
+    level += depth(lines[j]);
+    if (level <= 0) return CLOSER.test(lines[j]) ? j : -1;
+  }
+  return -1;
 }
 
 export function parseNotificationBody(body) {
@@ -63,6 +101,13 @@ export function parseNotificationBody(body) {
       continue;
     }
     if (!line.trim() || HR.test(line)) { i += 1; continue; }
+
+    const end = bracedRunEnd(lines, i);
+    if (end !== -1) {
+      blocks.push({ kind: "code", text: lines.slice(i, end + 1).join("\n") });
+      i = end + 1;
+      continue;
+    }
 
     let m = line.match(HEADING);
     if (m) {
@@ -91,7 +136,7 @@ export function parseNotificationBody(body) {
         items.push(listItem(cur, ordered));
         i += 1;
       }
-      blocks.push({ kind: "list", ordered, items });
+      blocks.push({ kind: "list", ordered, items: withEntries(items) });
       continue;
     }
 
@@ -135,4 +180,18 @@ export function inlineSegments(text) {
   }
   if (last < text.length) segs.push({ t: "text", v: text.slice(last) });
   return segs;
+}
+
+export function errorParts(blocks) {
+  let head = 0;
+  while (head < blocks.length && blocks[head].kind === "labelBody") head += 1;
+  let tail = blocks.length;
+  while (tail > head && blocks[tail - 1].kind === "code") tail -= 1;
+  return { facts: blocks.slice(0, head), rest: blocks.slice(head, tail), details: blocks.slice(tail) };
+}
+
+export function failedTitle(title) {
+  const text = String(title ?? "").trim();
+  const m = text.match(FAILED);
+  return m ? { lead: m[1], failed: true } : { lead: text, failed: false };
 }

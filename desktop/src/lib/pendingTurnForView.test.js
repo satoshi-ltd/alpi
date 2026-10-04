@@ -39,7 +39,11 @@ describe("pendingTurnForView", () => {
   it("shows a brand-new chat before session_start (no id yet, view still null)", () => {
     const t = turn({ sessionId: null, launchSessionId: null });
     expect(pendingTurnForView({ pendingTurns: map(t), view: profileView(null), activeProfileName: "muse" })).toBe(t);
-    expect(pendingTurnForView({ pendingTurns: map(t), view: { kind: "empty" }, activeProfileName: "muse" })).toBe(t);
+  });
+
+  it("frees the blank composer from a new chat detached before session_start", () => {
+    const t = turn({ sessionId: null, launchSessionId: "r" });
+    expect(pendingTurnForView({ pendingTurns: map(t), view: profileView(null), activeProfileName: "muse" })).toBeNull();
   });
 
   it("keeps a brand-new chat visible after session_start while the view lags the real id", () => {
@@ -58,9 +62,11 @@ describe("pendingTurnForView", () => {
     expect(pendingTurnForView({ pendingTurns: map(older, newer), view: profileView(null), activeProfileName: "muse" })).toBe(newer);
   });
 
-  it("does not leak a background session turn into the new-chat hero", () => {
-    const t = turn();
-    expect(pendingTurnForView({ pendingTurns: map(t), view: { kind: "empty" }, activeProfileName: "muse" })).toBeNull();
+  it("shows no turn outside a profile's conversation, not even a brand-new chat of the profile in Settings", () => {
+    const fresh = turn({ requestId: "fresh", sessionId: null, launchSessionId: null });
+    for (const view of [{ kind: "settings" }, { kind: "landing" }, { kind: "workgroups" }]) {
+      expect(pendingTurnForView({ pendingTurns: map(turn(), fresh), view, activeProfileName: "muse" })).toBeNull();
+    }
   });
 
   it("ignores a turn from another profile", () => {

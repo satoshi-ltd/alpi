@@ -173,7 +173,21 @@ describe("useHostConnections.onSetHostConnection", () => {
     expect(clearTurnsForConnection).not.toHaveBeenCalled();
   });
 
-  it("resets pickerAlpi on switch so the new connection's default wins even when both share a profile name", async () => {
+  it("shows the default profile of an older daemon as the alpaca", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("local");
+      if (cmd === "profile_summaries") return [{ name: "default", model: "a/b", is_default: true, fold: "diamond", accent: null }, { name: "doc", model: "a/b", fold: "shield", accent: "#3899e2" }];
+      if (cmd === "workgroups") return [];
+      return null;
+    });
+
+    const { result } = renderHostConnections();
+    await waitFor(() => expect(result.current.profiles).toHaveLength(2));
+    expect(result.current.profiles[0]).toMatchObject({ fold: "alpaca", accent: "var(--accent)" });
+    expect(result.current.profiles[1]).toMatchObject({ fold: "shield", accent: "#3899e2" });
+  });
+
+  it("sends the view to the landing on switch, with the new connection's roster already painted from cache", async () => {
     invoke.mockImplementation(async (cmd) => {
       if (cmd === "host_connections") return makeConnections("local");
       if (cmd === "profile_summaries") return [{ name: "doc", model: "a/b", is_default: true }];
@@ -182,20 +196,25 @@ describe("useHostConnections.onSetHostConnection", () => {
       return null;
     });
 
-    const { result } = renderHostConnections();
-    await waitFor(() => expect(result.current.pickerAlpi).toBe("doc"));
+    const { result, setView } = renderHostConnections();
+    await waitFor(() => expect(result.current.profiles).toHaveLength(1));
 
     setProfileCache("remote", [
       { name: "doc", model: "x/y", is_default: false },
       { name: "mirai", model: "x/z", is_default: true },
     ]);
+    setView.mockClear();
 
     act(() => {
       result.current.onSetHostConnection("remote");
     });
 
     expect(result.current.hostConnectionsRef.current.active_id).toBe("remote");
-    expect(result.current.pickerAlpi).toBe("mirai");
+    expect(result.current.profiles.map((p) => p.name)).toEqual(["doc", "mirai"]);
+    const updater = setView.mock.calls[0][0];
+    expect(updater({ kind: "profile", profile: "doc", sessionId: "s1" })).toEqual({ kind: "landing" });
+    expect(updater({ kind: "workgroup", profile: "doc", id: "crew" })).toEqual({ kind: "landing" });
+    expect(updater({ kind: "settings" })).toEqual({ kind: "settings" });
   });
 
   it("notifies and falls back to the previous connection when activating a revoked one fails", async () => {

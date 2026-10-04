@@ -32,7 +32,7 @@ const BASE = {
     { profile: "doc", id: "webfactory", name: "webfactory", mtime: TS },
     { profile: "doc", id: "roma", name: "roma", mtime: TS },
   ],
-  view: { kind: "empty" },
+  view: { kind: "landing" },
   hostConnections: { active_id: "remote", connections: [] },
 };
 

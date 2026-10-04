@@ -31,7 +31,7 @@ describe("useNavListener", () => {
     expect(setView).toHaveBeenCalledWith({ kind: "settings" });
   });
 
-  it('payload "home" leaves view alone when not in settings', async () => {
+  it('payload "home" leaves view alone when not in settings and lands on the roster from settings', async () => {
     const setView = vi.fn();
     renderHook(() => useNavListener(setView));
     await Promise.resolve();
@@ -39,7 +39,7 @@ describe("useNavListener", () => {
     expect(setView).toHaveBeenCalledTimes(1);
     const updater = setView.mock.calls[0][0];
     expect(updater({ kind: "chat" })).toEqual({ kind: "chat" });
-    expect(updater({ kind: "settings" })).toEqual({ kind: "empty" });
+    expect(updater({ kind: "settings" })).toEqual({ kind: "landing" });
   });
 
   it("ignores unknown payloads (forward-compat)", async () => {

@@ -1,3 +1,4 @@
+import { BRAND_INK } from "../../../common/folds.mjs";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -164,12 +165,11 @@ describe("accent palette", () => {
     for (const name of names) expect(name).toMatch(/^[a-z]+$/);
   });
 
-  it("keeps the --accent default inside the choosable set", () => {
-    // The swatch is the dark-mode value; :root carries its darkened pair, which has to
-    // clear contrast on a light ground and so is deliberately not a choosable swatch.
+  it("keeps --accent tied to the brand ink of each theme", () => {
     for (const body of [DARK_MEDIA, DARK_TOGGLE]) {
-      expect(ACCENT_HEXES).toContain(normalizeColor(colorVars(body).accent));
+      expect(normalizeColor(colorVars(body).accent)).toBe(BRAND_INK.dark);
     }
+    expect(normalizeColor(colorVars(ROOT).accent)).toBe(BRAND_INK.light);
   });
 
   it("darkens the light-mode accent rather than letting the two drift apart", () => {

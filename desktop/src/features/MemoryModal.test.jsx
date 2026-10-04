@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
+import { createRoot } from "react-dom/client";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("../primitives/Notification.jsx", () => ({ useNotify: () => () => {} }));
@@ -37,7 +38,7 @@ describe("matchesFile", () => {
 });
 
 describe("MemoryModal budget %", () => {
-  it("renders each file's percentage from memory_usage", async () => {
+  it("renders each file's use against its limit from memory_usage", async () => {
     invoke.mockImplementation((cmd) => {
       if (cmd === "profile_memory") {
         return Promise.resolve({ "AGENT.md": "hi", "MEMORY.md": "", "USER.md": "" });
@@ -52,7 +53,27 @@ describe("MemoryModal budget %", () => {
       return Promise.resolve(null);
     });
     render(<MemoryModal open profile="doc" connectionId={null} canEdit />);
-    await waitFor(() => expect(screen.getByText("50%")).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText("4,000 / 8,000").length).toBeGreaterThan(0));
+    expect(screen.getAllByText("Identity").length).toBeGreaterThan(0);
+    expect(screen.getByText("Learned")).toBeTruthy();
+    expect(screen.getByText("About you")).toBeTruthy();
+  });
+
+  it("splits a file into its entries and says when each was captured and reinforced", async () => {
+    const raw = "Fact one.\n<!-- alpi-meta conf=normal captured=2026-09-28 reinforced=3 -->\n§\nFact two.\n<!-- alpi-meta conf=low captured=2026-10-02 reinforced=0 -->";
+    invoke.mockImplementation((cmd) =>
+      cmd === "profile_memory"
+        ? Promise.resolve({ "AGENT.md": raw, "MEMORY.md": "", "USER.md": "" })
+        : Promise.resolve(null),
+    );
+    render(<MemoryModal open profile="scout" connectionId={null} owner={{ name: "scout", fold: "house", accent: "#c42" }} />);
+    await waitFor(() => expect(screen.getByText("Fact one.")).toBeTruthy());
+    expect(screen.getByText("Fact two.")).toBeTruthy();
+    expect(screen.getByText("captured Sep 28 · reinforced ×3")).toBeTruthy();
+    expect(screen.getByText("captured Oct 2 · low confidence")).toBeTruthy();
+    expect(screen.getByText("who scout is")).toBeTruthy();
+    expect(document.body.textContent).not.toContain("alpi-meta");
+    expect(document.body.textContent).not.toContain("§");
   });
 
   it("hides the Edit action for members (no canEdit)", async () => {
@@ -106,6 +127,25 @@ describe("MemoryModal edit", () => {
     expect(screen.getByLabelText("Edit AGENT.md").value).toBe("my precious draft");
   });
 
+  it("confirms before switching to a sibling panel while the edit is dirty", async () => {
+    mockLoad();
+    const onSection = vi.fn();
+    render(<MemoryModal open profile="doc" connectionId={null} canEdit owner={{ name: "doc", fold: "house", accent: "#cc4422" }} onSection={onSection} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Edit" })).toBeTruthy());
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Edit" })); });
+    fireEvent.change(await screen.findByLabelText("Edit AGENT.md"), { target: { value: "dirty draft" } });
+
+    const confirmSpy = vi.spyOn(globalThis, "confirm").mockReturnValue(false);
+    fireEvent.click(screen.getByRole("tab", { name: "Skills" }));
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(onSection).not.toHaveBeenCalled();
+
+    confirmSpy.mockReturnValue(true);
+    fireEvent.click(screen.getByRole("tab", { name: "Skills" }));
+    expect(onSection).toHaveBeenCalledWith("skills");
+    confirmSpy.mockRestore();
+  });
+
   it("confirms before closing while the edit is dirty and honours the choice", async () => {
     mockLoad();
     const onClose = vi.fn();
@@ -137,5 +177,67 @@ describe("MemoryModal edit", () => {
     await waitFor(() =>
       expect(invoke.mock.calls.filter((c) => c[0] === "profile_memory").length).toBe(before + 1),
     );
+  });
+});
+
+describe("MemoryModal edit right after the list loads", () => {
+  it("keeps the editor open when Edit is pressed before the selection effects run", async () => {
+    invoke.mockImplementation((cmd) => {
+      if (cmd === "profile_memory") return Promise.resolve({ "AGENT.md": "old body", "MEMORY.md": "", "USER.md": "" });
+      if (cmd === "memory_read") return Promise.resolve({ text: "old body full", rev: "r1" });
+      return Promise.resolve(null);
+    });
+    const actEnv = globalThis.IS_REACT_ACT_ENVIRONMENT;
+    globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    let watch;
+    try {
+      const pressed = new Promise((resolve, reject) => {
+        watch = new MutationObserver(() => {
+          const edit = document.querySelector('button[aria-label="Edit"]');
+          if (!edit) return;
+          watch.disconnect();
+          edit.click();
+          resolve();
+        });
+        watch.observe(document.body, { childList: true, subtree: true });
+        setTimeout(() => reject(new Error("Edit never appeared")), 3000);
+      });
+      root.render(<MemoryModal open profile="doc" connectionId={null} canEdit />);
+      await pressed;
+      await new Promise((r) => setTimeout(r, 200));
+      expect(document.querySelector('[aria-label="Edit AGENT.md"]')).not.toBeNull();
+    } finally {
+      watch?.disconnect();
+      root.unmount();
+      host.remove();
+      globalThis.IS_REACT_ACT_ENVIRONMENT = actEnv;
+    }
+  });
+
+  it("asks before switching file with a dirty edit, and drops the edit when it switches", async () => {
+    invoke.mockImplementation((cmd) => {
+      if (cmd === "profile_memory") return Promise.resolve({ "AGENT.md": "old body", "MEMORY.md": "learned", "USER.md": "" });
+      if (cmd === "memory_read") return Promise.resolve({ text: "old body full", rev: "r1" });
+      return Promise.resolve(null);
+    });
+    render(<MemoryModal open profile="doc" connectionId={null} canEdit />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Edit" })).toBeTruthy());
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Edit" })); });
+    fireEvent.change(await screen.findByLabelText("Edit AGENT.md"), { target: { value: "draft" } });
+    const learned = screen.getByRole("option", { name: /Learned/ });
+
+    const confirm = vi.spyOn(globalThis, "confirm").mockReturnValue(false);
+    fireEvent.click(learned);
+    expect(screen.getByLabelText("Edit AGENT.md").value).toBe("draft");
+
+    confirm.mockReturnValue(true);
+    fireEvent.click(learned);
+    await waitFor(() => expect(screen.queryByLabelText("Edit AGENT.md")).toBeNull());
+    fireEvent.click(screen.getByRole("option", { name: /Identity/ }));
+    expect(screen.queryByLabelText("Edit AGENT.md")).toBeNull();
+    confirm.mockRestore();
   });
 });

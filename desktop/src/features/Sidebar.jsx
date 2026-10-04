@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ConnectionSwitcher from "./ConnectionSwitcher.jsx";
 import VersionButton from "./VersionButton.jsx";
 import { ActionLink, SidebarRow, SectionLabel, ContextMenu } from "../primitives/index.js";
+import { WORKGROUP_FOLD } from "../../../common/folds.mjs";
 import { shortcutKeys } from "../lib/shortcuts.js";
 import {
   AutoIcon,
@@ -11,8 +12,7 @@ import {
   MoonIcon,
   SunIcon,
   Tip,
-  Diamond,
-  DiamondStack,
+  Fold,
   GearIcon,
   Icon,
   PauseIcon,
@@ -32,6 +32,7 @@ import {
   markWorkgroupRead,
 } from "../hooks/useReadState.js";
 import { compareProfiles, orderedSidebarProfiles, orderPinnedItems } from "../lib/profile-order.js";
+import { isDefaultProfile, splitDefaultProfile, withoutDefaultPin } from "../../../common/rosterOrder.mjs";
 import Skeleton from "../primitives/Skeleton.jsx";
 import { useDelayedFlag } from "../lib/useDelayedFlag.js";
 import styles from "./Sidebar.module.css";
@@ -93,7 +94,8 @@ function Sidebar({
   hostConnections,
   daemonOffline = false,
   connectionSyncing = false,
-  onNewChat,
+  rosterAnswered = true,
+  onNewSessionWith = null,
   onNewProfile,
   onNewWorkgroup,
   onOpenProfile,
@@ -133,7 +135,7 @@ function Sidebar({
 
   const connId = hostConnections?.active_id ?? "local";
   const showLoadingRows = useDelayedFlag(
-    connectionSyncing && profiles.length === 0 && workgroups.length === 0,
+    connectionSyncing && !rosterAnswered && profiles.length === 0 && workgroups.length === 0,
     300,
   );
   const { checkProfile: checkUnread, checkWorkgroup: checkWorkgroupUnread } =
@@ -174,17 +176,21 @@ function Sidebar({
     : view.kind === "workgroup"
       ? `${view.profile}/${view.id}`
       : null;
-  const inEmpty = view.kind === "empty";
 
-  const pinnedProfileNames = pinned.profiles ?? [];
+  const pinnedProfileNames = useMemo(() => withoutDefaultPin(pinned.profiles), [pinned.profiles]);
   const pinnedWorkgroupKeys = pinned.workgroups ?? [];
+
+  const { front: frontProfile, rest: otherProfiles } = useMemo(
+    () => splitDefaultProfile(profiles),
+    [profiles],
+  );
 
   const sortedProfiles = useMemo(
     () =>
-      orderedSidebarProfiles(profiles, pinnedProfileNames).filter(
+      orderedSidebarProfiles(otherProfiles, pinnedProfileNames).filter(
         (p) => !pinnedProfileNames.includes(p.name),
       ),
-    [profiles, pinnedProfileNames],
+    [otherProfiles, pinnedProfileNames],
   );
 
   const sortedWorkgroups = useMemo(() => {
@@ -202,11 +208,11 @@ function Sidebar({
 
   const pinnedProfiles = useMemo(() => {
     const list = pinnedProfileNames
-      .map((name) => profiles.find((p) => p.name === name))
+      .map((name) => otherProfiles.find((p) => p.name === name))
       .filter(Boolean);
     list.sort(compareProfiles);
     return list;
-  }, [pinnedProfileNames, profiles]);
+  }, [pinnedProfileNames, otherProfiles]);
 
   const pinnedWorkgroups = useMemo(() => {
     const list = pinnedWorkgroupKeys
@@ -249,8 +255,12 @@ function Sidebar({
       )
     : pinnedItems;
   const hasPinned = filteredPinnedItems.length > 0;
+  const visibleFront = frontProfile && matchProfile(frontProfile) ? frontProfile : null;
+  const showProfilesSection =
+    filteredProfiles.length > 0 || (!q && !!visibleFront && !!onNewProfile);
   const noMatches =
     !!q &&
+    !visibleFront &&
     filteredProfiles.length === 0 &&
     filteredWorkgroups.length === 0 &&
     filteredPinnedItems.length === 0;
@@ -267,6 +277,7 @@ function Sidebar({
     return () => ro.disconnect();
   }, []);
 
+  const [frontSectionRef, frontSectionH] = useMeasuredHeight();
   const [pinnedSectionRef, pinnedSectionH] = useMeasuredHeight();
   const [profilesSectionRef, profilesSectionH] = useMeasuredHeight();
   const [workgroupsSectionRef, workgroupsSectionH] = useMeasuredHeight();
@@ -286,10 +297,11 @@ function Sidebar({
   const maxAlpisVisible = useMemo(() => {
     if (!navHeight) return sortedProfiles.length;
     const available =
-      navHeight - pinnedSectionH - reservedWorkgroupsH - alpisLabelH - showMoreH;
+      navHeight - frontSectionH - pinnedSectionH - reservedWorkgroupsH - alpisLabelH - showMoreH;
     return Math.max(MIN_VISIBLE_ALPIS, Math.floor(available / rowHeight));
   }, [
     navHeight,
+    frontSectionH,
     pinnedSectionH,
     reservedWorkgroupsH,
     alpisLabelH,
@@ -311,7 +323,7 @@ function Sidebar({
       setWorkgroupLimit(maximumWorkgroupRows);
       return;
     }
-    const freeSpace = navHeight - pinnedSectionH - profilesSectionH - workgroupsSectionH;
+    const freeSpace = navHeight - frontSectionH - pinnedSectionH - profilesSectionH - workgroupsSectionH;
     setWorkgroupLimit((current) => fitWorkgroupRows(
       Math.min(current, maximumWorkgroupRows),
       maximumWorkgroupRows,
@@ -322,6 +334,7 @@ function Sidebar({
     maximumWorkgroupRows,
     navHeight,
     onViewAllWorkgroups,
+    frontSectionH,
     pinnedSectionH,
     profilesSectionH,
     q,
@@ -345,15 +358,32 @@ function Sidebar({
   const openProfileCtx = useCallback(
     (e, profile) => {
       e.preventDefault();
-      if (!onOpenSettingsTarget) return;
+      const newSessionItems = onNewSessionWith
+        ? [{
+            label: "New session",
+            icon: <PlusIcon />,
+            shortcut: shortcutKeys("new-session"),
+            onClick: () => onNewSessionWith(profile),
+          }]
+        : [];
+      if (!onOpenSettingsTarget) {
+        if (newSessionItems.length) setCtxMenu({ x: e.clientX, y: e.clientY, items: newSessionItems });
+        return;
+      }
       const pinned = pinnedProfileNames.includes(profile.name);
+      const pinItems = isDefaultProfile(profile)
+        ? []
+        : [
+            {
+              label: pinned ? "Unpin from top" : "Pin to top",
+              icon: pinned ? <PinOffIcon /> : <PinIcon />,
+              onClick: () => onTogglePin?.("profiles", profile.name),
+            },
+            { kind: "separator" },
+          ];
       const items = [
-        {
-          label: pinned ? "Unpin from top" : "Pin to top",
-          icon: pinned ? <PinOffIcon /> : <PinIcon />,
-          onClick: () => onTogglePin?.("profiles", profile.name),
-        },
-        { kind: "separator" },
+        ...(newSessionItems.length ? [...newSessionItems, { kind: "separator" }] : []),
+        ...pinItems,
         ...(onTogglePauseProfile
           ? [{
               label: profile.paused ? "Resume profile" : "Pause profile",
@@ -367,18 +397,22 @@ function Sidebar({
           shortcut: shortcutKeys("settings"),
           onClick: () => onOpenSettingsTarget({ kind: "profile", id: profile.name }),
         },
-        { kind: "separator" },
-        {
-          label: "Delete profile…",
-          icon: <TrashIcon />,
-          kind: "danger",
-          onClick: () =>
-            onOpenSettingsTarget({ kind: "profile", id: profile.name, intent: "delete" }),
-        },
+        ...(isDefaultProfile(profile)
+          ? []
+          : [
+              { kind: "separator" },
+              {
+                label: "Delete profile…",
+                icon: <TrashIcon />,
+                kind: "danger",
+                onClick: () =>
+                  onOpenSettingsTarget({ kind: "profile", id: profile.name, intent: "delete" }),
+              },
+            ]),
       ];
       setCtxMenu({ x: e.clientX, y: e.clientY, items });
     },
-    [pinnedProfileNames, onTogglePin, onTogglePauseProfile, onOpenSettingsTarget],
+    [pinnedProfileNames, onTogglePin, onTogglePauseProfile, onOpenSettingsTarget, onNewSessionWith],
   );
 
   const openWorkgroupCtx = useCallback(
@@ -426,6 +460,8 @@ function Sidebar({
       pending={!!pendingProfiles?.has(p.name) || rosterState?.profiles?.[p.name] === "working"}
       rowState={rosterState?.profiles?.[p.name] ?? null}
       isPinned={pinnedProfileNames.includes(p.name)}
+      pinnable={!isDefaultProfile(p)}
+      offline={daemonOffline}
       connId={connId}
       checkUnread={checkUnread}
       onOpen={openProfile}
@@ -446,6 +482,7 @@ function Sidebar({
         run={rosterState?.workgroups?.[key] ?? null}
         active={activeWorkgroupId === key}
         isPinned={pinnedWorkgroupKeys.includes(key)}
+        offline={daemonOffline}
         connId={connId}
         checkUnread={checkWorkgroupUnread}
         onOpen={openWorkgroup}
@@ -473,46 +510,34 @@ function Sidebar({
               locked={connectionLocked}
             />
           </div>
-          {!daemonOffline && !inSettings && (
-            searchOpen ? (
-              <div className={styles.searchRow} role="search">
-                <SearchIcon className={styles.searchIcon} />
-                <input
-                  ref={searchInputRef}
-                  className={styles.searchInput}
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Escape") {
-                      e.preventDefault();
-                      onCloseSearch?.();
-                    }
-                  }}
-                  placeholder="Filter profiles & workgroups…"
-                  spellCheck={false}
-                  autoCapitalize="off"
-                  autoCorrect="off"
-                  aria-label="Filter profiles and workgroups"
-                />
-                <IconBtn
-                  className={styles.searchClose}
-                  onClick={onCloseSearch}
-                  aria-label="Close filter"
-                >
-                  <XIcon />
-                </IconBtn>
-              </div>
-            ) : (
-              <Tip text={`New session · ${shortcutKeys("new-session")}`} side="r" block>
-                <SidebarRow
-                  kind="action"
-                  id="New session"
-                  sel={inEmpty}
-                  leading={<span className={styles.actionGlyph}><PlusIcon /></span>}
-                  onClick={onNewChat}
-                />
-              </Tip>
-            )
+          {!daemonOffline && !inSettings && searchOpen && (
+            <div className={styles.searchRow} role="search">
+              <SearchIcon className={styles.searchIcon} />
+              <input
+                ref={searchInputRef}
+                className={styles.searchInput}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    onCloseSearch?.();
+                  }
+                }}
+                placeholder="Filter profiles & workgroups…"
+                spellCheck={false}
+                autoCapitalize="off"
+                autoCorrect="off"
+                aria-label="Filter profiles and workgroups"
+              />
+              <IconBtn
+                className={styles.searchClose}
+                onClick={onCloseSearch}
+                aria-label="Close filter"
+              >
+                <XIcon />
+              </IconBtn>
+            </div>
           )}
         </div>
 
@@ -521,6 +546,11 @@ function Sidebar({
             <Section label="Profiles">
               <SidebarLoadingRows />
             </Section>
+          )}
+          {visibleFront && (
+            <div ref={frontSectionRef} className={styles.section}>
+              {renderProfileRow(visibleFront, "front:")}
+            </div>
           )}
           {hasPinned && (
             <Section label="Pinned" containerRef={pinnedSectionRef}>
@@ -532,7 +562,7 @@ function Sidebar({
             </Section>
           )}
 
-          {filteredProfiles.length > 0 && (
+          {showProfilesSection && (
             <Section
               label="Profiles"
               containerRef={profilesSectionRef}
@@ -595,7 +625,7 @@ function Sidebar({
           {noMatches && (
             <div className={styles.searchEmpty}>No profiles or workgroups match</div>
           )}
-          {!showLoadingRows && !query && !daemonOffline && !connectionSyncing && profiles.length === 0 && workgroups.length === 0 && (
+          {!showLoadingRows && !query && !daemonOffline && rosterAnswered && profiles.length === 0 && workgroups.length === 0 && (
             <div className={styles.searchEmpty}>
               {EMPTY.profiles.title}
               {onNewProfile && (
@@ -728,12 +758,12 @@ function ActivityButton({ needsYou = 0, onClick }) {
 
 const ROW_STATE_LABEL = { "needs-you": "needs you", failed: "failed", working: "working" };
 
-export function RowStateChip({ state }) {
+export function RowStateChip({ state, color }) {
   const text = ROW_STATE_LABEL[state];
   if (!text) return null;
   return (
-    <span className={styles.stateChip} data-state={state}>
-      <span className={styles.stateDot} aria-hidden />
+    <span className={styles.stateChip} data-state={state} style={color ? { "--c": color } : undefined}>
+      {state === "working" ? null : <span className={styles.stateDot} aria-hidden />}
       {text}
     </span>
   );
@@ -797,6 +827,8 @@ const ProfileRow = memo(function ProfileRow({
   pending,
   rowState = null,
   isPinned,
+  pinnable = true,
+  offline = false,
   connId,
   checkUnread,
   onOpen,
@@ -823,7 +855,7 @@ const ProfileRow = memo(function ProfileRow({
   const unread =
     !incomplete && !paused && !active && checkUnread?.(profile.name, sessionRecency);
   const trailing = rowState
-    ? <RowStateChip state={rowState} />
+    ? <RowStateChip state={rowState} color={profile.accent || undefined} />
     : sessionRecency > 0
       ? (
         <span className={`tnum sb-ts${unread ? " is-unr" : ""}`}>
@@ -833,15 +865,16 @@ const ProfileRow = memo(function ProfileRow({
       : null;
   const label = profileLabel(profile.name);
   const incompleteHint = `@${label}, needs provider — tap to set up`;
-  const leadingDiamond = <Diamond color={profile.accent || undefined} pulse={pending} />;
+  const leadingDiamond = <Fold fold={profile.fold} color={profile.accent || undefined} pulse={pending} outlined={incomplete} unfolded={offline || !!profile.paused} />;
   const bio = (profile.bio || profile.public_bio || "").trim();
 
   return (
-    <div className={styles.rowWrap}>
+    <div className={pinnable ? styles.rowWrap : `${styles.rowWrap} ${styles.rowWrapFixed}`}>
       <SidebarRow
         kind="profile"
         id={label}
         color={profile.accent || undefined}
+        fold={profile.fold}
         sel={active}
         unread={unread}
         state={paused ? "paused" : incomplete ? "needs-provider" : undefined}
@@ -865,7 +898,7 @@ const ProfileRow = memo(function ProfileRow({
         onClick={handleClick}
         onContextMenu={handleContextMenu}
       />
-      <PinAction isPinned={isPinned} onClick={handleTogglePin} />
+      {pinnable ? <PinAction isPinned={isPinned} onClick={handleTogglePin} /> : null}
     </div>
   );
 });
@@ -878,6 +911,7 @@ const WorkgroupRow = memo(function WorkgroupRow({
   run = null,
   active,
   isPinned,
+  offline = false,
   connId,
   checkUnread,
   onOpen,
@@ -926,7 +960,7 @@ const WorkgroupRow = memo(function WorkgroupRow({
   const hasPhases = run?.phasesTotal > 0 && run?.phasesDone != null;
   const trailing = hasPhases
     ? (
-      <span className={`tnum ${styles.phaseCount}`} aria-label={`phase ${run.phasesDone} of ${run.phasesTotal}`}>
+      <span className={`tnum ${styles.phaseCount}`} style={hubAccent ? { "--c": hubAccent } : undefined} aria-label={`phase ${run.phasesDone} of ${run.phasesTotal}`}>
         {run.phasesDone}/{run.phasesTotal}
       </span>
     )
@@ -950,12 +984,12 @@ const WorkgroupRow = memo(function WorkgroupRow({
         ariaLabel={unread ? `${label} unread` : undefined}
         leading={
           <span className={styles.workgroupLeading} style={{ color: hubAccent || "var(--ink-3)" }}>
-            {working ? (
+            {working && !paused ? (
               <Tip text={stateLabel} side="up-l">
-                <DiamondStack color={hubAccent || undefined} pulse />
+                <Fold fold={WORKGROUP_FOLD} color={hubAccent || undefined} pulse unfolded={offline} />
               </Tip>
             ) : (
-              <DiamondStack color={hubAccent || undefined} />
+              <Fold fold={WORKGROUP_FOLD} color={hubAccent || undefined} unfolded={offline || paused} />
             )}
           </span>
         }
