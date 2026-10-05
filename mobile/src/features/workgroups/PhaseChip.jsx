@@ -2,7 +2,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { radii, space } from '../../theme/tokens';
 
 import { Fold } from '../../components/Fold';
-import { Icon } from '../../components/Icon';
+import { phaseGround } from '../../../../common/pipelinePhases.mjs';
 import { useTheme } from '../../theme/ThemeContext';
 
 const STATE_WORD = { current: 'running', skipped: 'skipped', blocked: 'blocked' };
@@ -13,7 +13,6 @@ const STYLES = StyleSheet.create({
     alignItems: 'center',
     gap: space.s2,
     paddingHorizontal: space.s4,
-    borderWidth: 0.5,
     borderRadius: radii.xs,
   },
 });
@@ -34,7 +33,7 @@ export function PhaseChip({ chip, profileOf, height = 28, onPress, hint, testID 
   const { colors, fonts, fontSizes } = useTheme();
   const blocked = chip.state === 'blocked';
   const working = chip.state === 'current';
-  const word = STATE_WORD[chip.state];
+  const ground = phaseGround(chip.state, colors) ?? (working ? colors.selected : colors.hover);
   const Wrapper = onPress ? Pressable : View;
   return (
     <Wrapper
@@ -44,7 +43,7 @@ export function PhaseChip({ chip, profileOf, height = 28, onPress, hint, testID 
       accessibilityLabel={phaseLabel(chip)}
       accessibilityHint={hint}
       onPress={onPress}
-      style={[STYLES.chip, { minHeight: height, borderColor: blocked ? colors.danger : 'transparent', backgroundColor: working || blocked ? colors.selected : colors.hover }]}
+      style={[STYLES.chip, { minHeight: height, backgroundColor: ground }]}
     >
       <PhaseMark name={chip.owner} profileOf={profileOf} pulse={working && !chip.assignee} />
       <Text
@@ -63,10 +62,6 @@ export function PhaseChip({ chip, profileOf, height = 28, onPress, hint, testID 
           <PhaseMark name={chip.assignee} profileOf={profileOf} pulse={working} />
           <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink }}>@{chip.assignee}</Text>
         </>
-      ) : null}
-      {chip.state === 'completed' ? <Icon name="check" size="sm" color={colors.ink} /> : null}
-      {word ? (
-        <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: blocked ? colors.dangerText : colors.ink3 }}>{word}</Text>
       ) : null}
     </Wrapper>
   );

@@ -1,7 +1,6 @@
 import { Fragment } from "react";
 import Fold from "./Fold.jsx";
 import Tip from "./Tip.jsx";
-import { CheckIcon } from "./icons.jsx";
 import styles from "./PipelineStages.module.css";
 
 const STATE_WORD = { current: "running", skipped: "skipped", blocked: "blocked" };
@@ -26,8 +25,6 @@ function ChipBody({ chip, profileOf }) {
           <span className={styles.assignee}>@{chip.assignee}</span>
         </span>
       )}
-      {chip.state === "completed" && <CheckIcon size={11} className={styles.check} />}
-      {STATE_WORD[chip.state] && <span className={styles.word}>{STATE_WORD[chip.state]}</span>}
     </>
   );
 }

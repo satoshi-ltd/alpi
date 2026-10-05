@@ -79,7 +79,7 @@ def eyebrow(value):
 
 def strip_row(chips, pad="9px 16px"):
     return (f'<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px 5px; padding: {pad}; box-shadow: inset 0 -0.5px 0 {P["line"]}">'
-            f'{eyebrow("pipeline · setup")}{chips}</div>')
+            f'{eyebrow("pipeline")}{chips}</div>')
 
 
 def chips(states, key, owner=True, assignee=None, chain=CHAIN, size=10.5, height=21):

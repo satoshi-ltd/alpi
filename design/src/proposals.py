@@ -112,6 +112,7 @@ PROPOSALS = [
         "accept": "Shared: a <code>Busy</code> mark on both clients (the alpaca through the busy cycle, or a given fold sweeping its tones) built on the existing <code>Fold</code> components and <code>common/folds.mjs</code>, shown only after 300 ms, labelled “Loading” for screen readers, static with the word under reduced motion. Desktop: <code>SpinnerIcon</code>, the <code>Button</code> and <code>Chip</code> spinners and the <code>ChatPane</code> spinners become it at their current sizes; “Loading…” alone is gone; lists use <code>primitives/Skeleton</code> rows. Mobile: every <code>ActivityIndicator</code> becomes it and lists draw placeholder rows inside their cards. Workgroup strip: with one pipeline, or a cached run, the chain draws at once from the row with every phase pending and its owner, filled in place when the run arrives; otherwise the hub’s object sweeps beside placeholder chips; never the word. Tests cover the delay, reduced motion and the strip before and after the run on both clients; no green; light and dark match this board; the views are regenerated and the board is deleted.",
         "h": 2140,
     },
+
 ]
 
 

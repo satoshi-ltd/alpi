@@ -3,11 +3,9 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { lineHeights, space } from '../../theme/tokens';
 
 import { EdgeFade } from '../../components/EdgeFade';
-import { Eyebrow } from '../../components/Eyebrow';
-import { Pill } from '../../components/Pill';
 import { Sheet } from '../../components/Sheet';
 import { PhaseChip, PhaseMark } from '../workgroups/PhaseChip';
-import { phaseJumpable, phaseUnavailable, runStatus } from '../../lib/workgroupPipelines';
+import { phaseJumpable, phaseUnavailable } from '../../lib/workgroupPipelines';
 import { phaseCostLine, runChips } from '../../../../common/pipelinePhases.mjs';
 import { useTheme } from '../../theme/ThemeContext';
 
@@ -37,6 +35,7 @@ const STYLES = StyleSheet.create({
     gap: space.s5,
     paddingBottom: space.s4,
   },
+
 });
 
 const PHASE_WORD = { completed: 'completed', current: 'running', skipped: 'skipped', blocked: 'blocked', pending: 'pending' };
@@ -101,7 +100,6 @@ export function PipelineStrip({ run, phaseMap = null, active = null, profileOf =
     const overflow = contentSize.width - layoutMeasurement.width;
     setEdges({ left: contentOffset.x > 1, right: overflow > 1 && contentOffset.x < overflow - 1 });
   };
-  const status = runStatus(run);
 
   if (!run || chips.length === 0) return null;
   const pickedLive = picked ? chips.find((c) => c.slug === picked.slug) ?? null : null;
@@ -122,7 +120,6 @@ export function PipelineStrip({ run, phaseMap = null, active = null, profileOf =
         style={STYLES.strip}
         contentContainerStyle={STYLES.content}
       >
-        <Eyebrow>{`pipeline · ${run.pipeline}`}</Eyebrow>
         {chips.map((chip, i) => (
           <View
             key={chip.slug}
@@ -145,7 +142,6 @@ export function PipelineStrip({ run, phaseMap = null, active = null, profileOf =
             <PhaseChip chip={chip} profileOf={profileOf} height={44} hint="Shows the phase" onPress={() => setPicked(chip)} />
           </View>
         ))}
-        {status ? <Pill off>{status.text}</Pill> : null}
       </ScrollView>
       {edges.left ? <EdgeFade side="left" color={surface} /> : null}
       {edges.right ? <EdgeFade side="right" color={surface} /> : null}

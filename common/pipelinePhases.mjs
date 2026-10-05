@@ -1,3 +1,16 @@
+export const PHASE_GROUND = { completed: ["success", 0.18], blocked: ["danger", 0.14] };
+
+export function phaseGround(state, status) {
+  const spec = PHASE_GROUND[state];
+  if (!spec) return null;
+  const [key, alpha] = spec;
+  const hex = status?.[key];
+  if (!/^#(?:[\da-f]{3}|[\da-f]{6})$/i.test(hex ?? "")) return null;
+  const value = hex.length === 4 ? hex.slice(1).split("").map((c) => c + c).join("") : hex.slice(1);
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(value.slice(i, i + 2), 16));
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 export function sameName(a, b) {
   return typeof a === "string" && typeof b === "string" && a.trim().toLowerCase() === b.trim().toLowerCase();
 }

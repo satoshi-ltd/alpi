@@ -1,11 +1,16 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
+import { phaseGround } from '../../../../common/pipelinePhases.mjs';
 
 afterEach(cleanup);
 
 vi.mock('react-native', () => {
-  const plain = ({ style, ...rest }) => rest;
+  const plain = ({ style, accessibilityLabel, ...rest }) => ({
+    ...rest,
+    ...(accessibilityLabel ? { 'aria-label': accessibilityLabel } : {}),
+    'data-style': JSON.stringify(Object.assign({}, ...[style].flat(Infinity).filter(Boolean))),
+  });
   const View = ({ children, ...p }) => React.createElement('div', plain(p), children);
   const Text = ({ children, ...p }) => React.createElement('span', plain(p), children);
   const Pressable = ({ children, onPress, ...p }) =>
@@ -13,9 +18,13 @@ vi.mock('react-native', () => {
   return { View, Text, Pressable, StyleSheet: { create: (s) => s } };
 });
 
+const { COLORS } = vi.hoisted(() => ({
+  COLORS: { ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', line2: '#eee', bgInput: '#fafafa', hover: '#f4f4f4', selected: '#eaeaea', success: '#0a0', danger: '#c00' },
+}));
+
 vi.mock('../../theme/ThemeContext', () => ({
   useTheme: () => ({
-    colors: { ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', line2: '#eee', bgInput: '#fafafa', hover: '#f4f4f4', danger: '#c00' },
+    colors: COLORS,
     fonts: { mono: 'm', monoSemibold: 'ms', monoMedium: 'mm', sans: { regular: 's' } },
     fontSizes: { xs: 11, sm: 12, md: 14, lg: 15 },
   }),
@@ -97,19 +106,23 @@ describe('PipelinesSection', () => {
     expect(screen.getByText('last run running · 1 of 4 · $1.50')).toBeTruthy();
     const setupChip = container.querySelector('[testID="phase-setup"]');
     expect(setupChip.querySelector('[data-fold="house"]')).toBeTruthy();
-    expect(setupChip.querySelector('[data-icon="check"]')).toBeTruthy();
-    expect(container.querySelector('[testID="phase-enrich"]').textContent).toContain('running');
+    expect(setupChip.querySelector('[data-icon="check"]')).toBeNull();
+    expect(setupChip.textContent).toBe('#setup');
+    expect(JSON.parse(setupChip.dataset.style).backgroundColor).toBe(phaseGround('completed', COLORS));
+    expect(container.querySelector('[testID="phase-enrich"]').getAttribute('aria-label')).toContain('running');
     expect(container.querySelector('[testID="phase-enrich"]').querySelector('[data-fold]')).toBeNull();
     expect(container.querySelector('[testID="phase-media-update"]').querySelector('[data-fold="rocket"]')).toBeTruthy();
     expect(screen.getAllByText(/^last run/)).toHaveLength(1);
   });
 
-  it('draws an owner with no local profile as the grey unfolded object, and a blocked phase in words', () => {
+  it('draws an owner with no local profile as the grey unfolded object, and a blocked phase on a red ground', () => {
     const run = { pipeline: 'setup', status: 'blocked', phases: [{ slug: 'setup', state: 'current' }] };
     const { container } = render(<PipelinesSection workgroup={WG} run={run} profileOf={() => null} />);
     const chip = container.querySelector('[testID="phase-setup"]');
     expect(chip.querySelector('[data-unfolded="1"]')).toBeTruthy();
-    expect(chip.textContent).toContain('blocked');
+    expect(chip.textContent).toBe('#setup');
+    expect(chip.getAttribute('aria-label')).toContain('blocked');
+    expect(JSON.parse(chip.dataset.style).backgroundColor).toBe(phaseGround('blocked', COLORS));
   });
 
   it('lists chains in recipe order after the launch chain, like desktop', () => {

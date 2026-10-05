@@ -137,26 +137,19 @@ def phase_chip(slug, state=None, key="rip", owner=True, assignee=None, strong=Fa
     lead = (rippling(name, size + 1.5, key) if working else obj(name, size + 1.5)) if name else ""
     slug_colour = {"completed": P["ink"], "current": P["ink"], "skipped": P["ink3"], "blocked": P["ink"]}.get(state, P["ink2"])
     deco = "text-decoration: line-through;" if state == "skipped" else ""
-    weight = "font-weight: 600;" if strong and state in ("current", "blocked") else ""
+    weight = "font-weight: 600;" if state in ("current", "blocked") else ""
     handoff = ""
     if assignee:
         handoff = flex(arrow(), rippling(assignee, size + 1.5, key) if state == "current" else obj(assignee, size + 1.5), mono("@" + assignee, size, P["ink"], 600 if strong else 400), gap=3,
                        extra="flex-shrink: 0")
-    tail = ""
-    if state == "completed":
-        tail = glyph("check", 10, P["ink"])
-    elif state == "current":
-        tail = mono("running", size - 1, P["ink2"])
-    elif state == "skipped":
-        tail = mono("skipped", size - 1, P["ink3"])
-    elif state == "blocked":
-        tail = mono("blocked", size - 1, P["danger"], 500)
-    bg = P["selected"] if state in ("current", "blocked") else P["hover"]
-    ring = f"box-shadow: inset 0 0 0 1px color-mix(in srgb, {P['danger']} 45%, transparent);" if state == "blocked" else ""
-    title = f"{slug} · {name}" if name else slug
+    bg = (f"color-mix(in srgb, #3fb37a 18%, transparent)" if state == "completed" else
+          f"color-mix(in srgb, {P['danger']} 14%, transparent)" if state == "blocked" else
+          P["selected"] if state == "current" else P["hover"])
+    word = {"current": "running", None: "pending"}.get(state, state)
+    title = " · ".join(filter(None, ("#" + slug, "@" + name if name else None, "→ @" + assignee if assignee else None, word)))
     pad = "0 6px 0 4px" if name else "0 6px"
-    return (f'<span title="{title}" style="display: inline-flex; align-items: center; gap: 4px; height: {height}px; padding: {pad}; border-radius: 2px; background: {bg}; {ring} flex-shrink: 0">'
-            f'{lead}<span style="font-family: {MONO}; font-size: {size}px; color: {slug_colour}; white-space: nowrap; {weight} {deco}">#{slug}</span>{handoff}{tail}</span>')
+    return (f'<span title="{title}" style="display: inline-flex; align-items: center; gap: 4px; height: {height}px; padding: {pad}; border-radius: 2px; background: {bg}; flex-shrink: 0">'
+            f'{lead}<span style="font-family: {MONO}; font-size: {size}px; color: {slug_colour}; white-space: nowrap; {weight} {deco}">#{slug}</span>{handoff}</span>')
 
 
 def chain_flow(chain, states=None, key="rip", gap=4):

@@ -1,7 +1,7 @@
 import folds
 from notif_studies import dot, flex, stack, wrap
 from wg_settings_studies import P, accent, caption, crease_name, glyph, labelled, mono, phase_chip, phone, rippling
-from wg_strip_studies import CHAIN, d_header, eyebrow, frame, hub_task, m_header, now_trigger, sep
+from wg_strip_studies import CHAIN, d_header, frame, hub_task, m_header, now_trigger, sep
 
 BUSY = [accent(name) for name in ("mira", "pixel", "scout", "muse", "quill", "lingua", "lens")]
 
@@ -38,7 +38,7 @@ def strip_row(*parts):
 
 
 def d_now():
-    return frame(d_header(now_trigger()), strip_row(eyebrow("pipeline"), ghost_chip(arc() + mono("Loading flow…", 11, P["ink2"]))), hub_task("qa", "audit the built dist read-only…", ""))
+    return frame(d_header(now_trigger()), strip_row(ghost_chip(arc() + mono("Loading flow…", 11, P["ink2"]))), hub_task("qa", "audit the built dist read-only…", ""))
 
 
 def pending_chain(key):
@@ -46,12 +46,12 @@ def pending_chain(key):
 
 
 def d_known():
-    return frame(d_header(now_trigger()), strip_row(eyebrow("pipeline · setup"), pending_chain("lp")), hub_task("qa", "audit the built dist read-only…", ""))
+    return frame(d_header(now_trigger()), strip_row(pending_chain("lp")), hub_task("qa", "audit the built dist read-only…", ""))
 
 
 def d_unknown():
     bars = "".join((sep() if i else "") + bar(w, 21) for i, w in enumerate((62, 70, 66, 70, 74)))
-    return frame(d_header(now_trigger()), strip_row(eyebrow("pipeline"), rippling("mira", 13, "lu"), bars))
+    return frame(d_header(now_trigger()), strip_row(rippling("mira", 13, "lu"), bars))
 
 
 def specimen(mark, name, note):

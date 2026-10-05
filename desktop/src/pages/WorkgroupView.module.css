@@ -55,12 +55,7 @@
 }
 
 .pipelineLabel {
-  margin-right: var(--space-2);
-}
-
-.runStatus {
-  color: var(--ink-3);
-  font-size: var(--text-meta);
+  flex-shrink: 0;
 }
 
 .phaseDetail {

@@ -153,7 +153,7 @@ describe("WorkgroupView pipeline strip", () => {
       },
     });
 
-    await waitFor(() => expect(screen.getByText("pipeline · setup")).toBeInTheDocument());
+    await waitFor(() => expect(phaseEl("setup")).not.toBeNull());
     expect(screen.queryByTestId("pipeline-loading")).toBeNull();
   });
 
@@ -177,7 +177,7 @@ describe("WorkgroupView pipeline strip", () => {
     const first = render(
       <WorkgroupView workgroup={workgroup} profiles={profiles} connectionId="local" />,
     );
-    await waitFor(() => expect(screen.getByText("pipeline · setup")).toBeInTheDocument());
+    await waitFor(() => expect(phaseEl("setup")).not.toBeNull());
     first.unmount();
 
     invokeMock.mockImplementation((cmd) => (
@@ -185,7 +185,7 @@ describe("WorkgroupView pipeline strip", () => {
     ));
     render(<WorkgroupView workgroup={workgroup} profiles={profiles} connectionId="local" />);
 
-    expect(screen.getByText("pipeline · setup")).toBeInTheDocument();
+    expect(phaseEl("setup")).not.toBeNull();
     expect(screen.queryByTestId("pipeline-loading")).toBeNull();
   });
 
@@ -208,7 +208,7 @@ describe("WorkgroupView pipeline strip", () => {
 
     render(<WorkgroupView workgroup={workgroup} profiles={profiles} connectionId="local" />);
 
-    await waitFor(() => expect(screen.getByText("pipeline · setup")).toBeInTheDocument());
+    await waitFor(() => expect(phaseEl("setup")).not.toBeNull());
     expect(invokeMock).toHaveBeenCalledWith("workgroup_tasks", {
       profile: "hub",
       wgId: "launch",
@@ -237,10 +237,7 @@ describe("WorkgroupView pipeline strip", () => {
 
     render(<WorkgroupView workgroup={workgroup} profiles={profiles} connectionId="local" />);
 
-    await waitFor(() =>
-      expect(screen.getByText("pipeline · media-update")).toBeInTheDocument(),
-    );
-    expect(screen.queryByText("pipeline · setup")).toBeNull();
+    await waitFor(() => expect(phaseEl("media-update")).not.toBeNull());
     expect(phaseEl("setup")).toBeNull();
     expect(phaseEl("enrich")).toBeNull();
     expect(phaseEl("media-qa").dataset.state).toBe("current");
@@ -271,8 +268,8 @@ describe("WorkgroupView pipeline strip", () => {
         refreshCommandTick={1}
       />,
     );
-    await waitFor(() => expect(screen.getByText("pipeline · setup")).toBeInTheDocument());
-    expect(document.querySelector(`.${styles.runStatus}`)).toHaveTextContent("completed");
+    await waitFor(() => expect(phaseEl("setup")).not.toBeNull());
+    expect(document.querySelector(`.${styles.pipeline}`).children).toHaveLength(2);
 
     tasksReply({
       active: { slug: "media-update", title: "swap photos", opened_seq: 50 },
@@ -298,11 +295,9 @@ describe("WorkgroupView pipeline strip", () => {
       />,
     );
 
-    await waitFor(() =>
-      expect(screen.getByText("pipeline · media-update")).toBeInTheDocument(),
-    );
-    expect(screen.queryByText("pipeline · setup")).toBeNull();
-    expect(screen.queryByText("completed")).toBeNull();
+    await waitFor(() => expect(phaseEl("media-update")).not.toBeNull());
+    expect(phaseEl("enrich")).toBeNull();
+    expect(document.querySelector('[data-phase][data-state="completed"]')).toBeNull();
   });
 
   it("a repeated maintenance run resets completed phase state", async () => {
@@ -376,7 +371,7 @@ describe("WorkgroupView pipeline strip", () => {
       },
     });
     render(<WorkgroupView workgroup={workgroup} profiles={profiles} connectionId="local" />);
-    await waitFor(() => expect(screen.getByText("pipeline · setup")).toBeInTheDocument());
+    await waitFor(() => expect(phaseEl("setup")).not.toBeNull());
 
     tasksReply({
       active: { slug: "hotfix", title: "one-off", opened_seq: 70 },
@@ -386,7 +381,7 @@ describe("WorkgroupView pipeline strip", () => {
     });
     poke();
 
-    await waitFor(() => expect(screen.queryByText(/^pipeline · /)).toBeNull());
+    await waitFor(() => expect(document.querySelector("[data-phase]")).toBeNull());
     expect(phaseEl("setup")).toBeNull();
     expect(screen.getByText("one-off")).toBeInTheDocument();
   });
@@ -406,7 +401,7 @@ describe("WorkgroupView pipeline strip", () => {
     );
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("workgroup_tasks", expect.anything()));
-    expect(screen.queryByText(/^pipeline · /)).toBeNull();
+    expect(document.querySelector("[data-phase]")).toBeNull();
   });
 
   it("a blocked run keeps its phase current-but-blocked and banners the daemon reason", async () => {
@@ -430,9 +425,8 @@ describe("WorkgroupView pipeline strip", () => {
     await waitFor(() => expect(screen.getByText("Blocked at #enrich.")).toBeInTheDocument());
     expect(screen.getByText("Blocked at #enrich.").closest("span")).toHaveTextContent(/no source photos/);
     expect(phaseEl("enrich").dataset.state).toBe("blocked");
-    expect(within(phaseEl("enrich")).getByText("blocked")).toBeInTheDocument();
-    expect(phaseEl("enrich").querySelector("svg")).toBeNull();
-    expect(phaseEl("setup").querySelector("svg")).not.toBeNull();
+    expect(phaseEl("enrich")).toHaveAccessibleName(/blocked/);
+    expect(phaseEl("enrich").textContent).toBe("#enrich");
   });
 
   it("a between run says so in words and leaves no current phase", async () => {
@@ -453,7 +447,8 @@ describe("WorkgroupView pipeline strip", () => {
     });
     render(<WorkgroupView workgroup={workgroup} profiles={profiles} connectionId="local" />);
 
-    await waitFor(() => expect(screen.getByText("between phases")).toBeInTheDocument());
+    await waitFor(() => expect(phaseEl("setup").dataset.state).toBe("completed"));
+    expect(document.querySelector(`.${styles.pipeline}`).children).toHaveLength(2);
     expect(screen.queryByText("between")).toBeNull();
     expect(document.querySelector('[data-phase][data-state="current"]')).toBeNull();
     expect(phaseEl("enrich").querySelector("svg")).toBeNull();
@@ -492,11 +487,11 @@ describe("WorkgroupView pipeline strip", () => {
     const completed = phaseEl("setup");
     const skipped = phaseEl("enrich");
     expect(skipped.dataset.state).toBe("skipped");
-    expect(within(skipped).getByText("skipped")).toBeInTheDocument();
-    expect(skipped.querySelector("svg")).toBeNull();
+    expect(skipped).toHaveAccessibleName(/skipped/);
     expect(completed.dataset.state).toBe("completed");
-    expect(completed.querySelector("svg")).not.toBeNull();
-    expect(within(phaseEl("qa")).getByText("running")).toBeInTheDocument();
+    expect(completed).toHaveAccessibleName(/completed/);
+    expect(phaseEl("qa")).toHaveAccessibleName(/running/);
+    expect([completed, skipped, phaseEl("qa")].map((el) => el.textContent)).toEqual(["#setup", "#enrich", "#qa"]);
   });
 
   it("a chain that finishes by skipping its last phase reads completed", async () => {
@@ -520,7 +515,8 @@ describe("WorkgroupView pipeline strip", () => {
     });
     render(<WorkgroupView workgroup={workgroup} profiles={profiles} connectionId="local" />);
 
-    await waitFor(() => expect(document.querySelector(`.${styles.runStatus}`)).toHaveTextContent("completed"));
+    await waitFor(() => expect(phaseEl("enrich").dataset.state).toBe("skipped"));
+    expect(document.querySelector(`.${styles.pipeline}`).children).toHaveLength(2);
     expect(phaseEl("enrich").dataset.state).toBe("skipped");
     expect(document.querySelector('[data-phase][data-state="current"]')).toBeNull();
   });
@@ -605,9 +601,7 @@ describe("WorkgroupView pipeline strip", () => {
       },
     });
 
-    await waitFor(() =>
-      expect(screen.getByText("pipeline · media-update")).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(phaseEl("media-update")).not.toBeNull());
   });
 });
 
@@ -865,6 +859,35 @@ describe("WorkgroupView pipeline strip owners", () => {
     expect(trigger).toHaveTextContent("blocked · no source photos");
     expect(trigger).toHaveTextContent("1 of 2");
     expect(trigger.querySelector('[data-fold="house"]')).not.toBeNull();
+  });
+
+  it("gives a phase its state as its ground, with no check and no state word, and never names the pipeline twice", async () => {
+    tasksReply({
+      active: null,
+      closed: [],
+      blocked: null,
+      pipeline_run: {
+        pipeline: "setup",
+        status: "blocked",
+        started_seq: 40,
+        current_phase: "enrich",
+        phases: [
+          { slug: "setup", state: "completed", seq: 41 },
+          { slug: "enrich", state: "current", seq: 43 },
+        ],
+      },
+    });
+    render(<WorkgroupView workgroup={owned} profiles={crew} connectionId="local" />);
+
+    await waitFor(() => expect(phaseEl("enrich")).not.toBeNull());
+    expect([phaseEl("setup"), phaseEl("enrich")].map((el) => el.textContent)).toEqual(["#setup", "#enrich"]);
+    expect(phaseEl("setup")).toHaveAccessibleName(/completed/);
+    expect(phaseEl("enrich")).toHaveAccessibleName(/blocked/);
+    const label = screen.getByText("pipeline", { exact: true });
+    expect(label).toHaveClass(styles.pipelineLabel);
+    expect(label.nextElementSibling).toContainElement(phaseEl("setup"));
+    expect(screen.queryByText(/^pipeline · /)).toBeNull();
+    expect(screen.queryByText("setup", { exact: true })).toBeNull();
   });
 
   it("draws no owner object for a daemon without phase_map", async () => {

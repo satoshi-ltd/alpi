@@ -2,6 +2,8 @@ import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 
+import { phaseGround } from '../../../../common/pipelinePhases.mjs';
+
 afterEach(cleanup);
 
 const { fontOf, h } = vi.hoisted(() => ({
@@ -128,18 +130,38 @@ describe('PipelineStrip', () => {
     expect(strip({ pipeline: 'setup', status: 'running', phases: [] }).container.textContent).toBe('');
   });
 
-  it("labels the strip with the run's key and every phase with its declared owner", () => {
-    strip();
-    expect(screen.getByText('pipeline · media-update')).toBeTruthy();
+  it('marks every phase with its declared owner and its state as its ground, with no check and no word', () => {
+    const { container } = strip();
+    const ground = (label) => JSON.parse(screen.getByLabelText(label).dataset.style).backgroundColor;
     expect(screen.getByLabelText('#media-build · @pixel · running').querySelector('[data-fold="rocket"]')).toBeTruthy();
-    expect(screen.getByLabelText('#media-update · @muse · completed').querySelector('[data-icon="check"]')).toBeTruthy();
     expect(screen.getByLabelText('#media-config · skipped').querySelector('[data-fold]')).toBeNull();
     expect(screen.getByLabelText('#media-qa · @lens · pending').querySelector('[data-unfolded="true"]')).toBeTruthy();
+    expect(container.querySelector('[data-icon="check"]')).toBeNull();
+    expect(screen.getByLabelText('#media-update · @muse · completed').textContent).toBe('#media-update');
+    expect(screen.getByLabelText('#media-build · @pixel · running').textContent).toBe('#media-build');
+    expect(ground('#media-update · @muse · completed')).toBe(phaseGround('completed', { success: '#0a0' }));
+    expect(ground('#media-build · @pixel · running')).toBe('#eaeaea');
+    expect(ground('#media-qa · @lens · pending')).toBe('#f4f4f4');
   });
 
-  it('marks a blocked run on its phase, in words, with no run pill', () => {
+  it('keeps only steps even when the chain has scrolled off the left edge', () => {
+    strip();
+    const frame = (x, content, view) => ({
+      nativeEvent: { contentOffset: { x }, contentSize: { width: content }, layoutMeasurement: { width: view } },
+    });
+    expect(screen.queryByText('pipeline · media-update')).toBeNull();
+    expect(screen.queryByTestId('pipeline-name')).toBeNull();
+    act(() => { h.onScroll(frame(200, 900, 400)); });
+    expect(screen.queryByTestId('pipeline-name')).toBeNull();
+    act(() => { h.onScroll(frame(0, 900, 400)); });
+    expect(screen.queryByTestId('pipeline-name')).toBeNull();
+  });
+
+  it('marks a blocked run on its phase, on a red ground, with no run pill', () => {
     const { container } = strip({ ...RUN, status: 'blocked' });
-    expect(screen.getByLabelText('#media-build · @pixel · blocked')).toBeTruthy();
+    const blocked = screen.getByLabelText('#media-build · @pixel · blocked');
+    expect(JSON.parse(blocked.dataset.style).backgroundColor).toBe(phaseGround('blocked', { danger: '#c00' }));
+    expect(blocked.textContent).toBe('#media-build');
     expect(container.querySelector('[data-pill]')).toBeNull();
   });
 
@@ -193,11 +215,11 @@ describe('PipelineStrip', () => {
     }
   });
 
-  it('words a between or completed run in ink, and stays silent while a phase runs', () => {
+  it('keeps run status out of the strip in every state', () => {
     const pill = (container) => container.querySelector('[data-pill]');
     expect(pill(strip().container)).toBeNull();
-    expect(pill(strip({ ...RUN, status: 'between' }).container).textContent).toBe('between phases');
-    expect(pill(strip({ ...RUN, status: 'completed' }).container).getAttribute('data-pill')).toBe('off');
+    expect(pill(strip({ ...RUN, status: 'between' }).container)).toBeNull();
+    expect(pill(strip({ ...RUN, status: 'completed' }).container)).toBeNull();
   });
 
   it('hides the strip when an ad-hoc task nulls a run that was on screen', () => {

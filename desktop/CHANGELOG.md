@@ -11,6 +11,13 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.8.1 — 2026-10-05 — compact pipeline steps
+
+- Phase chips show completed in green and blocked in red; running keeps its folding object and skipped is struck through, without checks or state words.
+- The chat strip leads with “pipeline” and the steps, without repeating the pipeline name or adding a run-status suffix. Each step keeps its state and details on hover or tap.
+
+  Requires alpi 0.17.0.
+
 ## v0.8.0 — 2026-10-02 — profiles wear their origami
 
 - **A profile wears an origami object in its colour** in the sidebar, lists, headers, mentions and every empty chat at

@@ -532,13 +532,12 @@ export default function WorkgroupView({
       {banners}
       {taskState == null && workgroup.pipeline_mode && (
         <div className={styles.pipeline} data-testid="pipeline-loading">
-          <Eyebrow className={styles.pipelineLabel}>pipeline</Eyebrow>
           <Chip size="sm" ghost icon={<SpinnerIcon />}>Loading flow…</Chip>
         </div>
       )}
       {run && stripChips.length > 0 && (
         <div className={styles.pipeline}>
-          <Eyebrow className={styles.pipelineLabel}>pipeline · {run.pipeline}</Eyebrow>
+          <Eyebrow className={styles.pipelineLabel}>pipeline</Eyebrow>
           <PipelineStages
             chips={stripChips}
             profileOf={profileOf}
@@ -546,7 +545,6 @@ export default function WorkgroupView({
             canJump={(chip) => chip.seq != null && loadedSeqs.has(chip.seq)}
             detail={(chip, jumpable) => <PhaseDetail chip={chip} jumpable={jumpable} profileOf={profileOf} />}
           />
-          {RUN_STATUS_TEXT[run.status] && <Mono className={styles.runStatus}>{RUN_STATUS_TEXT[run.status]}</Mono>}
         </div>
       )}
       {searchOpen && (
@@ -721,11 +719,6 @@ function renderWgFooter({
     </>
   );
 }
-
-const RUN_STATUS_TEXT = {
-  between: "between phases",
-  completed: "completed",
-};
 
 function phaseUnavailable(phase) {
   if (phase.seq == null) {

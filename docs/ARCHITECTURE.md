@@ -952,6 +952,7 @@ Verb namespaces in current shape:
   sandbox*, voice_*, mcps, peers, models}`), fetched lazily by
   settings/profile screens. The summaries verb is the hot poll; the
   detail verb is on-demand.
+- **Workgroup pipeline display** — Phase chips on desktop and mobile show completed on an 18% success tint and blocked on a 14% danger tint over the pane. Running uses the selected ground, a semibold slug and the worker's folding object (static under reduced motion); pending uses hover and skipped is struck through. Checks and state words stay out of the chips; accessible names and hover/tap details retain the state. The desktop chat strip starts with the literal `pipeline`, followed by phase chips and separators; mobile shows just the chips and separators. Neither repeats the pipeline's name or adds a pinned label or run-status suffix; the header keeps the run's progress and status.
 - **`host.skills.list`** — one row per skill: `category, name,
   description, path, size, status` (active | inactive | invalid),
   `reason` (why, when not active) and `keywords`. Pass

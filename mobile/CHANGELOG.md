@@ -14,6 +14,13 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.7.1 — 2026-10-05 — pipeline strips show only steps
+
+- Phase chips show completed in green and blocked in red; running keeps its folding object and skipped is struck through, without checks or state words.
+- The chat strip shows only the steps, with no pipeline label or run-status suffix. Each step keeps its state and details on hover or tap.
+
+  Requires alpi 0.17.0.
+
 ## v0.7.0 — 2026-10-02 — profiles wear their origami
 
 - **A profile wears an origami object in its colour** in the inbox, lists, headers and every empty chat at hero size;
