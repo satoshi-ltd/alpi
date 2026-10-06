@@ -7,6 +7,20 @@
   max-width: 360px;
 }
 
+.root .trigger {
+  background: var(--hover);
+  border-radius: var(--r-xs);
+}
+
+.root .trigger:not(:disabled):hover,
+.root .trigger[aria-expanded="true"] {
+  background: var(--selected);
+}
+
+.root .trigger[aria-expanded="true"]:not(:focus-visible) {
+  outline: 0;
+}
+
 .openRing {
   width: 9px;
   height: 9px;

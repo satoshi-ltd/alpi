@@ -163,7 +163,7 @@ export default function TasksButton({
   return (
     <span className={styles.root}>
       <Tip text={tipText} side="r">
-        <Button variant="ghost" onClick={() => setOpen((o) => !o)} className={`${styles.trigger} ${phase ? styles.phaseTrigger : ""}`.trim()}>
+        <Button variant="ghost" onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open} className={`${styles.trigger} ${phase ? styles.phaseTrigger : ""}`.trim()}>
           {phase ? (
             <PhaseTrigger phase={phase} />
           ) : active ? (

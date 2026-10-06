@@ -78,17 +78,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
   be is fixed at its source; a test reproduces the mechanism (composition events, a re-render mid-dictation)
   and fails before the fix; the mention popover, drafts and auto-size still work after the text lands.
 
-- **DESK.TASKS-TRIGGER** — The workgroup's task trigger has no sheet at rest
-  `bug · desktop · agent · normal`
-  note: reported by the creator on 2026-10-04. The Desktop workgroup board draws the header's task trigger
-  (the phase form, `#content @quill 4 of 8` over the task line, and the plain form with a dot) as a 4 px
-  sheet on the hover tone at rest; [TasksButton.jsx](../desktop/src/primitives/TasksButton.jsx) renders it
-  as a ghost `Button`, so it is bare text until the pointer reaches it and the tint shows only under the
-  tooltip. Check mobile's owner button against the Phone board in the same pass.
-  accept: both forms of the trigger rest on the hover tone with 4 px corners as the board draws, step to
-  the selected tone on hover and while the popover is open, and keep their sizes; a test proves the resting
-  class; the Sessions trigger and the strip are unchanged; light and dark match the Desktop workgroup board.
-
 ## In progress
 
 _None._

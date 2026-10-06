@@ -11,6 +11,12 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.8.2 — 2026-10-06 — the task trigger rests on its sheet
+
+- The workgroup header's task trigger (the phase form and the plain form) rests on the hover tone with 4 px corners, steps to the selected tone on hover and while its menu is open, as the workgroup board draws it. It was bare text until the pointer reached it.
+
+  Requires alpi 0.17.0.
+
 ## v0.8.1 — 2026-10-05 — compact pipeline steps
 
 - Phase chips show completed in green and blocked in red; running keeps its folding object and skipped is struck through, without checks or state words.
