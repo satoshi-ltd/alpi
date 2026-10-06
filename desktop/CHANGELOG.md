@@ -11,6 +11,12 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.8.3 — 2026-10-06 — the composer pauses its work while text is composed
+
+- While macOS Dictation or an input method is composing text, the composer holds its auto-size and @mention work until the text lands, and drops the mention popover when a composition starts. This is an attempt at Dictation closing as soon as it starts in the composer; it still needs a check on a Mac.
+
+  Requires alpi 0.17.0.
+
 ## v0.8.2 — 2026-10-06 — the task trigger rests on its sheet
 
 - The workgroup header's task trigger (the phase form and the plain form) rests on the hover tone with 4 px corners, steps to the selected tone on hover and while its menu is open, as the workgroup board draws it. It was bare text until the pointer reached it.

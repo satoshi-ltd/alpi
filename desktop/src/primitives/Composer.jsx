@@ -21,21 +21,29 @@ export default function Composer({
   minHeight = null,
 }) {
   const textareaRef = useRef(null);
+  const composingRef = useRef(false);
+  const [settled, setSettled] = useState(0);
   const [mentionState, setMentionState] = useState(null);
   const isMentionOpen = mentionState != null && mentionState.items.length > 0;
 
   useEffect(() => {
+    composingRef.current = false;
+    setSettled((n) => n + 1);
+  }, [disabled]);
+
+  useEffect(() => {
     const ta = textareaRef.current;
-    if (!ta) return;
+    if (!ta || composingRef.current) return;
     ta.style.height = "auto";
     const floor = minHeight || 0;
     const target = Math.min(220, Math.max(floor, ta.scrollHeight));
     ta.style.height = `${target}px`;
     ta.style.overflowY = ta.scrollHeight > 220 ? "auto" : "hidden";
-  }, [value, minHeight]);
+  }, [value, minHeight, settled]);
 
   function recomputeMentionContext() {
     const ta = textareaRef.current;
+    if (composingRef.current) return;
     if (!ta || mentions.length === 0) {
       if (mentionState) setMentionState(null);
       return;
@@ -68,7 +76,7 @@ export default function Composer({
 
   useEffect(() => {
     recomputeMentionContext();
-  }, [value, mentions]);
+  }, [value, mentions, settled]);
 
   function selectMention(item) {
     if (item.status && item.status !== "on" && item.status !== "?") return;
@@ -202,7 +210,19 @@ export default function Composer({
           onChange={(e) => onChange?.(e.target.value)}
           onKeyDown={handleKeyDown}
           onSelect={recomputeMentionContext}
-          onBlur={() => setMentionState(null)}
+          onCompositionStart={() => {
+            composingRef.current = true;
+            setMentionState(null);
+          }}
+          onCompositionEnd={() => {
+            composingRef.current = false;
+            setSettled((n) => n + 1);
+          }}
+          onBlur={() => {
+            composingRef.current = false;
+            setMentionState(null);
+            setSettled((n) => n + 1);
+          }}
           rows={1}
           disabled={disabled}
         />

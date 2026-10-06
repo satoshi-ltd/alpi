@@ -61,22 +61,7 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **DESK.DICTATION** — macOS Dictation stops as soon as it starts in the composer
-  `bug · desktop · agent · high`
-  note: reported by the creator on 2026-10-04: with the composer focused, the 🌐 (fn) Dictation shortcut
-  opens Dictation and it closes at once. alpi has no voice input of its own (read aloud is output only), so
-  this is the system's Dictation fighting the webview's `<textarea>`. Suspects, none proved:
-  [Composer.jsx](../desktop/src/primitives/Composer.jsx) is a controlled textarea that re-renders on every
-  `onChange` and `onSelect` (the mention recompute sets state, the draft is written, the auto-size effect
-  rewrites `style.height`), and WebKit ends Dictation when script replaces the value or the selection during
-  its marked text; the window-level capture `keydown` in
-  [useWindowChrome.js](../desktop/src/hooks/useWindowChrome.js); anything that blurs or refocuses the field
-  while a reply streams. Compare first with another field in the app (the sidebar search) to tell the
-  composer from the webview.
-  accept: the cause is named with evidence; the composer leaves its value, selection and focus untouched
-  while a composition is open (`compositionstart` to `compositionend`), or whatever the cause turns out to
-  be is fixed at its source; a test reproduces the mechanism (composition events, a re-render mid-dictation)
-  and fails before the fix; the mention popover, drafts and auto-size still work after the text lands.
+_None._
 
 ## In progress
 
@@ -122,8 +107,8 @@ _None._
   connecting with a used link names the failure and clears the field.
 
 - **VERIFY-DESK-DICTATION** — Dictation in the composer on a Mac
-  `verify · desktop · creator · high · depends: DESK.DICTATION`
-  accept: on a Mac with a build that carries DESK.DICTATION, the Dictation shortcut set in System Settings
+  `verify · desktop · creator · high`
+  accept: on a Mac with desktop 0.8.3 or later (the composer holds its auto-size and mention work while text is composed; if Dictation still closes at once, the cause is elsewhere and this becomes a bug), the Dictation shortcut set in System Settings
   › Keyboard › Dictation (pressing 🌐 twice by default; a further press ends it, as in every app) opens
   Dictation in the composer and it stays open while you speak, the words land in the field, and the same
   holds while a reply streams and in a workgroup's composer.
