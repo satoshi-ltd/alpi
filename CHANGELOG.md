@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.17.1 — 2026-10-06 — members run skills again
+
+- **A member device runs and invokes the profile's skills again**, as it did before 0.17.0. v0.17.0 removed
+  `run` and `invoke` from what a member can use by mistake, so a profile driven through its skills by a member
+  lost every script of them without a single error. A member still cannot `test` a skill or change skills, memory
+  or jobs, nested calls included.
+- **An ALP peer without `tools.allow` keeps the full fence**: no skill scripts. `docs/SECURITY.md` says what a member
+  may call and that a profile untrusted members drive should hold only skills whose modes are safe to hand them.
+
 ## v0.17.0 — 2026-10-02 — profiles are origami
 
 - **A profile names its origami object** (`tui.fold`) and colour: twelve established models in twelve colours,

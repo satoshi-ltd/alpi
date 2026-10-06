@@ -132,11 +132,13 @@ Three trust tiers:
   be outside the home, skill secrets are not passed, and it is refused before
   running everywhere else (the supported Docker runtime, Linux without bwrap,
   macOS, whose sandbox cannot hide other processes' argv and env); members see and stop only their own device's
-  background jobs (a recycled pid is never signalled). Skill scripts and skill,
+  background jobs (a recycled pid is never signalled). Members can `run` and `invoke`
+  existing skills (their scripts run outside the sandbox with the profile's
+  environment, so they reach whatever modes a skill exposes); `test` and skill,
   memory or job changes are refused to members, nested calls included; the file
   fence covers every profile of the root (custom roots, any case, linked
   profiles) and `knowledge.sqlite`. An ALP peer turn without `tools.allow` gets
-  the same fence and no session or workgroup history tools; its role is unchanged.
+  the same fence, no skill scripts at all and no session or workgroup history tools; its role is unchanged.
   MCP tools and the `db` tool are not fenced. The fence does not hold for a profile
   in a workgroup: its members or no-policy peers can `workgroup_post`, and the turn
   that wakes is unfenced apart from losing the session history tools (SCOPE.11).

@@ -65,7 +65,7 @@ Never deliver from shared tmp: sessions retain absolute paths, but tmp has no re
 - Inspect: `list`, `view(name, [file])`, `validate(name)`.
 - Mutate: `create`, `edit`, `patch`, `set_meta`, `add_file`, `remove_file`, `delete`, `reset_state`.
 - Execute: `run`, `test`, `invoke`.
-- Member devices and ALP peers without `tools.allow` get only `list`/`view`/`validate` (scripts run outside the sandbox, so they and every mutation are refused, nested calls included); prose skills work through `view`.
+- Member devices get `list`/`view`/`validate`/`run`/`invoke`: they can call existing skills (scripts run outside the sandbox with the profile's environment) but never `test` or any mutation, nested calls included. ALP peers without `tools.allow` get only `list`/`view`/`validate`; prose skills work through `view`.
 
 Notes:
 

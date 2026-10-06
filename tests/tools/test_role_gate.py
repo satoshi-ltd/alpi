@@ -22,7 +22,7 @@ def test_member_sees_every_nonrestricted_tool():
 def test_member_schema_keeps_only_nonmutating_actions():
     with use(MEMBER):
         schema = schemas()
-    assert _actions(schema, "skill") == {"list", "view", "validate"}
+    assert _actions(schema, "skill") == {"list", "view", "validate", "run", "invoke"}
     assert _actions(schema, "memory") == {"read", "promotion_list"}
     assert _actions(schema, "schedule") == {"list"}
 
@@ -46,7 +46,46 @@ def test_member_blocks_new_actions_on_restricted_tools():
     assert "cannot use" in (result.error or "")
 
 
-def test_a_fenced_turn_never_runs_skill_scripts_or_changes_skills_and_jobs(tmp_home):
+def _scripted_skill(tmp_home):
+    made = execute("skill", {"action": "create", "name": "echo-skill", "category": "personal", "description": "Echo.", "body": "## When to use\nTest.\n"})
+    assert made.ok, made.error
+    added = execute("skill", {"action": "add_file", "name": "echo-skill", "subdir": "scripts", "filename": "run.py", "content": "print('hello from the skill')\n"})
+    assert added.ok, added.error
+
+
+def test_a_member_runs_and_invokes_existing_skills_but_never_tests_or_changes_them(tmp_home):
+    _scripted_skill(tmp_home)
+    with use(MEMBER):
+        ran = execute("skill", {"action": "run", "name": "echo-skill"})
+        assert ran.ok and "hello from the skill" in ran.output, (ran.output, ran.error)
+        invoked = execute("skill", {"action": "invoke", "name": "echo-skill"})
+        assert "cannot use" not in f"{invoked.output}{invoked.error}"
+        assert "structured contract" in (invoked.error or "")
+        for action in ("test", "create", "edit", "patch", "add_file", "remove_file", "delete", "set_meta", "reset_state"):
+            result = execute("skill", {"action": action, "name": "echo-skill", "category": "personal"})
+            assert not result.ok and "cannot use" in (result.error or ""), action
+        refusal = execute("skill", {"action": "test", "name": "echo-skill"}).error
+        assert "developer action" in refusal and "outside the sandbox" not in refusal
+
+
+def test_a_member_under_a_tool_list_runs_skills_and_still_changes_none(tmp_home):
+    from alpi.tools import _policy
+
+    _scripted_skill(tmp_home)
+    with use(MEMBER), _policy.use(frozenset({"skill"}), "listed"):
+        assert execute("skill", {"action": "run", "name": "echo-skill"}).ok
+        for action in ("test", "patch", "delete"):
+            result = execute("skill", {"action": action, "name": "echo-skill"})
+            assert not result.ok and "cannot use" in (result.error or ""), action
+
+
+def test_a_member_cannot_reach_a_skill_script_through_a_workflow_or_a_nested_call(tmp_home):
+    with use(MEMBER):
+        result = execute("workflow", {"steps": [{"id": "a", "tool": "skill", "arguments": {"action": "test", "name": "x"}}]})
+    assert "cannot use" in f"{result.output}{result.error}"
+
+
+def test_a_fenced_peer_never_runs_skill_scripts_or_changes_skills_and_jobs(tmp_home):
     from alpi.tools import _policy
     from alpi.tools._paths import PEER_HISTORY_TOOLS
 
@@ -61,7 +100,6 @@ def test_a_fenced_turn_never_runs_skill_scripts_or_changes_skills_and_jobs(tmp_h
         ("workflow", {"steps": [{"id": "a", "tool": "skill", "arguments": {"action": "run", "name": "x"}}]}),
     )
     for context, policy in (
-        (MEMBER, _policy.use(None, "")),
         (peer, _policy.use(None, "peer 'carol'", PEER_HISTORY_TOOLS, fence_without_policy=True)),
     ):
         with use(context), policy:

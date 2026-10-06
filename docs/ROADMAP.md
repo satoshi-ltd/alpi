@@ -1,6 +1,6 @@
 # alpi roadmap
 
-Updated 2026-10-04. Current versions live in the changelogs. v0.17 takes the tasks in Queue (the
+Updated 2026-10-06. Current versions live in the changelogs. v0.17 takes the tasks in Queue (the
 workgroup and profile boards); the rest of the pool targets v0.18.
 
 This is the task pool. [ARCHITECTURE.md](ARCHITECTURE.md) owns current state and
@@ -61,6 +61,34 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
+- **DESK.DICTATION** — macOS Dictation stops as soon as it starts in the composer
+  `bug · desktop · agent · high`
+  note: reported by the creator on 2026-10-04: with the composer focused, the 🌐 (fn) Dictation shortcut
+  opens Dictation and it closes at once. alpi has no voice input of its own (read aloud is output only), so
+  this is the system's Dictation fighting the webview's `<textarea>`. Suspects, none proved:
+  [Composer.jsx](../desktop/src/primitives/Composer.jsx) is a controlled textarea that re-renders on every
+  `onChange` and `onSelect` (the mention recompute sets state, the draft is written, the auto-size effect
+  rewrites `style.height`), and WebKit ends Dictation when script replaces the value or the selection during
+  its marked text; the window-level capture `keydown` in
+  [useWindowChrome.js](../desktop/src/hooks/useWindowChrome.js); anything that blurs or refocuses the field
+  while a reply streams. Compare first with another field in the app (the sidebar search) to tell the
+  composer from the webview.
+  accept: the cause is named with evidence; the composer leaves its value, selection and focus untouched
+  while a composition is open (`compositionstart` to `compositionend`), or whatever the cause turns out to
+  be is fixed at its source; a test reproduces the mechanism (composition events, a re-render mid-dictation)
+  and fails before the fix; the mention popover, drafts and auto-size still work after the text lands.
+
+- **DESK.TASKS-TRIGGER** — The workgroup's task trigger has no sheet at rest
+  `bug · desktop · agent · normal`
+  note: reported by the creator on 2026-10-04. The Desktop workgroup board draws the header's task trigger
+  (the phase form, `#content @quill 4 of 8` over the task line, and the plain form with a dot) as a 4 px
+  sheet on the hover tone at rest; [TasksButton.jsx](../desktop/src/primitives/TasksButton.jsx) renders it
+  as a ghost `Button`, so it is bare text until the pointer reaches it and the tint shows only under the
+  tooltip. Check mobile's owner button against the Phone board in the same pass.
+  accept: both forms of the trigger rest on the hover tone with 4 px corners as the board draws, step to
+  the selected tone on hover and while the popover is open, and keep their sizes; a test proves the resting
+  class; the Sessions trigger and the strip are unchanged; light and dark match the Desktop workgroup board.
+
 ## In progress
 
 _None._
@@ -103,6 +131,13 @@ _None._
   alpi didn't start with the log tail, the command and Retry; stopping the daemon
   mid-session keeps the open view under the banner and Retry starts it again;
   connecting with a used link names the failure and clears the field.
+
+- **VERIFY-DESK-DICTATION** — Dictation in the composer on a Mac
+  `verify · desktop · creator · high · depends: DESK.DICTATION`
+  accept: on a Mac with a build that carries DESK.DICTATION, the Dictation shortcut set in System Settings
+  › Keyboard › Dictation (pressing 🌐 twice by default; a further press ends it, as in every app) opens
+  Dictation in the composer and it stays open while you speak, the words land in the field, and the same
+  holds while a reply streams and in a workgroup's composer.
 
 - **VERIFY-BRAND-GLYPHS** — One-cell glyphs in the terminals alpi supports
   `verify · alpi · creator · low · `
@@ -253,6 +288,15 @@ _None._
   still read `<home>/out/`, where every session's produced files land.
   accept: a fenced turn (member device or peer without `tools.allow`) gets only read queries on the active
   skill's database, or none, and cannot read another connection's files under `out/`; tests cover both.
+- **POL.2** — A member connection can carry the tool policy a peer carries
+  `feature · alpi · agent · low`
+  note: a member device runs and invokes the profile's skills since v0.17.1 and is otherwise fenced; an ALP peer can already carry `tools.allow` (names, `*` patterns, `tool:action`) that replaces the fence with an exact list, but a member connection cannot. A profile that untrusted members drive has no way to open one skill and close another.
+  promote when: a profile is driven by members who are not trusted with every mode of its skills.
+  accept: a connection record takes the same `tools.allow` grammar as a peer and replaces the member fence with exactly that list, nested execution included; a connection without it behaves as today; the setting is in the takes-effect table of [CONFIG.md](CONFIG.md) and next to the member fence in [SECURITY.md](SECURITY.md); tests drive a member through a granted and an ungranted tool.
+- **RES.1** — One `research` call has no cost cap of its own
+  `bug · alpi · agent · normal`
+  note: [research.py](../alpi/tools/research.py) fans a brief into sub-agents that search and fetch on their own. On casa on 2026-09-29 two calls of a biography profile spent $2.35 and $2.74 and ended at the daily budget ($2.00, then $5.00) without an answer: the budget stops the turn after the damage, and the next message of the day failed too. Nothing bounds one call's spend, the number of sub-agents' steps or the retries on dead URLs (DNS failures).
+  accept: a `research` call stops at a configurable fraction of the remaining daily budget (or a fixed amount) and returns what it has with a note saying it was cut; the cap and the sub-agent step limit are in the takes-effect table of [CONFIG.md](CONFIG.md); a test with a fake provider that spends past the cap shows the call ending early and the turn still answering.
 - **CHART.1** — The mobile Usage chart follows the cost too
   `feature · mobile, common · agent · normal`
   note: found while reviewing UX.8. Desktop sizes bars by dollars when any day cost something, with the

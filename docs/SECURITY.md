@@ -86,9 +86,13 @@ not reach.
   `.env`, MCP tokens). A
   member sees and stops only the background jobs its own device started, and
   only while the job's process is the one it started (a recycled pid is never
-  signalled). Skill scripts (`run`, `test`, `invoke`) and every change to
-  skills, memory or jobs are refused to members, nested calls included; prose
-  skills keep working. The file fence covers every profile under the alpi
+  signalled). A member can `run` and `invoke` the profile's existing skills: their
+  scripts run outside the OS sandbox with the profile's environment, so a member
+  can use whatever modes an existing skill exposes, and a profile that
+  untrusted members drive should only hold skills whose modes are safe to hand
+  them. `test` and every change to skills, memory or jobs are refused to
+  members, nested calls included. A turn answering an ALP peer without
+  `tools.allow` gets no skill scripts at all. The file fence covers every profile under the alpi
   root (custom roots, any letter case, profiles linked from elsewhere) and its
   `knowledge.sqlite`; the post-turn memory review keeps the turn's fence. A turn answering an ALP peer that has no `tools.allow`
   gets all of the above (file tools, `search`, `terminal`, skills, jobs) and

@@ -54,11 +54,21 @@ _turn_mcp_tools: contextvars.ContextVar[dict[str, type[Tool]]] = contextvars.Con
     "turn_mcp_tools", default={}
 )
 
-_MEMBER_ALLOWED_ACTIONS: dict[str, frozenset[str]] = {
+_PEER_ALLOWED_ACTIONS: dict[str, frozenset[str]] = {
     "skill": frozenset({"list", "view", "validate"}),
     "memory": frozenset({"read", "promotion_list"}),
     "schedule": frozenset({"list"}),
 }
+_MEMBER_ALLOWED_ACTIONS: dict[str, frozenset[str]] = {
+    **_PEER_ALLOWED_ACTIONS,
+    "skill": frozenset({"list", "view", "validate", "run", "invoke"}),
+}
+
+
+def _fenced_actions(name: str) -> frozenset[str] | None:
+    from alpi.tools import _policy
+    table = _PEER_ALLOWED_ACTIONS if _policy.fences_private_areas() else _MEMBER_ALLOWED_ACTIONS
+    return table.get(name)
 
 
 @contextmanager
@@ -176,7 +186,7 @@ def _execute_registered(
 
 def _member_schema(schema: dict) -> dict:
     name = schema.get("function", {}).get("name", "")
-    allowed = _MEMBER_ALLOWED_ACTIONS.get(name)
+    allowed = _fenced_actions(name)
     action = schema.get("function", {}).get("parameters", {}).get("properties", {}).get("action")
     if allowed is None or not isinstance(action, dict) or not isinstance(action.get("enum"), list):
         return schema
@@ -188,9 +198,17 @@ def _member_schema(schema: dict) -> dict:
     return trimmed
 
 
+def _refusal_reason(name: str, action: str) -> str:
+    if name == "skill" and action in {"run", "invoke"}:
+        return "it runs a skill's scripts outside the sandbox"
+    if name == "skill" and action == "test":
+        return "it is a developer action on a skill"
+    return "it changes the profile"
+
+
 def _member_mutation_refusal(name: str, arguments: dict) -> ToolResult | None:
     from alpi.tools._paths import private_areas_fenced
-    allowed = _MEMBER_ALLOWED_ACTIONS.get(name)
+    allowed = _fenced_actions(name)
     if allowed is None or not private_areas_fenced():
         return None
     action = str(arguments.get("action", "") or "")
@@ -201,8 +219,8 @@ def _member_mutation_refusal(name: str, arguments: dict) -> ToolResult | None:
         output="",
         error=(
             f"member devices and peers without a tool policy cannot use {name} action "
-            f"'{action or '(none)'}': it changes the profile or runs a skill's scripts outside the "
-            "sandbox; it requires an admin device or a peer tools.allow that grants it"
+            f"'{action or '(none)'}': {_refusal_reason(name, action)}; "
+            "it requires an admin device or a peer tools.allow that grants it"
         ),
     )
 
