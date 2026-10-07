@@ -14,6 +14,7 @@ from alpi.session import (
     Session,
     ToolLog,
     Turn,
+    _normalize_tool_payload,
     load_turns,
     truncate_result,
     TOOL_RESULT_CAP,
@@ -333,3 +334,61 @@ def test_a_saved_session_carries_replacement_characters_for_lone_surrogates(tmp_
     assert turn["user"] == "list �"
     assert turn["assistant"] == "saw �"
     assert "\udcff" not in path.read_text(encoding="utf-8")
+
+
+def test_a_large_tool_argument_keeps_every_key_after_reload(tmp_path: Path) -> None:
+    args = {
+        "object": {"zz_body": "x" * 40_000, "aa_small": "kept", "nested": ["y" * 40_000, "tail"]},
+        "sources": ["https://a.example", "https://b.example"],
+        "summary": "short summary",
+    }
+    session = Session(home=tmp_path, model="m")
+    session.turns.append(Turn(
+        at=1.0, user="u",
+        tools=[ToolLog(at=1.0, name="write", args=args, result="ok", ok=True, duration_s=0.1)],
+        assistant="a",
+    ))
+
+    path = session.save()
+
+    tool = json.loads(path.read_text())["turns"][0]["tools"][0]
+    assert len(tool["args"].encode()) <= TOOL_ARGS_CAP
+    assert tool["args_meta"]["truncated"] is True
+    assert tool["args_meta"]["bytes"] > TOOL_ARGS_CAP
+    loaded = _normalize_tool_payload(tool)["args"]
+    assert set(loaded) == {"object", "sources", "summary"}
+    assert loaded["sources"] == ["https://a.example", "https://b.example"]
+    assert loaded["summary"] == "short summary"
+    assert loaded["object"]["aa_small"] == "kept"
+    assert loaded["object"]["nested"][1] == "tail"
+    assert loaded["object"]["zz_body"].endswith("…")
+
+
+def test_small_arguments_are_saved_untouched(tmp_path: Path) -> None:
+    session = Session(home=tmp_path, model="m")
+    session.turns.append(Turn(
+        at=1.0, user="u",
+        tools=[ToolLog(at=1.0, name="w", args={"b": 1, "a": "é"}, result="ok", ok=True, duration_s=0.1)],
+        assistant="a",
+    ))
+
+    tool = json.loads(session.save().read_text())["turns"][0]["tools"][0]
+
+    assert tool["args"] == '{"a": "é", "b": 1}'
+    assert "args_meta" not in tool
+
+
+def test_arguments_too_wide_to_shrink_fall_back_to_the_text_clip(tmp_path: Path) -> None:
+    args = {f"key_{i:04d}": "v" * 10 for i in range(3000)}
+    session = Session(home=tmp_path, model="m")
+    session.turns.append(Turn(
+        at=1.0, user="u",
+        tools=[ToolLog(at=1.0, name="w", args=args, result="ok", ok=True, duration_s=0.1)],
+        assistant="a",
+    ))
+
+    tool = json.loads(session.save().read_text())["turns"][0]["tools"][0]
+
+    assert len(tool["args"].encode()) <= TOOL_ARGS_CAP
+    assert tool["args_meta"]["truncated"] is True
+    assert "key_0000" in tool["args"]

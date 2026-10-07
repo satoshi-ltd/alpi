@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.17.3 — 2026-10-07 — a long tool call keeps all its arguments
+
+- A saved turn clips a long tool argument value by value instead of cutting the whole call at 16 KiB, so every key survives and a reloaded session returns the full argument object. Before, the keys that sorted after a large value were lost, and an audit of saved writes read them as missing their sources.
+
 ## v0.17.2 — 2026-10-07 — a stray byte no longer breaks a turn's journal
 
 - A tool whose output holds an unpaired surrogate (a file name that is not valid UTF-8) finishes its turn. The run journal and the saved session carry U+FFFD in its place; before, the journal write raised.

@@ -222,15 +222,6 @@ _None._
   accept: a turn whose tool output holds a lone surrogate streams to a client and finishes, the frame carrying
   U+FFFD; each writer named above either scrubs or is shown not to receive tool text; tests drive the socket and
   the websocket.
-- **SESS.1** — Saved tool arguments keep every key
-  `bug · alpi · agent · low`
-  note: [session.py](../alpi/session.py) saves a turn's tool arguments as one sorted JSON string
-  clipped at `TOOL_ARGS_CAP` (16 KiB), so a large call loses every key that sorts after its big
-  value, and reloading turns the clip into `{"preview": …}`. An audit of an MCP write tool whose
-  object sorts before `sources` and `summary` read 295 of 1008 saved writes as unsourced, while
-  712 of the 713 complete ones cite sources.
-  accept: long values are clipped one by one so every key survives within the cap; reloading
-  returns a dict with all keys; a test with a 40 KB nested value keeps the small keys after it.
 - **SCHED.8** — A long pass fires jobs from a stale snapshot
   `bug · alpi · agent · low`
   note: found while reviewing SCHED.6. `tick` iterates the jobs read at the start of the pass; a

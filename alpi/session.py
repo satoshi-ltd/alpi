@@ -273,7 +273,49 @@ def _put_json(row: dict[str, Any], key: str, value: Any, cap: int) -> None:
         text = json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
     except Exception:  # noqa: BLE001
         text = str(value)
-    _put(row, key, text, cap)
+        _put(row, key, text, cap)
+        return
+    raw = text.encode("utf-8", errors="replace")
+    if len(raw) <= cap:
+        row[key] = text
+        return
+    shrunk = _shrink_strings(value, cap)
+    if shrunk is None:
+        _put(row, key, text, cap)
+        return
+    row[key] = shrunk
+    row[f"{key}_meta"] = {"bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest(), "truncated": True}
+
+
+def _clip_strings(value: Any, limit: int) -> Any:
+    if isinstance(value, str):
+        raw = value.encode("utf-8", errors="replace")
+        if len(raw) <= limit:
+            return value
+        return raw[: limit - 3].decode("utf-8", errors="ignore") + "…"
+    if isinstance(value, dict):
+        return {k: _clip_strings(v, limit) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_clip_strings(v, limit) for v in value]
+    return value
+
+
+def _shrink_strings(value: Any, cap: int) -> str | None:
+    def dumped(limit: int) -> str:
+        return json.dumps(_clip_strings(value, limit), ensure_ascii=False, sort_keys=True, default=str)
+
+    floor = dumped(4)
+    if len(floor.encode("utf-8", errors="replace")) > cap:
+        return None
+    lo, hi, best = 5, cap, floor
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        text = dumped(mid)
+        if len(text.encode("utf-8", errors="replace")) <= cap:
+            best, lo = text, mid + 1
+        else:
+            hi = mid - 1
+    return best
 
 
 def _clip(value: Any, cap: int) -> tuple[str, dict[str, Any] | None]:
