@@ -46,3 +46,15 @@ describe('Row typography', () => {
     expect(screen.getByText('servers').getAttribute('data-font')).toBe('GeistMono_500Medium');
   });
 });
+
+describe('Row spoken label', () => {
+  const spoken = (container) => container.querySelector('button').getAttribute('accessibilitylabel');
+
+  it('speaks a string value and prefers spokenValue for an element value', () => {
+    const plain = render(<Row label="Skills" helper="h" value="5" onPress={() => {}} />);
+    expect(spoken(plain.container)).toBe('Skills, 5, h');
+    cleanup();
+    const flagged = render(<Row label="Skills" helper="1 fails lint" value={<span>1 5</span>} spokenValue="1 skill needs you, 5" onPress={() => {}} />);
+    expect(spoken(flagged.container)).toBe('Skills, 1 skill needs you, 5, 1 fails lint');
+  });
+});

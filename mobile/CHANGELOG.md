@@ -14,6 +14,14 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.7.2 — 2026-10-07 — schedules with a description, and counts on what needs you
+
+- **The schedule list and page read like the rest of the app.** Jobs show their title, one line of what they do, their state and the next run, grouped as Needs you, Active and Paused with no cron string in the rows. The page opens on the failure banner when the last run failed, then About, When (the sentence with the cron as a chip), Next, Last run and Runs, and the prompt in its own box.
+- **Profile settings flag what needs you.** The Skills, Memories and Cron jobs rows carry a red count and a line saying why ("1 fails lint", "2 over their limit", "1 failed"); the skill and memory pages open on a banner that names the problem and list the flagged ones first.
+- Against an older daemon nothing new appears and the rows stay as they were.
+
+  Requires alpi 0.17.5.
+
 ## v0.7.1 — 2026-10-05 — pipeline strips show only steps
 
 - Phase chips show completed in green and blocked in red; running keeps its folding object and skipped is struck through, without checks or state words.

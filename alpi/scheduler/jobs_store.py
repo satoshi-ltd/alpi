@@ -20,7 +20,7 @@ class CorruptJobsFile(RuntimeError):
 
 
 # jobs.json holds definitions only; runs.json holds per-id run state. Merged on read, split on write.
-STATE_FIELDS = ("last_run_at", "last_run_status", "first_seen_at")
+STATE_FIELDS = ("last_run_at", "last_run_status", "last_run_message", "last_ok_at", "first_seen_at")
 
 
 def jobs_path(home: Path) -> Path:

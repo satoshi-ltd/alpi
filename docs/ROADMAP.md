@@ -1,7 +1,7 @@
 # alpi roadmap
 
-Updated 2026-10-06. Current versions live in the changelogs. v0.17 takes the tasks in Queue (the
-workgroup and profile boards); the rest of the pool targets v0.18.
+Updated 2026-10-07. Current versions live in the changelogs. The Queue is empty; the creator approves
+the next tasks from Proposed.
 
 This is the task pool. [ARCHITECTURE.md](ARCHITECTURE.md) owns current state and
 contracts; [CHANGELOG.md](../CHANGELOG.md), [desktop/CHANGELOG.md](../desktop/CHANGELOG.md)
@@ -71,9 +71,9 @@ _None._
 
 ### Builds and deployments
 
-- **BUILD-MOBILE** — EAS build of mobile 0.7.0
+- **BUILD-MOBILE** — EAS build of mobile 0.7.1
   `deploy · mobile · creator · high`
-  accept: an EAS build of mobile 0.7.0 or later installed on the Fold and on an
+  accept: an EAS build of mobile 0.7.1 or later installed on the Fold and on an
   iPhone.
 - **OPS-CRED-SWEEP** — Credential hygiene on every daemon
   `deploy · alpi · creator · normal`
@@ -83,7 +83,7 @@ _None._
 
 ### Device checks
 
-- **VERIFY-MOBILE-070** — Mobile 0.7.0 on device
+- **VERIFY-MOBILE-070** — Mobile 0.7 on device
   `verify · mobile · creator · high · depends: BUILD-MOBILE`
   accept: on device, the process block sits at 12 pt flush with the answer; the
   Fold sidebar slides; expand/collapse and the Latest button animate; a long
@@ -96,9 +96,9 @@ _None._
   daemon stopped the header goes offline and the roster unfolds within seconds,
   and comes back on its own; a member with nothing shared sees whom to ask.
 
-- **VERIFY-DESKTOP-FIRSTRUN** — Desktop 0.8.0 first run on a Mac
+- **VERIFY-DESKTOP-FIRSTRUN** — Desktop first run on a Mac
   `verify · desktop · creator · high`
-  accept: on a Mac without alpi, the window opens on Set up alpi with the install
+  accept: on a Mac with desktop 0.8.3 or later and without alpi, the window opens on Set up alpi with the install
   commands and the link field, and installing alpi and pressing Check again lands
   on the roster with the one-time phone card; with alpi installed and stopped, it
   starts on its own (Starting alpi…) and lands on the roster; a broken config shows
@@ -114,7 +114,7 @@ _None._
   holds while a reply streams and in a workgroup's composer.
 
 - **VERIFY-BRAND-GLYPHS** — One-cell glyphs in the terminals alpi supports
-  `verify · alpi · creator · low · `
+  `verify · alpi · creator · low`
   accept: the twelve one-cell glyphs of the console (⌂ ♥ ➤ ⬟ ⌃ ★ ♣ ▣ ♛ ✒ ☼ and the diamond) were
   seen in Terminal, iTerm2 and one Linux terminal; any that fails is replaced or falls back to the
   diamond.
@@ -163,6 +163,12 @@ _None._
 
 ## Proposed
 
+### Agent tasks, by priority
+
+- **MEMBER.1** — A test pins what each caller class may invoke
+  `chore · alpi · agent · normal`
+  note: v0.17.0 took `run` and `invoke` away from member devices by mistake and no test failed; v0.17.1 gave them back. No test states the intended matrix of what each caller class may call.
+  accept: one table-driven test lists, for admin, a member device, an ALP peer without `tools.allow` and one with it, each skill mode and each tool the fence names as allowed or refused; changing a row, or the fence, fails it.
 - **WG.FLOW-LATENCY** — The pipeline strip appears as soon as a workgroup opens
   `bug · desktop, mobile · agent · normal`
   note: opening a pipeline workgroup shows "Loading flow…" for seconds, yet `fold_task_state` takes about 5 ms
@@ -172,23 +178,27 @@ _None._
   accept: a measurement of each hop (client call, bridge, socket, handler) on a pipeline workgroup names where the
   time goes; the fix brings the run state on screen without waiting for the transcript, and a test proves
   `workgroup_tasks` is not queued behind it.
-
-- **BRAND.EMPTY** — A blank chat that introduces the profile
-  `decision · desktop, mobile · creator · normal`
-  note: today an empty chat is the profile's origami at 72 px, "Start a new thread" and the model. Ideas to
-  weigh with the copy pass: the profile's own one-line bio under the origami, the pair name ("blue shield")
-  beside the model as the Brand board shows, up to three starter chips drawn from the profile's skills or
-  its recent sessions (one tap fills the composer), and a short fold-in of the origami on first paint that
-  stops under reduced motion. Needs a board before any code, and the copy of every empty state decided together.
-  accept: the creator picks which of these ideas ship and the copy of the empty states; the answer becomes a
-  `ui` task with its board.
-
-- **BRAND.SPLASH** — Mount the boot splash with the crease wordmark
-  `feature · desktop · creator · low`
-  note: `BootSplash` in [desktop/src/primitives](../desktop/src/primitives/) is exported but nothing renders
-  it; startup shows only the connecting banner. Decide where a splash belongs (first paint before the
-  daemon answers) before drawing the alpaca beside the crease "alpi" there.
-
+- **REDACT.1** — The URL-credentials pattern in `redact` is quadratic
+  `bug · alpi · agent · normal`
+  note: found while reviewing RUN.1. `(?P<scheme>[a-zA-Z][a-zA-Z0-9+.-]*://)[^/\s:@]+:[^/\s@]+@` in
+  [_redact.py](../alpi/_redact.py) takes 2.2 s on 50 KB of `a` and a 5 MB string did not finish in 120 s; `redact`
+  runs on every journal event, saved turn and tool result, so one large alphanumeric output can stall a turn.
+  accept: the scheme length is bounded; a test redacts 1 MB of `a` within a second and the URL, userinfo and
+  credential cases still redact as before.
+- **RES.1** — One `research` call has no cost cap of its own
+  `bug · alpi · agent · normal`
+  note: [research.py](../alpi/tools/research.py) fans a brief into sub-agents that search and fetch on their own. On casa on 2026-09-29 two calls of a biography profile spent $2.35 and $2.74 and ended at the daily budget ($2.00, then $5.00) without an answer: the budget stops the turn after the damage, and the next message of the day failed too. Nothing bounds one call's spend, the number of sub-agents' steps or the retries on dead URLs (DNS failures).
+  accept: a `research` call stops at a configurable fraction of the remaining daily budget (or a fixed amount) and returns what it has with a note saying it was cut; the cap and the sub-agent step limit are in the takes-effect table of [CONFIG.md](CONFIG.md); a test with a fake provider that spends past the cap shows the call ending early and the turn still answering.
+- **CHART.1** — The mobile Usage chart follows the cost too
+  `feature · mobile, common · agent · normal`
+  note: found while reviewing UX.8. Desktop sizes bars by dollars when any day cost something, with the
+  input/output split drawn inside each bar (the creator confirmed this design), but
+  [UsageChart.jsx](../mobile/src/components/UsageChart.jsx) still scales by tokens through `usageScale` in
+  [usage.mjs](../common/usage.mjs), so one profile draws a different tallest bar on each client. The split is
+  price-weighted from fixed constants because the ledger keeps one cost per day.
+  accept: `byCost` and `sizeOf` live in `common/usage.mjs` and both clients use them; mobile gets the same
+  thin-bar minimum, split and a "bars by" footer; a window with no cost on any day (a local model) sizes bars by
+  total tokens; a component test renders a mixed window and a free window on each client.
 - **TERM.3** — Profile environment for `terminal`
   `feature · alpi · agent · low`
   note: a skill toolchain installed in the volume (JDK and Maven under
@@ -205,13 +215,6 @@ _None._
   sandbox, the Docker backend's explicit forwarding list, invalid values and
   protected variables. The map is listed in the takes-effect table of
   [CONFIG.md](CONFIG.md#tools) and in the packaged config reference.
-- **REDACT.1** — The URL-credentials pattern in `redact` is quadratic
-  `bug · alpi · agent · normal`
-  note: found while reviewing RUN.1. `(?P<scheme>[a-zA-Z][a-zA-Z0-9+.-]*://)[^/\s:@]+:[^/\s@]+@` in
-  [_redact.py](../alpi/_redact.py) takes 2.2 s on 50 KB of `a` and a 5 MB string did not finish in 120 s; `redact`
-  runs on every journal event, saved turn and tool result, so one large alphanumeric output can stall a turn.
-  accept: the scheme length is bounded; a test redacts 1 MB of `a` within a second and the URL, userinfo and
-  credential cases still redact as before.
 - **FRAME.1** — A lone surrogate in a live frame breaks the client's stream
   `bug · alpi · agent · low`
   note: found while reviewing RUN.1. [host/server.py](../alpi/host/server.py) sends frames with
@@ -237,25 +240,6 @@ _None._
   still read `<home>/out/`, where every session's produced files land.
   accept: a fenced turn (member device or peer without `tools.allow`) gets only read queries on the active
   skill's database, or none, and cannot read another connection's files under `out/`; tests cover both.
-- **POL.2** — A member connection can carry the tool policy a peer carries
-  `feature · alpi · agent · low`
-  note: a member device runs and invokes the profile's skills since v0.17.1 and is otherwise fenced; an ALP peer can already carry `tools.allow` (names, `*` patterns, `tool:action`) that replaces the fence with an exact list, but a member connection cannot. A profile that untrusted members drive has no way to open one skill and close another.
-  promote when: a profile is driven by members who are not trusted with every mode of its skills.
-  accept: a connection record takes the same `tools.allow` grammar as a peer and replaces the member fence with exactly that list, nested execution included; a connection without it behaves as today; the setting is in the takes-effect table of [CONFIG.md](CONFIG.md) and next to the member fence in [SECURITY.md](SECURITY.md); tests drive a member through a granted and an ungranted tool.
-- **RES.1** — One `research` call has no cost cap of its own
-  `bug · alpi · agent · normal`
-  note: [research.py](../alpi/tools/research.py) fans a brief into sub-agents that search and fetch on their own. On casa on 2026-09-29 two calls of a biography profile spent $2.35 and $2.74 and ended at the daily budget ($2.00, then $5.00) without an answer: the budget stops the turn after the damage, and the next message of the day failed too. Nothing bounds one call's spend, the number of sub-agents' steps or the retries on dead URLs (DNS failures).
-  accept: a `research` call stops at a configurable fraction of the remaining daily budget (or a fixed amount) and returns what it has with a note saying it was cut; the cap and the sub-agent step limit are in the takes-effect table of [CONFIG.md](CONFIG.md); a test with a fake provider that spends past the cap shows the call ending early and the turn still answering.
-- **CHART.1** — The mobile Usage chart follows the cost too
-  `feature · mobile, common · agent · normal`
-  note: found while reviewing UX.8. Desktop sizes bars by dollars when any day cost something, with the
-  input/output split drawn inside each bar (the creator confirmed this design), but
-  [UsageChart.jsx](../mobile/src/components/UsageChart.jsx) still scales by tokens through `usageScale` in
-  [usage.mjs](../common/usage.mjs), so one profile draws a different tallest bar on each client. The split is
-  price-weighted from fixed constants because the ledger keeps one cost per day.
-  accept: `byCost` and `sizeOf` live in `common/usage.mjs` and both clients use them; mobile gets the same
-  thin-bar minimum, split and a "bars by" footer; a window with no cost on any day (a local model) sizes bars by
-  total tokens; a component test renders a mixed window and a free window on each client.
 - **ATT.3** — `host.attachments.fetch` ignores the caller's connection
   `bug · alpi · agent · low`
   note: found while reviewing ATT.2. `_fetch` in [attachments_rpc.py](../alpi/host/attachments_rpc.py)
@@ -282,9 +266,45 @@ _None._
   connections and sibling devices hold (a count only, no text).
   accept: the count includes only sessions `owns_session_row` lets the caller see; a
   test with sessions from two devices under `session_scope: device` counts one each.
+- **ALP.ADMIT** — Admission that adapts to provider latency
+  `feature · alpi · agent · low`
+  note: ALP.9 (shipped) settled `alp.max_active_workgroups` as an admission threshold, not
+  a cap; revisit on top of that contract.
+  accept: admission drops to 1 while the per-call provider median exceeds a
+  configured threshold and returns to the configured value when it recovers.
+- **MOB.LIVE-ACTIVITY** — Live Activity and closed-app approval pushes
+  `feature · mobile, alpi · agent · low`
+  note: needs a remote push relay (APNs/FCM) the daemon does not have.
+  accept: a running workgroup shows as a Live Activity, and an approval reaches
+  the phone as a push with the app closed.
+  the interface follows board UI-MOB.LIVE-ACTIVITY.
 
-Demand-gated entries name the condition that promotes them.
+### Waiting on a creator choice
 
+- **BRAND.EMPTY** — A blank chat that introduces the profile
+  `decision · desktop, mobile · creator · normal`
+  note: today an empty chat is the profile's origami at 72 px, "Start a new thread" and the model. Ideas to
+  weigh with the copy pass: the profile's own one-line bio under the origami, the pair name ("blue shield")
+  beside the model as the Brand board shows, up to three starter chips drawn from the profile's skills or
+  its recent sessions (one tap fills the composer), and a short fold-in of the origami on first paint that
+  stops under reduced motion. Needs a board before any code, and the copy of every empty state decided together.
+  accept: the creator picks which of these ideas ship and the copy of the empty states; the answer becomes a
+  `ui` task with its board.
+- **BRAND.SPLASH** — Mount the boot splash with the crease wordmark
+  `feature · desktop · creator · low`
+  note: `BootSplash` in [desktop/src/primitives](../desktop/src/primitives/) is exported but nothing renders
+  it; startup shows only the connecting banner. Decide where a splash belongs (first paint before the
+  daemon answers) before drawing the alpaca beside the crease "alpi" there.
+
+### Demand-gated
+
+Each names the condition that promotes it; none is worked on before.
+
+- **POL.2** — A member connection can carry the tool policy a peer carries
+  `feature · alpi · agent · low`
+  note: a member device runs and invokes the profile's skills since v0.17.1 and is otherwise fenced; an ALP peer can already carry `tools.allow` (names, `*` patterns, `tool:action`) that replaces the fence with an exact list, but a member connection cannot. A profile that untrusted members drive has no way to open one skill and close another.
+  promote when: a profile is driven by members who are not trusted with every mode of its skills.
+  accept: a connection record takes the same `tools.allow` grammar as a peer and replaces the member fence with exactly that list, nested execution included; a connection without it behaves as today; the setting is in the takes-effect table of [CONFIG.md](CONFIG.md) and next to the member fence in [SECURITY.md](SECURITY.md); tests drive a member through a granted and an ungranted tool.
 - **SCOPE.11** — Turns a workgroup post wakes run unfenced
   `bug · alpi · agent · low`
   note: found while reviewing SCOPE.9. `_dispatch_workgroup_turn` in [service.py](../alpi/service.py) runs a
@@ -337,18 +357,6 @@ Demand-gated entries name the condition that promotes them.
   promote when: a second profile mixes cheap questions with quality-sensitive
   writes in chat.
   accept: a skill-level `tier` raises the rest of the turn once that skill runs.
-- **ALP.ADMIT** — Admission that adapts to provider latency
-  `feature · alpi · agent · low`
-  note: ALP.9 (shipped) settled `alp.max_active_workgroups` as an admission threshold, not
-  a cap; revisit on top of that contract.
-  accept: admission drops to 1 while the per-call provider median exceeds a
-  configured threshold and returns to the configured value when it recovers.
-- **MOB.LIVE-ACTIVITY** — Live Activity and closed-app approval pushes
-  `feature · mobile, alpi · agent · low`
-  note: needs a remote push relay (APNs/FCM) the daemon does not have.
-  accept: a running workgroup shows as a Live Activity, and an approval reaches
-  the phone as a push with the app closed.
-  the interface follows board UI-MOB.LIVE-ACTIVITY.
 
 ## Discarded — don't relitigate
 

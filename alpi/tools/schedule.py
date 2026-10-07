@@ -17,6 +17,8 @@ from alpi.scheduler.run import (
 )
 from alpi.tools.base import Tool, ToolResult
 
+DESCRIPTION_MAX = 160
+
 
 class Schedule(Tool):
     name = "schedule"
@@ -46,7 +48,9 @@ class Schedule(Tool):
         "user says \"at 2pm\" write `0 14 * * *` for cron or "
         "`...T14:00:00` for once — do NOT convert to UTC.\n"
         "\n"
-        "`prompt` is what alpi should do when the job fires.\n"
+        "`prompt` is what alpi should do when the job fires. Give every job "
+        "a short `title` and a one-sentence `description` of what it does; "
+        "clients list jobs by them, in English like the prompt.\n"
         "\n"
         "Notification: set `notify: true` and the fired reply is pushed "
         "natively to the user's Alpi apps (use for reminders / alerts / "
@@ -118,6 +122,17 @@ class Schedule(Tool):
                     "update, pass an empty string to remove an existing title."
                 ),
             },
+            "description": {
+                "type": "string",
+                "description": (
+                    "Optional one sentence saying what the job does, shown under "
+                    "its title in clients: 'Compares every hotel's listings with "
+                    "its intake and posts the differences to the hub.' Not the "
+                    "cron expression and not the prompt. At most "
+                    f"{DESCRIPTION_MAX} characters. On update, pass an empty "
+                    "string to remove it."
+                ),
+            },
             "notify": {
                 "type": "boolean",
                 "description": (
@@ -183,6 +198,7 @@ class Schedule(Tool):
             paused: bool | None = None,
             no_agent: bool | None = None,
             title: str | None = None,
+            description: str | None = None,
             timeout: int | None = None,
             tier: str | None = None) -> ToolResult:
         home = get_home()
@@ -236,6 +252,11 @@ class Schedule(Tool):
                 job["tier"] = tier
             if title and title.strip():
                 job["title"] = title.strip()
+            if description is not None and (not isinstance(description, str) or description.strip()):
+                err = _validate_description(description)
+                if err:
+                    return ToolResult(ok=False, output="", error=err)
+                job["description"] = description.strip()
             if timeout is not None:
                 err = _validate_timeout(timeout)
                 if err:
@@ -350,6 +371,16 @@ class Schedule(Tool):
                     else:
                         job.pop("title", None)
                     changes.append("title")
+                if description is not None:
+                    if not isinstance(description, str) or description.strip():
+                        err = _validate_description(description)
+                        if err:
+                            outcome.append(ToolResult(ok=False, output="", error=err))
+                            return None
+                        job["description"] = description.strip()
+                    else:
+                        job.pop("description", None)
+                    changes.append("description")
                 if paused is not None:
                     job["paused"] = bool(paused)
                     changes.append("paused")
@@ -492,6 +523,17 @@ def _validate_prompt(prompt: str) -> str | None:
             "threat scan blocked scheduled prompt "
             f"(runs unattended with full tool access): {', '.join(flags)}"
         )
+    return None
+
+
+def _validate_description(description) -> str | None:
+    if not isinstance(description, str):
+        return "'description' must be a string"
+    text = description.strip()
+    if len(text) > DESCRIPTION_MAX:
+        return f"'description' is {len(text)} characters; keep it to one sentence of at most {DESCRIPTION_MAX}"
+    if len(text.splitlines()) > 1:
+        return "'description' must be one line"
     return None
 
 

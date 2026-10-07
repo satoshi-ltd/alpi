@@ -10,7 +10,8 @@ this file is the whole contract of the kit.
   `design/canvas/project/`. It needs `node` on PATH to read the shared icons in `common/`.
 - `design/src/` is the source, one module per family of boards: `build.py` (page shell and nav), `gen.py` (canvas index, mobile screens),
   `system_boards.py`, `desktop_boards.py`, `desktop_overlays.py`, `conversation_boards.py`, `mobile_overlays.py`,
-  `brand_boards.py` and `folds.py` (the Brand tab) and `proposals.py` (the proposal boards). Never edit a generated file by hand.
+  `brand_boards.py` and `folds.py` (the Brand tab), `panel_kit.py` (the drawing helpers of the profile window and phone panels, one place for the views and the proposals),
+  `profile_panel_studies.py` (the Desktop and Mobile panel views, drawn from the shipped panels) and `proposals.py` (the proposal boards). Never edit a generated file by hand.
 - `design/drift.py` runs the build and exits 1 naming every file it had to regenerate; `scripts/validate.py` runs it as the
   `design` step. `scripts/` holds no design file.
 - `design/README.md` is the human note; this file owns the contract.

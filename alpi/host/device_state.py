@@ -38,6 +38,7 @@ def register(server: host_server.Server) -> None:
     server.register("host.profile.detail", _profile_detail)
     server.register("host.profile.read_file", _profile_read_file)
     server.register("host.profile.memory_usage", _profile_memory_usage)
+    server.register("host.profile.attention", _profile_attention)
     server.register("host.profile.memory_read", _profile_memory_read)
     server.register("host.profile.memory_write", _profile_memory_write)
     server.register("host.profile.storage", _profile_storage)
@@ -404,6 +405,17 @@ async def _profile_memory_usage(
     return {"files": await asyncio.to_thread(_memory_usage_blocking, home)}
 
 
+async def _profile_attention(
+    params: dict[str, Any], _server: host_server.Server,
+) -> dict[str, Any]:
+    import asyncio
+
+    from alpi import attention
+
+    home = _resolve_home(str(params.get("profile") or ""))
+    return await asyncio.to_thread(attention.collect, home)
+
+
 async def _profile_memory_read(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
@@ -454,6 +466,12 @@ async def _profile_memory_write(
     except ValueError as e:
         raise host_server.HandlerError(-32602, "invalid-params", data={"detail": str(e)}) from None
     host_events.emit("memory_changed", {"profile": home_mod.profile_name(home), "name": name})
+    try:
+        from alpi import attention
+
+        await asyncio.to_thread(attention.reconcile, home)
+    except Exception:  # noqa: BLE001
+        pass
     return {"ok": True, "rev": rev}
 
 
@@ -1389,7 +1407,7 @@ def _skill_row(
     include_body: bool = True,
 ) -> dict[str, Any]:
     try:
-        text = skill_md.read_text(encoding="utf-8")
+        text = skill_md.read_text(encoding="utf-8", errors="replace")
     except OSError:
         text = ""
     description = _skill_description_from_text(text)

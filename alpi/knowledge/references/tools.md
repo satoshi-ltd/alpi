@@ -85,6 +85,9 @@ model actually sees.
 - **Scheduled delivery**: a job pushes to the owner's apps when `notify: true`
   (default silent). To also reach a third party, the job's prompt calls the
   `email` tool explicitly — it is an action, not a schedule field.
+- **Naming a job**: give every job a short `title` and a one-sentence
+  `description` of what it does (English, at most 160 characters, one line);
+  the apps list jobs by them and show the cron only as a fact.
 
 ## Attachments
 

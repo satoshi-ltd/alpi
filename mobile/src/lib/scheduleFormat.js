@@ -5,6 +5,7 @@ import { formatRelative } from './format';
 
 
 export function formatLastRun(iso, status) {
+  if (status === 'error' && !iso) return 'last run failed';
   if (!status || !iso) return 'never run';
   const ms = Date.parse(iso);
   if (Number.isNaN(ms)) return 'never run';
@@ -23,7 +24,7 @@ export function formatNextFire(iso) {
 }
 
 export function jobFailed(job) {
-  return job?.last_run_status === 'error' && !!job?.last_run_at;
+  return job?.last_run_status === 'error';
 }
 
 export function jobTitle(job) {

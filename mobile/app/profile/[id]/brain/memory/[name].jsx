@@ -3,6 +3,9 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, Text
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../../../../src/theme/tokens';
 
+import { AlertBanner } from '../../../../../src/components/AlertBanner';
+import { useAttention } from '../../../../../src/hooks/useAttention';
+import { memoryBanner, memoryItem } from '../../../../../../common/attention.mjs';
 import { Icon } from '../../../../../src/components/Icon';
 import { RichText } from '../../../../../src/components/RichText';
 import { PanelHeader } from '../../../../../src/features/profile/PanelHeader';
@@ -25,6 +28,8 @@ export default function MemoryDetail() {
   const goBack = useBack();
   const { colors, fonts, fontSizes } = useTheme();
   const mem = useMemoryEditor(id, name);
+  const { att } = useAttention(id);
+  const flag = memoryItem(att, String(name));
   const askLeave = useDirtyBack(mem.dirty, goBack);
 
   async function onSave() {
@@ -89,6 +94,7 @@ export default function MemoryDetail() {
         />
       ) : (
         <ScrollView contentContainerStyle={styles.readBody}>
+          {flag ? <AlertBanner {...memoryBanner(flag)} /> : null}
           <View style={{ gap: space.s1 }}>
             <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: space.s3 }}>
               <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.xl, color: colors.ink }}>{file.label}</Text>

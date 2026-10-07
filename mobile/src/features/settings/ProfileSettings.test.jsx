@@ -74,8 +74,8 @@ vi.mock('../../components/Row', () => ({
   RowGroup: ({ children }) => <div data-row-group="">{children}</div>,
   SettingsBand: ({ children }) => <section>{children}</section>,
   RowSeparator: () => <hr />,
-  Row: ({ label, helper, value }) => (
-    <div>
+  Row: ({ label, helper, value, spokenValue }) => (
+    <div data-spoken={spokenValue}>
       <span>{label}</span>
       {helper ? <small>{helper}</small> : null}
       {value ? <strong>{value}</strong> : null}
@@ -170,6 +170,7 @@ describe('ProfileSettings snapshot first paint', () => {
           storage: { storage: [{ key: 'sessions', label: 'sessions', size_bytes: 2048, file_count: 2 }] },
         };
       }
+      if (method === 'host.profile.attention') return { memory: [], skills: [], schedules: [], counts: {}, total: 0 };
       throw new Error(`unexpected ${method}`);
     });
 
@@ -204,9 +205,11 @@ describe('ProfileSettings snapshot first paint', () => {
           storage: { storage: [] },
         };
       }
+      if (method === 'host.profile.attention') return { memory: [], skills: [], schedules: [], counts: {}, total: 0 };
       if (method === 'host.email.status') {
         return { accounts: [{ id: 'fallback', address: 'fallback@example.com', configured: true }] };
       }
+      if (method === 'host.profile.attention') return { memory: [], skills: [], schedules: [], counts: {}, total: 0 };
       throw new Error(`unexpected ${method}`);
     });
 
@@ -235,9 +238,11 @@ describe('ProfileSettings snapshot first paint', () => {
           email: { accounts: [] },
         };
       }
+      if (method === 'host.profile.attention') return { memory: [], skills: [], schedules: [], counts: {}, total: 0 };
       if (method === 'host.profile.storage') {
         return { storage: [{ key: 'sessions', label: 'sessions', size_bytes: 4096, file_count: 3 }] };
       }
+      if (method === 'host.profile.attention') return { memory: [], skills: [], schedules: [], counts: {}, total: 0 };
       throw new Error(`unexpected ${method}`);
     });
 
@@ -271,6 +276,7 @@ describe('ProfileSettings routing tiers', () => {
           storage: { storage: [] },
         };
       }
+      if (method === 'host.profile.attention') return { memory: [], skills: [], schedules: [], counts: {}, total: 0 };
       throw new Error(`unexpected ${method}`);
     });
 
@@ -301,6 +307,7 @@ describe('ProfileSettings routing tiers', () => {
           storage: { storage: [] },
         };
       }
+      if (method === 'host.profile.attention') return { memory: [], skills: [], schedules: [], counts: {}, total: 0 };
       throw new Error(`unexpected ${method}`);
     });
 
@@ -336,6 +343,7 @@ describe('ProfileSettings vision model', () => {
         };
       }
       if (method === 'host.config.set_field') return { ok: true };
+      if (method === 'host.profile.attention') return { memory: [], skills: [], schedules: [], counts: {}, total: 0 };
       throw new Error(`unexpected ${method}`);
     });
 
@@ -366,6 +374,7 @@ describe('ProfileSettings delete intent', () => {
           storage: { storage: [] },
         };
       }
+      if (method === 'host.profile.attention') return { memory: [], skills: [], schedules: [], counts: {}, total: 0 };
       throw new Error(`unexpected ${method}`);
     });
   }
@@ -412,6 +421,7 @@ describe('ProfileSettings vocabulary', () => {
           storage: { storage: [] },
         };
       }
+      if (method === 'host.profile.attention') return { memory: [], skills: [], schedules: [], counts: {}, total: 0 };
       throw new Error(`unexpected ${method}`);
     });
 
@@ -439,6 +449,7 @@ describe('ProfileSettings vocabulary', () => {
           storage: { storage: [] },
         };
       }
+      if (method === 'host.profile.attention') return { memory: [], skills: [], schedules: [], counts: {}, total: 0 };
       throw new Error(`unexpected ${method}`);
     });
 
@@ -462,6 +473,7 @@ describe('ProfileSettings vocabulary', () => {
           storage: { storage: [] },
         };
       }
+      if (method === 'host.profile.attention') return { memory: [], skills: [], schedules: [], counts: {}, total: 0 };
       throw new Error(`unexpected ${method}`);
     });
 
@@ -483,6 +495,7 @@ describe('ProfileSettings vocabulary', () => {
       if (method === 'host.settings.profile_snapshot') {
         return { detail: { name: 'doc' }, usage: { days: [] }, schedules: { jobs: [] }, workgroups: { workgroups: [] }, email: { accounts: [] }, storage: { storage: [] } };
       }
+      if (method === 'host.profile.attention') return { memory: [], skills: [], schedules: [], counts: {}, total: 0 };
       throw new Error(`unexpected ${method}`);
     });
     const { container } = render(<ProfileSettings />, { wrapper: wrapper(call) });
@@ -505,6 +518,7 @@ describe('ProfileSettings vocabulary', () => {
         };
       }
       if (method === 'host.config.set_field') return {};
+      if (method === 'host.profile.attention') return { memory: [], skills: [], schedules: [], counts: {}, total: 0 };
       throw new Error(`unexpected ${method}`);
     });
 
@@ -527,6 +541,7 @@ describe('ProfileSettings vocabulary', () => {
         };
       }
       if (method === 'host.config.set_field') throw new Error('daemon said no');
+      if (method === 'host.profile.attention') return { memory: [], skills: [], schedules: [], counts: {}, total: 0 };
       throw new Error(`unexpected ${method}`);
     });
     const { container } = render(<ProfileSettings />, { wrapper: wrapper(call) });
@@ -551,6 +566,7 @@ describe('ProfileSettings vocabulary', () => {
         };
       }
       if (method === 'host.config.set_field') return {};
+      if (method === 'host.profile.attention') return { memory: [], skills: [], schedules: [], counts: {}, total: 0 };
       throw new Error(`unexpected ${method}`);
     });
     const { container } = render(<ProfileSettings />, { wrapper: wrapper(call) });
@@ -583,6 +599,7 @@ describe('ProfileSettings vocabulary', () => {
           storage: { storage: [] },
         };
       }
+      if (method === 'host.profile.attention') return { memory: [], skills: [], schedules: [], counts: {}, total: 0 };
       throw new Error(`unexpected ${method}`);
     });
 
@@ -609,6 +626,7 @@ describe('ProfileSettings daemon update on a daemon that cannot update itself', 
         storage: { storage: [] },
       };
     }
+    if (method === 'host.profile.attention') return { memory: [], skills: [], schedules: [], counts: {}, total: 0 };
     throw new Error(`unexpected ${method}`);
   });
   const docker = {
@@ -659,6 +677,7 @@ describe('ProfileSettings appearance', () => {
         return { detail: { name: 'doc', ...detail }, usage: { days: [] }, schedules: { jobs: [] }, workgroups: { workgroups: [] }, email: { accounts: [] }, storage: { storage: [] } };
       }
       if (method === 'host.config.set_field') return {};
+      if (method === 'host.profile.attention') return { memory: [], skills: [], schedules: [], counts: {}, total: 0 };
       throw new Error(`unexpected ${method}`);
     });
 
@@ -731,6 +750,7 @@ describe('ProfileSettings phone sections', () => {
           storage: { storage: [] },
         };
       }
+      if (method === 'host.profile.attention') return { memory: [], skills: [], schedules: [], counts: {}, total: 0 };
       throw new Error(`unexpected ${method}`);
     });
     render(<ProfileSettings />, { wrapper: wrapper(call) });
@@ -742,5 +762,64 @@ describe('ProfileSettings phone sections', () => {
     expect(groupOf(/14-day total/)).not.toBeNull();
     expect(groupOf(/14-day total/)).not.toBe(groupOf('Providers'));
     expect(groupOf('Delete profile')).not.toBe(groupOf('Reclaim space'));
+  });
+});
+
+describe('ProfileSettings attention', () => {
+  beforeEach(cleanup);
+  const daemon = (attention) => vi.fn(async (method) => {
+    if (method === 'host.profile.summaries') return { profiles: [{ name: 'doc', counts: { skills: 5 } }] };
+    if (method === 'host.settings.profile_snapshot') {
+      return {
+        detail: { name: 'doc' },
+        usage: { days: [] },
+        schedules: { jobs: [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }] },
+        workgroups: { workgroups: [] },
+        email: { accounts: [] },
+        storage: { storage: [] },
+      };
+    }
+    if (method === 'host.profile.attention') return attention();
+    if (method === 'host.profile.attention') return { memory: [], skills: [], schedules: [], counts: {}, total: 0 };
+    throw new Error(`unexpected ${method}`);
+  });
+
+  const flagged = () => ({
+    memory: [{ file: 'MEMORY.md', used: 2400, limit: 2000, pct: 120, over: true }, { file: 'USER.md', used: 3000, limit: 2000, pct: 150, over: true }],
+    skills: [{ name: 'review-digest', category: 'research', problem: 'lint', message: 'bad' }],
+    schedules: [{ id: 'j1', title: 'Digest', message: 'boom', at: 'x', last_ok_at: null }],
+    counts: { memory: 2, skills: 1, schedules: 1 },
+    total: 4,
+  });
+
+  it('shows a count pill and a helper line on flagged rows only', async () => {
+    render(<ProfileSettings />, { wrapper: wrapper(daemon(flagged)) });
+    await waitFor(() => expect(screen.getByText('1 fails lint')).toBeTruthy());
+    expect(screen.getByText('2 over their limit')).toBeTruthy();
+    expect(screen.getByText('1 failed')).toBeTruthy();
+    const pill = (label) => document.querySelector(`[accessibilitylabel="${label}"]`)?.textContent;
+    expect(pill('1 skill needs you')).toBe('1');
+    expect(pill('2 files need you')).toBe('2');
+    expect(pill('1 job needs you')).toBe('1');
+    expect(screen.getByText('native callable functions')).toBeTruthy();
+    expect(screen.getByText('view')).toBeTruthy();
+    const spoken = [...document.querySelectorAll('[data-spoken]')].map((n) => n.getAttribute('data-spoken'));
+    expect(spoken).toEqual(expect.arrayContaining(['1 skill needs you, 5', '2 files need you, 3 files', '1 job needs you, 4']));
+  });
+
+  it('keeps today\'s rows when the daemon does not know the verb', async () => {
+    const call = daemon(() => { throw Object.assign(new Error('method-not-found'), { code: -32601 }); });
+    render(<ProfileSettings />, { wrapper: wrapper(call) });
+    await waitFor(() => expect(screen.getByText('instructions loaded on demand')).toBeTruthy());
+    await waitFor(() => expect(call.mock.calls.some(([m]) => m === 'host.profile.attention')).toBe(true));
+    expect(screen.getByText('USER · MEMORY · AGENT')).toBeTruthy();
+    expect(screen.getByText('disable · fire · delete · add new')).toBeTruthy();
+    expect(document.querySelector('[accessibilitylabel*="need"]')).toBeNull();
+  });
+
+  it('keeps healthy rows as they are when nothing is flagged', async () => {
+    render(<ProfileSettings />, { wrapper: wrapper(daemon(() => ({ memory: [], skills: [], schedules: [], counts: { memory: 0, skills: 0, schedules: 0 }, total: 0 }))) });
+    await waitFor(() => expect(screen.getByText('instructions loaded on demand')).toBeTruthy());
+    expect(document.querySelector('[accessibilitylabel*="need"]')).toBeNull();
   });
 });

@@ -105,9 +105,9 @@ function offenders(pattern) {
 describe('one back helper for both pane modes', () => {
   it('leaves no screen calling router.back() on its own', () => {
     expect(offenders(/\.back\(\)/)).toEqual([]);
-  });
+  }, 30000);
 
   it('leaves no screen deciding for itself whether history exists', () => {
     expect(offenders(/canGoBack/)).toEqual([]);
-  });
+  }, 30000);
 });

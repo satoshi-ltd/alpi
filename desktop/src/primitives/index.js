@@ -4,6 +4,7 @@ export { default as AddMemberPopover } from "./AddMemberPopover.jsx";
 export { default as AddPeerPopover } from "./AddPeerPopover.jsx";
 export { default as AppearancePicker } from "./AppearancePicker.jsx";
 export { default as Banner } from "./Banner.jsx";
+export { default as AlertBanner } from "./AlertBanner.jsx";
 export { default as BootSplash } from "./BootSplash.jsx";
 export { default as Bar } from "./Bar.jsx";
 export { default as BudgetEdit } from "./BudgetEdit.jsx";

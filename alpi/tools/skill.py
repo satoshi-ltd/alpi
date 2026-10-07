@@ -135,7 +135,7 @@ def _find_skill(home: Path, name: str):
 def _frontmatter(md_path: Path) -> dict[str, str]:
     if not md_path.exists():
         return {}
-    return _frontmatter_from_text(md_path.read_text())
+    return _frontmatter_from_text(md_path.read_text(encoding="utf-8", errors="replace"))
 
 
 def _is_pinned(skill_dir: Path) -> bool:

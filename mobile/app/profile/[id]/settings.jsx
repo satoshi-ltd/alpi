@@ -7,6 +7,9 @@ import { space } from '../../../src/theme/tokens';
 import { pairName } from '../../../../common/accents.mjs';
 import { FALLBACK_ACCENT } from '../../../../common/folds.mjs';
 import { toUsageDays } from '../../../../common/usage.mjs';
+import { attentionHelper, attentionLabel, flagCount } from '../../../../common/attention.mjs';
+import { AttentionValue } from '../../../src/components/AttentionPill';
+import { useAttention } from '../../../src/hooks/useAttention';
 import { Button } from '../../../src/components/Button';
 import { Fold } from '../../../src/components/Fold';
 import { Meter } from '../../../src/components/Meter';
@@ -125,6 +128,7 @@ export default function ProfileSettings() {
   const profile = detailPre ? { ...(baseProfile || {}), ...detailPre } : baseProfile;
   const emailAccounts = useEmailAccounts(id, { skipWhen: !needsFallback(snap, 'email') });
   const schedule = useScheduleList(id, { skipWhen: !needsFallback(snap, 'schedules') });
+  const { att } = useAttention(id);
   const storage = useProfileStorage(id, { skipWhen: !needsFallback(snap, 'storage') });
   const [sheet, setSheet] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -195,6 +199,10 @@ export default function ProfileSettings() {
     );
   }
 
+  const flagged = (panel, text) => {
+    const n = flagCount(att, panel);
+    return n ? <AttentionValue count={n} label={attentionLabel(att, panel)}>{text}</AttentionValue> : text;
+  };
   const accent = profile.accent ?? FALLBACK_ACCENT;
   const locked = profile.name === 'default';
   const emailSection = sectionData(snap.data?.email);
@@ -636,8 +644,10 @@ export default function ProfileSettings() {
         <RowGroup>
           <Row
             label="Cron jobs"
-            helper="disable · fire · delete · add new"
-            value={String(scheduleCount)}
+            helper={attentionHelper(att, 'schedule') ?? 'disable · fire · delete · add new'}
+            helperDanger={flagCount(att, 'schedule') > 0}
+            value={flagged('schedule', String(scheduleCount))}
+            spokenValue={flagCount(att, 'schedule') ? `${attentionLabel(att, 'schedule')}, ${String(scheduleCount)}` : undefined}
             onPress={() => router.push(`/profile/${id}/schedule`)}
           />
         </RowGroup>
@@ -697,15 +707,19 @@ export default function ProfileSettings() {
         <RowGroup>
           <Row
             label="Skills"
-            helper="instructions loaded on demand"
-            value={String(skillCount)}
+            helper={attentionHelper(att, 'skills') ?? 'instructions loaded on demand'}
+            helperDanger={flagCount(att, 'skills') > 0}
+            value={flagged('skills', String(skillCount))}
+            spokenValue={flagCount(att, 'skills') ? `${attentionLabel(att, 'skills')}, ${String(skillCount)}` : undefined}
             onPress={() => router.push(`/profile/${id}/brain/skills`)}
           />
           <RowSeparator />
           <Row
             label="Memories"
-            helper="USER · MEMORY · AGENT"
-            value="3 files"
+            helper={attentionHelper(att, 'memory') ?? 'USER · MEMORY · AGENT'}
+            helperDanger={flagCount(att, 'memory') > 0}
+            value={flagged('memory', '3 files')}
+            spokenValue={flagCount(att, 'memory') ? `${attentionLabel(att, 'memory')}, 3 files` : undefined}
             onPress={() => router.push(`/profile/${id}/brain/memory`)}
           />
           <RowSeparator />

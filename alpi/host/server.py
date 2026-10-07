@@ -102,6 +102,7 @@ _ADMIN_METHODS = frozenset({
     "host.config.unset_field",
     "host.profile.memory_read",
     "host.profile.memory_usage",
+    "host.profile.attention",
     "host.profile.memory_write",
     "host.skills.list",
     "host.skill.read",
@@ -194,6 +195,7 @@ _MEMBER_BLOCKED_EVENTS = frozenset({
     "output.created",
     "output.updated",
     "budget.threshold",
+    "attention.changed",
 })
 
 

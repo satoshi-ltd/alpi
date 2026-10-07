@@ -3,6 +3,9 @@ import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../../../../src/theme/tokens';
 
+import { Dot } from '../../../../../src/components/Dot';
+import { useAttention } from '../../../../../src/hooks/useAttention';
+import { skillItem, skillWord } from '../../../../../../common/attention.mjs';
 import { Row, RowGroup, RowSeparator, SectionHeader } from '../../../../../src/components/Row';
 import { PanelHeader } from '../../../../../src/features/profile/PanelHeader';
 import { useBack } from '../../../../../src/hooks/useBack';
@@ -24,13 +27,17 @@ export default function SkillsList() {
   const { colors, fonts, fontSizes } = useTheme();
   const pull = usePullRefresh(() => skills.refresh?.());
   const skills = useSkills(id);
+  const { att } = useAttention(id);
 
   const rows = (skills.data?.skills ?? []).map((s) => ({
     ...s,
+    flag: skillItem(att, s.category, s.name),
+    rawCategory: s.category ?? '',
     category: formatCategory(s.category),
   }));
+  const needs = rows.filter((s) => s.flag);
 
-  const groups = rows.reduce((m, s) => {
+  const groups = rows.filter((s) => !s.flag).reduce((m, s) => {
     const k = s.category;
     if (!m.has(k)) m.set(k, []);
     m.get(k).push(s);
@@ -56,22 +63,23 @@ export default function SkillsList() {
             <Row label={EMPTY.skills.title} helper={EMPTY.skills.hint} chevron={false} />
           </RowGroup>
         ) : (
-          categoryOrder.map((cat) => (
+          [...(needs.length ? [['Needs you', needs]] : []), ...categoryOrder.map((cat) => [cat, groups.get(cat)])].map(([cat, list]) => (
             <View key={cat}>
-              <SectionHeader>{cat}</SectionHeader>
+              <SectionHeader>{cat === 'Needs you' ? `Needs you · ${list.length}` : cat}</SectionHeader>
               <RowGroup>
-                {groups.get(cat).map((s, i) => (
+                {list.map((s, i) => (
                   <View key={s.path ?? `${s.category}/${s.name}/${i}`}>
                     {i > 0 ? <RowSeparator /> : null}
                     <Pressable
                       onPress={() =>
                         router.push({
                           pathname: `/profile/${id}/brain/skills/[name]`,
-                          params: { name: s.name, path: s.path ?? '', category: s.category ?? '' },
+                          params: { name: s.name, path: s.path ?? '', category: s.rawCategory },
                         })
                       }
                       android_ripple={{ color: colors.selected }}
                       style={({ pressed }) => ({
+                        minHeight: 44,
                         paddingHorizontal: space.s8,
                         paddingVertical: space.s6,
                         gap: space.s1,
@@ -79,10 +87,13 @@ export default function SkillsList() {
                       })}
                     >
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
+                        {s.flag ? <Dot color={colors.danger} /> : null}
                         <Text style={{ flex: 1, fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.ink }} numberOfLines={1}>
                           {s.name}
                         </Text>
-                        {s.status && s.status !== 'active' ? (
+                        {s.flag ? (
+                          <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.dangerText }}>{skillWord(s.flag)}</Text>
+                        ) : s.status && s.status !== 'active' ? (
                           <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: s.status === 'invalid' ? colors.dangerText : colors.ink3 }}>
                             {s.status}
                           </Text>

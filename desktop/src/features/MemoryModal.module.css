@@ -108,3 +108,10 @@
   font-family: var(--font-mono);
   font-size: var(--text-meta);
 }
+
+.flagWord {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--c-danger-text);
+}

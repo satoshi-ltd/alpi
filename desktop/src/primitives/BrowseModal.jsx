@@ -4,13 +4,14 @@ import { createPortal } from "react-dom";
 import { IconBtn, Mono, RefreshBar, SearchIcon, Tip, XIcon } from "./index.js";
 import Crease from "./Crease.jsx";
 import Fold from "./Fold.jsx";
+import { badgeCount } from "../../../common/countBadge.mjs";
 import styles from "./BrowseModal.module.css";
 
 export { styles as browseStyles };
 
 const ShellContext = createContext(null);
 
-export function BrowseShell({ open, onClose, label, guardRef: sharedGuard = null, children }) {
+export function BrowseShell({ open, onClose, label, guardRef: sharedGuard = null, badges = null, children }) {
   const wrapRef = useRef(null);
   const ownGuard = useRef(null);
   const guardRef = sharedGuard ?? ownGuard;
@@ -19,7 +20,7 @@ export function BrowseShell({ open, onClose, label, guardRef: sharedGuard = null
     onClose?.();
   }, [onClose]);
   const isTop = useOverlay({ open, onClose: close, ref: wrapRef, modal: true });
-  const shell = useMemo(() => ({ close, guardRef }), [close, guardRef]);
+  const shell = useMemo(() => ({ close, guardRef, badges }), [close, guardRef, badges]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -124,11 +125,15 @@ export function BrowseBody({
                       type="button"
                       role="tab"
                       aria-selected={on}
+                      aria-label={shell?.badges?.[s.id]?.count > 0 ? `${s.label}, ${shell.badges[s.id].label}` : undefined}
                       className={`${styles.section} ${on ? styles.sectionOn : ""}`.trim()}
                       onClick={() => !on && switchTo(s.id)}
                     >
                       {s.label}
                       {on && count != null ? <span className={styles.count}>{count}</span> : null}
+                      {shell?.badges?.[s.id]?.count > 0 ? (
+                        <span className={styles.flag} aria-hidden>{badgeCount(shell.badges[s.id].count)}</span>
+                      ) : null}
                     </button>
                   );
                 })}

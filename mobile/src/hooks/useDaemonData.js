@@ -259,6 +259,16 @@ export function useScheduleList(profile, opts = {}) {
   );
 }
 
+export function useProfileAttention(profile, opts = {}) {
+  const inner = usePolledCall(
+    'host.profile.attention',
+    { profile },
+    [profile, opts.skipWhen],
+    { skipWhen: !profile || opts.skipWhen },
+  );
+  return { ...inner, unsupported: isMethodNotFound(inner.error) };
+}
+
 export function useOllamaModels(profile) {
   return usePolledCall('host.providers.ollama_models', { profile }, [profile], { skipWhen: !profile });
 }

@@ -302,3 +302,150 @@ def test_the_design_contract_lives_in_design_and_scripts_holds_no_design_file():
         if claude.exists():
             assert claude.read_text().strip() == "@AGENTS.md"
     assert not [p.name for p in (REPO / "scripts").iterdir() if "design" in p.name.lower()]
+
+
+def _panel_kit():
+    import importlib
+
+    src = str(REPO / "design" / "src")
+    if src not in sys.path:
+        sys.path.insert(0, src)
+    importlib.import_module("desktop_boards")
+    return importlib.import_module("panel_kit")
+
+
+def _css_rule(css, selector):
+    css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    match = re.search(r"(?<![\w-])" + re.escape(selector) + r"\s*\{([^}]*)\}", css)
+    assert match, selector
+    props = {}
+    for declaration in match.group(1).split(";"):
+        if ":" in declaration:
+            name, value = declaration.split(":", 1)
+            props[name.strip()] = " ".join(value.split())
+    return props
+
+
+def _jsx_condition(jsx, class_ref):
+    match = re.search(r"\{\s*([^<{}]+?)\s*\?\s*\(?\s*<span[^>]*" + re.escape(class_ref), jsx, re.S)
+    assert match, class_ref
+    return " ".join(match.group(1).split())
+
+
+def _html_text(html):
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html)).strip()
+
+
+def test_kit_tabs_are_the_profile_panels_in_the_shipped_order():
+    kit = _panel_kit()
+    source = (REPO / "desktop" / "src" / "lib" / "profilePanels.js").read_text()
+    labels = re.findall(r'label:\s*"([^"]+)"', source)
+    assert labels and tuple(labels) == tuple(kit.TABS)
+    html = _html_text(kit.head("Skills", 5))
+    assert [html.index(label) for label in labels] == sorted(html.index(label) for label in labels)
+
+
+def test_kit_draws_the_count_on_the_open_tab_and_the_flag_on_any_tab_like_browse_modal():
+    kit = _panel_kit()
+    jsx = (REPO / "desktop" / "src" / "primitives" / "BrowseModal.jsx").read_text()
+    assert _jsx_condition(jsx, "styles.count") == "on && count != null"
+    assert _jsx_condition(jsx, "styles.flag") == "shell?.badges?.[s.id]?.count > 0"
+    head = kit.head("Skills", 5, {"Memories": 2, "Schedules": 1})
+    assert head.count('data-part="count"') == 1
+    assert head.count('data-part="flag"') == 2
+    assert head.index('data-part="count"') > head.index("Skills") and head.index('data-part="count"') < head.index("Tools")
+    assert kit.head("Tools", 37).count('data-part="flag"') == 0
+
+
+def test_kit_sidebar_and_search_row_follow_browse_modal_css():
+    kit = _panel_kit()
+    css = (REPO / "desktop" / "src" / "primitives" / "BrowseModal.module.css").read_text()
+    tokens = (REPO / "desktop" / "src" / "styles" / "tokens.css").read_text()
+    assert _css_rule(css, ".sidebar")["background"] == "var(--bg-side)"
+    assert int(re.search(r"--modal-side:\s*(\d+)px", tokens).group(1)) == kit.SIDE_W
+    wrap_rule = _css_rule(css, ".searchWrap")
+    assert not {"background", "box-shadow", "border-radius", "border"} & set(wrap_rule)
+    input_rule = _css_rule(css, ".searchInput")
+    assert input_rule["background"] == "transparent" and input_rule["border"] == "0"
+    window = kit.window("Skills", 5, None, "Search skills…", "", "", 200)
+    side = re.search(r'<div style="width: 340px;[^>]*background: ([^;]+);', window)
+    assert side and side.group(1) == re.search(r"--bg-side:\s*(#[0-9a-f]{6})", tokens).group(1)
+    search = kit.search_row("Search skills…")
+    assert "background" not in search and "border-radius" not in search and "0 0 0 0.5px" not in search
+
+
+def test_kit_schedule_groups_are_the_shipped_job_groups():
+    kit = _panel_kit()
+    source = (REPO / "common" / "attention.mjs").read_text()
+    body = source.split("export function jobGroups", 1)[1]
+    shipped = re.findall(r'id:\s*"(\w+)"\s*,\s*label:\s*"([^"]+)"', body)
+    assert shipped and tuple(shipped) == tuple(kit.JOB_GROUPS)
+    import profile_panel_studies as studies
+
+    text = _html_text(studies.schedules_window(True))
+    positions = [text.index(label) for _, label in shipped]
+    assert positions == sorted(positions)
+    assert "Needs you" not in _html_text(studies.schedules_window(False))
+
+
+def test_kit_banner_and_badge_follow_the_paper_direction():
+    kit = _panel_kit()
+    tokens = (REPO / "desktop" / "src" / "styles" / "tokens.css").read_text()
+    radius = int(re.search(r"--r-xs:\s*(\d+)px", tokens).group(1))
+    assert radius <= 4
+    banner_css = (REPO / "desktop" / "src" / "primitives" / "AlertBanner.module.css").read_text()
+    assert "border-left" not in banner_css and _css_rule(banner_css, ".banner")["border-radius"] == "var(--r-xs)"
+    flag_css = (REPO / "desktop" / "src" / "primitives" / "BrowseModal.module.css").read_text()
+    assert _css_rule(flag_css, ".flag")["border-radius"] == "var(--r-xs)"
+    for html in (kit.alert_banner("Lead", "Detail", "Run now"), kit.flag_badge(2), kit.phone_banner("Lead", "Detail"), kit.attention_value(1, "5")):
+        assert not re.search(r"border-(left|right|top|bottom)\s*:", html)
+        assert not re.search(r"inset\s+-?\d+(\.\d+)?px\s+0\s+0", html)
+        assert not re.search(r"inset\s+0\s+-?\d+(\.\d+)?px\s+0\s+0\s+(?!0\.5)", html)
+        assert not re.search(r"blur|999px", html)
+        assert all(int(px) <= 4 for px in re.findall(r"border-radius:\s*(\d+)px", html))
+
+
+def test_kit_badge_uses_the_danger_fill_and_on_danger_pair_in_both_themes(tmp_path):
+    kit = _panel_kit()
+    tokens = (REPO / "desktop" / "src" / "styles" / "tokens.css").read_text()
+    css = (REPO / "desktop" / "src" / "primitives" / "BrowseModal.module.css").read_text()
+    flag = _css_rule(css, ".flag")
+    assert flag["background"] == "var(--c-danger)" and flag["color"] == "var(--on-danger)"
+    pill = (REPO / "mobile" / "src" / "components" / "AttentionPill.jsx").read_text()
+    assert "colors.danger" in pill and "colors.onDanger" in pill and "colors.dangerText" not in pill
+    assert re.search(r"--c-danger:\s*" + kit.DANGER_FILL, tokens)
+    assert re.search(r"--on-danger:\s*#ffffff", tokens)
+    subprocess.run([sys.executable, str(REPO / "design" / "build.py"), "--out", str(tmp_path)], check=True, capture_output=True)
+    built = (tmp_path / "desktop.html").read_text() + (tmp_path / "mobile.html").read_text()
+    badges = re.findall(r'data-part="flag" style="([^"]*)"', built)
+    assert badges
+    for style in badges:
+        assert "background: var(--c-danger);" in style and "color: var(--on-danger)" in style
+        assert "--c-danger-text" not in style and "--bg-pane" not in style
+    assert "background: var(--c-danger); display: inline-flex" in built
+
+
+def test_kit_phone_rows_use_the_attention_wording_and_groups_of_the_mobile_app():
+    kit = _panel_kit()
+    import profile_panel_studies as studies
+
+    attention = (REPO / "common" / "attention.mjs").read_text()
+    assert "fails lint" in attention and re.search(r"over \$\{[^}]*\"their\"[^}]*\} limit", attention)
+    assert re.search(r"\$\{items\.length\} failed", attention)
+    settings = (REPO / "mobile" / "app" / "profile" / "[id]" / "settings.jsx").read_text()
+    for phrase in ("instructions loaded on demand", "USER · MEMORY · AGENT", "disable · fire · delete · add new", "native callable functions"):
+        assert phrase in settings
+        assert phrase in _html_text(studies.m_settings_rows(False))
+    flagged = _html_text(studies.m_settings_rows(True))
+    for phrase in ("1 fails lint", "2 over their limit", "1 failed", "Cron jobs"):
+        assert phrase in flagged
+    for screen in ("skills/index.jsx", "memory/index.jsx"):
+        assert "Needs you" in (REPO / "mobile" / "app" / "profile" / "[id]" / "brain" / screen).read_text()
+    assert "Needs you · 1" in _html_text(studies.m_skill_list(True))
+    assert "Needs you · 2" in _html_text(studies.m_memory_list(True))
+    sched = _html_text(studies.m_schedule_list(True))
+    labels = [label for _, label in kit.JOB_GROUPS]
+    assert [sched.index(label) for label in labels] == sorted(sched.index(label) for label in labels)
+    job = (REPO / "mobile" / "app" / "profile" / "[id]" / "schedule" / "[job].jsx").read_text()
+    assert "[next, nextRunWord(job)].filter(Boolean).join(' · ')" in job
+    assert "tomorrow 07:30 · failed" in _html_text(studies.m_schedule_page(True))

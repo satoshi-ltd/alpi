@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.17.5 — 2026-10-07 — a section says when it needs you
+
+- **A profile reports what needs its owner.** `host.profile.attention` (admin) lists memory files at 90 % of their limit or over it, skills that fail lint or lack what they require, and jobs whose last run failed, with `attention.changed` to refetch. The first time a memory file or skill is flagged the daemon files one `warning` notification (a burst of more than three becomes one), and it files it again only after the item was fixed and broke again. `alpi profile show` and the TUI `/status` print the same list.
+- **A job carries a one-sentence `description`** beside its title: `schedule(add|update, description=…)`, at most 160 characters on one line, listed by `host.schedule.list` and shown by `alpi schedule list`, which now also prints the last failure.
+- **Run state keeps the last failure and the last good run** (`last_run_message`, redacted and capped at 300 characters; `last_ok_at`), so an app can say why a job failed and when it last worked.
+- **One unreadable skill no longer hides the rest.** A `SKILL.md` with invalid UTF-8 used to break the whole skills listing.
+
 ## v0.17.4 — 2026-10-07 — the scheduler trusts the file, not its snapshot
 
 - **A long pass no longer fires stale jobs.** Each job is re-read just before it fires: one removed, paused, edited or fired by hand during an earlier run of the same pass is skipped or runs from its current definition.

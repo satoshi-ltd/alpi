@@ -1,0 +1,40 @@
+.banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-5);
+  background: var(--hover);
+  border-radius: var(--r-xs);
+  box-shadow: 0 0 0 0.5px var(--line);
+}
+
+.icon {
+  flex-shrink: 0;
+  margin-top: var(--space-1);
+  color: var(--c-danger-text);
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.lead {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--ink);
+}
+
+.detail {
+  font-size: var(--text-meta);
+  line-height: var(--lh-cozy);
+  color: var(--ink-3);
+}
+
+.banner > button {
+  flex-shrink: 0;
+}

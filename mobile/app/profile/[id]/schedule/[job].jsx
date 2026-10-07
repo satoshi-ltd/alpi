@@ -2,10 +2,12 @@ import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { lineHeights, space } from '../../../../src/theme/tokens';
+import { lineHeights, radii, space } from '../../../../src/theme/tokens';
 
 import { ActionSheet } from '../../../../src/components/ActionSheet';
 import { LoadFailed } from '../../../../src/components/LoadFailed';
+import { AlertBanner } from '../../../../src/components/AlertBanner';
+import { useAttention } from '../../../../src/hooks/useAttention';
 import { Button } from '../../../../src/components/Button';
 import { Icon } from '../../../../src/components/Icon';
 import { RichText } from '../../../../src/components/RichText';
@@ -18,15 +20,32 @@ import { usePullRefresh } from '../../../../src/hooks/usePullRefresh';
 import { useEventEffect } from '../../../../src/hooks/useEvents';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
 import { formatLastRun, formatNextFire, jobFailed, jobTitle } from '../../../../src/lib/scheduleFormat';
+import { jobBanner, jobItem, nextRunWord } from '../../../../../common/attention.mjs';
 import { describeTimeout, describeWhen, rawWhen } from '../../../../../common/schedule.mjs';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 
-function Fact({ label, children, tone }) {
+function Fact({ label, children }) {
   const { colors, fonts, fontSizes } = useTheme();
   return (
     <View style={{ flexDirection: 'row', gap: space.s5, minHeight: 24, alignItems: 'baseline' }}>
-      <Text style={{ width: 72, fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>{label}</Text>
-      <Text style={{ flex: 1, fontFamily: fonts.mono, fontSize: fontSizes.sm, color: tone === 'danger' ? colors.dangerText : colors.ink }}>{children}</Text>
+      <Text style={{ width: 72, fontFamily: fonts.mono, fontSize: fontSizes.xs, letterSpacing: 0.6, color: colors.ink3 }}>{label}</Text>
+      <View style={{ flex: 1, gap: space.s2, alignItems: 'flex-start' }}>{children}</View>
+    </View>
+  );
+}
+
+function FactText({ children, tone }) {
+  const { colors, fonts, fontSizes } = useTheme();
+  return (
+    <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, lineHeight: fontSizes.md * lineHeights.normal, color: tone === 'danger' ? colors.dangerText : colors.ink2 }}>{children}</Text>
+  );
+}
+
+function Chip({ children }) {
+  const { colors, fonts, fontSizes } = useTheme();
+  return (
+    <View style={{ paddingHorizontal: space.s3, paddingVertical: 2, borderRadius: radii.xs, backgroundColor: colors.hover }}>
+      <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>{children}</Text>
     </View>
   );
 }
@@ -38,6 +57,7 @@ export default function ScheduleJob() {
   const { call } = useEndpoint();
   const { colors, fonts, fontSizes } = useTheme();
   const schedule = useScheduleList(id);
+  const { att } = useAttention(id);
   const pull = usePullRefresh(() => schedule.refresh?.());
   const [busy, setBusy] = useState(false);
   const [more, setMore] = useState(false);
@@ -80,6 +100,14 @@ export default function ScheduleJob() {
   };
 
   const failed = jobFailed(job);
+  const about = typeof job?.description === 'string' ? job.description.trim() : '';
+  const flagged = job ? jobItem(att, job.id) : null;
+  const banner = failed
+    ? jobBanner(
+        flagged ?? { message: job.last_run_message, last_ok_at: job.last_ok_at },
+        formatNextFire((flagged ?? job).last_ok_at) ?? '',
+      )
+    : null;
   const next = job && !job.paused ? formatNextFire(job.next_fire) : null;
 
   return (
@@ -107,15 +135,15 @@ export default function ScheduleJob() {
           refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />}
           contentContainerStyle={{ padding: space.s8, gap: space.s6, paddingBottom: space.s10 }}
         >
+          {failed ? (
+            <AlertBanner {...banner} />
+          ) : null}
           <View style={{ gap: space.s3 }}>
             <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.xl, color: colors.ink }}>{jobTitle(job)}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s4, flexWrap: 'wrap' }}>
               <StatusWord word={job.paused ? 'paused' : 'active'} on={!job.paused} />
-              <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink2 }}>{describeWhen(job)}</Text>
+              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>{String(job.id)}</Text>
             </View>
-            {failed ? (
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.dangerText }}>{formatLastRun(job.last_run_at, job.last_run_status)}</Text>
-            ) : null}
           </View>
           <View style={{ flexDirection: 'row', gap: space.s3 }}>
             <View style={{ flex: 1 }}>
@@ -125,21 +153,27 @@ export default function ScheduleJob() {
               <Button title={job.paused ? 'Resume' : 'Pause'} variant="secondary" fullWidth disabled={busy} onPress={() => act('host.schedule.set_paused', { paused: !job.paused })} />
             </View>
           </View>
-          <View style={{ gap: space.s2 }}>
-            {rawWhen(job) ? <Fact label={job.kind}>{rawWhen(job)}</Fact> : null}
-            {next ? <Fact label="next">{next}</Fact> : null}
-            <Fact label="last run" tone={failed ? 'danger' : undefined}>{formatLastRun(job.last_run_at, job.last_run_status)}</Fact>
-            <Fact label="runs">{[job.no_agent ? 'shell script' : 'agent', describeTimeout(job)].filter(Boolean).join(' · ')}</Fact>
-            {job.timeout_error ? <Fact label="timeout" tone="danger">{job.timeout_error}</Fact> : null}
-            <Fact label="notify">{job.notify ? 'pushes to your apps' : 'silent — failures still alert'}</Fact>
-            <Fact label="id">{String(job.id)}</Fact>
+          <View style={{ gap: space.s4 }}>
+            {about ? <Fact label="ABOUT"><FactText>{about}</FactText></Fact> : null}
+            <Fact label="WHEN">
+              <FactText>{describeWhen(job)}</FactText>
+              {rawWhen(job) ? <Chip>{rawWhen(job)}</Chip> : null}
+            </Fact>
+            {next ? <Fact label="NEXT"><FactText>{[next, nextRunWord(job)].filter(Boolean).join(' · ')}</FactText></Fact> : null}
+            <Fact label="LAST RUN"><FactText tone={failed ? 'danger' : undefined}>{formatLastRun(job.last_run_at, job.last_run_status)}</FactText></Fact>
+            <Fact label="RUNS"><FactText>{[job.no_agent ? 'shell script' : 'agent', describeTimeout(job)].filter(Boolean).join(' · ')}</FactText></Fact>
+            {job.timeout_error ? <Fact label="TIMEOUT"><FactText tone="danger">{job.timeout_error}</FactText></Fact> : null}
+            <Fact label="NOTIFY"><FactText>{job.notify ? 'pushes to your apps' : 'silent — failures still alert'}</FactText></Fact>
           </View>
           {job.prompt ? (
-            job.no_agent ? (
-              <Text selectable style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * lineHeights.cozy, color: colors.ink }}>{job.prompt}</Text>
-            ) : (
-              <RichText size={fontSizes.md} color={colors.ink}>{job.prompt}</RichText>
-            )
+            <View style={{ padding: space.s5, gap: space.s3, borderRadius: radii.xs, borderWidth: 0.5, borderColor: colors.line, backgroundColor: colors.bg }}>
+              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, letterSpacing: 0.6, color: colors.ink3 }}>PROMPT</Text>
+              {job.no_agent ? (
+                <Text selectable style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * lineHeights.cozy, color: colors.ink }}>{job.prompt}</Text>
+              ) : (
+                <RichText size={fontSizes.md} color={colors.ink2}>{job.prompt}</RichText>
+              )}
+            </View>
           ) : null}
         </ScrollView>
       )}

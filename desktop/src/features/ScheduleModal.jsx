@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Button, ConfirmDelete, IconBtn } from "../primitives/index.js";
+import { AlertBanner, Button, ConfirmDelete, Eyebrow, IconBtn } from "../primitives/index.js";
 import { I } from "../primitives/icons.jsx";
 import shell from "../primitives/BrowseModal.module.css";
 import { BrowseBody, BrowseShell } from "../primitives/BrowseModal.jsx";
@@ -10,6 +10,7 @@ import { subscribeDaemonEvent } from "../lib/daemon-bus.js";
 import { useNotify } from "../primitives/Notification.jsx";
 import { formatLastRun } from "./settings/util.js";
 import { describeTimeout, describeWhen, rawWhen } from "../../../common/schedule.mjs";
+import { jobBanner, jobGroups, jobItem, nextRunWord } from "../../../common/attention.mjs";
 import { formatNextFire, lastRunShort } from "../lib/time.js";
 import styles from "./ScheduleModal.module.css";
 import { EMPTY } from "../../../common/emptyCopy.mjs";
@@ -20,15 +21,17 @@ function jobTitle(j) {
   return j.title?.trim() || j.prompt?.trim().split("\n")[0] || `(job · ${String(j.id).slice(0, 6)})`;
 }
 
-function jobFailed(j) {
-  return j.last_run_status === "error" && !!j.last_run_at;
+function jobState(j) {
+  if (j.paused) return "paused";
+  return j.last_run_status === "error" ? "failed" : "active";
 }
 
 function JobStatus({ job }) {
+  const state = jobState(job);
   return (
-    <span className={styles.status} data-state={job.paused ? "paused" : "active"}>
-      <span className={styles.dot} data-on={job.paused ? "off" : "on"} aria-hidden />
-      {job.paused ? "paused" : "active"}
+    <span className={styles.status} data-state={state}>
+      <span className={styles.dot} data-on={state === "active" ? "on" : state === "paused" ? "off" : "fail"} aria-hidden />
+      {state}
     </span>
   );
 }
@@ -36,10 +39,10 @@ function JobStatus({ job }) {
 function matchesJob(j, query) {
   const needle = String(query || "").trim().toLowerCase();
   if (!needle) return true;
-  return [j.title, j.prompt, j.expression, j.id, describeWhen(j)].filter(Boolean).join(" ").toLowerCase().includes(needle);
+  return [j.title, j.description, j.prompt, j.expression, j.id, describeWhen(j)].filter(Boolean).join(" ").toLowerCase().includes(needle);
 }
 
-export function SchedulePanel({ open = true, profile, connectionId, openJob = null, owner = null, onSection = null }) {
+export function SchedulePanel({ open = true, profile, connectionId, openJob = null, owner = null, onSection = null, attention = null }) {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -97,7 +100,7 @@ export function SchedulePanel({ open = true, profile, connectionId, openJob = nu
 
   useEffect(() => {
     if (!jobs.length) { if (selectedId) setSelectedId(null); return; }
-    if (!jobs.some((j) => j.id === selectedId)) setSelectedId(jobs[0].id);
+    if (!jobs.some((j) => j.id === selectedId)) setSelectedId(jobGroups(jobs)[0].jobs[0].id);
   }, [jobs, selectedId]);
 
   const pendingJobRef = useRef(null);
@@ -114,7 +117,12 @@ export function SchedulePanel({ open = true, profile, connectionId, openJob = nu
   }, [jobs, openJob]);
 
   const filtered = useMemo(() => jobs.filter((j) => matchesJob(j, query)), [jobs, query]);
+  const groups = useMemo(() => jobGroups(filtered), [filtered]);
   const active = jobs.find((j) => j.id === selectedId) || null;
+  const failed = !!active && jobState(active) === "failed";
+  const flagged = active ? jobItem(attention, active.id) : null;
+  const okAt = flagged?.last_ok_at ?? active?.last_ok_at ?? null;
+  const banner = failed ? jobBanner({ message: flagged?.message ?? active.last_run_message, last_ok_at: okAt }, lastRunShort(okAt)) : null;
 
   async function mutate(kind, id, fn, okMsg) {
     const gen = genRef.current;
@@ -155,29 +163,32 @@ export function SchedulePanel({ open = true, profile, connectionId, openJob = nu
           <span className={shell.emptyTitle}>{EMPTY.matches.title}</span>
           <span className={shell.emptyHint}>{EMPTY.matches.hint}</span>
         </li>
-      ) : filtered.map((j) => (
-        <li key={j.id}>
-          <button
-            type="button"
-            className={`${shell.row} ${styles.jobRow} ${j.id === selectedId ? shell.rowActive : ""}`}
-            onClick={() => setSelectedId(j.id)}
-            role="option"
-            aria-selected={j.id === selectedId}
-          >
-            <span className={styles.dot} data-on={j.paused ? "off" : "on"} aria-hidden />
-            <span className={styles.jobMain}>
-              <span className={styles.jobTitle}>{jobTitle(j)}</span>
-              <span className={styles.jobCron}>{describeWhen(j)}</span>
-            </span>
-            {j.paused ? (
-              <span className={styles.jobWhen}>paused</span>
-            ) : jobFailed(j) ? (
-              <span className={`${styles.jobWhen} ${styles.failed}`}>failed</span>
-            ) : j.last_run_status && j.last_run_at ? (
-              <span className={styles.jobWhen}>{lastRunShort(j.last_run_at)}</span>
-            ) : null}
-          </button>
-        </li>
+      ) : groups.map((g) => (
+        <Fragment key={g.id}>
+          <Eyebrow as="li" className={shell.groupHeader} role="presentation">{`${g.label} · ${g.jobs.length}`}</Eyebrow>
+          {g.jobs.map((j) => {
+            const state = jobState(j);
+            const word = nextRunWord(j);
+            return (
+              <li key={j.id}>
+                <button
+                  type="button"
+                  className={`${shell.row} ${styles.jobRow} ${j.id === selectedId ? shell.rowActive : ""}`}
+                  onClick={() => setSelectedId(j.id)}
+                  role="option"
+                  aria-selected={j.id === selectedId}
+                >
+                  <span className={styles.dot} data-on={state === "active" ? "on" : state === "paused" ? "off" : "fail"} aria-hidden />
+                  <span className={styles.jobMain}>
+                    <span className={styles.jobTitle}>{jobTitle(j)}</span>
+                    {j.description ? <span className={styles.jobDesc}>{j.description}</span> : null}
+                  </span>
+                  {word ? <span className={`${styles.jobWhen} ${state === "failed" ? styles.failed : ""}`.trim()}>{word}</span> : null}
+                </button>
+              </li>
+            );
+          })}
+        </Fragment>
       ))}
     </ul>
   );
@@ -200,50 +211,64 @@ export function SchedulePanel({ open = true, profile, connectionId, openJob = nu
         <>
           <div className={shell.detailMeta}>
             <span className={styles.detailTitle}>{jobTitle(active)}</span>
+            <JobStatus job={active} />
             <span className={shell.detailMetaSpacer} />
-            <Button size="sm" variant="secondary" onClick={() => fire(active.id)} disabled={busy}>Run now</Button>
-            <Button size="sm" variant="ghost" onClick={() => setPaused(active.id, !active.paused)} disabled={busy}>
-              {active.paused ? "Resume" : "Pause"}
-            </Button>
-            <span className={styles.deleteWrap}>
-              <IconBtn tip="Delete" className={styles.deleteBtn} onClick={() => setConfirm(true)} disabled={busy}>
-                <I.Trash />
-              </IconBtn>
-              <ConfirmDelete
-                anchored={false}
-                open={confirm}
-                onClose={() => setConfirm(false)}
-                onConfirm={() => remove(active.id)}
-                title={`Delete "${jobTitle(active)}"?`}
-                consequence="The job stops firing and is removed. The agent can recreate it later from chat."
-              />
-            </span>
+            <span className={styles.detailId}>{active.id}</span>
           </div>
           <div className={shell.detailScroll}>
-            <div className={styles.lead}>
-              <JobStatus job={active} />
-              <span className={styles.leadWhen}>{describeWhen(active)}</span>
-              {!active.paused && active.next_fire ? <span className={styles.leadNext}>next {formatNextFire(active.next_fire)}</span> : null}
+            {banner ? (
+              <AlertBanner lead={banner.lead} detail={banner.detail} action="Run now" onAction={() => fire(active.id)} disabled={busy} />
+            ) : null}
+            <div className={styles.actions}>
+              {banner ? null : <Button size="sm" variant="secondary" onClick={() => fire(active.id)} disabled={busy}>Run now</Button>}
+              <Button size="sm" variant="ghost" onClick={() => setPaused(active.id, !active.paused)} disabled={busy}>
+                {active.paused ? "Resume" : "Pause"}
+              </Button>
+              <span className={styles.deleteWrap}>
+                <IconBtn tip="Delete" className={styles.deleteBtn} onClick={() => setConfirm(true)} disabled={busy}>
+                  <I.Trash />
+                </IconBtn>
+                <ConfirmDelete
+                  anchored={false}
+                  open={confirm}
+                  onClose={() => setConfirm(false)}
+                  onConfirm={() => remove(active.id)}
+                  title={`Delete "${jobTitle(active)}"?`}
+                  consequence="The job stops firing and is removed. The agent can recreate it later from chat."
+                />
+              </span>
             </div>
             <dl className={`${styles.fields} ${active.paused ? styles.paused : ""}`}>
-              {rawWhen(active) ? <div><dt>{active.kind}</dt><dd className="mono">{rawWhen(active)}</dd></div> : null}
+              {active.description ? <div><dt>about</dt><dd>{active.description}</dd></div> : null}
+              <div>
+                <dt>when</dt>
+                <dd>{describeWhen(active)}{rawWhen(active) ? <span className={styles.chip}>{rawWhen(active)}</span> : null}</dd>
+              </div>
+              {!active.paused && active.next_fire ? <div><dt>next</dt><dd>{formatNextFire(active.next_fire)}</dd></div> : null}
               <div>
                 <dt>last run</dt>
-                <dd className={`mono ${jobFailed(active) ? styles.failed : ""}`.trim()}>{formatLastRun(active.last_run_at, active.last_run_status)}</dd>
+                <dd className={failed ? styles.failed : ""}>{formatLastRun(active.last_run_at, active.last_run_status)}</dd>
               </div>
               <div>
                 <dt>runs</dt>
-                <dd className="mono">{[active.no_agent ? "shell script" : "agent", describeTimeout(active)].filter(Boolean).join(" · ")}</dd>
+                <dd>{[active.no_agent ? "shell script" : "agent", describeTimeout(active)].filter(Boolean).join(" · ")}</dd>
               </div>
               {active.timeout_error ? (
-                <div><dt>timeout</dt><dd className={`mono ${styles.failed}`}>{active.timeout_error}</dd></div>
+                <div><dt>timeout</dt><dd className={styles.failed}>{active.timeout_error}</dd></div>
               ) : null}
-              <div><dt>notify</dt><dd className="mono">{active.notify ? "pushes to your apps" : "silent — failures still alert"}</dd></div>
-              <div><dt>id</dt><dd className="mono">{active.id}</dd></div>
+              <div><dt>notify</dt><dd>{active.notify ? "pushes to your apps" : "silent — failures still alert"}</dd></div>
             </dl>
-            {active.prompt
-              ? <MarkdownBody source={active.no_agent ? `\`\`\`sh\n${active.prompt}\n\`\`\`` : active.prompt} />
-              : <em className={styles.emptyNote}>(empty)</em>}
+            <div className={styles.promptBox}>
+              <div className={styles.promptRail}>
+                <Eyebrow className={styles.promptLabel}>prompt</Eyebrow>
+                <div className={styles.promptItem}>Prompt</div>
+              </div>
+              <div className={styles.promptBody}>
+                {active.prompt
+                  ? <MarkdownBody source={active.no_agent ? `\`\`\`sh\n${active.prompt}\n\`\`\`` : active.prompt} />
+                  : <em className={styles.emptyNote}>(empty)</em>}
+              </div>
+            </div>
           </div>
         </>
       ) : loading ? (

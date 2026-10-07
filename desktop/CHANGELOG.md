@@ -11,6 +11,15 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.8.4 — 2026-10-07 — schedules read like skills, and sections flag what needs you
+
+- **Schedules open like a skill page.** The list shows each job's title, one line of what it does, its state and the next run, grouped as Needs you, Active and Paused, with no cron string in the rows. The reader carries About, When (the sentence with the cron as a chip), Next, Last run, Runs and Notify, and the prompt in its own box.
+- **A section says when something in it needs you.** A tab shows a red count of flagged items, the lists lift a Needs you group, and the reader opens with one banner that names the problem: a memory file over its limit, a skill that fails lint or lacks what it requires, a job whose last run failed (with a Run now action).
+- **The window's sidebar takes the side tone and its search is a plain row.**
+- Against an older daemon every new mark stays hidden and the panels look as before.
+
+  Requires alpi 0.17.5.
+
 ## v0.8.3 — 2026-10-06 — the composer pauses its work while text is composed
 
 - While macOS Dictation or an input method is composing text, the composer holds its auto-size and @mention work until the text lands, and drops the mention popover when a composition starts. This is an attempt at Dictation closing as soon as it starts in the composer; it still needs a check on a Mac.

@@ -83,7 +83,7 @@ function pressable(body, { onPress, onLongPress, disabled, colors, spoken }) {
   );
 }
 
-function WideRow({ label, helper, value, leading, trailing, onPress, onLongPress, danger, disabled, chevron, labelLines, helperLines, item }) {
+function WideRow({ label, helper, value, leading, trailing, onPress, onLongPress, danger, disabled, chevron, labelLines, helperLines, helperDanger, spokenValue, item }) {
   const { colors, fonts, fontSizes } = useTheme();
   const control =
     typeof value === 'string' ? (
@@ -140,7 +140,7 @@ function WideRow({ label, helper, value, leading, trailing, onPress, onLongPress
         {helper ? (
           <Text
             numberOfLines={helperLines ?? 2}
-            style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: item ? colors.ink3 : colors.ink4, marginTop: space.s1 }}
+            style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: helperDanger ? colors.dangerText : item ? colors.ink3 : colors.ink4, marginTop: space.s1 }}
           >
             {helper}
           </Text>
@@ -157,10 +157,10 @@ function WideRow({ label, helper, value, leading, trailing, onPress, onLongPress
       </View>
     </View>
   );
-  return pressable(body, { onPress, onLongPress, disabled, colors, spoken: rowLabel(label, value, helper) });
+  return pressable(body, { onPress, onLongPress, disabled, colors, spoken: rowLabel(label, spokenValue ?? value, helper) });
 }
 
-export function Row({ label, helper, value, leading, trailing, onPress, onLongPress, danger, disabled = false, chevron = true, labelLines = 1, helperLines, item = false }) {
+export function Row({ label, helper, value, leading, trailing, onPress, onLongPress, danger, disabled = false, chevron = true, labelLines = 1, helperLines, helperDanger = false, spokenValue, item = false }) {
   const { colors, fonts, fontSizes } = useTheme();
   const wide = useWideSettings();
   const [width, setWidth] = useState(0);
@@ -179,6 +179,8 @@ export function Row({ label, helper, value, leading, trailing, onPress, onLongPr
         chevron={chevron}
         labelLines={labelLines}
         helperLines={helperLines}
+        helperDanger={helperDanger}
+        spokenValue={spokenValue}
         item={item}
       />
     );
@@ -229,7 +231,7 @@ export function Row({ label, helper, value, leading, trailing, onPress, onLongPr
       style={{
         fontFamily: fonts.monoMedium,
         fontSize: fontSizes.xs,
-        color: colors.ink3,
+        color: helperDanger ? colors.dangerText : colors.ink3,
       }}
     >
       {helper}
@@ -274,7 +276,7 @@ export function Row({ label, helper, value, leading, trailing, onPress, onLongPr
     </View>
   );
 
-  return pressable(body, { onPress, onLongPress, disabled, colors, spoken: rowLabel(label, value, helper) });
+  return pressable(body, { onPress, onLongPress, disabled, colors, spoken: rowLabel(label, spokenValue ?? value, helper) });
 }
 
 export function RowSeparator({ indent = 20 }) {

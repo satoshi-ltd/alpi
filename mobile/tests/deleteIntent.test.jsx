@@ -147,6 +147,7 @@ vi.mock('../src/features/sheets/ProfileFieldSheets', () => ({
 }));
 vi.mock('../src/features/workgroups/PipelinesSection', () => ({ PipelinesSection: () => null }));
 
+vi.mock('../src/hooks/useAttention', () => ({ useAttention: () => ({ att: null, refresh: () => {} }) }));
 vi.mock('../src/hooks/useActiveRole', () => ({
   useActiveRole: () => 'admin',
   useCanAdminEarly: () => true,

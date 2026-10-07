@@ -1205,6 +1205,7 @@ def schedule_list(ctx: click.Context, as_json: bool) -> None:
         kind = j.get("kind", "cron")
         when = j.get("expression") or j.get("run_at") or f"{j.get('after_hours')}h idle"
         title = j.get("title") or (j.get("prompt") or "")[:60].replace("\n", " ")
+        description = j.get("description")
         flags = []
         if j.get("paused"):
             flags.append("paused")
@@ -1222,7 +1223,10 @@ def schedule_list(ctx: click.Context, as_json: bool) -> None:
         last = j.get("last_run_status") or "never ran"
         click.echo(f"{jid}  [{kind}] {when}  → next {_next_fire(j)}")
         click.echo(f"        {title}")
-        click.echo(f"        last: {last}{' · ' + ', '.join(flags) if flags else ''}")
+        if description:
+            click.echo(f"        {description}")
+        failure = f" ({j['last_run_message']})" if j.get("last_run_status") == "error" and j.get("last_run_message") else ""
+        click.echo(f"        last: {last}{failure}{' · ' + ', '.join(flags) if flags else ''}")
 
 
 @schedule.command("run-once")
@@ -3813,8 +3817,15 @@ def profile_show(ctx: click.Context, name: str | None) -> None:
         ("size", home.profile_size_label(h)),
         ("path", home.shorten_home(h)),
     ]
+    from alpi import attention
+
     lines = [Text(name, style=f"bold {accent}")]
     lines += [Text.assemble((f"{label:<7}", "dim"), value) for label, value in details]
+    try:
+        needs = attention.lines(attention.collect(h))
+    except Exception:  # noqa: BLE001
+        needs = []
+    lines += [Text.assemble((f"{'needs':<7}", "dim"), ("you: ", "bold"), line) for line in needs]
     if fold_art.supports_fold_art(stream=ui._console.file):
         picture = fold_art.art(fold, accent)
         ui._console.print(fold_art.beside(picture, lines))

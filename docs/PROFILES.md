@@ -47,7 +47,8 @@ Everything that represents state, identity, or cost:
 | `host/attachments/tmp/` | ✓ | Staged chat-attachment uploads from the paired apps. The rest of `host/` is root-only (see below). |
 | `run/bg/` | ✓ | Output capture and metadata for background terminal jobs. |
 | `runs/<run_id>.jsonl` | ✓ | Bounded, redacted durable event journal for each engine turn; surfaced by `alpi runs`, `/runs`, `host.runs.list` and `host.run.read`. |
-| `schedule/jobs.json` | ✓ | Cron + one-shot jobs. Scheduled runs never create chat sessions; a job flagged `no_agent: true` runs one of this profile's skill scripts directly, without the LLM. |
+| `attention.json` | ✓ | Which flagged memory files, skills and failed jobs the daemon already reported, so each is notified once (`alpi/attention.py`). |
+| `schedule/jobs.json` | ✓ | Cron + one-shot jobs, each with an optional one-line `description`. Scheduled runs never create chat sessions; a job flagged `no_agent: true` runs one of this profile's skill scripts directly, without the LLM. |
 | `outputs/outputs.jsonl` | ✓ | Persistent inbox for proactive agent messages + schedule failures, capped at 500 rows. Surfaced by `host.outputs.*` to paired apps. |
 | `out/` | ✓ | Files the agent produces for you and the apps serve back; the system prompt names its absolute path as the place for them. Kept ~30 days, then offered by the cleanup wizard; excluded from `alpi backup`. |
 | `knowledge.sqlite` | ✓ | Derived sqlite-vec indexes for workspace knowledge, session recall, and workgroup recall. |

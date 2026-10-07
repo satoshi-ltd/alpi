@@ -1137,6 +1137,9 @@ queries those stores, not ``host.events.history``.
     polling `host.outputs.list`.
   - `schedule.changed` (`action: removed|paused|resumed`) —
     schedule mutators on the host plane.
+  - `attention.changed` (`{profile, counts, total}`) — the set of
+    flagged items of `host.profile.attention` changed; refetch it.
+    Dropped from a member's stream like `schedule.*`.
   - `config_changed` (`scope: providers|mcp|sandbox|voice|env|<dotted-key-head>`)
     — every cfg.save in `alpi/host/config.py` plus
     `host.config.set_field` / `unset_field`.
@@ -1150,6 +1153,19 @@ queries those stores, not ``host.events.history``.
     crosses 80% or 100% of the daily cap (highest threshold wins
     when a single record vaults past both). Engine passes
     `cfg_budget` into the record callsite.
+
+`host.profile.attention` (admin) answers what needs the owner in one profile
+without opening each panel: `memory` (files at 90 % of their limit or over
+it: `file`, `used`, `limit`, `pct`, `over`), `skills` (a skill that fails
+lint, or is inactive because what it requires is missing: `name`, `category`,
+`problem` = `lint|missing`, `message`), `schedules` (a job whose last run
+failed and is not paused: `id`, `title`, `message`, `at`, `last_ok_at`), plus
+`counts` and `total`. `alpi/attention.py` computes it; the scheduler's tick and
+`host.profile.memory_write` reconcile it against `<home>/attention.json`, emit
+`attention.changed` when the set changes and file one `warning` output for each
+memory or skill item the first time it is flagged (again only after it was
+resolved and broke again). A failed job already files its own `error` row.
+`alpi profile show` and the TUI `/status` print the same list.
 
 Adding a new verb: create the handler in the matching `host/*.py`
 module, register on `host_server.Server.register` (or
@@ -1229,6 +1245,8 @@ default-executor turns. A regression test in
 pins the contract.
 
 **First run.** A cron job runs at its next occurrence, never on the tick it appears. The `schedule` tool records `last_run_at` when it adds a job; a job that arrives without run state (written into `jobs.json` by hand or by a deploy, or whose `schedule/runs.json` entry was lost) gets `first_seen_at` in `runs.json` from the first tick that sees it, or, if it arrives paused, from the first tick after it is resumed. A fired job is stamped (`last_run_at`, `last_run_status`; a one-shot that succeeded is removed) the moment its run returns, before its outputs and events are written and not at the end of the pass, so a daemon restart in the middle of a long pass does not fire a job that already finished. A run that raises (the agent subprocess cannot start, a file is missing) is a failed outcome stamped and reported like any other failure, and the pass goes on with the next job. Each job is re-read from `jobs.json` just before it fires and skipped if it was removed, paused, fired by hand or no longer due meanwhile, and fires from the fresh copy; a due check that raises skips that job with a logged reason; a stamp that cannot be written is logged and kept in memory, laid over the job on every later tick (so it is not fired again, and a one-shot stays gone) and retried first thing on each tick until it lands, without overwriting a newer stamp on disk (a daemon restart while the disk keeps failing loses it); an unreadable `jobs.json` mid-pass ends the pass. `fire_by_id` stamps the outcome (a failed stamp is logged, not raised) before it emits `schedule.done`, so the first `host.activity.list` after `activity.changed` already reads it. `schedule(action="fire")` runs a job now.
+
+**Job fields.** A job carries an optional one-line `description` (at most 160 characters, set through `schedule(add|update, description=…)` and listed by `host.schedule.list`), and its run state keeps `last_run_message` (the redacted failure, 300 characters, cleared by the next success) and `last_ok_at`.
 
 **Timezone.** Cron expressions evaluate against the **machine's system timezone** (`datetime.now().astimezone()` in `scheduler/run.py`). Jobs are stored with UTC `last_run_at` but fire according to local wall-clock time. Practical consequence: if you specify `10 12 * * *` because you want a 12:10 reminder in Bangkok, the Mac must be set to `Asia/Bangkok`. Move the machine to a different timezone and the cron fires at 12:10 there, not in Bangkok. No in-job timezone override today — add it via `TZ=…` in the launchd plist / systemd unit if cross-timezone stability is required.
 

@@ -4,14 +4,16 @@ import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../../../src/theme/tokens';
 
-import { Row, RowGroup, RowSeparator } from '../../../../src/components/Row';
+import { Dot } from '../../../../src/components/Dot';
+import { Row, RowGroup, RowSeparator, SectionHeader } from '../../../../src/components/Row';
 import { PanelHeader } from '../../../../src/features/profile/PanelHeader';
 import { StatusWord } from '../../../../src/features/profile/StatusWord';
 import { useBack } from '../../../../src/hooks/useBack';
 import { useScheduleList } from '../../../../src/hooks/useDaemonData';
 import { usePullRefresh } from '../../../../src/hooks/usePullRefresh';
 import { useEventEffect } from '../../../../src/hooks/useEvents';
-import { formatLastRun, jobFailed, jobTitle } from '../../../../src/lib/scheduleFormat';
+import { jobTitle } from '../../../../src/lib/scheduleFormat';
+import { jobGroups, nextRunWord } from '../../../../../common/attention.mjs';
 import { describeWhen } from '../../../../../common/schedule.mjs';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 import { EMPTY } from '../../../../../common/emptyCopy.mjs';
@@ -57,47 +59,62 @@ export default function ScheduleList() {
             </Text>
           </View>
         ) : (
-          <RowGroup style={{ marginTop: space.s5 }}>
-            {jobs.length === 0 ? (
+          jobs.length === 0 ? (
+            <RowGroup style={{ marginTop: space.s5 }}>
               <Row label={EMPTY.schedule.title} helper={EMPTY.schedule.hint} chevron={false} />
-            ) : (
-              jobs.map((j, i) => {
-                const paused = !!j.paused;
-                const failed = jobFailed(j);
-                return (
-                  <View key={j.id}>
-                    {i > 0 ? <RowSeparator /> : null}
-                    <Pressable
-                      onPress={() => open(j.id)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${jobTitle(j)}, ${describeWhen(j)}${paused ? ', paused' : failed ? ', last run failed' : ''}`}
-                      android_ripple={{ color: colors.selected }}
-                      style={({ pressed }) => ({
-                        minHeight: 44,
-                        paddingHorizontal: space.s8,
-                        paddingVertical: space.s5,
-                        gap: space.s1,
-                        backgroundColor: pressed ? colors.selected : 'transparent',
-                      })}
-                    >
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s4 }}>
-                        <StatusWord word="" on={!paused} />
-                        <Text style={{ flex: 1, fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, color: paused ? colors.ink3 : colors.ink }} numberOfLines={1}>
-                          {jobTitle(j)}
-                        </Text>
-                        <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: failed && !paused ? colors.dangerText : colors.ink3 }} numberOfLines={1}>
-                          {paused ? 'paused' : failed ? 'failed' : j.last_run_at ? formatLastRun(j.last_run_at, j.last_run_status).replace(/^ran /, '') : ''}
-                        </Text>
+            </RowGroup>
+          ) : (
+            jobGroups(jobs).map((g) => (
+              <View key={g.id}>
+                <SectionHeader>{`${g.label} · ${g.jobs.length}`}</SectionHeader>
+                <RowGroup>
+                  {g.jobs.map((j, i) => {
+                    const paused = !!j.paused;
+                    const failed = !paused && j.last_run_status === 'error';
+                    const word = nextRunWord(j);
+                    const dot = failed ? colors.danger : paused ? colors.ink4 : colors.ink;
+                    const description = typeof j.description === 'string' ? j.description.trim() : '';
+                    return (
+                      <View key={j.id}>
+                        {i > 0 ? <RowSeparator /> : null}
+                        <Pressable
+                          onPress={() => open(j.id)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${jobTitle(j)}, ${describeWhen(j)}${paused ? ', paused' : failed ? ', last run failed' : ''}`}
+                          android_ripple={{ color: colors.selected }}
+                          style={({ pressed }) => ({
+                            minHeight: 44,
+                            paddingHorizontal: space.s8,
+                            paddingVertical: space.s5,
+                            gap: space.s1,
+                            justifyContent: 'center',
+                            backgroundColor: pressed ? colors.selected : 'transparent',
+                          })}
+                        >
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s4 }}>
+                            <Dot color={dot} />
+                            <Text style={{ flex: 1, fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, color: paused ? colors.ink3 : colors.ink }} numberOfLines={1}>
+                              {jobTitle(j)}
+                            </Text>
+                            {word ? (
+                              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: failed ? colors.dangerText : colors.ink3 }} numberOfLines={1}>
+                                {word}
+                              </Text>
+                            ) : null}
+                          </View>
+                          {description ? (
+                            <Text style={{ marginLeft: space.s6, fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }} numberOfLines={1}>
+                              {description}
+                            </Text>
+                          ) : null}
+                        </Pressable>
                       </View>
-                      <Text style={{ marginLeft: space.s6, fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }} numberOfLines={1}>
-                        {describeWhen(j)}
-                      </Text>
-                    </Pressable>
-                  </View>
-                );
-              })
-            )}
-          </RowGroup>
+                    );
+                  })}
+                </RowGroup>
+              </View>
+            ))
+          )
         )}
       </ScrollView>
     </SafeAreaView>

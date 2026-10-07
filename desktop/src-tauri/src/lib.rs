@@ -298,6 +298,21 @@ async fn memory_usage(
 }
 
 #[tauri::command]
+async fn profile_attention(
+    profile: String,
+    connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    off_main(move || {
+        let params = serde_json::json!({ "profile": profile });
+        match connection_id.as_deref() {
+            Some(cid) => host_client::call_for(cid, "host.profile.attention", params),
+            None => host_client::call("host.profile.attention", params),
+        }
+    })
+    .await?
+}
+
+#[tauri::command]
 async fn memory_read(
     profile: String,
     name: String,
@@ -3934,6 +3949,7 @@ pub fn run() {
             profile_skill_file,
             profile_memory,
             memory_usage,
+            profile_attention,
             memory_read,
             memory_write,
             host_connections,

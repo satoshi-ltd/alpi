@@ -1,12 +1,13 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Eyebrow, Icon } from "../primitives/index.js";
+import { AlertBanner, Eyebrow, Icon } from "../primitives/index.js";
 import Markdown from "../primitives/Markdown.jsx";
 import CodeView from "../primitives/CodeView.jsx";
 import shell from "../primitives/BrowseModal.module.css";
 import { BrowseBody, BrowseShell } from "../primitives/BrowseModal.jsx";
 import { PROFILE_PANELS } from "../lib/profilePanels.js";
 import styles from "./SkillsModal.module.css";
+import { skillBanner, skillItem, skillWord } from "../../../common/attention.mjs";
 import { EMPTY } from "../../../common/emptyCopy.mjs";
 import { skillFileIcon } from "../../../common/fileKind.mjs";
 
@@ -75,7 +76,7 @@ function sameSkill(a, b) {
   return !!a && !!b && a.name === b.name && (a.category || null) === (b.category || null);
 }
 
-export function SkillsPanel({ open = true, profile, connectionId, owner = null, onSection = null }) {
+export function SkillsPanel({ open = true, profile, connectionId, owner = null, onSection = null, attention = null }) {
   const [skills, setSkills] = useState([]);
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState(null);
@@ -109,12 +110,20 @@ export function SkillsPanel({ open = true, profile, connectionId, owner = null, 
     return () => { cancelled = true; };
   }, [open, profile, connectionId]);
 
+  const pickedRef = useRef(false);
+  const settledRef = useRef(false);
+  useEffect(() => { pickedRef.current = false; settledRef.current = false; }, [open, profile, connectionId]);
+
   useEffect(() => {
     if (!skills.length) { if (selected) setSelected(null); return; }
-    if (!skills.some((s) => sameSkill(s, selected))) {
-      setSelected({ name: skills[0].name, category: skills[0].category || null });
-    }
-  }, [skills, selected]);
+    const flagged = skills.find((s) => skillItem(attention, s.category, s.name));
+    const first = flagged ?? skills[0];
+    const want = { name: first.name, category: first.category || null };
+    const lost = !skills.some((s) => sameSkill(s, selected));
+    const lift = !settledRef.current && !pickedRef.current && !!attention && !sameSkill(want, selected);
+    if (attention) settledRef.current = true;
+    if (lost || lift) setSelected(want);
+  }, [skills, selected, attention]);
 
   useEffect(() => {
     if (!open || !selected || !profile) return undefined;
@@ -149,7 +158,10 @@ export function SkillsPanel({ open = true, profile, connectionId, owner = null, 
   }, [detail, selectedPath, profile, connectionId]);
 
   const filtered = useMemo(() => skills.filter((s) => matchesSkill(s, query)), [skills, query]);
-  const groups = useMemo(() => groupSkills(filtered), [filtered]);
+  const flagOf = useCallback((s) => skillItem(attention, s.category, s.name), [attention]);
+  const needs = useMemo(() => filtered.filter((s) => flagOf(s)), [filtered, flagOf]);
+  const groups = useMemo(() => groupSkills(filtered.filter((s) => !flagOf(s))), [filtered, flagOf]);
+  const selectedFlag = selected ? skillItem(attention, selected.category, selected.name) : null;
 
   const onToggleDir = useCallback((name) => {
     setOpenDirs((prev) => {
@@ -187,7 +199,22 @@ export function SkillsPanel({ open = true, profile, connectionId, owner = null, 
           <span className={shell.emptyHint}>{EMPTY.matches.hint}</span>
         </li>
       ) : (
-        groups.map((g) => (
+        <>
+        {needs.length ? (
+          <>
+            <Eyebrow as="li" className={shell.groupHeader} role="presentation">{`Needs you · ${needs.length}`}</Eyebrow>
+            {needs.map((s) => (
+              <SkillRow
+                key={`${s.category || ""}/${s.name}`}
+                skill={s}
+                flag={flagOf(s)}
+                active={sameSkill(s, selected)}
+                onSelect={() => { pickedRef.current = true; setSelected({ name: s.name, category: s.category || null }); }}
+              />
+            ))}
+          </>
+        ) : null}
+        {groups.map((g) => (
           <Fragment key={g.cat}>
             <Eyebrow as="li" className={shell.groupHeader} role="presentation">{g.cat}</Eyebrow>
             {g.skills.map((s) => (
@@ -195,11 +222,12 @@ export function SkillsPanel({ open = true, profile, connectionId, owner = null, 
                 key={`${s.category || ""}/${s.name}`}
                 skill={s}
                 active={sameSkill(s, selected)}
-                onSelect={() => setSelected({ name: s.name, category: s.category || null })}
+                onSelect={() => { pickedRef.current = true; setSelected({ name: s.name, category: s.category || null }); }}
               />
             ))}
           </Fragment>
-        ))
+        ))}
+        </>
       )}
     </ul>
   );
@@ -227,6 +255,7 @@ export function SkillsPanel({ open = true, profile, connectionId, owner = null, 
           onSelectFile={setSelectedPath}
           file={currentFile}
           fileLoading={fileLoading && selectedPath !== "SKILL.md"}
+          flag={selectedFlag}
         />
       ) : detailLoading ? (
         <div className={shell.detailEmpty}>Loading skill…</div>
@@ -243,7 +272,7 @@ function StatusDot({ status }) {
   return <span aria-hidden className={`${styles.dot} ${tone}`} />;
 }
 
-function SkillRow({ skill, active, onSelect }) {
+function SkillRow({ skill, active, onSelect, flag = null }) {
   return (
     <li>
       <button
@@ -254,9 +283,9 @@ function SkillRow({ skill, active, onSelect }) {
         aria-selected={active}
       >
         <span className={styles.rowHead}>
-          <StatusDot status={skill.status} />
+          {flag ? <span aria-hidden className={`${styles.dot} ${styles.dotFlag}`} /> : <StatusDot status={skill.status} />}
           <span className={styles.rowId}>{skill.name}</span>
-          {skill.status !== "active" ? <span className={styles.rowStatus} data-status={skill.status}>{skill.status}</span> : null}
+          {flag ? <span className={styles.rowStatus} data-status="invalid">{skillWord(flag)}</span> : skill.status !== "active" ? <span className={styles.rowStatus} data-status={skill.status}>{skill.status}</span> : null}
           <span className={shell.sizeTag}>{formatBytes(skill.size)}</span>
         </span>
         {skill.description ? <span className={styles.rowBlurb}>{skill.description}</span> : null}
@@ -265,7 +294,7 @@ function SkillRow({ skill, active, onSelect }) {
   );
 }
 
-function DetailPane({ detail, selectedPath, openDirs, onToggleDir, onSelectFile, file, fileLoading }) {
+function DetailPane({ detail, selectedPath, openDirs, onToggleDir, onSelectFile, file, fileLoading, flag = null }) {
   const inactive = detail.status === "inactive";
   const invalid = detail.status === "invalid";
   return (
@@ -281,7 +310,8 @@ function DetailPane({ detail, selectedPath, openDirs, onToggleDir, onSelectFile,
       </div>
 
       <div className={styles.article}>
-        {inactive || invalid ? (
+        {flag ? <AlertBanner {...skillBanner(flag)} /> : null}
+        {!flag && (inactive || invalid) ? (
           <div className={`${styles.callout} ${invalid ? styles.calloutInvalid : ""}`}>
             <span className={styles.calloutDot} aria-hidden />
             <span>

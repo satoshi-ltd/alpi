@@ -4,6 +4,9 @@ import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { lineHeights, radii, space } from '../../../../../src/theme/tokens';
 
+import { AlertBanner } from '../../../../../src/components/AlertBanner';
+import { useAttention } from '../../../../../src/hooks/useAttention';
+import { skillBanner, skillItem } from '../../../../../../common/attention.mjs';
 import { Icon } from '../../../../../src/components/Icon';
 import { RichText } from '../../../../../src/components/RichText';
 import { PanelHeader } from '../../../../../src/features/profile/PanelHeader';
@@ -22,6 +25,7 @@ export default function SkillDetail() {
   const { call } = useEndpoint();
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
+  const { att } = useAttention(id);
 
   useEffect(() => {
     if (!id || !name) {
@@ -47,6 +51,8 @@ export default function SkillDetail() {
     };
   }, [id, name, category, call]);
 
+  const flag = skillItem(att, detail?.category || (category ? String(category) : null), String(name));
+  const banner = flag ? skillBanner(flag) : null;
   const status = detail ? statusLabel(detail.status) : null;
   const reason = detail?.reason ?? '';
   const requires = Array.isArray(detail?.requires) ? detail.requires : [];
@@ -69,6 +75,7 @@ export default function SkillDetail() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ padding: space.s8, gap: space.s6, paddingBottom: space.s10 }}>
+          {banner ? <AlertBanner {...banner} /> : null}
           <View style={{ gap: space.s3 }}>
             <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.xl, color: colors.ink }}>{detail.name ?? String(name)}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s4, flexWrap: 'wrap' }}>
@@ -78,7 +85,7 @@ export default function SkillDetail() {
             </View>
           </View>
 
-          {status !== 'active' && reason ? (
+          {status !== 'active' && reason && !banner ? (
             <Text
               accessibilityRole="alert"
               style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * lineHeights.normal, color: status === 'invalid' ? colors.dangerText : colors.ink2 }}

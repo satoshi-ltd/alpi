@@ -636,8 +636,7 @@ def fire_by_id(home: Path, job_id: str) -> tuple[bool, str]:
     def _stamp(current: list[dict]) -> list[dict] | None:
         for j in current:
             if j.get("id") == job_id:
-                j["last_run_at"] = stamp_at
-                j["last_run_status"] = "ok" if outcome.ok else "error"
+                _record_outcome(j, outcome.ok, outcome.message, stamp_at)
                 return current
         return None
     try:
@@ -848,19 +847,34 @@ def _profile_paused(home: Path) -> bool:
         return False
 
 
-_pending_stamps: dict[str, dict[str, tuple[str, bool, str]]] = {}
+_pending_stamps: dict[str, dict[str, tuple[str, bool, str, str]]] = {}
+FAILURE_MESSAGE_CAP = 300
 
 
-def _overlay_pending(job: dict, pending: dict[str, tuple[str, bool, str]]) -> dict | None:
+def _record_outcome(job: dict, ok: bool, message: str, at: str) -> None:
+    from alpi._redact import redact
+
+    job["last_run_at"] = at
+    job["last_run_status"] = "ok" if ok else "error"
+    if ok:
+        job["last_ok_at"] = at
+        job.pop("last_run_message", None)
+    else:
+        job["last_run_message"] = str(redact(message or ""))[:FAILURE_MESSAGE_CAP]
+
+
+def _overlay_pending(job: dict, pending: dict[str, tuple[str, bool, str, str]]) -> dict | None:
     entry = pending.get(str(job.get("id")))
     if entry is None:
         return job
-    kind, ok, at = entry
+    kind, ok, at, message = entry
     if kind == "once" and ok:
         return None
     if not _older(job.get("last_run_at"), at):
         return job
-    return {**job, "last_run_at": at, "last_run_status": "ok" if ok else "error"}
+    merged = dict(job)
+    _record_outcome(merged, ok, message, at)
+    return merged
 
 
 def _older(disk: str | None, at: str) -> bool:
@@ -877,8 +891,8 @@ def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]
     pending = _pending_stamps.setdefault(str(home), {})
     unseen: set[str] = set()
 
-    def _stamp(fired: dict[str, tuple[str, bool]]) -> None:
-        pending.update({jid: (kind, ok, stamp_at) for jid, (kind, ok) in fired.items()})
+    def _stamp(fired: dict[str, tuple[str, bool, str]]) -> None:
+        pending.update({jid: (kind, ok, stamp_at, message) for jid, (kind, ok, message) in fired.items()})
 
         def _apply(current: list[dict]) -> list[dict]:
             kept: list[dict] = []
@@ -887,12 +901,11 @@ def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]
                 if jid in unseen and _needs_first_seen(j):
                     j["first_seen_at"] = stamp_at
                 if jid in pending:
-                    kind, ok, at = pending[jid]
+                    kind, ok, at, message = pending[jid]
                     if kind == "once" and ok:
                         continue
                     if _older(j.get("last_run_at"), at):
-                        j["last_run_at"] = at
-                        j["last_run_status"] = "ok" if ok else "error"
+                        _record_outcome(j, ok, message, at)
                 kept.append(j)
             return kept
         try:
@@ -942,7 +955,7 @@ def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]
         outcome = _run_guarded(job, home)
         _elapsed = time.time() - _started
         # Stamp even on failure to avoid a tight re-fire loop; keep it ahead of the I/O below.
-        _stamp({job_id: (str(job.get("kind", "cron")), outcome.ok)})
+        _stamp({job_id: (str(job.get("kind", "cron")), outcome.ok, outcome.message)})
         stamped = True
         log.info("job %s %s — %s", job_id,
                  "OK" if outcome.ok else "FAIL", outcome.message)
@@ -952,7 +965,17 @@ def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]
 
     if unseen and not stamped:
         _stamp({})
+    _reconcile_attention(home)
     return results
+
+
+def _reconcile_attention(home: Path) -> None:
+    try:
+        from alpi import attention
+
+        attention.reconcile(home)
+    except Exception as e:  # noqa: BLE001
+        log.warning("attention check failed: %s", e)
 
 
 async def serve(home: Path) -> None:

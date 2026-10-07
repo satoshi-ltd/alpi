@@ -51,6 +51,7 @@ vi.mock('../src/components/ScreenHeader', () => ({ ScreenHeader: ({ title }) => 
 vi.mock('../src/components/Toast', () => ({ useToast: () => vi.fn() }));
 vi.mock('../src/components/TypedConfirm', () => ({ Bold: ({ children }) => children, Code: ({ children }) => children, TypedConfirm: () => null }));
 vi.mock('../src/hooks/usePullRefresh', () => ({ usePullRefresh: () => ({ refreshing: false, onRefresh: () => {} }) }));
+vi.mock('../src/hooks/useAttention', () => ({ useAttention: () => ({ att: null, refresh: () => {} }) }));
 vi.mock('../src/hooks/useBack', () => ({ useBack: () => () => {} }));
 vi.mock('../src/hooks/useDaemonData', () => ({ useSkills: () => h.skills, useTools: () => h.tools }));
 vi.mock('../src/hooks/useSubject', () => ({ useProfile: () => h.profile }));

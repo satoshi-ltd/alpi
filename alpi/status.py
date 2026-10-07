@@ -43,6 +43,14 @@ def status_rows(
     if home is not None:
         from alpi import ledger
         rows.append(("daily budget", ledger.status_line(home, cfg_budget or {})))
+    if home is not None:
+        try:
+            from alpi import attention
+
+            for line in attention.lines(attention.collect(home)):
+                rows.append(("needs you", line))
+        except Exception:  # noqa: BLE001
+            pass
     return rows
 
 

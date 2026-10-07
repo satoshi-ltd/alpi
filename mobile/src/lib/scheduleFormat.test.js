@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { scheduleSummary, formatLastRun } from "./scheduleFormat.js";
+import { scheduleSummary, formatLastRun, jobFailed } from "./scheduleFormat.js";
 
 describe("scheduleSummary", () => {
   it.each([
@@ -28,6 +28,12 @@ describe("formatLastRun", () => {
     expect(formatLastRun("2026-07-02T10:00:00Z", undefined)).toBe("never run");
     expect(formatLastRun("2026-07-02T10:00:00Z", null)).toBe("never run");
     expect(formatLastRun("not-a-date", "ok")).toBe("never run");
+  });
+
+  it("says a failed run without a timestamp failed, not never run", () => {
+    expect(formatLastRun(null, "error")).toBe("last run failed");
+    expect(jobFailed({ last_run_status: "error" })).toBe(true);
+    expect(jobFailed({ last_run_status: "ok", last_run_at: "2026-07-02T10:00:00Z" })).toBe(false);
   });
 
   it("formats a successful run and flags a failed one", () => {

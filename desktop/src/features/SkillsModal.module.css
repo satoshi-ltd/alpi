@@ -42,6 +42,7 @@
 .dotActive { background: var(--ink); }
 .dotInactive { border: 1px solid var(--ink-4); }
 .dotInvalid { border: 1px solid var(--c-danger); }
+.dotFlag { background: var(--c-danger); }
 
 .detailName {
   display: inline-flex;

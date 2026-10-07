@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { IconBtn, EditIcon, I } from "../primitives/index.js";
+import { AlertBanner, IconBtn, EditIcon, I } from "../primitives/index.js";
 import { useNotify } from "../primitives/Notification.jsx";
 import { subscribeDaemonEvent } from "../lib/daemon-bus.js";
 import CodeView from "../primitives/CodeView.jsx";
@@ -11,6 +11,7 @@ import MarkdownBody from "../primitives/MarkdownBody.jsx";
 import { shortDate } from "../lib/time.js";
 import styles from "./MemoryModal.module.css";
 import { EMPTY } from "../../../common/emptyCopy.mjs";
+import { memoryBanner, memoryItem, memoryWord } from "../../../common/attention.mjs";
 import { MEMORY_FILES, entryNote, memoryEntries } from "../../../common/memoryEntries.mjs";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -49,7 +50,7 @@ function Usage({ file, wide = false }) {
   );
 }
 
-export function MemoryPanel({ open = true, profile, connectionId, canEdit = false, owner = null, onSection = null }) {
+export function MemoryPanel({ open = true, profile, connectionId, canEdit = false, owner = null, onSection = null, attention = null }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -181,6 +182,9 @@ export function MemoryPanel({ open = true, profile, connectionId, canEdit = fals
     }
   }
 
+  const flagged = active ? memoryItem(attention, active.name) : null;
+  const banner = flagged ? memoryBanner(flagged) : null;
+
   const list = (
     <ul className={shell.list} role="listbox">
       {loading ? (
@@ -199,7 +203,9 @@ export function MemoryPanel({ open = true, profile, connectionId, canEdit = fals
           <span className={shell.emptyTitle}>{EMPTY.matches.title}</span>
           <span className={shell.emptyHint}>{EMPTY.matches.hint}</span>
         </li>
-      ) : filtered.map((f) => (
+      ) : filtered.map((f) => {
+        const item = memoryItem(attention, f.name);
+        return (
         <li key={f.name}>
           <button
             type="button"
@@ -211,11 +217,13 @@ export function MemoryPanel({ open = true, profile, connectionId, canEdit = fals
             <span className={styles.fileHead}>
               <span className={styles.fileLabel}>{f.label}</span>
               <span className={styles.fileName}>{f.name}</span>
+              {item ? <span className={styles.flagWord}>{memoryWord(item)}</span> : null}
             </span>
             <Usage file={f} />
           </button>
         </li>
-      ))}
+        );
+      })}
     </ul>
   );
 
@@ -254,6 +262,9 @@ export function MemoryPanel({ open = true, profile, connectionId, canEdit = fals
             )}
           </div>
           <div className={shell.detailScroll}>
+            {banner && !editing ? (
+              <AlertBanner lead={banner.lead} detail={banner.detail} action={canEdit ? "Edit" : null} onAction={startEdit} />
+            ) : null}
             {editing ? (
               <CodeView editable text={draft} onChange={setDraft} ariaLabel={`Edit ${active.name}`} />
             ) : active.entries.length ? (

@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a) => invokeMock(...a) }));
@@ -81,26 +81,6 @@ describe("ScheduleModal", () => {
     expect(screen.getByText("silent — failures still alert")).toBeTruthy();
   });
 
-  it("shows the last-run time in the list once a run has a status", async () => {
-    const when = new Date(Date.now() - 90 * 60 * 1000).toISOString();
-    invokeMock.mockResolvedValue([
-      { id: "ran1", kind: "cron", expression: "0 7 * * *", prompt: "p", title: "Ran job", paused: false, last_run_at: when, last_run_status: "ok", next_fire: null },
-    ]);
-    open();
-    await waitFor(() => expect(screen.getByText("Ran job")).toBeTruthy());
-    expect(screen.getByText(lastRunShort(when))).toBeTruthy();
-  });
-
-  it("hides the list time for a never-run job that carries a cron anchor timestamp", async () => {
-    const anchor = new Date(Date.now() - 90 * 60 * 1000).toISOString();
-    invokeMock.mockResolvedValue([
-      { id: "new1", kind: "cron", expression: "0 7 * * *", prompt: "p", title: "Fresh job", paused: false, last_run_at: anchor, last_run_status: null, next_fire: null },
-    ]);
-    open();
-    await waitFor(() => expect(screen.getByText("Fresh job")).toBeTruthy());
-    expect(screen.queryByText(lastRunShort(anchor))).toBeNull();
-  });
-
   it("pauses the selected job via schedule_set_paused", async () => {
     open();
     await waitFor(() => expect(screen.getByText("Run the whoop skill")).toBeTruthy());
@@ -134,9 +114,9 @@ describe("ScheduleModal mutation scope", () => {
 describe("ScheduleModal reads like the profile's page", () => {
   it("says when each job runs in words and keeps the cron as a fact", async () => {
     open();
-    await waitFor(() => expect(screen.getAllByText("every day at 07:00").length).toBeGreaterThan(0));
-    expect(screen.getByText("every day at 22:00")).toBeTruthy();
-    await waitFor(() => expect(screen.getByText("0 7 * * *")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/every day at 07:00/)).toBeTruthy());
+    expect(screen.getByText("0 7 * * *")).toBeTruthy();
+    expect(screen.getAllByText(/0 7 \* \* \*/)).toHaveLength(1);
   });
 
   it("marks a failed last run in red words and shows a broken timeout", async () => {
@@ -144,8 +124,8 @@ describe("ScheduleModal reads like the profile's page", () => {
       { ...JOBS[0], last_run_at: "2026-10-03T07:00:00Z", last_run_status: "error", run_timeout: null, timeout_error: "'timeout' must be a whole number of seconds" },
     ]);
     open();
-    await waitFor(() => expect(screen.getByText("failed")).toBeTruthy());
-    expect(screen.getByText("failed").className).toMatch(/failed/);
+    await waitFor(() => expect(screen.getAllByText("failed").length).toBeGreaterThan(0));
+    expect(screen.getAllByText("failed").some((el) => /failed/.test(el.className))).toBe(true);
     await waitFor(() => expect(screen.getByText(/must be a whole number of seconds/)).toBeTruthy());
   });
 
@@ -157,5 +137,76 @@ describe("ScheduleModal reads like the profile's page", () => {
     expect(screen.getByText("scout")).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: "Memories" }));
     expect(onSection).toHaveBeenCalledWith("memory");
+  });
+});
+
+const NOW = Date.parse("2026-10-07T12:00:00Z");
+const day = (n) => new Date(NOW + n * 86400000).toISOString();
+const MIX = [
+  { id: "ok1", kind: "cron", expression: "0 6 * * 1", title: "Weekly refresh", description: "Compares every listing", prompt: "refresh", paused: false, last_run_status: "ok", next_fire: day(2) },
+  { id: "bad1", kind: "cron", expression: "30 7 * * *", title: "Daily digest", description: "Summarises reviews", prompt: "digest", paused: false, last_run_status: "error", last_run_at: day(-0.1), last_run_message: "timeout", last_ok_at: day(-1), next_fire: day(1) },
+  { id: "nap1", kind: "inactivity", after_hours: 168, title: "Nudge", prompt: "nudge", paused: true, next_fire: null },
+  { id: "bare1", kind: "cron", expression: "0 9 * * *", prompt: "only a prompt line", paused: false, next_fire: day(1) },
+];
+
+describe("ScheduleModal grouped list and reader", () => {
+  beforeEach(() => { vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(NOW); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("groups the sidebar under Needs you, Active and Paused with the next-run word and no cron", async () => {
+    invokeMock.mockResolvedValue(MIX);
+    open();
+    await waitFor(() => expect(screen.getByText("Needs you · 1")).toBeTruthy());
+    expect(screen.getByText("Active · 2")).toBeTruthy();
+    expect(screen.getByText("Paused · 1")).toBeTruthy();
+    const rows = screen.getAllByRole("option");
+    expect(rows.map((r) => r.textContent)[0]).toMatch(/Daily digest.*Summarises reviews.*failed/);
+    expect(rows.find((r) => /Weekly refresh/.test(r.textContent)).textContent).toMatch(/in 2d/);
+    expect(rows.find((r) => /Nudge/.test(r.textContent)).textContent).toMatch(/paused/);
+    for (const r of rows) expect(r.textContent).not.toMatch(/\d+ \d+ \* \*|every day|Every/);
+  });
+
+  it("shows no empty description line and keeps the fallback title", async () => {
+    invokeMock.mockResolvedValue(MIX);
+    open();
+    await waitFor(() => expect(screen.getByText("Nudge")).toBeTruthy());
+    const nudge = screen.getAllByRole("option").find((r) => /Nudge/.test(r.textContent));
+    expect(nudge.querySelectorAll("span").length).toBeLessThanOrEqual(4);
+    expect(screen.getByText("only a prompt line", { selector: "span" })).toBeTruthy();
+  });
+
+  it("opens a failed job on the banner with a Run now that fires it", async () => {
+    invokeMock.mockResolvedValue(MIX);
+    open();
+    await waitFor(() => expect(screen.getByRole("group", { name: /Last run failed/ })).toBeTruthy());
+    expect(screen.getByRole("group", { name: /Last run failed/ }).textContent).toMatch(/Last run failed.*timeout/);
+    expect(screen.getAllByRole("button", { name: "Run now" })).toHaveLength(1);
+    invokeMock.mockClear();
+    invokeMock.mockResolvedValue({ ok: true });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Run now" })); });
+    expect(invokeMock).toHaveBeenCalledWith("schedule_fire", { profile: "lens", id: "bad1" });
+  });
+
+  it("lays the reader out as About, When with the cron chip, Next, Last run, Runs, Notify and a PROMPT box", async () => {
+    invokeMock.mockResolvedValue(MIX);
+    open();
+    await waitFor(() => expect(screen.getAllByRole("option").length).toBe(4));
+    fireEvent.click(screen.getAllByRole("option").find((r) => /Weekly refresh/.test(r.textContent)));
+    await waitFor(() => expect(screen.getByText("Compares every listing", { selector: "dd" })).toBeTruthy());
+    const labels = Array.from(document.querySelectorAll("dt")).map((d) => d.textContent);
+    expect(labels).toEqual(["about", "when", "next", "last run", "runs", "notify"]);
+    expect(screen.getByText("0 6 * * 1")).toBeTruthy();
+    expect(screen.getByText("prompt")).toBeTruthy();
+    expect(screen.getByText("Prompt")).toBeTruthy();
+    expect(screen.getAllByRole("option")).toHaveLength(4);
+    expect(screen.queryByRole("button", { name: /edit/i })).toBeNull();
+    expect(screen.queryByRole("group", { name: /Last run failed/ })).toBeNull();
+  });
+
+  it("omits About for a job without a description", async () => {
+    invokeMock.mockResolvedValue([MIX[2]]);
+    open();
+    await waitFor(() => expect(document.querySelectorAll("dt").length).toBeGreaterThan(0));
+    expect(Array.from(document.querySelectorAll("dt")).map((d) => d.textContent)).not.toContain("about");
   });
 });
