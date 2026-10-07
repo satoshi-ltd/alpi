@@ -1,6 +1,7 @@
-from gen import ic, page
-from desktop_boards import AMBER, HOVER, INK, INK2, INK3, LINE2, PANE, MONO, SIDE, wg_mark
+from gen import m_button, m_screen_header, page
+from desktop_boards import INK, INK3, LINE2
 from conversation_boards import h1, label, mono, spec
+from notif_studies import VIEW, a_panel, phone_triage
 
 PAGE_W = 1280
 COLUMN_PAD = 20
@@ -26,79 +27,113 @@ def phone_frame(inner):
     return f'<div style="width: 390px; max-width: 100%; border-radius: 12px; border: 0.5px solid {LINE2}; overflow: hidden; background: #ffffff">{inner}</div>'
 
 
-LOCK_BG = "background: linear-gradient(180deg, #1b2530 0%, #0d131a 100%)"
+DELETED = ("Security: billing-api P1", "Security: web-app P0", "Security: auth-gateway P1", "Security: search-index P2", "Security: rates-sync P1",
+           "Security: mail-relay P0", "Security: export-worker P2", "Security: image-proxy P1", "Security: crm-bridge P1")
 
 
-def glass(inner, pad=14):
-    return f'<div style="padding: {pad}px; border-radius: 22px; background: rgba(255,255,255,0.14); display: flex; flex-direction: column; gap: 10px; box-sizing: border-box">{inner}</div>'
+def toast_dot(color, top=0):
+    return f'<span style="width: 8px; height: 8px; border-radius: 4px; background: {color}; flex-shrink: 0; margin-top: {top}px"></span>'
 
 
-def app_icon():
-    return f'<span style="width: 34px; height: 34px; border-radius: 8px; background: #fff; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">{wg_mark(AMBER, 16)}</span>'
+def d_toast(message, action="", dot=VIEW["ink3"]):
+    tail = (f'<span style="width: 1px; height: 14px; background: {VIEW["line2"]}; margin: 0 2px; flex-shrink: 0"></span>'
+            f'<span style="padding: 2px 10px; border-radius: 4px; font-size: 12px; font-weight: 500; color: {VIEW["ink"]}; flex-shrink: 0">{action}</span>') if action else ""
+    pad = "6px 8px 6px 14px" if action else "8px 16px 8px 14px"
+    return (f'<div style="display: inline-flex; align-items: center; gap: 10px; padding: {pad}; max-width: 100%; box-sizing: border-box; border-radius: 4px; '
+            f'background: {VIEW["elev"]}; box-shadow: 0 0 0 0.5px {VIEW["line2"]}; font-size: 13px; line-height: 18px; color: {VIEW["ink2"]}; white-space: nowrap">'
+            f'{toast_dot(dot)}<span style="overflow: hidden; text-overflow: ellipsis">{message}</span>{tail}</div>')
 
 
-def push_banner(actions):
-    buttons = ""
-    if actions:
-        pill_ = lambda text, color: f'<span style="flex: 1; text-align: center; padding: 9px 0; border-radius: 12px; background: rgba(255,255,255,0.14); font-size: 14px; font-weight: 600; color: {color}">{text}</span>'
-        buttons = f'<div style="display: flex; gap: 8px; margin-top: 4px">{pill_("Deny", "#ff9b94")}{pill_("Allow once", "#fff")}</div>'
-    head = (f'<div style="display: flex; gap: 10px; align-items: flex-start">{app_icon()}<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">'
-            f'<span style="display: flex; justify-content: space-between; font-size: 12px; color: rgba(255,255,255,0.6)"><span>ALPI</span><span>now</span></span>'
-            f'<span style="font-size: 14px; font-weight: 600; color: #fff">remote-casa · abby · approval needed</span>'
-            f'<span style="font-family: {MONO}; font-size: 12px; color: rgba(255,255,255,0.75)">rm -rf dist &amp;&amp; npm run build</span></div></div>')
-    return glass(head + buttons, 12)
+def hug(inner):
+    return f'<div style="display: flex">{inner}</div>'
 
 
-def live_activity():
-    seg = lambda on: f'<span style="flex: 1; height: 5px; border-radius: 999px; background: {AMBER if on else "rgba(255,255,255,0.25)"}"></span>'
-    top = (f'<div style="display: flex; align-items: center; gap: 10px">{wg_mark(AMBER, 16)}<span style="flex: 1; font-size: 15px; font-weight: 600; color: #fff">alpha · #collect</span>'
-           f'<span style="font-family: {MONO}; font-size: 13px; color: #fff">4:12</span></div>')
-    bar = f'<div style="display: flex; gap: 4px">{seg(True)}{seg(True)}{seg(False)}{seg(False)}</div>'
-    foot = (f'<div style="display: flex; justify-content: space-between; font-family: {MONO}; font-size: 12px; color: rgba(255,255,255,0.7)"><span>phase 2 of 4</span><span>doc · alpi · yuri</span></div>')
-    return glass(top + bar + foot)
+def inbox_with_toasts(toasts, h):
+    pile = (f'<div style="position: absolute; right: 22px; bottom: 22px; left: 22px; display: flex; flex-direction: column-reverse; align-items: flex-end; gap: 8px">'
+            f'{"".join(toasts)}</div>')
+    return f'<div style="position: relative">{a_panel(VIEW, h)}{pile}</div>'
 
 
-def lock_screen():
-    return (f'<div style="width: 360px; box-sizing: border-box; padding: 34px 16px 22px; border-radius: 34px; {LOCK_BG}; display: flex; flex-direction: column; gap: 14px">'
-            f'<div style="display: flex; flex-direction: column; align-items: center; gap: 2px; padding-bottom: 10px"><span style="font-size: 13px; color: rgba(255,255,255,0.7)">Thursday 1 October</span>'
-            f'<span style="font-size: 64px; font-weight: 600; line-height: 1.05; letter-spacing: -0.02em; color: #fff">9:41</span></div>'
-            f'{live_activity()}{push_banner(True)}</div>')
-
-
-def live_now():
-    activity = phone_frame(f'<div style="padding: 12px 16px 4px">{cap("Running · 2")}</div>'
-                           + f'<div style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 16px">{ic("activity", 16, "#8a5a0a")}'
-                           f'<div style="flex: 1; display: flex; flex-direction: column; gap: 4px"><span style="font-weight: 500; font-size: 15px; color: {INK}">alpha · #collect</span>'
-                           f'<span style="font-family: {MONO}; font-size: 12px; color: {INK3}">phase 2 of 4 · daily-digest</span></div></div>')
-    banner = (f'<div style="width: 350px; box-sizing: border-box; padding: 12px; border-radius: 18px; background: {SIDE}; border: 0.5px solid {LINE2}; display: flex; flex-direction: column; gap: 10px">'
-              f'<div style="display: flex; gap: 10px; align-items: flex-start"><span style="width: 34px; height: 34px; border-radius: 8px; background: {PANE}; border: 0.5px solid {LINE2}; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">{wg_mark(AMBER, 16)}</span>'
-              f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="display: flex; justify-content: space-between; font-size: 12px; color: {INK3}"><span>ALPI</span><span>now</span></span>'
-              f'<span style="font-size: 14px; font-weight: 600; color: {INK}">remote-casa · abby · approval needed</span><span style="font-family: {MONO}; font-size: 12px; color: {INK2}">rm -rf dist &amp;&amp; npm run build</span></div></div>'
-              f'<div style="display: flex; gap: 8px"><span style="flex: 1; text-align: center; padding: 9px 0; border-radius: 12px; background: {HOVER}; font-size: 14px; font-weight: 600; color: #b73737">Deny</span>'
-              f'<span style="flex: 1; text-align: center; padding: 9px 0; border-radius: 12px; background: {HOVER}; font-size: 14px; font-weight: 600; color: {INK}">Allow once</span></div></div>')
+def toast_stack_now():
+    toasts = [d_toast(f"Deleted “{title}”", "Undo") for title in DELETED]
     return stack(
-        tagged("Activity tab · only while the app is open", activity),
-        tagged("Local notification · only while the app holds a socket", banner),
-        cap("Close the app and neither reaches the lock screen."),
-        gap=18,
+        tagged("Nine ⌫ presses in the inbox · one toast each, newest on top", inbox_with_toasts(toasts, 470)),
+        cap("Every pill has its own Undo and its own 5 s; the stack has no cap and climbs over the list, the reader and the composer behind the modal."),
+        cap("Hover pauses a pill but not its delete: Undo after the 5 s can only say “Already deleted”."),
     )
 
 
-def live_proposed():
-    return stack(tagged("Lock screen · app closed", lock_screen()), cap("A Live Activity for the running workgroup and the approval as a push with the same two actions."), gap=10)
+def toast_stack_proposed():
+    toasts = [d_toast("Copied"), d_toast("Deleted 9 notifications", "Undo")]
+    steps = stack(
+        tagged("First delete · names the row", hug(d_toast("Deleted “Security: billing-api P1”", "Undo"))),
+        tagged("Another inside the window · the same toast counts", hug(d_toast("Deleted 2 notifications", "Undo"))),
+        gap=12,
+    )
+    return stack(
+        tagged("Nine ⌫ presses · one toast for the batch, at most three on screen", inbox_with_toasts(toasts, 470)),
+        steps,
+        cap("Each delete restarts one 5 s window for the batch; Undo brings all nine back; hover pauses the toast and the deletes together. A fourth toast retires the oldest."),
+    )
+
+
+def m_toast(message, action="", faded=False):
+    tail = (f'<span style="min-width: 44px; min-height: 44px; margin: -10px -8px -10px 0; padding: 0 10px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; '
+            f'font-size: 14px; font-weight: 600; color: {VIEW["ink"]}; flex-shrink: 0">{action}</span>') if action else ""
+    return (f'<div style="display: flex; align-items: flex-start; gap: 10px; padding: 14px; box-sizing: border-box; border-radius: 4px; background: {VIEW["pane"]}; '
+            f'border: 0.5px solid {VIEW["line2"]}; opacity: {0.45 if faded else 1}">{toast_dot(VIEW["ink3"], 6)}'
+            f'<span style="flex: 1; min-width: 0; font-size: 14px; line-height: 20px; color: {VIEW["ink2"]}">{message}</span>{tail}</div>')
+
+
+def phone_with_toast(toast, h=420):
+    screen = (f'<div style="height: {h}px; display: flex; flex-direction: column; overflow: hidden; background: {VIEW["pane"]}">'
+              f'{m_screen_header("Notifications", "2 UNREAD", glyph="", right=m_button("Mark all read", "ghost", "md"))}{phone_triage(VIEW)}</div>')
+    return phone_frame(f'<div style="position: relative">{screen}<div style="position: absolute; top: 16px; left: 16px; right: 16px">{toast}</div></div>')
+
+
+def toast_undo_now():
+    swipes = stack(
+        tagged("Swipe 1 · replaced by swipe 2, its Undo gone", m_toast("Deleted “Security: billing-api P1”", "Undo", faded=True)),
+        tagged("Swipe 2 · replaced by swipe 3, its Undo gone", m_toast("Deleted “Security: web-app P0”", "Undo", faded=True)),
+        gap=10,
+    )
+    return stack(
+        tagged("Swipe 3 · the only toast left", phone_with_toast(m_toast("Deleted “Security: auth-gateway P1”", "Undo"))),
+        swipes,
+        cap("One toast at a time: each delete replaces it, so only the last can be undone and the first two go through after 5 s anyway."),
+    )
+
+
+def toast_undo_proposed():
+    return stack(
+        tagged("Three swipes · one toast for the batch", phone_with_toast(m_toast("Deleted 3 notifications", "Undo"))),
+        tagged("First swipe · names the row", m_toast("Deleted “Security: billing-api P1”", "Undo")),
+        cap("Each swipe restarts one 5 s window; Undo brings back all three; the copy matches desktop."),
+    )
 
 
 PROPOSALS = [
     {
-        "id": "UI-MOB.LIVE-ACTIVITY",
+        "id": "UI-TOAST.STACK",
+        "client": "desktop",
+        "area": "Toasts · Notifications inbox delete and Undo",
+        "title": "A run of deletes is one toast that counts, and the stack stops at three",
+        "why": "Every delete in the Notifications inbox raises its own toast with its own Undo (NotificationsModal.jsx onDeleteRow), and the toast stack appends without a cap, bottom-right and growing upwards (Notification.jsx, Notification.module.css), so ten ⌫ presses leave ten pills over the inbox and the composer. The toast pauses on hover but its 5 s delete in useDeleteOutput does not, so a late Undo can only answer “Already deleted”. Recommendation: deletes inside the undo window join one toast that counts them, with one Undo for all, and never more than three toasts on screen. Mobile replaces instead of stacking and loses the earlier Undo: board UI-MOB.TOAST-UNDO.",
+        "now": toast_stack_now,
+        "proposed": toast_stack_proposed,
+        "accept": "Deleting several notifications within the undo window shows one toast: the first names the row as today, the next ones turn it into “Deleted N notifications”. Each delete restarts one 5 s window for the batch, Undo brings every pending row back, and the rows are deleted together when the window ends; hovering the toast pauses the window, so Undo never shows a row the daemon already removed. At most three toasts are on screen and a fourth retires the oldest. A test presses ⌫ ten times and finds one toast, then ten rows back after Undo and no delete sent.",
+        "h": 1130,
+    },
+    {
+        "id": "UI-MOB.TOAST-UNDO",
         "client": "mobile",
-        "area": "Lock screen · Live Activity and approval push",
-        "title": "A running workgroup and an approval reach a locked phone",
-        "why": "Today the phone learns about a running workgroup only in the Activity tab and about an approval only through a local notification while the app is alive. This is a design proposal only while the push relay is pending: the card and the banner are drawn so the relay work has a target. The alternative is the approval push alone, without a Live Activity, which needs no widget extension.",
-        "now": live_now,
-        "proposed": live_proposed,
-        "accept": "A running workgroup shows as a Live Activity with its name and task, phase segments, elapsed time and the members working; an approval arrives as a push with the app closed, carrying Deny and Allow once as actions. Both draw in the light and dark lock screens and stay within the system's Live Activity height.",
-        "h": 870,
+        "area": "Toasts · Notifications delete and Undo",
+        "title": "A run of deletes keeps one Undo for all of them",
+        "why": "The phone shows one toast at a time and each delete replaces it (Toast.jsx show, app/outputs.jsx onDelete), so after three quick swipes only the last can be undone while the first two still go through when their own 5 s run out. It does not pile up like desktop (board UI-TOAST.STACK), but the earlier Undo disappears without a word. Recommendation: the same batch as desktop, one counting toast whose Undo restores every pending row.",
+        "now": toast_undo_now,
+        "proposed": toast_undo_proposed,
+        "accept": "Deleting several notifications within the undo window, from the list or the reader, keeps one toast: the first names the row, the next ones read “Deleted N notifications”. Each delete restarts one 5 s window for the batch, Undo restores every pending row, and the rows are deleted together when it ends. The Undo target stays 44 pt and the copy matches desktop. A test deletes three rows, presses Undo once and finds all three back and no delete sent.",
+        "h": 1050,
     },
 ]
 

@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   deepLinkFor,
   formatNotification,
+  INBOX_KINDS,
   NOTIFIABLE_KINDS,
+  POLL_KINDS,
 } from './kinds';
 
 describe('NOTIFIABLE_KINDS', () => {
@@ -162,5 +164,13 @@ describe('clarification requests', () => {
     expect(link(ev)).toBe('/');
     expect(stale(ev, 1059_000)).toBe(false);
     expect(stale(ev, 1061_000)).toBe(true);
+  });
+});
+
+describe('POLL_KINDS', () => {
+  it('is every notifiable kind plus the inbox changes, which never notify', () => {
+    expect(POLL_KINDS).toEqual([...NOTIFIABLE_KINDS, ...INBOX_KINDS]);
+    expect(INBOX_KINDS).toEqual(['output.created', 'output.updated']);
+    for (const kind of INBOX_KINDS) expect(NOTIFIABLE_KINDS).not.toContain(kind);
   });
 });

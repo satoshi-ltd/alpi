@@ -338,7 +338,7 @@ export function useAllOutputs({ connections, status, activeId = null, deferMs = 
     for (const pending of timersRef.current.values()) clearTimeout(pending);
   }, []);
 
-  // Refresh on any daemon's output mutation (active stream emits output.created/updated) AND on background-poll notifications (flagged, since the poller carries agent.message/etc., not output.created) — scoped to the event's connection.
+  // Refresh on any daemon's output mutation: the active stream's output.created/updated, and every background-poll frame (flagged) of another connection — scoped to the event's connection.
   useEffect(() => {
     if (!enabled) return undefined;
     let cancelled = false;

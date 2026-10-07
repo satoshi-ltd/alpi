@@ -343,3 +343,55 @@ describe('deliverEvents anchoring migration and empty first page', () => {
     expect(h.fireMock.mock.calls.map((c) => c[0].seq)).toEqual([8]);
   });
 });
+
+describe('deliverEvents · inbox changes', () => {
+  const created = (seq) => ({ event: 'output.created', seq, data: { profile: 'doc', id: `o${seq}`, type: 'warning' } });
+
+  it('never raises a banner for an inbox change, consumes it and signals the inbox', async () => {
+    const onInbox = vi.fn();
+    const fired = await deliverEvents([created(4), { event: 'output.updated', seq: 5, data: {} }], CONN, { onInbox });
+
+    expect(fired).toBe(0);
+    expect(h.fireMock).not.toHaveBeenCalled();
+    expect(onInbox).toHaveBeenCalledTimes(1);
+    const s = await loadState(KEY);
+    expect(s.afterSeq).toBe(5);
+    expect(s.seenIds).toEqual([]);
+  });
+
+  it('signals the inbox once when a notification that files a row fires', async () => {
+    const onInbox = vi.fn();
+    await deliverEvents([msg(6), created(7)], CONN, { onInbox });
+
+    expect(h.fireMock).toHaveBeenCalledTimes(1);
+    expect(onInbox).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays quiet when the page holds nothing new', async () => {
+    await saveState(KEY, { ...ANCHORED, afterSeq: 9, seenIds: ['agent.message:8'] });
+    const onInbox = vi.fn();
+    await deliverEvents([msg(8), created(9)], CONN, { onInbox });
+
+    expect(h.fireMock).not.toHaveBeenCalled();
+    expect(onInbox).not.toHaveBeenCalled();
+  });
+
+  it('anchors a first-contact daemon without banners but refreshes an inbox its page changed', async () => {
+    await saveState(KEY, { ...ANCHORED, anchored: false });
+    const onInbox = vi.fn();
+    await deliverEvents([msg(2), created(3)], CONN, { onInbox, nextSeq: 3 });
+
+    expect(h.fireMock).not.toHaveBeenCalled();
+    expect(onInbox).toHaveBeenCalledTimes(1);
+    expect((await loadState(KEY)).afterSeq).toBe(3);
+  });
+
+  it('anchors a first-contact daemon quietly when its page holds no inbox change', async () => {
+    await saveState(KEY, { ...ANCHORED, anchored: false });
+    const onInbox = vi.fn();
+    await deliverEvents([msg(2)], CONN, { onInbox, nextSeq: 2 });
+
+    expect(onInbox).not.toHaveBeenCalled();
+    expect((await loadState(KEY)).afterSeq).toBe(2);
+  });
+});

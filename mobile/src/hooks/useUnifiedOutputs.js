@@ -6,6 +6,7 @@ import { endpointUrl } from '../lib/endpoint.js';
 import { call as rpcCall } from '../lib/rpc';
 import { useDebouncedCallback } from './useDebouncedCallback';
 import { useEventEffect } from './useEvents';
+import { onInboxSignal } from '../features/aln/inboxSignal';
 import { useTheme } from '../theme/ThemeContext';
 import { EMPTY } from '../../../common/emptyCopy.mjs';
 
@@ -119,9 +120,10 @@ export function useUnifiedOutputs({ status } = {}) {
     refresh();
   }, [refresh]);
 
-  // Only the active connection streams events here; non-active deltas surface on next focus/refresh.
+  // The active connection streams its output events; the notification poll signals every other connection's.
   const debouncedRefresh = useDebouncedCallback(refresh, 500);
   useEventEffect(['output.created', 'output.updated'], debouncedRefresh);
+  useEffect(() => onInboxSignal(() => debouncedRefresh()), [debouncedRefresh]);
 
   return {
     rows,

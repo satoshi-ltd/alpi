@@ -1,5 +1,5 @@
 import { call } from '../../lib/rpc';
-import { NOTIFIABLE_KINDS } from './kinds';
+import { POLL_KINDS } from './kinds';
 import { alnStateKey, loadState, mutateState } from './state';
 
 // Must match HISTORY_MAX in alpi/host/events.py: the daemon clamps to it and tail-truncates, so anything lower discards recoverable events.
@@ -22,7 +22,7 @@ export async function pollConnection(connection) {
     const resp = await call(
       connection,
       'host.events.history',
-      { after_seq: cursor.afterSeq, limit: POLL_LIMIT, kinds: NOTIFIABLE_KINDS },
+      { after_seq: cursor.afterSeq, limit: POLL_LIMIT, kinds: POLL_KINDS },
       { timeoutMs: POLL_TIMEOUT_MS },
     );
     events = Array.isArray(resp?.events) ? resp.events : [];

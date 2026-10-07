@@ -1,4 +1,4 @@
-import { isStale } from './kinds';
+import { INBOX_KINDS, isStale } from './kinds';
 import { fireForEvent, getPermissionStatus } from './notify';
 import { alnStateKey, eventId, loadState, recordSeen, saveState, withStateLock } from './state';
 
@@ -13,7 +13,7 @@ function fireWithTimeout(event, connection) {
 }
 
 // The one delivery decision per daemon: the seenIds re-check and the fire must sit inside the same lock, or a live frame and a poll page racing on the same event both schedule it.
-export async function deliverEvents(events, connection, { advanceCursor = true, deadline = null, nextSeq = null } = {}) {
+export async function deliverEvents(events, connection, { advanceCursor = true, deadline = null, nextSeq = null, onInbox = null } = {}) {
   const key = alnStateKey(connection);
   const page = Array.isArray(events) ? events : [];
   // nextSeq alone is enough work to do: it anchors a freshly paired daemon whose first page is empty.
@@ -47,12 +47,24 @@ export async function deliverEvents(events, connection, { advanceCursor = true, 
       const fromPage = ordered.reduce((max, e) => (Number.isFinite(e?.seq) && e.seq > max ? e.seq : max), state.afterSeq);
       const head = nextSeq !== null && nextSeq > fromPage ? nextSeq : fromPage;
       await persist({ ...state, afterSeq: head, anchored: true });
+      // No banners for the backlog, but an inbox loaded before this first poll may be missing what the page changed.
+      if (ordered.some((e) => INBOX_KINDS.includes(e?.event)) && typeof onInbox === 'function') {
+        try { onInbox(); } catch { /* */ }
+      }
       return 0;
     }
 
     let fired = 0;
+    let inbox = false;
     for (const event of ordered) {
       if (deadline && Date.now() >= deadline) break;
+
+      if (INBOX_KINDS.includes(event?.event)) {
+        if (Number.isFinite(event?.seq) && event.seq > state.afterSeq) inbox = true;
+        const next = consumed(state, event);
+        if (next !== state && !await persist(next)) break;
+        continue;
+      }
 
       const id = eventId(event);
       if (!id) continue;
@@ -77,6 +89,9 @@ export async function deliverEvents(events, connection, { advanceCursor = true, 
       fired += 1;
     }
 
+    if ((inbox || fired > 0) && typeof onInbox === 'function') {
+      try { onInbox(); } catch { /* */ }
+    }
     return fired;
   });
 }

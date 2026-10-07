@@ -817,7 +817,21 @@ fn ensure_local(state: &mut ConnectionsState) {
 pub fn active_subscription_key() -> Option<String> {
     let state = load_connections();
     let active = state.connections.iter().find(|c| c.id() == state.active_id)?;
-    active.device_id().map(|d| format!("daemon:{d}"))
+    active.device_id()?;
+    Some(subscription_key(active))
+}
+
+// Admin routes of one daemon see the same events and share a cursor; any other route filters its stream, so it keeps its own.
+pub fn subscription_key(conn: &HostConnection) -> String {
+    subscription_key_for(conn.id(), conn.device_id(), effective_role(conn).as_deref())
+}
+
+fn subscription_key_for(id: &str, device_id: Option<&str>, role: Option<&str>) -> String {
+    match (device_id, role) {
+        (Some(d), Some("admin")) => format!("daemon:{d}"),
+        (Some(d), _) => format!("daemon:{d}|connection:{id}"),
+        (None, _) => format!("connection:{id}"),
+    }
 }
 
 fn persist_device_id(connection_id: &str, device_id: &str) {
@@ -2591,6 +2605,15 @@ pub fn backfill_missing_roles() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_admin_routes_of_one_daemon_share_a_cursor() {
+        assert_eq!(subscription_key_for("local", Some("d1"), Some("admin")), "daemon:d1");
+        assert_eq!(subscription_key_for("remote", Some("d1"), Some("admin")), "daemon:d1");
+        assert_eq!(subscription_key_for("m", Some("d1"), Some("member")), "daemon:d1|connection:m");
+        assert_eq!(subscription_key_for("u", Some("d1"), None), "daemon:d1|connection:u");
+        assert_eq!(subscription_key_for("n", None, Some("admin")), "connection:n");
+    }
 
     #[test]
     fn long_operations_override_default_rpc_windows() {

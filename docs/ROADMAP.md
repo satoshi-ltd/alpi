@@ -272,13 +272,6 @@ _None._
   a cap; revisit on top of that contract.
   accept: admission drops to 1 while the per-call provider median exceeds a
   configured threshold and returns to the configured value when it recovers.
-- **MOB.LIVE-ACTIVITY** — Live Activity and closed-app approval pushes
-  `feature · mobile, alpi · agent · low`
-  note: needs a remote push relay (APNs/FCM) the daemon does not have.
-  accept: a running workgroup shows as a Live Activity, and an approval reaches
-  the phone as a push with the app closed.
-  the interface follows board UI-MOB.LIVE-ACTIVITY.
-
 ### Waiting on a creator choice
 
 - **BRAND.EMPTY** — A blank chat that introduces the profile
@@ -363,6 +356,7 @@ Each names the condition that promotes it; none is worked on before.
 | Decision | Reason |
 |---|---|
 | Vendor subscription OAuth | alpi respects every provider's ToS: a subscription tied to a vendor's own client is for that client, and reversing its private OAuth flow is a ToS violation and an account-ban risk. Users pay per token with their own keys; an official, documented third-party OAuth flow would be adopted. |
+| Remote push to a closed phone (Live Activity, approval pushes; MOB.LIVE-ACTIVITY) | alpi puts no relay or third-party service between a daemon and its apps. APNs and FCM only take messages signed with the app's own keys, so reaching a closed phone needs a relay (Expo's push service or one the creator runs) between every daemon and every phone. The phone hears from its daemons through its own stream and poll, while the app runs and when the OS wakes it. |
 | Chat-app gateways (Telegram, Matrix, Signal, WhatsApp, Discord, …) | Retired in v0.10 — third-party chat bridges add attack surface and upkeep; the desktop/mobile/terminal apps are the surface, and email is an on-demand tool. |
 | Smart-home orchestration | Device protocols and physical-world policy belong in Home Assistant / MCP / user skills, not core. |
 | LangGraph / CrewAI / AutoGen as core | Graph frameworks do not match Alpi's profile/workgroup runtime and pull toward hosted observability. |

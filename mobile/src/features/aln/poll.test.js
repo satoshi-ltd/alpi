@@ -36,6 +36,7 @@ describe('pollConnection', () => {
     expect(params.after_seq).toBe(17);
     expect(params.limit).toBe(500);
     expect(params.kinds).toContain('approval.request');
+    expect(params.kinds).toEqual(expect.arrayContaining(['output.created', 'output.updated']));
   });
 
   it('returns the whole page including events already seen — dedupe belongs to deliverEvents', async () => {

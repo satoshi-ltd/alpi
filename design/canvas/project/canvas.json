@@ -432,12 +432,20 @@
    "title": "Brand \u00b7 states and motion",
    "page": "brand"
   },
-  "Proposals-UI-MOB.LIVE-ACTIVITY.dc.html": {
+  "Proposals-UI-TOAST.STACK.dc.html": {
    "x": 0,
    "y": 240,
    "w": 1280,
-   "h": 870,
-   "title": "Proposals \u00b7 ui-mob.live-activity \u00b7 a running workgroup and an approval reach a locked phone",
+   "h": 1130,
+   "title": "Proposals \u00b7 ui-toast.stack \u00b7 a run of deletes is one toast that counts, and the stack stops at three",
+   "page": "proposals"
+  },
+  "Proposals-UI-MOB.TOAST-UNDO.dc.html": {
+   "x": 0,
+   "y": 1610,
+   "w": 1280,
+   "h": 1050,
+   "title": "Proposals \u00b7 ui-mob.toast-undo \u00b7 a run of deletes keeps one undo for all of them",
    "page": "proposals"
   }
  },
@@ -492,7 +500,8 @@
   "Brand-Pairs.dc.html",
   "Brand-Palette.dc.html",
   "Brand-Motion.dc.html",
-  "Proposals-UI-MOB.LIVE-ACTIVITY.dc.html"
+  "Proposals-UI-TOAST.STACK.dc.html",
+  "Proposals-UI-MOB.TOAST-UNDO.dc.html"
  ],
  "notes": {
   "s-Foundations": {
@@ -727,10 +736,18 @@
    "maxW": 2600,
    "page": "brand"
   },
-  "p-UI-MOB.LIVE-ACTIVITY \u00b7 A running workgroup and an approval reach a locked phone": {
+  "p-UI-TOAST.STACK \u00b7 A run of deletes is one toast that counts, and the stack stops at three": {
    "x": 0,
    "y": 17,
-   "text": "UI-MOB.LIVE-ACTIVITY \u00b7 A running workgroup and an approval reach a locked phone",
+   "text": "UI-TOAST.STACK \u00b7 A run of deletes is one toast that counts, and the stack stops at three",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "proposals"
+  },
+  "p-UI-MOB.TOAST-UNDO \u00b7 A run of deletes keeps one Undo for all of them": {
+   "x": 0,
+   "y": 1387,
+   "text": "UI-MOB.TOAST-UNDO \u00b7 A run of deletes keeps one Undo for all of them",
    "kind": "title1",
    "maxW": 2600,
    "page": "proposals"

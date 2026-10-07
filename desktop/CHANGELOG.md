@@ -11,6 +11,15 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.8.6 — 2026-10-07 — every connection's notifications, once
+
+- **The inbox of a connection that is not open stays current.** Warnings the daemon files itself (a memory near its limit, a skill that fails lint) and rows read or deleted on another device used to appear only after switching to that connection; the background poll now refreshes them within about 25 s.
+- **Switching connections neither replays nor drops notifications.** The live stream and the background poll share one cursor per daemon (it starts over when the daemon's history was reset), so returning to a connection no longer pops up to 200 old banners, and nothing raised during the switch is lost.
+- **An agent's question raises a native notification** from any connection, like an approval; not while the question sheet is already open in front of you, and neither does a question or an approval that already timed out.
+- **Undo after a delete went through no longer brings the row back.** Holding the pointer over the toast keeps it open past the 5 s delete; Undo then says “Already deleted” instead of showing a row the daemon removed.
+
+  Requires alpi 0.17.5.
+
 ## v0.8.5 — 2026-10-07 — waiting is quiet and in ink
 
 - **One mark for every page or section wait:** the alpaca in flat brand ink, its facets dimming in turn, with what it waits for in words. It shows only after 300 ms and stays at least 400 ms, so a quick answer never flashes, and it stands still under reduced motion.

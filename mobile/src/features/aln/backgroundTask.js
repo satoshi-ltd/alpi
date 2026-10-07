@@ -4,6 +4,7 @@ import * as TaskManager from 'expo-task-manager';
 import { loadConnections } from '../../lib/store';
 import { endpointUrl } from '../../lib/endpoint.js';
 import { deliverEvents } from './deliver';
+import { signalInbox } from './inboxSignal';
 import { getPermissionStatus } from './notify';
 import { pollConnection, POLL_TIMEOUT_MS, recordGroupHealth, WAKE_BUDGET_MS } from './poll';
 import { loadFlag, saveFlag } from './state';
@@ -77,7 +78,9 @@ async function pollGroup(routes, remainingMs, deadline) {
 
   // A member sees a role-filtered stream, so its page's max seq is not a cursor an admin route can trust.
   const advanceCursor = !hasAdmin || winningRoute.role === 'admin';
-  return deliverEvents(winner.events, winningRoute, { advanceCursor, deadline, nextSeq: winner.nextSeq ?? null });
+  return deliverEvents(winner.events, winningRoute, {
+    advanceCursor, deadline, nextSeq: winner.nextSeq ?? null, onInbox: () => signalInbox(winningRoute.id),
+  });
 }
 
 let _runInFlight = false;

@@ -1135,6 +1135,25 @@ queries those stores, not ``host.events.history``.
   - `output.created` — companion event for every new outputs row
     (`{profile, id, type}`). Lets inbox surfaces refresh without
     polling `host.outputs.list`.
+
+  Desktop and mobile stream only the active connection. Every other
+  daemon is polled through `host.events.history` (desktop every 25 s,
+  mobile on its catch-up and background wakes) with the notifiable kinds
+  plus `output.created` / `output.updated`: the first raise native
+  notifications, the output kinds only refresh that connection's inbox.
+  Each client keeps one cursor per daemon, shared by its stream and its
+  poll (desktop shares it only between admin routes; a member route sees
+  a filtered stream and keeps its own), so switching the active connection
+  neither drops nor replays an event; a daemon whose `next_seq` falls below
+  the cursor its request carried restarts it from zero (a late answer below a
+  cursor that moved on since is not a reset). Its replay page then takes only
+  frames whose `at` is later than the last one the client saw, since a plain
+  restart can restore a counter below the cursor too (`history=False` emits
+  take a seq that is never persisted), while a frame above the head reported
+  at the reset is always new whatever its clock; with no `at` seen yet it
+  re-anchors at the head instead. A client's first poll of a daemon
+  anchors without banners but still refreshes that inbox when the page changed
+  it. A polled or replayed request past `ts + timeout_s` raises no banner.
   - `schedule.changed` (`action: removed|paused|resumed`) —
     schedule mutators on the host plane.
   - `attention.changed` (`{profile, counts, total}`) — the set of

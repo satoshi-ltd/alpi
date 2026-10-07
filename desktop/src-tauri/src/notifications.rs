@@ -46,6 +46,42 @@ fn notification_lines(title: &str, body: &str, profile: &str) -> (String, String
     (head, body.trim().to_string())
 }
 
+// Polled and replayed frames only: the daemon auto-resolves a request at ts + timeout_s, and a live frame must not hinge on clock skew between hosts.
+fn request_expired(data: &serde_json::Value, now_secs: f64) -> bool {
+    let ts = data.get("ts").and_then(|v| v.as_f64());
+    let timeout = data.get("timeout_s").and_then(|v| v.as_f64());
+    match (ts, timeout) {
+        (Some(ts), Some(timeout)) if timeout > 0.0 => now_secs > ts + timeout,
+        _ => false,
+    }
+}
+
+fn replay_expired(frame: &serde_json::Value, now: f64) -> bool {
+    let kind = frame.get("event").and_then(|v| v.as_str()).unwrap_or("");
+    let data = frame.get("data").cloned().unwrap_or(serde_json::Value::Null);
+    matches!(kind, "approval.request" | "clarification.request") && request_expired(&data, now)
+}
+
+pub fn dispatch_replayed_frame(app: &AppHandle, connection_id: &str, frame: &serde_json::Value) {
+    if replay_expired(frame, now_secs()) {
+        return;
+    }
+    dispatch_daemon_frame(app, connection_id, true, frame);
+}
+
+fn now_secs() -> f64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs_f64())
+        .unwrap_or(0.0)
+}
+
+fn clarification_lines(profile: &str, question: &str) -> (String, String) {
+    let title = if profile.is_empty() { "question".to_string() } else { format!("{} · question", profile) };
+    let body = if question.is_empty() { "Your agent is waiting for an answer.".to_string() } else { question.to_string() };
+    (title, body)
+}
+
 fn schedule_failure_body(name: &str, reason: &str) -> String {
     let reason = reason.replace('\n', " · ");
     let reason = reason.trim();
@@ -104,7 +140,7 @@ pub fn dispatch_daemon_frame(
     match event {
         "approval.request" => {
             // Skip native banner when window focused — App.jsx's ApprovalSheet modal already pops, banner would be a duplicate.
-            if is_active_connection && window_focused(app) {
+            if (is_active_connection && window_focused(app)) || (!is_active_connection && request_expired(&data, now_secs())) {
                 return;
             }
             let profile = data
@@ -144,6 +180,39 @@ pub fn dispatch_daemon_frame(
                 &body,
                 Deeplink {
                     kind: "approval".into(),
+                    profile: Some(profile),
+                    id: Some(request_id),
+                    connection_id: connection_id.to_string(),
+                },
+            );
+        }
+        "clarification.request" => {
+            // Same rule as approvals: the ClarificationSheet already pops in a focused window on the active connection.
+            if (is_active_connection && window_focused(app)) || (!is_active_connection && request_expired(&data, now_secs())) {
+                return;
+            }
+            let profile = data
+                .get("profile")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let question = data
+                .get("question")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim();
+            let request_id = data
+                .get("request_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let (title, body) = clarification_lines(&profile, question);
+            show(
+                app,
+                &title,
+                &body,
+                Deeplink {
+                    kind: "clarification".into(),
                     profile: Some(profile),
                     id: Some(request_id),
                     connection_id: connection_id.to_string(),
@@ -351,7 +420,39 @@ pub fn dispatch_daemon_disconnect(app: &AppHandle, connection_id: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::{notification_lines, schedule_failure_body};
+    use super::{clarification_lines, notification_lines, replay_expired, request_expired, schedule_failure_body};
+
+    #[test]
+    fn a_replayed_request_past_its_deadline_raises_no_banner() {
+        let question = serde_json::json!({"event": "clarification.request", "data": {"ts": 1000.0, "timeout_s": 300}});
+        let approval = serde_json::json!({"event": "approval.request", "data": {"ts": 1000.0, "timeout_s": 60}});
+        let message = serde_json::json!({"event": "agent.message", "data": {"ts": 1000.0, "timeout_s": 60}});
+        assert!(replay_expired(&question, 1400.0));
+        assert!(!replay_expired(&question, 1200.0));
+        assert!(replay_expired(&approval, 1100.0));
+        assert!(!replay_expired(&message, 99999.0));
+    }
+
+    #[test]
+    fn a_request_past_its_deadline_raises_no_banner() {
+        let data = serde_json::json!({"ts": 1000.0, "timeout_s": 300});
+        assert!(!request_expired(&data, 1299.0));
+        assert!(request_expired(&data, 1301.0));
+        assert!(!request_expired(&serde_json::json!({"ts": 1000.0}), 99999.0));
+        assert!(!request_expired(&serde_json::json!({}), 99999.0));
+    }
+
+    #[test]
+    fn a_question_names_its_profile_and_shows_the_question() {
+        assert_eq!(
+            clarification_lines("doc", "Which branch?"),
+            ("doc · question".to_string(), "Which branch?".to_string()),
+        );
+        assert_eq!(
+            clarification_lines("", ""),
+            ("question".to_string(), "Your agent is waiting for an answer.".to_string()),
+        );
+    }
 
     #[test]
     fn explicit_title_keeps_the_body() {

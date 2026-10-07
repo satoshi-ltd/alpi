@@ -14,6 +14,12 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.7.5 — 2026-10-07 — the inbox of every connection stays current
+
+- **Notifications from a connection that is not open refresh the inbox.** Before, a row from another connection, or a warning the daemon files itself, appeared only after reopening the screen or pulling to refresh; with notifications allowed, the notification poll now refreshes the inbox whenever it finds a change, and inbox changes never raise a banner.
+
+  Requires alpi 0.17.5.
+
 ## v0.7.4 — 2026-10-07 — the current Anthropic and OpenAI models
 
 - The model picker offers Claude Fable 5.1, Opus 5.5, Sonnet 5.5 and Haiku 4.5, and GPT-6 Astra, GPT-6.1 Sol and GPT-6 Luna; a new profile on an Anthropic or OpenAI key starts on Sonnet 5.5 or GPT-6.1 Sol. A profile that already uses an older model keeps it.

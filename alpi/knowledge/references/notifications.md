@@ -61,6 +61,13 @@ lines, clipped) at the top of the message. A digest is
 drawn as entries only when it has two or more items, every one a plain `-` bullet
 in that form with a plain meta of at most four words; any other list stays a list.
 
+## Which daemons reach the owner
+
+The desktop and phone apps raise notifications from every paired daemon, not
+only the connection that is open; the open one arrives at once, the others
+within about half a minute while the app runs. A warning row the daemon files
+itself (memory or skill attention) shows in the inbox but raises no banner.
+
 ## Auto-simplified (don't bother — it is downgraded for you)
 
 - `####+` deep headings → capped at two levels (heading + subheading)

@@ -24,7 +24,7 @@ const h = vi.hoisted(() => {
   return {
     ROW, DETAIL, detail: DETAIL, rows: [ROW], profileDetail: null, playTts: vi.fn(), ttsCb: { current: null },
     invoke: vi.fn(async () => ({ path: "/tmp/alpi-attach-1/whoop-sync-failed.md", name: "whoop-sync-failed.md", size: 42 })),
-    markRead: vi.fn(), markUnread: vi.fn(async () => ({})), notify: vi.fn(),
+    markRead: vi.fn(), markUnread: vi.fn(async () => ({})), notify: vi.fn(), cancelDelete: vi.fn(() => true),
   };
 });
 
@@ -41,7 +41,7 @@ vi.mock("../primitives/Notification.jsx", () => ({ useNotify: () => h.notify }))
 vi.mock("../hooks/useOutputs.js", () => ({
   useAllOutputs: () => ({ rows: h.rows, refresh: () => {}, loading: h.loading ?? false, unreachable: h.unreachable ?? [] }),
   useOutput: () => ({ row: h.detail, markRead: h.markRead, markUnread: h.markUnread }),
-  useDeleteOutput: () => ({ schedule: () => {}, cancel: () => {} }),
+  useDeleteOutput: () => ({ schedule: () => {}, cancel: h.cancelDelete }),
   useMarkAllOutputsRead: () => () => {},
   pendingDeleteKeys: () => [],
   rowKey: (r) => `${r.connectionId}:${r.profile}:${r.id}`,
@@ -65,6 +65,8 @@ beforeEach(() => {
   h.invoke.mockClear();
   h.markRead.mockClear();
   h.notify.mockClear();
+  h.cancelDelete.mockReset();
+  h.cancelDelete.mockImplementation(() => true);
   h.markUnread.mockReset();
   h.markUnread.mockResolvedValue({});
 });
@@ -702,6 +704,29 @@ describe("NotificationsModal triage", () => {
     const undos = h.notify.mock.calls.filter(([arg]) => arg.action === "Undo");
     expect(undos).toHaveLength(2);
     expect(undos.map(([arg]) => arg.message)).toEqual(["Deleted “Backup failed”", "Deleted “Digest”"]);
+  });
+
+  it("brings a row back on Undo while its delete is pending", () => {
+    renderTriage();
+    const row = option("Backup failed");
+    fireEvent.click(row);
+    fireEvent.keyDown(row, { key: "Backspace" });
+    expect(titles()).toHaveLength(3);
+    const [[{ onAction }]] = h.notify.mock.calls.filter(([arg]) => arg.action === "Undo");
+    act(() => { onAction(); });
+    expect(titles()).toHaveLength(4);
+  });
+
+  it("keeps a row gone when Undo comes after the daemon already deleted it", () => {
+    renderTriage();
+    const row = option("Backup failed");
+    fireEvent.click(row);
+    fireEvent.keyDown(row, { key: "Backspace" });
+    h.cancelDelete.mockImplementation(() => false);
+    const [[{ onAction }]] = h.notify.mock.calls.filter(([arg]) => arg.action === "Undo");
+    act(() => { onAction(); });
+    expect(titles()).toHaveLength(3);
+    expect(h.notify).toHaveBeenLastCalledWith({ message: "Already deleted" });
   });
 
   it("ignores Backspace pressed on another row's delete button", () => {

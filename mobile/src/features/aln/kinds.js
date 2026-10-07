@@ -7,6 +7,11 @@ export const NOTIFIABLE_KINDS = [
   'budget.threshold',
 ];
 
+// Polled beside the notifiable kinds only to refresh the inbox of a connection whose stream is not open; never a banner.
+export const INBOX_KINDS = ['output.created', 'output.updated'];
+
+export const POLL_KINDS = [...NOTIFIABLE_KINDS, ...INBOX_KINDS];
+
 
 export const APPROVAL_CATEGORY = 'alpi.approval';
 export const APPROVAL_ACTIONS = { deny: 'deny', allow_once: 'once' };

@@ -9,6 +9,7 @@ vi.mock('../theme/ThemeContext', () => ({ useTheme: () => ({ colors: { accent: '
 import { call as rpcCall } from '../lib/rpc';
 import { EndpointContext } from '../lib/EndpointContext';
 import { useUnifiedOutputs } from './useUnifiedOutputs';
+import { signalInbox } from '../features/aln/inboxSignal';
 
 function wrap(value) {
   return function Wrapper({ children }) {
@@ -87,5 +88,28 @@ describe('useUnifiedOutputs · admin-only fan-out', () => {
     expect(result.current.hasAdmin).toBe(false);
     expect(result.current.rows).toEqual([]);
     expect(result.current.loading).toBe(false);
+  });
+});
+
+describe('useUnifiedOutputs · inbox signal', () => {
+  it('refetches when the notification poll signals a change on a connection that is not streaming', async () => {
+    rpcCall.mockImplementation(async (c, method) => {
+      if (method === 'host.profile.summaries') return { profiles: [{ name: 'p' }] };
+      if (method === 'host.outputs.list') return { outputs: [{ id: 'o', created_at: 1 }] };
+      return {};
+    });
+    const value = {
+      connections: [{ id: 'c1', name: 'home', ip: '1.1.1.1', port: 80 }],
+      probeState: new Map(),
+      roleState: new Map([['c1', 'admin']]),
+    };
+    const lists = () => rpcCall.mock.calls.filter((c) => c[1] === 'host.outputs.list').length;
+    const { result } = renderHook(() => useUnifiedOutputs(), { wrapper: wrap(value) });
+    await waitFor(() => expect(result.current.rows.length).toBe(1));
+    await new Promise((r) => setTimeout(r, 50));
+    const before = lists();
+
+    act(() => { signalInbox('c1'); });
+    await waitFor(() => expect(lists()).toBeGreaterThan(before), { timeout: 3000 });
   });
 });

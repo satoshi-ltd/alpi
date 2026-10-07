@@ -3559,14 +3559,7 @@ fn tray_announce_notifications(app: AppHandle, unread: u64) {
 }
 
 fn subscribe_daemon_events(app: AppHandle) {
-    use std::collections::HashMap;
-    use std::sync::{Arc, Mutex};
-
-    use crate::event_dispatch::{classify_frame, SubscribeAction, SubscribeState};
-
-    // One state object per (daemon connection). Keeps last_seq + the dedupe window. Survives loop iterations so reconnects retain the cursor.
-    let states: Arc<Mutex<HashMap<String, SubscribeState>>> =
-        Arc::new(Mutex::new(HashMap::new()));
+    use crate::event_dispatch::{classify_frame, daemon_states, history_was_reset, SubscribeAction, SubscribeState, STATE_SEEN_CAP};
 
     // This loop doubles as the recovery detector for the active daemon — back off while it stays down (2,4,8,10s capped) so an offline remote isn't hammered, reset as soon as a stream lives.
     let mut consecutive_failures: u32 = 0;
@@ -3579,7 +3572,7 @@ fn subscribe_daemon_events(app: AppHandle) {
         };
         let app_for_frames = app.clone();
         let id_for_payload = starting_id.clone();
-        let states_for_loop = Arc::clone(&states);
+        let states_for_loop = daemon_states();
         let starting_id_for_match = starting_id.clone();
         let key_for_loop = sub_key.clone();
 
@@ -3595,16 +3588,31 @@ fn subscribe_daemon_events(app: AppHandle) {
                     .unwrap_or_else(|e| e.into_inner());
                 let state = guard
                     .entry(key_for_loop.clone())
-                    .or_insert_with(|| SubscribeState::new(1024));
+                    .or_insert_with(|| SubscribeState::new(STATE_SEEN_CAP));
                 let action = classify_frame(state, &frame);
                 drop(guard);
 
                 match action {
                     SubscribeAction::BackfillFrom(prev) => {
-                        if let Ok(value) = host_client::call(
+                        let mut from = prev;
+                        while let Ok(value) = host_client::call(
                             "host.events.history",
-                            serde_json::json!({ "after_seq": prev, "limit": 200 }),
+                            serde_json::json!({ "after_seq": from, "limit": 200 }),
                         ) {
+                            let next = value.get("next_seq").and_then(|v| v.as_u64());
+                            if history_was_reset(Some(from), next) {
+                                let replay = states_for_loop
+                                    .lock()
+                                    .unwrap_or_else(|e| e.into_inner())
+                                    .entry(key_for_loop.clone())
+                                    .or_insert_with(|| SubscribeState::new(STATE_SEEN_CAP))
+                                    .rewind(next.unwrap_or(0));
+                                if !replay {
+                                    break;
+                                }
+                                from = 0;
+                                continue;
+                            }
                             if let Some(events) =
                                 value.get("events").and_then(|v| v.as_array())
                             {
@@ -3613,20 +3621,19 @@ fn subscribe_daemon_events(app: AppHandle) {
                                         .lock()
                                         .unwrap_or_else(|e| e.into_inner());
                                     let s = g.entry(key_for_loop.clone())
-                                        .or_insert_with(|| SubscribeState::new(1024));
+                                        .or_insert_with(|| SubscribeState::new(STATE_SEEN_CAP));
+                                    if !s.accept(ev) {
+                                        continue;
+                                    }
                                     if let Some(seq) =
                                         ev.get("seq").and_then(|v| v.as_u64())
                                     {
-                                        if !s.mark_seen(seq) {
-                                            continue;
-                                        }
                                         s.bump_seq(seq);
                                     }
                                     drop(g);
-                                    notifications::dispatch_daemon_frame(
+                                    notifications::dispatch_replayed_frame(
                                         &app_for_frames,
                                         &id_for_payload,
-                                        true,
                                         ev,
                                     );
                                     let _ = app_for_frames.emit(
@@ -3639,27 +3646,37 @@ fn subscribe_daemon_events(app: AppHandle) {
                                     );
                                 }
                             }
-                            if let Some(next) =
-                                value.get("next_seq").and_then(|v| v.as_u64())
                             {
                                 let mut g = states_for_loop
                                     .lock()
                                     .unwrap_or_else(|e| e.into_inner());
-                                g.entry(key_for_loop.clone())
-                                    .or_insert_with(|| SubscribeState::new(1024))
-                                    .bump_seq(next);
+                                let s = g.entry(key_for_loop.clone())
+                                    .or_insert_with(|| SubscribeState::new(STATE_SEEN_CAP));
+                                if let Some(events) = value.get("events").and_then(|v| v.as_array()) {
+                                    s.observe(events);
+                                }
+                                s.end_replay();
+                                if let Some(next) = next {
+                                    s.bump_seq(next);
+                                }
                             }
+                            break;
                         }
+                        // A refetch that failed after a rewind must not leave the floor over live frames.
+                        states_for_loop
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .entry(key_for_loop.clone())
+                            .or_insert_with(|| SubscribeState::new(STATE_SEEN_CAP))
+                            .end_replay();
                     }
                     SubscribeAction::AnchorAt(anchor) => {
-                        if anchor > 0 {
-                            let mut g = states_for_loop
-                                .lock()
-                                .unwrap_or_else(|e| e.into_inner());
-                            g.entry(key_for_loop.clone())
-                                .or_insert_with(|| SubscribeState::new(1024))
-                                .bump_seq(anchor);
-                        }
+                        let mut g = states_for_loop
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner());
+                        g.entry(key_for_loop.clone())
+                            .or_insert_with(|| SubscribeState::new(STATE_SEEN_CAP))
+                            .bump_seq(anchor);
                     }
                     SubscribeAction::Deliver { .. } => {
                         notifications::dispatch_daemon_frame(&app_for_frames, &id_for_payload, true, &frame);
@@ -3692,37 +3709,32 @@ fn subscribe_daemon_events(app: AppHandle) {
 
 const INACTIVE_POLL_SECS: u64 = 25;
 
-// The active connection notifies via its instant stream; this polls every OTHER connection so background daemons still raise native notifications.
+// The active connection notifies via its instant stream; this polls every OTHER daemon so background daemons still raise native notifications and refresh their inbox.
 fn poll_inactive_connections(app: AppHandle) {
-    use std::collections::{HashMap, HashSet};
+    use crate::event_dispatch::{daemon_states, first_sight_touches_inbox, poll_into, should_poll, SubscribeState, NOTIFIABLE_KINDS, POLL_KINDS, STATE_SEEN_CAP};
 
-    use crate::event_dispatch::{classify_poll, NOTIFIABLE_KINDS};
-
-    let mut cursors: HashMap<String, u64> = HashMap::new();
     loop {
         std::thread::sleep(std::time::Duration::from_secs(INACTIVE_POLL_SECS));
         let state = host_client::load_connections();
+        let active_key = host_client::active_subscription_key();
         let active = host_client::active_connection_id();
-        let known: HashSet<String> =
-            state.connections.iter().map(|c| c.id().to_string()).collect();
-        cursors.retain(|id, _| known.contains(id));
+        let active_online = matches!(host_client::status_for(&active).0, host_client::ConnectionStatus::Online);
         for conn in &state.connections {
             let id = conn.id().to_string();
-            if id == active {
-                // Drop so it re-anchors (no replay) the moment it stops being active.
-                cursors.remove(&id);
+            let key = host_client::subscription_key(conn);
+            let role = host_client::effective_role(conn);
+            if !should_poll(&id, &key, &active, active_key.as_deref(), active_online, role.as_deref()) {
                 continue;
             }
-            // Members have no inbox — the daemon filters their events to empty, so polling is pure wasted traffic.
-            if host_client::effective_role(conn).as_deref() == Some("member") {
-                cursors.remove(&id);
-                continue;
-            }
-            let cursor = cursors.get(&id).copied();
+            let cursor = daemon_states()
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .get(&key)
+                .and_then(SubscribeState::cursor);
             let params = serde_json::json!({
                 "after_seq": cursor.unwrap_or(0),
-                "limit": 50,
-                "kinds": NOTIFIABLE_KINDS,
+                "limit": 200,
+                "kinds": POLL_KINDS,
             });
             let resp = match host_client::call_for(&id, "host.events.history", params) {
                 Ok(v) => v,
@@ -3734,10 +3746,31 @@ fn poll_inactive_connections(app: AppHandle) {
                 .cloned()
                 .unwrap_or_default();
             let next_seq = resp.get("next_seq").and_then(|v| v.as_u64());
-            let outcome = classify_poll(cursor, &events, next_seq);
-            for frame in &outcome.to_notify {
-                notifications::dispatch_daemon_frame(&app, &id, false, frame);
-                // background flag: useAllOutputs refreshes on this even though the poller carries agent.message/etc., not output.created.
+            // Switched to this connection mid-tick: its stream now owns the cursor and must replay these frames itself.
+            if host_client::active_connection_id() == id {
+                continue;
+            }
+            let fresh = {
+                let mut guard = daemon_states().lock().unwrap_or_else(|e| e.into_inner());
+                let daemon = guard.entry(key).or_insert_with(|| SubscribeState::new(STATE_SEEN_CAP));
+                poll_into(daemon, cursor, &events, next_seq)
+            };
+            if first_sight_touches_inbox(cursor, &events) {
+                let _ = app.emit(
+                    "daemon-event",
+                    serde_json::json!({
+                        "connection_id": id.clone(),
+                        "frame": { "event": "inbox.anchored" },
+                        "background": true,
+                    }),
+                );
+            }
+            for frame in &fresh {
+                let kind = frame.get("event").and_then(|v| v.as_str()).unwrap_or("");
+                if NOTIFIABLE_KINDS.contains(&kind) {
+                    notifications::dispatch_daemon_frame(&app, &id, false, frame);
+                }
+                // background flag: useAllOutputs refreshes this connection's inbox on it.
                 let _ = app.emit(
                     "daemon-event",
                     serde_json::json!({
@@ -3747,7 +3780,6 @@ fn poll_inactive_connections(app: AppHandle) {
                     }),
                 );
             }
-            cursors.insert(id, outcome.next_cursor);
         }
     }
 }

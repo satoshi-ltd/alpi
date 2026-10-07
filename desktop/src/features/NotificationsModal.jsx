@@ -295,7 +295,11 @@ export default function NotificationsModal({
       message: `Deleted “${clip(headlineParts(row).title || "notification", 48)}”`,
       action: "Undo",
       onAction: () => {
-        cancelDelete(row.profile, row.id, row.connectionId);
+        // The toast outlives the 5 s delete while hovered; a row the daemon already dropped must not come back.
+        if (!cancelDelete(row.profile, row.id, row.connectionId)) {
+          notify({ message: "Already deleted" });
+          return;
+        }
         setHiddenIds((prev) => {
           if (!prev.has(key)) return prev;
           const next = new Set(prev);
