@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.17.4 — 2026-10-07 — the scheduler trusts the file, not its snapshot
+
+- **A long pass no longer fires stale jobs.** Each job is re-read just before it fires: one removed, paused, edited or fired by hand during an earlier run of the same pass is skipped or runs from its current definition.
+- **A job that fails its due check, or a stamp that cannot be written, no longer stops the pass.** The job is skipped with a logged reason; an unwritten stamp is retried first thing on the next tick, so the job is not fired twice.
+- **A rerun fired by hand reads `ok` as soon as it succeeds.** The outcome is stamped before `schedule.done` goes out, so an app that refetches on the event no longer draws the profile as failed.
+
 ## v0.17.3 — 2026-10-07 — a long tool call keeps all its arguments
 
 - A saved turn clips a long tool argument value by value instead of cutting the whole call at 16 KiB, so every key survives and a reloaded session returns the full argument object. Before, the keys that sorted after a large value were lost, and an audit of saved writes read them as missing their sources.

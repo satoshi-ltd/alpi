@@ -632,7 +632,6 @@ def fire_by_id(home: Path, job_id: str) -> tuple[bool, str]:
     outcome = _run_guarded(target, home)
     log.info("job %s ad-hoc %s — %s", job_id,
              "OK" if outcome.ok else "FAIL", outcome.message)
-    _emit_schedule_event(home, target, outcome)
     stamp_at = _now().isoformat()
     def _stamp(current: list[dict]) -> list[dict] | None:
         for j in current:
@@ -641,7 +640,11 @@ def fire_by_id(home: Path, job_id: str) -> tuple[bool, str]:
                 j["last_run_status"] = "ok" if outcome.ok else "error"
                 return current
         return None
-    jobs_store.update(home, _stamp)
+    try:
+        jobs_store.update(home, _stamp)
+    except Exception as e:  # noqa: BLE001
+        log.error("could not stamp ad-hoc run of %s: %s", job_id, e)
+    _emit_schedule_event(home, target, outcome)
     return outcome.ok, outcome.message
 
 
@@ -845,42 +848,94 @@ def _profile_paused(home: Path) -> bool:
         return False
 
 
+_pending_stamps: dict[str, dict[str, tuple[str, bool, str]]] = {}
+
+
+def _overlay_pending(job: dict, pending: dict[str, tuple[str, bool, str]]) -> dict | None:
+    entry = pending.get(str(job.get("id")))
+    if entry is None:
+        return job
+    kind, ok, at = entry
+    if kind == "once" and ok:
+        return None
+    if not _older(job.get("last_run_at"), at):
+        return job
+    return {**job, "last_run_at": at, "last_run_status": "ok" if ok else "error"}
+
+
+def _older(disk: str | None, at: str) -> bool:
+    before, after = _parse_iso(disk), _parse_iso(at)
+    if before is None or after is None:
+        return True
+    return before.astimezone() < after.astimezone()
+
+
 def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]:
     """Run one pass: fire every due job, stamping each one as soon as it returns."""
     now = now or _now()
-    try:
-        jobs = jobs_store.read(home)
-    except jobs_store.CorruptJobsFile as e:
-        log.error("jobs.json corrupt — skipping tick (preserve disk state): %s", e)
-        return []
-    results: list[tuple[str, bool, str]] = []
-    unseen = {str(j["id"]) for j in jobs if _needs_first_seen(j)}
     stamp_at = now.isoformat()
+    pending = _pending_stamps.setdefault(str(home), {})
+    unseen: set[str] = set()
 
     def _stamp(fired: dict[str, tuple[str, bool]]) -> None:
+        pending.update({jid: (kind, ok, stamp_at) for jid, (kind, ok) in fired.items()})
+
         def _apply(current: list[dict]) -> list[dict]:
             kept: list[dict] = []
             for j in current:
                 jid = str(j.get("id"))
                 if jid in unseen and _needs_first_seen(j):
                     j["first_seen_at"] = stamp_at
-                if jid in fired:
-                    kind, ok = fired[jid]
-                    j["last_run_at"] = stamp_at
-                    j["last_run_status"] = "ok" if ok else "error"
+                if jid in pending:
+                    kind, ok, at = pending[jid]
                     if kind == "once" and ok:
                         continue
+                    if _older(j.get("last_run_at"), at):
+                        j["last_run_at"] = at
+                        j["last_run_status"] = "ok" if ok else "error"
                 kept.append(j)
             return kept
-        jobs_store.update(home, _apply)
+        try:
+            jobs_store.update(home, _apply)
+        except Exception as e:  # noqa: BLE001
+            log.error("could not stamp %s; retrying next tick: %s", sorted(pending) or "first-seen", e)
+            return
+        pending.clear()
+
+    if pending:
+        _stamp({})
+    try:
+        jobs = jobs_store.read(home)
+    except jobs_store.CorruptJobsFile as e:
+        log.error("jobs.json corrupt — skipping tick (preserve disk state): %s", e)
+        return []
+    jobs = [j for j in (_overlay_pending(j, pending) for j in jobs) if j is not None]
+    results: list[tuple[str, bool, str]] = []
+    unseen.update(str(j["id"]) for j in jobs if _needs_first_seen(j))
+
+    def _due(job: dict) -> bool:
+        try:
+            return is_due(job, now=now, home=home)
+        except Exception as e:  # noqa: BLE001
+            log.warning("skipping job %s: due check failed: %s", job.get("id", "?"), e)
+            return False
 
     stamped = False
     for job in jobs:
-        if not is_due(job, now=now, home=home):
+        if not _due(job):
             continue
         # per-job re-check (a job may run for hours; pause can land mid-tick); break, not return — finished jobs must keep their stamp
         if _profile_paused(home):
             break
+        try:
+            current = next((j for j in jobs_store.read(home) if j.get("id") == job.get("id")), None)
+        except Exception as e:  # noqa: BLE001
+            log.error("jobs.json unreadable — ending the pass: %s", e)
+            break
+        current = _overlay_pending(current, pending) if current is not None else None
+        if current is None or not _due(current):
+            continue
+        job = current
         job_id = str(job.get("id", "?"))
         log.info("firing job %s (%s)", job_id, job.get("kind", "cron"))
         _started = time.time()

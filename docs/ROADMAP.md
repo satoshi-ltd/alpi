@@ -222,21 +222,6 @@ _None._
   accept: a turn whose tool output holds a lone surrogate streams to a client and finishes, the frame carrying
   U+FFFD; each writer named above either scrubs or is shown not to receive tool text; tests drive the socket and
   the websocket.
-- **SCHED.8** — A long pass fires jobs from a stale snapshot
-  `bug · alpi · agent · low`
-  note: found while reviewing SCHED.6. `tick` iterates the jobs read at the start of the pass; a
-  job removed, edited, paused or fired by hand during an earlier run of up to 86400 s is still
-  fired from the old copy.
-  accept: each job is re-read from `jobs.json` just before it fires and skipped if it is gone,
-  paused or no longer due; a test removes the second job during the first run and it does not fire.
-- **SCHED.9** — A successful rerun fired by hand reads failed until the next event
-  `bug · alpi · agent · low`
-  note: found while reviewing ACT.1. `fire_by_id` in [scheduler/run.py](../alpi/scheduler/run.py)
-  ends the run and emits `schedule.done` before `jobs_store.update` stamps `ok`, and the stamp emits
-  nothing, so a client that refetches on `activity.changed` can still read `last_run_status: "error"`
-  and draw the profile failed again. `tick` stamps right after the run and is not affected.
-  accept: `fire_by_id` stamps the outcome before it emits; a test fires a previously failed job by
-  hand and the first `host.activity.list` after `activity.changed` reads it `ok`.
 - **ACT.2** — Jobs fired from the console never show as running
   `bug · alpi · agent · low`
   note: found while reviewing ACT.1. `alpi schedule fire`, `alpi setup → Fire now` and the TUI's
@@ -245,13 +230,6 @@ _None._
   The apps' Fire button (`host.schedule.fire`) and cron fires are listed.
   accept: a job fired from the CLI or the TUI appears as a running row with its `job_id` while it
   runs (handed to the daemon when one answers); a test fires through the CLI path against a daemon.
-- **SCHED.10** — A job whose due check or stamp raises still stops the pass
-  `bug · alpi · agent · low`
-  note: found while reviewing SCHED.7. `is_due` runs outside any guard in `tick`, so an inactivity job
-  with a non-numeric `after_hours` or a session file deleted between glob and `stat` aborts the pass
-  every tick; so does `jobs_store.update` raising mid-pass (disk full, permissions).
-  accept: a due check that raises skips that job with a logged reason and the pass goes on; a stamp that
-  fails is logged and retried on the next tick; tests cover both.
 - **SCOPE.12** — The `db` tool and `out/` sit outside the member fence
   `bug · alpi · agent · low`
   note: found while reviewing SCOPE.8. The `db` tool runs arbitrary SQL on any skill's `state/db.sqlite`,

@@ -1878,3 +1878,256 @@ def test_a_reply_cut_inside_a_code_block_closes_it_before_saying_where_it_was_cu
     assert body.count("```") == 2
     note = f"*Cut at 8,000 of {len(reply):,} characters.*"
     assert body.endswith(note) and body.rindex("```") < body.index(note)
+
+
+def _cron(job_id: str, **extra) -> dict:
+    return {"id": job_id, "kind": "cron", "expression": "* * * * *", "prompt": job_id, "last_run_at": _PAST, **extra}
+
+
+def _fired_by_tick(monkeypatch) -> list[tuple[str, str]]:
+    fired: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        scheduler, "run_job",
+        lambda job, home: (fired.append((job["id"], job["prompt"])) or scheduler.JobOutcome(True, "ok")),
+    )
+    return fired
+
+
+def test_a_job_removed_during_an_earlier_run_does_not_fire(monkeypatch, tmp_home_no_env: Path) -> None:
+    scheduler._save_jobs(tmp_home_no_env, [_cron("first"), _cron("second")])
+    fired: list[str] = []
+
+    def run(job, home):
+        fired.append(job["id"])
+        if job["id"] == "first":
+            jobs_store.update(home, lambda jobs: [j for j in jobs if j["id"] != "second"])
+        return scheduler.JobOutcome(True, "ok")
+
+    monkeypatch.setattr(scheduler, "run_job", run)
+
+    assert scheduler.tick(tmp_home_no_env) == [("first", True, "ok")]
+    assert fired == ["first"]
+    assert [j["id"] for j in jobs_store.read(tmp_home_no_env)] == ["first"]
+
+
+def test_a_job_paused_during_an_earlier_run_does_not_fire(monkeypatch, tmp_home_no_env: Path) -> None:
+    scheduler._save_jobs(tmp_home_no_env, [_cron("first"), _cron("second")])
+    fired: list[str] = []
+
+    def run(job, home):
+        fired.append(job["id"])
+        if job["id"] == "first":
+            def pause(jobs):
+                for j in jobs:
+                    if j["id"] == "second":
+                        j["paused"] = True
+                return jobs
+            jobs_store.update(home, pause)
+        return scheduler.JobOutcome(True, "ok")
+
+    monkeypatch.setattr(scheduler, "run_job", run)
+
+    scheduler.tick(tmp_home_no_env)
+
+    assert fired == ["first"]
+
+
+def test_a_job_edited_during_an_earlier_run_fires_with_its_new_prompt(monkeypatch, tmp_home_no_env: Path) -> None:
+    scheduler._save_jobs(tmp_home_no_env, [_cron("first"), _cron("second")])
+    fired: list[tuple[str, str]] = []
+
+    def run(job, home):
+        fired.append((job["id"], job["prompt"]))
+        if job["id"] == "first":
+            def edit(jobs):
+                for j in jobs:
+                    if j["id"] == "second":
+                        j["prompt"] = "edited"
+                return jobs
+            jobs_store.update(home, edit)
+        return scheduler.JobOutcome(True, "ok")
+
+    monkeypatch.setattr(scheduler, "run_job", run)
+
+    scheduler.tick(tmp_home_no_env)
+
+    assert fired == [("first", "first"), ("second", "edited")]
+
+
+def test_a_job_fired_by_hand_during_an_earlier_run_is_not_fired_again(monkeypatch, tmp_home_no_env: Path) -> None:
+    scheduler._save_jobs(tmp_home_no_env, [_cron("first"), _cron("second")])
+    fired: list[str] = []
+
+    def run(job, home):
+        fired.append(job["id"])
+        if job["id"] == "first":
+            def stamp(jobs):
+                for j in jobs:
+                    if j["id"] == "second":
+                        j["last_run_at"] = datetime.now(timezone.utc).isoformat()
+                return jobs
+            jobs_store.update(home, stamp)
+        return scheduler.JobOutcome(True, "ok")
+
+    monkeypatch.setattr(scheduler, "run_job", run)
+
+    scheduler.tick(tmp_home_no_env)
+
+    assert fired == ["first"]
+
+
+def test_a_successful_rerun_by_hand_is_stamped_ok_before_the_event_goes_out(monkeypatch, tmp_home_no_env: Path) -> None:
+    scheduler._save_jobs(tmp_home_no_env, [_cron("abc123", last_run_status="error")])
+    monkeypatch.setattr(scheduler, "run_job", lambda job, home: scheduler.JobOutcome(True, "ok"))
+    seen_at_emit: list[str] = []
+    monkeypatch.setattr(
+        scheduler, "_emit_schedule_event",
+        lambda home, job, outcome: seen_at_emit.append(jobs_store.read(home)[0]["last_run_status"]),
+    )
+
+    ok, _message = scheduler.fire_by_id(tmp_home_no_env, "abc123")
+
+    assert ok
+    assert seen_at_emit == ["ok"]
+
+
+def test_a_failing_due_check_skips_that_job_and_the_pass_goes_on(monkeypatch, tmp_home_no_env: Path) -> None:
+    broken = {"id": "broken", "kind": "inactivity", "after_hours": "soon", "prompt": "broken"}
+    scheduler._save_jobs(tmp_home_no_env, [broken, _cron("healthy")])
+    fired = _fired_by_tick(monkeypatch)
+
+    results = scheduler.tick(tmp_home_no_env)
+
+    assert results == [("healthy", True, "ok")]
+    assert fired == [("healthy", "healthy")]
+
+
+def test_a_stamp_that_fails_is_retried_next_tick_without_firing_the_job_again(monkeypatch, tmp_home_no_env: Path) -> None:
+    scheduler._save_jobs(tmp_home_no_env, [_cron("abc123")])
+    fired = _fired_by_tick(monkeypatch)
+    real_update = jobs_store.update
+    state = {"fail": True}
+
+    def flaky(home, mutator):
+        if state["fail"]:
+            raise OSError("disk full")
+        return real_update(home, mutator)
+
+    monkeypatch.setattr(jobs_store, "update", flaky)
+    assert scheduler.tick(tmp_home_no_env) == [("abc123", True, "ok")]
+    assert jobs_store.read(tmp_home_no_env)[0]["last_run_at"] == _PAST
+
+    state["fail"] = False
+    assert scheduler.tick(tmp_home_no_env) == []
+
+    assert fired == [("abc123", "abc123")]
+    merged = jobs_store.read(tmp_home_no_env)[0]
+    assert merged["last_run_at"] != _PAST
+    assert merged["last_run_status"] == "ok"
+
+
+def test_a_stamp_that_keeps_failing_never_fires_the_job_twice(monkeypatch, tmp_home_no_env: Path) -> None:
+    scheduler._save_jobs(tmp_home_no_env, [_cron("abc123")])
+    fired = _fired_by_tick(monkeypatch)
+
+    def broken(home, mutator):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(jobs_store, "update", broken)
+
+    for _ in range(3):
+        scheduler.tick(tmp_home_no_env)
+
+    assert fired == [("abc123", "abc123")]
+
+
+def test_a_one_shot_whose_stamp_fails_is_not_run_again_and_is_removed_on_recovery(monkeypatch, tmp_home_no_env: Path) -> None:
+    once = {"id": "once1", "kind": "once", "run_at": _PAST, "prompt": "once1"}
+    scheduler._save_jobs(tmp_home_no_env, [once])
+    fired = _fired_by_tick(monkeypatch)
+    real_update = jobs_store.update
+    state = {"fail": True}
+
+    def flaky(home, mutator):
+        if state["fail"]:
+            raise OSError("disk full")
+        return real_update(home, mutator)
+
+    monkeypatch.setattr(jobs_store, "update", flaky)
+    scheduler.tick(tmp_home_no_env)
+    scheduler.tick(tmp_home_no_env)
+    state["fail"] = False
+    scheduler.tick(tmp_home_no_env)
+
+    assert fired == [("once1", "once1")]
+    assert jobs_store.read(tmp_home_no_env) == []
+
+
+def test_a_pending_stamp_never_overwrites_a_newer_one_on_disk(monkeypatch, tmp_home_no_env: Path) -> None:
+    scheduler._save_jobs(tmp_home_no_env, [_cron("abc123")])
+    _fired_by_tick(monkeypatch)
+    real_update = jobs_store.update
+    state = {"fail": True}
+
+    def flaky(home, mutator):
+        if state["fail"]:
+            raise OSError("disk full")
+        return real_update(home, mutator)
+
+    monkeypatch.setattr(jobs_store, "update", flaky)
+    scheduler.tick(tmp_home_no_env)
+    state["fail"] = False
+    newer = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+
+    def by_hand(jobs):
+        jobs[0]["last_run_at"] = newer
+        return jobs
+
+    real_update(tmp_home_no_env, by_hand)
+    scheduler.tick(tmp_home_no_env)
+
+    assert jobs_store.read(tmp_home_no_env)[0]["last_run_at"] == newer
+
+
+def test_an_unreadable_jobs_file_mid_pass_ends_the_pass_instead_of_raising(monkeypatch, tmp_home_no_env: Path) -> None:
+    scheduler._save_jobs(tmp_home_no_env, [_cron("first"), _cron("second")])
+    fired = _fired_by_tick(monkeypatch)
+    real_read = jobs_store.read
+    calls = {"n": 0}
+
+    def flaky(home):
+        calls["n"] += 1
+        if calls["n"] > 1:
+            raise PermissionError("denied")
+        return real_read(home)
+
+    monkeypatch.setattr(jobs_store, "read", flaky)
+
+    assert scheduler.tick(tmp_home_no_env) == []
+    assert fired == []
+
+
+def test_a_hand_fire_whose_stamp_fails_still_reports_and_emits(monkeypatch, tmp_home_no_env: Path) -> None:
+    scheduler._save_jobs(tmp_home_no_env, [_cron("abc123")])
+    monkeypatch.setattr(scheduler, "run_job", lambda job, home: scheduler.JobOutcome(True, "ok"))
+    emitted: list[bool] = []
+    monkeypatch.setattr(scheduler, "_emit_schedule_event", lambda home, job, outcome: emitted.append(outcome.ok))
+
+    def broken(home, mutator):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(jobs_store, "update", broken)
+
+    assert scheduler.fire_by_id(tmp_home_no_env, "abc123") == (True, "ok")
+    assert emitted == [True]
+
+
+def test_older_compares_naive_and_aware_stamps_as_local_time() -> None:
+    aware = datetime(2026, 10, 7, 12, 0, tzinfo=timezone.utc).isoformat()
+    later_naive = (datetime(2026, 10, 7, 12, 0, tzinfo=timezone.utc).astimezone() + timedelta(hours=1)).replace(tzinfo=None).isoformat()
+    earlier_naive = (datetime(2026, 10, 7, 12, 0, tzinfo=timezone.utc).astimezone() - timedelta(hours=1)).replace(tzinfo=None).isoformat()
+
+    assert scheduler._older(earlier_naive, aware) is True
+    assert scheduler._older(later_naive, aware) is False
+    assert scheduler._older(None, aware) is True
+    assert scheduler._older("garbage", aware) is True
