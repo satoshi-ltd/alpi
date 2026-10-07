@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.17.7 — 2026-10-07 — the current Anthropic and OpenAI models
+
+- **The model pickers offer the current models.** Anthropic: Claude Fable 5.1, Opus 5.5, Sonnet 5.5 and Haiku 4.5. OpenAI: GPT-6 Astra, GPT-6.1 Sol and GPT-6 Luna. The OpenRouter shortlist moves to Sonnet 5.5 and Opus 5.5, and the OpenRouter context table is refreshed. A profile that pins a superseded model (Fable 5, Opus 5, Opus 4.8, Sonnet 5, GPT-6 Sol, the GPT-5.6 lineup) keeps it and keeps working.
+- **Reasoning effort is offered for GPT-6 and later** OpenAI models typed by hand, not only GPT-5.
+- **A workgroup turn's final handoff works on Claude models that think.** Claude refuses a forced tool call while thinking (always on Fable, Opus 5.5 and Sonnet 5.5, and on any Claude with an effort set), so alpi asks for the handoff without forcing it there; before, the call failed and the turn fell back to a generic continuation.
+- `docs/MODELS.md` recommends the new models by workload, with prices and windows checked against the providers' pages on 2026-10-07.
+
 ## v0.17.6 — 2026-10-07 — an edited job survives a pending stamp
 
 - Editing a one-shot job into a recurring one right after it ran no longer deletes it when the schedule store was briefly unwritable.

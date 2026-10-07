@@ -39,6 +39,7 @@ anthropic/claude-sonnet-5: 967232
 anthropic/claude-sonnet-5.5: 967232
 anthropic/claude-sonnet-5.5:batch: 967232
 anthropic/claude-sonnet-5:batch: 967232
+apodex/apodex-1.1-mini:free: 229376
 arcee-ai/trinity-large-thinking: 229376
 baidu/ernie-4.5-vl-424b-a47b: 107000
 bytedance-seed/seed-1.6: 229376
@@ -56,11 +57,11 @@ cohere/command-r-plus-08-2024: 124000
 cohere/command-r7b-12-2024: 124000
 cohere/north-mini-code:free: 223232
 deepseek/deepseek-chat: 112000
-deepseek/deepseek-chat-v3-0324: 131072
+deepseek/deepseek-chat-v3-0324: 96000
 deepseek/deepseek-chat-v3.1: 131072
 deepseek/deepseek-r1: 48000
 deepseek/deepseek-r1-0528: 131072
-deepseek/deepseek-v3.1-terminus: 98304
+deepseek/deepseek-v3.1-terminus: 131072
 deepseek/deepseek-v3.2: 98304
 deepseek/deepseek-v3.2-exp: 131072
 deepseek/deepseek-v4-flash: 1015808
@@ -103,6 +104,7 @@ google/gemini-3.7-flash: 1015808
 google/gemini-3.7-flash:batch: 1015808
 google/gemini-3.8-flash: 1015808
 google/gemini-3.8-flash:batch: 1015808
+google/gemini-nano-banana-2.1: 49152
 google/gemma-2-27b-it: 6144
 google/gemma-3-12b-it: 114688
 google/gemma-3-27b-it: 98304
@@ -122,9 +124,9 @@ inclusionai/ling-3.0-flash: 229376
 inclusionai/ling-3.0-flash-fin: 229376
 inclusionai/ling-3.0-flash-sante:free: 229376
 inclusionai/ling-3.0-flash-vl: 229376
+inclusionai/ling-3.1-flash: 229376
 inference-net/schematron-v2-small: 123904
 inference-net/schematron-v2-turbo: 119808
-kwaipilot/kat-coder-pro-v2.5: 229376
 liquid/lfm-2.5-2.6b:free: 57344
 mancer/weaver: 6000
 meituan/longcat-2.0: 1015988
@@ -163,6 +165,7 @@ mistralai/mistral-large: 96000
 mistralai/mistral-large-2407: 98304
 mistralai/mistral-large-2512: 229376
 mistralai/mistral-large-2512:batch: 229376
+mistralai/mistral-large-4-0: 491520
 mistralai/mistral-medium-3: 98304
 mistralai/mistral-medium-3-5: 229376
 mistralai/mistral-medium-3-5:batch: 229376
@@ -196,12 +199,13 @@ nvidia/nemotron-3-nano-30b-a3b: 229376
 nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free: 223232
 nvidia/nemotron-3-super-120b-a12b: 229376
 nvidia/nemotron-3-super-120b-a12b:free: 229376
-nvidia/nemotron-3-ultra-550b-a55b: 170032
+nvidia/nemotron-3-ultra-550b-a55b: 245760
 nvidia/nemotron-3-ultra-550b-a55b:free: 967232
 nvidia/nemotron-3.5-content-safety: 98304
 nvidia/nemotron-3.5-content-safety:free: 119808
 nvidia/nemotron-3.5-lightning: 229376
 nvidia/nemotron-3.5-lightning:free: 967232
+nvidia/switchyard: 967232
 openai/gpt-3.5-turbo: 12289
 openai/gpt-3.5-turbo-0613: 3072
 openai/gpt-3.5-turbo-16k: 12289
@@ -283,6 +287,8 @@ openai/gpt-6-sol: 1017232
 openai/gpt-6-sol-pro: 1017232
 openai/gpt-6-sol-pro:batch: 1017232
 openai/gpt-6-sol:batch: 1017232
+openai/gpt-6.1-sol: 1017232
+openai/gpt-6.1-sol-pro: 1017232
 openai/gpt-audio: 111616
 openai/gpt-audio-mini: 111616
 openai/gpt-chat-latest: 367232
@@ -328,9 +334,9 @@ qwen/qwen-plus-2025-07-28: 967232
 qwen/qwen2.5-vl-72b-instruct: 96000
 qwen/qwen3-14b: 30720
 qwen/qwen3-235b-a22b: 122880
-qwen/qwen3-235b-a22b-2507: 229376
+qwen/qwen3-235b-a22b-2507: 245760
 qwen/qwen3-235b-a22b-thinking-2507: 98304
-qwen/qwen3-30b-a3b: 122880
+qwen/qwen3-30b-a3b: 30720
 qwen/qwen3-30b-a3b-instruct-2507: 96000
 qwen/qwen3-30b-a3b-thinking-2507: 61440
 qwen/qwen3-32b: 30720
@@ -343,7 +349,7 @@ qwen/qwen3-coder-plus: 967232
 qwen/qwen3-max: 229376
 qwen/qwen3-max-thinking: 229376
 qwen/qwen3-next-80b-a3b-instruct: 229376
-qwen/qwen3-next-80b-a3b-thinking: 229376
+qwen/qwen3-next-80b-a3b-thinking: 98304
 qwen/qwen3-vl-235b-a22b-instruct: 98304
 qwen/qwen3-vl-235b-a22b-thinking: 98304
 qwen/qwen3-vl-30b-a3b-instruct: 245760
@@ -368,8 +374,7 @@ qwen/qwen3.7-flash: 967232
 qwen/qwen3.7-max: 967232
 qwen/qwen3.7-plus: 967232
 qwen/qwen3.8-2.4t-a95b: 967232
-qwen/qwen3.8-27b: 229376
-qwen/qwen3.8-27b:free: 229376
+qwen/qwen3.8-27b: 967232
 qwen/qwen3.8-flash: 967232
 qwen/qwen3.8-max-0902: 967232
 qwen/qwen3.8-max-prime: 967232
@@ -385,7 +390,6 @@ sakana/sakana-namazu: 229376
 sao10k/l3-lunaris-8b: 6144
 sao10k/l3.1-euryale-70b: 114688
 sao10k/l3.3-euryale-70b: 114688
-stealth/space-bunny-alpha: 967232
 stepfun/step-3.5-flash: 229376
 stepfun/step-3.7-flash: 223232
 tencent/hunyuan-a13b-instruct: 98304
@@ -404,6 +408,7 @@ thinkingmachines/inkling-small:free: 1015808
 thinkingmachines/inkling:free: 1015808
 typesafe/jev-router: 967232
 unbiased/pareto: 229376
+unbiased/pareto-26.10-preview: 1015808
 undi95/remm-slerp-l2-13b: 4608
 upstage/solar-mini4: 491520
 upstage/solar-pro-3: 98304
@@ -431,9 +436,9 @@ z-ai/glm-4.7: 169984
 z-ai/glm-4.7-flash: 98304
 z-ai/glm-5: 165232
 z-ai/glm-5-turbo: 169984
-z-ai/glm-5.1: 169984
+z-ai/glm-5.1: 167232
 z-ai/glm-5.2: 1015808
-z-ai/glm-5.3: 1015807
+z-ai/glm-5.3: 1015808
 z-ai/glm-5.3-flash: 1015807
 z-ai/glm-5.3-flash:batch: 1015808
 z-ai/glm-5.3-flashx: 1015808

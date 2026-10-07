@@ -27,6 +27,10 @@ run_mobile=false
 
 while IFS= read -r f; do
   case "$f" in
+    alpi/providers/curated_models.yaml)
+      run_alpi=true
+      run_mobile=true
+      ;;
     alpi/*|tests/*|pyproject.toml|uv.lock|deploy/umbrel/*)
       run_alpi=true
       ;;

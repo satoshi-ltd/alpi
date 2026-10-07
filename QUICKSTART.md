@@ -43,7 +43,8 @@ alpi setup
 Pick **Model / Provider**, choose a provider, paste the API key
 when prompted, pick a model. For recommendations see
 [docs/MODELS.md](docs/MODELS.md) — if you want a single sensible
-choice, **Claude Sonnet 5** (`anthropic/claude-sonnet-5`)
+choice, **Claude Sonnet 5.5** (`anthropic/claude-sonnet-5-5` with an Anthropic key,
+`openrouter/anthropic/claude-sonnet-5.5` through OpenRouter)
 is the pragmatic daily driver. If you want fully local (no cloud),
 install [Ollama](https://ollama.com/) first and pick **Ollama** in
 the wizard.

@@ -31,7 +31,7 @@ ALPI = (
     "mobile/CHANGELOG.md",
 )
 KNOWLEDGE = ("alpi/knowledge/*", "docs/*")
-CLIENTS = ("desktop/*", "mobile/*", "common/*")
+CLIENTS = ("desktop/*", "mobile/*", "common/*", "alpi/providers/curated_models.yaml")
 MOBILE_DEPS = ("mobile/package.json", "mobile/package-lock.json")
 DESIGN = (
     "design/*",

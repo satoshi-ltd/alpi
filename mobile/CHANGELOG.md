@@ -14,6 +14,12 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.7.4 — 2026-10-07 — the current Anthropic and OpenAI models
+
+- The model picker offers Claude Fable 5.1, Opus 5.5, Sonnet 5.5 and Haiku 4.5, and GPT-6 Astra, GPT-6.1 Sol and GPT-6 Luna; a new profile on an Anthropic or OpenAI key starts on Sonnet 5.5 or GPT-6.1 Sol. A profile that already uses an older model keeps it.
+
+  Requires alpi 0.17.5.
+
 ## v0.7.3 — 2026-10-07 — waiting is quiet and in ink
 
 - **The platform spinner is gone** (pull to refresh keeps the system gesture). A page or section that waits shows the alpaca in flat brand ink with what it waits for in words, after 300 ms and for at least 400 ms; controls share one ink arc; still under reduce motion.

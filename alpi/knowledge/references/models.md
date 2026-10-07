@@ -36,11 +36,11 @@ For profiles with many skills, persistent memory, database state, shell commands
 | DeepSeek V4.1 Flash | `deepseek/deepseek-v4.1-flash` | **The alpi team's recommended default.** Low cache-read price, suits an agent whose system prompt is large and stable. Text and image input, up to 1M context. First by weekly tokens on OpenRouter's public leaderboard (week ending 2026-09-28); released 2026-09-10 and not yet scored on the agentic index. |
 | GLM 5.3 Flash | `z-ai/glm-5.3-flash` | Highest published agentic index of the cheap tier (Artificial Analysis, via OpenRouter, read 2026-09-11); up to 1.25M context, image and video in. Reasoning is mandatory and defaults to `max`, with `low` and `high` also accepted — set `model_reasoning.effort` deliberately. |
 | DeepSeek V4 Flash 0731 | `deepseek/deepseek-v4-flash-0731` | Text only, up to 1.25M context, served by a large number of providers. Sixth by weekly tokens on OpenRouter's public leaderboard (week ending 2026-09-28). |
-| Claude Sonnet 5 | `anthropic/claude-sonnet-5` | Premium daily driver; strongest tool discipline at this tier. |
+| Claude Sonnet 5.5 | `anthropic/claude-sonnet-5.5` | Premium daily driver; strongest tool discipline at this tier. $2 / $10 per MTok, 1M. |
 | MiMo V2.5 Pro | `xiaomi/mimo-v2.5-pro` | Text only, up to 1M context; scores above the base MiMo on agentic and coding, at about 3x the input price. |
 | MiniMax M3 | `minimax/minimax-m3` | Mid-tier agent model. 1M is the announced ceiling; some endpoints serve 512K or 256K. |
 
-Pick one for a skill-heavy profile: start with DeepSeek V4.1 Flash, the alpi team's recommendation; move to Sonnet 5 when budget allows and tool discipline matters more than price. `deepseek/deepseek-v4-pro` is no longer recommended as a daily driver: the bare id is pinned to the 2026-04 build and a measured audit put it behind the flash tier at many times the price.
+Pick one for a skill-heavy profile: start with DeepSeek V4.1 Flash, the alpi team's recommendation; move to Sonnet 5.5 when budget allows and tool discipline matters more than price. `deepseek/deepseek-v4-pro` is no longer recommended as a daily driver: the bare id is pinned to the 2026-04 build and a measured audit put it behind the flash tier at many times the price.
 
 ## Vision route
 
@@ -59,9 +59,8 @@ For scheduled-job turns, heartbeats, summaries, simple lookups, low-risk command
 | DeepSeek V4.1 Flash | `deepseek/deepseek-v4.1-flash` | Recommended default for service turns too; cheap cache read when the prompt is large and mostly unchanged. |
 | DeepSeek V4 Flash 0731 | `deepseek/deepseek-v4-flash-0731` | Cheapest model with a real agentic score; 1.25M context, broad provider support. |
 | MiMo V2.5 | `xiaomi/mimo-v2.5` | Budget sibling to MiMo V2.5 Pro; 1M context. |
-| Claude Haiku 4.5 | `anthropic/claude-haiku-4.5` | Cheap, fast, reasoning support; reliable on short chains. |
-| GPT-5.6 Terra | `openai/gpt-5.6-terra` | Balanced OpenAI; router only when the skill catalog is small and clean. |
-| GPT-5.6 Luna | `openai/gpt-5.6-luna` | Cheapest OpenAI tier; mechanical turns only. |
+| Claude Haiku 4.5 | `anthropic/claude-haiku-4.5` | Cheap, fast, reasoning support; reliable on short chains. $1 / $5 per MTok, 200K. |
+| GPT-6 Luna | `openai/gpt-6-luna` | Cheapest OpenAI tier ($0.10 / $0.50 per MTok, cached $0.01, 1.05M); mechanical, high-volume turns only. |
 
 ## High-stakes engineering
 
@@ -69,10 +68,11 @@ When a wrong tool call is expensive: refactors, code review, long debugging, sch
 
 | Model | OpenRouter ID | Notes |
 |---|---|---|
-| Claude Fable 5 | `anthropic/claude-fable-5` | Ceiling — next-gen intelligence for long-running agents; most capable widely-released model. |
-| Claude Opus 5 | `anthropic/claude-opus-5` | Flagship for complex agentic coding and enterprise engineering; supersedes Opus 4.8 at the same price. |
-| Claude Sonnet 5 | `anthropic/claude-sonnet-5` | Best daily premium balance for coding-heavy profiles. |
-| GPT-5.6 Sol | `openai/gpt-5.6-sol` | OpenAI flagship; leads the coding-agent index, strong general engineering. |
+| Claude Fable 5.1 | `anthropic/claude-fable-5.1` | Ceiling: Anthropic's most capable widely released model ($10 / $50 per MTok, 1M). |
+| Claude Opus 5.5 | `anthropic/claude-opus-5.5` | Flagship for agentic coding ($4 / $20 per MTok, 1M); thinking cannot be turned off, default effort `medium`. |
+| Claude Sonnet 5.5 | `anthropic/claude-sonnet-5.5` | Best daily premium balance for coding-heavy profiles. |
+| GPT-6 Astra | `openai/gpt-6-astra` | OpenAI flagship ($10 / $50 per MTok, cached $1, 1.05M). |
+| GPT-6.1 Sol | `openai/gpt-6.1-sol` | OpenAI's recommended balance ($2 / $10 per MTok, cached $0.10, 1.05M), strong at coding. OpenAI's 1.05M is input plus output; on the native route alpi budgets against LiteLLM's ~922K input share, through OpenRouter against ~1.017M. |
 | Nemotron 3 Super | `nvidia/nemotron-3-super-120b-a12b` | Open-weight engineering option; 256K context. |
 
 ## Local/private profiles
@@ -87,13 +87,15 @@ When the user has ANTHROPIC_API_KEY or OPENAI_API_KEY, native routes work and us
 
 | Provider | OpenRouter route | Native route |
 |---|---|---|
-| Anthropic | `anthropic/claude-fable-5` | `claude-fable-5` |
-| Anthropic | `anthropic/claude-opus-5` | `claude-opus-5` (hyphens, not dots) |
-| Anthropic | `anthropic/claude-sonnet-5` | `claude-sonnet-5` |
+| Anthropic | `anthropic/claude-fable-5.1` | `claude-fable-5-1` (hyphens, not dots) |
+| Anthropic | `anthropic/claude-opus-5.5` | `claude-opus-5-5` |
+| Anthropic | `anthropic/claude-sonnet-5.5` | `claude-sonnet-5-5` |
 | Anthropic | `anthropic/claude-haiku-4.5` | `claude-haiku-4-5` |
-| OpenAI | `openai/gpt-5.6-sol` | `gpt-5.6-sol` (alias `gpt-5.6`, no prefix) |
-| OpenAI | `openai/gpt-5.6-terra` | `gpt-5.6-terra` |
-| OpenAI | `openai/gpt-5.6-luna` | `gpt-5.6-luna` |
+| OpenAI | `openai/gpt-6-astra` | `gpt-6-astra` |
+| OpenAI | `openai/gpt-6.1-sol` | `gpt-6.1-sol` |
+| OpenAI | `openai/gpt-6-luna` | `gpt-6-luna` |
+
+Checked against the providers' pages on 2026-10-07. Superseded but still served (a profile that pins one keeps working; never change a profile's model yourself): Claude Fable 5, Opus 5, Opus 4.8, Sonnet 5; GPT-6 Sol (replaced by GPT-6.1 Sol) and GPT-5.6 Sol/Terra/Luna. Claude refuses a forced tool call whenever it thinks (always on Fable, Opus 5.5 and Sonnet 5.5; on any Claude with an effort set), and alpi never forces one then.
 
 ## Prompt caching
 

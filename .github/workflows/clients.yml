@@ -14,6 +14,7 @@ on:
       - "desktop/**"
       - "mobile/**"
       - "common/**"
+      - "alpi/providers/curated_models.yaml"
       - ".github/workflows/clients.yml"
   workflow_dispatch:
 

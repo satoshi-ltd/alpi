@@ -1,4 +1,4 @@
-"""Shared curated model catalog (read by Python + the desktop Rust crate)."""
+"""Shared curated model catalog (the mobile app mirrors it in mobile/src/lib/curatedModels.js)."""
 
 from __future__ import annotations
 

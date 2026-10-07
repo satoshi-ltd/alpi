@@ -26,7 +26,7 @@ def normalise_effort(value: Any) -> str:
 # Direct providers without a curated YAML catalog (google/deepseek/xai) — we fall back to regex. OpenAI + Anthropic are catalog-driven: the YAML is the source of truth, the regex below is the safety net for custom-typed model strings the user enters via the wizard's "custom model" prompt.
 _DIRECT_PATTERNS: tuple[re.Pattern, ...] = (
     re.compile(r"^openai/o[1-9](?:[._-]|$)"),
-    re.compile(r"^openai/gpt-5(?:[.-]|$)"),
+    re.compile(r"^openai/gpt-(?:[5-9]|[1-9]\d)(?:[.-]|$)"),
     # Thinking starts at Claude 3.7 (hence 3-[7-9]); all 4.x+ and the 5 family qualify.
     re.compile(r"^anthropic/claude-(?:[4-9]|3-[7-9]|(?:sonnet|opus|haiku|fable|mythos)-[4-9])"),
     re.compile(r"^google/gemini-2\.[5-9]"),
@@ -46,7 +46,7 @@ def supports_reasoning(model: str) -> bool:
     2. ``openai/<id>`` / ``anthropic/<id>`` — consult `curated_models.yaml`. The
        catalog is the source of truth: a model marked ``reasoning: true`` is
        supported, anything else (including unknown ids) falls through to (3).
-    3. Regex fallback — catches o-series, gpt-5.x, Claude 3.7+/4+, Gemini 2.5+,
+    3. Regex fallback — catches o-series, gpt-5 and later, Claude 3.7+/4+, Gemini 2.5+,
        DeepSeek R1, Grok 3/4 reasoning, even when the user types the model
        name manually outside the curated catalog.
     """

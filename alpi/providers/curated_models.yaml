@@ -1,22 +1,22 @@
 openai:
-  - id: gpt-5.6-sol
-    note: flagship · coding
-    reasoning: true
-  - id: gpt-5.6-terra
-    note: balanced
-    reasoning: true
-  - id: gpt-5.6-luna
-    note: cheap · fast
-    reasoning: true
-anthropic:
-  - id: claude-fable-5
+  - id: gpt-6-astra
     note: flagship · 1M
     reasoning: true
-  - id: claude-opus-4-8
-    note: agentic coding
+  - id: gpt-6.1-sol
+    note: balanced · coding · 1M
     reasoning: true
-  - id: claude-sonnet-5
-    note: balanced
+  - id: gpt-6-luna
+    note: cheap · fast · 1M
+    reasoning: true
+anthropic:
+  - id: claude-fable-5-1
+    note: flagship · 1M
+    reasoning: true
+  - id: claude-opus-5-5
+    note: agentic coding · 1M
+    reasoning: true
+  - id: claude-sonnet-5-5
+    note: balanced · 1M
     reasoning: true
   - id: claude-haiku-4-5
     note: cheap · fast
@@ -46,11 +46,11 @@ openrouter:
   - id: nvidia/nemotron-3-super-120b-a12b
     note: text · up to 256K · open weights
     reasoning: true
-  - id: anthropic/claude-sonnet-5
+  - id: anthropic/claude-sonnet-5.5
     note: text+image+file · up to 1M · balanced
     reasoning: true
-  - id: anthropic/claude-opus-5
-    note: text+image+file · up to 1M · flagship
+  - id: anthropic/claude-opus-5.5
+    note: text+image+file · up to 1M · agentic coding
     reasoning: true
   - id: xiaomi/mimo-v2.5
     note: multimodal · up to 1M · audio and video in

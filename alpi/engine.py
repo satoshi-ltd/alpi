@@ -1499,7 +1499,10 @@ class Engine:
                         turn_error = "Workgroup final handoff is unavailable."
                         emit(AgentEvent(kind="error", text=turn_error))
                         return
-                    wrap_call_kwargs["tool_choice"] = "required"
+                    from alpi.providers.capabilities import forced_tool_choice
+
+                    if forced_tool_choice(str(wrap_call_kwargs.get("model") or ""), wrap_call_kwargs):
+                        wrap_call_kwargs["tool_choice"] = "required"
                     wrap_call_kwargs["parallel_tool_calls"] = False
                     wrap_deadline = time.monotonic() + _WORKGROUP_FINALIZE_SECONDS
                     wrap_instruction = (

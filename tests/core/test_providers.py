@@ -179,3 +179,37 @@ def test_ollama_is_ollama_fail_open(monkeypatch) -> None:
     ollama._IS_OLLAMA_CACHE.clear()
 
     assert ollama.is_ollama("http://localhost:11434") is False
+
+
+def test_the_curated_anthropic_and_openai_lists_are_the_current_models() -> None:
+    from alpi.providers.curated import load_curated
+
+    assert [m["id"] for m in load_curated("anthropic")] == ["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-4-5"]
+    assert [m["id"] for m in load_curated("openai")] == ["gpt-6-astra", "gpt-6.1-sol", "gpt-6-luna"]
+    for provider in ("anthropic", "openai"):
+        assert all(m.get("reasoning") is True for m in load_curated(provider)), provider
+
+
+def test_every_curated_native_model_has_a_real_window_and_price() -> None:
+    import litellm
+
+    from alpi.providers.curated import load_curated
+
+    for provider in ("anthropic", "openai"):
+        for entry in load_curated(provider):
+            info = litellm.model_cost.get(entry["id"])
+            assert info, entry["id"]
+            assert info.get("max_input_tokens", 0) >= 200_000, entry["id"]
+            assert info.get("input_cost_per_token", 0) > 0, entry["id"]
+
+
+def test_every_curated_openrouter_model_is_in_the_openrouter_window_table() -> None:
+    from pathlib import Path
+
+    import yaml
+
+    from alpi.providers.curated import load_curated
+
+    table = yaml.safe_load((Path(__file__).resolve().parents[2] / "alpi" / "providers" / "openrouter_models.yaml").read_text())
+    for entry in load_curated("openrouter"):
+        assert entry["id"] in table, entry["id"]

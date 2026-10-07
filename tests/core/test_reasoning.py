@@ -33,20 +33,25 @@ def test_normalise_effort_canonicalises_or_drops(raw, expected) -> None:
 @pytest.mark.parametrize("model", [
     "openai/o3-mini",
     "openai/o4-mini",
-    "openai/gpt-5.6-sol",         # curated catalog
-    "openai/gpt-5.6-terra",       # curated catalog
-    "openai/gpt-5.6-luna",        # curated catalog
+    "openai/gpt-6-astra",         # curated catalog
+    "openai/gpt-6.1-sol",         # curated catalog
+    "openai/gpt-6-luna",          # curated catalog
+    "openai/gpt-6-sol",           # custom-typed (regex fallback)
+    "openai/gpt-5.6-sol",         # custom-typed (regex fallback)
     "openai/gpt-5",               # custom-typed (catalog miss → regex fallback)
     "openai/gpt-5-mini",          # custom-typed (regex fallback)
-    "anthropic/claude-fable-5",   # curated catalog
-    "anthropic/claude-sonnet-5",  # curated catalog
+    "openai/gpt-10",              # custom-typed (regex fallback, two-digit major)
+    "anthropic/claude-fable-5-1", # curated catalog
+    "anthropic/claude-opus-5-5",  # curated catalog
+    "anthropic/claude-sonnet-5-5", # curated catalog
+    "anthropic/claude-sonnet-5",  # custom-typed (regex fallback)
     "anthropic/claude-haiku-4-5", # curated catalog
     "anthropic/claude-opus-4",    # custom-typed (regex fallback)
     "anthropic/claude-mythos-5",  # custom-typed (regex fallback: fable|mythos branch)
     "google/gemini-2.5-pro",
     "deepseek/deepseek-r1",
     "openrouter/openai/o3-mini",
-    "openrouter/anthropic/claude-sonnet-5",
+    "openrouter/anthropic/claude-sonnet-5.5",
 ])
 def test_supports_reasoning_true_for_known_models(model) -> None:
     assert supports_reasoning(model) is True
@@ -56,6 +61,7 @@ def test_supports_reasoning_true_for_known_models(model) -> None:
     "",
     "openai/gpt-4o",
     "openai/gpt-4o-mini",
+    "openai/gpt-4.1",
     "anthropic/claude-3.5-sonnet",
     "anthropic/claude-3-haiku",
     "google/gemini-1.5-pro",

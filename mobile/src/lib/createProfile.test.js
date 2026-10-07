@@ -15,9 +15,9 @@ describe('createProfileWithProvider', () => {
     const model = await createProfileWithProvider(call, {
       name: 'doc', providerId: 'anthropic', env: 'ANTHROPIC_API_KEY', apiKey: 'sk-ant-x',
     });
-    expect(model).toBe('anthropic/claude-sonnet-5');
+    expect(model).toBe('anthropic/claude-sonnet-5-5');
     expect(call).toHaveBeenCalledWith('host.config.set_field', {
-      profile: 'doc', key: 'model', value: 'anthropic/claude-sonnet-5',
+      profile: 'doc', key: 'model', value: 'anthropic/claude-sonnet-5-5',
     });
   });
 
@@ -26,9 +26,9 @@ describe('createProfileWithProvider', () => {
     const model = await createProfileWithProvider(call, {
       name: 'doc', providerId: 'openai', env: 'OPENAI_API_KEY', apiKey: 'sk-x',
     });
-    expect(model).toBe('openai/gpt-5.6-terra');
+    expect(model).toBe('openai/gpt-6.1-sol');
     expect(call).toHaveBeenCalledWith('host.config.set_field', {
-      profile: 'doc', key: 'model', value: 'openai/gpt-5.6-terra',
+      profile: 'doc', key: 'model', value: 'openai/gpt-6.1-sol',
     });
   });
 

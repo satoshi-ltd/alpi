@@ -61,19 +61,7 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **MODELS.REFRESH** — Bring the Anthropic and OpenAI model catalog up to date
-  `chore · alpi · agent · high`
-  note: asked by the creator on 2026-10-07: the catalog is far behind. It lists Claude Fable 5, Opus 5 and Sonnet 5 while
-  Fable 5.1, Opus 5.5 and Sonnet 5.5 exist, and the OpenAI entries (GPT-5.6 Sol, Terra, Luna) have not been checked since
-  they were added. The catalog lives in [curated_models.yaml](../alpi/providers/curated_models.yaml),
-  [openrouter_models.yaml](../alpi/providers/openrouter_models.yaml), [reasoning.py](../alpi/providers/reasoning.py),
-  [MODELS.md](MODELS.md) and the packaged `alpi/knowledge/references/models.md`.
-  accept: every Anthropic and OpenAI model id, route, context window, price and reasoning flag is checked against the
-  providers' official model pages on the day of the change and listed with that date; superseded models are marked as
-  such (kept only while a provider still serves them), the tier recommendations in MODELS.md are rewritten for the new
-  set, profiles that pin a removed id keep working or get a clear message (a profile's configured model is never changed
-  by the update); tests cover the catalog parse, the routes and the reasoning flags of the new ids; the knowledge
-  reference matches MODELS.md.
+_None._
 
 ## In progress
 
