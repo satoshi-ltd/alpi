@@ -1,4 +1,5 @@
 import Tip from "./Tip.jsx";
+import { SpinnerIcon } from "./icons.jsx";
 import styles from "./Chip.module.css";
 
 export default function Chip({
@@ -32,7 +33,7 @@ export default function Chip({
     .join(" ");
 
   const indicator = activity
-    ? <span className={styles.spinner} aria-hidden />
+    ? <SpinnerIcon className={styles.spinner} />
     : icon
       ? icon
       : accent

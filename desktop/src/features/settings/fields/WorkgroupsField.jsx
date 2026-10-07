@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Chip from "../../../primitives/Chip.jsx";
+import Skeleton from "../../../primitives/Skeleton.jsx";
 import Dropdown from "../../../primitives/Dropdown.jsx";
-import styles from "../Settings.module.css";
 
 export function WorkgroupsField({
   profile,
@@ -49,7 +49,7 @@ export function WorkgroupsField({
   useEffect(() => { onCountChange?.(groups.length); }, [groups.length, onCountChange]);
 
   if (groups.length === 0) {
-    return loading ? <span className={styles.muted}>loading…</span> : null;
+    return loading ? <Skeleton width="10em" height="var(--ctrl-xs)" radius="var(--r-tag)" label="Loading workgroups" /> : null;
   }
 
   const hubCount = groups.filter((g) => g.is_hub).length;

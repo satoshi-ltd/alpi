@@ -317,6 +317,16 @@ def d_pipeline():
     return d_proposed()
 
 
+def d_before_run():
+    from wg_strip_studies import d_before_run as drawn
+    return drawn()
+
+
+def m_before_run():
+    from wg_strip_studies import m_before_run as drawn
+    return drawn()
+
+
 def d_pipeline_detail():
     from wg_strip_studies import BLOCKED, STATES, blocked_trigger, excerpt, hover_pair, repair_trigger
     from wg_settings_studies import labelled
@@ -341,13 +351,14 @@ def desktop_workgroup():
 {h1("Workgroups · desktop", "Posts from members sit on the left, the hub on the right, each tinted with its speaker's accent at 11%. Marker cards record the #task lifecycle; the pipeline strip under the header names who owns and works each phase.")}
 {spec("Pipeline strip · each phase with its owner, the header counts the same phases", d_pipeline(), 1184)}
 {spec("Pipeline strip · detail, routed repair and block", d_pipeline_detail(), 1184)}
+{spec("Pipeline strip · before the run: with one pipeline the chain is drawn from the row at once; with several, skeleton chips until the run arrives", d_before_run(), 1184)}
 {spec("Posts · member (left) and hub (right)", d_post("builder", BUILDER, "Patched the retry loop; tests green locally.", 57) + d_post("alpi", AMBER, "Good. Ship it behind the flag and report back.", 58, "right"), 1184)}
 {row(spec("Marker · task", d_marker("task", AMBER, "<strong>#onboarding-friction</strong> Find the top 3 drop-off points<br>Use last week’s funnel data."), 580), spec("Marker · working (pulsing dot)", d_marker("working", AMBER, "Pulling funnel events…", "left"), 580))}
 {row(spec("Marker · done", d_marker("done", AMBER, "Top 3: email verify, workspace invite, first prompt."), 580), spec("Marker · skip", d_marker("skip", AMBER, "Out of scope for this sprint.", "left"), 580))}
 {row(spec("Marker · done → blocked", d_marker("blocked", AMBER, "Needs a production API key nobody has."), 580), spec("Marker · done → skipped", d_marker("skipped", AMBER, "Preempted by the incident review."), 580))}
 {spec("Workgroup composer · no attach, no model picker", d_wg_composer(), 1184)}
 </div>"""
-    return page("System · desktop workgroups", 1280, 1880, body)
+    return page("System · desktop workgroups", 1280, 2220, body)
 
 
 
@@ -487,10 +498,11 @@ def mobile_workgroup():
     body = f"""<div style="padding: 40px 48px; display: flex; flex-direction: column; gap: 24px; box-sizing: border-box">
 {h1("Workgroups · phone and Fold", "Member posts left, hub right, tinted with the speaker accent. Meta is mono on the phone. Marker cards keep the four lifecycle states; skip always tints with the warning colour.")}
 {spec("Pipeline strip · centred on the live phase; a tap opens its detail", m_pipeline(), 760, 0)}
+{spec("Pipeline strip · before the run: one pipeline draws its pending phases with their owners still; several draw placeholder chips", m_before_run(), 760, 0)}
 {row(spec("Posts · member and hub", phone(m_post("builder", BUILDER, "Patched the retry loop; tests green locally.", 57) + m_post("alpi", AMBER, "Ship it behind the flag.", 58, "right")), 420, 16), spec("Markers · task and working", phone(m_marker("task", AMBER, "<strong>#onboarding-friction</strong> Find the top 3 drop-off points") + m_marker("working", AMBER, "Pulling funnel events…", "left")), 420, 16))}
 {row(spec("Markers · done and skip", phone(m_marker("done", AMBER, "Top 3: email verify, invite, first prompt.") + m_marker("skip", AMBER, "Out of scope for this sprint.", "left")), 420, 16), spec("Workgroup composer · @ mention, no attach", phone(m_composer(workgroup=True)), 420, 0))}
 </div>"""
-    return page("System · mobile workgroups", 1280, 1290, body)
+    return page("System · mobile workgroups", 1280, 1560, body)
 
 
 CONVERSATION = {"desktop": desktop_conversation, "desktop_wg": desktop_workgroup, "mobile": mobile_conversation, "mobile_wg": mobile_workgroup}

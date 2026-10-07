@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import Button from "../../../primitives/Button.jsx";
 import Eyebrow from "../../../primitives/Eyebrow.jsx";
 import Chip from "../../../primitives/Chip.jsx";
+import Skeleton from "../../../primitives/Skeleton.jsx";
 import ConfirmDelete from "../../../primitives/ConfirmDelete.jsx";
 import Field from "../../../primitives/Field.jsx";
 import { useNotify } from "../../../primitives/Notification.jsx";
@@ -95,7 +96,7 @@ export function PrivateRouteField({ onLoadingChange = null }) {
         tooltip="Direct private-network route derived from the address and listen port"
       >
         {!status
-          ? "loading…"
+          ? <Skeleton width="12em" label="Loading the private route" />
           : !supportsEndpoints || needsRestart
             ? "restart required"
             : endpoint?.url || "unavailable"}
@@ -169,7 +170,7 @@ export function PublicRouteField({ onLoadingChange = null }) {
       <span ref={wrapRef} className={styles.popoverAnchor}>
         <span className={styles.inlineRow}>
           <Chip state={current ? "on" : "off"} tooltip="Optional certificate-validated Internet route">
-            {!status ? "loading…" : !supportsEndpoints ? "restart required" : current?.url || "off"}
+            {!status ? <Skeleton width="12em" label="Loading the public route" /> : !supportsEndpoints ? "restart required" : current?.url || "off"}
           </Chip>
           {supportsEndpoints && (
             <Button size="sm" onClick={() => setOpen((visible) => !visible)}>
@@ -337,7 +338,7 @@ export function NetworkAddressField({ profile, onSaved, onLoadingChange = null }
             state={status?.host_in_use ? "on" : "off"}
             tooltip={`${source}. The address is read-only.`}
           >
-            {!status ? "loading…" : address}
+            {!status ? <Skeleton width="9em" label="Loading the address" /> : address}
           </Chip>
           <Chip
             state="on"

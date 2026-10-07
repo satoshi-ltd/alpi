@@ -1,5 +1,6 @@
 import { Fragment } from "react";
 import Fold from "./Fold.jsx";
+import Skeleton from "./Skeleton.jsx";
 import Tip from "./Tip.jsx";
 import styles from "./PipelineStages.module.css";
 
@@ -75,6 +76,24 @@ export default function PipelineStages({ phases = [], chips = null, profileOf = 
           </Fragment>
         );
       })}
+    </div>
+  );
+}
+
+const GHOST_WIDTHS = [62, 70, 66, 70, 74, 64];
+
+export function PipelinePlaceholder({ count, label }) {
+  const n = Math.min(Math.max(Number.isInteger(count) ? count : 3, 1), GHOST_WIDTHS.length);
+  return (
+    <div className={styles.row} role="status" aria-label={label}>
+      {Array.from({ length: n }, (_, i) => (
+        <Fragment key={i}>
+          <span className={styles.ghost} data-phase-placeholder="" aria-hidden>
+            <Skeleton width={`${GHOST_WIDTHS[i]}px`} height="22px" radius="var(--r-tag)" delay={0} />
+          </span>
+          {i < n - 1 && <span className={styles.arrow} aria-hidden>→</span>}
+        </Fragment>
+      ))}
     </div>
   );
 }

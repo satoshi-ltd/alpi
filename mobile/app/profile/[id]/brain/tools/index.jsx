@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../../../../src/theme/tokens';
 
@@ -12,6 +12,7 @@ import { usePullRefresh } from '../../../../../src/hooks/usePullRefresh';
 import { useTheme } from '../../../../../src/theme/ThemeContext';
 import { LoadFailed } from '../../../../../src/components/LoadFailed';
 import { EMPTY } from '../../../../../../common/emptyCopy.mjs';
+import { ListSkeleton } from '../../../../../src/components/ListSkeleton';
 
 // Same category order as desktop ToolsPanel.
 const CATEGORY_ORDER = [
@@ -51,9 +52,7 @@ export default function ToolsList() {
       <PanelHeader profile={id} section="TOOLS" count={rows.length} onBack={goBack} />
       <ScrollView refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />} contentContainerStyle={{ paddingBottom: space.s9 }}>
         {tools.loading && rows.length === 0 ? (
-          <View style={{ padding: space.s10, alignItems: 'center' }}>
-            <ActivityIndicator color={colors.ink3} />
-          </View>
+          <ListSkeleton rows={4} helper="sm" label="Loading tools" style={{ marginTop: space.s5 }} />
         ) : tools.error && rows.length === 0 ? (
           <LoadFailed inline label="tools" error={tools.error} onRetry={() => tools.refresh?.()} />
         ) : rows.length === 0 ? (

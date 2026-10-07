@@ -144,6 +144,17 @@ describe("NotificationsModal — read aloud + body rendering", () => {
     expect(screen.getByLabelText("Stop reading")).toBeTruthy();
   });
 
+  it("keeps the verb while it prepares the audio, with the control arc as its icon", () => {
+    renderModal();
+    act(() => h.ttsCb.current?.({ key: "notif:c1:alice:n1", kind: "loading" }));
+    const header = screen.getByRole("button", { name: "Read aloud, preparing audio" });
+    expect(header.querySelector("svg.ds-spin")).not.toBeNull();
+    const item = menuItem("Read aloud, preparing audio");
+    expect(item).toHaveTextContent("Read aloud");
+    expect(item.querySelector("svg.ds-spin")).not.toBeNull();
+    expect(document.body.textContent).not.toContain("Loading");
+  });
+
   it("shows the connection and lowercase profile in the detail header", () => {
     renderModal([{ id: "c1", name: "casa" }, { id: "c2", name: "work" }]);
     const article = document.body.querySelector("article");
@@ -421,12 +432,14 @@ describe("NotificationsModal — read / unread", () => {
     expect(document.body.textContent).toContain("1 unread");
   });
 
-  it("does not claim inbox zero while the first sync is still running", () => {
+  it("does not claim inbox zero while the first sync is still running", async () => {
     h.rows = [];
     h.loading = true;
     renderModal();
     expect(screen.queryByText("Inbox zero")).toBeNull();
-    expect(screen.getByText("Syncing notifications…")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "Syncing notifications" })).toBeInTheDocument();
+    await waitFor(() => expect(document.querySelectorAll("[role=listbox] li[role=presentation] [class*=listRow]").length).toBeGreaterThan(1));
+    expect(screen.queryByText(/Syncing notifications…|Loading/)).toBeNull();
   });
 });
 

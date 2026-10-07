@@ -26,6 +26,15 @@ function open() {
 }
 
 describe("ScheduleModal", () => {
+  it("waits for the schedule with placeholder rows and lines, never the word", async () => {
+    invokeMock.mockImplementation(() => new Promise(() => {}));
+    open();
+    expect(screen.getByRole("progressbar", { name: "Loading schedule" })).toBeTruthy();
+    await waitFor(() => expect(document.querySelectorAll("[role=listbox] li[role=presentation] [class*=listRow]").length).toBeGreaterThan(1));
+    await waitFor(() => expect(document.querySelector("[aria-hidden=true][class*=reader]")).not.toBeNull());
+    expect(document.body.textContent).not.toMatch(/Loading/);
+  });
+
   it("lists jobs and shows the first job's detail", async () => {
     open();
     await waitFor(() => expect(screen.getByText("Run the whoop skill")).toBeTruthy());

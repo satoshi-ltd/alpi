@@ -82,6 +82,10 @@ vi.mock('../../components/Fold', () => ({
   Fold: ({ fold, unfolded, pulse }) => React.createElement('span', { 'data-fold': fold, 'data-unfolded': String(!!unfolded), 'data-pulse': String(!!pulse) }),
 }));
 
+vi.mock('../../components/SkeletonBar', () => ({
+  SkeletonBar: ({ width, height }) => React.createElement('i', { 'data-placeholder': `${width}x${height}` }),
+}));
+
 vi.mock('../../components/Sheet', () => ({
   Sheet: ({ open, title, subtitle, primaryAction, children }) => (open
     ? React.createElement('section', { 'data-sheet': title, 'data-subtitle': subtitle }, [
@@ -264,5 +268,108 @@ describe('PipelineStrip between phases', () => {
     rerender(<PipelineStrip run={null} phaseMap={PHASE_MAP} profileOf={profileOf} loadedSeqs={LOADED} />);
     rerender(<PipelineStrip run={{ ...RUN, started_seq: 90 }} phaseMap={PHASE_MAP} profileOf={profileOf} loadedSeqs={LOADED} />);
     expect(sheet()).toBeNull();
+  });
+});
+
+describe('PipelineStrip before the run state arrives', () => {
+  const ONE = { 'media-update': ['media-update', 'media-config', 'media-build', 'media-qa'] };
+  const TWO = { ...ONE, release: ['release-notes', 'release-tag'] };
+  const early = (props) => render(<PipelineStrip run={null} phaseMap={PHASE_MAP} profileOf={profileOf} loadedSeqs={LOADED} pending mode status="running" {...props} />);
+  const chipLabels = () => [...document.querySelectorAll('[data-testid^="phase-"]')].map((c) => c.getAttribute('aria-label'));
+
+  it('draws the one pipeline from the workgroup row at once, every phase pending with its owner', () => {
+    early({ pipelines: ONE, launch: 'media-update' });
+    expect(chipLabels()).toEqual([
+      '#media-update · @muse · pending',
+      '#media-config · pending',
+      '#media-build · @pixel · pending',
+      '#media-qa · @lens · pending',
+    ]);
+    expect(document.querySelector('[data-testid="strip-placeholder"]')).toBeNull();
+    expect(document.body.textContent).not.toMatch(/Loading/);
+  });
+
+  it('fills the same chain in place when the run arrives', () => {
+    const view = early({ pipelines: ONE, launch: 'media-update' });
+    view.rerender(<PipelineStrip run={RUN} phaseMap={PHASE_MAP} profileOf={profileOf} loadedSeqs={LOADED} pending={false} mode status="running" pipelines={ONE} launch="media-update" />);
+    expect(chipLabels()).toEqual([
+      '#media-update · @muse · completed',
+      '#media-config · skipped',
+      '#media-build · @pixel · running',
+      '#media-qa · @lens · pending',
+    ]);
+  });
+
+  const drawn = () => (document.querySelector('[data-testid="strip-placeholder"]') ? 'placeholders' : document.querySelector('[data-testid^="phase-"]') ? 'chain' : 'nothing');
+
+  it.each([
+    ['running', 'chain', 'placeholders'],
+    ['between', 'chain', 'placeholders'],
+    ['blocked', 'placeholders', 'placeholders'],
+    ['completed', 'placeholders', 'placeholders'],
+    ['queued', 'nothing', 'nothing'],
+    [null, 'nothing', 'nothing'],
+    [undefined, 'nothing', 'nothing'],
+  ])('with the row at %s draws %s for one pipeline and %s for several', (status, one, several) => {
+    early({ pipelines: ONE, launch: 'media-update', status });
+    expect(drawn()).toBe(one);
+    cleanup();
+    early({ pipelines: TWO, launch: 'media-update', status });
+    expect(drawn()).toBe(several);
+  });
+
+  it('draws nothing for a workgroup that is not in pipeline mode, or once the run state answers or fails', () => {
+    early({ pipelines: ONE, mode: false });
+    expect(drawn()).toBe('nothing');
+    cleanup();
+    early({ pipelines: ONE, pending: false });
+    expect(drawn()).toBe('nothing');
+  });
+
+  it('keeps an open phase sheet open when the run fills the chain in place', () => {
+    const view = early({ pipelines: ONE, launch: 'media-update' });
+    fireEvent.click(screen.getByTestId('phase-media-build'));
+    expect(sheet().getAttribute('data-subtitle')).toBe('pending · media-update');
+    view.rerender(<PipelineStrip run={RUN} phaseMap={PHASE_MAP} profileOf={profileOf} loadedSeqs={LOADED} pending={false} mode status="running" pipelines={ONE} launch="media-update" />);
+    expect(sheet().getAttribute('data-subtitle')).toBe('running · media-update');
+    view.rerender(<PipelineStrip run={{ ...RUN, pipeline: 'release', started_seq: 90 }} phaseMap={PHASE_MAP} profileOf={profileOf} loadedSeqs={LOADED} pending={false} mode status="running" pipelines={ONE} launch="media-update" />);
+    expect(sheet()).toBeNull();
+  });
+
+  it('opens a pending phase on its owner and its pipeline, with nothing to jump to yet', () => {
+    early({ pipelines: ONE, launch: 'media-update' });
+    fireEvent.click(screen.getByTestId('phase-media-build'));
+    expect(sheet().getAttribute('data-subtitle')).toBe('pending · media-update');
+    expect(sheet().textContent).toContain('rebuild the site');
+    expect(sheet().textContent).toContain('has not opened yet');
+  });
+
+  it('draws phase-sized placeholder chips when several pipelines could run, never a word', () => {
+    early({ pipelines: TWO, launch: 'media-update' });
+    const placeholder = screen.getByTestId('strip-placeholder');
+    expect(placeholder.querySelectorAll('[data-placeholder]')).toHaveLength(4);
+    expect([...placeholder.querySelectorAll('[data-placeholder]')].every((b) => b.dataset.placeholder.endsWith('x44'))).toBe(true);
+    expect(placeholder.getAttribute('aria-label')).toBe('Loading the pipeline');
+    expect(placeholder.textContent).not.toMatch(/Loading/);
+    expect(document.querySelector('[data-testid^="phase-"]')).toBeNull();
+  });
+
+  it.each([
+    ['idle', { status: null }],
+    ['from a daemon that sends no status', { status: undefined }],
+  ])('draws nothing for an %s pipeline, before or after the run state', (_, props) => {
+    const view = early({ pipelines: ONE, launch: 'media-update', ...props });
+    expect(view.container.textContent).toBe('');
+    expect(document.querySelector('[data-testid^="phase-"]')).toBeNull();
+    view.rerender(<PipelineStrip run={null} phaseMap={PHASE_MAP} profileOf={profileOf} loadedSeqs={LOADED} pending={false} pipelines={ONE} launch="media-update" {...props} />);
+    expect(view.container.textContent).toBe('');
+    cleanup();
+    expect(early({ pipelines: { ...ONE, release: ['release-tag'] }, ...props }).container.innerHTML).toBe('');
+  });
+
+  it('shows nothing once the run state says no pipeline is running, and nothing for a workgroup without one', () => {
+    expect(early({ pipelines: ONE, pending: false }).container.textContent).toBe('');
+    cleanup();
+    expect(early({ pipelines: {} }).container.textContent).toBe('');
   });
 });

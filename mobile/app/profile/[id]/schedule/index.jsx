@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../../../src/theme/tokens';
 
@@ -17,6 +17,7 @@ import { jobGroups, nextRunWord } from '../../../../../common/attention.mjs';
 import { describeWhen } from '../../../../../common/schedule.mjs';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 import { EMPTY } from '../../../../../common/emptyCopy.mjs';
+import { ListSkeleton } from '../../../../src/components/ListSkeleton';
 
 export default function ScheduleList() {
   const { id, job } = useLocalSearchParams();
@@ -46,9 +47,7 @@ export default function ScheduleList() {
       <PanelHeader profile={id} section="SCHEDULES" count={jobs.length} onBack={goBack} />
       <ScrollView refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />} contentContainerStyle={{ paddingBottom: space.s9 }}>
         {schedule.loading && jobs.length === 0 && !loadError ? (
-          <View style={{ padding: space.s10, alignItems: 'center' }}>
-            <ActivityIndicator color={colors.ink3} />
-          </View>
+          <ListSkeleton rows={3} title="md" helper="sm" label="Loading schedules" style={{ marginTop: space.s5 }} />
         ) : loadError ? (
           <View style={{ padding: space.s8, gap: space.s2 }}>
             <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, color: colors.dangerText }}>

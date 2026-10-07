@@ -1,7 +1,7 @@
 import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { mixHex } from '../../../../common/color.mjs';
@@ -27,6 +27,7 @@ import { freeze, noteUnreadMissing, trailPosition, UNDO_MS, useNotificationStore
 import { clip, fmtRelative, openChatTarget, replyDraft } from '../../../src/lib/outputsFormat';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { mobile, radii, space } from '../../../src/theme/tokens';
+import { ReaderSkeleton } from '../../../src/components/ReaderSkeleton';
 
 
 function IconButton({ name, label, onPress }) {
@@ -204,9 +205,7 @@ function NotificationPage({ profile, id, connectionId }) {
       <ScreenHeader title="" onBack={goBack} right={nav} />
 
       {loading && !row ? (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator color={colors.ink3} />
-        </View>
+        <ReaderSkeleton label="Loading the output" />
       ) : error || !row ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.s10, gap: space.s2 }}>
           <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.ink2 }}>

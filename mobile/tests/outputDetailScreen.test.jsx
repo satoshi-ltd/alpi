@@ -33,7 +33,6 @@ vi.mock('react-native', () => {
     Text,
     Pressable,
     ScrollView: ({ children }) => React.createElement('div', {}, children),
-    ActivityIndicator: () => React.createElement('span', {}),
   };
 });
 vi.mock('expo-clipboard', () => ({ setStringAsync: vi.fn() }));

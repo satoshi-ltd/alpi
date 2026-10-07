@@ -249,7 +249,11 @@
   font-size: var(--fs-sm);
 }
 
-.viewerLoading {
+.viewerSkeleton {
+  min-height: 200px;
+}
+
+.viewerNote {
   display: flex;
   align-items: center;
   justify-content: center;

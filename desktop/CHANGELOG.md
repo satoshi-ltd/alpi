@@ -11,6 +11,15 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.8.5 — 2026-10-07 — waiting is quiet and in ink
+
+- **One mark for every page or section wait:** the alpaca in flat brand ink, its facets dimming in turn, with what it waits for in words. It shows only after 300 ms and stays at least 400 ms, so a quick answer never flashes, and it stands still under reduced motion.
+- **One arc inside every control.** Send, buttons, chips, attachments and read aloud share the same ink arc at their own size; read aloud keeps its verb while it prepares the audio.
+- **Lists and readers draw placeholder rows and lines** in the shape of what will land; the bare word “Loading…” is gone. Refresh bars and waits never take a profile's or a connection's colour.
+- **The pipeline strip no longer says “Loading flow…”.** A running pipeline draws its chain at once from the workgroup row, every phase pending with its owner, and fills it in place when the run arrives; several pipelines, or a blocked or finished run, show placeholder chips; an idle or queued workgroup, or a failed call, shows nothing.
+
+  Requires alpi 0.17.5.
+
 ## v0.8.4 — 2026-10-07 — schedules read like skills, and sections flag what needs you
 
 - **Schedules open like a skill page.** The list shows each job's title, one line of what it does, its state and the next run, grouped as Needs you, Active and Paused, with no cron string in the rows. The reader carries About, When (the sentence with the cron as a chip), Next, Last run, Runs and Notify, and the prompt in its own box.

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Pressable, Text, View } from 'react-native';
+import { Alert, Image, Pressable, Text, View } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 
 import { Icon } from '../../components/Icon';
+import { Spinner } from '../../components/Spinner';
 import { useEndpoint } from '../../lib/EndpointContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { radii, space } from '../../theme/tokens';
@@ -38,7 +39,7 @@ function FetchedImage({ path, profile, name, colors, fonts }) {
   if (!uri) {
     return (
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3, padding: space.s3, borderRadius: radii.xs, backgroundColor: colors.hover }}>
-        {err ? <Icon name="file" size="md" color={colors.ink3} /> : <ActivityIndicator color={colors.ink3} />}
+        {err ? <Icon name="file" size="md" color={colors.ink3} /> : <Spinner color={colors.ink3} />}
         <Text numberOfLines={2} style={{ flexShrink: 1, fontFamily: fonts.sans.regular, color: colors.ink3 }}>
           {name}{err ? `  ·  ${err}` : ''}
         </Text>

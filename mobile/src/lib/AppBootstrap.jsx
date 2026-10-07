@@ -1,6 +1,6 @@
 import { useRouter, useSegments } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { radii, space } from '../theme/tokens';
 
 import { ALPACA_FOLD } from '../../../common/folds.mjs';
@@ -9,6 +9,7 @@ import { ensureRegistered as ensureAlnRegistered } from '../features/aln/backgro
 import { authenticate, biometricCapabilities, getBiometricPref } from './biometric';
 import { useEndpoint } from './EndpointContext';
 import { useTheme } from '../theme/ThemeContext';
+import { Busy } from '../components/Busy';
 
 export function AppBootstrap({ children }) {
   const router = useRouter();
@@ -65,18 +66,7 @@ export function AppBootstrap({ children }) {
           gap: space.s9,
         }}
       >
-        <Fold fold={ALPACA_FOLD} size={64} />
-        <ActivityIndicator color={colors.ink2} />
-        <Text
-          style={{
-            fontFamily: fonts.mono,
-            fontSize: fontSizes.xs,
-            color: colors.ink3,
-            letterSpacing: 0.6,
-          }}
-        >
-          CONNECTING…
-        </Text>
+        <Busy size={64} label="Connecting" />
       </View>
     );
   }

@@ -43,7 +43,6 @@ vi.mock('react-native', () => {
     View,
     Text,
     Pressable,
-    ActivityIndicator: () => React.createElement('span', { 'data-testid': 'spinner' }),
     FlatList: () => null,
     KeyboardAvoidingView: ({ children }) => React.createElement('div', {}, children),
     ScrollView: ({ children, horizontal, directionalLockEnabled, showsHorizontalScrollIndicator, style, contentContainerStyle, ...p }) =>
@@ -127,7 +126,9 @@ vi.mock('../src/features/chat/Composer', () => ({
 }));
 vi.mock('../src/features/chat/MarkerCard', () => ({ MarkerCard: () => null }));
 vi.mock('../src/features/chat/MessageActionsSheet', () => ({ MessageActionsSheet: () => null }));
-vi.mock('../src/features/chat/PipelineStrip', () => ({ PipelineStrip: () => null }));
+vi.mock('../src/features/chat/PipelineStrip', () => ({
+  PipelineStrip: (props) => { h.strip = props; return null; },
+}));
 vi.mock('../src/features/chat/SoundWave', () => ({ SoundWave: () => null }));
 vi.mock('../src/features/sheets/TasksSheet', () => ({ TasksSheet: () => null }));
 vi.mock('../src/features/aln/deeplink', () => ({ isForeignConnection: () => h.foreign }));
@@ -480,5 +481,33 @@ describe('Workgroup header between phases', () => {
     };
     render(<WorkgroupChat />);
     expect(screen.getByLabelText('pipeline · 1 of 2').textContent).toContain('1 of 2');
+  });
+});
+
+describe('Workgroup pipeline strip before the run state', () => {
+  const PIPELINES = { setup: ['build', 'qa'] };
+
+  it('hands the strip the chain the row already carries while the run state is on its way', () => {
+    h.wg = { ...WG, pipelines: PIPELINES, launch_pipeline: 'setup', phase_map: { build: { owner: 'pixel' } }, pipeline_status: 'running', pipeline_mode: true };
+    h.tasks = null;
+    render(<WorkgroupChat />);
+    expect(h.strip).toMatchObject({ run: null, pending: true, mode: true, status: 'running', pipelines: PIPELINES, launch: 'setup', phaseMap: { build: { owner: 'pixel' } } });
+    cleanup();
+    h.wg = { ...WG, pipelines: PIPELINES, launch_pipeline: 'setup' };
+    render(<WorkgroupChat />);
+    expect(h.strip.status).toBe(null);
+    expect(h.strip.mode).toBe(false);
+  });
+
+  it('stops waiting once the run state arrives or fails', () => {
+    h.wg = { ...WG, pipelines: PIPELINES, launch_pipeline: 'setup' };
+    h.tasks = { active: null, closed: [], blocked: null, pipeline_run: null };
+    render(<WorkgroupChat />);
+    expect(h.strip.pending).toBe(false);
+    cleanup();
+    h.tasks = null;
+    h.tasksError = new Error('timeout');
+    render(<WorkgroupChat />);
+    expect(h.strip.pending).toBe(false);
   });
 });

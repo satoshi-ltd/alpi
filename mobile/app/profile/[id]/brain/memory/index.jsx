@@ -1,6 +1,6 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useRef } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../../../../src/theme/tokens';
 
@@ -15,6 +15,7 @@ import { useProfileMemory } from '../../../../../src/hooks/useDaemonData';
 import { usePullRefresh } from '../../../../../src/hooks/usePullRefresh';
 import { useTheme } from '../../../../../src/theme/ThemeContext';
 import { LoadFailed } from '../../../../../src/components/LoadFailed';
+import { ListSkeleton } from '../../../../../src/components/ListSkeleton';
 
 function Meter({ used, limit, over }) {
   const { colors, fonts, fontSizes } = useTheme();
@@ -53,9 +54,7 @@ export default function MemoryList() {
       <PanelHeader profile={id} section="MEMORIES" count={MEMORY_FILES.length} onBack={goBack} />
       <ScrollView refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />} contentContainerStyle={{ paddingBottom: space.s9 }}>
         {mem.loading && !mem.data ? (
-          <View style={{ padding: space.s10, alignItems: 'center' }}>
-            <ActivityIndicator color={colors.ink3} />
-          </View>
+          <ListSkeleton rows={4} helper="sm" label="Loading memories" style={{ marginTop: space.s5 }} />
         ) : mem.error && !mem.data ? (
           <LoadFailed inline label="memories" error={mem.error} onRetry={() => mem.refresh?.()} />
         ) : (

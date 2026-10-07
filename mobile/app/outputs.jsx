@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, Text, View } from 'react-native';
+import { FlatList, RefreshControl, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { EMPTY } from '../../common/emptyCopy.mjs';
@@ -25,6 +25,7 @@ import { freeze, setTrail, UNDO_MS, useNotificationStore, withKey } from '../src
 import { clip } from '../src/lib/outputsFormat';
 import { useTheme } from '../src/theme/ThemeContext';
 import { space } from '../src/theme/tokens';
+import { ListSkeleton } from '../src/components/ListSkeleton';
 
 function keepWhere(set, keep) {
   const next = new Set([...set].filter(keep));
@@ -242,9 +243,7 @@ export default function OutputsScreen() {
         }
         ListEmptyComponent={
           showSkeleton ? (
-            <View style={{ padding: space.s10, alignItems: 'center' }}>
-              <ActivityIndicator color={colors.ink3} />
-            </View>
+            <ListSkeleton flat rows={5} label="Loading outputs" />
           ) : showEmpty || filtered ? (
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.s10, gap: space.s3 }}>
               <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.ink2 }}>

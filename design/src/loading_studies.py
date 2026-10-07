@@ -1,156 +1,189 @@
-import folds
-from notif_studies import dot, flex, stack, wrap
-from wg_settings_studies import P, accent, caption, crease_name, glyph, labelled, mono, phase_chip, phone, rippling
-from wg_strip_studies import CHAIN, d_header, frame, hub_task, m_header, now_trigger, sep
+import json
+import os
+import re
+import subprocess
 
-BUSY = [accent(name) for name in ("mira", "pixel", "scout", "muse", "quill", "lingua", "lens")]
+from notif_studies import flex, stack, wrap
+from paper_studies import text
+from wg_settings_studies import P, mono
+
+ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
+BRAND_INK = "#8a5a0a"
+FRAME_TIMES = (0.0, 0.4, 0.8, 1.2)
 
 
-def alpaca(size, key):
-    style = folds.busy_style(key, BUSY, 4.8)
-    svg = folds.fold("alpaca", BUSY[0], size, facet_attrs=folds.busy_attrs(key, 4.8))
+def _read(*parts):
+    with open(os.path.join(ROOT, *parts)) as f:
+        return f.read()
+
+
+def _load_busy():
+    common = os.path.join(ROOT, "common")
+    script = (
+        f"import {{ALPACA_FOLD, foldPolygons}} from {json.dumps(os.path.join(common, 'folds.mjs'))};"
+        f"import {{BUSY_WAVE_S, BUSY_DIM, BUSY_DELAY_MS, BUSY_MIN_MS, BUSY_MIN_MARK_PX, busyFacetDelays, busyFacetOrder}} from {json.dumps(os.path.join(common, 'busy.mjs'))};"
+        "const polygons = foldPolygons(ALPACA_FOLD, '#14110c', 100).map((p) => p.points);"
+        "process.stdout.write(JSON.stringify({polygons, delays: busyFacetDelays(polygons.length), order: busyFacetOrder(), wave: BUSY_WAVE_S, dim: BUSY_DIM,"
+        " delay: BUSY_DELAY_MS, min: BUSY_MIN_MS, mark: BUSY_MIN_MARK_PX}));"
+    )
+    out = subprocess.run(["node", "--input-type=module", "-e", script], capture_output=True, text=True, check=True)
+    return json.loads(out.stdout)
+
+
+BUSY = _load_busy()
+TOKENS = _read("desktop", "src", "styles", "tokens.css")
+DUR_LOOP = float(re.search(r"--dur-loop:\s*([\d.]+)s", TOKENS).group(1))
+DUR_SPIN = float(re.search(r"--dur-spin:\s*([\d.]+)s", TOKENS).group(1))
+SPINNER_TURN_MS = round(BUSY["wave"] * 1000 / 2)
+PULSE_MS = int(re.search(r"duration:\s*(\d+)", _read("mobile", "src", "components", "SkeletonBar.jsx")).group(1))
+DESKTOP_CIRCLE = re.search(r'<circle cx="8" cy="8" r="(\d+)" strokeDasharray="([\d ]+)"', _read("desktop", "src", "primitives", "icons.jsx")).groups()
+MOBILE_ARC = re.search(r'<Path d="([^"]+)"', _read("mobile", "src", "components", "Spinner.jsx")).group(1)
+
+
+def wave_level(phase):
+    u = phase % 1
+    dim = BUSY["dim"]
+    return 1 - (1 - dim) * 2 * u if u <= 0.5 else dim + (1 - dim) * (2 * u - 1)
+
+
+def frame_levels(t):
+    return [round(wave_level((t - d) / BUSY["wave"]), 2) for d in BUSY["delays"]]
+
+
+def _points(points):
+    return " ".join(f"{x:.2f},{y:.2f}" for x, y in points)
+
+
+def alpaca(size, key=None, at=None):
+    style = ""
+    polys = []
+    if key:
+        style = (f"<style>@keyframes {key}{{0%, 100%{{opacity: 1}} 50%{{opacity: {BUSY['dim']}}}}}.{key}-f{{animation: {key} {BUSY['wave']}s linear infinite}}"
+                 f"@media (prefers-reduced-motion: reduce){{.{key}-f{{animation: none}}}}</style>")
+    levels = frame_levels(at) if at is not None else None
+    for i, pts in enumerate(BUSY["polygons"]):
+        if key:
+            extra = f' class="{key}-f" style="fill: {BRAND_INK}; animation-delay: {BUSY["delays"][i]}s"'
+        elif levels:
+            extra = f' style="fill: {BRAND_INK}; opacity: {levels[i]}"'
+        else:
+            extra = f' style="fill: {BRAND_INK}"'
+        polys.append(f'<polygon points="{_points(pts)}"{extra}/>')
+    svg = f'<svg viewBox="0 0 100 100" width="{size}" height="{size}" style="display: block; overflow: visible; flex-shrink: 0">{"".join(polys)}</svg>'
     return f'<span role="img" aria-label="Loading" style="display: inline-flex; flex-shrink: 0">{style}{svg}</span>'
 
 
-def arc(size=13, colour=None):
-    colour = colour or P["ink2"]
-    return (f'<svg viewBox="0 0 16 16" width="{size}" height="{size}" fill="none" stroke="{colour}" stroke-width="1.5" stroke-linecap="round" style="flex-shrink: 0">'
-            f'<path d="M8 2a6 6 0 1 0 6 6"/></svg>')
+def spin_style(key, seconds):
+    return (f"<style>@keyframes {key}{{to{{transform: rotate(360deg)}}}}.{key}{{animation: {key} {seconds}s linear infinite}}"
+            f"@media (prefers-reduced-motion: reduce){{.{key}{{animation: none}}}}</style>")
 
 
-def spokes(size=18):
-    lines = "".join(f'<line x1="12" y1="3" x2="12" y2="7" stroke="{P["ink3"]}" stroke-width="2" stroke-linecap="round" opacity="{0.25 + i * 0.09:.2f}" '
-                    f'transform="rotate({i * 45} 12 12)"/>' for i in range(8))
-    return f'<svg viewBox="0 0 24 24" width="{size}" height="{size}" style="flex-shrink: 0">{lines}</svg>'
+def desktop_spinner(size, colour, stroke=1.5, opacity=1, key="dspin"):
+    r, dash = DESKTOP_CIRCLE
+    return (f'{spin_style(key, DUR_SPIN)}<svg class="{key}" viewBox="0 0 16 16" width="{size}" height="{size}" fill="none" stroke="{colour}" stroke-width="{stroke}" stroke-linecap="round" '
+            f'style="flex-shrink: 0; opacity: {opacity}"><circle cx="8" cy="8" r="{r}" stroke-dasharray="{dash}"/></svg>')
 
 
-def bar(w, h=10):
-    return f'<span style="display: inline-block; width: {w}px; height: {h}px; border-radius: 2px; background: {P["hover"]}; flex-shrink: 0"></span>'
+def mobile_spinner(size, colour, key="mspin"):
+    return (f'{spin_style(key, SPINNER_TURN_MS / 1000)}<svg class="{key}" viewBox="0 0 16 16" width="{size}" height="{size}" fill="none" stroke="{colour}" stroke-width="1.5" '
+            f'stroke-linecap="round" style="flex-shrink: 0"><path d="{MOBILE_ARC}"/></svg>')
 
 
-def ghost_chip(inner):
-    return f'<span style="display: inline-flex; align-items: center; gap: 6px; height: 21px; padding: 0 6px; border-radius: 2px; flex-shrink: 0">{inner}</span>'
+def specimen(mark, name, note, w=200):
+    return stack(f'<div style="height: 96px; display: flex; align-items: center; justify-content: center; border-radius: 4px; background: {P["pane"]}; '
+                 f'box-shadow: 0 0 0 1px {P["line2"]}">{mark}</div>', mono(name, 10.5, P["ink2"]), wrap(note, 11, P["ink3"], lh=1.4), gap=6, extra=f"width: {w}px")
 
 
-def strip_row(*parts):
-    return (f'<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px 5px; padding: 9px 16px; box-shadow: inset 0 -0.5px 0 {P["line"]}">'
-            f'{"".join(parts)}</div>')
+def frames():
+    cells = "".join(stack(f'<div style="height: 56px; display: flex; align-items: center; justify-content: center">{alpaca(44, at=t)}</div>',
+                          mono(f"{t:.1f} s", 10, P["ink3"], extra="text-align: center"), gap=4, extra="width: 76px")
+                    for t in FRAME_TIMES)
+    return f'<div style="display: flex; gap: 6px; padding: 10px 12px; border-radius: 4px; background: {P["pane"]}; box-shadow: 0 0 0 1px {P["line2"]}">{cells}</div>'
 
 
-def d_now():
-    return frame(d_header(now_trigger()), strip_row(ghost_chip(arc() + mono("Loading flow…", 11, P["ink2"]))), hub_task("qa", "audit the built dist read-only…", ""))
+def desktop_line(width, height=11, delay=0.0):
+    return (f'<span class="sk-line" style="display: block; width: {width}; height: {height}px; border-radius: 2px; animation-delay: {delay:.2f}s"></span>')
 
 
-def pending_chain(key):
-    return "".join((sep() if i else "") + phase_chip(slug, None, f"{key}{i}", strong=True) for i, slug in enumerate(CHAIN))
+DESKTOP_SHIMMER = (f"<style>@keyframes skShimmer{{0%{{background-position: -180% 0}}100%{{background-position: 180% 0}}}}"
+                   f".sk-line{{background: linear-gradient(100deg, {P['hover']} 30%, color-mix(in srgb, {P['ink']} 9%, {P['pane']}) 50%, {P['hover']} 70%); "
+                   f"background-size: 220% 100%; animation: skShimmer {DUR_LOOP}s ease-in-out infinite}}"
+                   f"@media (prefers-reduced-motion: reduce){{.sk-line{{animation: none; background: {P['hover']}}}}}</style>")
+MOBILE_PULSE = (f"<style>@keyframes skPulse{{0%, 100%{{opacity: 0.4}}50%{{opacity: 0.8}}}}"
+                f".sk-bar{{background: {P['hover']}; animation: skPulse {PULSE_MS * 2 / 1000}s ease-in-out infinite}}"
+                f"@media (prefers-reduced-motion: reduce){{.sk-bar{{animation: none; opacity: 0.6}}}}</style>")
 
 
-def d_known():
-    return frame(d_header(now_trigger()), strip_row(pending_chain("lp")), hub_task("qa", "audit the built dist read-only…", ""))
+def desktop_rows():
+    widths = (("46%", "72%"), ("58%", "64%"), ("40%", "78%"))
+    rows = "".join(flex(f'<span class="sk-line" style="display: block; width: 14px; height: 14px; border-radius: 2px; flex-shrink: 0; animation-delay: {i * 0.12:.2f}s"></span>',
+                        stack(desktop_line(a, 11, i * 0.12), desktop_line(b, 8, i * 0.12 + 0.06), gap=6, extra="flex: 1"), gap=10, extra="padding: 8px 10px")
+                   for i, (a, b) in enumerate(widths))
+    return f'<div style="width: 240px; padding: 8px; display: flex; flex-direction: column; gap: 4px; border-radius: 4px; background: {P["side"]}; box-shadow: 0 0 0 1px {P["line2"]}">{DESKTOP_SHIMMER}{rows}</div>'
 
 
-def d_unknown():
-    bars = "".join((sep() if i else "") + bar(w, 21) for i, w in enumerate((62, 70, 66, 70, 74)))
-    return frame(d_header(now_trigger()), strip_row(rippling("mira", 13, "lu"), bars))
+def mobile_bar(width, height, delay):
+    return f'<span class="sk-bar" style="display: block; width: {width * 0.72:.0f}px; height: {height}px; border-radius: 4px; animation-delay: {delay}ms"></span>'
 
 
-def specimen(mark, name, note):
-    return stack(f'<div style="height: 84px; display: flex; align-items: center; justify-content: center; border-radius: 4px; background: {P["pane"]}; '
-                 f'box-shadow: 0 0 0 1px {P["line2"]}">{mark}</div>', mono(name, 10.5, P["ink2"]), wrap(note, 11, P["ink3"], lh=1.4), gap=6, extra="width: 200px")
+def mobile_rows():
+    shapes = ((120, 200), (90, 230), (140, 170))
+    rows = "".join(f'<div style="min-height: 44px; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; {"" if i == 0 else "box-shadow: inset 0 0.5px 0 " + P["line"]}">'
+                   f'{mobile_bar(a, 12, i * 80)}{mobile_bar(b, 9, i * 80 + 40)}</div>' for i, (a, b) in enumerate(shapes))
+    return (f'<div style="width: 240px; padding: 12px; box-sizing: border-box; border-radius: 4px; background: {P["bg"]}; box-shadow: 0 0 0 1px {P["line2"]}">{MOBILE_PULSE}'
+            f'<div style="border-radius: 4px; background: {P["pane"]}; overflow: hidden">{rows}</div></div>')
 
 
-def now_inventory():
-    send = (f'<span style="width: 30px; height: 30px; border-radius: 999px; background: {P["ink"]}; display: inline-flex; align-items: center; justify-content: center">'
-            f'{arc(14, P["pane"])}</span>')
-    text = mono("Loading…", 12, P["ink3"])
-    return flex(
-        specimen(arc(18), "SpinnerIcon", "desktop: Send, attachments, read aloud, the flow chip"),
-        specimen(send, "Button · Chip spinner", "two more CSS arcs, chipSpin and btnSpin"),
-        specimen(text, "Loading…", "the skill viewer and the email cell print the word alone"),
-        specimen(spokes(), "ActivityIndicator", "mobile: 25 screens, iOS spokes and an Android ring"),
-        gap=14, align="flex-start", extra="flex-wrap: wrap",
-    )
+def desktop_button():
+    return (f'<span style="height: 28px; padding: 0 12px; border-radius: 4px; background: {P["ink"]}; display: inline-flex; align-items: center; gap: 6px; '
+            f'font-size: 12px; font-weight: 500; color: {P["pane"]}">{desktop_spinner(12, P["pane"], 2, 0.6, "dspin1")}Save</span>')
 
 
-def scales():
-    return flex(
-        specimen(alpaca(56, "a1"), "alpi · 56", "boot and an empty page: nobody owns the wait"),
-        specimen(flex(alpaca(18, "a2"), mono("reaching the daemon", 11, P["ink2"]), gap=7), "alpi · 18 + word", "a page that waits on the daemon, with what it waits for"),
-        specimen(flex(rippling("lens", 18, "o1"), crease_name("lens", 15), gap=7), "owner · 18", "a profile’s skills, schedules or memories: its own object sweeps"),
-        specimen(f'<span style="width: 30px; height: 30px; border-radius: 999px; background: {P["ink"]}; display: inline-flex; align-items: center; justify-content: center">'
-                 f'{alpaca(16, "a3")}</span>', "inside a control · 16", "Send, Button and Chip keep their size; the mark replaces the arc"),
-        gap=14, align="flex-start", extra="flex-wrap: wrap",
-    )
+def desktop_stopping():
+    return (f'<span aria-label="Stopping" style="width: 32px; height: 32px; border-radius: 4px; background: {P["ink"]}; opacity: 0.65; display: inline-grid; place-items: center">'
+            f'{desktop_spinner(14, P["pane"], 1.5, 1, "dspin2")}</span>')
 
 
-def list_row(i):
-    return flex(bar(14, 14), stack(bar(80 + (i % 3) * 20), bar(110 + (i % 2) * 20, 8), gap=6), gap=10, extra=f"padding: 12px 14px; box-shadow: inset 0 -0.5px 0 {P['line']}")
+def mobile_button():
+    return (f'<span style="height: 40px; min-width: 120px; padding: 0 16px; border-radius: 4px; background: {P["ink"]}; display: inline-flex; align-items: center; justify-content: center">'
+            f'{mobile_spinner(20, P["pane"], "mspin1")}</span>')
 
 
-def d_list():
-    head = flex(rippling("lens", 18, "dl"), crease_name("lens", 16), mono("skills", 11, P["ink3"]), gap=8, extra=f"padding: 12px 14px; box-shadow: inset 0 -0.5px 0 {P['line']}")
-    return frame(head, *(list_row(i) for i in range(4)))
+def busy_inline(label, key):
+    return flex(alpaca(BUSY["mark"], key), text(label, 12, P["ink2"]), gap=6)
 
 
-def m_list_now():
-    body = f'<div style="flex: 1; display: flex; align-items: center; justify-content: center; background: {P["bg"]}">{spokes(22)}</div>'
-    return phone(m_title("Skills") + body, 300, 200)
+def busy_page(label, size, key, gap):
+    return stack(alpaca(size, key), text(label, 12, P["ink2"]), gap=gap, extra="align-items: center")
 
 
-def m_title(value, lead=""):
-    back = glyph("chevron-left", 20, P["ink2"])
-    return flex(back, lead, mono(value, 15, P["ink"], 600), gap=8, extra=f"height: 48px; padding: 0 12px; background: {P['bg']}")
-
-
-def m_list_proposed():
-    rows = "".join(f'<div style="margin: 0 12px; border-radius: 4px; background: {P["pane"]}">{list_row(i)}</div>' for i in range(3))
-    return phone(m_title("Skills", rippling("lens", 16, "ml")) + f'<div style="display: flex; flex-direction: column; gap: 8px; padding-top: 4px">{rows}</div>', 300, 200)
-
-
-def m_strip():
-    chips = "".join((sep(12) if i else "") + phase_chip(slug, None, f"mk{i}", strong=True, height=30, size=12) for i, slug in enumerate(CHAIN[:3]))
-    return (f'<div style="height: 46px; display: flex; align-items: center; gap: 6px; padding: 0 12px; overflow: hidden; white-space: nowrap; background: {P["pane"]}; '
-            f'box-shadow: inset 0 -0.5px 0 {P["line"]}">{chips}</div>')
-
-
-def m_now_strip():
-    return (f'<div style="height: 38px; display: flex; align-items: center; gap: 8px; padding: 0 16px; background: {P["pane"]}; box-shadow: inset 0 -0.5px 0 {P["line"]}">'
-            f'{spokes(14)}{mono("Loading flow…", 12, P["ink3"])}</div>')
-
-
-def m_chat():
-    return f'<div style="flex: 1; background: {P["bg"]}"></div>'
-
-
-def m_button():
-    return f'<span style="width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">{rippling("mira", 14, "mb")}</span>'
-
-
-def side(drawing, note):
-    return flex(drawing, caption(note), gap=16, align="flex-start")
-
-
-def loading_now():
-    return stack(
-        labelled("Desktop · opening a workgroup", d_now(),
-                 "A ghost chip with a line arc and “Loading flow…” until host.workgroup.tasks answers, although the workgroup row already declares the pipelines and phase_map, so the chain and its owners are known before the run state is."),
-        labelled("Four ways to wait", now_inventory(), "None of them is alpi’s: two CSS arcs, an SVG arc, a bare word and the platform indicator, each in its own size and grey."),
-        labelled("Mobile · strip and lists", flex(phone(m_header(dot(accent("mira"), 6)) + m_now_strip() + m_chat(), 200, 240), m_list_now(), gap=16, align="flex-start"),
-                 "The platform spinner centred on an empty page: the layout jumps when the rows arrive."),
-        gap=22,
-    )
-
-
-def loading_proposed():
-    return stack(
-        labelled("Who waits draws the wait", scales(),
-                 "Nothing owns the wait: the alpaca folds through the profile colours (the busy cycle). A profile owns it: that profile’s object sweeps its three tones. Both stop under reduced motion and keep the word."),
-        labelled("Desktop · the chain is known before the run", d_known(),
-                 "With one pipeline, or a cached run, the strip draws at once from the workgroup row: every phase pending with its owner’s object, filled in place when the run state arrives. No word, no layout shift."),
-        labelled("Desktop · several pipelines, nothing cached", d_unknown(),
-                 "The hub’s object sweeps beside placeholder chips the size of a phase; the real chain replaces them."),
-        labelled("Desktop · lists", d_list(), "Skills, schedules, memories, outputs and email: placeholder rows in the shape of the list under the owner’s sweeping object."),
-        labelled("Mobile · strip and lists", flex(phone(m_header(m_button()) + m_strip() + m_chat(), 200, 240), m_list_proposed(), gap=16, align="flex-start"),
-                 "The same rules: the pending chain from the row, placeholder rows inside the cards they will fill, the owner’s object in the title."),
-        gap=22,
-    )
+def waiting(mobile=False):
+    timing = f"after {BUSY['delay']} ms, at least {BUSY['min']} ms on screen, {BUSY['wave']} s wave, opacity only"
+    if mobile:
+        marks = flex(
+            specimen(busy_page("Reaching the daemon", 40, "wm1", 12), "components/Busy · fill", f"the brand alpaca, 40 pt by default; {timing}"),
+            specimen(busy_inline("Earlier messages", "wm2"), "components/Busy · 18 + words", "24 pt or less sits in a row with its words; chat history, MCP handshakes"),
+            specimen(flex(mobile_button(), mobile_spinner(20, P["ink3"], "mspin2"), gap=14), "components/Spinner",
+                     f"a 270° arc turning every {SPINNER_TURN_MS} ms; Button hides its label under it; attachment cards, rich text images, member and model sheets in ink-3"),
+            specimen(flex(alpaca(BUSY["mark"]), text("Reaching the daemon", 12, P["ink2"]), gap=6), "reduce motion", "the alpaca stands still and the words carry the wait"),
+            gap=14, align="flex-start", extra="flex-wrap: wrap",
+        )
+        rows = stack(mobile_rows(), mono("ListSkeleton · ReaderSkeleton · SkeletonBar", 10.5, P["ink2"]),
+                     wrap(f"no mark: SkeletonBar rows inside the RowGroup card they will fill, opacity 0.4 ↔ 0.8 every {PULSE_MS} ms, 80 ms apart; 0.6 and still under reduce motion", 11, P["ink3"], lh=1.4),
+                     gap=6, extra="width: 240px")
+    else:
+        marks = flex(
+            specimen(busy_page("Reaching the daemon", 56, "wd1", 10), "primitives/Busy · page", f"the brand alpaca at 56 px; {timing}"),
+            specimen(busy_inline("Fetching latest settings", "wd2"), "primitives/Busy · 18 + words", "a section that waits says for what, in ink-2"),
+            specimen(flex(desktop_button(), desktop_stopping(), gap=14), "SpinnerIcon · Button, Chip, Send",
+                     f"a dashed circle (r {DESKTOP_CIRCLE[0]}, dash {DESKTOP_CIRCLE[1]}) turning every {DUR_SPIN} s; Send is icon-only and spins only while stopping; also attachments and read aloud"),
+            specimen(flex(alpaca(BUSY["mark"]), text("Fetching latest settings", 12, P["ink2"]), gap=6), "reduced motion", "the alpaca stands still and the words carry the wait"),
+            gap=14, align="flex-start", extra="flex-wrap: wrap",
+        )
+        rows = stack(desktop_rows(), mono("SkeletonRows · SkeletonReader", 10.5, P["ink2"]),
+                     wrap(f"a 14 px mark and two lines per row, skShimmer every {DUR_LOOP} s with an ink 9 % highlight; flat hover under reduced motion", 11, P["ink3"], lh=1.4),
+                     gap=6, extra="width: 240px")
+    places = flex(stack(frames(), mono("the wave, frame by frame", 10.5, P["ink2"]),
+                        wrap("each facet dims to 0.28 and back over 1.6 s, its delay from the tail to the head", 11, P["ink3"], lh=1.4), gap=6, extra="width: 340px"),
+                  rows, gap=22, align="flex-start", extra="flex-wrap: wrap")
+    return stack(marks, places, wrap("Colour says who; the wait is always the brand ink. A profile's object never animates to mean waiting: its sweep is a phase at work.", 11.5, P["ink3"]), gap=16)

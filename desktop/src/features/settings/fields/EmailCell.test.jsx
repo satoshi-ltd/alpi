@@ -212,6 +212,19 @@ describe("EmailCell multi-account", () => {
     });
   });
 
+  it("holds the editor with placeholder lines while the account config loads", async () => {
+    invoke.mockImplementation(async (command) => {
+      if (command === "email_status") return TWO_ACCOUNTS;
+      if (command === "email_config") return new Promise(() => {});
+      return null;
+    });
+    render(<EmailCell profile={profile} connectionId="casa" />);
+    fireEvent.click(await screen.findByRole("button", { name: "me@work.com" }));
+    const placeholder = await screen.findByRole("img", { name: "Loading the account" });
+    expect(placeholder.querySelectorAll("[class*=skLine]").length).toBeGreaterThan(1);
+    expect(screen.queryByText("Loading…")).toBeNull();
+  });
+
   it("opens the IMAP editor pre-filled from email_config and probes the single id", async () => {
     invoke.mockImplementation(async (command) => {
       if (command === "email_status") return TWO_ACCOUNTS;

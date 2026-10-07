@@ -449,3 +449,29 @@ def test_kit_phone_rows_use_the_attention_wording_and_groups_of_the_mobile_app()
     job = (REPO / "mobile" / "app" / "profile" / "[id]" / "schedule" / "[job].jsx").read_text()
     assert "[next, nextRunWord(job)].filter(Boolean).join(' · ')" in job
     assert "tomorrow 07:30 · failed" in _html_text(studies.m_schedule_page(True))
+
+
+def _node_json(script):
+    out = subprocess.run(["node", "--input-type=module", "-e", script], capture_output=True, text=True, check=True, cwd=REPO)
+    return json.loads(out.stdout)
+
+
+def test_kit_busy_wave_and_pre_run_strip_follow_the_shipped_sources(tmp_path):
+    subprocess.run([sys.executable, str(REPO / "design" / "build.py"), "--out", str(tmp_path)], check=True, capture_output=True)
+    shipped = _node_json("import {busyFacetDelays} from './common/busy.mjs'; process.stdout.write(JSON.stringify(busyFacetDelays()));")
+    index = (tmp_path / "index.html").read_text()
+    drawn = re.findall(r'<polygon points="[^"]+" class="(\w+)-f" style="fill: ([^;]+); animation-delay: ([-\d.]+)s"', index)
+    assert drawn
+    by_key = {}
+    for key, fill, delay in drawn:
+        assert fill == "var(--accent)"
+        by_key.setdefault(key, []).append(float(delay))
+    assert all(delays == shipped for delays in by_key.values())
+    jsx = (REPO / "desktop" / "src" / "primitives" / "PipelineStages.jsx").read_text()
+    ghosts = len(re.search(r"GHOST_WIDTHS\s*=\s*\[([^\]]*)\]", jsx).group(1).split(","))
+    board = (tmp_path / "canvas" / "project" / "System-DesktopWorkgroup.dc.html").read_text()
+    assert board.count('class="pl-ghost"') == ghosts
+    strip = (REPO / "mobile" / "src" / "features" / "chat" / "PipelineStrip.jsx").read_text()
+    bars = len(re.search(r"PLACEHOLDER_WIDTHS\s*=\s*\[([^\]]*)\]", strip).group(1).split(","))
+    phone = (tmp_path / "canvas" / "project" / "System-MobileWorkgroup.dc.html").read_text()
+    assert phone.count('class="pl-bar"') == bars

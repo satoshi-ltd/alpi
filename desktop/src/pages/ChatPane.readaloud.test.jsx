@@ -1,17 +1,19 @@
-import { act, render } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const playTtsMock = vi.fn();
 const stopTtsMock = vi.fn();
 let currentKey = null;
+const ttsSubs = new Set();
 
 vi.mock("../lib/tts.js", () => ({
   VOICE_POOL: ["voice-default"],
   currentlyPlayingKey: () => currentKey,
   playTts: (...args) => playTtsMock(...args),
   stopTts: () => stopTtsMock(),
-  subscribeTts: () => () => {},
+  subscribeTts: (fn) => { ttsSubs.add(fn); return () => ttsSubs.delete(fn); },
   enqueueTts: vi.fn(),
+  clearTtsQueue: vi.fn(),
 }));
 
 import ChatPane from "./ChatPane.jsx";
@@ -109,5 +111,37 @@ describe("ChatPane read aloud shortcut", () => {
 
     expect(playTtsMock).not.toHaveBeenCalled();
     expect(stopTtsMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("ChatPane read aloud while preparing", () => {
+  it("keeps the verb and shows the control arc, never the word Loading", () => {
+    render(chatElement(0));
+    act(() => ttsSubs.forEach((fn) => fn({ key: "chat:lens:s1:5", kind: "loading" })));
+    const button = screen.getByRole("button", { name: "Read aloud, preparing audio" });
+    expect(button.querySelector("svg.ds-spin")).not.toBeNull();
+    expect(screen.getAllByRole("button", { name: "Read aloud" })).toHaveLength(1);
+    expect(document.body.textContent).not.toContain("Loading");
+  });
+});
+
+describe("ChatPane sync bar", () => {
+  it("waits in ink, never in the profile's colour", async () => {
+    const profile = { name: "lens", model: "x/y", accent: "#ff3366" };
+    render(
+      <ChatPane
+        view={{ kind: "profile", profile: profile.name, sessionId: "s1" }}
+        profiles={[profile]}
+        activeProfile={profile}
+        sessionData={{ turnsOffset: 0, turns: [], last_ctx_tokens: 0 }}
+        sessionSync={{ sessionId: "s1" }}
+        pendingTurn={null}
+        onSend={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+    const bar = await screen.findByRole("progressbar", { name: "syncing conversation" }, { timeout: 2000 });
+    expect(bar.getAttribute("style")).toBeNull();
+    expect(bar.outerHTML).not.toContain("#ff3366");
   });
 });

@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { KeyboardPane } from '../../../../src/components/KeyboardPane';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { radii, space } from '../../../../src/theme/tokens';
@@ -20,6 +20,8 @@ import { useProfile } from '../../../../src/hooks/useSubject';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
 import { cloudProvider } from '../../../../src/lib/providers';
 import { useTheme } from '../../../../src/theme/ThemeContext';
+import { SkeletonBar } from '../../../../src/components/SkeletonBar';
+import { ListSkeleton } from '../../../../src/components/ListSkeleton';
 
 export default function ProviderKey() {
   const { id, key } = useLocalSearchParams();
@@ -282,7 +284,7 @@ function OllamaScreen({
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: space.s8, paddingBottom: space.s3 }}>
                 <Eyebrow>Live models</Eyebrow>
                 {ollamaModels.loading ? (
-                  <ActivityIndicator color={colors.ink3} size="small" />
+                  <SkeletonBar width={24} height={12} />
                 ) : (
                   <Pill tone={myModels.length > 0 ? 'on' : undefined} off={myModels.length === 0}>
                     {myModels.length}
@@ -290,9 +292,7 @@ function OllamaScreen({
                 )}
               </View>
               {ollamaModels.loading && myModels.length === 0 ? (
-                <View style={{ padding: space.s7, alignItems: 'center' }}>
-                  <ActivityIndicator color={colors.ink3} />
-                </View>
+                <ListSkeleton rows={2} label="Loading live models" />
               ) : myModels.length === 0 ? (
                 <View style={{ paddingHorizontal: space.s8, paddingVertical: space.s5, gap: space.s3 }}>
                   {myError ? (

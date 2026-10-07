@@ -31,11 +31,13 @@ beforeEach(() => {
 });
 
 describe("SkillsModal (mounted)", () => {
-  it("shows a loading state before skills resolve", () => {
+  it("shows placeholder rows, never the word, before skills resolve", async () => {
     h.invoke.mockImplementation(() => new Promise(() => {}));
     render(<SkillsModal open onClose={() => {}} profile="muse" connectionId="c2" />);
     expect(screen.getByRole("progressbar", { name: "Loading skills" })).toBeTruthy();
-    expect(screen.getByText("Loading skills…")).toBeTruthy();
+    await waitFor(() => expect(document.querySelectorAll("[role=listbox] li[role=presentation] [class*=listRow]").length).toBeGreaterThan(1));
+    expect(screen.queryByRole("status", { name: "Loading skills" })).toBeNull();
+    expect(document.body.textContent).not.toMatch(/Loading/);
     expect(screen.queryByText("No skills installed")).toBeNull();
   });
 
@@ -88,5 +90,22 @@ describe("SkillsModal (mounted)", () => {
     await waitFor(() => expect(document.body.textContent).toContain("use it"));
     fireEvent.click(screen.getByText("whoop"));
     await waitFor(() => expect(document.body.textContent).not.toContain("use it"));
+    await waitFor(() => expect(document.querySelector("[aria-hidden=true][class*=reader]")).not.toBeNull());
+    expect(document.body.textContent).not.toMatch(/Loading/);
+  });
+
+  it("reads a file that is still loading as placeholder lines, never the word", async () => {
+    const tree = [...DETAIL.tree, { name: "run.py", kind: "file", ftype: "py", size: 10 }];
+    h.invoke.mockImplementation((cmd) => {
+      if (cmd === "profile_skills") return Promise.resolve(SKILLS);
+      if (cmd === "profile_skill_read") return Promise.resolve({ ...DETAIL, tree });
+      if (cmd === "profile_skill_file") return new Promise(() => {});
+      return Promise.resolve(null);
+    });
+    render(<SkillsModal open onClose={() => {}} profile="muse" connectionId="c2" />);
+    fireEvent.click(await screen.findByText("run.py"));
+    const placeholder = await screen.findByRole("img", { name: "Loading file" });
+    expect(placeholder.querySelectorAll("[class*=skLine]").length).toBeGreaterThan(1);
+    expect(document.body.textContent).not.toMatch(/Loading/);
   });
 });

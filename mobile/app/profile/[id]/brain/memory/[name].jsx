@@ -1,5 +1,5 @@
 import { useLocalSearchParams } from 'expo-router';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../../../../src/theme/tokens';
 
@@ -14,6 +14,7 @@ import { useBack } from '../../../../../src/hooks/useBack';
 import { useDirtyBack } from '../../../../../src/hooks/useDirtyBack';
 import { useMemoryEditor } from '../../../../../src/hooks/useMemoryEditor';
 import { useTheme } from '../../../../../src/theme/ThemeContext';
+import { ReaderSkeleton } from '../../../../../src/components/ReaderSkeleton';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -73,9 +74,7 @@ export default function MemoryDetail() {
     <SafeAreaView edges={['top', 'left', 'right']} style={[styles.safe, { backgroundColor: colors.bg }]}>
       <PanelHeader profile={id} section="MEMORIES" onBack={askLeave} right={right} />
       {mem.loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator color={colors.ink3} />
-        </View>
+        <ReaderSkeleton label="Loading the memory file" />
       ) : mem.loadError ? (
         <View style={styles.center}>
           <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.dangerText, textAlign: 'center', padding: space.s8 }}>

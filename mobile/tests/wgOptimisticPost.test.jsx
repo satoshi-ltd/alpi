@@ -32,7 +32,6 @@ vi.mock('react-native', () => {
     View,
     Text,
     Pressable,
-    ActivityIndicator: () => React.createElement('span', { 'data-testid': 'spinner' }),
     FlatList: ({ data = [], renderItem, keyExtractor }) =>
       React.createElement(
         'div',

@@ -52,7 +52,7 @@
    "x": 0,
    "y": 3060,
    "w": 1280,
-   "h": 2600,
+   "h": 3080,
    "title": "Desktop \u00b7 controls and feedback",
    "page": "system"
   },
@@ -60,13 +60,13 @@
    "x": 1360,
    "y": 3060,
    "w": 1280,
-   "h": 3450,
+   "h": 3870,
    "title": "Mobile \u00b7 controls and feedback",
    "page": "system"
   },
   "System-DesktopConversation.dc.html": {
    "x": 0,
-   "y": 6750,
+   "y": 7170,
    "w": 1280,
    "h": 2520,
    "title": "Desktop \u00b7 conversation",
@@ -74,7 +74,7 @@
   },
   "System-MobileConversation.dc.html": {
    "x": 1360,
-   "y": 6750,
+   "y": 7170,
    "w": 1280,
    "h": 1400,
    "title": "Mobile \u00b7 conversation",
@@ -82,17 +82,17 @@
   },
   "System-DesktopWorkgroup.dc.html": {
    "x": 0,
-   "y": 9510,
+   "y": 9930,
    "w": 1280,
-   "h": 1880,
+   "h": 2220,
    "title": "Desktop \u00b7 workgroups",
    "page": "system"
   },
   "System-MobileWorkgroup.dc.html": {
    "x": 1360,
-   "y": 9510,
+   "y": 9930,
    "w": 1280,
-   "h": 1290,
+   "h": 1560,
    "title": "Mobile \u00b7 workgroups",
    "page": "system"
   },
@@ -439,14 +439,6 @@
    "h": 870,
    "title": "Proposals \u00b7 ui-mob.live-activity \u00b7 a running workgroup and an approval reach a locked phone",
    "page": "proposals"
-  },
-  "Proposals-UI-LOADING.dc.html": {
-   "x": 0,
-   "y": 1350,
-   "w": 1280,
-   "h": 2140,
-   "title": "Proposals \u00b7 ui-loading \u00b7 waiting looks like alpi, and the pipeline never waits for what it already knows",
-   "page": "proposals"
   }
  },
  "order": [
@@ -500,8 +492,7 @@
   "Brand-Pairs.dc.html",
   "Brand-Palette.dc.html",
   "Brand-Motion.dc.html",
-  "Proposals-UI-MOB.LIVE-ACTIVITY.dc.html",
-  "Proposals-UI-LOADING.dc.html"
+  "Proposals-UI-MOB.LIVE-ACTIVITY.dc.html"
  ],
  "notes": {
   "s-Foundations": {
@@ -522,7 +513,7 @@
   },
   "s-Conversation": {
    "x": 0,
-   "y": 6527,
+   "y": 6947,
    "text": "Conversation",
    "kind": "title1",
    "maxW": 2600,
@@ -530,7 +521,7 @@
   },
   "s-Workgroups": {
    "x": 0,
-   "y": 9287,
+   "y": 9707,
    "text": "Workgroups",
    "kind": "title1",
    "maxW": 2600,
@@ -740,14 +731,6 @@
    "x": 0,
    "y": 17,
    "text": "UI-MOB.LIVE-ACTIVITY \u00b7 A running workgroup and an approval reach a locked phone",
-   "kind": "title1",
-   "maxW": 2600,
-   "page": "proposals"
-  },
-  "p-UI-LOADING \u00b7 Waiting looks like alpi, and the pipeline never waits for what it already knows": {
-   "x": 0,
-   "y": 1127,
-   "text": "UI-LOADING \u00b7 Waiting looks like alpi, and the pipeline never waits for what it already knows",
    "kind": "title1",
    "maxW": 2600,
    "page": "proposals"

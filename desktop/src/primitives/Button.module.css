@@ -94,25 +94,15 @@
   padding: 0 var(--space-4);
 }
 
-.spinner {
+.button .spinner {
   width: var(--space-5);
   height: var(--space-5);
-  border-radius: 50%;
-  border: 1.5px solid currentColor;
-  border-right-color: transparent;
+  stroke-width: 2;
   opacity: 0.6;
-  animation: btnSpin var(--dur-spin) linear infinite;
-  flex-shrink: 0;
 }
 
 .loading {
   cursor: progress;
-}
-
-@keyframes btnSpin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 .sm.iconOnly {

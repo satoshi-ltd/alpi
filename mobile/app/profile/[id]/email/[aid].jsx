@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Field } from '../../../../src/components/Field';
@@ -14,6 +14,8 @@ import { useEndpoint } from '../../../../src/lib/EndpointContext';
 import { EMAIL_TYPE_LABELS } from '../../../../src/lib/emailAccounts';
 import { space } from '../../../../src/theme/tokens';
 import { useTheme } from '../../../../src/theme/ThemeContext';
+import { Busy } from '../../../../src/components/Busy';
+import { useBusyVisible } from '../../../../src/hooks/useBusyVisible';
 
 const VIEW_FIELDS = [
   { key: 'imap_host', label: 'IMAP host' },
@@ -29,6 +31,7 @@ export default function EmailConfig() {
   const { call } = useEndpoint();
   const { colors, fonts, fontSizes } = useTheme();
   const cfg = useEmailConfig(id, aid);
+  const holding = useBusyVisible(cfg.loading && !cfg.data);
   const [busy, setBusy] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
 
@@ -59,10 +62,8 @@ export default function EmailConfig() {
         onBack={goBack}
       />
       <ScrollView contentContainerStyle={{ padding: space.s8, gap: space.s7 }}>
-        {cfg.loading && !cfg.data ? (
-          <View style={{ padding: space.s10, alignItems: 'center' }}>
-            <ActivityIndicator color={colors.ink3} />
-          </View>
+        {(cfg.loading && !cfg.data) || holding ? (
+          <Busy visible={holding} label="Opening the account" />
         ) : (
           <>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3, flexWrap: 'wrap' }}>

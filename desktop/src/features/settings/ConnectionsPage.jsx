@@ -6,6 +6,7 @@ import Field from "../../primitives/Field.jsx";
 import Modal from "../../primitives/Modal.jsx";
 import SelectField from "../../primitives/SelectField.jsx";
 import LoadFailed from "../../primitives/LoadFailed.jsx";
+import { SkeletonRows } from "../../primitives/Skeleton.jsx";
 import {
   ArrowLeftIcon,
   Checkbox,
@@ -219,7 +220,7 @@ export default function ConnectionsPage({
               <Mono>{visibleRows.length} of {rows.length}</Mono>
             </div>
           )}
-          {!data && !loadError && <div className={styles.empty}>Loading connections…</div>}
+          {!data && !loadError && <SkeletonRows count={3} label="Loading connections" />}
           {!data && loadError && (
             <div className={styles.empty}><LoadFailed inline label="connections" onRetry={reload} /></div>
           )}
@@ -581,7 +582,7 @@ function AuditActivity({ sourceConnectionId, connections }) {
       {!loading && entries.length > 0 && visibleEntries.length === 0 && (
         <div className={styles.empty}>No loaded activity matches this search.</div>
       )}
-      {loading && entries.length === 0 && <div className={styles.empty}>Loading activity…</div>}
+      {loading && entries.length === 0 && <SkeletonRows count={4} mark={false} label="Loading activity" />}
       {cursor && (
         <div className={styles.auditMore}>
           <Button loading={loading} onClick={() => load(cursor, true)}>Load older</Button>

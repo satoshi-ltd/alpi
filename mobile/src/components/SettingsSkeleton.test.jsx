@@ -5,8 +5,8 @@ import { cleanup, render, screen } from '@testing-library/react';
 afterEach(cleanup);
 
 vi.mock('react-native', () => {
-  const View = ({ children, style, accessibilityLabel, ...p }) =>
-    React.createElement('div', { ...p, ...(accessibilityLabel ? { 'aria-label': accessibilityLabel } : {}) }, children);
+  const View = ({ children, style, accessibilityLabel, accessibilityRole, accessible, ...p }) =>
+    React.createElement('div', { ...p, role: accessibilityRole, 'data-accessible': accessible ? 'true' : undefined, ...(accessibilityLabel ? { 'aria-label': accessibilityLabel } : {}) }, children);
   return {
     View,
     Animated: {
@@ -26,7 +26,7 @@ import { SettingsSkeleton } from './SettingsSkeleton';
 describe('SettingsSkeleton', () => {
   it('draws a section eyebrow and five label · helper · value rows', () => {
     render(<SettingsSkeleton />);
-    expect(screen.getByLabelText('Loading settings')).toBeTruthy();
+    expect(screen.getByRole('progressbar', { name: 'Loading settings' }).dataset.accessible).toBe('true');
     expect(document.querySelectorAll('[data-bar]').length).toBe(1 + 5 * 3);
   });
 });

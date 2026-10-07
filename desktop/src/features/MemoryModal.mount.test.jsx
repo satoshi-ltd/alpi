@@ -21,11 +21,13 @@ beforeEach(() => {
 });
 
 describe("MemoryModal (mounted)", () => {
-  it("shows a loading state before memory files resolve", () => {
+  it("shows a loading state before memory files resolve", async () => {
     h.invoke.mockImplementation(() => new Promise(() => {}));
     render(<MemoryModal open onClose={() => {}} profile="muse" connectionId="c2" />);
     expect(screen.getByRole("progressbar", { name: "Loading memory" })).toBeTruthy();
-    expect(screen.getAllByText("Loading memory…").length).toBeGreaterThan(0);
+    await waitFor(() => expect(document.querySelectorAll("[role=listbox] li[role=presentation] [class*=listRow]")).toHaveLength(3));
+    await waitFor(() => expect(document.querySelector("[aria-hidden=true][class*=reader]")).not.toBeNull());
+    expect(document.body.textContent).not.toMatch(/Loading/);
     expect(screen.queryByText("No memory files")).toBeNull();
   });
 

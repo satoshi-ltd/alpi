@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ActionSheet } from '../../../../src/components/ActionSheet';
@@ -18,6 +18,7 @@ import { space } from '../../../../src/theme/tokens';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 import { LoadFailed } from '../../../../src/components/LoadFailed';
 import { EMPTY } from '../../../../../common/emptyCopy.mjs';
+import { ListSkeleton } from '../../../../src/components/ListSkeleton';
 
 export default function EmailList() {
   const { id } = useLocalSearchParams();
@@ -45,9 +46,7 @@ export default function EmailList() {
       />
       <ScrollView refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />}>
         {accounts.loading && !accounts.data ? (
-          <View style={{ padding: space.s11, alignItems: 'center' }}>
-            <ActivityIndicator color={colors.ink3} />
-          </View>
+          <ListSkeleton rows={2} label="Loading email accounts" style={{ marginTop: space.s5 }} />
         ) : accounts.error && !accounts.data ? (
           <LoadFailed inline label="email accounts" error={accounts.error} onRetry={() => accounts.refresh?.()} />
         ) : (

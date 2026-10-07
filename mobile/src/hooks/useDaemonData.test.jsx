@@ -393,6 +393,19 @@ describe("useWorkgroupTasks", () => {
   });
 });
 
+describe("useWorkgroups", () => {
+  it("asks every list for the pipeline status once, on the call the roster and the workgroup screen share", async () => {
+    const { useWorkgroups } = await import("./useDaemonData");
+    const call = vi.fn(async () => ({ workgroups: [{ id: "wg1", pipeline_status: null }] }));
+    const wrapper = ({ children }) => <EndpointContext.Provider value={{ endpoint: { id: "ep1" }, call }}>{children}</EndpointContext.Provider>;
+    renderHook(() => [useWorkgroups(), useWorkgroups()], { wrapper });
+    await waitFor(() => expect(call).toHaveBeenCalled());
+    expect(call.mock.calls).toEqual([["host.workgroups.list", { include_pipeline_status: true }]]);
+    renderHook(() => useWorkgroups("mira"), { wrapper });
+    await waitFor(() => expect(call).toHaveBeenCalledWith("host.workgroups.list", { profile: "mira", include_pipeline_status: true }));
+  });
+});
+
 describe("useProfileMemory", () => {
   it("exposes per-file usage alongside the raw text", async () => {
     const call = vi.fn(async (method) => {

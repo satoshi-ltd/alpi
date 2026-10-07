@@ -54,6 +54,9 @@ import { SettingsSurface } from '../../../src/nav/SettingsSurface';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { voiceLabel } from '../../../src/lib/voices';
 import { EMPTY } from '../../../../common/emptyCopy.mjs';
+import { SubtitleSkeleton } from '../../../src/components/SubtitleSkeleton';
+import { UsageSkeleton } from '../../../src/components/UsageSkeleton';
+import { ListSkeleton } from '../../../src/components/ListSkeleton';
 
 const DEFAULT_ALP_PORT = 7423;
 const WIDE_BODY_MAX_W = 968;
@@ -185,7 +188,7 @@ export default function ProfileSettings() {
   if (loading && !profile) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ScreenHeader title={`@${profileLabel(id)}`} subtitle="PROFILE · LOADING" onBack={goBack} />
+        <ScreenHeader title={`@${profileLabel(id)}`} subtitle={<SubtitleSkeleton />} onBack={goBack} />
         <SettingsSkeleton wide={twoPane} />
       </SafeAreaView>
     );
@@ -460,7 +463,7 @@ export default function ProfileSettings() {
         <SectionHeader kicker="last 14 days">Usage</SectionHeader>
         <RowGroup>
           {usageDays.length === 0 && snap.loading ? (
-            <Row label="Loading usage…" chevron={false} />
+            <SettingsBand><UsageSkeleton /></SettingsBand>
           ) : usageDays.length === 0 ? (
             <Row label={EMPTY.usage.title} helper={EMPTY.usage.hint} chevron={false} />
           ) : (
@@ -733,12 +736,10 @@ export default function ProfileSettings() {
 
         <SectionHeader kicker="disk footprint">Storage</SectionHeader>
         <RowGroup>
-          {storageRows.filter((it) => it.size_bytes > 0 || it.file_count > 0).length === 0 ? (
-            <Row
-              label={snap.loading || storage.loading ? 'Loading storage…' : EMPTY.storage.title}
-              helper={snap.loading || storage.loading ? undefined : EMPTY.storage.hint}
-              chevron={false}
-            />
+          {storageRows.filter((it) => it.size_bytes > 0 || it.file_count > 0).length === 0 && (snap.loading || storage.loading) ? (
+            <ListSkeleton flat rows={3} value label="Loading storage" />
+          ) : storageRows.filter((it) => it.size_bytes > 0 || it.file_count > 0).length === 0 ? (
+            <Row label={EMPTY.storage.title} helper={EMPTY.storage.hint} chevron={false} />
           ) : (
             storageRows
               .filter((it) => it.size_bytes > 0 || it.file_count > 0)

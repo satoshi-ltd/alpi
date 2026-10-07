@@ -4,6 +4,7 @@ import Button from "../../primitives/Button.jsx";
 import ActionLink from "../../primitives/ActionLink.jsx";
 import Chip from "../../primitives/Chip.jsx";
 import Textarea from "../../primitives/Textarea.jsx";
+import Skeleton from "../../primitives/Skeleton.jsx";
 import { useNotify } from "../../primitives/Notification.jsx";
 import { useProfileDetail } from "../../hooks/useProfileDetail.js";
 import { useProfileSnapshot } from "../../hooks/useProfileSnapshot.js";
@@ -281,7 +282,6 @@ export default function ProfileDetail({
       <div className={styles.syncBarSlot}>
         <RefreshBar
           active={syncing}
-          accent={profile.accent || null}
           controlled
           label="Fetching latest settings"
         />
@@ -402,7 +402,7 @@ export default function ProfileDetail({
                 total30={usage.total30}
               />
             ) : (
-              <span className={styles.muted}>loading…</span>
+              <Skeleton width="100%" height="104px" label="Loading usage" />
             )}
           </Section>
         )}

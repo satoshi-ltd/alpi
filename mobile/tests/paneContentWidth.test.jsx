@@ -29,7 +29,6 @@ vi.mock('react-native', () => {
     Pressable,
     FlatList,
     KeyboardAvoidingView: ({ children }) => React.createElement('div', { 'data-kav': 'true' }, children),
-    ActivityIndicator: () => React.createElement('span', { 'data-spinner': 'true' }),
     Platform: { OS: 'ios', select: (sel) => sel?.ios ?? sel?.default },
     Keyboard: { addListener: () => ({ remove: () => {} }) },
     StyleSheet: { create: (s) => s },

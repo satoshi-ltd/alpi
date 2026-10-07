@@ -4,7 +4,7 @@ import styles from "./Fold.module.css";
 
 const BASE = "var(--c, var(--ink-3))";
 const RIPPLE_SECONDS = 1.4;
-const ALPACA_VARS = { "--alp-l": BRAND_INK.light, "--alp-d": BRAND_INK.dark };
+export const ALPACA_VARS = { "--alp-l": BRAND_INK.light, "--alp-d": BRAND_INK.dark };
 const TONES = [`color-mix(in srgb, ${BASE} 62%, white)`, BASE, `color-mix(in srgb, ${BASE} 72%, black)`];
 
 export default function Fold({ fold, color: given, size, pulse = false, outlined = false, unfolded = false, className = "", style }) {

@@ -65,7 +65,6 @@ vi.mock('react-native', () => {
     Pressable,
     TextInput,
     SectionList,
-    ActivityIndicator: () => React.createElement('span', { 'data-testid': 'spinner' }),
     RefreshControl: () => null,
     Keyboard: { addListener: () => ({ remove: () => {} }) },
     StyleSheet: { create: (s) => s },
@@ -89,6 +88,10 @@ vi.mock('../../components/Icon', () => ({
 }));
 
 vi.mock('./InboxRow', () => ({ SEPARATOR_INSET: 52 }));
+
+vi.mock('../../components/Busy', () => ({
+  Busy: ({ label, size }) => React.createElement('span', { 'data-testid': 'busy', 'data-size': size }, label),
+}));
 
 vi.mock('./InboxSkeleton', () => ({
   InboxSkeleton: () => React.createElement('div', { 'data-testid': 'skeleton' }),
@@ -235,9 +238,10 @@ describe('Roster empty states', () => {
     expect(screen.queryByText('No profiles or workgroups yet')).toBeNull();
   });
 
-  it('keeps a spinner under the rows while refreshing a non-empty roster', () => {
+  it('keeps the small ink alpaca with its words under the rows while refreshing a non-empty roster', () => {
     render(<Roster items={ITEMS} query="" onQueryChange={() => {}} renderRow={plainRow} loading />);
-    expect(screen.getByTestId('spinner')).toBeTruthy();
+    expect(screen.getByTestId('busy').textContent).toBe('Refreshing profiles and workgroups');
+    expect(screen.getByTestId('busy').dataset.size).toBe('18');
     expect(screen.queryByTestId('skeleton')).toBeNull();
   });
 });

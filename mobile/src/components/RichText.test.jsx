@@ -34,7 +34,6 @@ vi.mock('react-native', () => {
       visible
         ? React.createElement('div', { 'data-orientations': (supportedOrientations ?? []).join(',') }, children)
         : null,
-    ActivityIndicator: () => React.createElement('span', { 'data-testid': 'spinner' }),
   };
 });
 

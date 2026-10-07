@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { radii, space } from '../../theme/tokens';
 
 import { Field } from '../../components/Field';
@@ -20,6 +20,9 @@ import {
   subscribeVoicePreview,
 } from '../../lib/voicePreview';
 import { useTheme } from '../../theme/ThemeContext';
+import { Busy } from '../../components/Busy';
+import { ListSkeleton } from '../../components/ListSkeleton';
+import { Spinner } from '../../components/Spinner';
 
 export function budgetError(value) {
   const text = String(value ?? '').trim();
@@ -286,12 +289,9 @@ export function ModelSheet({
             <RowSeparator />
           </View>
         ) : null}
-        {/* During the initial Ollama poll the cloud models (always synchronous via profile.models) are visible but the Ollama section is still loading — render a spinner instead of "No models available" only if BOTH are pending. */}
         {cats.length === 0 ? (
           ollama.loading ? (
-            <View style={{ padding: space.s10, alignItems: 'center' }}>
-              <ActivityIndicator color={colors.ink3} />
-            </View>
+            <ListSkeleton flat rows={4} label="Loading models" />
           ) : (
             <View style={{ paddingHorizontal: space.s8, paddingVertical: space.s8, gap: space.s5 }}>
               <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.ink }}>
@@ -362,11 +362,8 @@ export function ModelSheet({
             ))}
           </View>
         ) : null}
-        {/* Sub-spinner only when cloud models are already showing and Ollama is still polling, so the user sees that more is coming. */}
         {ollama.loading && cats.length > 0 ? (
-          <View style={{ padding: space.s7, alignItems: 'center' }}>
-            <ActivityIndicator color={colors.ink3} />
-          </View>
+          <ListSkeleton flat rows={2} label="Loading Ollama models" />
         ) : null}
       </ScrollView>
     </Sheet>
@@ -452,9 +449,7 @@ export function CleanupSheet({ open, onClose, profileName, call, onCleaned }) {
     >
       <View style={{ paddingVertical: space.s5 }}>
         {plan === null ? (
-          <View style={{ padding: space.s10, alignItems: 'center' }}>
-            <ActivityIndicator color={colors.ink3} />
-          </View>
+          <Busy label="Measuring what can be reclaimed" />
         ) : plan === 'error' ? (
           <Text
             style={{
@@ -574,9 +569,9 @@ export function VoiceSheet({ open, onClose, profileName, accent, initialValue, o
                       gap: space.s2,
                     })}
                   >
-                    {isLoading ? <ActivityIndicator size="small" color={colors.ink3} /> : null}
+                    {isLoading ? <Spinner color={colors.ink3} /> : null}
                     <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.xs, color: isPlaying ? colors.ink : colors.ink2 }}>
-                      {isLoading ? 'loading' : isPlaying ? 'stop' : 'preview'}
+                      {isPlaying ? 'stop' : 'preview'}
                     </Text>
                   </Pressable>
                 }

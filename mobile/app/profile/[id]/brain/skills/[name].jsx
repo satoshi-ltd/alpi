@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { lineHeights, radii, space } from '../../../../../src/theme/tokens';
 
@@ -16,6 +16,8 @@ import { useEndpoint } from '../../../../../src/lib/EndpointContext';
 import { fileSize, flattenTree, statusLabel } from '../../../../../src/lib/skillDetail';
 import { skillFileIcon } from '../../../../../../common/fileKind.mjs';
 import { useTheme } from '../../../../../src/theme/ThemeContext';
+import { Busy } from '../../../../../src/components/Busy';
+import { useBusyVisible } from '../../../../../src/hooks/useBusyVisible';
 
 export default function SkillDetail() {
   const { id, name, category } = useLocalSearchParams();
@@ -25,6 +27,7 @@ export default function SkillDetail() {
   const { call } = useEndpoint();
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
+  const holding = useBusyVisible(loading);
   const { att } = useAttention(id);
 
   useEffect(() => {
@@ -63,10 +66,8 @@ export default function SkillDetail() {
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <PanelHeader profile={id} section={category ? `SKILLS · ${String(category).toUpperCase()}` : 'SKILLS'} onBack={goBack} />
-      {loading ? (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator color={colors.ink3} />
-        </View>
+      {loading || holding ? (
+        <Busy fill visible={holding} label="Opening the skill" />
       ) : !detail ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.s8 }}>
           <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.ink2 }}>

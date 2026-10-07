@@ -20,6 +20,11 @@
   white-space: nowrap;
 }
 
+.ghost {
+  display: inline-flex;
+  height: 22px;
+}
+
 .slug {
   color: var(--ink);
 }

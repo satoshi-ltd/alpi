@@ -4,6 +4,7 @@ import { createSwrCache } from "../../../lib/swr-cache.js";
 import { useSwrValue } from "../../../hooks/useSwrValue.js";
 import Button from "../../../primitives/Button.jsx";
 import Chip from "../../../primitives/Chip.jsx";
+import Skeleton from "../../../primitives/Skeleton.jsx";
 import { Row } from "../primitives.jsx";
 import { ConfirmDelete, LoadFailed } from "../../../primitives/index.js";
 import { useNotify } from "../../../primitives/Notification.jsx";
@@ -140,7 +141,7 @@ export function StorageField({ profile, activeConnection, prefetched, onLoadingC
   const safeCount = cleanable.reduce((n, g) => n + g.safeCount, 0);
 
   if (usageOverride == null && usage == null && !error) {
-    return <Row label="storage"><span className={styles.muted}>loading…</span></Row>;
+    return <Row label="storage"><Skeleton width="14em" label="Loading storage" /></Row>;
   }
   if (usageOverride == null && usage == null && error) {
     return <Row label="storage"><LoadFailed inline label="storage" onRetry={refreshUsage} /></Row>;

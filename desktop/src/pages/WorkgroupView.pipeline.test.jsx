@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const invokeMock = vi.fn();
@@ -123,7 +123,7 @@ describe("WorkgroupView working heartbeats", () => {
 });
 
 describe("WorkgroupView pipeline strip", () => {
-  it("shows a pipeline loading row until the first canonical fold arrives", async () => {
+  it("shows phase-sized placeholder chips with several pipelines until the first canonical fold arrives", async () => {
     let resolveTasks;
     invokeMock.mockImplementation((cmd) => {
       if (cmd === "workgroup_tasks") {
@@ -134,9 +134,13 @@ describe("WorkgroupView pipeline strip", () => {
       return Promise.resolve("");
     });
 
-    render(<WorkgroupView workgroup={workgroup} profiles={profiles} connectionId="local" />);
+    render(<WorkgroupView workgroup={{ ...workgroup, pipeline_status: "running" }} profiles={profiles} connectionId="local" />);
 
-    expect(screen.getByTestId("pipeline-loading")).toHaveTextContent("Loading flow…");
+    const loading = screen.getByTestId("pipeline-loading");
+    expect(loading.querySelectorAll("[data-phase-placeholder]")).toHaveLength(2);
+    expect(within(loading).getByRole("status", { name: "Loading the pipeline" })).toBeInTheDocument();
+    expect(loading.textContent).not.toMatch(/Loading/);
+    expect(document.querySelector("[data-phase]")).toBeNull();
     resolveTasks({
       active: { slug: "enrich", title: "go", opened_seq: 42 },
       closed: [],
@@ -155,6 +159,126 @@ describe("WorkgroupView pipeline strip", () => {
 
     await waitFor(() => expect(phaseEl("setup")).not.toBeNull());
     expect(screen.queryByTestId("pipeline-loading")).toBeNull();
+  });
+
+  it("draws a single pipeline from the row at once, every phase pending with its owner, then fills it in place", async () => {
+    let resolveTasks;
+    invokeMock.mockImplementation((cmd) => {
+      if (cmd === "workgroup_tasks") return new Promise((resolve) => { resolveTasks = resolve; });
+      return Promise.resolve("");
+    });
+    const single = {
+      ...workgroup,
+      pipeline_status: "running",
+      pipelines: { setup: ["setup", "enrich", "qa"] },
+      phase_map: { setup: { owner: "hub" }, enrich: { owner: "pixel" }, qa: { owner: "hub" } },
+    };
+
+    render(<WorkgroupView workgroup={single} profiles={profiles} connectionId="local" />);
+
+    const strip = screen.getByTestId("pipeline-strip");
+    expect(strip.hasAttribute("data-pending")).toBe(true);
+    expect(screen.queryByTestId("pipeline-loading")).toBeNull();
+    expect(["setup", "enrich", "qa"].map((slug) => phaseEl(slug).dataset.state)).toEqual(["pending", "pending", "pending"]);
+    expect(phaseEl("setup").querySelector("[data-fold]")).not.toBeNull();
+    expect(phaseEl("enrich").querySelector("[data-fold]").dataset.unfolded).toBe("");
+    expect(phaseEl("setup").querySelector("polygon").getAttribute("class") ?? "").toBe("");
+    expect(strip.textContent).not.toMatch(/Loading/);
+    expect(strip.textContent).toContain("pipeline");
+
+    resolveTasks({
+      active: { slug: "enrich", title: "go", opened_seq: 42 },
+      closed: [],
+      blocked: null,
+      pipeline_run: {
+        pipeline: "setup",
+        status: "running",
+        started_seq: 40,
+        current_phase: "enrich",
+        phases: [
+          { slug: "setup", state: "completed", seq: 41 },
+          { slug: "enrich", state: "current", seq: 42 },
+          { slug: "qa", state: "pending", seq: null },
+        ],
+      },
+    });
+
+    await waitFor(() => expect(phaseEl("setup").dataset.state).toBe("completed"));
+    expect(screen.getByTestId("pipeline-strip")).toBe(strip);
+    expect(strip.hasAttribute("data-pending")).toBe(false);
+    expect(phaseEl("enrich").dataset.state).toBe("current");
+    expect(phaseEl("qa").dataset.state).toBe("pending");
+  });
+
+  it.each([
+    ["an idle workgroup with no run", { pipeline_status: null }],
+    ["a queued item without a run", { pipeline_status: "queued" }],
+    ["an older daemon's row without the field", {}],
+  ])("%s draws no pending strip before or after the reply", async (_, extra) => {
+    let resolveTasks;
+    invokeMock.mockImplementation((cmd) => {
+      if (cmd === "workgroup_tasks") return new Promise((resolve) => { resolveTasks = resolve; });
+      return Promise.resolve("");
+    });
+    for (const pipelines of [{ setup: ["setup", "enrich"] }, workgroup.pipelines]) {
+      const { unmount } = render(
+        <WorkgroupView workgroup={{ ...workgroup, ...extra, pipelines }} profiles={profiles} connectionId="local" />,
+      );
+      expect(screen.queryByTestId("pipeline-strip")).toBeNull();
+      expect(screen.queryByTestId("pipeline-loading")).toBeNull();
+      expect(document.querySelector("[data-phase]")).toBeNull();
+      await act(async () => resolveTasks({ active: null, closed: [], blocked: null, pipeline_run: null }));
+      expect(screen.queryByTestId("pipeline-strip")).toBeNull();
+      expect(screen.queryByTestId("pipeline-loading")).toBeNull();
+      expect(document.querySelector("[data-phase]")).toBeNull();
+      unmount();
+      _resetTaskStateCache();
+    }
+  });
+
+  it.each([
+    ["running", "chain", "placeholders"],
+    ["between", "chain", "placeholders"],
+    ["blocked", "placeholders", "placeholders"],
+    ["completed", "placeholders", "placeholders"],
+    ["queued", "nothing", "nothing"],
+    [null, "nothing", "nothing"],
+    [undefined, "nothing", "nothing"],
+  ])("before the reply a row with status %s draws %s for one pipeline and %s for several", (status, single, several) => {
+    invokeMock.mockImplementation((cmd) => (cmd === "workgroup_tasks" ? new Promise(() => {}) : Promise.resolve("")));
+    const drawn = () => (
+      document.querySelector("[data-phase]") ? "chain"
+        : document.querySelector("[data-phase-placeholder]") ? "placeholders" : "nothing"
+    );
+    const row = { ...workgroup, pipeline_status: status };
+    if (status === undefined) delete row.pipeline_status;
+    const one = render(<WorkgroupView workgroup={{ ...row, pipelines: { setup: ["setup", "enrich"] } }} profiles={profiles} connectionId="local" />);
+    expect(drawn()).toBe(single);
+    if (single === "chain") expect(phaseEl("setup").dataset.state).toBe("pending");
+    one.unmount();
+    render(<WorkgroupView workgroup={row} profiles={profiles} connectionId="local" />);
+    expect(drawn()).toBe(several);
+  });
+
+  it.each([{}, null, { setup: [] }])("a running row with no declared pipeline (%j) draws nothing before the reply", (pipelines) => {
+    invokeMock.mockImplementation((cmd) => (cmd === "workgroup_tasks" ? new Promise(() => {}) : Promise.resolve("")));
+    render(<WorkgroupView workgroup={{ ...workgroup, pipeline_status: "running", pipelines }} profiles={profiles} connectionId="local" />);
+    expect(screen.queryByTestId("pipeline-loading")).toBeNull();
+    expect(screen.queryByTestId("pipeline-strip")).toBeNull();
+    expect(document.querySelector("[data-phase], [data-phase-placeholder]")).toBeNull();
+  });
+
+  it.each([
+    ["one pipeline", { setup: ["setup", "enrich"] }],
+    ["several pipelines", workgroup.pipelines],
+  ])("draws nothing beside the stale banner once the daemon fails to answer, with %s", async (_, pipelines) => {
+    tasksFail();
+    render(<WorkgroupView workgroup={{ ...workgroup, pipeline_status: "running", pipelines }} profiles={profiles} connectionId="local" />);
+    await screen.findByTestId("pipeline-stale");
+    expect(screen.queryByTestId("pipeline-loading")).toBeNull();
+    expect(screen.queryByTestId("pipeline-strip")).toBeNull();
+    expect(screen.queryByRole("status", { name: "Loading the pipeline" })).toBeNull();
+    expect(document.querySelector("[data-phase], [data-phase-placeholder]")).toBeNull();
   });
 
   it("keeps the last valid flow visible while a remounted view refreshes", async () => {
@@ -295,6 +419,10 @@ describe("WorkgroupView pipeline strip", () => {
       />,
     );
 
+    const bar = document.querySelector(".refresh-bar");
+    expect(bar).not.toBeNull();
+    expect(bar.getAttribute("style")).toBeNull();
+    expect(bar.outerHTML).not.toContain(profiles[0].accent);
     await waitFor(() => expect(phaseEl("media-update")).not.toBeNull());
     expect(phaseEl("enrich")).toBeNull();
     expect(document.querySelector('[data-phase][data-state="completed"]')).toBeNull();

@@ -13,7 +13,6 @@ vi.mock('react-native', () => ({
     React.createElement('textarea', { value, placeholder, readOnly: editable === false, onChange: (e) => onChangeText?.(e.target.value) }),
   Pressable: ({ children, onPress, style, disabled, accessibilityLabel, ...p }) =>
     React.createElement('button', { type: 'button', onClick: onPress, disabled, 'aria-label': accessibilityLabel }, children),
-  ActivityIndicator: () => null,
   StyleSheet: { create: (s) => s, absoluteFillObject: {} },
 }));
 
@@ -26,6 +25,7 @@ vi.mock('../../theme/ThemeContext', () => ({
   }),
 }));
 
+vi.mock('../../components/Spinner', () => ({ Spinner: () => null }));
 vi.mock('../../components/Toast', () => ({ useToast: () => h.toast }));
 
 import { IdentityEditor } from './IdentityEditor';

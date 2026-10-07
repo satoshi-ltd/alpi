@@ -169,7 +169,7 @@ export function useProfileSnapshot(profile) {
 
 // Daemon dedupes by wg_id when called with no profile param.
 export function useWorkgroups(profile = null) {
-  return usePolledCall('host.workgroups.list', profile ? { profile } : {}, [profile]);
+  return usePolledCall('host.workgroups.list', profile ? { profile, include_pipeline_status: true } : { include_pipeline_status: true }, [profile]);
 }
 
 export function useProfilesList() {

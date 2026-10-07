@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { radii, space } from '../../src/theme/tokens';
 
@@ -29,6 +29,9 @@ import { usePane } from '../../src/nav/PaneContext';
 import { SettingsSurface } from '../../src/nav/SettingsSurface';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { EMPTY } from '../../../common/emptyCopy.mjs';
+import { Busy } from '../../src/components/Busy';
+import { useBusyVisible } from '../../src/hooks/useBusyVisible';
+import { SubtitleSkeleton } from '../../src/components/SubtitleSkeleton';
 
 const WIDE_BODY_MAX_W = 968;
 
@@ -79,6 +82,7 @@ function ConnectionDetail() {
   const [pairing, setPairing] = useState(null);
 
   const row = (summary.data?.connections ?? []).find((r) => r.id === id) ?? null;
+  const opening = useBusyVisible(!row && summary.loading);
   const isHost = id === 'host';
   const devices = (row?.devices ?? []).filter((d) => d.status !== 'deleted');
   const usageDays = toUsageDays(row?.usage_days);
@@ -110,13 +114,11 @@ function ConnectionDetail() {
     ? { paddingHorizontal: space.s9, paddingTop: space.s9, paddingBottom: space.s11, maxWidth: WIDE_BODY_MAX_W, width: '100%', alignSelf: 'center' }
     : { paddingBottom: space.s10 };
 
-  if (!row) {
+  if (!row || opening) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ScreenHeader title="Connection" subtitle={summary.loading ? 'LOADING' : 'NOT FOUND'} onBack={goBack} />
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          {summary.loading ? <ActivityIndicator color={colors.ink3} /> : null}
-        </View>
+        <ScreenHeader title="Connection" subtitle={summary.loading || opening ? <SubtitleSkeleton /> : 'NOT FOUND'} onBack={goBack} />
+        <Busy fill visible={opening} label="Opening the connection" />
       </SafeAreaView>
     );
   }

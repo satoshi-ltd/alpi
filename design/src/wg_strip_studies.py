@@ -1,5 +1,5 @@
-from notif_studies import MONO, dot, ell, flex, spacer, stack, wrap
-from wg_settings_studies import (P, PIPELINES, WG_NAME, accent, crease_name, glyph, mono, obj, phase_chip, phone, rippling)
+from notif_studies import MONO, ell, flex, spacer, stack, wrap
+from wg_settings_studies import (P, PIPELINES, WG_NAME, crease_name, glyph, mono, obj, phase_chip, phone, rippling)
 
 CHAIN = PIPELINES[0][1]
 STATES = {**{slug: "completed" for slug in CHAIN[:-1]}, "qa": "current"}
@@ -48,10 +48,6 @@ def ghost_button(inner, w=None):
     width = f"width: {w}px;" if w else ""
     return (f'<span style="display: inline-flex; align-items: center; gap: 6px; {width} height: 28px; padding: 0 8px; border-radius: 4px; background: {P["hover"]}; '
             f'box-sizing: border-box; min-width: 0; flex-shrink: 1">{inner}</span>')
-
-
-def now_trigger():
-    return ghost_button(dot(accent("mira"), 7) + ell(QA_LINE, 12, P["ink"], extra="flex: 1") + mono("7/8", 11, P["ink2"]) + glyph("chevron-down", 11, P["ink3"]), 200)
 
 
 def progress_trigger(lead, phase_line, line, tone="ink"):
@@ -203,3 +199,59 @@ def m_sheet(key="sh"):
 def m_sheet_phone():
     return phone(m_header(m_owner_button("mh2")) + m_strip("ms2") + m_sheet(), 540)
 
+
+
+def _source(*parts):
+    import os
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", *parts)) as f:
+        return f.read()
+
+
+def _widths(src, name):
+    import re
+    return [int(v) for v in re.search(name + r"\s*=\s*\[([\d,\s]+)\]", src).group(1).split(",")]
+
+
+GHOST_WIDTHS = _widths(_source("desktop", "src", "primitives", "PipelineStages.jsx"), "GHOST_WIDTHS")
+PLACEHOLDER_WIDTHS = _widths(_source("mobile", "src", "features", "chat", "PipelineStrip.jsx"), "PLACEHOLDER_WIDTHS")
+GHOST_STYLE = (f"<style>@keyframes ghostShimmer{{0%{{background-position: 100% 0}}100%{{background-position: -100% 0}}}}"
+               f".pl-ghost{{background: linear-gradient(90deg, {P['hover']} 0%, {P['selected']} 50%, {P['hover']} 100%); background-size: 200% 100%; animation: ghostShimmer 1.4s ease-in-out infinite}}"
+               f"@keyframes ghostPulse{{0%, 100%{{opacity: 0.4}}50%{{opacity: 0.8}}}}.pl-bar{{background: {P['hover']}; animation: ghostPulse 1.4s ease-in-out infinite}}"
+               f"@media (prefers-reduced-motion: reduce){{.pl-ghost, .pl-bar{{animation: none}}}}</style>")
+
+
+def ghost_chips(count):
+    n = min(max(count, 1), len(GHOST_WIDTHS))
+    return GHOST_STYLE + "".join((arrow_sep() if i else "") + f'<span class="pl-ghost" style="display: inline-block; width: {GHOST_WIDTHS[i]}px; height: 21px; border-radius: 2px; flex-shrink: 0"></span>'
+                                 for i in range(n))
+
+
+def d_before_run():
+    one = frame(d_header(""), strip({}, "dbr"))
+    several = frame(d_header(""), strip_row(ghost_chips(len(CHAIN))))
+    return stack(
+        stack(mono("one pipeline · the chain drawn from the row, every phase pending, each owner standing still", 10.5, P["ink3"]), one, gap=6),
+        stack(mono("several pipelines · skeleton chips the size of a phase until the run arrives", 10.5, P["ink3"]), several, gap=6),
+        gap=16,
+    )
+
+
+def m_pending_strip(key="mbr"):
+    items = "".join((sep(12) if i else "") + phase_chip(slug, None, f"{key}{i}", True, None, True, 30, 12) for i, slug in enumerate(CHAIN))
+    return (f'<div style="position: relative; display: flex; align-items: center; gap: 8px; height: 46px; padding: 0 16px; overflow: hidden; white-space: nowrap; background: {P["pane"]}; '
+            f'box-shadow: inset 0 -0.5px 0 {P["line"]}">{items}{fade("right")}</div>')
+
+
+def m_placeholder_strip():
+    n = min(len(CHAIN), len(PLACEHOLDER_WIDTHS))
+    bars = "".join((sep(12) if i else "") + f'<span class="pl-bar" style="display: inline-block; width: {PLACEHOLDER_WIDTHS[i]}px; height: 30px; border-radius: 4px; flex-shrink: 0; animation-delay: {i * 80}ms"></span>'
+                   for i in range(n))
+    return (f'<div style="display: flex; align-items: center; gap: 8px; height: 46px; padding: 0 16px; overflow: hidden; background: {P["pane"]}; '
+            f'box-shadow: inset 0 -0.5px 0 {P["line"]}">{GHOST_STYLE}{bars}</div>')
+
+
+def m_before_run():
+    body = f'<div style="flex: 1; background: {P["bg"]}"></div>'
+    one = stack(mono("one pipeline · every phase pending", 10.5, P["ink3"]), phone(m_header("") + m_pending_strip() + body, 200), gap=6)
+    several = stack(mono("several pipelines · placeholder chips", 10.5, P["ink3"]), phone(m_header("") + m_placeholder_strip() + body, 200), gap=6)
+    return f'<div style="display: flex; gap: 24px; align-items: flex-start">{one}{several}</div>'

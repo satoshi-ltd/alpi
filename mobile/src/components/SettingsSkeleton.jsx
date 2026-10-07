@@ -7,7 +7,7 @@ const ROWS = [[120, 180], [90, 220], [140, 160], [70, 200], [110, 150]];
 
 export function SettingsSkeleton({ wide = false }) {
   return (
-    <View accessibilityLabel="Loading settings" style={{ paddingHorizontal: wide ? space.s9 : space.s8, paddingTop: space.s9, gap: space.s8 }}>
+    <View accessible accessibilityRole="progressbar" accessibilityLabel="Loading settings" style={{ paddingHorizontal: wide ? space.s9 : space.s8, paddingTop: space.s9, gap: space.s8 }}>
       <SkeletonBar width={72} height={10} />
       {ROWS.map(([label, helper], i) => (
         <View key={label} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.s5 }}>

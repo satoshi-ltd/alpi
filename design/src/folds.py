@@ -237,23 +237,6 @@ def outline(form, color, size=64):
     return f'<svg viewBox="0 0 100 100" width="{size}" height="{size}" role="img" aria-label="{form} unfolded" style="flex-shrink: 0; display: block">{"".join(parts)}</svg>'
 
 
-def busy_style(prefix, colors, seconds):
-    n = len(colors)
-    parts = []
-    for tone, key in ((LIGHT, "l"), (BASE, "b"), (SHADE, "s")):
-        frames = "".join(f"{round(i * 100 / n, 2)}%{{fill: {tones(c)[tone]}}}" for i, c in enumerate(colors + [colors[0]]))
-        parts.append(f"@keyframes {prefix}-{key}{{{frames}}}")
-        parts.append(f".{prefix}-{key}{{animation-name: {prefix}-{key}}}")
-    parts.append(f".{prefix}-f{{animation-duration: {seconds}s; animation-iteration-count: infinite; animation-timing-function: ease-in-out}}")
-    parts.append(f"@media (prefers-reduced-motion: reduce){{.{prefix}-f{{animation: none}}}}")
-    return "<style>" + "".join(parts) + "</style>"
-
-
-def busy_attrs(prefix, seconds, spread=0.5):
-    names = {LIGHT: "l", BASE: "b", SHADE: "s"}
-    return lambda i, n, tone: f' class="{prefix}-f {prefix}-{names[tone]}" style="animation-delay: {-(i / n) * seconds * spread:.2f}s"'
-
-
 def sweep_style(prefix, accent, seconds):
     t = tones(accent)
     frames = f"0%{{fill: {t[LIGHT]}}}33%{{fill: {t[BASE]}}}66%{{fill: {t[SHADE]}}}100%{{fill: {t[LIGHT]}}}"

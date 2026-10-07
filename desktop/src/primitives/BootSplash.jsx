@@ -1,12 +1,10 @@
-import { ALPACA_FOLD, FOLD_SIZES } from "../../../common/folds.mjs";
-import Fold from "./Fold.jsx";
+import Busy from "./Busy.jsx";
 import styles from "./BootSplash.module.css";
 
-export default function BootSplash({ message = "Connecting to daemon…" }) {
+export default function BootSplash({ message = "Reaching the daemon", active = true }) {
   return (
     <div className={styles.root}>
-      <Fold fold={ALPACA_FOLD} size={FOLD_SIZES.hero} className={styles.glyph} />
-      <span className={styles.msg}>{message}</span>
+      <Busy active={active} page label={message} />
     </div>
   );
 }

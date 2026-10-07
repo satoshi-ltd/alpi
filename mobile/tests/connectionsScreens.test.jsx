@@ -1,12 +1,13 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 afterEach(cleanup);
 
 const h = vi.hoisted(() => ({
   call: vi.fn(async () => ({})),
   summary: null,
+  loading: false,
   refresh: vi.fn(async () => null),
   params: { id: 'conn_1' },
   endpoint: { id: 'phone-conn', deviceId: 'dev_me' },
@@ -26,7 +27,6 @@ vi.mock('react-native', () => {
     Pressable,
     ScrollView: ({ children, contentContainerStyle, keyboardShouldPersistTaps, refreshControl, ...p }) => React.createElement('div', p, children),
     RefreshControl: () => null,
-    ActivityIndicator: () => React.createElement('span', { 'data-testid': 'spinner' }),
     Share: { share: vi.fn(async () => ({})) },
     StyleSheet: { create: (s) => s },
     TextInput: ({ value, onChangeText, placeholder, style, ...p }) =>
@@ -34,6 +34,9 @@ vi.mock('react-native', () => {
   };
 });
 
+vi.mock('../src/components/Busy', () => ({
+  Busy: ({ label, visible, fill }) => (visible === false ? React.createElement('div', { 'data-busy-slot': String(!!fill) }) : React.createElement('div', { 'data-busy': String(!!fill) }, label)),
+}));
 vi.mock('../src/components/Dot', () => ({ Dot: () => React.createElement('span', { 'data-dot': 'true' }) }));
 
 vi.mock('../src/components/Toggle', () => ({
@@ -95,7 +98,7 @@ vi.mock('../src/components/TypedConfirm', () => ({
 }));
 vi.mock('../src/hooks/useBack', () => ({ useBack: () => vi.fn() }));
 vi.mock('../src/hooks/useDaemonData', () => ({
-  useConnectionsSummary: () => ({ data: h.summary, loading: false, error: null, refresh: h.refresh }),
+  useConnectionsSummary: () => ({ data: h.summary, loading: h.loading, error: null, refresh: h.refresh }),
   useProfileSummaries: () => ({ data: { profiles: [{ name: 'doc' }, { name: 'abby' }] }, loading: false, refresh: vi.fn() }),
 }));
 vi.mock('../src/lib/EndpointContext', () => ({
@@ -126,6 +129,7 @@ beforeEach(() => {
   h.push.mockClear();
   h.replace.mockClear();
   h.summary = SUMMARY;
+  h.loading = false;
   h.params = { id: 'conn_1' };
   h.endpoint = { id: 'phone-conn', deviceId: 'dev_me' };
 });
@@ -278,5 +282,41 @@ describe('connection detail', () => {
     expect(screen.getByText('Local host')).toBeTruthy();
     expect(screen.queryByText('+ Add device')).toBeNull();
     expect(screen.queryByText('Delete connection')).toBeNull();
+  });
+});
+
+describe('connections page waiting on the daemon', () => {
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] }); });
+  afterEach(() => { vi.useRealTimers(); });
+  const tick = (ms) => act(() => { vi.advanceTimersByTime(ms); });
+
+  it('shows the ink alpaca with what it waits for after 300 ms and holds it 400 ms after the answer', () => {
+    h.summary = null;
+    h.loading = true;
+    const view = render(<ConnectionsRoute />);
+    expect(screen.queryByText('Reaching the daemon')).toBeNull();
+    tick(300);
+    expect(screen.getByText('Reaching the daemon').dataset.busy).toBe('true');
+    h.summary = SUMMARY;
+    h.loading = false;
+    view.rerender(<ConnectionsRoute />);
+    expect(screen.getByText('Reaching the daemon')).toBeTruthy();
+    expect(screen.queryByText('Support')).toBeNull();
+    tick(400);
+    expect(screen.queryByText('Reaching the daemon')).toBeNull();
+    expect(screen.getByText('Support')).toBeTruthy();
+  });
+
+  it('never flashes the wait when the daemon answers inside the delay', () => {
+    h.summary = null;
+    h.loading = true;
+    const view = render(<ConnectionsRoute />);
+    tick(100);
+    h.summary = SUMMARY;
+    h.loading = false;
+    view.rerender(<ConnectionsRoute />);
+    expect(screen.getByText('Support')).toBeTruthy();
+    tick(1000);
+    expect(screen.queryByText('Reaching the daemon')).toBeNull();
   });
 });

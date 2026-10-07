@@ -1,6 +1,6 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { radii, space } from '../../../../src/theme/tokens';
 
@@ -17,6 +17,7 @@ import { useEndpoint } from '../../../../src/lib/EndpointContext';
 import { accentForPubkey, foldForPubkey } from '../../../../src/lib/localFold';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 import { EMPTY } from '../../../../../common/emptyCopy.mjs';
+import { ListSkeleton } from '../../../../src/components/ListSkeleton';
 
 function shortPubkey(pk) {
   if (!pk) return '—';
@@ -133,9 +134,7 @@ export default function PeersList() {
 
         <SectionHeader>Trusted</SectionHeader>
         {loading && peers.length === 0 ? (
-          <View style={{ padding: space.s10, alignItems: 'center' }}>
-            <ActivityIndicator color={colors.ink3} />
-          </View>
+          <ListSkeleton rows={3} label="Loading trusted peers" />
         ) : (
           <RowGroup>
             {peers.length === 0 ? (

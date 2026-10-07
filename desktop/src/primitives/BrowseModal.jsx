@@ -87,7 +87,6 @@ export function BrowseBody({
   list,
   loading = false,
   loadingLabel = "Loading",
-  accent = null,
   owner = null,
   sections = null,
   section = null,
@@ -156,7 +155,7 @@ export function BrowseBody({
         </Tip>
       </header>
       <div className={styles.syncSlot}>
-        <RefreshBar active={loading} accent={accent} controlled label={loadingLabel} />
+        <RefreshBar active={loading} controlled label={loadingLabel} />
       </div>
 
       <div className={styles.body}>

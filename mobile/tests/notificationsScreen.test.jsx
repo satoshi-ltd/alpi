@@ -45,7 +45,6 @@ vi.mock('react-native', () => {
     FlatList,
     ScrollView: ({ children }) => React.createElement('div', {}, children),
     RefreshControl: () => null,
-    ActivityIndicator: () => React.createElement('span', {}),
     AccessibilityInfo: { isReduceMotionEnabled: async () => false, addEventListener: () => ({ remove: () => {} }) },
   };
 });

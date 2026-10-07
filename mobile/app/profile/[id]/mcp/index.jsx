@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../../../src/theme/tokens';
 
@@ -19,6 +19,8 @@ import { describeError } from '../../../../src/lib/rpc';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 import { usePullRefresh } from '../../../../src/hooks/usePullRefresh';
 import { EMPTY } from '../../../../../common/emptyCopy.mjs';
+import { ListSkeleton } from '../../../../src/components/ListSkeleton';
+import { Busy } from '../../../../src/components/Busy';
 
 export default function McpList() {
   const { id } = useLocalSearchParams();
@@ -70,9 +72,7 @@ export default function McpList() {
       />
       <ScrollView refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />}>
         {loading && servers.length === 0 ? (
-          <View style={{ padding: space.s10, alignItems: 'center' }}>
-            <ActivityIndicator color={colors.ink3} />
-          </View>
+          <ListSkeleton rows={3} label="Loading MCP servers" style={{ marginTop: space.s5 }} />
         ) : error && !profile ? (
           <LoadFailed inline label="MCP servers" error={error} onRetry={() => refresh?.()} />
         ) : (
@@ -157,18 +157,7 @@ export default function McpList() {
             {`tools${Array.isArray(tools) && tools.length ? ` · ${tools.length}` : ''}`}
           </SectionHeader>
           {tools === null ? (
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: space.s3,
-                paddingHorizontal: space.s8,
-                paddingVertical: space.s4,
-              }}
-            >
-              <ActivityIndicator color={colors.ink3} />
-              <Text style={{ fontFamily: fonts.sans.regular, color: colors.ink3, fontSize: fontSizes.sm }}>handshaking with server…</Text>
-            </View>
+            <Busy size={18} label="Handshaking with the server" style={{ paddingHorizontal: space.s8, paddingVertical: space.s4 }} />
           ) : toolsError ? (
             <LoadFailed inline showDetail label="tools" error={toolsError} onRetry={() => setToolsAttempt((n) => n + 1)} />
           ) : tools.length === 0 ? (

@@ -1,7 +1,8 @@
 import { useEffect, useMemo } from "react";
 import ProfileDetail from "../features/settings/ProfileDetail.jsx";
 import WorkgroupDetail from "../features/settings/WorkgroupDetail.jsx";
-import RefreshBar from "../primitives/RefreshBar.jsx";
+import { BusyMark } from "../primitives/Busy.jsx";
+import { useBusyVisible } from "../lib/useBusyVisible.js";
 import ConnectionsPage from "../features/settings/ConnectionsPage.jsx";
 import styles from "../features/settings/Settings.module.css";
 
@@ -40,6 +41,10 @@ export default function Settings({
     return workgroups.find((w) => w.id === target.id) ?? null;
   }, [workgroups, target]);
 
+  const nothingYet = !selectedProfile && !selectedWorkgroup && target?.kind !== "connections";
+  const fetching = nothingYet && connectionSyncing && !!target?.id;
+  const waiting = useBusyVisible(fetching, `${target?.kind ?? ""}:${target?.id ?? ""}`);
+
   // Default the first time settings opens with no target.
   useEffect(() => {
     if (!target || (target.kind === "profile" && !target.id)) {
@@ -50,7 +55,12 @@ export default function Settings({
 
   return (
     <div className={styles.wrap}>
-      {selectedProfile && (
+      {waiting && (
+        <div className={styles.empty}>
+          <BusyMark label="Fetching latest settings" />
+        </div>
+      )}
+      {!waiting && selectedProfile && (
         <ProfileDetail
           key={`${activeConnection?.id ?? "local"}:${selectedProfile.name}`}
           profile={selectedProfile}
@@ -70,7 +80,7 @@ export default function Settings({
           }
         />
       )}
-      {selectedWorkgroup && (
+      {!waiting && selectedWorkgroup && (
         <WorkgroupDetail
           key={`${activeConnection?.id ?? "local"}:${selectedWorkgroup.id}:${refreshTick}`}
           workgroup={selectedWorkgroup}
@@ -96,22 +106,8 @@ export default function Settings({
       {target?.kind === "connections" && !canManageConnections && (
         <div className={styles.empty}>Admin access required</div>
       )}
-      {!selectedProfile && !selectedWorkgroup && target?.kind !== "connections" && (
-        <div className={styles.empty}>
-          {connectionSyncing && target?.id ? (
-            <>
-              <RefreshBar
-                active
-                accent={activeConnection?.accent || null}
-                controlled
-                label="Fetching latest settings"
-              />
-              Fetching latest settings…
-            </>
-          ) : (
-            "No selection"
-          )}
-        </div>
+      {!waiting && nothingYet && (
+        <div className={styles.empty}>{fetching ? null : "No selection"}</div>
       )}
     </div>
   );

@@ -13,7 +13,6 @@ vi.mock('react-native', () => {
     Text,
     Pressable,
     ScrollView: View,
-    ActivityIndicator: () => React.createElement('span', { 'data-testid': 'spinner' }),
     TextInput: (props) => React.createElement('input', props),
     useColorScheme: () => 'light',
     Alert: { alert: vi.fn() },

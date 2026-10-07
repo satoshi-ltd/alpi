@@ -33,10 +33,10 @@ function Row() {
   );
 }
 
-export function InboxSkeleton({ rows = 6 }) {
+export function InboxSkeleton({ rows = 6, label }) {
   const { colors } = useTheme();
   return (
-    <View style={{ flex: 1 }}>
+    <View accessible={!!label} accessibilityRole={label ? 'progressbar' : undefined} accessibilityLabel={label} style={{ flex: 1 }}>
       {Array.from({ length: rows }).map((_, i) => (
         <View key={i}>
           {i > 0 ? (

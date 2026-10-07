@@ -7,6 +7,7 @@ from desktop_boards import (HOVER, INK, INK2, INK3, INK4, LINE, LINE2, MONO, PAN
                             meterchip, phase_count, selectish, settings_rail, state_chip, textarea)
 from desktop_overlays import checkbox, dialog_footer, dropdown_row, dropdown_trigger, ds_field, menu_item, modal
 from mobile_overlays import action_item, picker_row, separator, sheet_header
+from loading_studies import DUR_LOOP, DUR_SPIN, PULSE_MS, SPINNER_TURN_MS, waiting
 
 AMBER, ACCENT_LIGHT, ACCENT_DARK = "#14110c", "#14110c", "#f3efe6"
 TOKENS_MJS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "common", "tokens.mjs")
@@ -168,6 +169,7 @@ def desktop_components_board():
 <div style="display: flex; gap: 22px; align-items: flex-start">{specimen("Context menu · 6/10 rows, radius 4", menu, 260)}{specimen("Dropdown menu · 8/10 rows, caption mono 11, active = selected fill", dropdown, 300)}{specimen("Banners · danger with Retry · warning", banner, 560)}</div>
 <div style="display: flex; gap: 22px; align-items: flex-start">{specimen("Modal 520 · title 18 · content scrolls · DialogFooter (ghost Cancel, primary)", modal_spec, 552, SIDE)}{specimen("ConfirmDelete · typed only for irreversible deletes · waits for the delete", confirm_spec, 492, SIDE)}</div>
 {specimen("NotificationBody · a digest as entries (name, address in mono, text) · a failed run as a flat card: red on the mark and the word failed, facts, trace folded under Details, Run again and Open job", notification_reader(420))}
+{specimen("Waiting · Busy for a page or a section, SpinnerIcon inside controls, shimmering skeleton rows and lines for lists and readers", waiting())}
 <div style="display: flex; gap: 22px; align-items: flex-start">{specimen("LoadFailed · card and inline (role alert)", load_failed, 420)}{specimen("EmptyState · glyph, display heading, mono subtitle, one action", empty, 620)}</div>
 </div>"""
     return page("System · desktop components", 1280, DESKTOP_COMPONENTS_H, body)
@@ -216,6 +218,7 @@ def mobile_components_board():
 <div style="display: flex; gap: 22px; align-items: flex-start">{specimen("PickerRow · 7 px dot, selected fill, one style everywhere", picker, 392)}{specimen("ActionSheet items · 20 px icon slot, mono detail, danger", actions, 392)}</div>
 <div style="display: flex; gap: 22px; align-items: flex-start">{specimen("Sheet · grabber, title 18, mono subtitle, X · primaryAction [secondary, primary] · dismissible=false for decisions", sheet_spec, 422, SIDE)}{specimen("TypedConfirm · danger + typed for deletes · neutral untyped for reversible actions", confirm, 400, SIDE)}</div>
 <div style="display: flex; gap: 22px; align-items: flex-start">{specimen("Toast · top, max 560, 2.8 s", toast, 392)}{specimen("Banner · daemon states", banners, 392)}{specimen("JumpToLatest", jump, 200)}</div>
+{specimen("Waiting · Busy for a page or a section, the Spinner arc inside controls, pulsing skeleton rows inside the cards they will fill · no ActivityIndicator", waiting(mobile=True))}
 {specimen("LoadFailed · card and inline row (accessibilityRole alert)", load_failed, 780)}
 {specimen("NotificationBody · digest entries · a failed run as a flat card on the group tone, Details folds at 44 pt, Run again and Open job", notification_reader(360, 14, mobile=True))}
 </div>"""
@@ -223,8 +226,8 @@ def mobile_components_board():
 
 
 TOKENS_H = 2580
-DESKTOP_COMPONENTS_H = 2600
-MOBILE_COMPONENTS_H = 3450
+DESKTOP_COMPONENTS_H = 3080
+MOBILE_COMPONENTS_H = 3870
 
 DESKTOP_MOTION = [
     ("Hover, press, tooltip", "--dur-1 · 120 ms", "colour and opacity only"),
@@ -232,8 +235,10 @@ DESKTOP_MOTION = [
     ("Streaming text", "150 ms", "only the newest chunk fades; nothing already shown re-animates"),
     ("Steps and reasoning open", "--dur-2 · 200 ms", "grid-rows reveal; reasoning folds itself when the answer lands"),
     ("Modal and dialog exit", "120 ms", "fade and scale down; a timer closes it if the animation never ends"),
-    ("Working pulse, dots", "--dur-loop · 1.4 s", "the only loops; every loop shares one duration"),
-    ("Spinner", "--dur-spin · 0.9 s", "busy buttons and loaders"),
+    ("Working pulse, dots", "--dur-loop · 1.4 s", "a phase or a profile at work; the only loop that carries a profile colour"),
+    ("Busy mark", "1.6 s wave", "the brand alpaca for a page or section wait: after 300 ms, at least 400 ms on screen, opacity only"),
+    ("Spinner", f"--dur-spin · {DUR_SPIN} s", "SpinnerIcon, a dashed circle inside Button, Chip, the stopping Send, attachments and read aloud"),
+    ("Skeleton shimmer", f"--dur-loop · {DUR_LOOP} s", "skShimmer over SkeletonRows and SkeletonReader lines, an ink 9 % highlight"),
     ("Reduced motion", "global rule", "one prefers-reduced-motion rule stops every animation and transition"),
 ]
 MOBILE_MOTION = [
@@ -246,6 +251,9 @@ MOBILE_MOTION = [
     ("Keyboard", "frame by frame", "the composer rides the keyboard with useAnimatedKeyboard; swipe down dismisses"),
     ("Long press", "350 ms · pulse 160 ms", "nothing moves on a tap or a scroll; only a recognised long press pulses once with the haptic as the menu opens"),
     ("Working pulse", "1.4 s", "roster state dot; static under reduce motion"),
+    ("Busy mark", "1.6 s wave", "the brand alpaca for a page or section wait: after 300 ms, at least 400 ms on screen"),
+    ("Spinner", f"{SPINNER_TURN_MS} ms turn", "a 270° arc inside Button, attachment cards, rich text images, the member sheet and the model sheets; RefreshControl stays the system gesture"),
+    ("Skeleton", f"{PULSE_MS} ms pulse", "SkeletonBar opacity 0.4 ↔ 0.8 inside the RowGroup cards they will fill; still at 0.6 under reduce motion"),
     ("Reduce motion", "one shared value", "every fade, pulse and shimmer reads one app-wide setting"),
 ]
 HAPTICS = [
@@ -263,7 +271,7 @@ def motion_board():
             f'<span style="font-size: 13px; color: {INK}">{a}</span><span style="font-family: {MONO}; font-size: 12px; color: {INK2}">{b}</span><span style="font-size: 12.5px; line-height: 1.5; color: {INK3}">{c}</span></div>'
             for a, b, c in rows)
     body = f"""<div style="padding: 40px 48px; display: flex; flex-direction: column; gap: 22px; box-sizing: border-box">
-{h1("Motion and feel", "Still boards cannot move, so this page states what moves, for how long and what it answers to. Motion marks change: a new turn, the streaming edge, a step opening, the keyboard. Nothing decorative loops except the working pulse, and reduced motion turns it all off.")}
+{h1("Motion and feel", "Still boards cannot move, so this page states what moves, for how long and what it answers to. Motion marks change: a new turn, the streaming edge, a step opening, the keyboard. Nothing loops except the working pulse, the brand busy wave, the control spinner and the skeleton shimmer or pulse, and reduced motion turns it all off.")}
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: start">
 <div style="display: flex; flex-direction: column">{label("Desktop")}<div style="height: 8px"></div>{table(DESKTOP_MOTION, "170px 140px 1fr")}</div>
 <div style="display: flex; flex-direction: column">{label("Phone and Fold")}<div style="height: 8px"></div>{table(MOBILE_MOTION, "150px 130px 1fr")}</div>

@@ -10,11 +10,13 @@ vi.mock('react-native', () => ({
   View: ({ children }) => React.createElement('div', {}, children),
   Text: ({ children }) => React.createElement('span', {}, children),
   Pressable: ({ children, onPress }) => React.createElement('button', { type: 'button', onClick: onPress }, children),
-  ActivityIndicator: () => React.createElement('span', { 'data-spinner': 'true' }),
 }));
 vi.mock('expo-router', () => ({ useRouter: () => ({ replace: vi.fn() }), useSegments: () => ['index'] }));
 vi.mock('../components/Fold', () => ({
   Fold: ({ fold, color, size }) => React.createElement('span', { 'data-fold': fold, 'data-color': color ?? '', 'data-size': size }),
+}));
+vi.mock('../components/Busy', () => ({
+  Busy: ({ label, size }) => React.createElement('span', { 'data-busy': size }, label),
 }));
 vi.mock('../features/aln/backgroundTask', () => ({ ensureRegistered: async () => {} }));
 vi.mock('./biometric', () => ({
@@ -42,12 +44,11 @@ beforeEach(() => {
 const markOf = (container) => container.querySelector('[data-fold]');
 
 describe('AppBootstrap brand mark', () => {
-  it('draws the alpaca fold in the theme ink while connecting', async () => {
-    const { container } = render(<AppBootstrap><span>app</span></AppBootstrap>);
+  it('waits with the ink alpaca and its words while connecting, never a still mark beside a spinner', async () => {
+    const { container, getByText } = render(<AppBootstrap><span>app</span></AppBootstrap>);
     await act(async () => {});
-    expect(markOf(container).getAttribute('data-fold')).toBe('alpaca');
-    expect(markOf(container).getAttribute('data-color')).toBe('');
-    expect(markOf(container).getAttribute('data-size')).toBe('64');
+    expect(getByText('Connecting').getAttribute('data-busy')).toBe('64');
+    expect(markOf(container)).toBeNull();
   });
 
   it('draws the alpaca fold on the biometric lock screen', async () => {

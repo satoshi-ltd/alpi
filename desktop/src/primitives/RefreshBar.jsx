@@ -4,7 +4,6 @@ const DURATION_MS = 800;
 
 export default function RefreshBar({
   active,
-  accent,
   controlled = false,
   label = null,
 }) {
@@ -22,7 +21,6 @@ export default function RefreshBar({
   return (
     <span
       className="refresh-bar"
-      style={accent ? { "--c": accent } : undefined}
       data-controlled={controlled || undefined}
       role={label ? "progressbar" : undefined}
       aria-label={label || undefined}

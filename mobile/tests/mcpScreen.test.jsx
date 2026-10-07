@@ -21,7 +21,6 @@ vi.mock('react-native', () => {
     Pressable,
     ScrollView: ({ children }) => React.createElement('div', {}, children),
     RefreshControl: () => null,
-    ActivityIndicator: () => React.createElement('span', { 'data-testid': 'spinner' }),
   };
 });
 
@@ -43,6 +42,10 @@ vi.mock('../src/theme/ThemeContext', () => ({
   }),
 }));
 
+vi.mock('../src/components/Busy', () => ({
+  Busy: ({ label, size }) => React.createElement('span', { 'data-busy': size }, label),
+}));
+vi.mock('../src/components/ListSkeleton', () => ({ ListSkeleton: ({ label }) => React.createElement('div', { 'data-skeleton': label }) }));
 vi.mock('../src/components/Button', () => ({ Button: ({ title }) => React.createElement('button', { type: 'button' }, title) }));
 vi.mock('../src/components/Pill', () => ({ Pill: ({ children }) => React.createElement('span', {}, children) }));
 vi.mock('../src/components/Row', () => ({
@@ -78,10 +81,10 @@ function openServer() {
 }
 
 describe('MCP server sheet typography', () => {
-  it('renders the handshake notice in a theme font', () => {
+  it('waits for the handshake with the small ink alpaca and its words', () => {
     h.call.mockReturnValue(new Promise(() => {}));
     openServer();
-    expect(screen.getByText('handshaking with server…').getAttribute('data-font')).toBe('Geist_400Regular');
+    expect(screen.getByText('Handshaking with the server').getAttribute('data-busy')).toBe('18');
   });
 
   it('renders the handshake failure in a theme font', async () => {

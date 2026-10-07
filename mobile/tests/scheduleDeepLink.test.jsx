@@ -29,7 +29,6 @@ vi.mock('react-native', () => {
     View, Text, Pressable,
     ScrollView: ({ children }) => React.createElement('div', {}, children),
     RefreshControl: () => null,
-    ActivityIndicator: () => null,
     Alert: { alert: (...a) => h.alert(...a) },
   };
 });

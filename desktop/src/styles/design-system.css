@@ -661,7 +661,7 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
   display: block;
   width: 60%;
   height: 100%;
-  background: var(--c, var(--accent));
+  background: var(--accent);
   animation: ds-refresh-bar 800ms var(--ease);
 }
 .refresh-bar[data-controlled] > i {

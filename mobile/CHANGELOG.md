@@ -14,6 +14,14 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.7.3 — 2026-10-07 — waiting is quiet and in ink
+
+- **The platform spinner is gone** (pull to refresh keeps the system gesture). A page or section that waits shows the alpaca in flat brand ink with what it waits for in words, after 300 ms and for at least 400 ms; controls share one ink arc; still under reduce motion.
+- **Lists and readers draw placeholder rows inside the cards they will fill,** and headers no longer say “loading”: the subtitle holds its place until the data lands.
+- **A running pipeline draws its chain at once** from the workgroup row and fills it in place when the run arrives; several pipelines, or a blocked or finished run, show placeholder chips; an idle or queued workgroup, or a failed call, shows nothing, as before.
+
+  Requires alpi 0.17.5.
+
 ## v0.7.2 — 2026-10-07 — schedules with a description, and counts on what needs you
 
 - **The schedule list and page read like the rest of the app.** Jobs show their title, one line of what they do, their state and the next run, grouped as Needs you, Active and Paused with no cron string in the rows. The page opens on the failure banner when the last run failed, then About, When (the sentence with the cron as a chip), Next, Last run and Runs, and the prompt in its own box.

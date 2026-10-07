@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { KeyboardPane } from '../../src/components/KeyboardPane';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { radii, space } from '../../src/theme/tokens';
@@ -52,6 +52,9 @@ import { usePane } from '../../src/nav/PaneContext';
 import { resolveMembers } from '../../src/lib/workgroupMembers';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { EMPTY, postsHint } from '../../../common/emptyCopy.mjs';
+import { Busy } from '../../src/components/Busy';
+import { useBusyVisible } from '../../src/hooks/useBusyVisible';
+import { SubtitleSkeleton } from '../../src/components/SubtitleSkeleton';
 
 const INITIAL_PAGE = 30;
 const PAGE_STEP = 30;
@@ -250,9 +253,7 @@ const WgList = forwardRef(function WgList(
       }}
       ListFooterComponent={
         hasMore ? (
-          <View style={{ padding: space.s5, alignItems: 'center' }}>
-            <ActivityIndicator color={colors.ink3} size="small" />
-          </View>
+          <Busy size={18} label="Earlier messages" style={{ padding: space.s5, justifyContent: 'center' }} />
         ) : null
       }
     />
@@ -342,6 +343,8 @@ function WorkgroupChatInner() {
   );
 
   const profile = wg?.profile ?? null;
+  const opening = wgs.loading && !wg;
+  const holding = useBusyVisible(opening);
   const transcript = useWorkgroupTranscript(profile, id);
   const taskState = useWorkgroupTasks(profile, id);
   const memberList = useWorkgroupMembers(profile, id);
@@ -539,13 +542,11 @@ function WorkgroupChatInner() {
     );
   }
 
-  if (wgs.loading && !wg) {
+  if (opening || holding) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ChatHeader kind="workgroup" accent={colors.ink3} title={`#${id}`} meta="loading…" onBack={goBack} />
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator color={colors.ink3} />
-        </View>
+        <ChatHeader kind="workgroup" accent={colors.ink3} title={`#${id}`} meta={<SubtitleSkeleton />} onBack={goBack} />
+        <Busy fill visible={holding} label={`Opening #${id}`} />
       </SafeAreaView>
     );
   }
@@ -664,6 +665,11 @@ function WorkgroupChatInner() {
       ) : null}
       <PipelineStrip
         run={pipelineRun}
+        pending={!taskState.data && !taskState.error}
+        mode={!!wg?.pipeline_mode}
+        status={wg?.pipeline_status ?? null}
+        pipelines={wg?.pipelines}
+        launch={wg?.launch_pipeline}
         phaseMap={wg?.phase_map}
         active={activeTask}
         profileOf={profileOf}

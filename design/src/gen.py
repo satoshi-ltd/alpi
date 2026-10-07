@@ -102,6 +102,7 @@ def role_ic(role, size=16, color="currentColor", stroke=2):
 
 
 LIGHT_ACCENT = "#14110c"
+THEMED_ACCENT = "#8a5a0a"
 FOLD_OF = {"alpi": "alpaca", "doc": "shield", "abby": "plane", "galt": "box", "lingo": "star"}
 
 
@@ -110,7 +111,8 @@ def identity_glyph(name, color, px=16, legacy=None):
     shape = FOLD_OF.get(name)
     if shape == "alpaca":
         big = round(px * 1.3)
-        return f'<span style="width: {px}px; height: {px}px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">{folds.fold(shape, LIGHT_ACCENT, big)}</span>'
+        themed = folds.fold(shape, LIGHT_ACCENT, big, facet_attrs=lambda i, n, tone: f' style="fill: {THEMED_ACCENT}"')
+        return f'<span style="width: {px}px; height: {px}px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">{themed}</span>'
     if shape:
         return folds.fold(shape, color, px)
     return folds.fold("diamond", color, px)
@@ -994,7 +996,7 @@ def build(desktop_boards):
         ("Foundations", [("System-Tokens.dc.html", SYSTEM["tokens"](), TOKENS_H, "System · tokens"), ("System-Motion.dc.html", SYSTEM["motion"](), 900, "System · motion and feel")]),
         ("Controls and feedback", [("System-DesktopComponents.dc.html", SYSTEM["desktop"](), DESKTOP_COMPONENTS_H, "Desktop · controls and feedback"), ("System-MobileComponents.dc.html", SYSTEM["mobile"](), MOBILE_COMPONENTS_H, "Mobile · controls and feedback")]),
         ("Conversation", [("System-DesktopConversation.dc.html", CONVERSATION["desktop"](), 2520, "Desktop · conversation"), ("System-MobileConversation.dc.html", CONVERSATION["mobile"](), 1400, "Mobile · conversation")]),
-        ("Workgroups", [("System-DesktopWorkgroup.dc.html", CONVERSATION["desktop_wg"](), 1880, "Desktop · workgroups"), ("System-MobileWorkgroup.dc.html", CONVERSATION["mobile_wg"](), 1290, "Mobile · workgroups")]),
+        ("Workgroups", [("System-DesktopWorkgroup.dc.html", CONVERSATION["desktop_wg"](), 2220, "Desktop · workgroups"), ("System-MobileWorkgroup.dc.html", CONVERSATION["mobile_wg"](), 1560, "Mobile · workgroups")]),
     ):
         y += 240
         title(f"s-{label}", label, y - 223, "system")

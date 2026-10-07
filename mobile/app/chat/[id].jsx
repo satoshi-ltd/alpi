@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
+import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { KeyboardPane } from '../../src/components/KeyboardPane';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { radii, space, typography } from '../../src/theme/tokens';
@@ -52,6 +52,9 @@ import { markProfileRead } from '../../src/lib/readState';
 import { usePane } from '../../src/nav/PaneContext';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { useCanAdminEarly } from '../../src/hooks/useActiveRole';
+import { Busy } from '../../src/components/Busy';
+import { useBusyVisible } from '../../src/hooks/useBusyVisible';
+import { SubtitleSkeleton } from '../../src/components/SubtitleSkeleton';
 
 function relativeTime(ms) {
   if (!ms) return '';
@@ -295,9 +298,7 @@ function ChatList({ turns, pendingTurn, hydrating, profileName, model, accent, f
       removeClippedSubviews
       ListFooterComponent={
         hasMore ? (
-          <View style={{ padding: space.s5, alignItems: 'center' }}>
-            <ActivityIndicator color={colors.ink3} size="small" />
-          </View>
+          <Busy size={18} label="Earlier messages" style={{ padding: space.s5, justifyContent: 'center' }} />
         ) : null
       }
     />
@@ -386,6 +387,8 @@ function ProfileChatInner() {
     () => summaries.data?.profiles?.find((p) => p.name === id) ?? null,
     [summaries.data, id],
   );
+  const opening = summaries.loading && !profile;
+  const holding = useBusyVisible(opening);
 
   const latestChatId =
     profile?.latest_session?.kind === 'chat' ? profile.latest_session.id : null;
@@ -595,13 +598,11 @@ function ProfileChatInner() {
     );
   }
 
-  if (summaries.loading && !profile) {
+  if (opening || holding) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ChatHeader kind="profile" accent={colors.ink3} title={`@${profileLabel(id)}`} meta="loading…" onBack={goBack} />
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator color={colors.ink3} />
-        </View>
+        <ChatHeader kind="profile" accent={colors.ink3} title={`@${profileLabel(id)}`} meta={<SubtitleSkeleton />} onBack={goBack} />
+        <Busy fill visible={holding} label={`Opening @${profileLabel(id)}`} />
       </SafeAreaView>
     );
   }

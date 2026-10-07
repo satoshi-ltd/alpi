@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { lineHeights, space } from '../../../../src/theme/tokens';
 
@@ -10,6 +10,7 @@ import { useBack } from '../../../../src/hooks/useBack';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
 import { fileSize } from '../../../../src/lib/skillDetail';
 import { useTheme } from '../../../../src/theme/ThemeContext';
+import { ReaderSkeleton } from '../../../../src/components/ReaderSkeleton';
 
 export default function SkillFile() {
   const { id, name, category, file } = useLocalSearchParams();
@@ -37,9 +38,7 @@ export default function SkillFile() {
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <PanelHeader profile={id} section={`SKILLS · ${String(name ?? '').toUpperCase()}`} onBack={goBack} />
       {state.loading ? (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator color={colors.ink3} />
-        </View>
+        <ReaderSkeleton label="Loading the file" />
       ) : !f ? (
         <View style={{ padding: space.s8, gap: space.s2 }}>
           <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, color: colors.ink2 }}>Could not open {String(file)}</Text>

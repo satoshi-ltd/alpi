@@ -22,14 +22,9 @@
   height: var(--ctrl-2xs);
 }
 
-.sm .dot,
-.sm .spinner {
+.sm .dot {
   width: var(--space-3);
   height: var(--space-3);
-}
-
-.sm .spinner {
-  border-width: 1.2px;
 }
 
 .ghost {
@@ -96,19 +91,15 @@
   font-weight: var(--fw-semibold);
 }
 
-.spinner {
+.chip .spinner {
   width: var(--space-5);
   height: var(--space-5);
-  border-radius: 50%;
-  border: 1.5px solid currentColor;
-  border-right-color: transparent;
+  stroke-width: 2;
   opacity: 0.6;
-  animation: chipSpin var(--dur-spin) linear infinite;
-  flex-shrink: 0;
 }
 
-@keyframes chipSpin {
-  to {
-    transform: rotate(360deg);
-  }
+.chip.sm .spinner {
+  width: var(--space-3);
+  height: var(--space-3);
+  stroke-width: 2.4;
 }

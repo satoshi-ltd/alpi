@@ -1,6 +1,7 @@
 import { forwardRef } from "react";
 import { buttonDefaults, buttonHeights, buttonVariants } from "../../../common/button.mjs";
 import Tip from "./Tip.jsx";
+import { SpinnerIcon } from "./icons.jsx";
 import styles from "./Button.module.css";
 
 export function tipSideFor(direction = "down", align = "center") {
@@ -67,7 +68,7 @@ const Button = forwardRef(function Button({
       onClick={onClick}
       aria-label={accessibleName}
     >
-      {loading && <span className={styles.spinner} aria-hidden />}
+      {loading && <SpinnerIcon className={styles.spinner} />}
       {icon && !loading && <span className={styles.icon}>{icon}</span>}
       {children}
     </button>

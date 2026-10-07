@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useMemo } from 'react';
-import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { radii, space } from '../../../../../src/theme/tokens';
 
@@ -11,6 +11,9 @@ import { PanelHeader } from '../../../../../src/features/profile/PanelHeader';
 import { useBack } from '../../../../../src/hooks/useBack';
 import { useTools } from '../../../../../src/hooks/useDaemonData';
 import { useTheme } from '../../../../../src/theme/ThemeContext';
+import { Busy } from '../../../../../src/components/Busy';
+import { useBusyVisible } from '../../../../../src/hooks/useBusyVisible';
+import { SubtitleSkeleton } from '../../../../../src/components/SubtitleSkeleton';
 
 function formatType(schema) {
   if (!schema) return '—';
@@ -28,14 +31,14 @@ export default function ToolDetail() {
     () => (tools.data?.tools ?? []).find((t) => t.name === String(name)) ?? null,
     [tools.data, name],
   );
+  const opening = tools.loading && !tools.data;
+  const holding = useBusyVisible(opening);
 
-  if (tools.loading && !tools.data) {
+  if (opening || holding) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ScreenHeader title={String(name ?? '')} subtitle="TOOL · LOADING" onBack={goBack} />
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator color={colors.ink3} />
-        </View>
+        <ScreenHeader title={String(name ?? '')} subtitle={<SubtitleSkeleton />} onBack={goBack} />
+        <Busy fill visible={holding} label="Opening the tool" />
       </SafeAreaView>
     );
   }

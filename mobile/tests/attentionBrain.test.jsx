@@ -24,7 +24,6 @@ vi.mock('react-native', () => {
     Text: ({ children }) => R.createElement('span', {}, children),
     ScrollView: ({ children }) => R.createElement('div', {}, children),
     RefreshControl: () => null,
-    ActivityIndicator: () => null,
     TextInput: () => null,
     Alert: { alert: () => {} },
     StyleSheet: { create: (s) => s },

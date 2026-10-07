@@ -39,7 +39,6 @@ vi.mock('react-native', () => {
     Pressable,
     ScrollView: ({ children, refreshControl, ...p }) => React.createElement(View, { ...p, 'data-refresh': refreshControl ? 'true' : 'false' }, children),
     RefreshControl: () => null,
-    ActivityIndicator: () => React.createElement('span', { 'data-testid': 'activity' }),
     StyleSheet: { create: (s) => s, absoluteFillObject: {} },
     useColorScheme: () => 'light',
     useWindowDimensions: () => ({ width: 390, height: 844, scale: 3, fontScale: 1 }),

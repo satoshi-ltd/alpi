@@ -35,6 +35,8 @@ import { SettingsSurface } from '../../../src/nav/SettingsSurface';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { AdminGuard } from '../../../src/components/AdminGuard';
 import { EMPTY } from '../../../../common/emptyCopy.mjs';
+import { SubtitleSkeleton } from '../../../src/components/SubtitleSkeleton';
+import { UsageSkeleton } from '../../../src/components/UsageSkeleton';
 
 const WIDE_BODY_MAX_W = 968;
 
@@ -98,7 +100,7 @@ function WorkgroupSettings() {
   if (loading && !wg) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ScreenHeader title={`#${id}`} subtitle="WORKGROUP · LOADING" onBack={goBack} />
+        <ScreenHeader title={`#${id}`} subtitle={<SubtitleSkeleton />} onBack={goBack} />
         <SettingsSkeleton wide={twoPane} />
       </SafeAreaView>
     );
@@ -325,7 +327,7 @@ function WorkgroupSettings() {
         <SectionHeader kicker="last 14 days">Usage</SectionHeader>
         <RowGroup>
           {usageDays.length === 0 && usage.loading ? (
-            <Row label="Loading usage…" chevron={false} />
+            <SettingsBand><UsageSkeleton /></SettingsBand>
           ) : usageDays.length === 0 ? (
             <Row label={EMPTY.workgroupUsage.title} helper={EMPTY.workgroupUsage.hint} chevron={false} />
           ) : (

@@ -73,7 +73,6 @@ vi.mock('react-native', () => {
     Pressable,
     TextInput,
     SectionList,
-    ActivityIndicator: () => React.createElement('span', { 'data-testid': 'spinner' }),
     RefreshControl: () => null,
     AppState: { addEventListener: () => ({ remove: () => {} }) },
     Keyboard: { addListener: () => ({ remove: () => {} }) },

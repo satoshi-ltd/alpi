@@ -6,6 +6,7 @@ import CodeView from "../primitives/CodeView.jsx";
 import shell from "../primitives/BrowseModal.module.css";
 import { BrowseBody, BrowseShell } from "../primitives/BrowseModal.jsx";
 import { PROFILE_PANELS } from "../lib/profilePanels.js";
+import { SkeletonReader, SkeletonRows } from "../primitives/Skeleton.jsx";
 import styles from "./SkillsModal.module.css";
 import { skillBanner, skillItem, skillWord } from "../../../common/attention.mjs";
 import { EMPTY } from "../../../common/emptyCopy.mjs";
@@ -180,9 +181,7 @@ export function SkillsPanel({ open = true, profile, connectionId, owner = null, 
   const list = (
     <ul className={shell.list} role="listbox">
       {listLoading ? (
-        <li className={shell.empty}>
-          <span className={shell.emptyTitle}>Loading skills…</span>
-        </li>
+        <SkeletonRows as="li" />
       ) : listError ? (
         <li className={shell.empty}>
           <span className={shell.emptyTitle}>Could not load skills</span>
@@ -258,7 +257,7 @@ export function SkillsPanel({ open = true, profile, connectionId, owner = null, 
           flag={selectedFlag}
         />
       ) : detailLoading ? (
-        <div className={shell.detailEmpty}>Loading skill…</div>
+        <SkeletonReader />
       ) : (
         <div className={shell.detailEmpty}>Select a skill.</div>
       )}
@@ -498,7 +497,7 @@ function FileRow({ node, path, active, nested, onSelect }) {
 }
 
 function FileViewer({ file, loading }) {
-  if (loading) return <div className={styles.viewerLoading}>Loading…</div>;
+  if (loading) return <SkeletonReader heading={false} label="Loading file" className={styles.viewerSkeleton} />;
   const kind = viewerKind(file);
   if (kind === "binary") {
     return (
@@ -514,13 +513,13 @@ function FileViewer({ file, loading }) {
         {file.text ? (
           <Markdown source={file.text} className="alpi-md" />
         ) : (
-          <div className={styles.viewerLoading}>Empty file.</div>
+          <div className={styles.viewerNote}>Empty file.</div>
         )}
       </div>
     );
   }
   if (kind === "code") return <CodeView text={file.text || ""} lang={file.ftype} />;
-  return <div className={styles.viewerLoading}>Select a file.</div>;
+  return <div className={styles.viewerNote}>Select a file.</div>;
 }
 
 export default function SkillsModal({ open, onClose, ...panel }) {

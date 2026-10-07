@@ -346,7 +346,6 @@ export default function WorkgroupDetail({
       <div className={styles.syncBarSlot}>
         <RefreshBar
           active={syncing}
-          accent={hub?.accent || null}
           controlled
           label="Fetching latest workgroup settings"
         />

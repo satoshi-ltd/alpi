@@ -19,6 +19,7 @@ import {
 } from "../primitives/index.js";
 import NotificationBody, { ErrorCard } from "./NotificationBody.jsx";
 import WaveBars from "../primitives/WaveBars.jsx";
+import { SkeletonRows } from "../primitives/Skeleton.jsx";
 import Eyebrow from "../primitives/Eyebrow.jsx";
 import { playTts, subscribeTts, VOICE_POOL } from "../lib/tts.js";
 import { useOnline } from "../lib/useOnline.js";
@@ -469,9 +470,7 @@ export default function NotificationsModal({
         </li>
       )}
       {rows.length === 0 && loading ? (
-        <li className={styles.empty}>
-          <span className={styles.emptyHint}>Syncing notifications…</span>
-        </li>
+        <SkeletonRows as="li" />
       ) : rows.length === 0 && unreachable.length > 0 ? (
         <li className={styles.empty}>
           <span className={styles.emptyTitle}>{unreachableTitle(unreachable)}</span>
@@ -620,7 +619,8 @@ function DetailPane({ row, accent, fold, connId, connectionName, voiceId, onCopy
   const ttsDisabled = (!online && !isPlaying) || !row.body;
   const speakLabel = !online && !isPlaying
     ? "Offline — TTS unavailable"
-    : isLoading ? "Loading…" : isPlaying ? "Stop reading" : "Read aloud";
+    : isPlaying ? "Stop reading" : "Read aloud";
+  const speakName = isLoading ? "Read aloud, preparing audio" : speakLabel;
   const onSpeak = () => {
     if (!row.body) return;
     playTts({ key: ttsKey, profile: row.profile, voice: voiceId ?? row.voice_id ?? VOICE_POOL[0], text: row.body, accent });
@@ -644,7 +644,7 @@ function DetailPane({ row, accent, fold, connId, connectionName, voiceId, onCopy
         <span className={styles.detailMetaSpacer} />
         {isLoading || isPlaying ? (
           <Tip text={speakLabel} side="l" escape>
-            <IconBtn aria-label={speakLabel} onClick={onSpeak}>
+            <IconBtn aria-label={speakName} onClick={onSpeak}>
               {isLoading ? <DSSpinnerIcon /> : <WaveBars accent={accent} active />}
             </IconBtn>
           </Tip>
@@ -655,8 +655,8 @@ function DetailPane({ row, accent, fold, connId, connectionName, voiceId, onCopy
           </IconBtn>
           <Popover open={menuOpen} onClose={() => setMenuOpen(false)} align="right" navigable role="menu">
             <div className={styles.menu}>
-              <Button role="menuitem" fullWidth className={styles.menuItem} disabled={ttsDisabled} onClick={run(onSpeak)}>
-                <VolumeIcon className={styles.menuIcon} />
+              <Button role="menuitem" fullWidth className={styles.menuItem} disabled={ttsDisabled} onClick={run(onSpeak)} aria-label={isLoading ? speakName : undefined}>
+                {isLoading ? <DSSpinnerIcon className={styles.menuIcon} /> : <VolumeIcon className={styles.menuIcon} />}
                 <span className={styles.menuLabel}>{speakLabel}</span>
               </Button>
               <Button role="menuitem" fullWidth className={styles.menuItem} onClick={run(onCopy)}>

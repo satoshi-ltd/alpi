@@ -16,7 +16,6 @@ vi.mock('react-native', () => {
     Pressable: host('button'),
     ScrollView: ({ children }) => R.createElement('div', {}, children),
     RefreshControl: () => null,
-    ActivityIndicator: () => R.createElement('span', { 'data-testid': 'spinner' }),
   };
 });
 vi.mock('expo-router', () => ({

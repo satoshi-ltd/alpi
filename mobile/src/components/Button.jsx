@@ -1,8 +1,9 @@
 import { contrastText, mixHex } from "../../../common/color.mjs";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { buttonDefaults, buttonHeights, buttonVariants } from '../../../common/button.mjs';
 import { radii, space } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeContext';
+import { Spinner } from './Spinner';
 
 const SIZES = {
   sm: { padX: 12, token: 'sm' },
@@ -66,7 +67,7 @@ export function Button({
         {title}
       </Text>
       {loading && <View style={styles.progress} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-        <ActivityIndicator color={fg} />
+        <Spinner color={fg} />
       </View>}
     </Pressable>
   );

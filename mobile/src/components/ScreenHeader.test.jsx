@@ -18,7 +18,7 @@ vi.mock('react-native', () => {
   const Pressable = ({ children, onPress, hitSlop, style, ...p }) =>
     React.createElement('button', { type: 'button', onClick: onPress, ...p }, children);
   const StyleSheet = { create: (x) => x, absoluteFillObject: {} };
-  return { View, Text, Pressable, StyleSheet, ActivityIndicator: () => null };
+  return { View, Text, Pressable, StyleSheet };
 });
 
 vi.mock('../theme/ThemeContext', () => ({

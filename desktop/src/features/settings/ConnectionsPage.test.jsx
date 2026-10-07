@@ -285,6 +285,21 @@ describe("ConnectionsPage", () => {
     expect(screen.queryByText("Create connection")).toBeNull();
   });
 
+  it("waits for connections and activity with placeholder rows, never a word", async () => {
+    invoke.mockImplementation(() => new Promise(() => {}));
+    render(<ConnectionsPage profiles={[]} activeConnection={{ id: "local" }} />);
+    expect((await screen.findByRole("status", { name: "Loading connections" })).querySelectorAll("[class*=listRow]")).toHaveLength(3);
+    expect(document.body.textContent).not.toMatch(/Loading/);
+  });
+
+  it("waits for the audit log with placeholder rows, never a word", async () => {
+    invoke.mockImplementation((command) => (command === "audit_list" ? new Promise(() => {}) : Promise.resolve(summary)));
+    render(<ConnectionsPage profiles={[]} activeConnection={{ id: "local" }} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Audit log" }));
+    expect((await screen.findByRole("status", { name: "Loading activity" })).querySelectorAll("[class*=listRow]")).toHaveLength(4);
+    expect(document.body.textContent).not.toMatch(/Loading/);
+  });
+
   it("shows bounded administrative activity without chat content", async () => {
     invoke.mockImplementation((command) => {
       if (command === "connections_summary") return Promise.resolve(summary);

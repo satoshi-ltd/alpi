@@ -2,11 +2,12 @@
 
 import { useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
+import { FlatList, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../../src/theme/tokens';
 
 import { Fold } from '../../../src/components/Fold';
+import { InboxSkeleton } from '../../../src/features/inbox/InboxSkeleton';
 import { ScreenHeader } from '../../../src/components/ScreenHeader';
 import { useToast } from '../../../src/components/Toast';
 import { useBack } from '../../../src/hooks/useBack';
@@ -16,6 +17,7 @@ import { accentForPubkey, foldForPubkey } from '../../../src/lib/localFold';
 import { useEndpoint } from '../../../src/lib/EndpointContext';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { AdminGuard } from '../../../src/components/AdminGuard';
+import { Spinner } from '../../../src/components/Spinner';
 
 export default function AddMemberRoute() {
   return (
@@ -70,9 +72,7 @@ function AddMember() {
         onBack={goBack}
       />
       {peersLoading ? (
-        <View style={{ padding: space.s10, alignItems: 'center' }}>
-          <ActivityIndicator color={colors.ink3} />
-        </View>
+        <InboxSkeleton rows={4} label="Loading the hub’s peers" />
       ) : (
         <FlatList
           data={candidates}
@@ -103,7 +103,7 @@ function AddMember() {
                     {(item.pubkey || '').slice(0, 16)}…
                   </Text>
                 </View>
-                {isBusy ? <ActivityIndicator color={colors.ink3} size="small" /> : null}
+                {isBusy ? <Spinner color={colors.ink3} /> : null}
               </Pressable>
             );
           }}

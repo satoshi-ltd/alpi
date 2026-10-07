@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { lineHeights, radii, space } from '../../../../src/theme/tokens';
 
@@ -23,6 +23,8 @@ import { formatLastRun, formatNextFire, jobFailed, jobTitle } from '../../../../
 import { jobBanner, jobItem, nextRunWord } from '../../../../../common/attention.mjs';
 import { describeTimeout, describeWhen, rawWhen } from '../../../../../common/schedule.mjs';
 import { useTheme } from '../../../../src/theme/ThemeContext';
+import { Busy } from '../../../../src/components/Busy';
+import { useBusyVisible } from '../../../../src/hooks/useBusyVisible';
 
 function Fact({ label, children }) {
   const { colors, fonts, fontSizes } = useTheme();
@@ -62,6 +64,8 @@ export default function ScheduleJob() {
   const [busy, setBusy] = useState(false);
   const [more, setMore] = useState(false);
   const job = (schedule.data?.jobs ?? []).find((j) => String(j.id) === String(jobId)) ?? null;
+  const opening = !job && schedule.loading;
+  const holding = useBusyVisible(opening);
 
   useEventEffect(['schedule.done', 'schedule.failed', 'schedule.changed'], (ev) => {
     if (ev.data?.profile === id) schedule.refresh();
@@ -124,12 +128,12 @@ export default function ScheduleJob() {
       />
       {!job && schedule.error && !schedule.data ? (
         <LoadFailed inline label="this job" error={schedule.error} onRetry={() => schedule.refresh?.()} />
-      ) : !job ? (
-        <View style={{ padding: space.s10, alignItems: 'center' }}>
-          {schedule.loading ? <ActivityIndicator color={colors.ink3} /> : (
+      ) : !job || holding ? (
+        opening || holding ? <Busy fill visible={holding} label="Opening the job" /> : (
+          <View style={{ padding: space.s10, alignItems: 'center' }}>
             <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink3 }}>This job is gone.</Text>
-          )}
-        </View>
+          </View>
+        )
       ) : (
         <ScrollView
           refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />}

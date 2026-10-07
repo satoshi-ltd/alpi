@@ -153,10 +153,11 @@ describe("WorkgroupsView", () => {
     expect(screen.queryByText("Finished hotel")).not.toBeInTheDocument();
   });
 
-  it("waits quietly while the connection syncs, then offers to create the first workgroup", () => {
+  it("waits quietly while the connection syncs, then offers to create the first workgroup", async () => {
     const onNewWorkgroup = vi.fn();
     const { rerender } = render(<WorkgroupsView workgroups={[]} profiles={[]} syncing onNewWorkgroup={onNewWorkgroup} />);
-    expect(screen.getByText("Syncing workgroups…")).toBeInTheDocument();
+    expect((await screen.findByRole("status", { name: "Syncing workgroups" })).querySelectorAll("[class*=listRow]")).toHaveLength(3);
+    expect(screen.queryByText(/Syncing workgroups…/)).toBeNull();
     expect(screen.queryByText("No workgroups yet")).toBeNull();
     rerender(<WorkgroupsView workgroups={[]} profiles={[]} syncing={false} onNewWorkgroup={onNewWorkgroup} />);
     expect(screen.getByText("No workgroups yet")).toBeInTheDocument();

@@ -1,7 +1,6 @@
 from gen import ic, page
 from desktop_boards import AMBER, HOVER, INK, INK2, INK3, LINE2, PANE, MONO, SIDE, wg_mark
 from conversation_boards import h1, label, mono, spec
-from loading_studies import loading_now, loading_proposed
 
 PAGE_W = 1280
 COLUMN_PAD = 20
@@ -101,18 +100,6 @@ PROPOSALS = [
         "accept": "A running workgroup shows as a Live Activity with its name and task, phase segments, elapsed time and the members working; an approval arrives as a push with the app closed, carrying Deny and Allow once as actions. Both draw in the light and dark lock screens and stay within the system's Live Activity height.",
         "h": 870,
     },
-    {
-        "id": "UI-LOADING",
-        "client": "desktop",
-        "area": "Every wait · spinners, the pipeline strip and lists, desktop and mobile",
-        "title": "Waiting looks like alpi, and the pipeline never waits for what it already knows",
-        "why": "Desktop waits four ways: <code>SpinnerIcon</code> (a line arc, in Send, attachments, read aloud and the workgroup’s “Loading flow…” chip), the <code>chipSpin</code> and <code>btnSpin</code> CSS arcs, and the bare word “Loading…” in the skill viewer and the email cell. Mobile uses the platform <code>ActivityIndicator</code> in 25 screens, centred on an empty page, so every list jumps when its rows land. None of them is alpi’s, although <code>folds.mjs</code> already gives every profile an object with three tones and the alpaca a busy cycle through the profile colours. The workgroup strip shows “Loading flow…” until <code>host.workgroup.tasks</code> answers, but the workgroup row already carries <code>pipelines</code>, <code>launch</code> and <code>phase_map</code>, so the chain and its owners are known before the run state. Recommendation: the alpaca busy cycle when nobody owns the wait, the owner’s object sweeping when a profile does, placeholder rows and chips in the shape of what will land, and the strip drawn from the row at once. Alternative: one shared spinner restyled in ink on both clients, which unifies the look but keeps the empty pages and the strip’s wait.",
-        "now": loading_now,
-        "proposed": loading_proposed,
-        "accept": "Shared: a <code>Busy</code> mark on both clients (the alpaca through the busy cycle, or a given fold sweeping its tones) built on the existing <code>Fold</code> components and <code>common/folds.mjs</code>, shown only after 300 ms, labelled “Loading” for screen readers, static with the word under reduced motion. Desktop: <code>SpinnerIcon</code>, the <code>Button</code> and <code>Chip</code> spinners and the <code>ChatPane</code> spinners become it at their current sizes; “Loading…” alone is gone; lists use <code>primitives/Skeleton</code> rows. Mobile: every <code>ActivityIndicator</code> becomes it and lists draw placeholder rows inside their cards. Workgroup strip: with one pipeline, or a cached run, the chain draws at once from the row with every phase pending and its owner, filled in place when the run arrives; otherwise the hub’s object sweeps beside placeholder chips; never the word. Tests cover the delay, reduced motion and the strip before and after the run on both clients; no green; light and dark match this board; the views are regenerated and the board is deleted.",
-        "h": 2140,
-    },
-
 ]
 
 

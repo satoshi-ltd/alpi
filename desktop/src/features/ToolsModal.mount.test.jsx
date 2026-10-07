@@ -22,11 +22,13 @@ beforeEach(() => {
 });
 
 describe("ToolsModal (mounted)", () => {
-  it("shows a loading state before tools resolve", () => {
+  it("shows a loading state before tools resolve", async () => {
     h.invoke.mockImplementation(() => new Promise(() => {}));
     render(<ToolsModal open onClose={() => {}} profile="muse" connectionId="c2" />);
     expect(screen.getByRole("progressbar", { name: "Loading tools" })).toBeTruthy();
-    expect(screen.getAllByText("Loading tools…").length).toBeGreaterThan(0);
+    await waitFor(() => expect(document.querySelectorAll("[role=listbox] li[role=presentation] [class*=listRow]").length).toBeGreaterThan(1));
+    await waitFor(() => expect(document.querySelector("[aria-hidden=true][class*=reader]")).not.toBeNull());
+    expect(document.body.textContent).not.toMatch(/Loading/);
     expect(screen.queryByText("No tools registered")).toBeNull();
   });
 

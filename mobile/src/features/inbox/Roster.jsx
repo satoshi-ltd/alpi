@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, SectionList, Text, TextInput, View } from 'react-native';
+import { Pressable, RefreshControl, SectionList, Text, TextInput, View } from 'react-native';
 import { mobile, radii, space } from '../../theme/tokens';
 
 import { Eyebrow } from '../../components/Eyebrow';
@@ -12,6 +12,7 @@ import { InboxSkeleton } from './InboxSkeleton';
 import { memberEmptyCopy } from '../../../../common/onboarding.mjs';
 import { EMPTY } from '../../../../common/emptyCopy.mjs';
 import { useWell } from '../../components/well';
+import { Busy } from '../../components/Busy';
 
 const HAIRLINE = 0.5;
 const EMPTY_MIN_H = 240;
@@ -143,7 +144,7 @@ export function Roster({
   const keepEmpty = useMemo(() => Object.keys(addActions ?? {}), [addActions]);
   const sections = useMemo(() => rosterSections(items, query, { keepEmpty }), [items, query, keepEmpty]);
   const empty = rosterIsEmpty(sections);
-  const placeholder = loading ? <InboxSkeleton /> : <EmptyState paired={paired} query={query} device={device} canCreate={addActions != null} daemonDown={daemonDown} error={error} onRetry={onRefresh} />;
+  const placeholder = loading ? <InboxSkeleton label="Loading profiles and workgroups" /> : <EmptyState paired={paired} query={query} device={device} canCreate={addActions != null} daemonDown={daemonDown} error={error} onRetry={onRefresh} />;
 
   const renderSectionHeader = useCallback(
     ({ section }) => {
@@ -210,9 +211,7 @@ export function Roster({
           sections.length === 0 ? null : empty ? (
             placeholder
           ) : loading ? (
-            <View style={{ padding: space.s9, alignItems: 'center' }}>
-              <ActivityIndicator color={colors.ink3} />
-            </View>
+            <Busy size={18} label="Refreshing profiles and workgroups" style={{ padding: space.s9, justifyContent: 'center' }} />
           ) : null
         }
       />

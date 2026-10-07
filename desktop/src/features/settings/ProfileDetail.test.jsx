@@ -114,7 +114,9 @@ describe("ProfileDetail", () => {
       />,
     );
 
-    expect(screen.getByRole("progressbar", { name: "Fetching latest settings" })).toBeInTheDocument();
+    const bar = screen.getByRole("progressbar", { name: "Fetching latest settings" });
+    expect(bar.getAttribute("style")).toBeNull();
+    expect(bar.outerHTML).not.toContain("#10b981");
   });
 
   it("keeps daemon and client access in one Service section", () => {

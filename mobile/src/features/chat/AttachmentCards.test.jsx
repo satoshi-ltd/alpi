@@ -23,7 +23,6 @@ vi.mock('react-native', () => {
     Text,
     Pressable,
     Image: (props) => React.createElement('img', props),
-    ActivityIndicator: () => React.createElement('span', { 'data-testid': 'spinner' }),
     Alert: { alert: h.alert },
   };
 });
@@ -36,6 +35,7 @@ vi.mock('expo-sharing', () => ({
   isAvailableAsync: h.isAvailableAsync,
   shareAsync: h.shareAsync,
 }));
+vi.mock('../../components/Spinner', () => ({ Spinner: () => <span data-testid="spinner" /> }));
 vi.mock('../../components/Icon', () => ({ Icon: ({ name }) => <i>{name}</i> }));
 vi.mock('../../lib/EndpointContext', () => ({ useEndpoint: () => ({ call: h.call, endpoint: { id: 'c1' } }) }));
 vi.mock('../../hooks/useCachedImage', () => ({ useCachedImage: () => ({ uri: null, err: null }) }));
@@ -92,6 +92,7 @@ describe('AttachmentCards document share flow', () => {
     const img = { name: 'shot.png', mime: 'image/png', size: 2048, path: '/data/.alpi/profiles/agora/out/shot.png' };
     render(<AttachmentCards items={[img]} variant="message" profile="agora" />);
     expect(screen.getByText('shot.png').getAttribute('data-font')).toBe('sans');
+    expect(screen.getByTestId('spinner')).toBeTruthy();
   });
 
   it('a failed fetch surfaces the alert instead of sharing', async () => {

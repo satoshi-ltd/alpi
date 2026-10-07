@@ -4,6 +4,7 @@ import { Eyebrow } from "../primitives/index.js";
 import shell from "../primitives/BrowseModal.module.css";
 import { BrowseBody, BrowseShell } from "../primitives/BrowseModal.jsx";
 import { PROFILE_PANELS } from "../lib/profilePanels.js";
+import { SkeletonReader, SkeletonRows } from "../primitives/Skeleton.jsx";
 import MarkdownBody from "../primitives/MarkdownBody.jsx";
 import styles from "./ToolsModal.module.css";
 import { EMPTY } from "../../../common/emptyCopy.mjs";
@@ -76,9 +77,7 @@ export function ToolsPanel({ open = true, profile, connectionId, owner = null, o
   const list = (
     <ul className={shell.list} role="listbox">
       {loading ? (
-        <li className={shell.empty}>
-          <span className={shell.emptyTitle}>Loading tools…</span>
-        </li>
+        <SkeletonRows as="li" mark={false} />
       ) : error ? (
         <li className={shell.empty}>
           <span className={shell.emptyTitle}>Could not load tools</span>
@@ -133,7 +132,7 @@ export function ToolsPanel({ open = true, profile, connectionId, owner = null, o
       {active ? (
         <ToolDetail tool={active} />
       ) : loading ? (
-        <div className={shell.detailEmpty}>Loading tools…</div>
+        <SkeletonReader />
       ) : (
         <div className={shell.detailEmpty}>Select a tool.</div>
       )}

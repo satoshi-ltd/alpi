@@ -31,7 +31,9 @@ describe("WorkgroupDetail", () => {
       />,
     );
 
-    expect(screen.getByRole("progressbar", { name: "Fetching latest workgroup settings" })).toBeInTheDocument();
+    const bar = screen.getByRole("progressbar", { name: "Fetching latest workgroup settings" });
+    expect(bar.getAttribute("style")).toBeNull();
+    expect(bar.outerHTML).not.toContain("#446");
   });
 
   it("lists its sections in the searchable settings rail", async () => {

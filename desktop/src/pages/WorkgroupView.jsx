@@ -38,14 +38,13 @@ import {
 } from "../lib/workgroup-cache.js";
 import { fetchWorkgroupTranscript } from "../lib/workgroup-fetch.js";
 import { FOLD_SIZES, WORKGROUP_FOLD } from "../../../common/folds.mjs";
-import { liveChip, phaseCostLine, runChips, runProgress, sameName } from "../../../common/pipelinePhases.mjs";
-import PipelineStages from "../primitives/PipelineStages.jsx";
+import { chainChips, liveChip, orderedPipelines, phaseCostLine, runChips, runProgress, sameName } from "../../../common/pipelinePhases.mjs";
+import PipelineStages, { PipelinePlaceholder } from "../primitives/PipelineStages.jsx";
 import { WorkgroupChatHeader, TasksButton, Eyebrow, LoadFailed } from "../primitives/index.js";
 import { ChatLoadSkeleton } from "./ChatSkeletons.jsx";
 import { JumpToLatest, MarkerCard, MessageBubble } from "../primitives/index.js";
 import {
   Banner,
-  Chip,
   CopyIcon,
   Fold,
   IconBtn,
@@ -61,6 +60,8 @@ import styles from "./WorkgroupView.module.css";
 import { EMPTY, postsHint } from "../../../common/emptyCopy.mjs";
 
 const MY_SEQS_KEY = "alpi.workgroup.mySeqs";
+const RUN_STATUSES = new Set(["running", "between", "blocked", "completed"]);
+const LIVE_STATUSES = new Set(["running", "between"]);
 const taskStateCache = new Map();
 
 function taskCacheKey(connectionId, profile, wgId) {
@@ -185,6 +186,17 @@ export default function WorkgroupView({
     () => runChips(run, workgroup.phase_map, hostActive),
     [run, workgroup.phase_map, hostActive],
   );
+  const declared = useMemo(
+    () => orderedPipelines(workgroup.pipelines, workgroup.launch_pipeline),
+    [workgroup.pipelines, workgroup.launch_pipeline],
+  );
+  const awaitingRun = taskState == null && !taskStateStale && !!workgroup.pipeline_mode && declared.length > 0 && RUN_STATUSES.has(workgroup.pipeline_status);
+  const knownChain = useMemo(
+    () => (awaitingRun && LIVE_STATUSES.has(workgroup.pipeline_status) && declared.length === 1 ? chainChips(declared[0].phases, workgroup.phase_map, null) : null),
+    [awaitingRun, declared, workgroup.phase_map, workgroup.pipeline_status],
+  );
+  const shownChips = run && stripChips.length > 0 ? stripChips : knownChain;
+  const pendingChain = shownChips != null && shownChips === knownChain;
   const profileOf = (name) => {
     const p = (profiles ?? []).find((x) => sameName(x.name, name));
     return p ? { fold: p.fold, accent: p.accent } : null;
@@ -530,20 +542,21 @@ export default function WorkgroupView({
         }
       />
       {banners}
-      {taskState == null && workgroup.pipeline_mode && (
+      {awaitingRun && !knownChain && (
         <div className={styles.pipeline} data-testid="pipeline-loading">
-          <Chip size="sm" ghost icon={<SpinnerIcon />}>Loading flow…</Chip>
+          <Eyebrow className={styles.pipelineLabel}>pipeline</Eyebrow>
+          <PipelinePlaceholder count={declared[0]?.phases.length} label="Loading the pipeline" />
         </div>
       )}
-      {run && stripChips.length > 0 && (
-        <div className={styles.pipeline}>
+      {shownChips && (
+        <div className={styles.pipeline} data-testid="pipeline-strip" data-pending={pendingChain ? "" : undefined}>
           <Eyebrow className={styles.pipelineLabel}>pipeline</Eyebrow>
           <PipelineStages
-            chips={stripChips}
+            chips={shownChips}
             profileOf={profileOf}
-            onJump={(chip) => jumpToSeq(chip.seq)}
+            onJump={pendingChain ? null : (chip) => jumpToSeq(chip.seq)}
             canJump={(chip) => chip.seq != null && loadedSeqs.has(chip.seq)}
-            detail={(chip, jumpable) => <PhaseDetail chip={chip} jumpable={jumpable} profileOf={profileOf} />}
+            detail={pendingChain ? null : (chip, jumpable) => <PhaseDetail chip={chip} jumpable={jumpable} profileOf={profileOf} />}
           />
         </div>
       )}
@@ -566,7 +579,6 @@ export default function WorkgroupView({
         <RefreshBar
           key={refreshBeat}
           active={refreshBeat > 0}
-          accent={ownerProfile?.accent ?? null}
         />
         {error && messages === null ? (
           <LoadFailed label="this workgroup" error={error} onRetry={() => setRefreshTick((t) => t + 1)} />
@@ -678,7 +690,8 @@ function renderWgFooter({
   const ttsDisabled = !online && !isPlaying;
   const tipText = !online && !isPlaying
     ? "Offline — TTS unavailable"
-    : isLoading ? "Loading…" : isPlaying ? "Stop" : "Read aloud";
+    : isPlaying ? "Stop" : "Read aloud";
+  const speakName = isLoading ? "Read aloud, preparing audio" : tipText;
   // Workgroup `at` is an ISO string; RelativeTime expects unix seconds.
   const stampTs = at ? Date.parse(at) / 1000 : 0;
   return (
@@ -694,7 +707,7 @@ function renderWgFooter({
       </Tip>
       <Tip text={tipText} side="up">
         <IconBtn
-          aria-label={tipText}
+          aria-label={speakName}
           disabled={ttsDisabled}
           onClick={() => playTts({
             key: ttsKey,

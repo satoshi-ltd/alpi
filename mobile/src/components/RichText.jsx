@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Image, Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { Image, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { space, lineHeights, radii, typography } from '../theme/tokens';
 
 import { SheetClose } from './SheetClose';
+import { Spinner } from './Spinner';
 import { segmentBlocks } from '../lib/markdownBlocks';
 import { useCachedImage } from '../hooks/useCachedImage';
 import { useEndpoint } from '../lib/EndpointContext';
@@ -33,7 +34,7 @@ function MarkdownImage({ path, alt, note, profile, theme }) {
           />
         ) : (
           <View style={{ height: 160, borderRadius: radii.xs, borderWidth: 0.5, borderColor: colors.line, backgroundColor: colors.hover, alignItems: 'center', justifyContent: 'center' }}>
-            <ActivityIndicator color={colors.ink3} />
+            <Spinner color={colors.ink3} />
           </View>
         )}
       </Pressable>

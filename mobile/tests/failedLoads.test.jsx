@@ -21,7 +21,6 @@ vi.mock('react-native', () => {
     Pressable: host('button'),
     ScrollView: ({ children }) => R.createElement('div', {}, children),
     RefreshControl: () => null,
-    ActivityIndicator: () => R.createElement('span', { 'data-testid': 'spinner' }),
   };
 });
 vi.mock('expo-router', () => ({
@@ -46,6 +45,7 @@ vi.mock('../src/components/Row', () => ({
   RowSeparator: () => React.createElement('hr', {}),
   SectionHeader: ({ children }) => React.createElement('h3', {}, children),
 }));
+vi.mock('../src/components/SkeletonBar', () => ({ SkeletonBar: () => React.createElement('i', { 'data-bar': '' }) }));
 vi.mock('../src/components/Sheet', () => ({ Sheet: ({ open, children }) => (open ? React.createElement('div', {}, children) : null) }));
 vi.mock('../src/components/ScreenHeader', () => ({ ScreenHeader: ({ title }) => React.createElement('h1', {}, title) }));
 vi.mock('../src/components/Toast', () => ({ useToast: () => vi.fn() }));
@@ -100,5 +100,22 @@ describe('failed loads never pose as empty lists', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     await waitFor(() => expect(screen.getByText('search')).toBeTruthy());
     expect(h.call).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('a list in flight draws its rows before they land', () => {
+  const inFlight = () => ({ data: null, loading: true, error: null, refresh: vi.fn() });
+
+  it.each([
+    ['skills', () => { h.skills = inFlight(); return <SkillsList />; }, 'Loading skills'],
+    ['tools', () => { h.tools = inFlight(); return <ToolsList />; }, 'Loading tools'],
+    ['MCP servers', () => { h.profile = { profile: null, loading: true, error: null, refresh: vi.fn() }; return <McpList />; }, 'Loading MCP servers'],
+  ])('%s show placeholder rows inside the card they will fill, with no word on screen', (_, screenOf, label) => {
+    const { container } = render(screenOf());
+    const wait = screen.getByRole('progressbar', { name: label });
+    const card = wait.querySelector('[data-row-group]');
+    expect(card).not.toBeNull();
+    expect(card.querySelectorAll('[data-bar]').length).toBeGreaterThan(2);
+    expect(container.textContent).not.toMatch(/Loading/);
   });
 });

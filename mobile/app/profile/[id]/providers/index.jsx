@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo } from 'react';
-import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../../../src/theme/tokens';
 
@@ -12,6 +12,7 @@ import { useOllamaModels } from '../../../../src/hooks/useDaemonData';
 import { useProfile } from '../../../../src/hooks/useSubject';
 import { CLOUD_PROVIDERS } from '../../../../src/lib/providers';
 import { useTheme } from '../../../../src/theme/ThemeContext';
+import { SkeletonBar } from '../../../../src/components/SkeletonBar';
 
 export default function ProvidersList() {
   const { id } = useLocalSearchParams();
@@ -59,7 +60,7 @@ export default function ProvidersList() {
               const reachableCount = modelsByName.get(o.name);
               const err = errorsByName.get(o.name);
               const value = ollamaModels.loading
-                ? <ActivityIndicator color={colors.ink3} size="small" />
+                ? <SkeletonBar width={72} height={12} />
                 : reachableCount != null && reachableCount > 0
                   ? <Pill tone="on">{reachableCount} model{reachableCount === 1 ? '' : 's'}</Pill>
                   : <Pill off>unreachable</Pill>;

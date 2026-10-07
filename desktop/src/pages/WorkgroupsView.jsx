@@ -10,6 +10,7 @@ import {
   EmptyState,
 } from "../primitives/index.js";
 import styles from "./WorkgroupsView.module.css";
+import { SkeletonRows } from "../primitives/Skeleton.jsx";
 import { EMPTY } from "../../../common/emptyCopy.mjs";
 
 const FILTERS = [
@@ -218,7 +219,7 @@ export default function WorkgroupsView({
             <div className={styles.empty}>No workgroups match this view.</div>
           )}
           {workgroups.length === 0 && (syncing ? (
-            <div className={styles.empty}>Syncing workgroups…</div>
+            <SkeletonRows count={3} label="Syncing workgroups" />
           ) : (
             <EmptyState fold={WORKGROUP_FOLD} heading={EMPTY.workgroups.title} subtitle={EMPTY.workgroups.hint}>
               {onNewWorkgroup && <Button onClick={onNewWorkgroup}>New workgroup</Button>}

@@ -7,6 +7,7 @@ import CodeView from "../primitives/CodeView.jsx";
 import shell from "../primitives/BrowseModal.module.css";
 import { BrowseBody, BrowseShell, useBrowseCloseGuard } from "../primitives/BrowseModal.jsx";
 import { PROFILE_PANELS } from "../lib/profilePanels.js";
+import { SkeletonReader, SkeletonRows } from "../primitives/Skeleton.jsx";
 import MarkdownBody from "../primitives/MarkdownBody.jsx";
 import { shortDate } from "../lib/time.js";
 import styles from "./MemoryModal.module.css";
@@ -188,9 +189,7 @@ export function MemoryPanel({ open = true, profile, connectionId, canEdit = fals
   const list = (
     <ul className={shell.list} role="listbox">
       {loading ? (
-        <li className={shell.empty}>
-          <span className={shell.emptyTitle}>Loading memory…</span>
-        </li>
+        <SkeletonRows as="li" count={3} />
       ) : error ? (
         <li className={shell.empty}>
           <span className={shell.emptyTitle}>Could not load memory</span>
@@ -288,7 +287,7 @@ export function MemoryPanel({ open = true, profile, connectionId, canEdit = fals
           </div>
         </>
       ) : loading ? (
-        <div className={shell.detailEmpty}>Loading memory…</div>
+        <SkeletonReader />
       ) : (
         <div className={shell.detailEmpty}>Select a file.</div>
       )}

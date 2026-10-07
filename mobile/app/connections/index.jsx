@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, View } from 'react-native';
+import { RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../src/theme/tokens';
 
@@ -22,6 +22,8 @@ import { SettingsSurface } from '../../src/nav/SettingsSurface';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { LoadFailed } from '../../src/components/LoadFailed';
 import { EMPTY } from '../../../common/emptyCopy.mjs';
+import { Busy } from '../../src/components/Busy';
+import { useBusyVisible } from '../../src/hooks/useBusyVisible';
 
 const WIDE_BODY_MAX_W = 968;
 
@@ -44,6 +46,8 @@ function ConnectionsScreen() {
 
   useFocusEffect(useCallback(() => { summary.refresh(); }, [summary.refresh]));
   const pull = usePullRefresh(summary.refresh);
+  const reaching = !summary.data && summary.loading;
+  const holding = useBusyVisible(reaching);
 
   const rows = summary.data?.connections ?? [];
   const host = rows.find((r) => r.id === 'host');
@@ -62,10 +66,8 @@ function ConnectionsScreen() {
         right={<Button title="New" size="md" onPress={() => setCreating(true)} />}
       />
       <SyncBar syncing={summary.loading} />
-      {!summary.data && summary.loading ? (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator color={colors.ink3} />
-        </View>
+      {reaching || holding ? (
+        <Busy fill visible={holding} label="Reaching the daemon" />
       ) : !summary.data && summary.error ? (
         <LoadFailed label="connections" error={summary.error} onRetry={() => summary.refresh?.()} />
       ) : (

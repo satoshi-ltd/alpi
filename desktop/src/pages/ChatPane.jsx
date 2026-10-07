@@ -329,7 +329,6 @@ export default function ChatPane({
           key={syncVisible ? "sync" : refreshBeat}
           active={refreshBeat > 0 || syncVisible}
           controlled={syncVisible}
-          accent={activeProfile?.accent ?? null}
           label={syncVisible ? "syncing conversation" : null}
         />
         <SessionView
@@ -671,7 +670,8 @@ const Turn = memo(function Turn({
   const ttsDisabled = !online && !isPlaying;
   const speakTip = !online && !isPlaying
     ? "Offline — TTS unavailable"
-    : isLoading ? "Loading…" : isPlaying ? "Stop" : "Read aloud";
+    : isPlaying ? "Stop" : "Read aloud";
+  const speakName = isLoading ? "Read aloud, preparing audio" : speakTip;
   const onSpeak = () => {
     if (!turn.assistant) return;
     playTts({
@@ -768,7 +768,7 @@ const Turn = memo(function Turn({
               )}
               <Tip text={speakTip} side="up">
                 <IconBtn
-                  aria-label={speakTip}
+                  aria-label={speakName}
                   disabled={ttsDisabled}
                   onClick={onSpeak}
                   className={styles.agentActionBtn}

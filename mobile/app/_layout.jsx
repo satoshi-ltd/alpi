@@ -14,7 +14,7 @@ import { Stack, usePathname, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef } from 'react';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -35,6 +35,7 @@ import { useReduceMotion } from '../src/lib/reduceMotion';
 import { hasLiveSocket, setAuthFailedHandler, setRateLimitedHandler } from '../src/lib/rpc';
 import { RATE_LIMITED_STATUS } from '../src/lib/rateLimit';
 import { ThemeProvider, useTheme } from '../src/theme/ThemeContext';
+import { Busy } from '../src/components/Busy';
 
 // Hold native splash until fonts load so first frame isn't unstyled text.
 SplashScreen.preventAutoHideAsync().catch(() => { /* */ });
@@ -132,8 +133,8 @@ function Routes() {
 function Boot() {
   const { colors } = useTheme();
   return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg }}>
-      <ActivityIndicator color={colors.ink2} />
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <Busy fill size={56} />
     </View>
   );
 }

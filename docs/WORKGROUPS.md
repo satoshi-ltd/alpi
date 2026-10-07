@@ -728,6 +728,8 @@ phases and after the run completes.
 
 Phase chips on desktop and mobile show completed on an 18% success tint and blocked on a 14% danger tint over the pane. Running uses the selected ground, a semibold slug and the worker's folding object (static under reduced motion); pending uses hover and skipped is struck through. Checks and state words stay out of the chips; accessible names and hover/tap details retain the state. The desktop chat strip starts with the literal `pipeline`, followed by phase chips and separators; mobile shows just the chips and separators. Neither repeats the pipeline's name or adds a pinned label or run-status suffix; the header keeps the run's progress and status.
 
+Before the run state arrives, the strip reads the workgroup row's `pipeline_status` (requested with `include_pipeline_status: true`). While a run is `running` or `between` phases, a workgroup with exactly one declared pipeline draws that chain at once from the row (`pipelines`, `launch_pipeline`, `phase_map`): every phase pending with its owner's object standing still, filled in place when `host.workgroup.tasks` answers; with several pipelines it shows placeholder chips the size of a phase. A `blocked` or `completed` run shows placeholder chips, so a finished phase is never drawn pending first. A `queued` or absent status, an older daemon without the field, or a failed `host.workgroup.tasks` call draws nothing, so a strip never appears and then vanishes.
+
 **Pipeline turns are project-local.** A declared pipeline dispatch keeps the
 profile's identity, user preferences, skills and active workgroup context, but
 does not inject `MEMORY.md` or expose session, workgroup-history and memory

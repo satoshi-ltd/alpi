@@ -58,7 +58,6 @@ vi.mock('react-native', () => {
     View,
     Text,
     Pressable,
-    ActivityIndicator: () => React.createElement('span', { 'data-testid': 'spinner' }),
     FlatList: ({ data }) => React.createElement('div', { 'data-list': String(data.length) }),
     KeyboardAvoidingView: ({ children }) => React.createElement('div', {}, children),
     Platform: { OS: 'ios', select: (s) => s?.ios ?? s?.default },

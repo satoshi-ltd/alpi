@@ -12,8 +12,8 @@ vi.mock('react-native', () => ({
   Text: ({ children, style }) => <span data-label-style={JSON.stringify(Object.assign({}, ...style.filter(Boolean)))}>{children}</span>,
   View: ({ children }) => <div>{children}</div>,
   StyleSheet: { create: (styles) => styles, absoluteFillObject: { position: 'absolute', inset: 0 } },
-  ActivityIndicator: () => <span data-testid="spinner" />,
 }));
+vi.mock('./Spinner', () => ({ Spinner: ({ color, size }) => <span data-testid="spinner" data-color={color} data-size={size ?? ''} /> }));
 vi.mock('../theme/ThemeContext', () => ({ useTheme: () => ({
   colors: { ink: '#111', ink2: '#333', ink4: '#aaa', bgPane: '#fff', bgInput: '#eee', danger: '#c14545', dangerText: '#b73737', onDanger: '#ffffff', hover: '#ddd', selected: '#ccc', line2: '#bbb' },
   fonts: { sans: { medium: 'medium', semibold: 'semibold' } }, fontSizes: { sm: 12, md: 14, lg: 15, xl: 18 },
@@ -76,6 +76,13 @@ describe('Button shared contract', () => {
     expect(screen.getByRole('button').dataset.style).toBe(before);
     expect(JSON.parse(screen.getByText('Save connection').dataset.labelStyle).opacity).toBe(0);
     expect(screen.getByTestId('spinner')).toBeTruthy();
+  });
+
+  it('waits with the shared ink arc in the label colour at its own size', () => {
+    render(<Button title="Save" variant="primary" loading />);
+    const arc = screen.getByTestId('spinner');
+    expect(arc.dataset.color).toBe(JSON.parse(screen.getByText('Save').dataset.labelStyle).color);
+    expect(arc.dataset.size).toBe('');
   });
 });
 

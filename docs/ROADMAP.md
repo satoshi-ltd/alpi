@@ -1,7 +1,7 @@
 # alpi roadmap
 
-Updated 2026-10-07. Current versions live in the changelogs. The Queue is empty; the creator approves
-the next tasks from Proposed.
+Updated 2026-10-07. Current versions live in the changelogs. The Queue runs top to bottom; the creator
+approves the next tasks from Proposed.
 
 This is the task pool. [ARCHITECTURE.md](ARCHITECTURE.md) owns current state and
 contracts; [CHANGELOG.md](../CHANGELOG.md), [desktop/CHANGELOG.md](../desktop/CHANGELOG.md)
@@ -171,10 +171,10 @@ _None._
   accept: one table-driven test lists, for admin, a member device, an ALP peer without `tools.allow` and one with it, each skill mode and each tool the fence names as allowed or refused; changing a row, or the fence, fails it.
 - **WG.FLOW-LATENCY** — The pipeline strip appears as soon as a workgroup opens
   `bug · desktop, mobile · agent · normal`
-  note: opening a pipeline workgroup shows "Loading flow…" for seconds, yet `fold_task_state` takes about 5 ms
-  on a 37-post transcript in process (decrypt plus fold, cold). The wait is elsewhere: the three calls the view
-  fires at once (`workgroup_members`, `workgroup_tasks`, the transcript), the Tauri bridge and its socket, or a
-  busy daemon loop. Board UI-LOADING covers drawing the chain before the run arrives; this task is the latency.
+  note: opening a running pipeline workgroup shows the pending chain (one pipeline) or placeholder chips (several)
+  for seconds before the run state fills them, yet `fold_task_state` takes about 5 ms on a 37-post transcript in
+  process (decrypt plus fold, cold). The wait is elsewhere: the three calls the view fires at once
+  (`workgroup_members`, `workgroup_tasks`, the transcript), the Tauri bridge and its socket, or a busy daemon loop.
   accept: a measurement of each hop (client call, bridge, socket, handler) on a pipeline workgroup names where the
   time goes; the fix brings the run state on screen without waiting for the transcript, and a test proves
   `workgroup_tasks` is not queued behind it.

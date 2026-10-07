@@ -9,6 +9,7 @@ import Chip from "../../../primitives/Chip.jsx";
 import Dot from "../../../primitives/Dot.jsx";
 import Eyebrow from "../../../primitives/Eyebrow.jsx";
 import Modal from "../../../primitives/Modal.jsx";
+import Skeleton, { SkeletonReader } from "../../../primitives/Skeleton.jsx";
 import { useNotify } from "../../../primitives/Notification.jsx";
 import Field from "../../../primitives/Field.jsx";
 import { ConfirmDeleteAction, DialogFooter, LoadFailed } from "../../../primitives/index.js";
@@ -78,7 +79,7 @@ export function EmailCell({
 
   return (
     <span className={styles.chipRow}>
-      {accounts === null && !failed && <span className={styles.muted}>loading…</span>}
+      {accounts === null && !failed && <Skeleton width="9em" height="var(--ctrl-xs)" radius="var(--r-tag)" label="Loading email accounts" />}
       {failed && <LoadFailed inline label="email accounts" onRetry={refresh} />}
       {accounts?.length === 0 && <span className={styles.muted}>{emptyLine("email")}</span>}
       {accounts?.map((a) => (
@@ -490,7 +491,7 @@ function EmailEditorModal({ profile, account, connectionId = null, onClose, onSa
   return (
     <Modal title={title} onClose={onClose}>
       {values === null ? (
-        <div className={styles.muted}>Loading…</div>
+        <SkeletonReader heading={false} label="Loading the account" lines={["64%", "88%", "72%"]} />
       ) : isGmail ? (
         <GmailFields values={values} set={set} disabledAddress />
       ) : (

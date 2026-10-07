@@ -5,6 +5,7 @@ import { I } from "../primitives/icons.jsx";
 import shell from "../primitives/BrowseModal.module.css";
 import { BrowseBody, BrowseShell } from "../primitives/BrowseModal.jsx";
 import { PROFILE_PANELS } from "../lib/profilePanels.js";
+import { SkeletonReader, SkeletonRows } from "../primitives/Skeleton.jsx";
 import MarkdownBody from "../primitives/MarkdownBody.jsx";
 import { subscribeDaemonEvent } from "../lib/daemon-bus.js";
 import { useNotify } from "../primitives/Notification.jsx";
@@ -147,7 +148,7 @@ export function SchedulePanel({ open = true, profile, connectionId, openJob = nu
   const list = (
     <ul className={shell.list} role="listbox">
       {loading && jobs.length === 0 ? (
-        <li className={shell.empty}><span className={shell.emptyTitle}>Loading schedule…</span></li>
+        <SkeletonRows as="li" />
       ) : error ? (
         <li className={shell.empty}>
           <span className={shell.emptyTitle}>Could not load schedule</span>
@@ -272,7 +273,7 @@ export function SchedulePanel({ open = true, profile, connectionId, openJob = nu
           </div>
         </>
       ) : loading ? (
-        <div className={shell.detailEmpty}>Loading schedule…</div>
+        <SkeletonReader />
       ) : (
         <div className={shell.detailEmpty}>Select a job.</div>
       )}
