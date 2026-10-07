@@ -2131,3 +2131,123 @@ def test_older_compares_naive_and_aware_stamps_as_local_time() -> None:
     assert scheduler._older(later_naive, aware) is False
     assert scheduler._older(None, aware) is True
     assert scheduler._older("garbage", aware) is True
+
+
+def test_a_pending_one_shot_stamp_never_deletes_the_job_that_replaced_it(monkeypatch, tmp_home_no_env: Path) -> None:
+    once = {"id": "swap1", "kind": "once", "run_at": _PAST, "prompt": "once"}
+    scheduler._save_jobs(tmp_home_no_env, [once])
+    fired = _fired_by_tick(monkeypatch)
+    real_update = jobs_store.update
+    state = {"fail": True}
+
+    def flaky(home, mutator):
+        if state["fail"]:
+            raise OSError("disk full")
+        return real_update(home, mutator)
+
+    monkeypatch.setattr(jobs_store, "update", flaky)
+    scheduler.tick(tmp_home_no_env)
+
+    def to_cron(jobs):
+        return [{**j, "kind": "cron", "expression": "0 0 1 1 *", "last_run_at": datetime.now(timezone.utc).isoformat()} for j in jobs if j["id"] == "swap1"]
+
+    real_update(tmp_home_no_env, to_cron)
+    state["fail"] = False
+    scheduler.tick(tmp_home_no_env)
+    scheduler.tick(tmp_home_no_env)
+
+    kept = jobs_store.read(tmp_home_no_env)
+    assert [(j["id"], j["kind"]) for j in kept] == [("swap1", "cron")]
+    assert kept[0].get("last_run_status") is None
+    assert fired == [("swap1", "once")]
+
+
+def test_a_pending_one_shot_stamp_does_not_hide_the_replacement_from_the_pass(monkeypatch, tmp_home_no_env: Path) -> None:
+    once = {"id": "swap2", "kind": "once", "run_at": _PAST, "prompt": "once"}
+    scheduler._save_jobs(tmp_home_no_env, [once])
+    fired = _fired_by_tick(monkeypatch)
+    real_update = jobs_store.update
+    state = {"fail": True}
+
+    def flaky(home, mutator):
+        if state["fail"]:
+            raise OSError("disk full")
+        return real_update(home, mutator)
+
+    monkeypatch.setattr(jobs_store, "update", flaky)
+    scheduler.tick(tmp_home_no_env)
+
+    real_update(tmp_home_no_env, lambda jobs: [{**j, "kind": "cron", "expression": "* * * * *", "last_run_at": _PAST, "prompt": "cron"} for j in jobs])
+    scheduler.tick(tmp_home_no_env)
+
+    assert fired == [("swap2", "once"), ("swap2", "cron")]
+
+
+def test_a_pending_one_shot_stamp_is_ignored_when_the_job_was_given_a_new_run_at(monkeypatch, tmp_home_no_env: Path) -> None:
+    once = {"id": "swap3", "kind": "once", "run_at": _PAST, "prompt": "once"}
+    scheduler._save_jobs(tmp_home_no_env, [once])
+    _fired_by_tick(monkeypatch)
+    real_update = jobs_store.update
+    state = {"fail": True}
+
+    def flaky(home, mutator):
+        if state["fail"]:
+            raise OSError("disk full")
+        return real_update(home, mutator)
+
+    monkeypatch.setattr(jobs_store, "update", flaky)
+    scheduler.tick(tmp_home_no_env)
+
+    later = (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()
+    real_update(tmp_home_no_env, lambda jobs: [{**j, "run_at": later} for j in jobs])
+    state["fail"] = False
+    scheduler.tick(tmp_home_no_env)
+
+    kept = jobs_store.read(tmp_home_no_env)
+    assert [(j["id"], j["run_at"]) for j in kept] == [("swap3", later)]
+
+
+def test_a_pending_cron_stamp_still_applies_after_the_expression_changed(monkeypatch, tmp_home_no_env: Path) -> None:
+    scheduler._save_jobs(tmp_home_no_env, [_cron("keep1")])
+    _fired_by_tick(monkeypatch)
+    real_update = jobs_store.update
+    state = {"fail": True}
+
+    def flaky(home, mutator):
+        if state["fail"]:
+            raise OSError("disk full")
+        return real_update(home, mutator)
+
+    monkeypatch.setattr(jobs_store, "update", flaky)
+    scheduler.tick(tmp_home_no_env)
+    real_update(tmp_home_no_env, lambda jobs: [{**j, "expression": "*/5 * * * *"} for j in jobs])
+    state["fail"] = False
+    scheduler.tick(tmp_home_no_env)
+
+    job = jobs_store.read(tmp_home_no_env)[0]
+    assert job["last_run_status"] == "ok" and job["last_run_at"] != _PAST
+
+
+def test_a_pending_one_shot_deletion_yields_to_a_newer_manual_stamp(monkeypatch, tmp_home_no_env: Path) -> None:
+    once = {"id": "swap4", "kind": "once", "run_at": _PAST, "prompt": "once"}
+    scheduler._save_jobs(tmp_home_no_env, [once])
+    _fired_by_tick(monkeypatch)
+    real_update = jobs_store.update
+    state = {"fail": True}
+
+    def flaky(home, mutator):
+        if state["fail"]:
+            raise OSError("disk full")
+        return real_update(home, mutator)
+
+    monkeypatch.setattr(jobs_store, "update", flaky)
+    scheduler.tick(tmp_home_no_env)
+
+    newer = (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat()
+    real_update(tmp_home_no_env, lambda jobs: [{**j, "last_run_at": newer, "last_run_status": "error", "last_run_message": "manual failure"} for j in jobs])
+    state["fail"] = False
+    scheduler.tick(tmp_home_no_env)
+    scheduler.tick(tmp_home_no_env)
+
+    kept = jobs_store.read(tmp_home_no_env)
+    assert [(j["id"], j["last_run_status"], j["last_run_at"]) for j in kept] == [("swap4", "error", newer)]

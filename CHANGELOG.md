@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.17.6 — 2026-10-07 — an edited job survives a pending stamp
+
+- Editing a one-shot job into a recurring one right after it ran no longer deletes it when the schedule store was briefly unwritable.
+
 ## v0.17.5 — 2026-10-07 — a section says when it needs you
 
 - **A profile reports what needs its owner.** `host.profile.attention` (admin) lists memory files at 90 % of their limit or over it, skills that fail lint or lack what they require, and jobs whose last run failed, with `attention.changed` to refetch. The first time a memory file or skill is flagged the daemon files one `warning` notification (a burst of more than three becomes one), and it files it again only after the item was fixed and broke again. `alpi profile show` and the TUI `/status` print the same list.

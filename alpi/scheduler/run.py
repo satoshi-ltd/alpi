@@ -847,7 +847,7 @@ def _profile_paused(home: Path) -> bool:
         return False
 
 
-_pending_stamps: dict[str, dict[str, tuple[str, bool, str, str]]] = {}
+_pending_stamps: dict[str, dict[str, tuple[str, bool, str, str, str | None]]] = {}
 FAILURE_MESSAGE_CAP = 300
 
 
@@ -863,15 +863,19 @@ def _record_outcome(job: dict, ok: bool, message: str, at: str) -> None:
         job["last_run_message"] = str(redact(message or ""))[:FAILURE_MESSAGE_CAP]
 
 
-def _overlay_pending(job: dict, pending: dict[str, tuple[str, bool, str, str]]) -> dict | None:
+def _same_run(entry: tuple[str, bool, str, str, str | None], job: dict) -> bool:
+    return entry[0] == job.get("kind", "cron") and entry[4] == job.get("run_at")
+
+
+def _overlay_pending(job: dict, pending: dict[str, tuple[str, bool, str, str, str | None]]) -> dict | None:
     entry = pending.get(str(job.get("id")))
-    if entry is None:
+    if entry is None or not _same_run(entry, job):
         return job
-    kind, ok, at, message = entry
-    if kind == "once" and ok:
-        return None
+    kind, ok, at, message, _run_at = entry
     if not _older(job.get("last_run_at"), at):
         return job
+    if kind == "once" and ok:
+        return None
     merged = dict(job)
     _record_outcome(merged, ok, message, at)
     return merged
@@ -891,8 +895,8 @@ def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]
     pending = _pending_stamps.setdefault(str(home), {})
     unseen: set[str] = set()
 
-    def _stamp(fired: dict[str, tuple[str, bool, str]]) -> None:
-        pending.update({jid: (kind, ok, stamp_at, message) for jid, (kind, ok, message) in fired.items()})
+    def _stamp(fired: dict[str, tuple[str, bool, str, str | None]]) -> None:
+        pending.update({jid: (kind, ok, stamp_at, message, run_at) for jid, (kind, ok, message, run_at) in fired.items()})
 
         def _apply(current: list[dict]) -> list[dict]:
             kept: list[dict] = []
@@ -900,11 +904,11 @@ def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]
                 jid = str(j.get("id"))
                 if jid in unseen and _needs_first_seen(j):
                     j["first_seen_at"] = stamp_at
-                if jid in pending:
-                    kind, ok, at, message = pending[jid]
-                    if kind == "once" and ok:
-                        continue
+                if jid in pending and _same_run(pending[jid], j):
+                    kind, ok, at, message, _run_at = pending[jid]
                     if _older(j.get("last_run_at"), at):
+                        if kind == "once" and ok:
+                            continue
                         _record_outcome(j, ok, message, at)
                 kept.append(j)
             return kept
@@ -955,7 +959,7 @@ def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]
         outcome = _run_guarded(job, home)
         _elapsed = time.time() - _started
         # Stamp even on failure to avoid a tight re-fire loop; keep it ahead of the I/O below.
-        _stamp({job_id: (str(job.get("kind", "cron")), outcome.ok, outcome.message)})
+        _stamp({job_id: (str(job.get("kind", "cron")), outcome.ok, outcome.message, job.get("run_at"))})
         stamped = True
         log.info("job %s %s — %s", job_id,
                  "OK" if outcome.ok else "FAIL", outcome.message)
