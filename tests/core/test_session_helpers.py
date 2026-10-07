@@ -315,3 +315,21 @@ def test_log_turn_stamps_the_end_by_default() -> None:
 def test_turns_from_older_sessions_load_without_an_end_stamp() -> None:
     loaded = load_turns({"turns": [{"at": 7.0, "user": "a", "assistant": "b"}]})
     assert loaded[0].ended_at == 0.0
+
+
+def test_a_saved_session_carries_replacement_characters_for_lone_surrogates(tmp_path) -> None:
+    session = Session(home=tmp_path, model="m")
+    session.turns.append(Turn(
+        at=1.0, user="list \udcff",
+        tools=[ToolLog(at=1.0, name="terminal", args={"cwd": "a\udcffb"}, result="name \udcff.txt", ok=True, duration_s=0.1)],
+        assistant="saw \udcff",
+    ))
+
+    path = session.save()
+
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    turn = saved["turns"][0]
+    assert turn["tools"][0]["result"] == "name �.txt"
+    assert turn["user"] == "list �"
+    assert turn["assistant"] == "saw �"
+    assert "\udcff" not in path.read_text(encoding="utf-8")

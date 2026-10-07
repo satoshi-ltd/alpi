@@ -71,7 +71,7 @@ class ToolExecutor:
                     ),
                 }
             runs.append(self.context.home, self.context.run_id, kind, data)
-        except OSError:
+        except (OSError, ValueError):
             pass
 
     def is_parallel_safe(self, name: str, arguments: dict) -> bool:

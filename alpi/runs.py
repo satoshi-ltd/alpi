@@ -13,7 +13,7 @@ from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
 
-from alpi._redact import redact
+from alpi._redact import redact, scrub_surrogates
 from alpi.core.run_context import RunContext, current as current_run
 
 
@@ -126,7 +126,7 @@ def append(home: Path, run_id: str, kind: str, data: dict[str, Any] | None = Non
             "version": FORMAT_VERSION,
             "seq": seq,
             "at": time.time(),
-            "kind": str(kind),
+            "kind": scrub_surrogates(str(kind)),
             "data": payload,
         }
         encoded = json.dumps(record, ensure_ascii=False, default=str)

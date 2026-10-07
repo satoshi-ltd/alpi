@@ -10,6 +10,7 @@ from typing import Any
 
 
 _REDACTED = "[REDACTED]"
+_LONE_SURROGATE = re.compile("[\ud800-\udfff]")
 
 # (pattern, replacement); most map the whole match to [REDACTED], structured ones keep surrounding shape.
 _VALUE_PATTERNS: tuple[tuple[re.Pattern, str], ...] = (
@@ -31,16 +32,22 @@ _VALUE_PATTERNS: tuple[tuple[re.Pattern, str], ...] = (
 
 def redact(value: Any) -> Any:
     if isinstance(value, dict):
-        return {k: redact(v) for k, v in value.items()}
+        return {scrub_surrogates(k): redact(v) for k, v in value.items()}
     if isinstance(value, list):
         return [redact(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(redact(item) for item in value)
     if isinstance(value, str):
         return _redact_string(value)
     return value
 
 
+def scrub_surrogates(key: Any) -> Any:
+    return _LONE_SURROGATE.sub("\ufffd", key) if isinstance(key, str) else key
+
+
 def _redact_string(s: str) -> str:
-    out = s
+    out = _LONE_SURROGATE.sub("\ufffd", s)
     for pat, repl in _VALUE_PATTERNS:
         out = pat.sub(repl, out)
     return out

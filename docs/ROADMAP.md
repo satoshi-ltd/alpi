@@ -205,17 +205,23 @@ _None._
   sandbox, the Docker backend's explicit forwarding list, invalid values and
   protected variables. The map is listed in the takes-effect table of
   [CONFIG.md](CONFIG.md#tools) and in the packaged config reference.
-- **RUN.1** — A lone surrogate in tool output crashes the journal write
+- **REDACT.1** — The URL-credentials pattern in `redact` is quadratic
   `bug · alpi · agent · normal`
-  note: `runs.append` in [runs.py](../alpi/runs.py) measures
-  `json.dumps(record, ensure_ascii=False).encode()`, which raises `UnicodeEncodeError` on an
-  unpaired surrogate, and `ToolExecutor._record` catches only `OSError`. Model-sent arguments are
-  refused since 0.16.22, but tool output (a non-UTF-8 filename decoded with `surrogateescape`) and
-  an expanded `${step.output}` still reach the write. Reproduced with
-  `runs.append(home, "r1", "tool.finished", {"output": "name \udcff.txt"})`.
-  accept: a tool whose output holds a lone surrogate finishes its turn; the journal line and the
-  saved session carry U+FFFD in its place; tests drive it through `ToolExecutor` and through
-  `runs.append`.
+  note: found while reviewing RUN.1. `(?P<scheme>[a-zA-Z][a-zA-Z0-9+.-]*://)[^/\s:@]+:[^/\s@]+@` in
+  [_redact.py](../alpi/_redact.py) takes 2.2 s on 50 KB of `a` and a 5 MB string did not finish in 120 s; `redact`
+  runs on every journal event, saved turn and tool result, so one large alphanumeric output can stall a turn.
+  accept: the scheme length is bounded; a test redacts 1 MB of `a` within a second and the URL, userinfo and
+  credential cases still redact as before.
+- **FRAME.1** — A lone surrogate in a live frame breaks the client's stream
+  `bug · alpi · agent · low`
+  note: found while reviewing RUN.1. [host/server.py](../alpi/host/server.py) sends frames with
+  `json.dumps(..., ensure_ascii=False).encode("utf-8")` on the Unix socket and the websocket; a `tool_end` or
+  `assistant` frame that carries tool output with an unpaired surrogate raises inside `send` (the Unix path logs
+  `host unix connection crashed`). The same pattern appears in `outputs.py`, `run_ledger.py`, `admin_audit.py` and
+  `workgroup.py`; whether each receives text derived from tool output is not traced.
+  accept: a turn whose tool output holds a lone surrogate streams to a client and finishes, the frame carrying
+  U+FFFD; each writer named above either scrubs or is shown not to receive tool text; tests drive the socket and
+  the websocket.
 - **SESS.1** — Saved tool arguments keep every key
   `bug · alpi · agent · low`
   note: [session.py](../alpi/session.py) saves a turn's tool arguments as one sorted JSON string

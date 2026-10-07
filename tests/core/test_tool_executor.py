@@ -134,3 +134,57 @@ def test_exclusive_call_forces_serial_batch(monkeypatch, tmp_path: Path) -> None
 
     assert order == ["first", "second"]
     assert [item.result.output for item in outcomes] == order
+
+
+def _journal(executor: ToolExecutor) -> list[dict]:
+    path = executor.context.home / "runs" / f"{executor.context.run_id}.jsonl"
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+
+
+def test_a_lone_surrogate_in_tool_output_does_not_break_the_journal(monkeypatch, tmp_path: Path) -> None:
+    executor = ToolExecutor(_context(tmp_path))
+    monkeypatch.setattr(
+        tools, "_execute_registered",
+        lambda name, arguments, deny=None, deny_reasons=None: ToolResult(ok=True, output="name \udcff.txt"),
+    )
+
+    result = executor.execute("terminal", {"action": "run", "cwd": "/workspace"})
+
+    assert result.ok
+    finished = next(row for row in _journal(executor) if row["kind"] == "tool.finished")
+    assert finished["data"]["output"] == "name �.txt"
+
+
+def test_runs_append_replaces_a_lone_surrogate_in_values_and_keys(tmp_path: Path) -> None:
+    from alpi import runs
+
+    runs.append(tmp_path, "r1", "tool.finished", {"output": "name \udcff.txt", "k\udcff": "v"})
+
+    line = (tmp_path / "runs" / "r1.jsonl").read_text(encoding="utf-8")
+    data = json.loads(line)["data"]
+    assert data == {"output": "name �.txt", "k�": "v"}
+
+
+def test_runs_append_scrubs_the_kind_and_tuple_values(tmp_path: Path) -> None:
+    from alpi import runs
+
+    runs.append(tmp_path, "r2", "a\udcffb", {"t": ("x \udcff",)})
+
+    row = json.loads((tmp_path / "runs" / "r2.jsonl").read_text(encoding="utf-8"))
+    assert row["kind"] == "a�b"
+    assert row["data"] == {"t": ["x �"]}
+
+
+def test_a_journal_write_that_raises_value_error_never_fails_the_tool(monkeypatch, tmp_path: Path) -> None:
+    from alpi import runs
+
+    def boom(*_args, **_kwargs):
+        raise UnicodeEncodeError("utf-8", "x", 0, 1, "surrogates not allowed")
+
+    monkeypatch.setattr(runs, "append", boom)
+    monkeypatch.setattr(
+        tools, "_execute_registered",
+        lambda name, arguments, deny=None, deny_reasons=None: ToolResult(ok=True, output="done"),
+    )
+
+    assert ToolExecutor(_context(tmp_path)).execute("read_file", {"path": "x"}).output == "done"

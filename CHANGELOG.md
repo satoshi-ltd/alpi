@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.17.2 — 2026-10-07 — a stray byte no longer breaks a turn's journal
+
+- A tool whose output holds an unpaired surrogate (a file name that is not valid UTF-8) finishes its turn. The run journal and the saved session carry U+FFFD in its place; before, the journal write raised.
+
 ## v0.17.1 — 2026-10-06 — members run skills again
 
 - **A member device runs and invokes the profile's skills again**, as it did before 0.17.0. v0.17.0 removed
