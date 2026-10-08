@@ -467,7 +467,7 @@
   <div class="shell">
     <div>
       <div class="kicker"><span class="dot"></span>No account. No telemetry.</div>
-      <h1><span class="crease crease-first">Your agents.</span><span class="crease crease-second">Your machines.</span></h1>
+      <h1><span class="hero-line"><span class="crease crease-first">Your</span> <span class="crease crease-agents">agents.</span></span><span class="crease crease-second">Your machines.</span></h1>
       <p class="lead">
         Review pull requests. Keep a knowledge base. Run the nightly job. Give each agent its own memory, tools and budget &mdash; on a machine you control.
       </p>
@@ -891,6 +891,12 @@ $ alpi doctor
     drawer.addEventListener('click', (e) => {
       if (e.target.tagName === 'A') setOpen(false);
     });
+  })();
+
+  (function(){
+    const hero = document.querySelector('.hero');
+    if (!hero || !('IntersectionObserver' in window)) return;
+    new IntersectionObserver(([entry]) => hero.classList.toggle('is-away', !entry.isIntersecting)).observe(hero);
   })();
 
   /* ============================================================

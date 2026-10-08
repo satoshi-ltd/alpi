@@ -14,6 +14,12 @@ export const FONT_URL = `assets/fonts/${FONT_FILE}`;
 export const LOCKUP_SLIT = 0.6;
 export const HERO_SLIT = 0.7;
 export const TAGLINE = 'Your private agent network.';
+export const AGENTS_STEP_S = 2.5;
+export const AGENTS_RIPPLE_S = 0.36;
+export const AGENTS_STAGGER_S = 0.12;
+export const AGENTS_EASE = 'cubic-bezier(.2,.7,.2,1)';
+export const AGENTS_DIM = 0.5;
+export const AGENTS_PASS_S = AGENTS_STEP_S * ACCENTS.length;
 
 export const IDENTITIES = ACCENTS.map(([colour, hex]) => ({
   colour,
@@ -98,6 +104,48 @@ const tokens = (set) => [
   `--crease-second:${creaseGradient(set.second, HERO_SLIT)}`,
 ].join(';');
 
+const agentHexes = () => ACCENTS.map(([, hex]) => hex);
+
+export function agentLadders() {
+  return { night: agentHexes().map((hex) => creaseTones(hex, NIGHT)), light: agentHexes().map((hex) => creaseTones(hex, PAPER)) };
+}
+
+const AGENT_BANDS = ['a', 'b', 'c'];
+const AGENT_PROPS = { night: AGENT_BANDS.map((band) => `--agent-${band}`), paper: AGENT_BANDS.map((band) => `--agent-p${band}`) };
+const agentPct = (seconds) => Number(((seconds / AGENTS_PASS_S) * 100).toFixed(4));
+const dimmed = (tone) => `${tone}${Math.round(AGENTS_DIM * 255).toString(16).padStart(2, '0')}`;
+
+function agentKeyframes(name, prop, ladder, band) {
+  const hold = AGENTS_STEP_S - AGENTS_RIPPLE_S;
+  const stops = [`0%{${prop}:${ladder[0][band]}}`];
+  ladder.forEach((tones, i) => {
+    const next = ladder[(i + 1) % ladder.length][band];
+    const start = i * AGENTS_STEP_S + hold;
+    stops.push(
+      `${agentPct(start)}%{${prop}:${tones[band]}}`,
+      `${agentPct(start + AGENTS_RIPPLE_S / 2)}%{${prop}:${dimmed(next)}}`,
+      `${agentPct(start + AGENTS_RIPPLE_S)}%{${prop}:${next}}`,
+    );
+  });
+  return `@keyframes ${name}{${stops.join('')}}`;
+}
+
+const agentRest = (ground, tones) => tones.map((tone, i) => `${AGENT_PROPS[ground][i]}:${tone}`).join(';');
+const agentGradient = (ground) => creaseGradient(AGENT_PROPS[ground].map((prop) => `var(${prop})`), HERO_SLIT);
+const agentAnimation = () => ['night', 'paper'].flatMap((ground) => AGENT_BANDS.map((band, i) => `agents-${band}-${ground} ${AGENTS_PASS_S}s ${AGENTS_EASE} ${Number((i * AGENTS_STAGGER_S).toFixed(2))}s 1 both`)).join(',');
+
+function agentsCss() {
+  const { night, light } = agentLadders();
+  const ladders = { night, paper: light };
+  return [
+    ...['night', 'paper'].flatMap((ground) => AGENT_PROPS[ground].map((prop) => `@property ${prop}{syntax:"<color>";inherits:false;initial-value:${ladders[ground][0][0]}}`)),
+    ...['night', 'paper'].flatMap((ground) => AGENT_BANDS.map((band, i) => agentKeyframes(`agents-${band}-${ground}`, AGENT_PROPS[ground][i], ladders[ground], i))),
+    `.hero h1 .crease-agents{${agentRest('night', night[0])};${agentRest('paper', light[0])};background-image:${agentGradient('night')}}`,
+    `:root[data-theme="light"] .hero h1 .crease-agents{background-image:${agentGradient('paper')}}`,
+    `@media (prefers-reduced-motion:no-preference){.hero h1 .crease-agents{animation:${agentAnimation()}}.hero.is-away h1 .crease-agents{animation-play-state:paused}}`,
+  ];
+}
+
 export function brandCss() {
   const { night, light } = creaseLadders();
   return [
@@ -115,10 +163,14 @@ export function brandCss() {
     `:root[data-theme="light"] .crease-name{background-image:var(--crease-paper)}`,
     `.hero h1 .crease-first{background-image:var(--crease-first)}`,
     `.hero h1 .crease-second{background-image:var(--crease-second)}`,
+    ...agentsCss(),
+    `.hero h1 .hero-line{display:flex;column-gap:.24em}`,
     `h1.crease-heading{display:block;width:fit-content;max-width:100%;padding:0 0 .12em;font-weight:800;letter-spacing:-.03em;line-height:1.08;background-image:var(--crease-second)}`,
     `h2.crease-heading{display:block;width:fit-content;margin:15px 0 25px;padding:0 0 .12em;font-weight:800;letter-spacing:-.03em;line-height:1.1;background-image:var(--crease-second)}`,
     `@media (forced-colors:active){.crease,:root .logo .logo-word.crease,h1.crease-heading,h2.crease-heading{background:none;color:CanvasText}}`,
     `@media print{.crease,:root .logo .logo-word.crease,h1.crease-heading,h2.crease-heading{background:none;color:#000}}`,
+    `@media (forced-colors:active){.hero h1 .crease-agents{background:none;color:CanvasText;animation:none}}`,
+    `@media print{.hero h1 .crease-agents{background:none;color:#000;animation:none}}`,
     '',
   ].join('\n');
 }

@@ -113,9 +113,16 @@ test('every navigation lockup is the tonal alpaca beside real crease text', () =
 test('the landing hero is the crease headline, with no strip of identities', () => {
   const html = read('index.html');
   const hero = html.match(/<h1>[\s\S]*?<\/h1>/)[0];
-  assert.ok(hero.includes('<span class="crease crease-first">Your agents.</span>'));
+  assert.ok(hero.includes('<span class="hero-line"><span class="crease crease-first">Your</span> <span class="crease crease-agents">agents.</span></span>'));
+  assert.ok(read('brand.css').includes('.hero h1 .hero-line{display:flex;column-gap:.24em}'));
   assert.ok(hero.includes('<span class="crease crease-second">Your machines.</span>'));
   assert.ok(!html.includes('class="identities"') && !html.includes('IDENTITIES'));
+});
+
+test('the hero pass pauses while the hero is off screen', () => {
+  const html = read('index.html');
+  assert.match(html, /IntersectionObserver\(\(\[entry\]\) => hero\.classList\.toggle\('is-away', !entry\.isIntersecting\)\)\.observe\(hero\)/);
+  assert.ok(read('brand.css').includes('.hero.is-away h1 .crease-agents{animation-play-state:paused}'));
 });
 
 test('favicon, brand art and social card are generated from the shared sources', () => {
