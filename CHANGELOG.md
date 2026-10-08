@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.17.10 — 2026-10-08 — a member only attaches its own uploads
+
+- **A remote member can attach only files its own connection uploaded** (its own device's under `session_scope: device`). Knowing another connection's upload path used to be enough to send its bytes to the agent.
+- **An upload with no readable owner cannot be attached by a remote member.** Remote admins and the local socket are unchanged.
+
 ## v0.17.9 — 2026-10-08 — a member only downloads its own connection's files
 
 - **A remote member fetches only what its own connection staged or produced.** `host.attachments.fetch` used to check this only when a connection's sessions were private to each device; with the default scope a member of one connection could download another connection's file by path.

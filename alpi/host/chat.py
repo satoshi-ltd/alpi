@@ -127,10 +127,23 @@ def _persistable_frame(frame: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _owns_staged_upload(home: Path, real: Path) -> bool:
+    from alpi.host.attachments_rpc import _staged_owner, owns_upload
+    try:
+        return owns_upload(_staged_owner(home, real))
+    except host_server.HandlerError:
+        return False
+
+
 def _unstaged_attachment(home: Path, attachments: Any) -> str | None:
+    from alpi import attachments as att
     from alpi.host.attachments_rpc import _stage_root
+    from alpi.host.connection_context import current
+    member = current().role != "admin"
     if not isinstance(attachments, list):
         return "(attachments must be a list)"
+    if len(attachments) > att.MAX_ATTACHMENTS:
+        return "(too many attachments)"
     try:
         root = _stage_root(home).resolve()
     except OSError:
@@ -143,6 +156,8 @@ def _unstaged_attachment(home: Path, attachments: Any) -> str | None:
             real = None
         if real is None or not real.is_relative_to(root) or not real.is_file():
             return raw or "(no path)"
+        if member and not _owns_staged_upload(home, real):
+            return raw
     return None
 
 
@@ -172,7 +187,7 @@ async def _data_chat_send(
     if attachments:
         from alpi.host.connection_context import current
         if current().source == "remote":
-            unstaged = _unstaged_attachment(home, attachments)
+            unstaged = await asyncio.to_thread(_unstaged_attachment, home, attachments)
             if unstaged is not None:
                 await send_frame({
                     "event": "error",

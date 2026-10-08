@@ -269,7 +269,10 @@ are served only from the profile's `out/`, the workspace and the upload staging
 area, and only those are offered as attachments; `attach_file` refuses the rest.
 A remote device's chat attachments must be files uploaded to the profile's
 staging area with `host.attachments.stage`; `host.chat.send` refuses any other
-path from it.
+path from it. A remote member may attach only its own connection's uploads (its
+device's under `session_scope: device`), and an upload with a missing, unreadable
+or malformed `.owner` marker is refused; a remote admin is checked against the
+staging area only.
 
 ## Prompt injection
 

@@ -145,6 +145,11 @@ def _staged_owner(home: Path, real: Path) -> dict[str, str] | None:
     return owner
 
 
+def owns_upload(owner: dict[str, str] | None) -> bool:
+    from alpi.host.connection_context import owns_session
+    return bool(owner) and owns_session(owner["connection_id"], owner["device_id"])
+
+
 def _caller_bound(ctx: Any) -> bool:
     return ctx.source == "remote" and ctx.role != "admin"
 
@@ -152,11 +157,11 @@ def _caller_bound(ctx: Any) -> bool:
 def _caller_may_fetch(home: Path, requested: str, real: Path) -> bool:
     from alpi.host import offered_paths
     from alpi.host import sessions as host_sessions
-    from alpi.host.connection_context import owns_session, owns_session_row
+    from alpi.host.connection_context import owns_session_row
 
     staged = _staged_owner(home, real)
     if staged is not None:
-        return bool(staged) and owns_session(staged["connection_id"], staged["device_id"])
+        return owns_upload(staged)
     lexical = os.path.normpath(requested)
     wanted = {str(real)}
     if os.path.realpath(lexical) == str(real):

@@ -440,8 +440,12 @@ file name.
 Inbound, a remote device attaches only uploaded files: `host.chat.send` from a
 remote connection (member or admin) accepts an attachment path only when it
 resolves, symlinks followed, to a file in that profile's staging area
-(`host/attachments/tmp/`, filled by `host.attachments.stage` and shared by
-every device of the profile), and refuses the whole message otherwise. The local socket and `host.chat.delegate` still pass
+(`host/attachments/tmp/`, filled by `host.attachments.stage`), and refuses the
+whole message otherwise. A remote member also needs the upload to be its own:
+its connection staged it (its device too under `session_scope: device`), and a
+missing, unreadable or malformed `.owner` marker refuses it, so knowing another
+connection's path is not enough to attach its bytes. A remote admin is checked
+only against the staging area. The local socket and `host.chat.delegate` still pass
 local paths, which is how the desktop on the same machine attaches a file.
 
 ## Audit trail & accountability

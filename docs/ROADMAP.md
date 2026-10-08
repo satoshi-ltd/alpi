@@ -61,16 +61,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **SCOPE.10** — Staged uploads keep their owner when attached to a turn
-  `bug · alpi · agent · high`
-  note: `host.chat.send` checks that a remote attachment is inside the staging root but does not
-  check its `.owner`; knowing another connection's or device's path is enough to attach its bytes.
-  accept: a remote member may attach only its connection's uploads, narrowed to its device under
-  `session_scope: device`; tests stage as A and send as B across connections and sibling devices,
-  with owner and connection-shared controls. Missing, malformed and unreadable markers have an
-  explicit fail-closed rule for remote members; local attachment paths keep working. Remote-admin
-  behavior follows the existing fetch exception unless SCOPE.D1 changes that contract.
-
 - **MEMBER.1** — A test pins what each caller class may invoke
   `chore · alpi · agent · high`
   note: v0.17.0 took `run` and `invoke` away from member devices by mistake and no test failed; v0.17.1 gave them back. No test states the intended matrix of what each caller class may call.
