@@ -179,12 +179,12 @@ export function SchedulePanel({ open = true, profile, connectionId, openJob = nu
                   role="option"
                   aria-selected={j.id === selectedId}
                 >
-                  <span className={styles.dot} data-on={state === "active" ? "on" : state === "paused" ? "off" : "fail"} aria-hidden />
-                  <span className={styles.jobMain}>
+                  <span className={styles.jobHead}>
+                    <span className={styles.dot} data-on={state === "active" ? "on" : state === "paused" ? "off" : "fail"} aria-hidden />
                     <span className={styles.jobTitle}>{jobTitle(j)}</span>
-                    {j.description ? <span className={styles.jobDesc}>{j.description}</span> : null}
+                    {word ? <span className={`${styles.jobWhen} ${state === "failed" ? styles.failed : ""}`.trim()}>{word}</span> : null}
                   </span>
-                  {word ? <span className={`${styles.jobWhen} ${state === "failed" ? styles.failed : ""}`.trim()}>{word}</span> : null}
+                  {j.description ? <span className={styles.jobDesc}>{j.description}</span> : null}
                 </button>
               </li>
             );

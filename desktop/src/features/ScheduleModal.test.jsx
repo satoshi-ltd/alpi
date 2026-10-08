@@ -169,7 +169,7 @@ describe("ScheduleModal grouped list and reader", () => {
     expect(screen.getByText("Active · 2")).toBeTruthy();
     expect(screen.getByText("Paused · 1")).toBeTruthy();
     const rows = screen.getAllByRole("option");
-    expect(rows.map((r) => r.textContent)[0]).toMatch(/Daily digest.*Summarises reviews.*failed/);
+    expect(rows.map((r) => r.textContent)[0]).toMatch(/Daily digest.*failed.*Summarises reviews/);
     expect(rows.find((r) => /Weekly refresh/.test(r.textContent)).textContent).toMatch(/in 2d/);
     expect(rows.find((r) => /Nudge/.test(r.textContent)).textContent).toMatch(/paused/);
     for (const r of rows) expect(r.textContent).not.toMatch(/\d+ \d+ \* \*|every day|Every/);

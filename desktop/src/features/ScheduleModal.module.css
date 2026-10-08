@@ -1,7 +1,14 @@
 .jobRow {
   display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.jobHead {
+  display: flex;
   align-items: center;
   gap: var(--space-3);
+  min-width: 0;
 }
 
 .dot {
@@ -24,14 +31,9 @@
   border: 1.5px solid var(--ink-4);
 }
 
-.jobMain {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-tight);
-  min-width: 0;
-}
-
 .jobTitle {
+  flex: 1;
+  min-width: 0;
   font-size: var(--fs-sm);
   font-weight: var(--fw-semibold);
   color: var(--ink);
@@ -41,11 +43,15 @@
 }
 
 .jobDesc {
+  margin-left: calc(8px + var(--space-3));
   font-size: var(--text-meta);
+  line-height: var(--lh-cozy);
+  overflow-wrap: anywhere;
   color: var(--ink-3);
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .jobWhen {

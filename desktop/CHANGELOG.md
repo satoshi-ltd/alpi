@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.8.8 — 2026-10-08 — a job's description shows two lines
+
+- **The schedules list shows two lines of each job's description**, like the skills list, instead of cutting it after one. The full text is still under About in the job's page.
+- **A job row reads like a skill row:** the state dot, the title and the next-run word stay on the first line, with the description below them at the row's full width.
+- **A long unbroken word in a job or skill description wraps** inside the two lines instead of being cut at the edge without an ellipsis.
+
+  Requires alpi 0.17.5.
+
 ## v0.8.7 — 2026-10-08 — a run of deletes is one Undo
 
 - **Deleting several notifications in a row raises one toast, not one per row.** The first names the row as before; the next ones turn it into “Deleted N notifications”, with a single Undo that brings every pending row back.

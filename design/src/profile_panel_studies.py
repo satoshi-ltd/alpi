@@ -34,7 +34,7 @@ def entry_block(value, note):
 def skill_row(name, state, size, blurb, on=False, flag=""):
     word_ = word(flag, "danger") if flag else word(state, "off") if state != "active" else ""
     head = flex(skill_mark("flag" if flag else state), mono(name, 12, P["ink"], 500, "flex: 1; overflow: hidden; text-overflow: ellipsis"), word_, size_tag(size), gap=8)
-    clamp = (f'<span style="margin-left: 14px; font-size: 11px; line-height: 1.3; color: {P["ink3"]}; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden">{blurb}</span>')
+    clamp = (f'<span style="margin-left: 14px; font-size: 11px; line-height: 1.3; color: {P["ink3"]}; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere">{blurb}</span>')
     return row(head + clamp, on, state != "active" and not flag, gap=4)
 
 
@@ -122,10 +122,10 @@ def tools_window():
 def job_row(job, on=False):
     failed = job["state"] == "failed"
     title = f'<span style="font-size: 12px; font-weight: 600; line-height: 1.3; color: {P["ink"]}; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{job["title"]}</span>'
-    about = f'<span style="font-size: 11px; line-height: 1.3; color: {P["ink3"]}; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{job["about"]}</span>'
+    about = f'<span style="margin-left: 16px; font-size: 11px; line-height: 1.3; color: {P["ink3"]}; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere">{job["about"]}</span>'
     tail = mono(job["word"], 11, P["danger"] if failed else P["ink3"]) if job["word"] else ""
-    inner = flex(job_mark(job["state"]), f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">{title}{about}</div>', tail, gap=8)
-    return row(inner, on, gap=0)
+    head = flex(job_mark(job["state"]), f'<div style="flex: 1; min-width: 0">{title}</div>', tail, gap=8)
+    return row(head + about, on, gap=4)
 
 
 def job_groups(jobs):
