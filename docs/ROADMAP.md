@@ -295,12 +295,6 @@ _None._
   Notifications and read/delete changes on a connection that is not open refresh its inbox
   through background polling while the app runs; switching connections does not replay banners.
 
-- **VERIFY-CACHE-OPENAI** — A direct OpenAI model reads the prompt cache on a live daemon
-  `verify · alpi · creator · high`
-  accept: on a daemon running alpi 0.17.8 or later, a profile on `openai/gpt-6-luna` with tools and
-  `effort: medium` shows cached input tokens above zero on the second call of a pass (before the fix
-  every call read 0), and a profile on `anthropic/` still reads its cache.
-
 - **VERIFY-BRAND-GLYPHS** — One-cell glyphs in the terminals alpi supports
   `verify · alpi · creator · low`
   accept: the twelve one-cell glyphs of the console (⌂ ♥ ➤ ⬟ ⌃ ★ ♣ ▣ ♛ ✒ ☼ and the diamond) were
