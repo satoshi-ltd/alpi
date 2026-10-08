@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.17.9 — 2026-10-08 — a member only downloads its own connection's files
+
+- **A remote member fetches only what its own connection staged or produced.** `host.attachments.fetch` used to check this only when a connection's sessions were private to each device; with the default scope a member of one connection could download another connection's file by path.
+- **An upload with no readable owner is refused to remote members**, not shared with whoever asks. Admins and the local socket are unchanged.
+
 ## v0.17.8 — 2026-10-08 — OpenAI models read their prompt cache again
 
 - **A model on a direct OpenAI key reads the prompt cache.** alpi marked every cacheable prompt for the provider, and for OpenAI that switched off its own automatic caching without placing a mark, so each call paid the full input price: with tools and reasoning on, none of the prompt was read from cache. OpenAI models are no longer marked; Anthropic, including through OpenRouter, still is.

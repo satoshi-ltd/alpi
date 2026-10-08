@@ -61,20 +61,8 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **ATT.3** — `host.attachments.fetch` ignores the caller's connection
-  `bug · alpi · agent · high`
-  note: found while reviewing ATT.2. `_fetch` in [attachments_rpc.py](../alpi/host/attachments_rpc.py)
-  checks roots, the denylist and, since ATT.2, the device under `session_scope: device`; under
-  `session_scope: connection` and for any non-admin member it never compares the path with the
-  caller's connection, so a member of one connection can fetch another connection's produced
-  file or staged upload by path.
-  accept: a remote non-admin caller is served only what its own connection staged or what appears
-  in a session its connection owns (plus the device clause when configured); a test with two
-  connections fetches across them and is refused, with the owner control; sibling-device isolation
-  still holds under device scope; admin and the Unix socket are unaffected.
-
 - **SCOPE.10** — Staged uploads keep their owner when attached to a turn
-  `bug · alpi · agent · high · depends: ATT.3`
+  `bug · alpi · agent · high`
   note: `host.chat.send` checks that a remote attachment is inside the staging root but does not
   check its `.owner`; knowing another connection's or device's path is enough to attach its bytes.
   accept: a remote member may attach only its connection's uploads, narrowed to its device under

@@ -419,10 +419,14 @@ on every client:
 
 Implication: a client authorised for a profile can fetch any image under
 those roots by path — broader than "an image that appeared in this chat".
-This is intentional (it's what inline rendering needs and the device is
-already trusted for the profile), but it is a real read surface. A future
-tightening would restrict reads to paths that appear in the session
-transcript or an output manifest; not implemented today.
+This is intentional for an admin (it's what inline rendering needs and the
+device is already trusted for the profile), but it is a real read surface. A
+remote member is narrower: it fetches only what its own connection staged or
+what appears in a session its connection owns (its own device under
+`session_scope: device`); an upload whose `.owner` marker is missing or
+unreadable is refused to every remote member. A path the agent itself lists or
+reads in one of the member's sessions counts as offered, so the gate stops
+guessing a path, not an agent-mediated read.
 
 Documents (every attachment that is not an image) are narrower: the daemon
 serves them only from the profile's `out/`, its workspace and the upload

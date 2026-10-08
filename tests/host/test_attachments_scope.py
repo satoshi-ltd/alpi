@@ -247,12 +247,43 @@ async def test_an_invalid_existing_owner_marker_never_grants_access(short_tmp, m
 
 
 @pytest.mark.asyncio
-async def test_an_upload_with_no_marker_stays_fetchable_for_the_whole_connection(short_tmp, monkeypatch) -> None:
-    server, url, a, b, *_rest, staged = await _world(short_tmp, monkeypatch, "device")
+@pytest.mark.parametrize("scope", ["device", "connection"])
+async def test_an_upload_with_no_marker_is_served_to_no_remote_member(short_tmp, monkeypatch, scope) -> None:
+    server, url, a, b, *_rest, staged = await _world(short_tmp, monkeypatch, scope)
     try:
         (Path(staged).parent / ".owner").unlink()
-        assert _fetch_ok(await _call(url, a["token"], "host.attachments.fetch", path=staged))
-        assert _fetch_ok(await _call(url, b["token"], "host.attachments.fetch", path=staged))
+        assert _forbidden(await _call(url, a["token"], "host.attachments.fetch", path=staged))
+        assert _forbidden(await _call(url, b["token"], "host.attachments.fetch", path=staged))
+        local = await server._dispatch({
+            "id": "1", "method": "host.attachments.fetch", "params": {"profile": "default", "path": staged},
+        })
+        assert _fetch_ok(local)
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scope", ["device", "connection"])
+async def test_another_connection_fetches_nothing_the_first_one_produced_or_staged(short_tmp, monkeypatch, scope) -> None:
+    server, url, a, _b, report, shared, chart, staged = await _world(short_tmp, monkeypatch, scope)
+    try:
+        _row, outsider = connections.create_connection("Other", role="member", session_scope=scope)
+        for path in (report, shared, chart, staged):
+            assert _fetch_ok(await _call(url, a["token"], "host.attachments.fetch", path=path))
+            assert _forbidden(await _call(url, outsider["token"], "host.attachments.fetch", path=path))
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_a_connection_fetches_what_its_own_sessions_offered_even_beside_another_connection(short_tmp, monkeypatch) -> None:
+    server, url, _a, _b, report, *_ = await _world(short_tmp, monkeypatch, "connection")
+    try:
+        row, outsider = connections.create_connection("Other", role="member", session_scope="connection")
+        _save(short_tmp, row["id"], outsider["id"], Turn(
+            1, "mine", [], "ok", output_attachments=[{"path": report, "name": "report.md"}],
+        ))
+        assert _fetch_ok(await _call(url, outsider["token"], "host.attachments.fetch", path=report))
     finally:
         await server.stop()
 
