@@ -18,6 +18,9 @@ pub struct SubscribeState {
     last_at: f64,
     floor_at: Option<f64>,
     replay_head: u64,
+    known: HashSet<(u64, u64)>,
+    known_order: VecDeque<(u64, u64)>,
+    fresh: HashSet<(u64, u64)>,
     /// Seqs we've seen recently — dedupes the overlap between a live frame
     /// and a backfilled frame that carry the same seq.
     seen: HashSet<u64>,
@@ -34,6 +37,9 @@ impl SubscribeState {
             last_at: 0.0,
             floor_at: None,
             replay_head: 0,
+            known: HashSet::new(),
+            known_order: VecDeque::new(),
+            fresh: HashSet::new(),
             seen: HashSet::new(),
             seen_order: VecDeque::new(),
             seen_cap,
@@ -92,21 +98,47 @@ impl SubscribeState {
             if let Some(at) = frame.get("at").and_then(|v| v.as_f64()) {
                 self.last_at = self.last_at.max(at);
             }
+            let persisted = frame.get("event").and_then(|v| v.as_str()) != Some("activity.changed");
+            if let Some(id) = identity(frame).filter(|_| persisted) {
+                if self.known.insert(id) {
+                    self.known_order.push_back(id);
+                    while self.known_order.len() > KNOWN_CAP {
+                        if let Some(old) = self.known_order.pop_front() {
+                            self.known.remove(&old);
+                        }
+                    }
+                }
+            }
         }
+    }
+
+    // Replay pages arrive in append order: what follows the last frame this client already knew was raised after the reset, whatever its clock says. A page with no known frame could be restored history, so only its newest few are trusted. Call before accepting the page.
+    pub fn begin_page(&mut self, frames: &[Value]) {
+        self.fresh.clear();
+        if self.floor_at.is_none() {
+            return;
+        }
+        let after = frames
+            .iter()
+            .rposition(|f| identity(f).map_or(false, |id| self.known.contains(&id)))
+            .map_or(frames.len().saturating_sub(UNANCHORED_TAIL), |i| i + 1);
+        self.fresh.extend(frames[after..].iter().filter_map(identity));
     }
 
     // The floor guards only the one replay page after a rewind, so a daemon clock that later moves back never silences live frames.
     pub fn end_replay(&mut self) {
         self.floor_at = None;
         self.replay_head = 0;
+        self.fresh.clear();
     }
 
     // Above the head the daemon reported at the reset a frame is new whatever its clock says; at or below it only a later stamp tells a startup alert from history.
     pub fn accept(&mut self, frame: &Value) -> bool {
         let at = frame.get("at").and_then(|v| v.as_f64());
         let seq = frame.get("seq").and_then(|v| v.as_u64());
+        let fresh = identity(frame).map_or(false, |id| self.fresh.contains(&id));
         if let (Some(floor), Some(at)) = (self.floor_at, at) {
-            if at <= floor && seq.map_or(true, |s| s <= self.replay_head) {
+            if !fresh && at <= floor && seq.map_or(true, |s| s <= self.replay_head) {
                 return false;
             }
         }
@@ -127,6 +159,14 @@ pub fn daemon_states() -> &'static Mutex<HashMap<String, SubscribeState>> {
 }
 
 pub const STATE_SEEN_CAP: usize = 1024;
+const KNOWN_CAP: usize = 4096;
+const UNANCHORED_TAIL: usize = 5;
+
+fn identity(frame: &Value) -> Option<(u64, u64)> {
+    let seq = frame.get("seq").and_then(|v| v.as_u64())?;
+    let at = frame.get("at").and_then(|v| v.as_f64())?;
+    Some((seq, at.to_bits()))
+}
 
 /// What the loop should do with the frame the daemon just sent.
 #[derive(Debug, Eq, PartialEq)]
@@ -252,6 +292,7 @@ pub fn poll_into(
         state.rewind(next_seq.unwrap_or(0));
         return Vec::new();
     }
+    state.begin_page(events);
     let outcome = classify_poll(state.cursor(), events, next_seq);
     let fresh = outcome
         .to_notify
@@ -549,7 +590,7 @@ mod tests {
         let _ = polled(&mut s, &[at(4990, 100.0)], Some(5000));
         assert!(polled(&mut s, &[], Some(3)).is_empty());
         assert_eq!(s.cursor(), Some(0));
-        assert_eq!(polled(&mut s, &[at(1, 90.0), at(2, 110.0), at(3, 120.0)], Some(3)), vec![2, 3]);
+        assert_eq!(polled(&mut s, &[at(1, 90.0), at(2, 110.0), at(3, 120.0)], Some(3)), vec![1, 2, 3]);
         assert_eq!(s.cursor(), Some(3));
     }
 
@@ -665,7 +706,7 @@ mod tests {
         let mut s = SubscribeState::new(STATE_SEEN_CAP);
         let _ = classify_frame(&mut s, &at(10, 500.0));
         assert!(s.rewind(3));
-        assert!(polled(&mut s, &[at(1, 400.0)], Some(3)).is_empty());
+        assert_eq!(polled(&mut s, &[at(1, 400.0)], Some(3)), vec![1]);
         assert_eq!(classify_frame(&mut s, &at(4, 450.0)), SubscribeAction::Deliver { seq: Some(4) });
     }
 
@@ -676,7 +717,61 @@ mod tests {
         let requested = s.cursor();
         assert!(poll_into(&mut s, requested, &[], Some(40)).is_empty());
         let page = [at(31, 500.0), at(40, 450.0), at(41, 460.0), at(42, 470.0)];
-        assert_eq!(polled(&mut s, &page, Some(42)), vec![41, 42]);
+        assert_eq!(polled(&mut s, &page, Some(42)), vec![40, 41, 42]);
         assert_eq!(s.cursor(), Some(42));
+    }
+
+    #[test]
+    fn a_message_raised_before_the_query_that_found_the_reset_is_delivered_when_the_clock_went_back() {
+        let mut s = SubscribeState::new(STATE_SEEN_CAP);
+        let _ = classify_frame(&mut s, &at(10, 500.0));
+        assert!(s.rewind(1));
+        assert_eq!(polled(&mut s, &[at(1, 400.0)], Some(1)), vec![1]);
+        assert_eq!(s.cursor(), Some(1));
+    }
+
+    #[test]
+    fn a_restored_page_with_no_known_frame_only_trusts_its_newest_few() {
+        let mut s = SubscribeState::new(STATE_SEEN_CAP);
+        let _ = classify_frame(&mut s, &at(900, 500.0));
+        assert!(s.rewind(120));
+        let page: Vec<Value> = (1..=120).map(|n| at(n, 100.0 + n as f64)).collect();
+        assert_eq!(polled(&mut s, &page, Some(120)), vec![116, 117, 118, 119, 120]);
+    }
+
+    #[test]
+    fn frames_that_never_reach_history_do_not_anchor_a_page() {
+        let mut s = SubscribeState::new(STATE_SEEN_CAP);
+        let activity = |seq: u64| json!({"event": "activity.changed", "seq": seq, "at": 100.0 + seq as f64});
+        let _ = classify_frame(&mut s, &at(10, 200.0));
+        for n in 11..=20 {
+            let _ = classify_frame(&mut s, &activity(n));
+        }
+        assert!(s.rewind(30));
+        let page = [at(10, 200.0), activity(15), at(21, 150.0)];
+        s.begin_page(&page);
+        assert_eq!(classify_frame(&mut s, &page[0]), SubscribeAction::DuplicateSeq);
+        assert_eq!(classify_frame(&mut s, &page[2]), SubscribeAction::Deliver { seq: Some(21) });
+    }
+
+    #[test]
+    fn history_older_than_the_last_known_frame_stays_silent_even_when_new_ones_follow() {
+        let mut s = SubscribeState::new(STATE_SEEN_CAP);
+        let _ = polled(&mut s, &[at(31, 100.0), at(32, 101.0)], Some(42));
+        let requested = s.cursor();
+        assert!(poll_into(&mut s, requested, &[], Some(40)).is_empty());
+        let page = [at(20, 90.0), at(31, 100.0), at(32, 101.0), at(33, 80.0)];
+        assert_eq!(polled(&mut s, &page, Some(33)), vec![33]);
+    }
+
+    #[test]
+    fn a_live_replay_page_gets_the_same_verdict_through_begin_page() {
+        let mut s = SubscribeState::new(STATE_SEEN_CAP);
+        let _ = classify_frame(&mut s, &at(31, 500.0));
+        assert!(s.rewind(40));
+        let page = [at(31, 500.0), at(40, 450.0)];
+        s.begin_page(&page);
+        assert_eq!(classify_frame(&mut s, &page[0]), SubscribeAction::DuplicateSeq);
+        assert_eq!(classify_frame(&mut s, &page[1]), SubscribeAction::Deliver { seq: Some(40) });
     }
 }

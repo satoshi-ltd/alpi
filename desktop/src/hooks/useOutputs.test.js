@@ -10,6 +10,7 @@ import {
   rowKey,
   useAllOutputs,
   useDeleteOutput,
+  subscribeDeleteFailed,
   useMarkAllOutputsRead,
   useOutput,
 } from "./useOutputs.js";
@@ -713,11 +714,8 @@ describe("useDeleteOutput", () => {
     vi.useFakeTimers();
   });
   afterEach(() => {
-    for (const key of pendingDeleteKeys()) {
-      const [connectionId, profile, id] = key.split(":");
-      const { result } = renderHook(() => useDeleteOutput());
-      result.current.cancel(profile, id, connectionId);
-    }
+    const { result } = renderHook(() => useDeleteOutput());
+    result.current.cancelAll();
     vi.useRealTimers();
   });
 
@@ -739,15 +737,42 @@ describe("useDeleteOutput", () => {
     expect(pendingDeleteKeys()).toEqual([]);
   });
 
-  it("cancel before the timeout drops the timer without calling the RPC", async () => {
+  it("every delete restarts one window for the whole batch", async () => {
+    invoke.mockResolvedValue(null);
+    const { result } = renderHook(() => useDeleteOutput());
+
+    act(() => {
+      expect(result.current.schedule("abby", "out-1", { connectionId: "c1" })).toBe(1);
+    });
+    act(() => {
+      vi.advanceTimersByTime(4000);
+    });
+    act(() => {
+      expect(result.current.schedule("abby", "out-2", { connectionId: "c1" })).toBe(2);
+    });
+    act(() => {
+      vi.advanceTimersByTime(4000);
+    });
+    expect(invoke).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(invoke.mock.calls.map(([, args]) => args.id).sort()).toEqual(["out-1", "out-2"]);
+  });
+
+  it("cancelAll hands back every pending row and sends no RPC", async () => {
     invoke.mockResolvedValue(null);
     const { result } = renderHook(() => useDeleteOutput());
 
     act(() => {
       result.current.schedule("abby", "out-2", { connectionId: "c1" });
+      result.current.schedule("abby", "out-3", { connectionId: "c1" });
     });
-    const cancelled = result.current.cancel("abby", "out-2", "c1");
-    expect(cancelled).toBe(true);
+    const restored = result.current.cancelAll();
+    expect(restored.map((e) => e.key)).toEqual(["c1:abby:out-2", "c1:abby:out-3"]);
     expect(pendingDeleteKeys()).toEqual([]);
 
     await act(async () => {
@@ -757,20 +782,45 @@ describe("useDeleteOutput", () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 
-  it("re-scheduling the same key cancels the previous timer", async () => {
+  it("pause holds the window and resume spends it in full", async () => {
     invoke.mockResolvedValue(null);
     const { result } = renderHook(() => useDeleteOutput());
 
     act(() => {
-      result.current.schedule("abby", "out-3", { delayMs: 1000, connectionId: "c1" });
+      result.current.schedule("abby", "out-4", { delayMs: 1000, connectionId: "c1" });
     });
     act(() => {
+      vi.advanceTimersByTime(900);
+      result.current.pause();
+    });
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(invoke).not.toHaveBeenCalled();
+
+    act(() => {
+      result.current.resume();
+      vi.advanceTimersByTime(900);
+    });
+    expect(invoke).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+      await Promise.resolve();
+    });
+    expect(invoke).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-scheduling the same key deletes it once", async () => {
+    invoke.mockResolvedValue(null);
+    const { result } = renderHook(() => useDeleteOutput());
+
+    act(() => {
+      result.current.schedule("abby", "out-5", { delayMs: 1000, connectionId: "c1" });
       vi.advanceTimersByTime(500);
     });
     act(() => {
-      result.current.schedule("abby", "out-3", { delayMs: 1000, connectionId: "c1" });
-    });
-    act(() => {
+      expect(result.current.schedule("abby", "out-5", { delayMs: 1000, connectionId: "c1" })).toBe(1);
       vi.advanceTimersByTime(600);
     });
     expect(invoke).not.toHaveBeenCalled();
@@ -792,8 +842,78 @@ describe("useDeleteOutput", () => {
     });
     expect(pendingDeleteKeys().sort()).toEqual(["c1:default:shared", "c2:default:shared"]);
 
-    result.current.cancel("default", "shared", "c1");
-    expect(pendingDeleteKeys()).toEqual(["c2:default:shared"]);
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(invoke.mock.calls.map(([, args]) => args.connectionId).sort()).toEqual(["c1", "c2"]);
+  });
+
+  it("one slow connection does not hold back another's delete", async () => {
+    let releaseSlow;
+    invoke.mockImplementation((cmd, args) =>
+      args.connectionId === "slow" ? new Promise((resolve) => { releaseSlow = resolve; }) : Promise.resolve(null));
+    const { result } = renderHook(() => useDeleteOutput());
+
+    act(() => {
+      result.current.schedule("abby", "a", { connectionId: "slow" });
+      result.current.schedule("abby", "b", { connectionId: "fast" });
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+      await Promise.resolve();
+    });
+    expect(invoke.mock.calls.map(([, args]) => args.connectionId).sort()).toEqual(["fast", "slow"]);
+    releaseSlow?.(null);
+  });
+
+  it("a refused delete is handed back to its row, a row already gone is not", async () => {
+    invoke.mockImplementation(async (cmd, args) => {
+      if (args.id === "refused") throw new Error("forbidden");
+      if (args.id === "gone") throw new Error("alp -32004: not-found");
+      return null;
+    });
+    const onFailed = vi.fn();
+    const heard = vi.fn();
+    const stop = subscribeDeleteFailed(heard);
+    const { result } = renderHook(() => useDeleteOutput());
+
+    act(() => {
+      result.current.schedule("abby", "refused", { connectionId: "c1", onFailed });
+      result.current.schedule("abby", "gone", { connectionId: "c1", onFailed });
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(onFailed).toHaveBeenCalledTimes(1);
+    expect(String(onFailed.mock.calls[0][0])).toMatch(/forbidden/);
+    expect(heard.mock.calls).toEqual([["c1:abby:refused"]]);
+    stop();
+  });
+
+  it("a delete while paused waits for resume", async () => {
+    invoke.mockResolvedValue(null);
+    const { result } = renderHook(() => useDeleteOutput());
+
+    act(() => {
+      result.current.schedule("abby", "a", { connectionId: "c1" });
+      result.current.pause();
+      result.current.schedule("abby", "b", { connectionId: "c1" });
+      vi.advanceTimersByTime(20000);
+    });
+    expect(invoke).not.toHaveBeenCalled();
+
+    await act(async () => {
+      result.current.resume();
+      vi.advanceTimersByTime(5000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(invoke).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -816,6 +936,7 @@ describe("rowKey (modal hide/delete namespacing)", () => {
     expect(visible).toEqual([{ connectionId: "c2", profile: "default", id: "o1" }]);
   });
 });
+
 
 
 describe("useAllOutputs unreachable daemons", () => {

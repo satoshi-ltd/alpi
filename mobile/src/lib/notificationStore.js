@@ -1,12 +1,13 @@
 import { useSyncExternalStore } from 'react';
 
-export const UNDO_MS = 5000;
+import { createUndoBatch, UNDO_WINDOW_MS } from '../../../common/undoBatch.mjs';
+
+export const UNDO_MS = UNDO_WINDOW_MS;
 
 const EMPTY_SET = new Set();
 const INITIAL = { trail: null, frozen: null, hidden: EMPTY_SET, unreadMissing: EMPTY_SET };
 
 let state = INITIAL;
-const timers = new Map();
 const listeners = new Set();
 
 function emit(patch) {
@@ -53,27 +54,30 @@ export function withKey(set, key, on) {
 }
 
 // A finished delete stays hidden: the row is gone on the daemon, and the list drops it on its next refresh.
-export function scheduleDelete(key, run, { delayMs = UNDO_MS, onError } = {}) {
-  if (timers.has(key)) clearTimeout(timers.get(key));
-  const timer = setTimeout(async () => {
-    timers.delete(key);
-    try {
-      await run();
-    } catch (error) {
-      emit({ hidden: withKey(state.hidden, key, false) });
-      onError?.(error);
+const deletes = createUndoBatch({
+  commit: (batch) => {
+    for (const entry of batch) {
+      Promise.resolve()
+        .then(entry.run)
+        .catch((error) => {
+          emit({ hidden: withKey(state.hidden, entry.key, false) });
+          entry.onError?.(error);
+        });
     }
-  }, delayMs);
-  timers.set(key, timer);
+  },
+});
+
+export function scheduleDelete(key, run, { delayMs, onError } = {}) {
+  const count = deletes.add(key, { key, run, onError }, { delayMs });
   emit({ hidden: withKey(state.hidden, key, true) });
+  return count;
 }
 
-export function cancelDelete(key) {
-  const timer = timers.get(key);
-  if (!timer) return false;
-  clearTimeout(timer);
-  timers.delete(key);
-  emit({ hidden: withKey(state.hidden, key, false) });
+export function undoAllDeletes() {
+  let hidden = state.hidden;
+  for (const entry of deletes.undoAll()) hidden = withKey(hidden, entry.key, false);
+  if (hidden === state.hidden) return false;
+  emit({ hidden });
   return true;
 }
 
@@ -82,8 +86,7 @@ export function noteUnreadMissing(connectionKey) {
 }
 
 export function _resetNotificationStoreForTests() {
-  for (const timer of timers.values()) clearTimeout(timer);
-  timers.clear();
+  deletes.undoAll();
   state = INITIAL;
   for (const fn of listeners) fn();
 }

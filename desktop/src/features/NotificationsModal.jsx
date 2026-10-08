@@ -28,6 +28,7 @@ import { notificationTime } from "../lib/time.js";
 import { profileLabel } from "../lib/profile-display.js";
 import {
   pendingDeleteKeys,
+  subscribeDeleteFailed,
   rowKey,
   useAllOutputs,
   useDeleteOutput,
@@ -40,6 +41,7 @@ import styles from "./NotificationsModal.module.css";
 import { copyText } from "../lib/clipboard.js";
 import { headlineParts } from "../lib/notificationHeadline.js";
 import { EMPTY } from "../../../common/emptyCopy.mjs";
+import { deletedMessage, UNDO_WINDOW_MS } from "../../../common/undoBatch.mjs";
 import {
   NOTIFICATION_FILTERS,
   filterNotifications,
@@ -86,6 +88,8 @@ const KEYS = [["↑↓", "move"], ["⏎", "open"], ["R", "reply"], ["U", "unread
 
 const clip = (text, max) => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text);
 
+const UNDO_TOAST_ID = "notif-delete-undo";
+
 export function unreachableTitle(names) {
   const shown = names.slice(0, 3).join(", ");
   const rest = names.length > 3 ? ` and ${names.length - 3} more` : "";
@@ -112,7 +116,12 @@ export default function NotificationsModal({
     connections, activeId: activeConnectionId, enabled: open, deferMs: 0,
   });
   const markAll = useMarkAllOutputsRead();
-  const { schedule: scheduleDelete, cancel: cancelDelete } = useDeleteOutput();
+  const {
+    schedule: scheduleDelete,
+    cancelAll: cancelAllDeletes,
+    pause: pauseDeletes,
+    resume: resumeDeletes,
+  } = useDeleteOutput();
   const [pendingId, setPendingId] = useState(null);
   const [pendingProfile, setPendingProfile] = useState(null);
   const [pendingConnectionId, setPendingConnectionId] = useState(null);
@@ -211,6 +220,15 @@ export default function NotificationsModal({
     setHiddenIds(() => new Set(pendingDeleteKeys()));
   }, [open]);
 
+  useEffect(() => subscribeDeleteFailed((key) => {
+    setHiddenIds((prev) => {
+      if (!prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+  }), []);
+
   useEffect(() => {
     if (selectedId) {
       setPendingId(selectedId);
@@ -290,25 +308,31 @@ export default function NotificationsModal({
       setPendingProfile(null);
       setPendingConnectionId(null);
     }
-    scheduleDelete(row.profile, row.id, { connectionId: row.connectionId });
+    const count = scheduleDelete(row.profile, row.id, {
+      connectionId: row.connectionId,
+      onFailed: (error) => notify({ message: `Delete failed: ${error}`, variant: "error" }),
+    });
     notify({
-      message: `Deleted “${clip(headlineParts(row).title || "notification", 48)}”`,
+      id: UNDO_TOAST_ID,
+      message: deletedMessage(count, clip(headlineParts(row).title || "notification", 48)),
       action: "Undo",
+      duration: UNDO_WINDOW_MS,
+      onPause: pauseDeletes,
+      onResume: resumeDeletes,
       onAction: () => {
-        // The toast outlives the 5 s delete while hovered; a row the daemon already dropped must not come back.
-        if (!cancelDelete(row.profile, row.id, row.connectionId)) {
+        const restored = cancelAllDeletes();
+        if (restored.length === 0) {
           notify({ message: "Already deleted" });
           return;
         }
         setHiddenIds((prev) => {
-          if (!prev.has(key)) return prev;
           const next = new Set(prev);
-          next.delete(key);
+          for (const entry of restored) next.delete(entry.key);
           return next;
         });
       },
     });
-  }, [scheduleDelete, cancelDelete, notify, activeId, activeProfile, activeConnId]);
+  }, [scheduleDelete, cancelAllDeletes, pauseDeletes, resumeDeletes, notify, activeId, activeProfile, activeConnId]);
 
   const onCopy = useCallback(async () => {
     if (!detail) return;

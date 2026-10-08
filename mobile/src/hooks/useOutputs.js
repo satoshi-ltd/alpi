@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { notificationKey } from '../../../common/notificationTriage.mjs';
 import { useEndpoint } from '../lib/EndpointContext';
-import { cancelDelete, noteUnreadMissing, scheduleDelete } from '../lib/notificationStore';
+import { isGone } from '../../../common/isGone.mjs';
+import { noteUnreadMissing, scheduleDelete, undoAllDeletes } from '../lib/notificationStore';
 import { call as rpcCall } from '../lib/rpc';
 import { isMissingVerb } from './useActivity';
 import { useDebouncedCallback } from './useDebouncedCallback';
@@ -10,10 +11,6 @@ import { useEventEffect } from './useEvents';
 
 const DEFAULT_LIMIT = 100;
 
-export function isGone(error) {
-  const text = String(error?.message ?? error ?? '').toLowerCase();
-  return /-32004\b/.test(text) || (/\bnot[-_ ]found\b/.test(text) && !/method[-_ ]not[-_ ]found/.test(text));
-}
 
 export function useOutputs({ profile, status, profiles } = {}) {
   const { endpoint, call } = useEndpoint();
@@ -183,15 +180,13 @@ export function useNotificationActions() {
       return false;
     }
   }, [send, activeId]);
-  const remove = useCallback((row, { onError } = {}) => {
-    scheduleDelete(notificationKey(row), async () => {
-      try {
-        await send(row, 'host.outputs.delete');
-      } catch (error) {
-        if (!isGone(error)) throw error;
-      }
-    }, { onError });
-  }, [send]);
-  const undoRemove = useCallback((row) => cancelDelete(notificationKey(row)), []);
+  const remove = useCallback((row, { onError } = {}) => scheduleDelete(notificationKey(row), async () => {
+    try {
+      await send(row, 'host.outputs.delete');
+    } catch (error) {
+      if (!isGone(error)) throw error;
+    }
+  }, { onError }), [send]);
+  const undoRemove = useCallback(() => undoAllDeletes(), []);
   return { markRead, markUnread, remove, undoRemove };
 }

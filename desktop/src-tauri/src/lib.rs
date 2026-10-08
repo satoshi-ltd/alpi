@@ -3616,6 +3616,12 @@ fn subscribe_daemon_events(app: AppHandle) {
                             if let Some(events) =
                                 value.get("events").and_then(|v| v.as_array())
                             {
+                                states_for_loop
+                                    .lock()
+                                    .unwrap_or_else(|e| e.into_inner())
+                                    .entry(key_for_loop.clone())
+                                    .or_insert_with(|| SubscribeState::new(STATE_SEEN_CAP))
+                                    .begin_page(events);
                                 for ev in events {
                                     let mut g = states_for_loop
                                         .lock()

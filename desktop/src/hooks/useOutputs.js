@@ -1,4 +1,6 @@
 import { defaultAsAlpaca } from "../../../common/folds.mjs";
+import { isGone } from "../../../common/isGone.mjs";
+import { createUndoBatch } from "../../../common/undoBatch.mjs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { subscribeDaemonEvent } from "../lib/daemon-bus.js";
@@ -453,12 +455,36 @@ export function useMarkAllOutputsRead() {
 }
 
 
-// Keyed by connectionId:profile:id — ids are unique only within a daemon's profile, so the unified inbox must namespace by connection.
-const _pendingDeletes = new Map();
-
 function _pendingKey(connectionId, profile, id) {
   return `${connectionId}:${profile}:${id}`;
 }
+
+const _failListeners = new Set();
+
+export function subscribeDeleteFailed(fn) {
+  _failListeners.add(fn);
+  return () => _failListeners.delete(fn);
+}
+
+const _pendingDeletes = createUndoBatch({
+  commit: async (batch) => {
+    const byConnection = new Map();
+    for (const entry of batch) {
+      const key = entry.connectionId ?? null;
+      byConnection.set(key, [...(byConnection.get(key) ?? []), entry]);
+    }
+    await Promise.all(Array.from(byConnection, async ([connectionId, rows]) => {
+      const results = await Promise.allSettled(rows.map(({ profile, id }) =>
+        invoke("outputs_delete", { profile, id, ...(connectionId ? { connectionId } : {}) })));
+      results.forEach((r, i) => {
+        if (r.status !== "rejected" || isGone(r.reason)) return;
+        for (const fn of _failListeners) fn(rows[i].key);
+        try { rows[i].onFailed?.(r.reason); } catch { /* a bad handler must not block the others */ }
+      });
+      if (results.some((r) => r.status === "fulfilled" || isGone(r.reason))) notifyLocalChange(connectionId);
+    }));
+  },
+});
 
 // Same composite key the undo timer uses — the modal hides/deletes by this so identical ids on two daemons never collide.
 export function rowKey(row) {
@@ -466,35 +492,19 @@ export function rowKey(row) {
 }
 
 export function pendingDeleteKeys() {
-  return Array.from(_pendingDeletes.keys());
+  return _pendingDeletes.keys();
 }
 
 export function useDeleteOutput() {
-  const schedule = useCallback((profile, id, { delayMs = 5000, connectionId } = {}) => {
-    if (!profile || !id) return;
+  const schedule = useCallback((profile, id, { delayMs, connectionId, onFailed } = {}) => {
+    if (!profile || !id) return 0;
     const key = _pendingKey(connectionId, profile, id);
-    const prev = _pendingDeletes.get(key);
-    if (prev) clearTimeout(prev);
-    const timer = setTimeout(async () => {
-      _pendingDeletes.delete(key);
-      try {
-        await invoke("outputs_delete", { profile, id, ...(connectionId ? { connectionId } : {}) });
-        notifyLocalChange(connectionId ?? null);
-      } catch {
-        /* best-effort: row may already be gone */
-      }
-    }, delayMs);
-    _pendingDeletes.set(key, timer);
+    return _pendingDeletes.add(key, { key, profile, id, connectionId, onFailed }, { delayMs });
   }, []);
 
-  const cancel = useCallback((profile, id, connectionId) => {
-    const key = _pendingKey(connectionId, profile, id);
-    const timer = _pendingDeletes.get(key);
-    if (!timer) return false;
-    clearTimeout(timer);
-    _pendingDeletes.delete(key);
-    return true;
-  }, []);
+  const cancelAll = useCallback(() => _pendingDeletes.undoAll(), []);
+  const pause = useCallback(() => _pendingDeletes.pause(), []);
+  const resume = useCallback(() => _pendingDeletes.resume(), []);
 
-  return { schedule, cancel };
+  return { schedule, cancelAll, pause, resume };
 }

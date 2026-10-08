@@ -12,6 +12,7 @@ import styles from "./Notification.module.css";
 const NotifyContext = createContext(null);
 
 const DEDUP_WINDOW_MS = 2000;
+const MAX_TOASTS = 3;
 
 function normalize(arg, extra) {
   const o = typeof arg === "string" ? { text: arg, ...(extra || {}) } : arg || {};
@@ -30,9 +31,17 @@ function normalize(arg, extra) {
     kind,
     action: o.action,
     onAction: o.onAction,
+    onPause: o.onPause,
+    onResume: o.onResume,
     duration: o.duration ?? 5000,
     persistent: !!o.persistent,
   };
+}
+
+function capStack(items) {
+  let over = items.length - MAX_TOASTS;
+  if (over <= 0) return items;
+  return items.filter((x) => x.pinned || over-- <= 0);
 }
 
 export function NotificationProvider({ children }) {
@@ -46,6 +55,17 @@ export function NotificationProvider({ children }) {
   const notify = useCallback((arg, extra) => {
     const o = normalize(arg, extra);
     if (!o.text) return null;
+    const pinned = typeof arg === "object" && arg ? arg.id : undefined;
+    if (pinned) {
+      setItems((prev) => {
+        const at = prev.findIndex((x) => x.id === pinned);
+        if (at < 0) return capStack([...prev, { id: pinned, rev: 0, pinned: true, ...o }]);
+        const next = prev.slice();
+        next[at] = { ...next[at], ...o, rev: next[at].rev + 1 };
+        return next;
+      });
+      return pinned;
+    }
     const key = `${o.kind}|${o.text}`;
     const now = Date.now();
     const recent = recentRef.current;
@@ -56,7 +76,7 @@ export function NotificationProvider({ children }) {
     }
     recent.set(key, now);
     const id = Math.random().toString(36).slice(2, 9);
-    setItems((prev) => [...prev, { id, ...o }]);
+    setItems((prev) => capStack([...prev, { id, rev: 0, ...o }]));
     return id;
   }, []);
 
@@ -88,7 +108,7 @@ function NotificationStack({ items, onDismiss }) {
   return (
     <div className={styles.stack} aria-live="polite">
       {items.map((n) => (
-        <Notification key={n.id} n={n} onDismiss={() => onDismiss(n.id)} />
+        <Notification key={n.id} n={n} onDismiss={onDismiss} />
       ))}
     </div>
   );
@@ -98,25 +118,42 @@ function Notification({ n, onDismiss }) {
   const [paused, setPaused] = useState(false);
   const [exiting, setExiting] = useState(false);
   const timer = useRef(null);
+  const exitTimer = useRef(null);
+  const pausedRef = useRef(false);
+  const latest = useRef(n);
+  latest.current = n;
+
+  // Stable, or every render of the stack would restart this toast's window while the delete it offers to undo runs on.
+  const close = useCallback(() => onDismiss(n.id), [onDismiss, n.id]);
+
+  const beginExit = useCallback(() => {
+    clearTimeout(exitTimer.current);
+    setExiting(true);
+    exitTimer.current = setTimeout(close, 180);
+  }, [close]);
 
   const start = useCallback(() => {
     if (n.persistent) return;
     clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
-      setExiting(true);
-      setTimeout(onDismiss, 180);
-    }, n.duration);
-  }, [n.persistent, n.duration, onDismiss]);
+    timer.current = setTimeout(beginExit, n.duration);
+  }, [n.persistent, n.duration, beginExit]);
 
   useEffect(() => {
-    start();
+    clearTimeout(exitTimer.current);
+    setExiting(false);
+    if (pausedRef.current) latest.current.onPause?.();
+  }, [n.rev]);
+
+  useEffect(() => {
+    if (!paused) start();
     return () => clearTimeout(timer.current);
-  }, [start]);
+  }, [paused, start, n.rev]);
 
-  useEffect(() => {
-    if (paused) clearTimeout(timer.current);
-    else start();
-  }, [paused, start]);
+  // A toast retired while hovered never gets mouseleave; its owner must still hear the resume.
+  useEffect(() => () => {
+    clearTimeout(exitTimer.current);
+    if (pausedRef.current) latest.current.onResume?.();
+  }, []);
 
   const dotColor =
     {
@@ -129,8 +166,16 @@ function Notification({ n, onDismiss }) {
 
   return (
     <div
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
+      onMouseEnter={() => {
+        pausedRef.current = true;
+        setPaused(true);
+        n.onPause?.();
+      }}
+      onMouseLeave={() => {
+        pausedRef.current = false;
+        setPaused(false);
+        n.onResume?.();
+      }}
       className={`${styles.toast} ${n.action ? styles.toastWithAction : ""}`}
       style={{
         animation: exiting
@@ -150,8 +195,7 @@ function Notification({ n, onDismiss }) {
             type="button"
             onClick={() => {
               n.onAction?.();
-              setExiting(true);
-              setTimeout(onDismiss, 180);
+              beginExit();
             }}
             className={styles.actionBtn}
           >

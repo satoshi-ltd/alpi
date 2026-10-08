@@ -14,6 +14,13 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.7.6 — 2026-10-08 — a run of deletes keeps one Undo for all of them
+
+- **Deleting several notifications in a row no longer loses the earlier Undo.** Each delete used to replace the toast, so after three quick swipes only the last could be undone while the first two went through anyway.
+- **One toast now counts the batch** — “Deleted N notifications” — and its Undo restores every pending row. Each delete restarts the same 5 s window and the rows are deleted together when it ends, matching the desktop wording; an Undo tapped after the window ended says “Already deleted”.
+
+  Requires alpi 0.17.5.
+
 ## v0.7.5 — 2026-10-07 — the inbox of every connection stays current
 
 - **Notifications from a connection that is not open refresh the inbox.** Before, a row from another connection, or a warning the daemon files itself, appeared only after reopening the screen or pulling to refresh; with notifications allowed, the notification poll now refreshes the inbox whenever it finds a change, and inbox changes never raise a banner.

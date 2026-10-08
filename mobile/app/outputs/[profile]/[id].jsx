@@ -8,6 +8,7 @@ import { mixHex } from '../../../../common/color.mjs';
 import { FALLBACK_ACCENT } from '../../../../common/folds.mjs';
 import { headlineParts } from '../../../../common/notificationHeadline.mjs';
 import { notificationKey } from '../../../../common/notificationTriage.mjs';
+import { deletedMessage } from '../../../../common/undoBatch.mjs';
 import { ActionSheet } from '../../../src/components/ActionSheet';
 import { Button } from '../../../src/components/Button';
 import { Fold } from '../../../src/components/Fold';
@@ -138,11 +139,11 @@ function NotificationPage({ profile, id, connectionId }) {
     if (!row) return;
     const target = { profile, id, connectionId: connectionId || undefined };
     const next = position?.next ?? null;
-    actions.remove(target, { onError: (e) => toast({ message: `Delete failed: ${String(e?.message ?? e)}`, kind: 'danger' }) });
+    const count = actions.remove(target, { onError: (e) => toast({ message: `Delete failed: ${String(e?.message ?? e)}`, kind: 'danger' }) });
     toast({
-      message: `Deleted “${clip(headlineParts(row).title || 'notification', 48)}”`,
+      message: deletedMessage(count, clip(headlineParts(row).title || 'notification', 48)),
       action: 'Undo',
-      onAction: () => actions.undoRemove(target),
+      onAction: () => { if (!actions.undoRemove()) toast({ message: 'Already deleted' }); },
       duration: UNDO_MS,
     });
     if (next) step(next);

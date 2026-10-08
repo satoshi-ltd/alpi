@@ -281,7 +281,7 @@ describe('notification page, moving between notifications', () => {
     const shown = h.toast.mock.calls.at(-1)[0];
     expect(shown.action).toBe('Undo');
     shown.onAction();
-    expect(h.undoRemove).toHaveBeenCalledWith({ profile: 'abby', id: 'd1', connectionId: 'casa' });
+    expect(h.undoRemove).toHaveBeenCalledWith();
     expect(h.setParams).toHaveBeenLastCalledWith({ profile: 'sentinel', id: 'z', connectionId: 'mirai' });
   });
 

@@ -256,6 +256,47 @@ describe('notifications list, row actions', () => {
       vi.useRealTimers();
     }
   });
+
+  it('says Already deleted when Undo comes after the window ended', async () => {
+    vi.useFakeTimers();
+    try {
+      render(<OutputsScreen />);
+      act(() => { fireEvent.click(a11yAction('Knowledge pass', 'Delete')); });
+      const undo = h.toast.mock.calls.at(-1)[0];
+      await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+      act(() => { undo.onAction(); });
+      expect(h.toast).toHaveBeenLastCalledWith({ message: 'Already deleted' });
+      expect(rowTitles().some((t) => t.includes('Knowledge pass'))).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('folds a run of deletes into one counting toast whose Undo restores them all', async () => {
+    vi.useFakeTimers();
+    try {
+      render(<OutputsScreen />);
+      act(() => { fireEvent.click(a11yAction('Knowledge pass', 'Delete')); });
+      expect(h.toast.mock.calls.at(-1)[0].message).toMatch(/^Deleted “/);
+      await act(async () => { await vi.advanceTimersByTimeAsync(4000); });
+      act(() => { fireEvent.click(a11yAction('PR waiting', 'Delete')); });
+      const undo = h.toast.mock.calls.at(-1)[0];
+      expect(undo.message).toBe('Deleted 2 notifications');
+      expect(undo.action).toBe('Undo');
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(4000); });
+      expect(h.rpc).not.toHaveBeenCalledWith(expect.anything(), 'host.outputs.delete', expect.anything());
+
+      act(() => { undo.onAction(); });
+      const titles = rowTitles();
+      expect(titles.some((t) => t.includes('Knowledge pass'))).toBe(true);
+      expect(titles.some((t) => t.includes('PR waiting'))).toBe(true);
+      await act(async () => { await vi.advanceTimersByTimeAsync(6000); });
+      expect(h.rpc).not.toHaveBeenCalledWith(expect.anything(), 'host.outputs.delete', expect.anything());
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('notifications list, access', () => {

@@ -1,7 +1,12 @@
-from gen import m_button, m_screen_header, page
-from desktop_boards import INK, INK3, LINE2
+import json
+import os
+import subprocess
+
+import folds
+from gen import page
+from desktop_boards import INK, INK3, MONO
 from conversation_boards import h1, label, mono, spec
-from notif_studies import VIEW, a_panel, phone_triage
+from brand_boards import EXTRA_FONTS, crease
 
 PAGE_W = 1280
 COLUMN_PAD = 20
@@ -23,117 +28,133 @@ def tagged(title, inner):
     return stack(cap(title), inner, gap=8)
 
 
-def phone_frame(inner):
-    return f'<div style="width: 390px; max-width: 100%; border-radius: 12px; border: 0.5px solid {LINE2}; overflow: hidden; background: #ffffff">{inner}</div>'
+def hero_palette():
+    common = lambda name: json.dumps(os.path.join(folds.COMMON, name))
+    script = (
+        f"import {{ACCENTS, ACCENT_FOLDS}} from {common('accents.mjs')};"
+        f"import {{creaseTones}} from {common('crease.mjs')};"
+        f"import {{BRAND_INK}} from {common('folds.mjs')};"
+        f"import {{palettes}} from {common('tokens.mjs')};"
+        "const grounds = {paper: palettes.light.bg, night: palettes.dark.bg};"
+        "const ink = {paper: [BRAND_INK.light, BRAND_INK.light], night: [BRAND_INK.dark, '#ffffff']};"
+        "process.stdout.write(JSON.stringify({grounds,"
+        "ink: Object.fromEntries(Object.entries(ink).map(([k, pair]) => [k, pair.map((hex) => creaseTones(hex, grounds[k]))])),"
+        "accents: ACCENTS.map(([name, hex]) => ({name, hex, fold: ACCENT_FOLDS[name],"
+        "paper: creaseTones(hex, grounds.paper), night: creaseTones(hex, grounds.night)}))}));"
+    )
+    out = subprocess.run(["node", "--input-type=module", "-e", script], capture_output=True, text=True, check=True)
+    return json.loads(out.stdout)
 
 
-DELETED = ("Security: billing-api P1", "Security: web-app P0", "Security: auth-gateway P1", "Security: search-index P2", "Security: rates-sync P1",
-           "Security: mail-relay P0", "Security: export-worker P2", "Security: image-proxy P1", "Security: crm-bridge P1")
+# rgb() escapes build.py's THEMED hex rewrite, which would theme the site's own grounds away.
+def rgb(value):
+    return "rgb(%d, %d, %d)" % tuple(int(value[i:i + 2], 16) for i in (1, 3, 5))
 
 
-def toast_dot(color, top=0):
-    return f'<span style="width: 8px; height: 8px; border-radius: 4px; background: {color}; flex-shrink: 0; margin-top: {top}px"></span>'
+def hero_word(text, size, tones3):
+    return crease(text, size, [rgb(t) for t in tones3], track="-0.03em")
 
 
-def d_toast(message, action="", dot=VIEW["ink3"]):
-    tail = (f'<span style="width: 1px; height: 14px; background: {VIEW["line2"]}; margin: 0 2px; flex-shrink: 0"></span>'
-            f'<span style="padding: 2px 10px; border-radius: 4px; font-size: 12px; font-weight: 500; color: {VIEW["ink"]}; flex-shrink: 0">{action}</span>') if action else ""
-    pad = "6px 8px 6px 14px" if action else "8px 16px 8px 14px"
-    return (f'<div style="display: inline-flex; align-items: center; gap: 10px; padding: {pad}; max-width: 100%; box-sizing: border-box; border-radius: 4px; '
-            f'background: {VIEW["elev"]}; box-shadow: 0 0 0 0.5px {VIEW["line2"]}; font-size: 13px; line-height: 18px; color: {VIEW["ink2"]}; white-space: nowrap">'
-            f'{toast_dot(dot)}<span style="overflow: hidden; text-overflow: ellipsis">{message}</span>{tail}</div>')
+def hero_panel(inner, ground, pad=22, gap=12):
+    return (f'<div style="padding: {pad}px; border-radius: 10px; background: {rgb(ground)}; display: flex; flex-direction: column; gap: {gap}px; overflow: hidden">'
+            f'{inner}</div>')
 
 
-def hug(inner):
-    return f'<div style="display: flex">{inner}</div>'
+def hero_caption(text, ground):
+    colour = "rgba(255,255,255,0.52)" if ground == hero_palette()["grounds"]["night"] else "rgba(20,20,20,0.5)"
+    return f'<span style="font-family: {MONO}; font-size: 10.5px; letter-spacing: 0.05em; text-transform: uppercase; color: {colour}">{text}</span>'
 
 
-def inbox_with_toasts(toasts, h):
-    pile = (f'<div style="position: absolute; right: 22px; bottom: 22px; left: 22px; display: flex; flex-direction: column-reverse; align-items: flex-end; gap: 8px">'
-            f'{"".join(toasts)}</div>')
-    return f'<div style="position: relative">{a_panel(VIEW, h)}{pile}</div>'
+def hero_now_lines(key, size=40):
+    first, second = hero_palette()["ink"][key]
+    return (f'<div style="display: flex; flex-direction: column; gap: 2px">'
+            f'<span>{hero_word("Your agents.", size, first)}</span><span>{hero_word("Your machines.", size, second)}</span></div>')
 
 
-def toast_stack_now():
-    toasts = [d_toast(f"Deleted “{title}”", "Undo") for title in DELETED]
+def hero_cycle_lines(key, accent, size=40):
+    first, second = hero_palette()["ink"][key]
+    return (f'<div style="display: flex; flex-direction: column; gap: 2px">'
+            f'<span>{hero_word("Your&nbsp;", size, first)}{hero_word("agents.", size, accent[key])}</span>'
+            f'<span>{hero_word("Your machines.", size, second)}</span></div>')
+
+
+def cycle_words(key, size=21):
+    cells = []
+    for accent in hero_palette()["accents"]:
+        cells.append(f'<div style="display: flex; flex-direction: column; gap: 3px; align-items: flex-start">'
+                     f'<span>{hero_word("agents", size, accent[key])}</span>{hero_caption(accent["name"], hero_palette()["grounds"][key])}</div>')
+    return f'<div style="display: flex; flex-wrap: wrap; gap: 14px 22px">{"".join(cells)}</div>'
+
+
+def cycle_bar(key, h=14):
+    accents = hero_palette()["accents"]
+    cells = []
+    for i, accent in enumerate(accents):
+        this = rgb(accent[key][0])
+        nxt = rgb(accents[(i + 1) % len(accents)][key][0])
+        cells.append(f'<div style="flex: 1; background: linear-gradient(90deg, {this} 0 80%, {nxt} 100%)"></div>')
+    return f'<div style="display: flex; height: {h}px; border-radius: {h // 2}px; overflow: hidden">{"".join(cells)}</div>'
+
+
+ON_PAGE = ("shield", "tree", "star", "rocket")
+NAMED = (("reviewer", "blue"), ("librarian", "green"), ("researcher", "violet"))
+
+
+def page_pair(accent, size=30):
+    dim = "" if accent["fold"] in ON_PAGE else "; opacity: 0.28"
+    return f'<span style="display: inline-flex{dim}">{folds.fold(accent["fold"], accent["hex"], size)}</span>'
+
+
+def profile_names(key, size=18):
+    by_name = {a["name"]: a for a in hero_palette()["accents"]}
+    items = []
+    for name, colour in NAMED:
+        accent = by_name[colour]
+        items.append(f'<span style="display: inline-flex; align-items: center; gap: 8px">'
+                     f'{folds.fold(accent["fold"], accent["hex"], size)}{hero_word(name, size, accent[key])}</span>')
+    return f'<div style="display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center">{"".join(items)}</div>'
+
+
+def hero_colour_now():
+    paper, night = hero_palette()["grounds"]["paper"], hero_palette()["grounds"]["night"]
+    return EXTRA_FONTS + stack(
+        tagged("Night · as it ships", hero_panel(hero_now_lines("night") + hero_caption("--crease-first and --crease-second · one ink ladder", night), night)),
+        tagged("Paper · as it ships", hero_panel(hero_now_lines("paper") + hero_caption("--crease-first and --crease-second · one ink ladder", paper), paper)),
+        tagged("Four of the twelve reach the page; the other eight never do",
+               f'<div style="display: flex; flex-wrap: wrap; gap: 10px">'
+               f'{"".join(page_pair(a) for a in hero_palette()["accents"])}</div>'),
+        tagged("profileName() already creases a colour, at 14, 18 and 28 px",
+               stack(hero_panel(profile_names("night"), night, pad=16), hero_panel(profile_names("paper"), paper, pad=16), gap=10)),
+        cap("Both lines take creaseTones(BRAND_INK, ground): near-black down to warm grey on paper, white down to warm grey on night. The largest word on the page is the one place a profile colour never reaches."),
+    )
+
+
+def hero_colour_proposed():
+    accents = {a["name"]: a for a in hero_palette()["accents"]}
+    paper, night = hero_palette()["grounds"]["paper"], hero_palette()["grounds"]["night"]
     return stack(
-        tagged("Nine ⌫ presses in the inbox · one toast each, newest on top", inbox_with_toasts(toasts, 470)),
-        cap("Every pill has its own Undo and its own 5 s; the stack has no cap and climbs over the list, the reader and the composer behind the modal."),
-        cap("Hover pauses a pill but not its delete: Undo after the 5 s can only say “Already deleted”."),
-    )
-
-
-def toast_stack_proposed():
-    toasts = [d_toast("Copied"), d_toast("Deleted 9 notifications", "Undo")]
-    steps = stack(
-        tagged("First delete · names the row", hug(d_toast("Deleted “Security: billing-api P1”", "Undo"))),
-        tagged("Another inside the window · the same toast counts", hug(d_toast("Deleted 2 notifications", "Undo"))),
-        gap=12,
-    )
-    return stack(
-        tagged("Nine ⌫ presses · one toast for the batch, at most three on screen", inbox_with_toasts(toasts, 470)),
-        steps,
-        cap("Each delete restarts one 5 s window for the batch; Undo brings all nine back; hover pauses the toast and the deletes together. A fourth toast retires the oldest."),
-    )
-
-
-def m_toast(message, action="", faded=False):
-    tail = (f'<span style="min-width: 44px; min-height: 44px; margin: -10px -8px -10px 0; padding: 0 10px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; '
-            f'font-size: 14px; font-weight: 600; color: {VIEW["ink"]}; flex-shrink: 0">{action}</span>') if action else ""
-    return (f'<div style="display: flex; align-items: flex-start; gap: 10px; padding: 14px; box-sizing: border-box; border-radius: 4px; background: {VIEW["pane"]}; '
-            f'border: 0.5px solid {VIEW["line2"]}; opacity: {0.45 if faded else 1}">{toast_dot(VIEW["ink3"], 6)}'
-            f'<span style="flex: 1; min-width: 0; font-size: 14px; line-height: 20px; color: {VIEW["ink2"]}">{message}</span>{tail}</div>')
-
-
-def phone_with_toast(toast, h=420):
-    screen = (f'<div style="height: {h}px; display: flex; flex-direction: column; overflow: hidden; background: {VIEW["pane"]}">'
-              f'{m_screen_header("Notifications", "2 UNREAD", glyph="", right=m_button("Mark all read", "ghost", "md"))}{phone_triage(VIEW)}</div>')
-    return phone_frame(f'<div style="position: relative">{screen}<div style="position: absolute; top: 16px; left: 16px; right: 16px">{toast}</div></div>')
-
-
-def toast_undo_now():
-    swipes = stack(
-        tagged("Swipe 1 · replaced by swipe 2, its Undo gone", m_toast("Deleted “Security: billing-api P1”", "Undo", faded=True)),
-        tagged("Swipe 2 · replaced by swipe 3, its Undo gone", m_toast("Deleted “Security: web-app P0”", "Undo", faded=True)),
-        gap=10,
-    )
-    return stack(
-        tagged("Swipe 3 · the only toast left", phone_with_toast(m_toast("Deleted “Security: auth-gateway P1”", "Undo"))),
-        swipes,
-        cap("One toast at a time: each delete replaces it, so only the last can be undone and the first two go through after 5 s anyway."),
-    )
-
-
-def toast_undo_proposed():
-    return stack(
-        tagged("Three swipes · one toast for the batch", phone_with_toast(m_toast("Deleted 3 notifications", "Undo"))),
-        tagged("First swipe · names the row", m_toast("Deleted “Security: billing-api P1”", "Undo")),
-        cap("Each swipe restarts one 5 s window; Undo brings back all three; the copy matches desktop."),
+        tagged("Night · at rest and under reduced motion",
+               hero_panel(hero_cycle_lines("night", accents["amber"]) + hero_caption("amber · step 1 and step 13", night), night)),
+        tagged("Night · the pass", hero_panel(cycle_words("night") + cycle_bar("night"), night, gap=16)),
+        tagged("Paper · at rest and under reduced motion",
+               hero_panel(hero_cycle_lines("paper", accents["amber"]) + hero_caption(f'amber, darkened to {accents["amber"]["paper"][0]} by the ladder', paper), paper)),
+        tagged("Paper · the pass", hero_panel(cycle_words("paper") + cycle_bar("paper"), paper, gap=16)),
+        cap("2.4 s held, 0.6 s crossfaded, twelve steps in the order of ACCENTS — the wheel from amber back to amber — then it stops. 36 s in all, paused while the hero is off screen."),
+        cap("Paper keeps the hue and loses the swatch: nine of the twelve only clear 3:1 on paper after creaseTones darkens them, so the bands sit closer together there than on night."),
     )
 
 
 PROPOSALS = [
     {
-        "id": "UI-TOAST.STACK",
-        "client": "desktop",
-        "area": "Toasts · Notifications inbox delete and Undo",
-        "title": "A run of deletes is one toast that counts, and the stack stops at three",
-        "why": "Every delete in the Notifications inbox raises its own toast with its own Undo (NotificationsModal.jsx onDeleteRow), and the toast stack appends without a cap, bottom-right and growing upwards (Notification.jsx, Notification.module.css), so ten ⌫ presses leave ten pills over the inbox and the composer. The toast pauses on hover but its 5 s delete in useDeleteOutput does not, so a late Undo can only answer “Already deleted”. Recommendation: deletes inside the undo window join one toast that counts them, with one Undo for all, and never more than three toasts on screen. Mobile replaces instead of stacking and loses the earlier Undo: board UI-MOB.TOAST-UNDO.",
-        "now": toast_stack_now,
-        "proposed": toast_stack_proposed,
-        "accept": "Deleting several notifications within the undo window shows one toast: the first names the row as today, the next ones turn it into “Deleted N notifications”. Each delete restarts one 5 s window for the batch, Undo brings every pending row back, and the rows are deleted together when the window ends; hovering the toast pauses the window, so Undo never shows a row the daemon already removed. At most three toasts are on screen and a fourth retires the oldest. A test presses ⌫ ten times and finds one toast, then ten rows back after Undo and no delete sent.",
-        "h": 1130,
-    },
-    {
-        "id": "UI-MOB.TOAST-UNDO",
-        "client": "mobile",
-        "area": "Toasts · Notifications delete and Undo",
-        "title": "A run of deletes keeps one Undo for all of them",
-        "why": "The phone shows one toast at a time and each delete replaces it (Toast.jsx show, app/outputs.jsx onDelete), so after three quick swipes only the last can be undone while the first two still go through when their own 5 s run out. It does not pile up like desktop (board UI-TOAST.STACK), but the earlier Undo disappears without a word. Recommendation: the same batch as desktop, one counting toast whose Undo restores every pending row.",
-        "now": toast_undo_now,
-        "proposed": toast_undo_proposed,
-        "accept": "Deleting several notifications within the undo window, from the list or the reader, keeps one toast: the first names the row, the next ones read “Deleted N notifications”. Each delete restarts one 5 s window for the batch, Undo restores every pending row, and the rows are deleted together when it ends. The Undo target stays 44 pt and the copy matches desktop. A test deletes three rows, presses Undo once and finds all three back and no delete sent.",
-        "h": 1050,
+        "id": "UI-SITE.HERO-COLOUR",
+        "client": "site",
+        "area": "Hero · the landing headline",
+        "title": "The word “agents” wears the twelve profile colours, once",
+        "why": "The hero is two creased lines in the same ink: brandCss() builds --crease-first and --crease-second from creaseTones(BRAND_INK, ground) (site/scripts/brand.mjs, ladders), so <span class=\"crease crease-first\">Your agents.</span> (site/templates/landing.html:470) is grey on paper and white on night. Colour is already beside it: the console in the same hero draws reviewer, librarian and builder as their objects in blue, green and teal, and profileName() creases those names in their own colour at 14, 18 and 28 px further down — four of the twelve pairs, and the other eight never reach the page at all. The largest words on the site say “your agents” in the one voice no agent has, next to a terminal already proving the opposite. The mechanism needs nothing new: creaseTones(accent, ground) takes any accent to a legible three-tone ladder and creaseGradient turns it into the same band gradient. Measured on the hero’s own grounds, palettes.light.bg and palettes.dark.bg, all twelve accents clear CREASE_MIN_CONTRAST in both themes and the floor is 3.13:1 (vermilion on night) — but nine of the twelve only clear it on paper after the ladder darkens them, so paper keeps the hue and loses the swatch. Recommendation: the word “agents” alone carries the cycle, in the order of ACCENTS, which is already the hue wheel starting at amber; one pass of 36 s that settles back on amber; “machines.” stays ink, because the contrast is what makes the agents the coloured ones.",
+        "now": hero_colour_now,
+        "proposed": hero_colour_proposed,
+        "accept": "The hero draws “Your” and “Your machines.” in the ink crease and the word “agents” in a profile colour. brandCss() emits one @keyframes per ground over three @property-registered <color> custom properties that feed creaseGradient, holding each of the twelve creaseTones(hex, ground) ladders 2.4 s and crossfading 0.6 s, twelve steps in ACCENTS order from amber back to amber, with animation-iteration-count 1 so the hero is still 36 s after load; an IntersectionObserver of a few lines pauses it while the hero is off screen, and no dependency is added. Under prefers-reduced-motion: reduce the animation is none and the word rests on amber, the colour the pass ends on. The new class joins .crease in the forced-colors and print resets. site/scripts/brand.test.mjs asserts the twenty-four ladders are three distinct tones each at CREASE_MIN_CONTRAST or better against palettes.light.bg and palettes.dark.bg, that the keyframes name all twelve accents in ACCENTS order and open and close on amber, and that the reduced-motion rule and both resets carry the class; site/scripts/build.test.mjs replaces its hero assertion with the new spans and checks “Your machines.” still reads --crease-second.",
+        "h": 1580,
     },
 ]
 

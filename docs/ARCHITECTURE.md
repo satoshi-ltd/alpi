@@ -1072,6 +1072,14 @@ Verb namespaces in current shape:
   `schedule.done` and `schedule.failed` events ship `output_id`
   + `deep_link: /outputs/<profile>/<id>` whenever an output was
   filed so clients can deep-link straight to the row.
+  Deleting is client-side until it lands: both clients hide the row
+  at once and hold every delete of one run in a single 5 s window
+  (`common/undoBatch.mjs`), so a run of deletes raises one toast that
+  counts them and one Undo that brings all of them back. Each delete
+  restarts that one window, and on desktop hovering the toast pauses
+  it, so `host.outputs.delete` is sent only for the rows the window
+  outlived. Desktop shows at most three toasts; a fourth retires the
+  oldest.
 
 **Contract.** ``host.events.*`` is transport, not durable history.
 The replay window (``HISTORY_MAX = 500``) is sized for reconnect

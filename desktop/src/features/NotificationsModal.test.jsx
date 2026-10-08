@@ -21,10 +21,21 @@ const h = vi.hoisted(() => {
   // outputs_read (the detail payload) carries no voice_id — only the list rows do.
   const DETAIL = { ...ROW };
   delete DETAIL.voice_id;
+  const pending = { rows: [] };
+  const scheduleDelete = vi.fn((profile, id, { connectionId } = {}) => {
+    pending.rows.push({ key: `${connectionId}:${profile}:${id}`, profile, id, connectionId });
+    return pending.rows.length;
+  });
+  const cancelAllDeletes = vi.fn(() => {
+    const batch = pending.rows;
+    pending.rows = [];
+    return batch;
+  });
   return {
     ROW, DETAIL, detail: DETAIL, rows: [ROW], profileDetail: null, playTts: vi.fn(), ttsCb: { current: null },
     invoke: vi.fn(async () => ({ path: "/tmp/alpi-attach-1/whoop-sync-failed.md", name: "whoop-sync-failed.md", size: 42 })),
-    markRead: vi.fn(), markUnread: vi.fn(async () => ({})), notify: vi.fn(), cancelDelete: vi.fn(() => true),
+    markRead: vi.fn(), markUnread: vi.fn(async () => ({})), notify: vi.fn(),
+    failed: { current: null }, pending, scheduleDelete, cancelAllDeletes, pauseDeletes: vi.fn(), resumeDeletes: vi.fn(),
   };
 });
 
@@ -41,9 +52,15 @@ vi.mock("../primitives/Notification.jsx", () => ({ useNotify: () => h.notify }))
 vi.mock("../hooks/useOutputs.js", () => ({
   useAllOutputs: () => ({ rows: h.rows, refresh: () => {}, loading: h.loading ?? false, unreachable: h.unreachable ?? [] }),
   useOutput: () => ({ row: h.detail, markRead: h.markRead, markUnread: h.markUnread }),
-  useDeleteOutput: () => ({ schedule: () => {}, cancel: h.cancelDelete }),
+  useDeleteOutput: () => ({
+    schedule: h.scheduleDelete,
+    cancelAll: h.cancelAllDeletes,
+    pause: h.pauseDeletes,
+    resume: h.resumeDeletes,
+  }),
   useMarkAllOutputsRead: () => () => {},
   pendingDeleteKeys: () => [],
+  subscribeDeleteFailed: (fn) => { h.failed.current = fn; return () => { h.failed.current = null; }; },
   rowKey: (r) => `${r.connectionId}:${r.profile}:${r.id}`,
 }));
 vi.mock("../hooks/useProfileDetail.js", () => ({
@@ -65,8 +82,9 @@ beforeEach(() => {
   h.invoke.mockClear();
   h.markRead.mockClear();
   h.notify.mockClear();
-  h.cancelDelete.mockReset();
-  h.cancelDelete.mockImplementation(() => true);
+  h.pending.rows = [];
+  h.scheduleDelete.mockClear();
+  h.cancelAllDeletes.mockClear();
   h.markUnread.mockReset();
   h.markUnread.mockResolvedValue({});
 });
@@ -693,7 +711,7 @@ describe("NotificationsModal triage", () => {
     expect(digest.querySelector('[aria-label="Unread"]')).toBeTruthy();
   });
 
-  it("gives every Backspace delete its own Undo and ignores a held key", async () => {
+  it("folds a run of Backspace deletes into one counting Undo and ignores a held key", async () => {
     renderTriage();
     const first = option("Backup failed");
     fireEvent.click(first);
@@ -703,7 +721,48 @@ describe("NotificationsModal triage", () => {
     fireEvent.keyDown(next, { key: "Backspace" });
     const undos = h.notify.mock.calls.filter(([arg]) => arg.action === "Undo");
     expect(undos).toHaveLength(2);
-    expect(undos.map(([arg]) => arg.message)).toEqual(["Deleted “Backup failed”", "Deleted “Digest”"]);
+    expect(undos.every(([arg]) => arg.id === undos[0][0].id)).toBe(true);
+    expect(undos.map(([arg]) => arg.message)).toEqual(["Deleted “Backup failed”", "Deleted 2 notifications"]);
+    expect(h.scheduleDelete).toHaveBeenCalledTimes(2);
+  });
+
+  it("brings every row of the batch back with one Undo", () => {
+    renderTriage();
+    const first = option("Backup failed");
+    fireEvent.click(first);
+    fireEvent.keyDown(first, { key: "Backspace" });
+    fireEvent.keyDown(option("Digest"), { key: "Backspace" });
+    expect(titles()).toHaveLength(2);
+    const undos = h.notify.mock.calls.filter(([arg]) => arg.action === "Undo");
+    act(() => { undos[undos.length - 1][0].onAction(); });
+    expect(titles()).toHaveLength(4);
+  });
+
+  it("shows a row again and says so when the daemon refuses its delete", () => {
+    renderTriage();
+    const row = option("Backup failed");
+    fireEvent.click(row);
+    fireEvent.keyDown(row, { key: "Backspace" });
+    expect(titles()).toHaveLength(3);
+    const { onFailed } = h.scheduleDelete.mock.calls[0][2];
+    act(() => {
+      h.failed.current(h.pending.rows[0].key);
+      onFailed("forbidden");
+    });
+    expect(titles()).toHaveLength(4);
+    expect(h.notify).toHaveBeenLastCalledWith({ message: "Delete failed: forbidden", variant: "error" });
+  });
+
+  it("hands the toast's hover the batch window so a paused Undo stays honest", () => {
+    renderTriage();
+    const row = option("Backup failed");
+    fireEvent.click(row);
+    fireEvent.keyDown(row, { key: "Backspace" });
+    const [[arg]] = h.notify.mock.calls.filter(([a]) => a.action === "Undo");
+    act(() => { arg.onPause(); });
+    expect(h.pauseDeletes).toHaveBeenCalled();
+    act(() => { arg.onResume(); });
+    expect(h.resumeDeletes).toHaveBeenCalled();
   });
 
   it("brings a row back on Undo while its delete is pending", () => {
@@ -722,7 +781,7 @@ describe("NotificationsModal triage", () => {
     const row = option("Backup failed");
     fireEvent.click(row);
     fireEvent.keyDown(row, { key: "Backspace" });
-    h.cancelDelete.mockImplementation(() => false);
+    h.cancelAllDeletes.mockImplementation(() => []);
     const [[{ onAction }]] = h.notify.mock.calls.filter(([arg]) => arg.action === "Undo");
     act(() => { onAction(); });
     expect(titles()).toHaveLength(3);

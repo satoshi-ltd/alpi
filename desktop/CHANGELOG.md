@@ -11,6 +11,16 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.8.7 — 2026-10-08 — a run of deletes is one Undo
+
+- **Deleting several notifications in a row raises one toast, not one per row.** The first names the row as before; the next ones turn it into “Deleted N notifications”, with a single Undo that brings every pending row back.
+- **The undo window belongs to the whole batch.** Each delete restarts the same 5 s window, so the rows go to the daemon together and holding the pointer over the toast holds the deletes too: an Undo you can still see always finds its rows.
+- **The toast stack stops at three.** A fourth toast retires the oldest instead of covering the inbox and the composer.
+- **A delete the daemon refuses brings the row back** with “Delete failed”, instead of leaving it hidden until you reopen the inbox.
+- **A message raised right after a daemon lost its history is no longer dropped** when its clock ran behind the last one you had seen; only what you had already seen stays silent.
+
+  Requires alpi 0.17.5.
+
 ## v0.8.6 — 2026-10-07 — every connection's notifications, once
 
 - **The inbox of a connection that is not open stays current.** Warnings the daemon files itself (a memory near its limit, a skill that fails lint) and rows read or deleted on another device used to appear only after switching to that connection; the background poll now refreshes them within about 25 s.

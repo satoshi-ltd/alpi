@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { EMPTY } from '../../common/emptyCopy.mjs';
 import { headlineParts } from '../../common/notificationHeadline.mjs';
+import { deletedMessage } from '../../common/undoBatch.mjs';
 import {
   filterNotifications,
   groupNotifications,
@@ -164,11 +165,11 @@ export default function OutputsScreen() {
   }, [isUnread, actions, toast, refresh]);
 
   const onDelete = useCallback((row) => {
-    actions.remove(row, { onError: (e) => toast({ message: `Delete failed: ${String(e?.message ?? e)}`, kind: 'danger' }) });
+    const count = actions.remove(row, { onError: (e) => toast({ message: `Delete failed: ${String(e?.message ?? e)}`, kind: 'danger' }) });
     toast({
-      message: `Deleted “${clip(headlineParts(row).title || 'notification', 48)}”`,
+      message: deletedMessage(count, clip(headlineParts(row).title || 'notification', 48)),
       action: 'Undo',
-      onAction: () => actions.undoRemove(row),
+      onAction: () => { if (!actions.undoRemove()) toast({ message: 'Already deleted' }); },
       duration: UNDO_MS,
     });
   }, [actions, toast]);
