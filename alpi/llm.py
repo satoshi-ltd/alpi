@@ -236,7 +236,8 @@ def _compute_cost_detail(resp, model: str) -> tuple[float, str]:
     """Source tags feed the billing reconciliation: only "provider" is the endpoint's own figure; "litellm" and "table" are cache-blind list-price arithmetic. The value and the label must come from the SAME field — usage.cost is the provider evidence and wins; _hidden_params.response_cost alone is litellm's own stamp for any mapped model."""
     c = _usage_cost(resp)
     if c is not None:
-        return c, "provider"
+        # Only OpenRouter is asked for usage cost on the wire; LiteLLM stamps its own list-price figure on every other streamed response.
+        return c, "provider" if str(model).startswith("openrouter/") else "litellm"
     hp = getattr(resp, "_hidden_params", None) or {}
     rc = hp.get("response_cost")
     if rc is not None:

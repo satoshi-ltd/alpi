@@ -1,6 +1,6 @@
 # alpi roadmap
 
-Updated 2026-10-07. Current versions live in the changelogs. The Queue runs top to bottom; the creator
+Updated 2026-10-08. Current versions live in the changelogs. The Queue runs top to bottom; the creator
 approves the next tasks from Proposed.
 
 This is the task pool. [ARCHITECTURE.md](ARCHITECTURE.md) owns current state and
@@ -61,7 +61,133 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-_None._
+- **ATT.3** — `host.attachments.fetch` ignores the caller's connection
+  `bug · alpi · agent · high`
+  note: found while reviewing ATT.2. `_fetch` in [attachments_rpc.py](../alpi/host/attachments_rpc.py)
+  checks roots, the denylist and, since ATT.2, the device under `session_scope: device`; under
+  `session_scope: connection` and for any non-admin member it never compares the path with the
+  caller's connection, so a member of one connection can fetch another connection's produced
+  file or staged upload by path.
+  accept: a remote non-admin caller is served only what its own connection staged or what appears
+  in a session its connection owns (plus the device clause when configured); a test with two
+  connections fetches across them and is refused, with the owner control; sibling-device isolation
+  still holds under device scope; admin and the Unix socket are unaffected.
+
+- **SCOPE.10** — Staged uploads keep their owner when attached to a turn
+  `bug · alpi · agent · high · depends: ATT.3`
+  note: `host.chat.send` checks that a remote attachment is inside the staging root but does not
+  check its `.owner`; knowing another connection's or device's path is enough to attach its bytes.
+  accept: a remote member may attach only its connection's uploads, narrowed to its device under
+  `session_scope: device`; tests stage as A and send as B across connections and sibling devices,
+  with owner and connection-shared controls. Missing, malformed and unreadable markers have an
+  explicit fail-closed rule for remote members; local attachment paths keep working. Remote-admin
+  behavior follows the existing fetch exception unless SCOPE.D1 changes that contract.
+
+- **MEMBER.1** — A test pins what each caller class may invoke
+  `chore · alpi · agent · high`
+  note: v0.17.0 took `run` and `invoke` away from member devices by mistake and no test failed; v0.17.1 gave them back. No test states the intended matrix of what each caller class may call.
+  accept: one table-driven test lists, for admin, a member device, an ALP peer without `tools.allow` and one with it, each skill mode and each tool the fence names as allowed or refused; changing a row, or the fence, fails it.
+
+- **SCOPE.12** — The `db` tool and `out/` sit outside the member fence
+  `bug · alpi · agent · high · depends: MEMBER.1`
+  note: found while reviewing SCOPE.8. The `db` tool runs arbitrary SQL on any skill's `state/db.sqlite`,
+  around the `skills/` file fence and the restrictions on direct skill mutation, and the fenced file tools
+  still read `<home>/out/`, where every session's produced files land.
+  accept: a fenced turn (member device or peer without `tools.allow`) gets only read queries on the active
+  skill's database, or none, and cannot read another connection's files under `out/`; tests cover both.
+
+- **SCOPE.11** — Turns a workgroup post wakes run unfenced
+  `bug · alpi · agent · high · depends: MEMBER.1, SCOPE.12`
+  note: found while reviewing SCOPE.9. `_dispatch_workgroup_turn` in [service.py](../alpi/service.py) runs a
+  `chat --once` child as the profile (admin) for every member or hub turn a post wakes; the session history
+  tools are denied there since v0.17.0, but `read_file`, `search` and `terminal` still read `sessions/`,
+  `runs/` and `host/`, so a member device or a peer without `tools.allow` driving any profile of the
+  workgroup can `workgroup_post` a request for another conversation and get it posted back.
+  accept: the initiating caller's verified authority reaches every downstream turn, including
+  subprocesses and follow-up posts; untrusted post text cannot claim admin authority. This task
+  may add the minimal authenticated dispatch metadata needed to preserve that authority.
+  Member-origin turns retain the member policy (including skill run/invoke); peers without
+  `tools.allow` retain the stricter peer fence. Both stay out of private files through file tools,
+  search and terminal, including indirect skill execution. Tests cover both origins, a downstream
+  handoff and an attempted session read; local admin pipelines retain terminal and skill scripts.
+  If a skill execution path cannot preserve the fence, refuse that path explicitly rather than
+  silently promoting the whole turn to admin.
+
+- **REDACT.1** — The URL-credentials pattern in `redact` is quadratic
+  `bug · alpi · agent · high`
+  note: found while reviewing RUN.1. `(?P<scheme>[a-zA-Z][a-zA-Z0-9+.-]*://)[^/\s:@]+:[^/\s@]+@` in
+  [_redact.py](../alpi/_redact.py) takes 2.2 s on 50 KB of `a` and a 5 MB string did not finish in 120 s; `redact`
+  runs on every journal event, saved turn and tool result, so one large alphanumeric output can stall a turn.
+  accept: the scheme length is bounded; a test redacts 1 MB of `a` within a second and the URL, userinfo and
+  credential cases still redact as before.
+
+- **RES.1** — One `research` call has no cost cap of its own
+  `bug · alpi · agent · high`
+  note: [research.py](../alpi/tools/research.py) already limits each sub-agent to 8/15/30 iterations
+  and a batch to three briefs. It checks the daily budget, but has no per-call monetary budget;
+  reaching the daily cap returns an error before synthesis and can leave the main turn unable to answer.
+  accept: a configurable per-call cap bounds the whole batch, shared across workers, with explicit
+  headroom for synthesis and the parent answer. Exhaustion returns partial findings and a truncation
+  note; no new provider calls start after exhaustion, and already in-flight calls have documented
+  overshoot semantics. Fake-provider tests cover single and parallel calls, exhausted daily headroom
+  and the parent still answering. Document the cap's default and takes-effect behavior in CONFIG and
+  its knowledge reference; preserve the existing depth constants unless separately approved.
+
+- **FRAME.1** — A lone surrogate in a live frame breaks the client's stream
+  `bug · alpi · agent · normal`
+  note: found while reviewing RUN.1. [host/server.py](../alpi/host/server.py) sends frames with
+  `json.dumps(..., ensure_ascii=False)` followed by UTF-8 encoding directly on Unix or by the websocket library; a `tool_end` or
+  `assistant` frame that carries tool output with an unpaired surrogate raises inside `send` (the Unix path logs
+  `host unix connection crashed`). The same pattern appears in `outputs.py`, `run_ledger.py`, `admin_audit.py` and
+  `workgroup.py`; whether each receives text derived from tool output is not traced.
+  accept: a turn whose tool output holds a lone surrogate streams to a client and finishes, the frame carrying
+  U+FFFD; each writer named above either scrubs or is shown not to receive tool text; tests drive the socket and
+  the websocket.
+
+- **SCOPE.5** — Profile session counts respect scope
+  `bug · alpi · agent · normal`
+  note: `counts.sessions` in `host.profile.summaries` counts every session file of the
+  profile, so a member or a device-scoped device learns how many sessions other
+  connections and sibling devices hold (a count only, no text).
+  accept: the count includes only sessions `owns_session_row` lets the caller see; a
+  test with sessions from two devices under `session_scope: device` counts one each.
+
+- **WG.FLOW-LATENCY** — Remove the measured delay before pipeline state appears
+  `bug · alpi, desktop, mobile · agent · normal`
+  note: the clients already request tasks and transcript independently; the desktop bridge uses
+  `off_main` and both daemon handlers use `asyncio.to_thread`. A fast isolated fold does not identify
+  the source of the reported multi-second delay.
+  accept: reproduce with a defined transcript size and local/remote connection, measure request,
+  bridge/transport, handler and render time, then fix the measured bottleneck. A regression test
+  reproduces that bottleneck and proves state can render while transcript loading is held pending;
+  record before/after timings under the same conditions. Narrow the release products to the layers
+  actually changed. Preserve the existing visual design and regenerate affected design views.
+
+- **ACT.2** — Jobs fired from the console never show as running
+  `bug · alpi · agent · normal`
+  note: found while reviewing ACT.1. `alpi schedule fire`, `alpi setup → Fire now` and the TUI's
+  in-process `schedule(action="fire")` run `scheduled_run` in their own process, where the activity
+  registry is off, so `host.activity.list` never lists the run and the apps never show it working.
+  The apps' Fire button (`host.schedule.fire`) and cron fires are listed.
+  accept: a job fired from the CLI or the TUI appears as a running row with its `job_id` while it
+  runs (handed to the daemon when one answers); a test fires through the CLI path against a daemon.
+
+- **TERM.3** — Profile environment for `terminal`
+  `feature · alpi · agent · low`
+  note: a skill toolchain installed in the volume (JDK and Maven under
+  `/data/toolchains`) is exported only to the skill runner's own subprocesses;
+  [terminal.py](../alpi/tools/terminal.py) builds its environment itself and the
+  sandbox refuses discovery as `dangerous pattern: dump environment`.
+  accept: a `tools.terminal.env` map of plain strings in the profile config is
+  applied on top of the environment the tool builds, with `PATH` prepended to the
+  backend's own PATH (not a host PATH absent from the image); no secret
+  expansion, no `.env` keys, internal execution/ownership markers cannot be
+  overridden, sandbox and allowlist unchanged. A profile with the map runs
+  `java -version` through `terminal` and finds the volume JDK; a profile without
+  it is byte-for-byte unchanged. Tests cover foreground, background, the native
+  sandbox, the Docker backend's explicit forwarding list, invalid values and
+  protected variables. The map is listed in the takes-effect table of
+  [CONFIG.md](CONFIG.md#tools) and in the packaged config reference.
 
 ## In progress
 
@@ -69,12 +195,58 @@ _None._
 
 ## Needs creator
 
+### Decisions
+
+- **SCOPE.D1** — Does `session_scope: device` bind an admin connection?
+  `decision · alpi · creator · high`
+  note: found by the SCOPE.4 inventory. `can_read_session` and `can_handle_prompt` return
+  true for `role == admin`, and the member-only event filters never run for an admin, so a
+  remote admin device with `session_scope: device` sees device A's sessions through
+  `session_search`, `session_read`, `recall_sessions`, `host.activity.list`, prompts and
+  every event, while `host.sessions.*`, `host.chat.*` and `host.runs.*` hide them. Today the
+  scope is a partition for admins, not a privacy boundary.
+  accept: decide whether remote admins are bound for session text, and whether that applies
+  within their connection or across connections. Create a separate agent task for consistent
+  enforcement, documentation and matrix tests; preserve the local socket owner semantics.
+  Member-only isolation fixes in Queue do not wait on this decision.
+
+- **OPS-CONN-POLICY** — Connection policy for the fleet
+  `decision · alpi · creator · normal`
+  accept: a written connection policy (one connection per person with an exact
+  `profile_scope`, one device per physical device, the old row revoked on
+  re-pairing, a profile's tools reviewed before granting scope) is confirmed and
+  applied to every deployed daemon; any code it needs becomes an agent task.
+
+- **BRAND.D1** — Brand choices still open
+  `decision · alpi · creator · normal`
+  note: decided by the creator: the brand accent is ink (cream on dark, black on light); the alpaca is
+  one flat ink and only its name carries tones (T3 crease); objects are established origami models (the
+  gate); object and colour are two stored values and every new profile takes the next pair of the roulette; the honeycomb
+  marks a workgroup; the default profile is the alpaca. Still open, none blocking: the unit's name
+  ("profile", with "fold" only the look); whether the box stays or becomes a paper hat.
+  accept: a written answer to each; a different answer becomes an edit to the task it touches
+  before that task ships.
+
+- **BRAND.EMPTY** — A blank chat that introduces the profile
+  `decision · desktop, mobile · creator · normal`
+  note: today an empty chat is the profile's origami at 72 px, "Start a new thread" and the model. Ideas to
+  weigh with the copy pass: the profile's own one-line bio under the origami, the pair name ("blue shield")
+  beside the model as the Brand board shows, up to three starter chips drawn from the profile's skills or
+  its recent sessions (one tap fills the composer), and a short fold-in of the origami on first paint that
+  stops under reduced motion. Needs a board before any code, and the copy of every empty state decided together.
+  accept: the creator picks which of these ideas ship and the copy of the empty states; the answer becomes a
+  `ui` task with its board.
+
+- **BRAND.SPLASH** — Mount the boot splash with the crease wordmark
+  `decision · desktop · creator · low`
+  note: `BootSplash` in [desktop/src/primitives](../desktop/src/primitives/) is exported but nothing renders
+  it; startup shows only the connecting banner. Decide where a splash belongs (first paint before the
+  daemon answers) before drawing the alpaca beside the crease "alpi" there.
+  accept: decide whether a splash belongs before first connection; if yes, approve its board
+  and create the implementation task.
+
 ### Builds and deployments
 
-- **BUILD-MOBILE** — EAS build of mobile 0.7.1
-  `deploy · mobile · creator · high`
-  accept: an EAS build of mobile 0.7.1 or later installed on the Fold and on an
-  iPhone.
 - **OPS-CRED-SWEEP** — Credential hygiene on every daemon
   `deploy · alpi · creator · normal`
   accept: the credential hygiene checklist in the creator's operations runbook
@@ -84,8 +256,8 @@ _None._
 ### Device checks
 
 - **VERIFY-MOBILE-070** — Mobile 0.7 on device
-  `verify · mobile · creator · high · depends: BUILD-MOBILE`
-  accept: on device, the process block sits at 12 pt flush with the answer; the
+  `verify · mobile · creator · high`
+  accept: with mobile 0.7.5 or later and alpi 0.17.5 or later, on device, the process block sits at 12 pt flush with the answer; the
   Fold sidebar slides; expand/collapse and the Latest button animate; a long
   press pulses only after 350 ms and a tap never moves a bubble; the notification
   count shows its number at large text sizes; approval notification actions
@@ -113,6 +285,22 @@ _None._
   Dictation in the composer and it stays open while you speak, the words land in the field, and the same
   holds while a reply streams and in a workgroup's composer.
 
+- **VERIFY-NOTIF-PHONE** — Notifications on the phone, on device
+  `verify · mobile · creator · normal`
+  accept: with mobile 0.7.5 or later and alpi 0.17.5 or later, on an iPhone and Android, a row swipes left to Unread/Read and Delete and back; the
+  Undo toast after a delete leaves the list scrollable and tappable and Back working for its 5 s (it is
+  a transparent Modal: if it blocks touches, the toast becomes an overlay); up and down on a
+  notification page step through the list across connections; Reply opens a new session with the
+  quote in the composer; large text keeps rows and the bottom bar readable, on the phone and the Fold.
+  Notifications and read/delete changes on a connection that is not open refresh its inbox
+  through background polling while the app runs; switching connections does not replay banners.
+
+- **VERIFY-CACHE-OPENAI** — A direct OpenAI model reads the prompt cache on a live daemon
+  `verify · alpi · creator · high`
+  accept: on a daemon running alpi 0.17.8 or later, a profile on `openai/gpt-6-luna` with tools and
+  `effort: medium` shows cached input tokens above zero on the second call of a pass (before the fix
+  every call read 0), and a profile on `anthropic/` still reads its cache.
+
 - **VERIFY-BRAND-GLYPHS** — One-cell glyphs in the terminals alpi supports
   `verify · alpi · creator · low`
   accept: the twelve one-cell glyphs of the console (⌂ ♥ ➤ ⬟ ⌃ ★ ♣ ▣ ♛ ✒ ☼ and the diamond) were
@@ -125,72 +313,12 @@ _None._
   screens, and an Android build with the adaptive mask all show the flat ink alpaca without clipping,
   and the splash and adaptive background are neutral grey (no blue tint) in light and dark.
 
-- **VERIFY-NOTIF-PHONE** — Notifications on the phone, on device
-  `verify · mobile · creator · normal`
-  accept: on an iPhone and an Android build, a row swipes left to Unread/Read and Delete and back; the
-  Undo toast after a delete leaves the list scrollable and tappable and Back working for its 5 s (it is
-  a transparent Modal: if it blocks touches, the toast becomes an overlay); up and down on a
-  notification page step through the list across connections; Reply opens a new session with the
-  quote in the composer; large text keeps rows and the bottom bar readable, on the phone and the Fold.
-
-### Decisions
-
-- **SCOPE.D1** — Does `session_scope: device` bind an admin connection?
-  `decision · alpi · creator · high`
-  note: found by the SCOPE.4 inventory. `can_read_session` and `can_handle_prompt` return
-  true for `role == admin`, and the member-only event filters never run for an admin, so a
-  remote admin device with `session_scope: device` sees device A's sessions through
-  `session_search`, `session_read`, `recall_sessions`, `host.activity.list`, prompts and
-  every event, while `host.sessions.*`, `host.chat.*` and `host.runs.*` hide them. Today the
-  scope is a partition for admins, not a privacy boundary.
-  accept: a written decision, one of "admins are never bound" (documented as such) or "admins
-  are bound for session text", with the matrix rows added for the chosen reading.
-- **OPS-CONN-POLICY** — Connection policy for the fleet
-  `decision · alpi · creator · normal`
-  accept: a written connection policy (one connection per person with an exact
-  `profile_scope`, one device per physical device, the old row revoked on
-  re-pairing, a profile's tools reviewed before granting scope) is confirmed and
-  applied to every deployed daemon; any code it needs becomes an agent task.
-- **BRAND.D1** — Brand choices still open
-  `decision · alpi · creator · normal`
-  note: decided by the creator: the brand accent is ink (cream on dark, black on light); the alpaca is
-  one flat ink and only its name carries tones (T3 crease); objects are established origami models (the
-  gate); object and colour are two stored values and every new profile takes the next pair of the roulette; the honeycomb
-  marks a workgroup; the default profile is the alpaca. Still open, none blocking: the unit's name
-  ("profile", with "fold" only the look); whether the box stays or becomes a paper hat.
-  accept: a written answer to each; a different answer becomes an edit to the task it touches
-  before that task ships.
-
 ## Proposed
 
-### Agent tasks, by priority
+### Requires a design board
 
-- **MEMBER.1** — A test pins what each caller class may invoke
-  `chore · alpi · agent · normal`
-  note: v0.17.0 took `run` and `invoke` away from member devices by mistake and no test failed; v0.17.1 gave them back. No test states the intended matrix of what each caller class may call.
-  accept: one table-driven test lists, for admin, a member device, an ALP peer without `tools.allow` and one with it, each skill mode and each tool the fence names as allowed or refused; changing a row, or the fence, fails it.
-- **WG.FLOW-LATENCY** — The pipeline strip appears as soon as a workgroup opens
-  `bug · desktop, mobile · agent · normal`
-  note: opening a running pipeline workgroup shows the pending chain (one pipeline) or placeholder chips (several)
-  for seconds before the run state fills them, yet `fold_task_state` takes about 5 ms on a 37-post transcript in
-  process (decrypt plus fold, cold). The wait is elsewhere: the three calls the view fires at once
-  (`workgroup_members`, `workgroup_tasks`, the transcript), the Tauri bridge and its socket, or a busy daemon loop.
-  accept: a measurement of each hop (client call, bridge, socket, handler) on a pipeline workgroup names where the
-  time goes; the fix brings the run state on screen without waiting for the transcript, and a test proves
-  `workgroup_tasks` is not queued behind it.
-- **REDACT.1** — The URL-credentials pattern in `redact` is quadratic
-  `bug · alpi · agent · normal`
-  note: found while reviewing RUN.1. `(?P<scheme>[a-zA-Z][a-zA-Z0-9+.-]*://)[^/\s:@]+:[^/\s@]+@` in
-  [_redact.py](../alpi/_redact.py) takes 2.2 s on 50 KB of `a` and a 5 MB string did not finish in 120 s; `redact`
-  runs on every journal event, saved turn and tool result, so one large alphanumeric output can stall a turn.
-  accept: the scheme length is bounded; a test redacts 1 MB of `a` within a second and the URL, userinfo and
-  credential cases still redact as before.
-- **RES.1** — One `research` call has no cost cap of its own
-  `bug · alpi · agent · normal`
-  note: [research.py](../alpi/tools/research.py) fans a brief into sub-agents that search and fetch on their own. On casa on 2026-09-29 two calls of a biography profile spent $2.35 and $2.74 and ended at the daily budget ($2.00, then $5.00) without an answer: the budget stops the turn after the damage, and the next message of the day failed too. Nothing bounds one call's spend, the number of sub-agents' steps or the retries on dead URLs (DNS failures).
-  accept: a `research` call stops at a configurable fraction of the remaining daily budget (or a fixed amount) and returns what it has with a note saying it was cut; the cap and the sub-agent step limit are in the takes-effect table of [CONFIG.md](CONFIG.md); a test with a fake provider that spends past the cap shows the call ending early and the turn still answering.
 - **CHART.1** — The mobile Usage chart follows the cost too
-  `feature · mobile, common · agent · normal`
+  `feature · desktop, mobile, common · agent · normal`
   note: found while reviewing UX.8. Desktop sizes bars by dollars when any day cost something, with the
   input/output split drawn inside each bar (the creator confirmed this design), but
   [UsageChart.jsx](../mobile/src/components/UsageChart.jsx) still scales by tokens through `usageScale` in
@@ -199,95 +327,8 @@ _None._
   accept: `byCost` and `sizeOf` live in `common/usage.mjs` and both clients use them; mobile gets the same
   thin-bar minimum, split and a "bars by" footer; a window with no cost on any day (a local model) sizes bars by
   total tokens; a component test renders a mixed window and a free window on each client.
-- **TERM.3** — Profile environment for `terminal`
-  `feature · alpi · agent · low`
-  note: a skill toolchain installed in the volume (JDK and Maven under
-  `/data/toolchains`) is exported only to the skill runner's own subprocesses;
-  [terminal.py](../alpi/tools/terminal.py) builds its environment itself and the
-  sandbox refuses discovery as `dangerous pattern: dump environment`.
-  accept: a `tools.terminal.env` map of plain strings in the profile config is
-  applied on top of the environment the tool builds, with `PATH` prepended to the
-  backend's own PATH (not a host PATH absent from the image); no secret
-  expansion, no `.env` keys, internal execution/ownership markers cannot be
-  overridden, sandbox and allowlist unchanged. A profile with the map runs
-  `java -version` through `terminal` and finds the volume JDK; a profile without
-  it is byte-for-byte unchanged. Tests cover foreground, background, the native
-  sandbox, the Docker backend's explicit forwarding list, invalid values and
-  protected variables. The map is listed in the takes-effect table of
-  [CONFIG.md](CONFIG.md#tools) and in the packaged config reference.
-- **FRAME.1** — A lone surrogate in a live frame breaks the client's stream
-  `bug · alpi · agent · low`
-  note: found while reviewing RUN.1. [host/server.py](../alpi/host/server.py) sends frames with
-  `json.dumps(..., ensure_ascii=False).encode("utf-8")` on the Unix socket and the websocket; a `tool_end` or
-  `assistant` frame that carries tool output with an unpaired surrogate raises inside `send` (the Unix path logs
-  `host unix connection crashed`). The same pattern appears in `outputs.py`, `run_ledger.py`, `admin_audit.py` and
-  `workgroup.py`; whether each receives text derived from tool output is not traced.
-  accept: a turn whose tool output holds a lone surrogate streams to a client and finishes, the frame carrying
-  U+FFFD; each writer named above either scrubs or is shown not to receive tool text; tests drive the socket and
-  the websocket.
-- **ACT.2** — Jobs fired from the console never show as running
-  `bug · alpi · agent · low`
-  note: found while reviewing ACT.1. `alpi schedule fire`, `alpi setup → Fire now` and the TUI's
-  in-process `schedule(action="fire")` run `scheduled_run` in their own process, where the activity
-  registry is off, so `host.activity.list` never lists the run and the apps never show it working.
-  The apps' Fire button (`host.schedule.fire`) and cron fires are listed.
-  accept: a job fired from the CLI or the TUI appears as a running row with its `job_id` while it
-  runs (handed to the daemon when one answers); a test fires through the CLI path against a daemon.
-- **SCOPE.12** — The `db` tool and `out/` sit outside the member fence
-  `bug · alpi · agent · low`
-  note: found while reviewing SCOPE.8. The `db` tool runs arbitrary SQL on any skill's `state/db.sqlite`,
-  around the `skills/` file fence and the rule that fenced turns change no skill, and the fenced file tools
-  still read `<home>/out/`, where every session's produced files land.
-  accept: a fenced turn (member device or peer without `tools.allow`) gets only read queries on the active
-  skill's database, or none, and cannot read another connection's files under `out/`; tests cover both.
-- **ATT.3** — `host.attachments.fetch` ignores the caller's connection
-  `bug · alpi · agent · low`
-  note: found while reviewing ATT.2. `_fetch` in [attachments_rpc.py](../alpi/host/attachments_rpc.py)
-  checks roots, the denylist and, since ATT.2, the device under `session_scope: device`; under
-  `session_scope: connection` and for any non-admin member it never compares the path with the
-  caller's connection, so a member of one connection can fetch another connection's produced
-  file or staged upload by path.
-  accept: a remote non-admin caller is served only what its own connection staged or what appears
-  in a session its connection owns (`owns_session` without the device clause); a test with two
-  connections fetches across them and is refused, with the owner control; admin and the Unix
-  socket are unaffected.
-- **SCOPE.10** — A device can attach another device's staged upload to its own turn
-  `bug · alpi · agent · low`
-  note: found by the SCOPE.4 inventory. `host.chat.send` accepts any path under the staging
-  root from a remote device, so a device that knows the path of another device's staged upload
-  (`host/attachments/tmp/<hex8>/`) can attach it to its own turn and read it through the model.
-  `host.attachments.fetch` is already scoped (ATT.2, v0.16.16).
-  accept: `host.chat.send` refuses a staged path whose `.owner` marker names another device of a
-  `session_scope: device` connection; a test stages as A and sends as B.
-- **SCOPE.5** — Profile session counts respect scope
-  `bug · alpi · agent · low`
-  note: `counts.sessions` in `host.profile.summaries` counts every session file of the
-  profile, so a member or a device-scoped device learns how many sessions other
-  connections and sibling devices hold (a count only, no text).
-  accept: the count includes only sessions `owns_session_row` lets the caller see; a
-  test with sessions from two devices under `session_scope: device` counts one each.
-- **ALP.ADMIT** — Admission that adapts to provider latency
-  `feature · alpi · agent · low`
-  note: ALP.9 (shipped) settled `alp.max_active_workgroups` as an admission threshold, not
-  a cap; revisit on top of that contract.
-  accept: admission drops to 1 while the per-call provider median exceeds a
-  configured threshold and returns to the configured value when it recovers.
-### Waiting on a creator choice
-
-- **BRAND.EMPTY** — A blank chat that introduces the profile
-  `decision · desktop, mobile · creator · normal`
-  note: today an empty chat is the profile's origami at 72 px, "Start a new thread" and the model. Ideas to
-  weigh with the copy pass: the profile's own one-line bio under the origami, the pair name ("blue shield")
-  beside the model as the Brand board shows, up to three starter chips drawn from the profile's skills or
-  its recent sessions (one tap fills the composer), and a short fold-in of the origami on first paint that
-  stops under reduced motion. Needs a board before any code, and the copy of every empty state decided together.
-  accept: the creator picks which of these ideas ship and the copy of the empty states; the answer becomes a
-  `ui` task with its board.
-- **BRAND.SPLASH** — Mount the boot splash with the crease wordmark
-  `feature · desktop · creator · low`
-  note: `BootSplash` in [desktop/src/primitives](../desktop/src/primitives/) is exported but nothing renders
-  it; startup shows only the connecting banner. Decide where a splash belongs (first paint before the
-  daemon answers) before drawing the alpaca beside the crease "alpi" there.
+  The interface follows board UI-CHART.1, matching the existing desktop cost-based chart;
+  draw and approve that board before moving this task to Queue.
 
 ### Demand-gated
 
@@ -298,24 +339,13 @@ Each names the condition that promotes it; none is worked on before.
   note: a member device runs and invokes the profile's skills since v0.17.1 and is otherwise fenced; an ALP peer can already carry `tools.allow` (names, `*` patterns, `tool:action`) that replaces the fence with an exact list, but a member connection cannot. A profile that untrusted members drive has no way to open one skill and close another.
   promote when: a profile is driven by members who are not trusted with every mode of its skills.
   accept: a connection record takes the same `tools.allow` grammar as a peer and replaces the member fence with exactly that list, nested execution included; a connection without it behaves as today; the setting is in the takes-effect table of [CONFIG.md](CONFIG.md) and next to the member fence in [SECURITY.md](SECURITY.md); tests drive a member through a granted and an ungranted tool.
-- **SCOPE.11** — Turns a workgroup post wakes run unfenced
-  `bug · alpi · agent · low`
-  note: found while reviewing SCOPE.9. `_dispatch_workgroup_turn` in [service.py](../alpi/service.py) runs a
-  `chat --once` child as the profile (admin) for every member or hub turn a post wakes; the session history
-  tools are denied there since v0.17.0, but `read_file`, `search` and `terminal` still read `sessions/`,
-  `runs/` and `host/`, so a member device or a peer without `tools.allow` driving any profile of the
-  workgroup can `workgroup_post` a request for another conversation and get it posted back.
-  promote when: a profile that member devices or peers without `tools.allow` drive joins a workgroup.
-  accept: a turn woken by a post whose author is a member device or a peer without `tools.allow` gets the
-  member fence (file tools and `search` out of the private areas, `terminal` only in Linux bubblewrap and
-  refused elsewhere, no skill scripts or skill/memory/job changes); a test posts as a member asking for
-  another session's text and the turn gets none of it; a pipeline of local profiles with admin posts keeps
-  terminal and skill scripts.
+
 - **SK.2** — Safe skill import
   `feature · alpi · agent · low`
   promote when: users repeatedly exchange skills outside their own profile.
   accept: `alpi skill import <dir|zip>` previews, scans and installs; a skill
   that fails the scan is not installed.
+
 - **SK.3** — A profile can lock its own skills against its file tools
   `feature · alpi · agent · low`
   note: the denylist in [_paths.py](../alpi/tools/_paths.py) protects
@@ -327,6 +357,7 @@ Each names the condition that promotes it; none is worked on before.
   accept: an opt-in profile setting under which `write_file`, `edit_file` and the
   skill tool's write actions refuse the profile's own `skills/`; off by default,
   inline skill updates unchanged.
+
 - **KB.10** — Language policy for knowledge ingest and maintain
   `feature · alpi · agent · low`
   note: `_MAINTAIN_PROMPT` in [knowledge_base.py](../alpi/tools/knowledge_base.py)
@@ -335,6 +366,7 @@ Each names the condition that promotes it; none is worked on before.
   goes back to the tool (instead of a skill gate) for curation.
   accept: a `knowledge.language` setting reaches the prompt and is checked on the
   proposal; unset keeps today's behaviour.
+
 - **KB.12** — Vision in knowledge ingest
   `feature · alpi · agent · low`
   note: an image reaches `knowledge(action="ingest")` only with `ocr=true`, which
@@ -342,14 +374,25 @@ Each names the condition that promotes it; none is worked on before.
   promote when: a second profile wants images kept as knowledge.
   accept: an ingested image produces a page that embeds it as an asset with a
   description from the configured vision model.
+
 - **TIER.1** — Model tier per task, not only per job
   `feature · alpi · agent · low`
   note: a job's `tier` sets `ALPI_TIER` for its turn
-  ([scheduler/run.py](../alpi/scheduler/run.py), read in `engine.py`); a chat turn
-  always runs the main model, even for quality-sensitive knowledge writes.
+  ([scheduler/run.py](../alpi/scheduler/run.py), read in `engine.py`); chat has no skill-declared
+  tier, even for quality-sensitive knowledge writes; the engine already has a separate automatic
+  escalation path.
   promote when: a second profile mixes cheap questions with quality-sensitive
   writes in chat.
   accept: a skill-level `tier` raises the rest of the turn once that skill runs.
+
+- **ALP.ADMIT** — Admission that adapts to provider latency
+  `feature · alpi · agent · low`
+  note: ALP.9 (shipped) settled `alp.max_active_workgroups` as an admission threshold, not
+  a cap; revisit on top of that contract.
+  promote when: measured provider saturation repeatedly delays useful workgroup progress and
+  a fixed admission threshold is insufficient.
+  accept: admission drops to 1 while the per-call provider median exceeds a
+  configured threshold and returns to the configured value when it recovers.
 
 ## Discarded — don't relitigate
 

@@ -21,6 +21,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from alpi.scan import scan_injection
 
@@ -160,8 +161,30 @@ def render_cacheable(parts: dict[str, str]) -> str:
     return "\n\n".join(p for p in ordered if p)
 
 
-def cache_kwargs_for_model(model: str) -> dict:
-    """Ask LiteLLM to inject a ``cache_control`` marker on ``messages[0]`` for models known to support prompt caching. Target index 0 (not role=system) because later system messages still appear mid-history (tool footer, compaction summary) — only ``messages[0]`` is the stable prefix. Returns ``{}`` on any failure: a missing helper, a raise, or an unsupported model. Caching never breaks a call."""
+# LiteLLM turns the marker into OpenAI's explicit mode, which switches off OpenAI's own prefix cache and drops the breakpoint when it bridges to /v1/responses.
+PREFIX_CACHING_PROVIDERS = frozenset({"openai"})
+
+
+def _provider_of(model: str) -> str | None:
+    try:
+        from litellm.utils import get_llm_provider
+        return get_llm_provider(model)[1]
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _is_openai_endpoint(api_base: str | None) -> bool:
+    import litellm
+
+    base = (api_base or getattr(litellm, "api_base", None) or os.environ.get("OPENAI_BASE_URL") or os.environ.get("OPENAI_API_BASE") or "").strip()
+    if not base:
+        return True
+    host = urlsplit(base).hostname or ""
+    return host == "api.openai.com" or host.endswith(".api.openai.com")
+
+
+def cache_kwargs_for_model(model: str, api_base: str | None = None) -> dict:
+    """Ask LiteLLM to inject a ``cache_control`` marker on ``messages[0]`` for models known to support prompt caching. Target index 0 (not role=system) because later system messages still appear mid-history (tool footer, compaction summary) — only ``messages[0]`` is the stable prefix. Returns ``{}`` on any failure: a missing helper, a raise, an unsupported model, or a provider in ``PREFIX_CACHING_PROVIDERS`` that caches by prefix on its own when it is called at its own endpoint, judged the way LiteLLM does (a gateway behind the same prefix keeps the marker). Caching never breaks a call."""
     if not model:
         return {}
     try:
@@ -169,6 +192,8 @@ def cache_kwargs_for_model(model: str) -> dict:
         if not supports_prompt_caching(model=model):
             return {}
     except Exception:  # noqa: BLE001
+        return {}
+    if _provider_of(model) in PREFIX_CACHING_PROVIDERS and _is_openai_endpoint(api_base):
         return {}
     return {
         "cache_control_injection_points": [

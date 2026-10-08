@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
+from packaging.specifiers import SpecifierSet
 
 from alpi import cli, config as cfg_mod, doctor
 
@@ -752,8 +754,9 @@ def test_the_hot_path_dependency_is_verified_as_installed(tmp_path: Path) -> Non
 def test_the_pin_is_read_from_what_the_package_itself_records() -> None:
     spec = doctor._pinned_specifier("litellm")
 
-    assert spec is not None
-    assert "1.100" in spec
+    declared = re.search(r'"litellm([^"]+)"', (Path(__file__).parents[2] / "pyproject.toml").read_text())
+    assert spec is not None and declared is not None
+    assert SpecifierSet(spec) == SpecifierSet(declared.group(1))
     assert doctor._pinned_specifier("a-package-alpi-does-not-require") is None
 
 

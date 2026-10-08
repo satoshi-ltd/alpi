@@ -244,3 +244,28 @@ def test_streaming_drops_provider_but_keeps_generation_id(monkeypatch):
     ))[-1]
     assert final['generation_id'] == 'gen-stream-test'
     assert final['provider'] is None
+
+
+@pytest.mark.parametrize('model', ['openai/gpt-5', 'anthropic/claude-sonnet-5-5', 'deepseek/deepseek-chat'])
+def test_a_stream_without_a_wire_cost_is_never_labelled_provider(monkeypatch, model):
+    import json
+    import httpx
+    import alpi.llm as llm
+
+    def send(client, request, **kwargs):
+        chunk = {'id': 'x', 'created': 1, 'model': model.split('/', 1)[1],
+                 'choices': [{'index': 0, 'delta': {'content': 'ok'}, 'finish_reason': 'stop'}]}
+        usage = dict(chunk, choices=[], usage={'prompt_tokens': 1000, 'completion_tokens': 10, 'total_tokens': 1010})
+        body = ''.join('data: ' + json.dumps(c) + '\n\n' for c in [chunk, usage]) + 'data: [DONE]\n\n'
+        return httpx.Response(200, request=request, headers={'content-type': 'text/event-stream'}, content=body.encode())
+
+    monkeypatch.setattr(httpx.Client, 'send', send)
+    final = list(llm.stream(messages=[{'role': 'user', 'content': 'hi'}], tools=[], model=model, api_key='local-test-only'))[-1]
+    assert final['cost_source'] != 'provider'
+
+
+def test_a_stamped_usage_cost_off_openrouter_is_litellms_figure():
+    import alpi.llm as llm
+    resp = SimpleNamespace(usage=SimpleNamespace(cost=0.002), _hidden_params={})
+    assert llm._compute_cost_detail(resp, 'openai/gpt-5') == (0.002, 'litellm')
+    assert llm._compute_cost_detail(resp, 'openrouter/x/y') == (0.002, 'provider')

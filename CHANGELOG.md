@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.17.8 — 2026-10-08 — OpenAI models read their prompt cache again
+
+- **A model on a direct OpenAI key reads the prompt cache.** alpi marked every cacheable prompt for the provider, and for OpenAI that switched off its own automatic caching without placing a mark, so each call paid the full input price: with tools and reasoning on, none of the prompt was read from cache. OpenAI models are no longer marked; Anthropic, including through OpenRouter, still is.
+- **LiteLLM moves to 1.104.1** (from 1.100), the current release.
+
 ## v0.17.7 — 2026-10-07 — the current Anthropic and OpenAI models
 
 - **The model pickers offer the current models.** Anthropic: Claude Fable 5.1, Opus 5.5, Sonnet 5.5 and Haiku 4.5. OpenAI: GPT-6 Astra, GPT-6.1 Sol and GPT-6 Luna. The OpenRouter shortlist moves to Sonnet 5.5 and Opus 5.5, and the OpenRouter context table is refreshed. A profile that pins a superseded model (Fable 5, Opus 5, Opus 4.8, Sonnet 5, GPT-6 Sol, the GPT-5.6 lineup) keeps it and keeps working.

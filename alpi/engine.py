@@ -738,7 +738,7 @@ class Engine:
         consecutive_tool_failures = 0
         fallback_queue = list(self.cfg.fallback_models)
         from alpi import prompt_cache as _pc
-        call_kwargs.update(_pc.cache_kwargs_for_model(call_kwargs.get("model", "")))
+        call_kwargs.update(_pc.cache_kwargs_for_model(call_kwargs.get("model", ""), call_kwargs.get("api_base")))
         call_kwargs = self._with_affinity(call_kwargs)
         max_steps = self.cfg.tools.max_steps_per_turn
 
@@ -893,7 +893,7 @@ class Engine:
                                     fb_kwargs = cfg_mod.resolve_model(self.cfg, model=fb_model)
                                 except Exception:  # noqa: BLE001
                                     continue
-                                fb_kwargs.update(_pc.cache_kwargs_for_model(fb_kwargs.get("model", "")))
+                                fb_kwargs.update(_pc.cache_kwargs_for_model(fb_kwargs.get("model", ""), fb_kwargs.get("api_base")))
                                 fb_kwargs = self._with_affinity(fb_kwargs)
                                 logging.getLogger("alpi.engine").warning(
                                     "model %s failed (%s); falling back to %s",
@@ -1800,12 +1800,12 @@ class Engine:
                 self.cfg, model=current_model, include_reasoning=False,
             )
             kwargs = merge_into_kwargs(kwargs, reasoning_kwargs(current_model, "high"))
-            kwargs.update(_pc.cache_kwargs_for_model(kwargs.get("model", "")))
+            kwargs.update(_pc.cache_kwargs_for_model(kwargs.get("model", ""), kwargs.get("api_base")))
             return self._with_affinity(kwargs), current_model, "high", f"escalated effort to high ({reason})"
         deep = self.cfg.tiers.deep
         if deep.model and deep.model != current_model:
             kwargs = cfg_mod.resolve_model(self.cfg, tier="deep")
-            kwargs.update(_pc.cache_kwargs_for_model(kwargs.get("model", "")))
+            kwargs.update(_pc.cache_kwargs_for_model(kwargs.get("model", ""), kwargs.get("api_base")))
             return self._with_affinity(kwargs), deep.model, deep.effort, f"escalated to {deep.model} ({reason})"
         return None
 

@@ -224,3 +224,34 @@ def test_multimodal_turn_keeps_parts_and_appends_one_suffix_part(
     assert any(p.get("type") == "image_url" for p in parts[:-1])
     suffixed = [p for p in parts if p.get("type") == "text" and "# HOST CONTEXT" in p.get("text", "")]
     assert len(suffixed) == 1
+
+
+@pytest.mark.parametrize(
+    ("api_base", "marked"),
+    [("http://localhost:4000/v1", True), (None, False)],
+)
+def test_engine_passes_the_endpoint_so_a_gateway_keeps_the_marker(
+    bootstrapped_home: Path, monkeypatch, api_base, marked,
+) -> None:
+    from alpi import engine as engine_mod
+    import litellm.utils as _lu
+
+    monkeypatch.setattr(_lu, "supports_prompt_caching", lambda model, **_kw: True)
+    real = config.resolve_model
+
+    def _resolve(cfg, *a, **kw):
+        out = dict(real(cfg, *a, **kw))
+        out["model"] = "openai/claude-sonnet-5-5"
+        if api_base:
+            out["api_base"] = api_base
+        return out
+
+    monkeypatch.setattr(config, "resolve_model", _resolve)
+    captured: list = []
+    monkeypatch.setattr(engine_mod.llm, "stream", _spy_stream(captured))
+
+    engine = Engine(home=bootstrapped_home, cfg=config.load(bootstrapped_home))
+    engine.run_turn("hola", lambda _ev: None)
+
+    assert captured, "llm.stream was never called"
+    assert ("cache_control_injection_points" in captured[0]) is marked

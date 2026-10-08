@@ -23,7 +23,7 @@ Local agent runtime, per turn:
 |---|---|
 | `alpi/engine.py` | Turn loop, tool loop, event emission, interrupt flag. |
 | `alpi/llm.py` | LiteLLM transport. |
-| `alpi/prompt_cache.py` | Stable cacheable system-prompt prefix assembly and platform/env hints. |
+| `alpi/prompt_cache.py` | Stable cacheable system-prompt prefix assembly and platform/env hints; `cache_kwargs_for_model` adds the `cache_control` marker for Anthropic-style providers and never for an `openai`-prefixed model at OpenAI's own endpoint (its automatic prefix cache needs no marker, and the marker would switch it off; a gateway behind that prefix keeps it). |
 | `alpi/prefix_diag.py` | Hashed logical-conversation affinity and bounded request-shape diagnostics. |
 | `alpi/config.py` | Config load/save, defaults, model resolution. |
 | `alpi/attachments.py` | Input/output attachment validation, mime/magic checks, text rendering for non-rich surfaces. |

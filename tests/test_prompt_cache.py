@@ -270,6 +270,88 @@ def test_cache_kwargs_targets_index_zero_not_role(monkeypatch) -> None:
     assert point["location"] == "message"
 
 
+@pytest.mark.parametrize(
+    ("model", "marked"),
+    [
+        ("openai/gpt-6-luna", False),
+        ("openai/gpt-5", False),
+        ("gpt-5", False),
+        ("anthropic/claude-sonnet-5-5", True),
+        ("openrouter/anthropic/claude-sonnet-5-5", True),
+        ("openrouter/deepseek/deepseek-v4.1-flash", True),
+    ],
+)
+def test_cache_kwargs_per_provider(monkeypatch, model: str, marked: bool) -> None:
+    """A provider that caches by prefix on its own never gets the marker; Anthropic keeps it."""
+    import litellm.utils as _lu
+    monkeypatch.setattr(_lu, "supports_prompt_caching", lambda model: True)
+    out = pc.cache_kwargs_for_model(model)
+    assert bool(out) is marked
+    if marked:
+        assert out == {"cache_control_injection_points": [{"location": "message", "index": 0}]}
+
+
+def _outgoing_body(model: str, **extra) -> dict:
+    import json
+
+    import httpx
+    import litellm
+    import litellm.utils as _lu
+
+    seen: list[dict] = []
+
+    def fake_send(self, request, **kw):
+        seen.append(json.loads(request.content or b"{}"))
+        raise RuntimeError("stop before the network")
+
+    kwargs = dict(
+        model=model, api_key="sk-test", num_retries=0,
+        messages=[{"role": "system", "content": "SYS " * 50}, {"role": "user", "content": "hi"}],
+        tools=[{"type": "function", "function": {"name": "t", "description": "d", "parameters": {"type": "object", "properties": {}}}}],
+        **extra,
+    )
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(_lu, "supports_prompt_caching", lambda model: True)
+        kwargs.update(pc.cache_kwargs_for_model(model, extra.get("api_base")))
+        mp.setattr(httpx.Client, "send", fake_send)
+        try:
+            litellm.completion(**kwargs)
+        except Exception:  # noqa: BLE001
+            pass
+    assert seen, "no request reached the transport"
+    return seen[0]
+
+
+def test_openai_request_leaves_automatic_prefix_caching_on() -> None:
+    import json
+
+    body = json.dumps(_outgoing_body("openai/gpt-6-luna", reasoning_effort="medium", allowed_openai_params=["reasoning_effort"]))
+    assert "prompt_cache_options" not in body
+    assert "prompt_cache_breakpoint" not in body
+
+
+def test_a_gateway_behind_the_openai_prefix_keeps_the_marker(monkeypatch) -> None:
+    import litellm.utils as _lu
+    monkeypatch.setattr(_lu, "supports_prompt_caching", lambda model: True)
+    assert pc.cache_kwargs_for_model("openai/claude-sonnet-5-5", "http://localhost:4000/v1")
+    assert pc.cache_kwargs_for_model("openai/gpt-6-luna", "https://api.openai.com/v1") == {}
+    assert pc.cache_kwargs_for_model("openai/gpt-6-luna", None) == {}
+
+
+def test_gateway_request_carries_cache_control() -> None:
+    import json
+
+    body = json.dumps(_outgoing_body("openai/claude-sonnet-5-5", api_base="http://localhost:4000/v1"))
+    assert "cache_control" in body
+
+
+@pytest.mark.parametrize("model", ["anthropic/claude-sonnet-5-5", "openrouter/anthropic/claude-sonnet-5-5"])
+def test_anthropic_request_still_carries_cache_control(model: str) -> None:
+    import json
+
+    assert "cache_control" in json.dumps(_outgoing_body(model))
+
+
 def test_build_parts_never_writes(tmp_path: Path) -> None:
     """CL.1 — the prompt builder is read-only even when a prunable entry is on disk; pruning moved to memory.run_maintenance."""
     from datetime import date, timedelta
@@ -304,3 +386,28 @@ def test_run_maintenance_prunes_what_the_builder_no_longer_does(tmp_path: Path) 
     removed = memory.run_maintenance(tmp_path)
     assert removed == 1
     assert "flaky guess" not in (tmp_path / "memories" / "MEMORY.md").read_text()
+
+
+@pytest.mark.parametrize(
+    ("api_base", "env", "is_openai"),
+    [
+        (None, {}, True),
+        ("https://api.openai.com/v1", {}, True),
+        ("https://eu.api.openai.com/v1", {}, True),
+        ("http://localhost:4000/v1", {}, False),
+        ("https://api.openai.com.evil.example/v1", {}, False),
+        ("http://proxy/?x=api.openai.com", {}, False),
+        ("https://gw/api.openai.com/v1", {}, False),
+        (None, {"OPENAI_BASE_URL": "http://gateway:4000/v1"}, False),
+        (None, {"OPENAI_API_BASE": "https://api.openai.com/v1"}, True),
+    ],
+)
+def test_the_openai_endpoint_is_judged_by_host_like_litellm_does(monkeypatch, api_base, env, is_openai) -> None:
+    import litellm
+
+    for name in ("OPENAI_BASE_URL", "OPENAI_API_BASE"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(litellm, "api_base", None, raising=False)
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    assert pc._is_openai_endpoint(api_base) is is_openai

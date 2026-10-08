@@ -110,7 +110,7 @@ removed for v0.3 because:
   `pyproject.toml` and `alpi/__init__.py`. Both must change for
   a publish to happen.
 - **Installation rejects Python 3.10.** Alpi requires Python 3.11–3.13.
-  Use a supported interpreter; LiteLLM 1.100.0 imports typing features
+  Use a supported interpreter; the pinned LiteLLM imports typing features
   introduced in Python 3.11.
 - **PyPI publish fails with 403 / OIDC.** Re-check the Trusted
   Publisher config on PyPI: workflow filename matches exactly
