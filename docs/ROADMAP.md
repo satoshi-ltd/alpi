@@ -61,16 +61,8 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **SCOPE.12** — The `db` tool and `out/` sit outside the member fence
-  `bug · alpi · agent · high`
-  note: found while reviewing SCOPE.8. The `db` tool runs arbitrary SQL on any skill's `state/db.sqlite`,
-  around the `skills/` file fence and the restrictions on direct skill mutation, and the fenced file tools
-  still read `<home>/out/`, where every session's produced files land.
-  accept: a fenced turn (member device or peer without `tools.allow`) gets only read queries on the active
-  skill's database, or none, and cannot read another connection's files under `out/`; tests cover both.
-
 - **SCOPE.11** — Turns a workgroup post wakes run unfenced
-  `bug · alpi · agent · high · depends: SCOPE.12`
+  `bug · alpi · agent · high`
   note: found while reviewing SCOPE.9. `_dispatch_workgroup_turn` in [service.py](../alpi/service.py) runs a
   `chat --once` child as the profile (admin) for every member or hub turn a post wakes; the session history
   tools are denied there since v0.17.0, but `read_file`, `search` and `terminal` still read `sessions/`,
@@ -246,6 +238,12 @@ _None._
 ### Demand-gated
 
 Each names the condition that promotes it; none is worked on before.
+
+- **OUT.OWN** — A member rereads and edits its own earlier outputs
+  `feature · alpi · agent · low`
+  note: since SCOPE.12 a fenced turn (member device, peer without `tools.allow`) reaches `out/` only for files it creates in that turn or its skill produces; the next turn cannot reread, edit or attach them, because `out/` carries no owner and the only ownership records are the sessions' offered paths, which cost a session scan per file check.
+  promote when: members ask the agent to revise or resend a document it made for them earlier.
+  accept: a fenced turn reads, edits and attaches the files its own connection produced in earlier turns (its device too under `session_scope: device`) and still none another connection produced; no new persisted state beyond what ownership needs, named in the change; tests cover two connections on one profile.
 
 - **POL.2** — A member connection can carry the tool policy a peer carries
   `feature · alpi · agent · low`

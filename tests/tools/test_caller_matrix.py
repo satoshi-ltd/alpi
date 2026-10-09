@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from contextlib import ExitStack
 from pathlib import Path
 
 import pytest
@@ -10,14 +9,13 @@ from alpi import tools
 from alpi.alp import handlers as alp_handlers
 from alpi.host.connection_context import ConnectionContext
 from alpi.host.connection_context import use as use_connection
-from alpi.tools import _policy
 from alpi.tools._paths import PEER_HISTORY_TOOLS
 from alpi.tools.base import ToolResult
 
 ADMIN = ConnectionContext(connection_id="c1", device_id="d1", source="remote", role="admin")
 MEMBER = ConnectionContext(connection_id="c2", device_id="d2", source="remote", role="member")
 
-LISTED = frozenset({"skill", "schedule", "memory:read", "session_search", "read_file", "search", "write_file"})
+LISTED = frozenset({"skill", "schedule", "db", "memory:read", "session_search", "read_file", "search", "write_file"})
 
 CALLERS = {
     "A": "admin device",
@@ -39,11 +37,14 @@ MATRIX: dict[tuple[str, str], str] = {
     **{("schedule", a): "AL" for a in ("add", "update", "remove", "fire")},
     ("session_search", ""): "AML",
     **{(name, ""): "AM" for name in HISTORY_TOOLS},
+    ("db", "query"): "AL",
+    ("db", "exec"): "AL",
     ("web_search", ""): "AMP",
     ("read_file", ""): "AMPL",
 }
 
-ACTION_TOOLS = {"skill", "memory", "schedule"}
+FENCE_TABLE_TOOLS = {"skill", "memory", "schedule"}
+ACTION_TOOLS = FENCE_TABLE_TOOLS | {"db"}
 
 SECRET = "PRIVATE-SESSION"
 
@@ -158,7 +159,8 @@ def test_only_a_caller_the_fence_does_not_cover_touches_a_private_area_of_the_ho
 
 
 def test_the_table_classifies_every_action_of_every_tool_the_fence_trims() -> None:
-    assert set(tools._PEER_ALLOWED_ACTIONS) == set(tools._MEMBER_ALLOWED_ACTIONS) == ACTION_TOOLS
+    assert set(tools._PEER_ALLOWED_ACTIONS) == set(tools._MEMBER_ALLOWED_ACTIONS) == FENCE_TABLE_TOOLS
+    assert tools._FENCED_OUT_TOOLS == {"db"}
     for name in ACTION_TOOLS:
         declared = set(tools._TOOLS[name].parameters["properties"]["action"]["enum"])
         assert {action for n, action in MATRIX if n == name} == declared, name

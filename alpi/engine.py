@@ -660,6 +660,7 @@ class Engine:
         self._turn_cost_trail = {}
         _wg_state.reset_skill_env()
         _wg_state.reset_turn_attachments()
+        _wg_state.reset_turn_outputs()
 
         # MM.1: image/PDF attachments → multimodal content parts (kept in the
         # in-memory message only; session persists bytes-free metadata).
@@ -1339,6 +1340,7 @@ class Engine:
                         )
                         if produced and not any(a["path"] == produced["path"] for a in turn_produced):
                             turn_produced.append(produced)
+                            _wg_state.note_turn_output(Path(produced["path"]).resolve())
                     emit(AgentEvent(
                         kind="tool_end", name=name, args=args,
                         output=payload, ok=result.ok, tool_id=tid,

@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.17.11 — 2026-10-09 — a member's turn leaves skill databases and other connections' files alone
+
+- **The `db` tool is no longer offered to a member device's turn or to an ALP peer turn without `tools.allow`**, and a call to it is refused, nested calls included. It reached every skill's state database, around the fence that keeps `skills/` out of their file tools. A peer whose `tools.allow` names `db` and every admin keep it; a skill's own scripts still open their database directly.
+- **`out/` joins the private areas of those turns.** They read, edit or overwrite only the files they create there in the current turn or that their skill produces, and never a file another connection left; the next turn cannot reread them. Admins are unchanged.
+
 ## v0.17.10 — 2026-10-08 — a member only attaches its own uploads
 
 - **A remote member can attach only files its own connection uploaded** (its own device's under `session_scope: device`). Knowing another connection's upload path used to be enough to send its bytes to the agent.

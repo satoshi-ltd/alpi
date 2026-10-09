@@ -83,7 +83,7 @@ Notes:
 
 ## Per-skill DB
 
-Use the `db` tool for structured SQLite state (path `<skill>/state/db.sqlite`):
+Use the `db` tool for structured SQLite state (path `<skill>/state/db.sqlite`). A member device's turn and an ALP peer turn without `tools.allow` do not get it (it is withheld and refused), so a skill that must work for them keeps its state in scripts that open the database themselves:
 
 ```python
 db(action="exec", skill="whoop-tracker",

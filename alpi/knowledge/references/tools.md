@@ -36,7 +36,7 @@
 | Terminal | `terminal` | Shell commands when no native tool fits. Approval + guards apply. |
 | Web/browser | `web_search`, `web_fetch`, `web_extract`, `browser`, `research` | Web information; `research` is read-only sub-agent work. |
 | Memory | `memory`, `todo` | Durable profile memory and per-turn task tracking. |
-| Skills/state | `skill`, `db` | Create/run reusable skills; skill-local SQLite state. |
+| Skills/state | `skill`, `db` | Create/run reusable skills; skill-local SQLite state (`db` is withheld from member devices and from peers without `tools.allow`). |
 | Communication | `notify`, `email`, `schedule`, `peer`, `workgroup`, `ask_user` | Push to the owner's apps, reach third parties by email, schedules, ALP peers/workgroups, clarification UI. |
 | Media | `read_image`, `tts`, `stt` | Vision, speech synthesis, speech transcription. |
 | Delegation | `delegate` | Write-capable focused sub-agent. |

@@ -37,6 +37,9 @@ _active_skills_env: ContextVar[Optional[set]] = ContextVar(
 _turn_attachments: ContextVar[Optional[list]] = ContextVar(
     "alpi_turn_attachments", default=None,
 )
+_turn_outputs: ContextVar[Optional[set]] = ContextVar(
+    "alpi_turn_outputs", default=None,
+)
 
 
 def get_emit() -> Optional[EmitFn]:
@@ -287,6 +290,22 @@ def bump_turn_usage(
         if cached_input_tokens is not None:
             tally["cached_in"] = int(tally.get("cached_in", 0)) + int(cached_input_tokens)
             tally["measured_in"] = int(tally.get("measured_in", 0)) + int(input_tokens)
+
+
+def reset_turn_outputs() -> None:
+    _turn_outputs.set(set())
+
+
+def note_turn_output(path: os.PathLike[str] | str) -> None:
+    current = _turn_outputs.get()
+    if current is None:
+        current = set()
+        _turn_outputs.set(current)
+    current.add(str(path))
+
+
+def is_turn_output(path: os.PathLike[str] | str) -> bool:
+    return str(path) in (_turn_outputs.get() or ())
 
 
 def reset_skill_env() -> None:

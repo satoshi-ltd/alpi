@@ -68,9 +68,13 @@ not reach.
   — `$HOME`, `/tmp`, directories outside the workspace — is allowed.
   For a turn started from a member device, file tools also refuse every
   profile's `host/`, `secrets/`, `gateway/`, `cache/`, `logs/`, `outputs/`,
-  `sessions/`, `memories/`, `schedule/`, `skills/`, `runs/`, `run/`,
+  `out/`, `sessions/`, `memories/`, `schedule/`, `skills/`, `runs/`, `run/`,
   `mentions/`, `browser/` and `recipes/`, and its `config.yaml`, for reads and writes, and `search` leaves them out of its
-  results; `alp/` transcripts stay readable (its `secrets/` never). A member
+  results; `alp/` transcripts stay readable (its `secrets/` never). `out/`, where every connection's produced
+  files land, is open only to the files the turn itself created there (`write_file`) or its skill produced; the next
+  turn cannot reread, edit or overwrite them, and a file that already exists in `out/` is never overwritten by a
+  fenced turn (two turns that pick the same new name in the same instant can still collide). The rule covers the
+  profile's own `out/` only, and a workspace configured at or under it locks itself the same way. A member
   turn's `terminal` runs only inside Linux `bubblewrap`, whatever
   `tools.terminal.sandbox` says: the alpi home is not mounted there, other
   processes are invisible (`--unshare-pid`) and `/tmp` is private (the Docker
@@ -96,10 +100,11 @@ not reach.
   root (custom roots, any letter case, profiles linked from elsewhere) and its
   `knowledge.sqlite`; the post-turn memory review keeps the turn's fence. A turn answering an ALP peer that has no `tools.allow`
   gets all of the above (file tools, `search`, `terminal`, skills, jobs) and
-  no session history tools, without changing its role. MCP tools are not
+  no session history tools, without changing its role. The `db` tool is not
+  offered to these turns and is refused if called, nested calls included: it reads and writes any skill's state database,
+  which the `skills/` fence keeps out of file tools. MCP tools are not
   fenced: what a configured MCP server can read is the operator's grant, and
-  so is the `db` tool on a skill's state database, and the `browser` tool
-  shares the profile's one browser page and its saved cookies. The fence does not hold
+  the `browser` tool shares the profile's one browser page and its saved cookies. The fence does not hold
   for a profile in a workgroup: any of its member devices or peers without a
   policy can `workgroup_post`, and the turn that post wakes runs as the
   profile, unfenced (no session history tools, but its file tools and

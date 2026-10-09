@@ -193,7 +193,7 @@ device: the file tools and `search` never read or write the profile's
 `sessions/`, `runs/`, `host/`, every `config.yaml` and other private areas, `terminal` runs only
 inside Linux `bubblewrap` with the alpi home hidden or in the Docker execution
 backend (refused in the Docker runtime and on macOS), skill scripts and changes to skills, memory
-or jobs are refused, and the session and workgroup history tools
+or jobs are refused, the `db` tool is withheld, and the session and workgroup history tools
 (`session_search`, `session_read`, `recall_sessions`, `index_sessions`,
 `workgroup_search`, `index_workgroups`) are withheld, mention replies
 included. A `tools.allow` replaces all of that with exactly the tools it

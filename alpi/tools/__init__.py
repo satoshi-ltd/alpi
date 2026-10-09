@@ -65,6 +65,9 @@ _MEMBER_ALLOWED_ACTIONS: dict[str, frozenset[str]] = {
 }
 
 
+_FENCED_OUT_TOOLS = frozenset({"db"})
+
+
 def _fenced_actions(name: str) -> frozenset[str] | None:
     from alpi.tools import _policy
     table = _PEER_ALLOWED_ACTIONS if _policy.fences_private_areas() else _MEMBER_ALLOWED_ACTIONS
@@ -109,15 +112,15 @@ def schemas(deny: frozenset[str] | set[str] | None = None) -> list[dict]:
             )
             if schema is not None
         ),
-        key=_schema_sort_key,
+        key=_schema_name,
     )
     from alpi.tools._paths import private_areas_fenced
     if not private_areas_fenced():
         return schemas
-    return [_member_schema(schema) for schema in schemas]
+    return [_member_schema(schema) for schema in schemas if _schema_name(schema) not in _FENCED_OUT_TOOLS]
 
 
-def _schema_sort_key(schema: dict) -> str:
+def _schema_name(schema: dict) -> str:
     try:
         return str(schema.get("function", {}).get("name") or "")
     except AttributeError:
@@ -208,6 +211,16 @@ def _refusal_reason(name: str, action: str) -> str:
 
 def _member_mutation_refusal(name: str, arguments: dict) -> ToolResult | None:
     from alpi.tools._paths import private_areas_fenced
+    if name in _FENCED_OUT_TOOLS and private_areas_fenced():
+        return ToolResult(
+            ok=False,
+            output="",
+            error=(
+                f"member devices and peers without a tool policy cannot use {name}: it reads and writes "
+                "skill state that the skills/ fence keeps out of their file tools; "
+                "it requires an admin device or a peer tools.allow that grants it"
+            ),
+        )
     allowed = _fenced_actions(name)
     if allowed is None or not private_areas_fenced():
         return None

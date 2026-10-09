@@ -42,7 +42,7 @@ _SENSITIVE_PATH_REGEX: tuple[re.Pattern[str], ...] = (
 
 # Off-limits to members for READ as well as write — reading host/ would leak an admin token and escalate.
 _MEMBER_HOME_AREA: frozenset[str] = frozenset({
-    "host", "secrets", "gateway", "cache", "logs", "outputs",
+    "host", "secrets", "gateway", "cache", "logs", "outputs", "out",
     "sessions", "memories", "schedule", "skills", "alp", "runs", "mentions", "run", "browser", "recipes",
 })
 _MEMBER_HOME_FILE_PREFIXES = ("knowledge.sqlite", "config.yaml")
@@ -115,7 +115,22 @@ def _member_denied_area(p: Path | str, resolved: Path, *, for_write: bool) -> st
     if area == "alp" and not for_write:
         if not (_ALP_SECRETS_RE.search(str(p)) or _ALP_SECRETS_RE.search(str(resolved))):
             return None
+    if area == "out" and _own_out_path(resolved, for_write):
+        return None
     return area
+
+
+def _own_out_path(resolved: Path, for_write: bool) -> bool:
+    from alpi.home import get_home
+    from alpi.tools import _state
+    if _member_home_area(resolved) != "out":
+        return False
+    if _state.is_turn_output(resolved):
+        return True
+    if not for_write or resolved.exists() or not resolved.is_relative_to(get_home().resolve() / "out"):
+        return False
+    _state.note_turn_output(resolved)
+    return True
 
 
 def _configured_workspace() -> Path | None:
@@ -296,6 +311,11 @@ def resolve_path(path: str, *, for_write: bool = False) -> Path:
         area = _member_denied_area(p, resolved, for_write=for_write)
         if area is not None:
             verb = "write to" if for_write else "read"
+            if area == "out":
+                raise ValueError(
+                    f"cannot {verb} {path}: member devices and peers without a tool policy use only the files "
+                    "this turn created in out/, and an existing file is not theirs, so choose a new file name"
+                )
             raise ValueError(
                 f"member devices and peers without a tool policy cannot {verb} the profile "
                 f"{area}/ area; this requires an admin device: {path}"

@@ -11,12 +11,13 @@ def _actions(schema, name):
     return set(tool["function"]["parameters"]["properties"]["action"]["enum"])
 
 
-def test_member_sees_every_nonrestricted_tool():
+def test_member_sees_every_tool_but_the_skill_database():
     with use(ADMIN):
         admin_names = {item["function"]["name"] for item in schemas()}
     with use(MEMBER):
         member_names = {item["function"]["name"] for item in schemas()}
-    assert member_names == admin_names
+    assert "db" in admin_names
+    assert member_names == admin_names - {"db"}
 
 
 def test_member_schema_keeps_only_nonmutating_actions():

@@ -124,9 +124,9 @@ Three trust tiers:
   `not-found`). Sensitive **host control plane**
   mutations reject `-32001 forbidden / admin role required`. For a member turn
   the file tools refuse every profile's `host/`, `secrets/`, `gateway/`,
-  `cache/`, `logs/`, `outputs/`, `sessions/`, `memories/`, `schedule/`,
+  `cache/`, `logs/`, `outputs/`, `out/`, `sessions/`, `memories/`, `schedule/`,
   `skills/`, `runs/`, `run/`, `mentions/` and `browser/` (read, write and `search` results;
-  `alp/` transcripts readable). A member turn's `terminal` runs only in Linux
+  `alp/` transcripts readable). `out/` is open only to files the turn itself created there or its skill produced (never an existing file, never the next turn). A member turn's `terminal` runs only in Linux
   bubblewrap (whatever `tools.terminal.sandbox` says) with the alpi home not
   mounted, other processes hidden and a private /tmp; the workspace and cwd must
   be outside the home, skill secrets are not passed, and it is refused before
@@ -139,7 +139,7 @@ Three trust tiers:
   fence covers every profile of the root (custom roots, any case, linked
   profiles) and `knowledge.sqlite`. An ALP peer turn without `tools.allow` gets
   the same fence, no skill scripts at all and no session or workgroup history tools; its role is unchanged.
-  MCP tools and the `db` tool are not fenced. The fence does not hold for a profile
+  The `db` tool is withheld from these turns (not offered, refused when called, nested included); MCP tools are not fenced. The fence does not hold for a profile
   in a workgroup: its members or no-policy peers can `workgroup_post`, and the turn
   that wakes is unfenced apart from losing the session history tools (SCOPE.11).
   With `tools.execution.backend: docker` a fenced command runs in that container. The role does NOT otherwise sandbox the agent's own tools — `host.chat.send` is open to members,
