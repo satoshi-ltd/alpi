@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.17.13 — 2026-10-09 — a post's fence follows it into the turns it wakes
+
+- **A workgroup turn keeps the fence of the post that woke it.** A post made by a member device, through `host.workgroup.post` or the agent's `workgroup_post`, or by a peer turn is stamped with its caller's fence. The turns that wake on it run under it: file tools, search and terminal stay out of sessions, runs and host; a member keeps the member policy, a peer without `tools.allow` the stricter one, a peer with it exactly its list plus `workgroup_post`, so it can hand off. Before, every woken turn ran as the profile and could read another conversation and post it back.
+- **The fence rides the whole handoff.** The follow-up posts of a fenced turn carry it, so it holds until the fenced posts leave the last five posts and the open task's opener. Local admin pipelines are unchanged.
+- **A pipeline owner woken by a fenced post loses `terminal` where fenced turns do**, in the Docker runtime and on macOS. A turn that cannot read the fence it was handed is fenced as a peer.
+- `workgroup.post` takes an optional `origin`; a hub older than this version ignores it.
+
 ## v0.17.12 — 2026-10-09 — a write cannot clobber a neighbour's file
 
 - **`write_file` no longer touches another file while it writes.** It staged every write in a predictable `<name>.tmp` beside the target, so writing `report.md` overwrote and then removed a neighbouring `report.md.tmp`; the staging file is now unique and exclusive.

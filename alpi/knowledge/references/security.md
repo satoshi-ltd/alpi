@@ -139,9 +139,7 @@ Three trust tiers:
   fence covers every profile of the root (custom roots, any case, linked
   profiles) and `knowledge.sqlite`. An ALP peer turn without `tools.allow` gets
   the same fence, no skill scripts at all and no session or workgroup history tools; its role is unchanged.
-  The `db` tool is withheld from these turns (not offered, refused when called, nested included); MCP tools are not fenced. The fence does not hold for a profile
-  in a workgroup: its members or no-policy peers can `workgroup_post`, and the turn
-  that wakes is unfenced apart from losing the session history tools (SCOPE.11).
+  The `db` tool is withheld from these turns (not offered, refused when called, nested included); MCP tools are not fenced. A workgroup post made by a fenced caller carries its fence (`origin` on the transcript entry); the turn a post wakes runs under the weakest fence of the posts it sees (last five, the open task's opener and every post newer than the turn's last response; `#file` markers are stamped too, and the skill scripts and shell commands a fenced turn starts receive the fence in their environment), handed to the `chat --once` child, applied before the engine starts and stamped on the child's own posts: member origin keeps the member policy, a peer without `tools.allow` the peer fence, a peer with it exactly its list plus `workgroup_post`, a mixture the peer fence, an unreadable fence the peer fence. Pipeline owners woken that way lose `terminal` where fenced turns do. A wire post from another daemon's profile is stamped from its unsigned claim (restriction only); no claim counts as admin's.
   With `tools.execution.backend: docker` a fenced command runs in that container. The role does NOT otherwise sandbox the agent's own tools — `host.chat.send` is open to members,
   so anything the agent can do (workspace writes, memory edits, network
   calls) stays reachable. Use the OS sandbox flag and a dedicated profile for

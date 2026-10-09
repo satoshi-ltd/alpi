@@ -1596,12 +1596,14 @@ def _run_or_test(home: Path, name: str, args: list[str], *, mode: str) -> ToolRe
             error=f"skill {name!r} has no output_schema; invoke requires a structured contract",
         )
 
+    from alpi import authority
     from alpi.home import effective_profile_env, workspace_env
     extra_env = {
         "ALPI_HOME": str(home),
         "ALPI_SKILL_NAME": name,
         "ALPI_SKILL_DIR": str(skill_dir),
         **workspace_env(home),
+        **authority.environ(),
     }
     env = effective_profile_env(home, extra=extra_env)
 

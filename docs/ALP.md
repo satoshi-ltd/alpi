@@ -198,10 +198,9 @@ or jobs are refused, the `db` tool is withheld, and the session and workgroup hi
 `workgroup_search`, `index_workgroups`) are withheld, mention replies
 included. A `tools.allow` replaces all of that with exactly the tools it
 lists: granting `read_file`, `search` or `terminal` gives that peer the
-profile's data, conversations included. The fence does not cover a profile
-in a workgroup: such a peer can `workgroup_post`, and the turn the post wakes
-has no session history tools but is otherwise unfenced (its file tools and
-`terminal` still reach `sessions/`).
+profile's data, conversations included. A `workgroup_post` such a turn makes
+is stamped with its fence (`origin` on the transcript entry), and the turns
+that post wakes run under it (see [SECURITY.md](SECURITY.md)).
 
 An entry is one of:
 
@@ -743,7 +742,13 @@ methods callable by pinned peers in the workgroup roster.
   their next `join`/`pull`. Idempotent — a second `join` returns
   the same sealed key and refreshes the bio if supplied.
 
-- `workgroup.post(workgroup_id, key_version, nonce, ciphertext, cost?) → {seq, ts}`
+- `workgroup.post(workgroup_id, key_version, nonce, ciphertext, cost?, origin?) → {seq, ts}`
+  — `origin` is the poster's claim of the fence its turn ran under
+  (`{"fence": "member" | "peer"}` or `{"fence": "allow", "allow": [tool, …]}`);
+  the hub stores it in plaintext on the entry after normalising it (anything
+  it does not understand becomes `{"fence": "peer"}`), it is not signed, and it
+  can only add restriction to the turns the post wakes. `workgroup.file_put`
+  takes the same `origin` for the `#file` marker it appends
   The author encrypts the message client-side under the
   group key for `key_version` (ChaCha20-Poly1305, AAD =
   `b"post"`); the hub never sees plaintext. `cost` is an optional

@@ -104,13 +104,28 @@ not reach.
   offered to these turns and is refused if called, nested calls included: it reads and writes any skill's state database,
   which the `skills/` fence keeps out of file tools. MCP tools are not
   fenced: what a configured MCP server can read is the operator's grant, and
-  the `browser` tool shares the profile's one browser page and its saved cookies. The fence does not hold
-  for a profile in a workgroup: any of its member devices or peers without a
-  policy can `workgroup_post`, and the turn that post wakes runs as the
-  profile, unfenced (no session history tools, but its file tools and
-  `terminal` still reach `sessions/`) and can post the answer back to a
-  transcript they can read. Keep profiles that member devices or untrusted
-  peers drive out of workgroups until those turns are fenced (SCOPE.11). Turns that run as admin (admin devices, the CLI, jobs, a
+  the `browser` tool shares the profile's one browser page and its saved cookies. A workgroup post a fenced
+  caller makes (a member device through `host.workgroup.post` or the agent's
+  `workgroup_post`, a peer turn with or without `tools.allow`) is stamped with
+  that caller's fence in its transcript entry (`origin`). The turn a post wakes
+  runs under the weakest fence among the posts it sees (the last five and the
+  open task's opener, and every post newer than the turn's last response): the daemon hands it to the `chat --once` child, which
+  applies it before the engine starts, and the child's own posts carry it on,
+  so a handoff keeps the fence until the fenced posts leave that window. A
+  member origin keeps the member policy (skills run and invoke; no memory,
+  job or skill changes), a peer without `tools.allow` the stricter peer fence,
+  a peer with it exactly its list plus `workgroup_post`, so it can hand off; a
+  mixture takes the peer fence, and a child that cannot read the fence it was
+  handed is fenced as a peer. A `#file` marker is stamped like a post, and the
+  skill scripts and shell commands a fenced turn starts receive the fence in
+  their environment, so an `alpi workgroup post` they run is stamped too. The
+  stamp is stored in the transcript in plaintext: a peer's `tools.allow` list
+  is visible to every member of the workgroup. A pipeline
+  owner woken by a fenced post loses `terminal` wherever fenced turns do (the
+  Docker runtime, macOS). A post that arrives over the wire from another
+  daemon's profile is stamped from that profile's own claim, which can only add
+  restriction; a post with no claim counts as admin's, and the claim is
+  plaintext and unsigned. Turns that run as admin (admin devices, the CLI, jobs, a
   peer whose `tools.allow` grants the tools) are not fenced, and the session
   tools do not use file paths.
   Workspace-only isolation is Layer 2.

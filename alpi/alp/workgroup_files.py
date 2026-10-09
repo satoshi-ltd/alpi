@@ -16,7 +16,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from alpi import attachments
+from alpi import attachments, authority
 from alpi.alp import server as alp_server
 from alpi.alp.keys import Keypair
 from alpi.home import format_bytes
@@ -239,6 +239,7 @@ def _append_marker(
     size: int,
     digest: str,
     note: str,
+    origin: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     from alpi.alp import wakes
     from alpi.alp.workgroup import (
@@ -271,6 +272,8 @@ def _append_marker(
         "nonce": nonce,
         "ciphertext": ciphertext,
     }
+    if origin is not None:
+        entry["origin"] = origin
     member = wg.member(uploader)
     if member is not None:
         member.last_seen_at = entry["ts"]
@@ -342,6 +345,7 @@ def _put_chunk_locked(
     if len(data) > CHUNK_BYTES:
         raise WorkgroupFileError(f"chunk exceeds {CHUNK_BYTES} bytes")
     done = bool(params.get("done"))
+    origin = authority.sanitize(params["origin"]) if "origin" in params else None
     ciphertext_size = size + _AEAD_TAG_BYTES
     if offset + len(data) > ciphertext_size:
         raise WorkgroupFileError("chunk exceeds declared ciphertext size")
@@ -354,6 +358,7 @@ def _put_chunk_locked(
         marker = _append_marker(
             home, wg, kp, uploader=uploader,
             key_version=key_version, name=name, size=size, digest=digest, note=note,
+            origin=origin,
         )
         return {
             "ok": True, "existed": True, "complete": True,
@@ -450,6 +455,7 @@ def _put_chunk_locked(
         marker = _append_marker(
             home, wg, kp, uploader=uploader,
             key_version=key_version, name=name, size=size, digest=digest, note=note,
+            origin=origin,
         )
     except Exception:
         bin_path.unlink(missing_ok=True)

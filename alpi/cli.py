@@ -225,6 +225,22 @@ def _run_once(
     session_id: str | None = None,
     continue_last: bool = False,
 ) -> None:
+    from alpi import authority
+    with authority.apply(authority.from_environ()):
+        _run_once_with_authority(
+            h, user_text, emit_events, persist, attach, session_id, continue_last,
+        )
+
+
+def _run_once_with_authority(
+    h: Path,
+    user_text: str,
+    emit_events: bool,
+    persist: bool,
+    attach: tuple[str, ...],
+    session_id: str | None,
+    continue_last: bool,
+) -> None:
     import json
 
     _bootstrap(h)

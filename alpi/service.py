@@ -1295,6 +1295,7 @@ async def _maybe_dispatch_for_sub(
             ),
             member_responded_seq=new_responded,
             member_turn=True,
+            authority=_wake_authority(posts, sub.hub_pubkey, sub.last_responded_seq),
         ),
     )
     return True
@@ -1841,6 +1842,7 @@ async def _maybe_dispatch_for_hub(
             ),
             phase=_active_phase_slug(wg_mod.safe_phase_map(wg.meta), recent, wg.meta.hub_pubkey),
             final_repair=gate_repair_exhausted,
+            authority=_wake_authority(recent, wg.meta.hub_pubkey, last_responded),
         ),
     )
 
@@ -2314,6 +2316,7 @@ async def _maybe_watchdog_close(
                 recovery_kind="continuation",
                 recovery_seq=last_seq,
                 recovery_attempt=cnt,
+                authority=_wake_authority(recent, wg.meta.hub_pubkey),
             ),
         )
         return
@@ -2451,6 +2454,7 @@ async def _maybe_watchdog_close(
             recovery_kind="watchdog",
             recovery_seq=last_seq,
             recovery_attempt=count,
+            authority=_wake_authority(recent, wg.meta.hub_pubkey),
         ),
     )
 
@@ -3395,6 +3399,19 @@ def _append_turn_event(home: Path, event: dict[str, Any]) -> None:
 # Previous role-aware addendum removed; rotation checks enforce it now.
 
 
+def _wake_authority(posts: list[dict], hub_pubkey: str, since: int | None = None) -> dict | None:
+    from alpi import authority
+    from alpi.alp import tasks as wg_tasks
+    from alpi.alp.agent_context import _RECENT_POSTS
+    seen = list(posts[-_RECENT_POSTS:])
+    if since is not None:
+        seen += [p for p in posts if int(p.get("seq", 0)) > since]
+    active = wg_tasks.active_task(posts, hub_pubkey=hub_pubkey)
+    if active is not None:
+        seen += [p for p in posts if p.get("seq") == active.opened_seq]
+    return authority.fold(authority.of_post(p) for p in seen)
+
+
 async def _dispatch_workgroup_turn(
     home: Path, profile: str, wg_id: str, wg_name: str, reason: str,
     *, closure_only: bool = False, continuation: bool = False,
@@ -3411,6 +3428,7 @@ async def _dispatch_workgroup_turn(
     recovery_seq: int = 0,
     recovery_attempt: int = 0,
     member_turn: bool = False,
+    authority: dict | None = None,
 ) -> None:
     """Spawn a background ``chat --once`` turn for a workgroup."""
     turn_id = os.urandom(16).hex()
@@ -3639,6 +3657,7 @@ async def _dispatch_workgroup_turn(
                     "declared owner or ask the hub to open the correct phase."
                 )
         prompt += f"\n\n{policy}"
+    from alpi import authority as authority_mod
     from alpi.home import effective_profile_env as _effective_profile_env, workspace_env
     soft_budget = _soft_turn_budget(turn_timeout)
     env = _effective_profile_env(home, extra={
@@ -3660,6 +3679,9 @@ async def _dispatch_workgroup_turn(
         } if recheck_suffix else {}),
         **env_extra,
     })
+    env.pop(authority_mod.ENV, None)
+    if authority is not None:
+        env[authority_mod.ENV] = authority_mod.encode(authority)
     # `--emit-events`: child prints JSON event lines to stdout = the idle-timeout's sign-of-life (tail discarded).
     argv = [
         sys.executable, "-m", "alpi", "-p", profile,

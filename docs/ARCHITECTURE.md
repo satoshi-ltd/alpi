@@ -1627,11 +1627,26 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   writes as device A and reads as device B through each path it lists (the session verbs, replay,
   runs, activity, prompts, summaries, events and the session tools); a new path is one more row.
   Profile-wide data is shared by design: workgroup posts, memory and the files an admin may read.
-  The known gaps, turns a workgroup post wakes (unfenced, SCOPE.11), staged attachments, the
-  profile session count and the admin reading of the scope, are tasks in `docs/ROADMAP.md`. A device with `provisioner: true` may call the `_SELF_SERVICE_METHODS`
+  The known gaps, staged attachments, the profile session count and the admin reading of
+  the scope, are tasks in `docs/ROADMAP.md`. A device with `provisioner: true` may call the `_SELF_SERVICE_METHODS`
   (`add_device`, `pairing_status`, `cancel_pairing`, `revoke_device`) on its own
   `connection_id` without the admin role; those verbs are `_SCOPE_FREE_METHODS`
   because they carry no profile.
+- **A workgroup post carries the fence of whoever made it, and the turns it wakes keep it.**
+  `workgroup_client.post` and `send_file` (the `#file` marker, `workgroup.file_put`) stamp `origin` (`alpi/authority.py::current`: `member`, `peer`, or
+  `allow` with the list; absent means admin) on the transcript entry, locally or as the
+  optional `origin` param of `workgroup.post`, which the hub normalises with
+  `authority.sanitize` (what it does not understand becomes `peer`). Each of the four
+  `_dispatch_workgroup_turn` call sites folds the origins of the posts the turn will see
+  (`service._wake_authority`: the last `_RECENT_POSTS`, the open task's opener and every post past the
+  turn's cursor) with
+  `authority.fold` (weakest wins; member plus peer, or any mixture with a list, is `peer`) and
+  passes it as `ALPI_WORKGROUP_AUTHORITY`; `cli._run_once` applies it with `authority.apply`
+  before the `Engine` is built, so the child's tools, nested execution and posts see the same
+  fence; `authority.environ()` puts it in the environment of the skill scripts and shell commands a
+  fenced turn starts, and `authority.current` falls back to it, so a CLI they run stamps its posts too. A child with an unreadable value is fenced as `peer`, and the daemon clears
+  an inherited value when a turn is not fenced. A new dispatch site passes `authority=`
+  (`tests/alp/test_workgroup_authority.py` fails otherwise).
 
 ## Non-obvious things to know
 

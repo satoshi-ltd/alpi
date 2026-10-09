@@ -1020,12 +1020,14 @@ async def post(
     _check_substantive(_plaintext)
     _check_task_shape(_plaintext)
 
+    from alpi import authority
+    origin = authority.current()
     wg = wg_mod.load(home, wg_id)
     if wg is not None and wg.meta.hub_pubkey == kp.pubkey_b64():
         _check_hub_single_marker(_plaintext)
         result = _post_as_hub(
             home, wg, kp, text, cost,
-            operator_abandon=operator_abandon, turn_id=turn_id,
+            operator_abandon=operator_abandon, turn_id=turn_id, origin=origin,
         )
         _emit_wg_post(home, wg_id, result)
         if tasks_mod.is_done(_plaintext):
@@ -1104,6 +1106,8 @@ async def post(
         params["cost"] = cost
     if turn_id:
         params["turn_id"] = turn_id
+    if origin is not None:
+        params["origin"] = origin
     result = await _call(home, kp, sub.hub_id, "workgroup.post", params)
     _emit_wg_post(home, wg_id, result)
     return result
@@ -1177,6 +1181,8 @@ async def send_file(
     note = wf._validate_note(note)
     digest = hashlib.sha256(data).hexdigest()
     kp = load_or_generate(home)
+    from alpi import authority
+    origin = authority.current()
     wg = wg_mod.load(home, wg_id)
     local_hub = wg is not None and wg.meta.hub_pubkey == kp.pubkey_b64()
     if local_hub and wg.meta.paused:
@@ -1197,6 +1203,7 @@ async def send_file(
         "key_version": version,
         "nonce": nonce,
         "note": note,
+        **({"origin": origin} if origin is not None else {}),
     }
     offset = 0
     busy_deadline = asyncio.get_running_loop().time() + 300.0
@@ -1430,6 +1437,7 @@ def _post_as_hub(
     home: Path, wg, kp: Keypair, text: bytes,
     cost: dict[str, Any] | None,
     *, operator_abandon: bool = False, turn_id: str = "",
+    origin: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Write a hub post directly into the local transcript."""
     from alpi.alp.workgroup import _transcript_write_lock, _wg_dir
@@ -1445,7 +1453,7 @@ def _post_as_hub(
     with _transcript_write_lock(d):
         return _post_as_hub_locked(
             home, wg, own, kp, text, dict(cost) if cost else {}, d,
-            operator_abandon=operator_abandon, turn_id=turn_id,
+            operator_abandon=operator_abandon, turn_id=turn_id, origin=origin,
         )
 
 
@@ -1453,6 +1461,7 @@ def _post_as_hub_locked(
     home: Path, wg, own, kp: Keypair, text: bytes,
     cost_dict: dict[str, Any], d: Path,
     *, operator_abandon: bool, turn_id: str = "",
+    origin: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     import datetime as _dt
     from alpi.alp import pipeline_gates as gates
@@ -1573,6 +1582,8 @@ def _post_as_hub_locked(
             entry["pipeline_trigger"] = True
         if turn_id:
             entry["turn_id"] = turn_id
+        if origin is not None:
+            entry["origin"] = origin
         if declared_usd or declared_tokens:
             entry["cost"] = {"usd": declared_usd, "tokens": declared_tokens}
             if declared_in or declared_out:

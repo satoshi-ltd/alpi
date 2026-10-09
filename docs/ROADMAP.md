@@ -61,23 +61,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **SCOPE.11** — Turns a workgroup post wakes run unfenced
-  `bug · alpi · agent · high`
-  note: found while reviewing SCOPE.9. `_dispatch_workgroup_turn` in [service.py](../alpi/service.py) runs a
-  `chat --once` child as the profile (admin) for every member or hub turn a post wakes; the session history
-  tools are denied there since v0.17.0, but `read_file`, `search` and `terminal` still read `sessions/`,
-  `runs/` and `host/`, so a member device or a peer without `tools.allow` driving any profile of the
-  workgroup can `workgroup_post` a request for another conversation and get it posted back.
-  accept: the initiating caller's verified authority reaches every downstream turn, including
-  subprocesses and follow-up posts; untrusted post text cannot claim admin authority. This task
-  may add the minimal authenticated dispatch metadata needed to preserve that authority.
-  Member-origin turns retain the member policy (including skill run/invoke); peers without
-  `tools.allow` retain the stricter peer fence. Both stay out of private files through file tools,
-  search and terminal, including indirect skill execution. Tests cover both origins, a downstream
-  handoff and an attempted session read; local admin pipelines retain terminal and skill scripts.
-  If a skill execution path cannot preserve the fence, refuse that path explicitly rather than
-  silently promoting the whole turn to admin.
-
 - **REDACT.1** — The URL-credentials pattern in `redact` is quadratic
   `bug · alpi · agent · high`
   note: found while reviewing RUN.1. `(?P<scheme>[a-zA-Z][a-zA-Z0-9+.-]*://)[^/\s:@]+:[^/\s@]+@` in
@@ -244,6 +227,18 @@ Each names the condition that promotes it; none is worked on before.
   note: since SCOPE.12 a fenced turn (member device, peer without `tools.allow`) reaches `out/` only for files it creates in that turn or its skill produces; the next turn cannot reread, edit or attach them, because `out/` carries no owner and the only ownership records are the sessions' offered paths, which cost a session scan per file check.
   promote when: members ask the agent to revise or resend a document it made for them earlier.
   accept: a fenced turn reads, edits and attaches the files its own connection produced in earlier turns (its device too under `session_scope: device`) and still none another connection produced; no new persisted state beyond what ownership needs, named in the change; tests cover two connections on one profile.
+
+- **WG.ORIGIN-WIRE** — A post that arrives over the wire without a claim counts as admin's
+  `bug · alpi · agent · normal`
+  note: SCOPE.11 stamps the fence of every post a caller on this daemon makes and lets another daemon's profile claim one, but a peer that posts to the hub directly (not through a turn here) carries no claim, and the hub cannot verify what authority that profile's turn ran under. Its post wakes turns as admin. The same claim lets any member of a workgroup degrade the turns its post wakes: a `peer` claim takes `terminal` away from a pipeline owner, and an empty `allow` leaves only `workgroup_post`.
+  promote when: a hub takes posts from profiles on daemons the creator does not run, or the creator asks for it.
+  accept: the hub derives the origin of a wire post from the posting peer's record (`tools.allow` absent means fenced) instead of trusting the claim alone, with a per-member way to trust a profile fully so local multi-profile pipelines keep working; tests cover a local trusted member, an untrusted one and a forged claim.
+
+- **ALP.READ** — Fenced turns read every workgroup transcript under `alp/`
+  `bug · alpi · agent · low`
+  note: the member fence leaves `alp/` readable (peer mentions, workgroup transcripts) except `alp/secrets`, so a fenced turn reads the decrypted posts cached in `alp/subscriptions.yaml` and the transcripts of every workgroup of the profile, not only the one it serves.
+  promote when: a profile is in workgroups that members or untrusted peers of one must not see.
+  accept: a fenced turn reads `alp/` only for the workgroup its turn serves, or none; tests cover a second workgroup's transcript and the subscriptions file.
 
 - **POL.2** — A member connection can carry the tool policy a peer carries
   `feature · alpi · agent · low`

@@ -1633,6 +1633,9 @@ def register(server: alp_server.Server, home: Path) -> None:
         }
         if turn_id:
             entry["turn_id"] = turn_id
+        if "origin" in (params or {}):
+            from alpi import authority
+            entry["origin"] = authority.sanitize(params["origin"])
         if declared_usd or declared_tokens:
             entry["cost"] = {"usd": declared_usd, "tokens": declared_tokens}
             if declared_in or declared_out:
