@@ -1,6 +1,6 @@
 # alpi roadmap
 
-Updated 2026-10-08. Current versions live in the changelogs. The Queue runs top to bottom; the creator
+Updated 2026-10-09. Current versions live in the changelogs. The Queue runs top to bottom; the creator
 approves the next tasks from Proposed.
 
 This is the task pool. [ARCHITECTURE.md](ARCHITECTURE.md) owns current state and
@@ -61,13 +61,8 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **MEMBER.1** — A test pins what each caller class may invoke
-  `chore · alpi · agent · high`
-  note: v0.17.0 took `run` and `invoke` away from member devices by mistake and no test failed; v0.17.1 gave them back. No test states the intended matrix of what each caller class may call.
-  accept: one table-driven test lists, for admin, a member device, an ALP peer without `tools.allow` and one with it, each skill mode and each tool the fence names as allowed or refused; changing a row, or the fence, fails it.
-
 - **SCOPE.12** — The `db` tool and `out/` sit outside the member fence
-  `bug · alpi · agent · high · depends: MEMBER.1`
+  `bug · alpi · agent · high`
   note: found while reviewing SCOPE.8. The `db` tool runs arbitrary SQL on any skill's `state/db.sqlite`,
   around the `skills/` file fence and the restrictions on direct skill mutation, and the fenced file tools
   still read `<home>/out/`, where every session's produced files land.
@@ -75,7 +70,7 @@ defect, so a helper is extracted only when it removes evidenced duplication.
   skill's database, or none, and cannot read another connection's files under `out/`; tests cover both.
 
 - **SCOPE.11** — Turns a workgroup post wakes run unfenced
-  `bug · alpi · agent · high · depends: MEMBER.1, SCOPE.12`
+  `bug · alpi · agent · high · depends: SCOPE.12`
   note: found while reviewing SCOPE.9. `_dispatch_workgroup_turn` in [service.py](../alpi/service.py) runs a
   `chat --once` child as the profile (admin) for every member or hub turn a post wakes; the session history
   tools are denied there since v0.17.0, but `read_file`, `search` and `terminal` still read `sessions/`,
@@ -130,6 +125,15 @@ defect, so a helper is extracted only when it removes evidenced duplication.
   accept: the count includes only sessions `owns_session_row` lets the caller see; a
   test with sessions from two devices under `session_scope: device` counts one each.
 
+- **ACT.2** — Jobs fired from the console never show as running
+  `bug · alpi · agent · normal`
+  note: found while reviewing ACT.1. `alpi schedule fire`, `alpi setup → Fire now` and the TUI's
+  in-process `schedule(action="fire")` run `scheduled_run` in their own process, where the activity
+  registry is off, so `host.activity.list` never lists the run and the apps never show it working.
+  The apps' Fire button (`host.schedule.fire`) and cron fires are listed.
+  accept: a job fired from the CLI or the TUI appears as a running row with its `job_id` while it
+  runs (handed to the daemon when one answers); a test fires through the CLI path against a daemon.
+
 - **WG.FLOW-LATENCY** — Remove the measured delay before pipeline state appears
   `bug · alpi, desktop, mobile · agent · normal`
   note: the clients already request tasks and transcript independently; the desktop bridge uses
@@ -140,15 +144,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
   reproduces that bottleneck and proves state can render while transcript loading is held pending;
   record before/after timings under the same conditions. Narrow the release products to the layers
   actually changed. Preserve the existing visual design and regenerate affected design views.
-
-- **ACT.2** — Jobs fired from the console never show as running
-  `bug · alpi · agent · normal`
-  note: found while reviewing ACT.1. `alpi schedule fire`, `alpi setup → Fire now` and the TUI's
-  in-process `schedule(action="fire")` run `scheduled_run` in their own process, where the activity
-  registry is off, so `host.activity.list` never lists the run and the apps never show it working.
-  The apps' Fire button (`host.schedule.fire`) and cron fires are listed.
-  accept: a job fired from the CLI or the TUI appears as a running row with its `job_id` while it
-  runs (handed to the daemon when one answers); a test fires through the CLI path against a daemon.
 
 - **TERM.3** — Profile environment for `terminal`
   `feature · alpi · agent · low`
@@ -230,60 +225,6 @@ _None._
   accept: the credential hygiene checklist in the creator's operations runbook
   has been run on every deployed daemon and `alpi doctor` reports no credential
   findings on each.
-
-### Device checks
-
-- **VERIFY-MOBILE-070** — Mobile 0.7 on device
-  `verify · mobile · creator · high`
-  accept: with mobile 0.7.5 or later and alpi 0.17.5 or later, on device, the process block sits at 12 pt flush with the answer; the
-  Fold sidebar slides; expand/collapse and the Latest button animate; a long
-  press pulses only after 350 ms and a tap never moves a bubble; the notification
-  count shows its number at large text sizes; approval notification actions
-  answer on the right connection from a cold start. Pairing from a fresh install:
-  Scan QR opens the camera at once, a reachable host walks the three steps to
-  Paired with its name and role, Open inbox leaves no way Back to onboarding, an
-  unreachable host keeps the link with Try again, a used link is cleared; with the
-  daemon stopped the header goes offline and the roster unfolds within seconds,
-  and comes back on its own; a member with nothing shared sees whom to ask.
-
-- **VERIFY-DESKTOP-FIRSTRUN** — Desktop first run on a Mac
-  `verify · desktop · creator · high`
-  accept: on a Mac with desktop 0.8.3 or later and without alpi, the window opens on Set up alpi with the install
-  commands and the link field, and installing alpi and pressing Check again lands
-  on the roster with the one-time phone card; with alpi installed and stopped, it
-  starts on its own (Starting alpi…) and lands on the roster; a broken config shows
-  alpi didn't start with the log tail, the command and Retry; stopping the daemon
-  mid-session keeps the open view under the banner and Retry starts it again;
-  connecting with a used link names the failure and clears the field.
-
-- **VERIFY-DESK-DICTATION** — Dictation in the composer on a Mac
-  `verify · desktop · creator · high`
-  accept: on a Mac with desktop 0.8.3 or later (the composer holds its auto-size and mention work while text is composed; if Dictation still closes at once, the cause is elsewhere and this becomes a bug), the Dictation shortcut set in System Settings
-  › Keyboard › Dictation (pressing 🌐 twice by default; a further press ends it, as in every app) opens
-  Dictation in the composer and it stays open while you speak, the words land in the field, and the same
-  holds while a reply streams and in a workgroup's composer.
-
-- **VERIFY-NOTIF-PHONE** — Notifications on the phone, on device
-  `verify · mobile · creator · normal`
-  accept: with mobile 0.7.5 or later and alpi 0.17.5 or later, on an iPhone and Android, a row swipes left to Unread/Read and Delete and back; the
-  Undo toast after a delete leaves the list scrollable and tappable and Back working for its 5 s (it is
-  a transparent Modal: if it blocks touches, the toast becomes an overlay); up and down on a
-  notification page step through the list across connections; Reply opens a new session with the
-  quote in the composer; large text keeps rows and the bottom bar readable, on the phone and the Fold.
-  Notifications and read/delete changes on a connection that is not open refresh its inbox
-  through background polling while the app runs; switching connections does not replay banners.
-
-- **VERIFY-BRAND-GLYPHS** — One-cell glyphs in the terminals alpi supports
-  `verify · alpi · creator · low`
-  accept: the twelve one-cell glyphs of the console (⌂ ♥ ➤ ⬟ ⌃ ★ ♣ ▣ ♛ ✒ ☼ and the diamond) were
-  seen in Terminal, iTerm2 and one Linux terminal; any that fails is replaced or falls back to the
-  diamond.
-
-- **VERIFY-BRAND-ICONS** — The new icons on a Mac, an iPhone and an Android
-  `verify · desktop, mobile · creator · low`
-  accept: the Tauri app's dock and window icon, an EAS iOS build in light, dark and tinted home
-  screens, and an Android build with the adaptive mask all show the flat ink alpaca without clipping,
-  and the splash and adaptive background are neutral grey (no blue tint) in light and dark.
 
 ## Proposed
 
