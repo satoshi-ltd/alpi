@@ -1640,7 +1640,7 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   `_dispatch_workgroup_turn` call sites folds the origins of the posts the turn will see
   (`service._wake_authority`: the last `_RECENT_POSTS`, the open task's opener and every post past the
   turn's cursor) with
-  `authority.fold` (weakest wins; member plus peer, or any mixture with a list, is `peer`) and
+  `authority.fold` (the strictest fence wins, peer over member, and the tool lists intersect, so a list mixed with a fence keeps both: `{"fence": "member", "allow": [...]}`) and
   passes it as `ALPI_WORKGROUP_AUTHORITY`; `cli._run_once` applies it with `authority.apply`
   before the `Engine` is built, so the child's tools, nested execution and posts see the same
   fence; `authority.environ()` puts it in the environment of the skill scripts and shell commands a

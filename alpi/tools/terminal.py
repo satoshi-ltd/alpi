@@ -152,6 +152,7 @@ def _resolve_popen_args(
     *,
     docker_container_name: str | None = None,
 ) -> list[str] | str:
+    from alpi import authority
     from alpi.core.execution_world import current as current_world
 
     world = current_world()
@@ -181,7 +182,7 @@ def _resolve_popen_args(
     if world is not None and world.backend != "local":
         return world.command(
             command, Path(cwd or _default_cwd()).resolve(),
-            _SAFE_ENV_KEYS + ("ALPI_HOME", "ALPI_WORKSPACE", "WORKSPACE"),
+            _SAFE_ENV_KEYS + ("ALPI_HOME", "ALPI_WORKSPACE", "WORKSPACE", authority.ENV),
             container_name=docker_container_name, write_rules=write_rules,
             member=member_root is not None,
         )

@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.17.14 — 2026-10-09 — a fence and a tool list add up in a woken turn
+
+- **A workgroup turn woken by posts of different origins keeps every restriction.** A tool list mixed with a member or peer origin used to be replaced by the generic peer fence, which could allow a tool the list did not (a list of `web_search` and `workgroup_post` plus a member post let the turn write files). Now the strictest fence applies and the lists intersect.
+- **A peer fence mixed with a tool list keeps the history tools withheld.** A list naming `workgroup_search` or `*` used to give them back to a turn that also answers a peer without a list.
+- **The fence reaches commands run in a Docker execution backend.** The variable that carries it was not forwarded to the container, so an `alpi workgroup post` run in an image with alpi counted as an admin's.
+
 ## v0.17.13 — 2026-10-09 — a post's fence follows it into the turns it wakes
 
 - **A workgroup turn keeps the fence of the post that woke it.** A post made by a member device, through `host.workgroup.post` or the agent's `workgroup_post`, or by a peer turn is stamped with its caller's fence. The turns that wake on it run under it: file tools, search and terminal stay out of sessions, runs and host; a member keeps the member policy, a peer without `tools.allow` the stricter one, a peer with it exactly its list plus `workgroup_post`, so it can hand off. Before, every woken turn ran as the profile and could read another conversation and post it back.

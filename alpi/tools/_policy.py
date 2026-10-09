@@ -24,12 +24,13 @@ def use(
     withheld: Iterable[str] = (),
     *,
     fence_without_policy: bool = False,
+    fenced: bool = False,
 ) -> Iterator[None]:
     entries = None if allowed is None else frozenset(str(a).strip() for a in allowed if str(a).strip())
     allowed_token = _allowed.set(entries)
     label_token = _label.set(label)
-    withheld_token = _withheld.set(frozenset(withheld) if entries is None else frozenset())
-    fenced_token = _fenced.set(fence_without_policy and entries is None)
+    withheld_token = _withheld.set(frozenset(withheld) if (entries is None or fenced) else frozenset())
+    fenced_token = _fenced.set(fenced or (fence_without_policy and entries is None))
     try:
         yield
     finally:
@@ -64,8 +65,10 @@ def is_denied(name: str, deny: Iterable[str] | None) -> bool:
 
 def allowed_actions(name: str) -> frozenset[str] | None:
     policy = _allowed.get()
+    if name in _withheld.get():
+        return frozenset()
     if policy is None:
-        return frozenset() if name in _withheld.get() else None
+        return None
     actions: set[str] = set()
     for entry in policy:
         tool, _, action = entry.partition(":")
@@ -123,10 +126,11 @@ def allowed_schema(schema: dict) -> dict | None:
 
 
 def refusal(name: str, arguments: object = None) -> str:
-    if _allowed.get() is None and name in _withheld.get():
+    if name in _withheld.get():
+        unless = " unless that peer's tools.allow in peers.yaml names it" if _allowed.get() is None else ", whatever a tool list names"
         return (
             f"{name} is not available to {_label.get() or 'this turn'}: session and workgroup history "
-            "stay out of turns another agent starts unless that peer's tools.allow in peers.yaml names it"
+            f"stay out of turns another agent starts{unless}"
         )
     action = _action(arguments)
     shown = f"{name}:{action}" if action and allowed_actions(name) else name

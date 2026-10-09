@@ -16,27 +16,35 @@ _FAIL_CLOSED: dict[str, Any] = {"fence": "peer"}
 def current() -> dict[str, Any] | None:
     from alpi.host.connection_context import current as connection
     from alpi.tools import _policy
-    if connection().role != "admin":
-        return {"fence": "member"}
-    if _policy.fences_private_areas():
-        return {"fence": "peer"}
     allowed = _policy.allowed()
-    if allowed is not None:
+    if _policy.fences_private_areas():
+        fence = "peer"
+    elif connection().role != "admin":
+        fence = "member"
+    elif allowed is not None:
         return {"fence": "allow", "allow": sorted(allowed)}
-    return from_environ()
+    else:
+        return from_environ()
+    return {"fence": fence} if allowed is None else {"fence": fence, "allow": sorted(allowed)}
+
+
+def _names(raw: object) -> list[str] | None:
+    if not isinstance(raw, list):
+        return None
+    names = sorted({a.strip() for a in raw if isinstance(a, str) and 0 < len(a.strip()) <= _MAX_NAME})
+    return names[:_MAX_ALLOW]
 
 
 def sanitize(raw: object) -> dict[str, Any]:
     if not isinstance(raw, dict) or raw.get("fence") not in _FENCES:
         return dict(_FAIL_CLOSED)
     fence = raw["fence"]
-    if fence != "allow":
-        return {"fence": fence}
-    allow = raw.get("allow")
-    if not isinstance(allow, list):
-        return dict(_FAIL_CLOSED)
-    names = sorted({a.strip() for a in allow if isinstance(a, str) and 0 < len(a.strip()) <= _MAX_NAME})
-    return {"fence": "allow", "allow": names[:_MAX_ALLOW]}
+    if fence == "allow" or "allow" in raw:
+        names = _names(raw.get("allow"))
+        if names is None:
+            return {"fence": "peer", "allow": []} if fence != "allow" else dict(_FAIL_CLOSED)
+        return {"fence": fence, "allow": names}
+    return {"fence": fence}
 
 
 def of_post(post: Mapping[str, Any]) -> dict[str, Any] | None:
@@ -44,21 +52,19 @@ def of_post(post: Mapping[str, Any]) -> dict[str, Any] | None:
 
 
 def fold(origins: Iterable[Mapping[str, Any] | None]) -> dict[str, Any] | None:
-    kinds: set[str] = set()
+    fences: set[str] = set()
     lists: list[set[str]] = []
     for origin in origins:
         if origin is None:
             continue
-        kinds.add(origin["fence"])
-        if origin["fence"] == "allow":
+        fences.add(origin["fence"])
+        if "allow" in origin:
             lists.append(set(origin["allow"]))
-    if not kinds:
+    if not fences:
         return None
-    if kinds == {"allow"}:
-        return {"fence": "allow", "allow": sorted(set.intersection(*lists))}
-    if kinds == {"member"}:
-        return {"fence": "member"}
-    return dict(_FAIL_CLOSED)
+    allow = sorted(set.intersection(*lists)) if lists else None
+    fence = "peer" if "peer" in fences else "member" if "member" in fences else "allow"
+    return {"fence": fence} if allow is None else {"fence": fence, "allow": allow}
 
 
 def environ() -> dict[str, str]:
@@ -89,12 +95,16 @@ def apply(authority: Mapping[str, Any] | None) -> Iterator[None]:
     from alpi.host.connection_context import use as use_connection
     from alpi.tools import _policy
     from alpi.tools._paths import PEER_HISTORY_TOOLS
+    fence = authority["fence"]
+    allow = {*authority["allow"], "workgroup_post"} if "allow" in authority else None
     with ExitStack() as stack:
-        if authority["fence"] == "member":
+        if fence == "member":
             stack.enter_context(use_connection(ConnectionContext(source="workgroup", role="member")))
-        else:
-            allow = {*authority["allow"], "workgroup_post"} if authority["fence"] == "allow" else None
+        if fence != "member" or allow is not None:
             stack.enter_context(
-                _policy.use(allow, "a workgroup turn woken by a fenced post", PEER_HISTORY_TOOLS, fence_without_policy=True),
+                _policy.use(
+                    allow, "a workgroup turn woken by a fenced post", PEER_HISTORY_TOOLS,
+                    fence_without_policy=True, fenced=fence == "peer",
+                ),
             )
         yield

@@ -75,7 +75,9 @@ def test_the_weakest_authority_of_the_posts_a_turn_sees_wins() -> None:
     allow_b = {"fence": "allow", "allow": ["search", "web_search"]}
     assert fold([allow_a, None]) == allow_a
     assert fold([allow_a, allow_b]) == {"fence": "allow", "allow": ["search"]}
-    assert fold([allow_a, MEMBER_ORIGIN]) == PEER_ORIGIN
+    assert fold([allow_a, MEMBER_ORIGIN]) == {"fence": "member", "allow": ["read_file", "search"]}
+    assert fold([allow_a, PEER_ORIGIN, MEMBER_ORIGIN]) == {"fence": "peer", "allow": ["read_file", "search"]}
+    assert fold([allow_a, allow_b, MEMBER_ORIGIN]) == {"fence": "member", "allow": ["search"]}
 
 
 def test_what_a_turn_sees_is_the_last_posts_and_the_task_opener() -> None:
@@ -461,3 +463,71 @@ def test_every_cursor_aware_dispatch_site_hands_the_cursor_to_the_fold() -> None
         if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "_wake_authority"
     ]
     assert sorted(len(call.args) for call in folds) == [2, 2, 3, 3]
+
+
+def test_a_claim_may_carry_both_a_fence_and_a_tool_list() -> None:
+    both = {"fence": "member", "allow": [" web_search ", "web_search", "workgroup_post"]}
+    assert authority.sanitize(both) == {"fence": "member", "allow": ["web_search", "workgroup_post"]}
+    assert authority.sanitize({"fence": "member", "allow": "all"}) == {"fence": "peer", "allow": []}
+    assert authority.sanitize({"fence": "peer", "allow": ["read_file"]}) == {"fence": "peer", "allow": ["read_file"]}
+
+
+def test_a_list_mixed_with_a_member_origin_keeps_both_restrictions(home: Path) -> None:
+    listed = {"fence": "allow", "allow": ["web_search", "workgroup_post"]}
+    mixed = authority.fold([listed, MEMBER_ORIGIN])
+    target = home.parent / "ws" / "written.txt"
+    with authority.apply(listed):
+        assert "tool policy" in tools.execute("write_file", {"path": str(target), "content": "x"}).error
+    with authority.apply(mixed):
+        refused = tools.execute("write_file", {"path": str(target), "content": "x"})
+        assert not refused.ok and "tool policy" in refused.error
+        assert authority.current() == {"fence": "member", "allow": ["web_search", "workgroup_post"]}
+        assert SECRET not in _read_session(home)
+    assert not target.exists()
+
+
+def test_a_list_mixed_with_a_peer_origin_still_fences_the_private_areas(home: Path) -> None:
+    listed = {"fence": "allow", "allow": ["read_file"]}
+    with authority.apply(listed):
+        assert SECRET in _read_session(home)
+    with authority.apply(authority.fold([listed, PEER_ORIGIN])):
+        assert SECRET not in _read_session(home)
+        assert "workgroup_post" in {item["function"]["name"] for item in tools.schemas()}
+        assert "cannot use skill action 'run'" not in tools.execute("skill", {"action": "list"}).error
+        assert authority.current() == {"fence": "peer", "allow": ["read_file", "workgroup_post"]}
+
+
+def test_the_authority_reaches_a_docker_command(tmp_path: Path, monkeypatch) -> None:
+    from alpi.core.execution_world import DockerExecutionWorld
+    from alpi.core.execution_world import use as use_world
+    from alpi.core.run_context import RunContext
+    from alpi.tools import terminal
+
+    workspace = tmp_path / "workspace"
+    root = tmp_path / "alpi"
+    workspace.mkdir()
+    root.mkdir()
+    (root / "config.yaml").write_text(f"workspace: {workspace}\n")
+    monkeypatch.setenv("ALPI_HOME", str(root))
+    monkeypatch.setattr("alpi.core.execution_world.shutil.which", lambda name, **kwargs: "/usr/bin/docker")
+    world = DockerExecutionWorld(context=RunContext("run", root, workspace, "default", "peer", "s", "peer:carol"))
+    with use_world(world):
+        plain = terminal._resolve_popen_args("pwd")
+        with authority.apply({"fence": "allow", "allow": ["terminal"]}):
+            carried = terminal._resolve_popen_args("pwd")
+    assert [plain[i + 1] for i, v in enumerate(plain[:-1]) if v == "--env"].count(authority.ENV) == 1
+    assert authority.ENV in [carried[i + 1] for i, v in enumerate(carried[:-1]) if v == "--env"]
+
+
+def test_a_peer_fence_mixed_with_a_list_keeps_the_history_tools_withheld(home: Path) -> None:
+    listed = {"fence": "allow", "allow": ["*"]}
+    history = ("workgroup_search", "index_workgroups", "session_read")
+    with authority.apply(authority.fold([PEER_ORIGIN, listed])):
+        offered = {item["function"]["name"] for item in tools.schemas()}
+        assert not offered & set(history)
+        refused = tools.execute("workgroup_search", {"query": "x"})
+        assert "history stay out" in refused.error and "whatever a tool list names" in refused.error
+    with authority.apply(PEER_ORIGIN):
+        assert "unless that peer" in tools.execute("workgroup_search", {"query": "x"}).error
+    with authority.apply(listed):
+        assert {"workgroup_search", "index_workgroups"} <= {item["function"]["name"] for item in tools.schemas()}

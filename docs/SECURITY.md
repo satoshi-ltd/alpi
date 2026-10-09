@@ -115,7 +115,7 @@ not reach.
   member origin keeps the member policy (skills run and invoke; no memory,
   job or skill changes), a peer without `tools.allow` the stricter peer fence,
   a peer with it exactly its list plus `workgroup_post`, so it can hand off; a
-  mixture takes the peer fence, and a child that cannot read the fence it was
+  mixture takes the strictest fence, peer over member, and keeps the intersection of the lists, so a list never loosens a fence nor a fence a list (under a peer fence the session and workgroup history tools stay withheld whatever a list names), and a child that cannot read the fence it was
   handed is fenced as a peer. A `#file` marker is stamped like a post, and the
   skill scripts and shell commands a fenced turn starts receive the fence in
   their environment, so an `alpi workgroup post` they run is stamped too. The
