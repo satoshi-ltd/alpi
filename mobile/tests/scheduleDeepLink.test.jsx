@@ -1,12 +1,15 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 afterEach(cleanup);
 
 const h = vi.hoisted(() => ({
   params: { id: 'abby', job: 'j-mail' },
   push: vi.fn(),
+  replace: vi.fn(),
+  wide: false,
+  loading: false,
   call: vi.fn(async () => ({})),
   alert: vi.fn(),
   att: null,
@@ -21,7 +24,7 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock('react-native', () => {
-  const View = ({ children, accessibilityLabel }) => React.createElement('div', accessibilityLabel ? { 'aria-label': accessibilityLabel } : {}, children);
+  const View = ({ children, accessibilityLabel, testID }) => React.createElement('div', { ...(accessibilityLabel ? { 'aria-label': accessibilityLabel } : {}), ...(testID ? { testid: testID } : {}) }, children);
   const Text = ({ children, style }) => React.createElement('span', { 'data-color': style?.color }, children);
   const Pressable = ({ children, onPress, accessibilityLabel, style }) =>
     React.createElement('button', { type: 'button', onClick: onPress, 'aria-label': accessibilityLabel, 'data-minheight': (typeof style === 'function' ? style({ pressed: false }) : style)?.minHeight }, typeof children === 'function' ? children({ pressed: false }) : children);
@@ -30,9 +33,10 @@ vi.mock('react-native', () => {
     ScrollView: ({ children }) => React.createElement('div', {}, children),
     RefreshControl: () => null,
     Alert: { alert: (...a) => h.alert(...a) },
+    useWindowDimensions: () => ({ width: 390, height: 844 }),
   };
 });
-vi.mock('expo-router', () => ({ useLocalSearchParams: () => h.params, useRouter: () => ({ push: h.push }) }));
+vi.mock('expo-router', () => ({ useLocalSearchParams: () => h.params, useRouter: () => ({ push: h.push, replace: h.replace }) }));
 vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: ({ children }) => React.createElement('div', {}, children) }));
 vi.mock('../src/theme/ThemeContext', () => ({
   useTheme: () => ({
@@ -61,15 +65,30 @@ vi.mock('../src/hooks/useAttention', () => ({ useAttention: () => ({ att: h.att,
 vi.mock('../src/features/profile/PanelHeader', () => ({ PanelHeader: ({ right }) => React.createElement('header', {}, right) }));
 vi.mock('../src/components/Toast', () => ({ useToast: () => vi.fn() }));
 vi.mock('../src/hooks/useBack', () => ({ useBack: () => vi.fn() }));
-vi.mock('../src/hooks/useDaemonData', () => ({ useScheduleList: () => ({ data: { jobs: h.jobs }, refresh: vi.fn() }) }));
+vi.mock('../src/hooks/useDaemonData', () => ({ useScheduleList: () => ({ data: { jobs: h.jobs }, loading: h.loading, refresh: vi.fn() }) }));
 vi.mock('../src/hooks/usePullRefresh', () => ({ usePullRefresh: () => ({}) }));
 vi.mock('../src/hooks/useEvents', () => ({ useEventEffect: () => {} }));
+vi.mock('../src/hooks/useMasterDetail', () => ({ useMasterDetail: () => h.wide }));
 vi.mock('../src/lib/EndpointContext', () => ({ useEndpoint: () => ({ call: h.call }) }));
+vi.mock('../src/components/TypedConfirm', () => ({
+  Bold: ({ children }) => React.createElement('b', {}, children),
+  TypedConfirm: ({ open, expected, onConfirm, confirmLabel }) => (open ? React.createElement('button', { type: 'button', 'data-expected': expected, onClick: onConfirm }, confirmLabel) : null),
+}));
+vi.mock('../src/components/Field', () => ({ Field: () => React.createElement('input', { 'aria-label': 'search' }) }));
+vi.mock('../src/components/ListSkeleton', () => ({ ListSkeleton: () => null }));
+vi.mock('../src/components/LoadFailed', () => ({ LoadFailed: ({ label }) => React.createElement('div', { 'data-load-failed': label }) }));
+vi.mock('../src/components/Busy', () => ({ Busy: () => null }));
+vi.mock('../src/hooks/useBusyVisible', () => ({ useBusyVisible: () => false }));
+vi.mock('../src/hooks/useOutputs', () => ({ useOutputs: () => ({ rows: [] }) }));
+vi.mock('../src/hooks/useActivity', async (importOriginal) => ({ ...(await importOriginal()), useActivity: () => ({ activity: { running: [] } }) }));
+vi.mock('../src/lib/clipboard', () => ({ copyText: async () => true }));
 
 import ScheduleList from '../app/profile/[id]/schedule/index.jsx';
 import ScheduleJob from '../app/profile/[id]/schedule/[job].jsx';
 
 beforeEach(() => {
+  h.wide = false;
+  h.replace.mockClear();
   h.push.mockClear();
   h.call.mockClear();
   h.alert.mockClear();
@@ -126,7 +145,7 @@ describe('schedule list as the board draws it', () => {
   it('draws no empty line for a job without a description', () => {
     render(<ScheduleList />);
     const row = screen.getByLabelText(/^Nudge,/);
-    expect(row.querySelectorAll('span').length).toBe(2);
+    expect([...row.querySelectorAll('span')].map((n) => n.textContent)).toEqual(['Nudge', 'paused', 'never run']);
   });
 
   it('colours the dot and the word by state and keeps every row at 44', () => {
@@ -152,7 +171,7 @@ describe('schedule job page as the board draws it', () => {
     expect(order.every((n) => n >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     expect(screen.getByText('Digest of the inbox')).toBeTruthy();
-    expect(screen.getByText(/^every day at 07:30/)).toBeTruthy();
+    expect(screen.getAllByText(/^every day at 07:30/).length).toBeGreaterThan(0);
     expect(screen.getByText('30 7 * * *')).toBeTruthy();
   });
 
@@ -184,27 +203,31 @@ describe('schedule job page', () => {
   it('leads with status and words, keeps the cron as a fact and shows a broken timeout', () => {
     h.params = { id: 'abby', job: 'j-mail' };
     render(<ScheduleJob />);
-    expect(screen.getByText('every day at 07:30')).toBeTruthy();
+    expect(screen.getAllByText('every day at 07:30').length).toBe(2);
     expect(screen.getByText('30 7 * * *')).toBeTruthy();
     expect(screen.getByText('PROMPT')).toBeTruthy();
     expect(screen.getByText("'timeout' must be a whole number of seconds").getAttribute('data-color')).toBe('#a00');
     expect(screen.getByText('mail prompt')).toBeTruthy();
   });
 
-  it('runs and pauses from the page and deletes after a plain confirmation', async () => {
+  it('runs and pauses from the page and deletes only after a typed confirmation', () => {
     h.params = { id: 'abby', job: 'j-mail' };
     render(<ScheduleJob />);
     fireEvent.click(screen.getByText('Run now'));
     expect(h.call).toHaveBeenCalledWith('host.schedule.fire', { profile: 'abby', id: 'j-mail' });
+    cleanup();
+    h.call.mockClear();
+    render(<ScheduleJob />);
     fireEvent.click(screen.getByText('Pause'));
     expect(h.call).toHaveBeenCalledWith('host.schedule.set_paused', { profile: 'abby', id: 'j-mail', paused: true });
     fireEvent.click(screen.getByLabelText('More'));
     vi.useFakeTimers();
-    fireEvent.click(screen.getByText('Delete'));
-    vi.runAllTimers();
+    fireEvent.click(screen.getByText('Delete job…'));
+    expect(screen.queryByText('Delete job')).toBeNull();
+    act(() => { vi.runAllTimers(); });
     vi.useRealTimers();
-    expect(h.alert).toHaveBeenCalledTimes(1);
-    expect(h.alert.mock.calls[0][0]).toBe('Delete "Mail"?');
+    expect(h.alert).not.toHaveBeenCalled();
+    expect(screen.getByText('Delete job').getAttribute('data-expected')).toBe('Mail');
   });
 
   it('says the job is gone when it no longer exists', () => {
@@ -218,13 +241,116 @@ describe('schedule job page when the schedule cannot load', () => {
   it('says the load failed and offers a retry instead of calling the job gone', async () => {
     vi.resetModules();
     vi.doMock('../src/hooks/useDaemonData', () => ({ useScheduleList: () => ({ data: null, loading: false, error: new Error('daemon unreachable'), refresh: vi.fn() }) }));
-    vi.doMock('../src/components/LoadFailed', () => ({ LoadFailed: ({ label }) => React.createElement('div', { 'data-load-failed': label }) }));
     const { default: Page } = await import('../app/profile/[id]/schedule/[job].jsx');
     h.params = { id: 'abby', job: 'j-mail' };
     const { container } = render(<Page />);
     expect(container.querySelector('[data-load-failed="this job"]')).toBeTruthy();
     expect(screen.queryByText('This job is gone.')).toBeNull();
     vi.doUnmock('../src/hooks/useDaemonData');
-    vi.doUnmock('../src/components/LoadFailed');
+  });
+});
+
+
+describe('schedule on a wide pane', () => {
+  const fleet = [
+    { id: 'a', kind: 'cron', expression: '0 6 * * 1', title: 'Weekly listing refresh', prompt: 'refresh prompt' },
+    { id: 'b', kind: 'cron', expression: '30 7 * * *', title: 'Daily review digest', prompt: 'digest prompt', last_run_status: 'error', last_run_at: '2026-10-03T07:30:00Z' },
+  ];
+  beforeEach(() => { h.wide = true; h.jobs = fleet; h.params = { id: 'abby' }; });
+  afterEach(() => { h.jobs = base; });
+
+  it('shows the list beside the first job, the one that needs the user', () => {
+    render(<ScheduleList />);
+    expect(document.querySelector('[testid="master-list"]')).toBeTruthy();
+    const detail = document.querySelector('[testid="master-detail"]');
+    expect(detail.textContent).toContain('digest prompt');
+    expect(detail.textContent).not.toContain('refresh prompt');
+  });
+
+  it('opens a job in the detail column without leaving the list', () => {
+    render(<ScheduleList />);
+    fireEvent.click(screen.getByLabelText(/^Weekly listing refresh,/));
+    expect(document.querySelector('[testid="master-detail"]').textContent).toContain('refresh prompt');
+    expect(h.push).not.toHaveBeenCalled();
+  });
+
+  it('selects the job a deep link names instead of pushing its page', () => {
+    h.params = { id: 'abby', job: 'a' };
+    render(<ScheduleList />);
+    expect(document.querySelector('[testid="master-detail"]').textContent).toContain('refresh prompt');
+    expect(h.push).not.toHaveBeenCalled();
+  });
+
+  it('says so when there are no jobs', () => {
+    h.jobs = [];
+    render(<ScheduleList />);
+    expect(document.querySelector('[testid="master-detail"]').textContent).toContain('No scheduled jobs');
+  });
+
+  it('sends a job page opened on a wide pane back to the list with that job selected', () => {
+    h.params = { id: 'abby', job: 'a' };
+    const { container } = render(<ScheduleJob />);
+    expect(container.firstChild).toBeNull();
+    expect(h.replace).toHaveBeenCalledWith({ pathname: '/profile/abby/schedule', params: { job: 'a' } });
+  });
+
+  it('reselects when a second link names another job while mounted', () => {
+    h.params = { id: 'abby', job: 'a' };
+    const view = render(<ScheduleList />);
+    h.params = { id: 'abby', job: 'b' };
+    view.rerender(<ScheduleList />);
+    expect(document.querySelector('[testid="master-detail"]').textContent).toContain('digest prompt');
+  });
+
+  it('does not push a page for a link it already showed when the pane narrows', () => {
+    h.params = { id: 'abby', job: 'a' };
+    const view = render(<ScheduleList />);
+    h.wide = false;
+    view.rerender(<ScheduleList />);
+    expect(h.push).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the first job when the one it showed is gone', () => {
+    const view = render(<ScheduleList />);
+    fireEvent.click(screen.getByLabelText(/^Weekly listing refresh,/));
+    h.jobs = [fleet[1]];
+    view.rerender(<ScheduleList />);
+    expect(document.querySelector('[testid="master-detail"]').textContent).toContain('digest prompt');
+  });
+
+  it('keeps the empty line away while the list is still loading', () => {
+    h.jobs = [];
+    h.loading = true;
+    render(<ScheduleList />);
+    expect(document.querySelector('[testid="master-detail"]').textContent).not.toContain('No scheduled jobs');
+    h.loading = false;
+  });
+
+  it('does not snap back to the linked job when the pane flips after another pick', () => {
+    h.params = { id: 'abby', job: 'a' };
+    const view = render(<ScheduleList />);
+    fireEvent.click(screen.getByLabelText(/^Daily review digest,/));
+    h.wide = false;
+    view.rerender(<ScheduleList />);
+    h.wide = true;
+    view.rerender(<ScheduleList />);
+    expect(document.querySelector('[testid="master-detail"]').textContent).toContain('digest prompt');
+  });
+
+  it('opens a second link on a phone while the list stays mounted', () => {
+    h.wide = false;
+    h.params = { id: 'abby', job: 'a' };
+    const view = render(<ScheduleList />);
+    h.params = { id: 'abby', job: 'b' };
+    view.rerender(<ScheduleList />);
+    expect(h.push.mock.calls.map(([r]) => r.params.job)).toEqual(['a', 'b']);
+  });
+
+  it('keeps the phone behaviour below the threshold', () => {
+    h.wide = false;
+    render(<ScheduleList />);
+    expect(document.querySelector('[testid="master-list"]')).toBeNull();
+    fireEvent.click(screen.getByLabelText(/^Weekly listing refresh,/));
+    expect(h.push).toHaveBeenCalledWith({ pathname: '/profile/abby/schedule/[job]', params: { job: 'a' } });
   });
 });

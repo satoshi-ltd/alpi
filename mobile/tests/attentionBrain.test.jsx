@@ -27,6 +27,7 @@ vi.mock('react-native', () => {
     TextInput: () => null,
     Alert: { alert: () => {} },
     StyleSheet: { create: (s) => s },
+    useWindowDimensions: () => ({ width: 390, height: 844 }),
   };
 });
 vi.mock('expo-router', () => ({

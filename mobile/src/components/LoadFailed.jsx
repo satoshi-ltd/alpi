@@ -1,6 +1,6 @@
 import { Pressable, Text, View } from 'react-native';
 
-import { lineHeights, space } from '../theme/tokens';
+import { lineHeights, mobile, space } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeContext';
 import { Button } from './Button';
 
@@ -18,7 +18,7 @@ export function LoadFailed({ label, error, onRetry, inline = false, showDetail =
           ) : null}
         </View>
         {onRetry ? (
-          <Pressable onPress={onRetry} accessibilityRole="button" accessibilityLabel="Retry" hitSlop={8}>
+          <Pressable onPress={onRetry} accessibilityRole="button" accessibilityLabel="Retry" style={{ minHeight: mobile.tap, minWidth: mobile.tap, marginVertical: -space.s5, alignItems: 'center', justifyContent: 'center' }}>
             <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.ink2 }}>Retry</Text>
           </Pressable>
         ) : null}

@@ -9,6 +9,7 @@ const h = vi.hoisted(() => ({
   flatStyle: (style) => Object.assign({}, ...[style].flat(Infinity).filter(Boolean)),
 }));
 
+vi.mock('../src/hooks/useAttention', () => ({ useAttention: () => ({ att: null, refresh: () => {} }) }));
 vi.mock('react-native', () => {
   const View = ({ children, style, ...p }) =>
     React.createElement('div', { ...p, 'data-style': JSON.stringify(h.flatStyle(style)) }, children);

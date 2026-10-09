@@ -2,6 +2,10 @@ import { readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, it, expect } from "vitest";
 import {
+  LIST_COLUMN_W,
+  MASTER_DETAIL_MIN_W,
+  isMasterDetail,
+  paneWidth,
   backFallback,
   SIDEBAR_W,
   MIN_W,
@@ -427,5 +431,27 @@ describe("stacksRow", () => {
     expect(stacksRow(359)).toBe(true);
     expect(stacksRow(360)).toBe(false);
     expect(stacksRow(390)).toBe(false);
+  });
+});
+
+
+describe('master-detail threshold', () => {
+  it('takes the roster out of the pane before judging its width', () => {
+    expect(paneWidth(852, true, true)).toBe(572);
+    expect(paneWidth(852, true, false)).toBe(852);
+    expect(paneWidth(1104, true, true)).toBe(824);
+    expect(paneWidth(390, false, true)).toBe(390);
+  });
+
+  it('opens the page beside the list from 760 pt of pane, whatever the device', () => {
+    expect(MASTER_DETAIL_MIN_W).toBe(760);
+    expect(LIST_COLUMN_W).toBe(300);
+    expect(isMasterDetail(852, true, true)).toBe(false);
+    expect(isMasterDetail(1104, true, true)).toBe(true);
+    expect(isMasterDetail(852, true, false)).toBe(true);
+    expect(isMasterDetail(1040, true, true)).toBe(true);
+    expect(isMasterDetail(1039, true, true)).toBe(false);
+    expect(isMasterDetail(390, false, true)).toBe(false);
+    expect(isMasterDetail(900, false, false)).toBe(false);
   });
 });

@@ -439,14 +439,14 @@ def test_kit_phone_rows_use_the_attention_wording_and_groups_of_the_mobile_app()
     flagged = _html_text(studies.m_settings_rows(True))
     for phrase in ("1 fails lint", "2 over their limit", "1 failed", "Cron jobs"):
         assert phrase in flagged
-    for screen in ("skills/index.jsx", "memory/index.jsx"):
-        assert "Needs you" in (REPO / "mobile" / "app" / "profile" / "[id]" / "brain" / screen).read_text()
+    for screen in (REPO / "mobile" / "src" / "features" / "brain" / "SkillsList.jsx", REPO / "mobile" / "app" / "profile" / "[id]" / "brain" / "memory" / "index.jsx"):
+        assert "Needs you" in screen.read_text()
     assert "Needs you · 1" in _html_text(studies.m_skill_list(True))
     assert "Needs you · 2" in _html_text(studies.m_memory_list(True))
     sched = _html_text(studies.m_schedule_list(True))
     labels = [label for _, label in kit.JOB_GROUPS]
     assert [sched.index(label) for label in labels] == sorted(sched.index(label) for label in labels)
-    job = (REPO / "mobile" / "app" / "profile" / "[id]" / "schedule" / "[job].jsx").read_text()
+    job = (REPO / "mobile" / "src" / "features" / "schedule" / "JobDetail.jsx").read_text()
     assert "[next, nextRunWord(job)].filter(Boolean).join(' · ')" in job
     assert "tomorrow 07:30 · failed" in _html_text(studies.m_schedule_page(True))
 

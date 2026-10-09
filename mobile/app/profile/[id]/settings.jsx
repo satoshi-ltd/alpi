@@ -51,6 +51,8 @@ import {
 } from '../../../src/features/sheets/ProfileFieldSheets';
 import { usePane } from '../../../src/nav/PaneContext';
 import { SettingsSurface } from '../../../src/nav/SettingsSurface';
+import { AttentionSummary, JumpChips } from '../../../src/features/settings/SectionJump';
+import { useSectionJump } from '../../../src/features/settings/useSectionJump';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { voiceLabel } from '../../../src/lib/voices';
 import { EMPTY } from '../../../../common/emptyCopy.mjs';
@@ -132,6 +134,7 @@ export default function ProfileSettings() {
   const emailAccounts = useEmailAccounts(id, { skipWhen: !needsFallback(snap, 'email') });
   const schedule = useScheduleList(id, { skipWhen: !needsFallback(snap, 'schedules') });
   const { att } = useAttention(id);
+  const { scrollRef, anchor, jump, section, onScroll } = useSectionJump();
   const storage = useProfileStorage(id, { skipWhen: !needsFallback(snap, 'storage') });
   const [sheet, setSheet] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -329,13 +332,18 @@ export default function ProfileSettings() {
         }
       />
       <SyncBar syncing={settingsSyncing} />
+      <JumpChips current={section} onJump={jump} />
       <SettingsSurface>
       <ScrollView
+        ref={scrollRef}
+        scrollEventThrottle={64}
+        onScroll={onScroll}
         contentContainerStyle={contentStyle}
         keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />}
       >
-        <SectionHeader first>Overview</SectionHeader>
+        <AttentionSummary att={att} onJump={jump} />
+        <SectionHeader first {...anchor('overview')}>Overview</SectionHeader>
         <RowGroup>
           <Row
             label="Paused"
@@ -460,7 +468,7 @@ export default function ProfileSettings() {
           <Row label="Home" value={`~/.alpi/profiles/${profile.name}`} chevron={false} />
         </RowGroup>
 
-        <SectionHeader kicker="last 14 days">Usage</SectionHeader>
+        <SectionHeader kicker="last 14 days" {...anchor('usage')}>Usage</SectionHeader>
         <RowGroup>
           {usageDays.length === 0 && snap.loading ? (
             <SettingsBand><UsageSkeleton /></SettingsBand>
@@ -478,7 +486,7 @@ export default function ProfileSettings() {
           )}
         </RowGroup>
 
-        <SectionHeader kicker="how peers see this agent">Identity</SectionHeader>
+        <SectionHeader kicker="how peers see this agent" {...anchor('identity')}>Identity</SectionHeader>
         <RowGroup>
           {twoPane ? (
             <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space.s9, paddingVertical: space.s3 }}>
@@ -499,7 +507,7 @@ export default function ProfileSettings() {
           )}
         </RowGroup>
 
-        <SectionHeader kicker="daemon">Service</SectionHeader>
+        <SectionHeader kicker="daemon" {...anchor('service')}>Service</SectionHeader>
         <RowGroup>
           {twoPane ? (
             <Row
@@ -592,7 +600,7 @@ export default function ProfileSettings() {
           />
         </RowGroup>
 
-        <SectionHeader kicker="peers + workgroups">ALP</SectionHeader>
+        <SectionHeader kicker="peers + workgroups" {...anchor('alp')}>ALP</SectionHeader>
         <RowGroup>
           <Row
             label="Public key"
@@ -643,7 +651,7 @@ export default function ProfileSettings() {
           )}
         </RowGroup>
 
-        <SectionHeader>Schedule</SectionHeader>
+        <SectionHeader {...anchor('schedule')}>Schedule</SectionHeader>
         <RowGroup>
           <Row
             label="Cron jobs"
@@ -655,7 +663,7 @@ export default function ProfileSettings() {
           />
         </RowGroup>
 
-        <SectionHeader>Sandbox</SectionHeader>
+        <SectionHeader {...anchor('sandbox')}>Sandbox</SectionHeader>
         <RowGroup>
           <Row
             label="Terminal"
@@ -680,7 +688,7 @@ export default function ProfileSettings() {
           />
         </RowGroup>
 
-        <SectionHeader>Voice</SectionHeader>
+        <SectionHeader {...anchor('voice')}>Voice</SectionHeader>
         <RowGroup>
           <Row
             label="Voice"
@@ -696,7 +704,7 @@ export default function ProfileSettings() {
           />
         </RowGroup>
 
-        <SectionHeader>MCP Servers</SectionHeader>
+        <SectionHeader {...anchor('mcp')}>MCP Servers</SectionHeader>
         <RowGroup>
           <Row
             label="Manage"
@@ -706,7 +714,7 @@ export default function ProfileSettings() {
           />
         </RowGroup>
 
-        <SectionHeader kicker="skills, memories, tools">Brain</SectionHeader>
+        <SectionHeader kicker="skills, memories, tools" {...anchor('brain')}>Brain</SectionHeader>
         <RowGroup>
           <Row
             label="Skills"
@@ -734,7 +742,7 @@ export default function ProfileSettings() {
           />
         </RowGroup>
 
-        <SectionHeader kicker="disk footprint">Storage</SectionHeader>
+        <SectionHeader kicker="disk footprint" {...anchor('storage')}>Storage</SectionHeader>
         <RowGroup>
           {storageRows.filter((it) => it.size_bytes > 0 || it.file_count > 0).length === 0 && (snap.loading || storage.loading) ? (
             <ListSkeleton flat rows={3} value label="Loading storage" />

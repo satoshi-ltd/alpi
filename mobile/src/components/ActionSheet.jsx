@@ -133,7 +133,17 @@ export function ActionSheet({ open, onClose, title, subtitle, description, actio
                       {a.selected ? <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: colors.accent }} /> : null}
                     </View>
                   ) : null}
-                  {a.icon ? <View style={{ width: 24 }}>{a.icon}</View> : null}
+                  {a.icon ? (
+                    <View style={{ width: 24 }}>
+                      {a.icon}
+                      {a.badge ? (
+                        <View
+                          testID="action-badge"
+                          style={{ position: 'absolute', top: -2, right: 0, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.danger, borderWidth: 1.5, borderColor: colors.bgPane }}
+                        />
+                      ) : null}
+                    </View>
+                  ) : null}
                   <Text
                     style={{
                       flex: 1,
@@ -145,7 +155,7 @@ export function ActionSheet({ open, onClose, title, subtitle, description, actio
                     {a.label}
                   </Text>
                   {a.detail ? (
-                    <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.sm, color: colors.ink3 }}>
+                    <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.sm, color: a.detailDanger ? colors.dangerText : colors.ink3 }}>
                       {a.detail}
                     </Text>
                   ) : null}

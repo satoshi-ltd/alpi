@@ -14,6 +14,16 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.8.0 — 2026-10-09 — the schedule is on the first screens
+
+- **Activity answers what runs next and what failed.** The Scheduled group becomes Next up, grouped by day with the time on the right. A job that failed is a Needs you row with Run again, and every row opens its job, a running one included, instead of the profile's chat.
+- **The inbox shows what waits on you.** A band above the roster lists up to three approvals, questions and failed jobs with their actions, and its title opens Activity.
+- **The job page says what is happening.** Its status reads failed, paused or running; Run now becomes Running · m:ss and ends in a toast with View. Ask the agent to change this opens the chat with the job named, and More holds the last output, the id and a typed delete. The list shows each job's last result, marks the running one, searches, retries a failed load and offers New schedule when empty.
+- **On a fold, Schedule, Skills and Tools open their page beside the list** once the pane is 760 pt wide; below that they push as before.
+- **Smaller changes.** Sessions in the chat header has its own icon and a failed job puts a dot on the menu; profile settings opens on what needs you with a row of chips that jump between sections; Accept, Discard and the Retry buttons reach 44 pt.
+
+  Requires alpi 0.17.5.
+
 ## v0.7.6 — 2026-10-08 — a run of deletes keeps one Undo for all of them
 
 - **Deleting several notifications in a row no longer loses the earlier Undo.** Each delete used to replace the toast, so after three quick swipes only the last could be undone while the first two went through anyway.

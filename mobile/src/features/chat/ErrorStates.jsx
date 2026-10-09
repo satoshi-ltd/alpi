@@ -1,5 +1,5 @@
 import { Pressable, Text, View } from 'react-native';
-import { radii, space } from '../../theme/tokens';
+import { mobile, radii, space } from '../../theme/tokens';
 
 import { Banner } from '../../components/Banner';
 import { Icon } from '../../components/Icon';
@@ -9,7 +9,7 @@ export function FailedSend({ onRetry }) {
   const { colors, fonts, fontSizes } = useTheme();
   return (
     <View style={{ paddingHorizontal: space.s7, flexDirection: 'row', justifyContent: 'flex-end' }}>
-      <Pressable onPress={onRetry} hitSlop={6} style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
+      <Pressable onPress={onRetry} accessibilityRole="button" style={{ minHeight: mobile.tap, minWidth: mobile.tap, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: space.s2 }}>
         <Icon name="refresh" size="xs" color={colors.danger} />
         <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.dangerText }}>
           failed to send · Retry
@@ -49,7 +49,7 @@ export function FailedVoice({ duration, onRetry }) {
         <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.dangerText }}>
           {duration}s · voice upload failed
         </Text>
-        <Pressable onPress={onRetry} hitSlop={6}>
+        <Pressable onPress={onRetry} accessibilityRole="button" style={{ minHeight: mobile.tap, minWidth: mobile.tap, marginVertical: -space.s6, alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.sm, color: colors.dangerText }}>
             Retry
           </Text>

@@ -52,6 +52,8 @@ import { markProfileRead } from '../../src/lib/readState';
 import { usePane } from '../../src/nav/PaneContext';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { useCanAdminEarly } from '../../src/hooks/useActiveRole';
+import { useAttention } from '../../src/hooks/useAttention';
+import { flagCount } from '../../../common/attention.mjs';
 import { Busy } from '../../src/components/Busy';
 import { useBusyVisible } from '../../src/hooks/useBusyVisible';
 import { SubtitleSkeleton } from '../../src/components/SubtitleSkeleton';
@@ -376,6 +378,8 @@ function ProfileChatInner() {
   const { colors, fonts, fontSizes } = useTheme();
   const { twoPane } = usePane();
   const canAdmin = useCanAdminEarly();
+  const { att } = useAttention(canAdmin ? id : null);
+  const failedJobs = canAdmin ? flagCount(att, 'schedule') : 0;
   const { endpoint, call, probeState } = useEndpoint();
   const summaries = useProfileSummaries();
   const sessionsList = useSessionsList(id);
@@ -696,6 +700,7 @@ function ProfileChatInner() {
     onOpenMemory: canAdmin ? () => router.push(`/profile/${profile.name}/brain/memory`) : null,
     onOpenTools: canAdmin ? () => router.push(`/profile/${profile.name}/brain/tools`) : null,
     onOpenSchedule: canAdmin ? () => router.push(`/profile/${profile.name}/schedule`) : null,
+    failedJobs,
     onRefresh: () => {
       sessionsList.refresh();
       session.refresh();
@@ -715,6 +720,7 @@ function ProfileChatInner() {
         onBack={goBack}
         onMore={() => setMenuOpen(true)}
         onPickSession={() => setSessionsOpen(true)}
+        failedJobs={failedJobs}
         right={<SoundWave accent={accent} />}
       />
       <DaemonBanner status={daemonStatus} paired={!!endpoint} onRetry={() => session.refresh()} />

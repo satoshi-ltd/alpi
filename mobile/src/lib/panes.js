@@ -5,6 +5,8 @@ export const MIN_W = 600;
 export const MIN_H = 500;
 export const HYSTERESIS = 24;
 export const SIDEBAR_OPEN_MIN_W = 800;
+export const MASTER_DETAIL_MIN_W = 760;
+export const LIST_COLUMN_W = 300;
 export const ROW_STACK_MAX_W = 360;
 
 export const CONTENT_MAX_W = 720;
@@ -120,4 +122,12 @@ export function stackAnimation(twoPane) {
 export function paneAnimation(twoPane, reduceMotion = false) {
   if (!twoPane) return stackAnimation(false);
   return reduceMotion ? 'none' : 'fade';
+}
+
+export function paneWidth(width, twoPane, sidebarOpen) {
+  return twoPane && sidebarOpen ? width - SIDEBAR_W : width;
+}
+
+export function isMasterDetail(width, twoPane, sidebarOpen) {
+  return twoPane && paneWidth(width, twoPane, sidebarOpen) >= MASTER_DETAIL_MIN_W;
 }

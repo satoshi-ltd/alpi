@@ -759,7 +759,7 @@ describe('ProfileSettings phone sections', () => {
     await waitFor(() => expect(screen.getByText(/14-day total \$0\.12/)).toBeTruthy());
     expect(groupOf('Providers')).not.toBeNull();
     expect(groupOf('Providers')).toBe(groupOf('Workspace'));
-    expect(screen.getByText('Overview').closest('[data-row-group]')).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Overview' }).closest('[data-row-group]')).toBeNull();
     expect(groupOf(/14-day total/)).not.toBeNull();
     expect(groupOf(/14-day total/)).not.toBe(groupOf('Providers'));
     expect(groupOf('Delete profile')).not.toBe(groupOf('Reclaim space'));
@@ -822,5 +822,39 @@ describe('ProfileSettings attention', () => {
     render(<ProfileSettings />, { wrapper: wrapper(daemon(() => ({ memory: [], skills: [], schedules: [], counts: { memory: 0, skills: 0, schedules: 0 }, total: 0 }))) });
     await waitFor(() => expect(screen.getByText('instructions loaded on demand')).toBeTruthy());
     expect(document.querySelector('[accessibilitylabel*="need"]')).toBeNull();
+  });
+});
+
+
+describe('ProfileSettings section jump', () => {
+  const callWith = (attention) => vi.fn(async (method) => {
+    if (method === 'host.profile.summaries') return { profiles: [{ name: 'doc', counts: {} }] };
+    if (method === 'host.settings.profile_snapshot') {
+      return {
+        detail: { name: 'doc', model: 'openrouter/example' },
+        usage: { days: [{ iso: '2026-06-29', tokIn: 1000, tokOut: 500, cost: 0.12, today: true }] },
+        schedules: { jobs: [] },
+        workgroups: { workgroups: [] },
+        email: { accounts: [] },
+        storage: { storage: [] },
+      };
+    }
+    if (method === 'host.profile.attention') return attention;
+    throw new Error(`unexpected ${method}`);
+  });
+
+  it('opens on what needs the user and keeps one chip per section under the header', async () => {
+    render(<ProfileSettings />, { wrapper: wrapper(callWith({ memory: [], skills: [], schedules: [{ id: 'j1', title: 'weekly labs', message: 'timed out' }], counts: {}, total: 1 })) });
+    await waitFor(() => expect(screen.getByText(/14-day total \$0\.12/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Needs you · 1')).toBeTruthy());
+    expect(document.querySelector('[accessibilitylabel="1 job failed, Schedule"]')).toBeTruthy();
+    expect([...document.querySelectorAll('[accessibilitylabel^="Go to "]')].map((n) => n.getAttribute('accessibilitylabel').slice(6))).toEqual(['Overview', 'Usage', 'Identity', 'Service', 'ALP', 'Schedule', 'Sandbox', 'Voice', 'MCP', 'Brain', 'Storage']);
+  });
+
+  it('leaves the summary out while nothing is flagged', async () => {
+    render(<ProfileSettings />, { wrapper: wrapper(callWith({ memory: [], skills: [], schedules: [], counts: {}, total: 0 })) });
+    await waitFor(() => expect(screen.getByText(/14-day total \$0\.12/)).toBeTruthy());
+    expect(screen.queryByText(/^Needs you/)).toBeNull();
+    expect(document.querySelector('[accessibilitylabel="Go to Overview"]')).toBeTruthy();
   });
 });

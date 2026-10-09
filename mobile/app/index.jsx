@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DaemonBanner, isDaemonDown } from '../src/components/DaemonBanner';
 import { ConnHeader } from '../src/features/inbox/ConnHeader';
+import { NeedsYouBand } from '../src/features/inbox/NeedsYouBand';
+import { useActivityActions } from '../src/features/shell/useActivityActions';
 import { InboxRow } from '../src/features/inbox/InboxRow';
 import { Roster } from '../src/features/inbox/Roster';
 import { RowContextSheet } from '../src/features/inbox/RowContextSheet';
@@ -40,6 +42,7 @@ function InboxScreen({ items, loading, refresh, error = null }) {
   const { rows: unreadOutputs } = useUnifiedOutputs({ status: 'unread' });
   const unreadCount = unreadOutputs.length;
   const activity = useActivity();
+  const { open: openNeeds, runAgain } = useActivityActions(activity.refresh);
 
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -163,6 +166,7 @@ function InboxScreen({ items, loading, refresh, error = null }) {
         onConnPress={() => setSheet('conn')}
       />
       <DaemonBanner status={daemonStatus} paired={!!endpoint} onRetry={onRefresh} />
+      {activity.supported ? <NeedsYouBand activity={activity.activity} onOpen={openNeeds} onRun={runAgain} onOpenActivity={activityEntry} /> : null}
       <Roster
         items={enriched}
         query={query}

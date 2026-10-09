@@ -9,6 +9,7 @@ const h = vi.hoisted(() => ({
   profile: null,
 }));
 
+vi.mock('../src/hooks/useAttention', () => ({ useAttention: () => ({ att: null, refresh: () => {} }) }));
 vi.mock('react-native', () => {
   const View = ({ children, style, accessibilityLabel, onLayout, ...p }) =>
     React.createElement(

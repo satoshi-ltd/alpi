@@ -274,7 +274,7 @@ describe('ChatHeader seam', () => {
 describe('ChatHeader session trigger', () => {
   it('keeps the same icon-only trigger under two panes, never a labelled control', () => {
     inTwoPane(<ChatHeader kind="profile" title="doc" onPickSession={() => {}} />);
-    expect(screen.getByText('clock')).toBeTruthy();
+    expect(screen.getByText('history')).toBeTruthy();
     expect(screen.queryByText('Sessions')).toBeNull();
     expect(screen.getByLabelText('Sessions')).toBeTruthy();
   });
@@ -282,7 +282,7 @@ describe('ChatHeader session trigger', () => {
   it('keeps the icon-only trigger on the phone', () => {
     render(<ChatHeader kind="profile" title="doc" onPickSession={() => {}} />);
     expect(screen.queryByText('Sessions')).toBeNull();
-    expect(screen.getByText('clock')).toBeTruthy();
+    expect(screen.getByText('history')).toBeTruthy();
     expect(screen.getByLabelText('Sessions')).toBeTruthy();
   });
 
@@ -294,6 +294,30 @@ describe('ChatHeader session trigger', () => {
     inTwoPane(<ChatHeader kind="profile" title="doc" onPickSession={onPickSession} />);
     screen.getByLabelText('Sessions').click();
     expect(onPickSession).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('ChatHeader failed jobs', () => {
+  it('marks the menu button and says how many jobs failed', () => {
+    render(<ChatHeader kind="profile" title="doc" onMore={() => {}} failedJobs={2} />);
+    expect(screen.getByLabelText('More, 2 jobs failed')).toBeTruthy();
+    expect(document.querySelector('[testid="failed-jobs-dot"]')).toBeTruthy();
+    cleanup();
+    render(<ChatHeader kind="profile" title="doc" onMore={() => {}} failedJobs={1} />);
+    expect(screen.getByLabelText('More, 1 job failed')).toBeTruthy();
+  });
+
+  it('draws neither the dot nor the count while no job failed', () => {
+    render(<ChatHeader kind="profile" title="doc" onMore={() => {}} />);
+    expect(screen.getByLabelText('More')).toBeTruthy();
+    expect(document.querySelector('[testid="failed-jobs-dot"]')).toBeNull();
+  });
+
+  it('keeps the Sessions button on its own icon, apart from the Schedule item', () => {
+    const schedule = headerMenuActions({ onOpenSchedule: () => {} }).find((a) => a.id === 'schedule');
+    expect(schedule.icon.props.name).toBe('clock');
+    render(<ChatHeader kind="profile" title="doc" onPickSession={() => {}} />);
+    expect(screen.getByLabelText('Sessions').textContent).toBe('history');
   });
 });
 
@@ -415,6 +439,24 @@ describe('ChatHeader meta row', () => {
       .find((el) => el.querySelector('[aria-label="More"]') && styleOf(el).flexShrink === 0);
     expect(actions).toBeTruthy();
     expect(actions.querySelector('[data-scroll]')).toBeNull();
+  });
+});
+
+describe('headerMenuActions failed jobs', () => {
+  const schedule = (props) => headerMenuActions({ onOpenSchedule: () => {}, ...props }).find((a) => a.id === 'schedule');
+
+  it('says how many failed in the danger tone and puts a badge on the icon', () => {
+    const item = schedule({ failedJobs: 3 });
+    expect(item.detail).toBe('3 failed');
+    expect(item.detailDanger).toBe(true);
+    expect(item.badge).toBe(true);
+  });
+
+  it('says nothing while no job failed', () => {
+    const item = schedule({ failedJobs: 0 });
+    expect(item.detail).toBeUndefined();
+    expect(item.badge).toBeUndefined();
+    expect(schedule({}).detail).toBeUndefined();
   });
 });
 

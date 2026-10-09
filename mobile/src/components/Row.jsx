@@ -28,12 +28,13 @@ export function RowGroup({ children, style }) {
   );
 }
 
-export function SectionHeader({ children, kicker, first = false }) {
+export function SectionHeader({ children, kicker, first = false, onLayout }) {
   const { colors, fonts, fontSizes } = useTheme();
   const wide = useWideSettings();
   if (wide) {
     return (
       <View
+        onLayout={onLayout}
         style={{
           flexDirection: 'row',
           alignItems: 'baseline',
@@ -57,7 +58,7 @@ export function SectionHeader({ children, kicker, first = false }) {
     );
   }
   return (
-    <View style={{ paddingHorizontal: space.s8, paddingTop: space.s9, paddingBottom: space.s3 }}>
+    <View onLayout={onLayout} style={{ paddingHorizontal: space.s8, paddingTop: space.s9, paddingBottom: space.s3 }}>
       <Eyebrow>{children}{kicker ? ` · ${kicker}` : ''}</Eyebrow>
     </View>
   );

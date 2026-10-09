@@ -1,123 +1,41 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { space } from '../../../../../src/theme/tokens';
 
-import { Row, RowGroup, RowSeparator, SectionHeader } from '../../../../../src/components/Row';
-import { Eyebrow } from '../../../../../src/components/Eyebrow';
+import { MasterDetail } from '../../../../../src/components/MasterDetail';
+import { NothingSelected } from '../../../../../src/components/NothingSelected';
+import { ToolDetail } from '../../../../../src/features/brain/ToolDetail';
+import { ToolsList, groupTools } from '../../../../../src/features/brain/ToolsList';
 import { PanelHeader } from '../../../../../src/features/profile/PanelHeader';
 import { useBack } from '../../../../../src/hooks/useBack';
 import { useTools } from '../../../../../src/hooks/useDaemonData';
-import { usePullRefresh } from '../../../../../src/hooks/usePullRefresh';
+import { useMasterDetail } from '../../../../../src/hooks/useMasterDetail';
 import { useTheme } from '../../../../../src/theme/ThemeContext';
-import { LoadFailed } from '../../../../../src/components/LoadFailed';
-import { EMPTY } from '../../../../../../common/emptyCopy.mjs';
-import { ListSkeleton } from '../../../../../src/components/ListSkeleton';
 
-// Same category order as desktop ToolsPanel.
-const CATEGORY_ORDER = [
-  'Filesystem',
-  'Workspace',
-  'Web',
-  'Memory',
-  'Comms',
-  'Agent',
-  'Media',
-  'System',
-  'Collab',
-];
-
-export default function ToolsList() {
-  const { id } = useLocalSearchParams();
+export default function ToolsRoute() {
+  const { id, name } = useLocalSearchParams();
   const router = useRouter();
   const goBack = useBack();
-  const { colors, fonts, fontSizes } = useTheme();
-  const pull = usePullRefresh(() => tools.refresh?.());
+  const { colors } = useTheme();
+  const wide = useMasterDetail();
   const tools = useTools(id);
-  const rows = tools.data?.tools ?? [];
-
-  const groups = rows.reduce((m, t) => {
-    const k = t.category ?? 'Other';
-    if (!m.has(k)) m.set(k, []);
-    m.get(k).push(t);
-    return m;
-  }, new Map());
-  const cats = [
-    ...CATEGORY_ORDER.filter((c) => groups.has(c)),
-    ...[...groups.keys()].filter((c) => !CATEGORY_ORDER.includes(c)).sort(),
-  ];
+  const { rows, ordered } = groupTools(tools.data?.tools);
+  const [picked, setPicked] = useState(name ? String(name) : null);
+  const selected = ordered.some((t) => t.name === picked) ? picked : ordered[0]?.name ?? null;
+  const settled = !tools.loading && !tools.error;
+  const open = (t) => router.push({ pathname: `/profile/${id}/brain/tools/[name]`, params: { name: t.name } });
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <PanelHeader profile={id} section="TOOLS" count={rows.length} onBack={goBack} />
-      <ScrollView refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />} contentContainerStyle={{ paddingBottom: space.s9 }}>
-        {tools.loading && rows.length === 0 ? (
-          <ListSkeleton rows={4} helper="sm" label="Loading tools" style={{ marginTop: space.s5 }} />
-        ) : tools.error && rows.length === 0 ? (
-          <LoadFailed inline label="tools" error={tools.error} onRetry={() => tools.refresh?.()} />
-        ) : rows.length === 0 ? (
-          <RowGroup style={{ marginTop: space.s5 }}>
-            <Row label={EMPTY.tools.title} helper={EMPTY.tools.hint} chevron={false} />
-          </RowGroup>
-        ) : (
-          cats.map((cat) => (
-            <View key={cat}>
-              <SectionHeader>{cat}</SectionHeader>
-              <RowGroup>
-                {groups.get(cat).map((t, i) => (
-                  <View key={t.name}>
-                    {i > 0 ? <RowSeparator /> : null}
-                    <Pressable
-                      onPress={() =>
-                        router.push({
-                          pathname: `/profile/${id}/brain/tools/[name]`,
-                          params: { name: t.name },
-                        })
-                      }
-                      android_ripple={{ color: colors.selected }}
-                      style={({ pressed }) => ({
-                        paddingHorizontal: space.s8,
-                        paddingVertical: space.s6,
-                        gap: space.s1,
-                        backgroundColor: pressed ? colors.selected : 'transparent',
-                      })}
-                    >
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
-                        <Text
-                          style={{
-                            fontFamily: fonts.monoMedium,
-                            fontSize: fontSizes.lg,
-                            color: t.denied ? colors.ink3 : colors.ink,
-                            textDecorationLine: t.denied ? 'line-through' : 'none',
-                          }}
-                        >
-                          {t.name}
-                        </Text>
-                        {t.denied ? (
-                          <Eyebrow color={colors.warning}>denied</Eyebrow>
-                        ) : null}
-                      </View>
-                      {t.description ? (
-                        <Text
-                          numberOfLines={2}
-                          style={{
-                            fontFamily: fonts.sans.regular,
-                            fontSize: fontSizes.sm,
-                            color: colors.ink3,
-                            opacity: t.denied ? 0.6 : 1,
-                          }}
-                        >
-                          {t.description}
-                        </Text>
-                      ) : null}
-                    </Pressable>
-                  </View>
-                ))}
-              </RowGroup>
-            </View>
-          ))
-        )}
-      </ScrollView>
+      {wide ? (
+        <MasterDetail
+          list={<ToolsList profile={id} selectedName={selected} onOpen={(t) => setPicked(t.name)} />}
+          detail={selected ? <ToolDetail key={selected} profile={id} name={selected} embedded /> : settled ? <NothingSelected>No tools registered</NothingSelected> : null}
+        />
+      ) : (
+        <ToolsList profile={id} onOpen={open} />
+      )}
     </SafeAreaView>
   );
 }

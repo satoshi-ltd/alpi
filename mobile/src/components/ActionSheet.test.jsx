@@ -63,7 +63,7 @@ vi.mock('./useSheetGesture', () => ({
 vi.mock('../theme/ThemeContext', () => ({
   useTheme: () => ({
     shadow: { base: { borderWidth: 0.5, borderColor: '#ddd' } },
-    colors: { bgPane: '#fff', ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', line: '#ddd', danger: '#f00', selected: '#eee' },
+    colors: { bgPane: '#fff', ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', line: '#ddd', danger: '#f00', dangerText: '#a00', selected: '#eee' },
     fonts: {
       sans: { regular: 'Geist_400Regular', semibold: 'Geist_600SemiBold' },
       mono: 'GeistMono_400Regular',
@@ -285,5 +285,19 @@ describe('ActionSheet feel', () => {
     rerender(<ActionSheet open onClose={() => {}} actions={[{ label: 'Pin' }]} />);
     rerender(<ActionSheet open onClose={() => {}} actions={[{ label: 'Pin' }]} />);
     expect(h.selection).toHaveBeenCalledTimes(1);
+  });
+});
+
+
+describe('ActionSheet item hints', () => {
+  const LEFT = [{ id: 'schedule', label: 'Schedule', icon: React.createElement('i', { 'data-icon': 'clock' }), detail: '1 failed', detailDanger: true, badge: true }, { id: 'tools', label: 'Tools', detail: 'view' }];
+
+  it('puts a badge on the icon and the detail in the danger tone when an item asks', () => {
+    render(<ActionSheet open onClose={() => {}} title="doc" actions={LEFT} />);
+    expect(document.querySelectorAll('[testid="action-badge"]').length).toBe(1);
+    const flagged = JSON.parse(screen.getByText('1 failed').getAttribute('data-text-style'));
+    const quiet = JSON.parse(screen.getByText('view').getAttribute('data-text-style'));
+    expect(flagged.color).toBe('#a00');
+    expect(quiet.color).toBe('#666');
   });
 });

@@ -18,6 +18,7 @@ import { accentForPubkey, foldForPubkey } from '../../../../src/lib/localFold';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 import { EMPTY } from '../../../../../common/emptyCopy.mjs';
 import { ListSkeleton } from '../../../../src/components/ListSkeleton';
+import { PendingPeerActions } from '../../../../src/features/peers/PendingPeerActions';
 
 function shortPubkey(pk) {
   if (!pk) return '—';
@@ -90,41 +91,15 @@ export default function PeersList() {
                         {p.address ?? p.pubkey}
                       </Text>
                     </View>
-                    <Pressable
-                      onPress={() => discard(p.pubkey)}
-                      hitSlop={6}
-                      style={({ pressed }) => ({
-                        paddingHorizontal: space.s5,
-                        paddingVertical: space.s2,
-                        borderRadius: radii.xs,
-                        borderWidth: 0.5,
-                        borderColor: colors.line2,
-                        backgroundColor: pressed ? colors.selected : 'transparent',
-                      })}
-                    >
-                      <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.xs, color: colors.ink3 }}>
-                        Discard
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      onPress={() =>
+                    <PendingPeerActions
+                      onDiscard={() => discard(p.pubkey)}
+                      onAccept={() =>
                         router.push({
                           pathname: `/profile/${id}/peers/accept`,
                           params: { pubkey: p.pubkey, address: p.address ?? '', suggested: p.local_profile ?? '' },
                         })
                       }
-                      hitSlop={6}
-                      style={({ pressed }) => ({
-                        paddingHorizontal: space.s5,
-                        paddingVertical: space.s2,
-                        borderRadius: radii.xs,
-                        backgroundColor: pressed ? colors.ink2 : colors.ink,
-                      })}
-                    >
-                      <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.xs, color: colors.bgPane }}>
-                        Accept
-                      </Text>
-                    </Pressable>
+                    />
                   </View>
                 </View>
               ))}

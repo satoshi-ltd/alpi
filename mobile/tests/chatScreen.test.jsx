@@ -17,8 +17,10 @@ const h = vi.hoisted(() => ({
   ctxTokens: 0,
   params: { id: 'doc' },
   sessionIds: [],
+  att: null,
 }));
 
+vi.mock('../src/hooks/useAttention', () => ({ useAttention: () => ({ att: h.att, refresh: () => {} }) }));
 vi.mock('react-native', () => {
   const View = ({ children, style, accessibilityLabel, ...p }) =>
     React.createElement(
@@ -310,6 +312,28 @@ describe('Profile chat header menu', () => {
     expect([...document.querySelectorAll('[data-action]')].map((el) => el.getAttribute('data-action'))).toEqual([
       'refresh',
     ]);
+  });
+});
+
+describe('Profile chat failed jobs', () => {
+  const FLAGGED = { schedules: [{ id: 'j1', title: 'weekly labs', message: 'timed out' }] };
+  afterEach(() => { h.att = null; });
+
+  it('marks the menu button while a job of the profile has failed', () => {
+    h.att = FLAGGED;
+    render(<ProfileChat />);
+    expect(document.querySelector('[aria-label="More, 1 job failed"]')).toBeTruthy();
+    expect(document.querySelector('[testid="failed-jobs-dot"]')).toBeTruthy();
+  });
+
+  it('shows nothing while no job failed, and nothing to a member', () => {
+    render(<ProfileChat />);
+    expect(document.querySelector('[testid="failed-jobs-dot"]')).toBeNull();
+    cleanup();
+    h.att = FLAGGED;
+    h.canAdmin = false;
+    render(<ProfileChat />);
+    expect(document.querySelector('[testid="failed-jobs-dot"]')).toBeNull();
   });
 });
 

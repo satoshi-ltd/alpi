@@ -25,6 +25,7 @@ export function headerMenuActions({
   onOpenTools,
   onOpenSchedule,
   onRefresh,
+  failedJobs = 0,
 } = {}) {
   const Noun = noun.charAt(0).toUpperCase() + noun.slice(1);
   const glyph = (name) => <Icon name={name} size="lg" />;
@@ -53,7 +54,15 @@ export function headerMenuActions({
   if (onOpenSkills) brain.push({ id: 'skills', label: 'Skills', icon: glyph('sparkle'), onPress: onOpenSkills });
   if (onOpenMemory) brain.push({ id: 'memory', label: 'Memory', icon: glyph('archive'), onPress: onOpenMemory });
   if (onOpenTools) brain.push({ id: 'tools', label: 'Tools', icon: glyph('cpu'), onPress: onOpenTools });
-  if (onOpenSchedule) brain.push({ id: 'schedule', label: 'Schedule', icon: glyph('clock'), onPress: onOpenSchedule });
+  if (onOpenSchedule) {
+    brain.push({
+      id: 'schedule',
+      label: 'Schedule',
+      icon: glyph('clock'),
+      ...(failedJobs > 0 ? { detail: `${failedJobs} failed`, detailDanger: true, badge: true } : {}),
+      onPress: onOpenSchedule,
+    });
+  }
   const tail = onRefresh
     ? [{ id: 'refresh', label: 'Refresh thread', icon: glyph('refresh-cw'), onPress: onRefresh }]
     : [];
@@ -88,12 +97,12 @@ function SessionsTrigger({ onPress }) {
   const { colors } = useTheme();
   return (
     <HeaderButton label="Sessions" onPress={onPress}>
-      <Icon name="clock" size="lg" color={colors.ink2} />
+      <Icon name="history" size="lg" color={colors.ink2} />
     </HeaderButton>
   );
 }
 
-export function ChatHeader({ kind, accent, fold, creased = false, paused = false, title, meta, onBack, onMore, onPickSession, right }) {
+export function ChatHeader({ kind, accent, fold, creased = false, paused = false, title, meta, onBack, onMore, onPickSession, right, failedJobs = 0 }) {
   const { colors, fonts, fontSizes } = useTheme();
   const { twoPane, sidebarOpen, toggleSidebar } = usePane();
   const showBack = useShowBack(onBack);
@@ -160,8 +169,14 @@ export function ChatHeader({ kind, accent, fold, creased = false, paused = false
             {right}
             {onPickSession ? <SessionsTrigger onPress={onPickSession} /> : null}
             {onMore ? (
-              <HeaderButton label="More" onPress={onMore}>
+              <HeaderButton label={failedJobs > 0 ? `More, ${failedJobs} ${failedJobs === 1 ? 'job' : 'jobs'} failed` : 'More'} onPress={onMore}>
                 <Icon name="more" size="lg" color={colors.ink2} />
+                {failedJobs > 0 ? (
+                  <View
+                    testID="failed-jobs-dot"
+                    style={{ position: 'absolute', top: space.s3, right: space.s3, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.danger, borderWidth: 1.5, borderColor: colors.bg }}
+                  />
+                ) : null}
               </HeaderButton>
             ) : null}
           </View>

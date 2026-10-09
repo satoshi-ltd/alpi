@@ -45,7 +45,15 @@ older daemons that contain a final `token` remain readable.
   (online / offline / disabled / auth-failed / probing).
 - **Inbox.** Profiles + workgroups sorted by recency (unread float to
   top), pinned strip up top, long-press for pin/settings actions,
-  pull-to-refresh, FAB → ComposeSheet.
+  pull-to-refresh, FAB → ComposeSheet. A Needs you band above the
+  roster lists up to three approvals, questions and failed jobs.
+- **Activity.** Needs you, Running and Next up across profiles (admin:
+  jobs by day, Run again on a failed one); every row opens its target.
+- **Schedule (admin).** Jobs grouped by need, with the last result,
+  search and a running mark; the job page runs, pauses, deletes with a
+  typed confirm, and hands changes to the agent in chat (no add or edit
+  verb exists). On a pane of 760 pt or more, Schedule, Skills and Tools
+  open their page beside the list.
 - **Profile chat.** Streamed responses (`host.chat.send`) with tool
   rows, cancel via `host.chat.cancel`; latest session auto-loaded;
   session switcher via SessionsSheet; keyboard avoidance + inverted

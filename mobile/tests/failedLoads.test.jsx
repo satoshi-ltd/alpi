@@ -21,6 +21,7 @@ vi.mock('react-native', () => {
     Pressable: host('button'),
     ScrollView: ({ children }) => R.createElement('div', {}, children),
     RefreshControl: () => null,
+    useWindowDimensions: () => ({ width: 390, height: 844 }),
   };
 });
 vi.mock('expo-router', () => ({
