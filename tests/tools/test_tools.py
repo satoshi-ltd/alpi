@@ -428,8 +428,23 @@ def test_write_file_atomic_overwrite(tmp_home_no_env: Path) -> None:
     assert target.read_text() == "v2"
     # No lingering .tmp or .bak siblings — write_file is intentionally
     # clean, git (or user backups) handles version recovery.
-    assert not (tmp_home_no_env / "data.txt.tmp").exists()
+    assert not list(tmp_home_no_env.glob("*.tmp"))
     assert not (tmp_home_no_env / "data.txt.bak").exists()
+
+
+def test_write_file_takes_a_name_up_to_the_filesystem_limit(tmp_home_no_env: Path) -> None:
+    target = tmp_home_no_env / ("n" * 250 + ".md")
+    assert WriteFile().run(path=str(target), content="long").ok
+    assert target.read_text() == "long"
+    assert not list(tmp_home_no_env.glob(".*.tmp"))
+
+
+def test_write_file_leaves_no_staging_file_when_the_write_fails(tmp_home_no_env: Path) -> None:
+    target = tmp_home_no_env / "broken.txt"
+    with pytest.raises(UnicodeEncodeError):
+        WriteFile().run(path=str(target), content="\ud800")
+    assert not target.exists()
+    assert not list(tmp_home_no_env.glob(".*.tmp"))
 
 
 def test_write_file_rejects_malformed_json(tmp_home_no_env: Path) -> None:

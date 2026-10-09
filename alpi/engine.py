@@ -1340,7 +1340,6 @@ class Engine:
                         )
                         if produced and not any(a["path"] == produced["path"] for a in turn_produced):
                             turn_produced.append(produced)
-                            _wg_state.note_turn_output(Path(produced["path"]).resolve())
                     emit(AgentEvent(
                         kind="tool_end", name=name, args=args,
                         output=payload, ok=result.ok, tool_id=tid,

@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextvars
 import copy
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Iterator
 
 from alpi.tools.base import Tool, ToolResult
@@ -180,11 +181,41 @@ def _execute_registered(
             error=f"tool unavailable: {name} ({reason or 'check failed'})",
         )
     try:
-        return cls().run(**arguments)
+        result = cls().run(**arguments)
+        if result.ok and name in _PRODUCING_TOOLS:
+            _note_produced_output(name, arguments, result)
+        return result
     except TypeError as e:
         return ToolResult(ok=False, output="", error=f"bad arguments for {name}: {e}")
     except Exception as e:  # noqa: BLE001
         return ToolResult(ok=False, output="", error=f"{name} crashed: {e}")
+
+
+_PRODUCING_TOOLS = frozenset({"skill", "attach_file"})
+
+
+def _note_produced_output(name: str, arguments: dict, result: ToolResult) -> None:
+    from alpi import attachments
+    from alpi.home import get_home
+    from alpi.tools import _state
+    from alpi.tools._paths import _configured_workspace, private_areas_fenced
+    if not private_areas_fenced():
+        return
+    try:
+        workspace = _configured_workspace()
+    except ValueError:
+        workspace = None
+    home = get_home()
+    try:
+        produced = attachments.produced_attachment(
+            arguments.get("name") or name, result.output,
+            roots=attachments.servable_roots(home, workspace, image=True),
+            doc_roots=attachments.servable_roots(home, workspace, image=False),
+        )
+    except (ValueError, OSError):
+        return
+    if produced:
+        _state.note_turn_output(Path(produced["path"]).resolve())
 
 
 def _member_schema(schema: dict) -> dict:

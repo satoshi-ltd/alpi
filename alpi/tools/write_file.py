@@ -69,9 +69,14 @@ class WriteFile(Tool):
         # Atomic overwrite: write to a sibling tmp file and os.replace onto
         # the target. If we crash mid-write the original is untouched.
         # No `.bak` sibling — git (or the user's own backups) covers that.
-        tmp = p.with_suffix(p.suffix + ".tmp")
-        tmp.write_text(content)
-        os.replace(tmp, p)
+        tmp = p.with_name(f".{os.urandom(8).hex()}.tmp")
+        try:
+            with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666), "w") as handle:
+                handle.write(content)
+            os.replace(tmp, p)
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
         from alpi.tools import _mutations
         _mutations.record_mutation(_mutations.build_record(p, before, content))
         return ToolResult(ok=True, output=f"Wrote {len(content):,} chars to {p}")

@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.17.12 — 2026-10-09 — a write cannot clobber a neighbour's file
+
+- **`write_file` no longer touches another file while it writes.** It staged every write in a predictable `<name>.tmp` beside the target, so writing `report.md` overwrote and then removed a neighbouring `report.md.tmp`; the staging file is now unique and exclusive.
+- **A member's skill output inside a `workflow` can be attached.** The files a skill produced in a nested step were not recognised as the turn's own in `out/`, so the next step was refused.
+
 ## v0.17.11 — 2026-10-09 — a member's turn leaves skill databases and other connections' files alone
 
 - **The `db` tool is no longer offered to a member device's turn or to an ALP peer turn without `tools.allow`**, and a call to it is refused, nested calls included. It reached every skill's state database, around the fence that keeps `skills/` out of their file tools. A peer whose `tools.allow` names `db` and every admin keep it; a skill's own scripts still open their database directly.

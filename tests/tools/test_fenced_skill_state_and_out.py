@@ -130,6 +130,42 @@ def test_a_member_works_on_the_files_it_creates_in_out_for_the_rest_of_the_turn(
     assert "final" in mine.read_text()
 
 
+def test_writing_a_file_never_touches_a_neighbouring_tmp_file_of_another_connection(home: Path) -> None:
+    neighbour = home / "out" / "report.md.tmp"
+    neighbour.write_text(OTHER)
+    with use_connection(MEMBER):
+        assert tools.execute("write_file", {"path": str(home / "out" / "report.md"), "content": "mine"}).ok
+    assert neighbour.read_text() == OTHER
+    assert sorted(p.name for p in (home / "out").iterdir() if p.name.endswith(".tmp")) == ["report.md.tmp"]
+
+
+def test_a_member_may_attach_what_a_skill_produced_inside_a_workflow(home: Path) -> None:
+    report = home / "out" / "skill.md"
+    script = f"import json, pathlib\npathlib.Path({str(report)!r}).write_text('made by the skill')\nprint(json.dumps({{'out': {str(report)!r}}}))\n"
+    assert tools.execute("skill", {"action": "create", "name": "maker", "category": "personal", "description": "Makes.", "body": "## When to use\nAlways.\n"}).ok
+    assert tools.execute("skill", {"action": "add_file", "name": "maker", "subdir": "scripts", "filename": "run.py", "content": script}).ok
+    context = RunContext("run", home, home.parent / "ws", "default", "peer", "s", "c2")
+    steps = [
+        {"id": "make", "tool": "skill", "arguments": {"action": "run", "name": "maker"}},
+        {"id": "send", "tool": "attach_file", "arguments": {"path": str(report)}},
+    ]
+    _state.reset_turn_outputs()
+    with use_connection(MEMBER), use_executor(ToolExecutor(context)):
+        result = tools.execute("workflow", {"steps": steps})
+    assert result.ok, f"{result.output}{result.error}"
+    assert "refused" not in f"{result.output}{result.error}".lower()
+    assert str(report) in result.output
+
+
+def test_a_skill_that_prints_an_unusable_output_path_still_succeeds_for_a_member(home: Path) -> None:
+    script = "import json\nprint(json.dumps({'out': '" + str(home / "out") + "/a\\u0000b.md'}))\n"
+    assert tools.execute("skill", {"action": "create", "name": "odd", "category": "personal", "description": "Odd.", "body": "## When to use\nAlways.\n"}).ok
+    assert tools.execute("skill", {"action": "add_file", "name": "odd", "subdir": "scripts", "filename": "run.py", "content": script}).ok
+    with use_connection(MEMBER):
+        result = tools.execute("skill", {"action": "run", "name": "odd"})
+    assert result.ok, f"{result.output}{result.error}"
+
+
 def test_a_member_cannot_create_a_file_in_out_through_a_link_into_another_area(home: Path) -> None:
     (home / "out" / "door").symlink_to(home / "sessions" / "planted.json")
     with use_connection(MEMBER):
