@@ -100,6 +100,10 @@ vi.mock('../src/components/Diamond', () => ({ Diamond: () => null }));
 vi.mock('../src/components/Fold', () => ({ Fold: () => null }));
 vi.mock('../src/components/Icon', () => ({ Icon: ({ name }) => React.createElement('span', { 'data-icon': name }) }));
 vi.mock('../src/components/Meter', () => ({ Meter: () => null }));
+vi.mock('../src/features/notifications/NotificationPage', () => ({ NotificationPage: ({ id, onClose }) => React.createElement('article', { 'data-page': id }, React.createElement('button', { type: 'button', onClick: onClose }, 'close page')) }));
+vi.mock('../src/hooks/useMasterDetail', () => ({ useMasterDetail: () => globalThis.__wide === true }));
+vi.mock('../src/components/MasterDetail', () => ({ MasterDetail: ({ list, detail }) => React.createElement('div', { 'data-master-detail': '' }, React.createElement('aside', {}, list), React.createElement('section', {}, detail)) }));
+vi.mock('../src/components/NothingSelected', () => ({ NothingSelected: ({ children }) => React.createElement('p', { 'data-nothing': '' }, children) }));
 vi.mock('../src/components/Toast', () => ({ useToast: () => vi.fn() }));
 
 vi.mock('../src/features/chat/Bubble', () => ({ ProfileAssistantMessage: () => null, ProfileUserMessage: () => null }));

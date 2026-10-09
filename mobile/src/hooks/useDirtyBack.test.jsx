@@ -77,6 +77,13 @@ describe("useDirtyBack", () => {
     expect(nav.setOptions).toHaveBeenLastCalledWith({ gestureEnabled: false });
   });
 
+  it("gives the swipe back when the editor goes away while dirty, so the screen under it is not left locked", () => {
+    const view = renderHook(() => useDirtyBack(true, () => {}));
+    expect(nav.setOptions).toHaveBeenLastCalledWith({ gestureEnabled: false });
+    view.unmount();
+    expect(nav.setOptions).toHaveBeenLastCalledWith({ gestureEnabled: true });
+  });
+
   it("returns an ask() that triggers the leave attempt", () => {
     const leave = vi.fn();
     const { result } = renderHook(() => useDirtyBack(false, leave));

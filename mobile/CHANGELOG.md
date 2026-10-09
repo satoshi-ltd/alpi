@@ -14,6 +14,16 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.8.1 — 2026-10-09 — fixes after the first device pass and a sweep
+
+- **Activity stays true after a reconnect and says when it cannot load.** A job that finished while the connection was down no longer shows as running, and a failed first load offers Retry instead of a blank screen.
+- **The screen reader and reduced motion are respected.** Toasts are read aloud and Back dismisses them; pulses, sync bars and sheets stop moving; the biometric switch, the key eye and the pairing Back button have names; small controls in the chat reach 44 pt.
+- **Long screens fit.** The Needs you band shows one row on a short screen or at large text, the memory editor rises above the keyboard, the typed-confirm dialog scrolls, the settings chips follow the section you land on, and on a fold Notifications and Memories open their page beside the list, like Schedule, Skills and Tools.
+- **Smaller fixes:** the notifications count shows its number, a job page holds still while it runs, the default profile is called alpi everywhere, an approval waiting on you stays when the connection details refresh, and a pairing link the system hands over again after it was used no longer reopens the pairing screen.
+- **Links and notifications land where they should.** A failed-job notification opens that job's page, an approval or question tap no longer stacks a second inbox, and a draft carried by a link from another app is ignored.
+
+  Requires alpi 0.17.5.
+
 ## v0.8.0 — 2026-10-09 — the schedule is on the first screens
 
 - **Activity answers what runs next and what failed.** The Scheduled group becomes Next up, grouped by day with the time on the right. A job that failed is a Needs you row with Run again, and every row opens its job, a running one included, instead of the profile's chat.

@@ -1,111 +1,54 @@
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useRef } from 'react';
-import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useRef, useState } from 'react';
+import { Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { space } from '../../../../../src/theme/tokens';
 
-import { Dot } from '../../../../../src/components/Dot';
-import { useAttention } from '../../../../../src/hooks/useAttention';
-import { memoryItem, memoryWord } from '../../../../../../common/attention.mjs';
-import { RowGroup, SectionHeader, RowSeparator } from '../../../../../src/components/Row';
+import { MEMORY_FILES } from '../../../../../../common/memoryEntries.mjs';
+import { MasterDetail } from '../../../../../src/components/MasterDetail';
+import { MemoryDetail } from '../../../../../src/features/brain/MemoryDetail';
+import { MemoryList } from '../../../../../src/features/brain/MemoryList';
 import { PanelHeader } from '../../../../../src/features/profile/PanelHeader';
-import { MEMORY_FILES, memoryEntries } from '../../../../../../common/memoryEntries.mjs';
 import { useBack } from '../../../../../src/hooks/useBack';
-import { useProfileMemory } from '../../../../../src/hooks/useDaemonData';
-import { usePullRefresh } from '../../../../../src/hooks/usePullRefresh';
+import { useMasterDetail } from '../../../../../src/hooks/useMasterDetail';
 import { useTheme } from '../../../../../src/theme/ThemeContext';
-import { LoadFailed } from '../../../../../src/components/LoadFailed';
-import { ListSkeleton } from '../../../../../src/components/ListSkeleton';
 
-function Meter({ used, limit, over }) {
-  const { colors, fonts, fontSizes } = useTheme();
-  if (used == null || !limit) return null;
-  const pct = Math.min(100, Math.round((used / limit) * 100));
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s4 }}>
-      <View style={{ flex: 1, height: 3, borderRadius: 2, backgroundColor: colors.hover, overflow: 'hidden' }}>
-        <View style={{ width: `${pct}%`, height: 3, backgroundColor: over ? colors.danger : colors.ink2 }} />
-      </View>
-      <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: over ? colors.dangerText : colors.ink3 }}>
-        {`${used.toLocaleString('en-US')} / ${limit.toLocaleString('en-US')}`}
-      </Text>
-    </View>
-  );
-}
-
-export default function MemoryList() {
+export default function MemoryRoute() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const goBack = useBack();
-  const { colors, fonts, fontSizes } = useTheme();
-  const pull = usePullRefresh(() => mem.refresh?.());
-  const mem = useProfileMemory(id);
-  const { att } = useAttention(id);
-  const needs = MEMORY_FILES.filter((f) => memoryItem(att, f.file));
-  const refresh = mem.refresh;
-  const settled = useRef(false);
-  useFocusEffect(useCallback(() => {
-    if (settled.current) refresh();
-    else settled.current = true;
-  }, [refresh]));
+  const { colors } = useTheme();
+  const wide = useMasterDetail();
+  const [picked, setPicked] = useState(null);
+  const [editing, setEditing] = useState(false);
+  const [savedTick, setSavedTick] = useState(0);
+  const dirty = useRef(false);
+  const split = wide || editing;
+  const selected = picked ?? MEMORY_FILES[0].file;
+
+  const choose = (file) => {
+    if (file === selected) return;
+    if (!dirty.current) {
+      setPicked(file);
+      return;
+    }
+    Alert.alert('Discard changes?', 'You have unsaved edits.', [
+      { text: 'Keep editing', style: 'cancel' },
+      { text: 'Discard', style: 'destructive', onPress: () => setPicked(file) },
+    ]);
+  };
+  const open = (file) => router.push({ pathname: `/profile/${id}/brain/memory/[name]`, params: { name: file } });
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <PanelHeader profile={id} section="MEMORIES" count={MEMORY_FILES.length} onBack={goBack} />
-      <ScrollView refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />} contentContainerStyle={{ paddingBottom: space.s9 }}>
-        {mem.loading && !mem.data ? (
-          <ListSkeleton rows={4} helper="sm" label="Loading memories" style={{ marginTop: space.s5 }} />
-        ) : mem.error && !mem.data ? (
-          <LoadFailed inline label="memories" error={mem.error} onRetry={() => mem.refresh?.()} />
-        ) : (
-          <>
-            {[['Needs you', needs], ['', MEMORY_FILES.filter((f) => !memoryItem(att, f.file))]].map(([label, files]) => files.length === 0 ? null : (
-              <View key={label || 'rest'}>
-                {label ? <SectionHeader>{`${label} · ${files.length}`}</SectionHeader> : null}
-                <RowGroup style={!label && needs.length === 0 ? { marginTop: space.s5 } : undefined}>
-                  {files.map((f, i) => {
-                    const flag = memoryItem(att, f.file);
-                    const u = mem.usage?.[f.file];
-                    const raw = mem.data?.[f.file] ?? '';
-                    const count = /\n§\n/.test(raw) ? memoryEntries(raw).length : null;
-                    return (
-                      <View key={f.file}>
-                        {i > 0 ? <RowSeparator /> : null}
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel={flag ? `${f.label}, ${f.file}, ${memoryWord(flag)}` : `${f.label}, ${f.file}`}
-                          onPress={() => router.push({ pathname: `/profile/${id}/brain/memory/[name]`, params: { name: f.file } })}
-                          android_ripple={{ color: colors.selected }}
-                          style={({ pressed }) => ({
-                            minHeight: 44,
-                            paddingHorizontal: space.s8,
-                            paddingVertical: space.s5,
-                            gap: space.s2,
-                            backgroundColor: pressed ? colors.selected : 'transparent',
-                          })}
-                        >
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
-                            {flag ? <Dot color={colors.danger} /> : null}
-                            <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.ink }}>{f.label}</Text>
-                            <Text style={{ flex: 1, fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>{f.file}</Text>
-                            {flag ? (
-                              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.dangerText }}>{memoryWord(flag)}</Text>
-                            ) : (
-                              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>{count ? `${count} ${count === 1 ? 'entry' : 'entries'}` : raw.trim() ? '' : 'empty'}</Text>
-                            )}
-                          </View>
-                          <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}>{f.caption(String(id))}</Text>
-                          <Meter used={u?.used ?? null} limit={u?.limit ?? null} over={!!u?.over} />
-                        </Pressable>
-                      </View>
-                    );
-                  })}
-                </RowGroup>
-              </View>
-            ))}
-          </>
-        )}
-      </ScrollView>
+      {split ? (
+        <MasterDetail
+          list={<MemoryList profile={id} selectedFile={selected} refreshKey={savedTick} onOpen={choose} />}
+          detail={<MemoryDetail key={selected} profile={id} name={selected} embedded onDirtyChange={(value) => { dirty.current = value; setEditing(value); }} onSaved={() => setSavedTick((n) => n + 1)} />}
+        />
+      ) : (
+        <MemoryList profile={id} refreshKey={savedTick} onOpen={open} />
+      )}
     </SafeAreaView>
   );
 }

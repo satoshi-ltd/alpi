@@ -33,6 +33,9 @@ import { saveCachedMessages } from "./lib/workgroup-cache.js";
 import { fetchWorkgroupTranscript, invalidateTranscriptCache } from "./lib/workgroup-fetch.js";
 import { invalidateSessionCache } from "./lib/session-cache.js";
 import { createSessionOpener } from "./lib/session-open.js";
+import { watchAcceptance } from "./lib/chat-acceptance.js";
+import { connectionCanManage } from "./lib/connection-access.js";
+import { describeConnectionError } from "./lib/connection-status.js";
 import { createSessionRefresher } from "./lib/session-refresh.js";
 import { invalidateConnectionCaches } from "./lib/swr-cache.js";
 import { invalidateSessionsButtonCache } from "./primitives/SessionsButton.jsx";
@@ -422,14 +425,6 @@ export default function App() {
   const onNewSessionWith = useCallback((profile) => startNewThread(profile?.name), [startNewThread]);
   const onNewSession = useCallback(() => startNewThread(newSessionProfileRef.current()), [startNewThread]);
 
-  useNotificationDeeplink({
-    setView,
-    setSettingsTarget,
-    openNotifications: openNotificationsForDeeplink,
-    onSwitchConnection: onSetHostConnection,
-    activeConnectionId: hostConnections.active_id,
-  });
-
   const approval = usePendingQueue({
     command: "approval_pending",
     connectionId: hostConnections.active_id,
@@ -439,6 +434,35 @@ export default function App() {
     command: "clarification_pending",
     connectionId: hostConnections.active_id,
     enqueue: enqueueClarificationRequest,
+  });
+
+  const focusPendingRequest = useCallback((request) => {
+    const queue = request.kind === "clarification" ? clarification : approval;
+    queue.refetch().then(() => queue.promote(request.id));
+  }, [approval, clarification]);
+  const openScheduleFor = useCallback((profile) => {
+    if (!panelsMayLeave()) return;
+    if (viewRef.current?.kind !== "profile" || viewRef.current.profile !== profile) {
+      setView({ kind: "profile", profile, sessionId: null });
+    }
+    setScheduleJob(null);
+    setBrowse("schedule");
+  }, [panelsMayLeave]);
+
+  const canOpenScheduleOn = useCallback(
+    (connectionId) => connectionCanManage(hostConnectionsRef.current?.connections, connectionId),
+    [],
+  );
+
+  useNotificationDeeplink({
+    setView,
+    setSettingsTarget,
+    openNotifications: openNotificationsForDeeplink,
+    onSwitchConnection: onSetHostConnection,
+    activeConnectionId: hostConnections.active_id,
+    focusRequest: focusPendingRequest,
+    openSchedule: openScheduleFor,
+    canOpenSchedule: canOpenScheduleOn,
   });
 
   useEffect(() => {
@@ -533,7 +557,7 @@ export default function App() {
       (v?.kind === "settings" && t?.kind === "profile" && t.id === name);
     if (viewingDeleted) setView(LANDING_VIEW);
     try {
-      await invoke("profile_delete", { name });
+      await invoke("profile_delete", { name, connectionId: hostConnectionsRef.current?.active_id ?? null });
       window.notify?.(`Profile @${name} deleted`, { variant: "success" });
       reload();
     } catch (e) {
@@ -602,6 +626,7 @@ export default function App() {
       createSessionRefresher({
         activeConnectionIdRef,
         sessionDataRef,
+        viewRef,
         setSessionData,
         clearViewSession: (profile, sessionId) =>
           setView((v) =>
@@ -656,6 +681,10 @@ export default function App() {
     : null;
 
   const scheduleReload = useCoalescedCallback(() => reloadRef.current?.(), 500, 5000);
+  const schedulePendingSync = useCoalescedCallback(() => {
+    approval.refetch();
+    clarification.refetch();
+  }, 300, 3000);
 
   const scheduleSessionRefresh = useCoalescedCallback((profile, sessionId) => {
     refreshSessionData(profile, sessionId);
@@ -731,7 +760,7 @@ export default function App() {
       default:
         break;
     }
-  }, [scheduleReload, scheduleSessionRefresh, setActivityByWorkgroup, setTaskByWorkgroup, seenMtimesRef, touchWorkgroup]);
+  }, [scheduleReload, schedulePendingSync, scheduleSessionRefresh, setActivityByWorkgroup, setTaskByWorkgroup, seenMtimesRef, touchWorkgroup]);
 
   useEffect(() => {
     let cancelled = false;
@@ -753,6 +782,7 @@ export default function App() {
       if (cls === "replay") {
         // Reconnect backfill (up to 200 frames in a burst): one coalesced reload covers state catch-up; per-event fetch fan-out would hammer the freshly restarted daemon.
         if (fromDaemonFrame(frame)) scheduleReload();
+        if (/^(approval|clarification)\./.test(String(frame?.event ?? ""))) schedulePendingSync();
         return;
       }
       // approval.request: enqueue caution prompt. approval.resolved: pop in case another client answered first.
@@ -976,10 +1006,16 @@ export default function App() {
   const onSend = useCallback(
     async (text, model, opts) => {
       const attachments = opts?.attachments?.length ? opts.attachments : null;
-      if ((!text.trim() && !attachments) || !activeProfile) return;
-      if (activeProfile.paused) return;
-      if (sendingRef.current) return;
+      if ((!text.trim() && !attachments) || !activeProfile) return false;
+      if (activeProfile.paused) return false;
+      if (sendingRef.current) return false;
       sendingRef.current = true;
+      let held = true;
+      const release = () => {
+        if (!held) return;
+        held = false;
+        sendingRef.current = false;
+      };
       try {
         const profileName = activeProfile.name;
         const startSessionId =
@@ -1006,7 +1042,7 @@ export default function App() {
         );
         if (turnBlocksSend(prior)) {
           notify({ message: "A turn is already running in this session — wait for it or press Stop.", variant: "info" });
-          return;
+          return false;
         }
         if (prior) {
           removeTurn(prior.requestId);
@@ -1048,11 +1084,13 @@ export default function App() {
             } catch (e) {
               notify({ message: `Attachment upload failed: ${e}`, variant: "error" });
               removeTurn(requestId);
-              return;
+              return false;
             }
           }
         }
 
+        const acceptance = watchAcceptance(requestId);
+        await acceptance.ready;
         try {
           await invoke("chat_send_stream", {
             profile: profileName,
@@ -1065,11 +1103,21 @@ export default function App() {
             connectionId: activeConnectionId,
           });
         } catch (e) {
+          acceptance.cancel();
           notify({ message: String(e), variant: "error" });
           removeTurn(requestId);
+          return false;
         }
+        release();
+        const verdict = await acceptance.promise;
+        if (!verdict.accepted) {
+          removeTurn(requestId);
+          notify({ message: describeConnectionError(verdict.text) || "The daemon did not take the message.", variant: "error" });
+          return false;
+        }
+        return true;
       } finally {
-        sendingRef.current = false;
+        release();
       }
     },
     [activeProfile, view, rewriteDraft, notify, startTurn, removeTurn, pendingTurnsRef, hostConnectionsRef],
@@ -1596,6 +1644,11 @@ export default function App() {
         selectedProfile={notificationsTarget?.profile}
         selectedConnectionId={notificationsTarget?.connectionId}
         onOpenChat={(profile, sessionId, connId) => {
+          if (!panelsMayLeave()) return;
+          if (viewRef.current?.kind === "settings" && hasDirtySettings()) {
+            window.notify?.("Save or discard your settings changes first", { variant: "info" });
+            return;
+          }
           if (connId && connId !== hostConnections.active_id) onSetHostConnection(connId);
           setView({ kind: "profile", profile, sessionId: sessionId || null });
         }}

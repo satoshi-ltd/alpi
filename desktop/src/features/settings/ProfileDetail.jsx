@@ -162,18 +162,19 @@ export default function ProfileDetail({
     const timers = timersRef.current;
     for (const [field, t] of Object.entries(timers)) {
       clearTimeout(t);
-      if (field in pendingRef.current) persist(field, pendingRef.current[field]);
+      if (field in pendingRef.current) persist(field, pendingRef.current[field].value, pendingRef.current[field].connId);
     }
     timersRef.current = {};
     pendingRef.current = {};
   };
   useEffect(() => () => flushRef.current?.(), []);
 
-  function persist(field, value) {
+  function persist(field, value, connectionId = connId) {
     invoke("set_config_field", {
       profile: profile.name,
       key: FIELD_KEYS[field],
       value,
+      connectionId,
     })
       .then(() => { onSaved?.(); })
       .catch((e) => {
@@ -189,11 +190,12 @@ export default function ProfileDetail({
     setDraft((d) => ({ ...d, [field]: value }));
     const timers = timersRef.current;
     if (timers[field]) clearTimeout(timers[field]);
-    pendingRef.current[field] = value;
+    const editedOn = connId;
+    pendingRef.current[field] = { value, connId: editedOn };
     timers[field] = setTimeout(() => {
       delete timers[field];
       delete pendingRef.current[field];
-      persist(field, value);
+      persist(field, value, editedOn);
     }, 600);
   }
 

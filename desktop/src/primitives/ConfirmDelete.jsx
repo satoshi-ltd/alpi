@@ -6,6 +6,7 @@ import Popover from "./Popover.jsx";
 import DialogFooter from "./DialogFooter.jsx";
 import { Field } from "./index.js";
 import styles from "./ConfirmDelete.module.css";
+import { isComposing } from "../lib/composition.js";
 
 const SheetHost = createContext(null);
 
@@ -76,7 +77,7 @@ function ConfirmBody({
             value={typed}
             onChange={(e) => setTyped(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") confirm();
+              if (!isComposing(e) && e.key === "Enter") confirm();
             }}
             autoFocus
           />

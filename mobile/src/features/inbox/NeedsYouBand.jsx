@@ -1,4 +1,4 @@
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View, useWindowDimensions } from 'react-native';
 import { mobile, space } from '../../theme/tokens';
 
 import { Eyebrow } from '../../components/Eyebrow';
@@ -9,15 +9,23 @@ import { ActivityRow, activitySections } from '../shell/ActivityList';
 
 export const BAND_MAX = 3;
 
-export function bandOf(activity, nowSec = Date.now() / 1000) {
+const SHORT_SCREEN = 520;
+const LARGE_TEXT = 1.15;
+
+export function bandMax({ height, fontScale }) {
+  return height < SHORT_SCREEN || fontScale > LARGE_TEXT ? 1 : BAND_MAX;
+}
+
+export function bandOf(activity, nowSec = Date.now() / 1000, max = BAND_MAX) {
   const needs = activitySections(activity, nowSec).find((section) => section.key === 'needs');
-  return needs ? { total: needs.rows.length, rows: needs.rows.slice(0, BAND_MAX) } : null;
+  return needs ? { total: needs.rows.length, rows: needs.rows.slice(0, max) } : null;
 }
 
 export function NeedsYouBand({ activity, onOpen, onRun, onOpenActivity, nowSec }) {
   const { colors, fonts, fontSizes } = useTheme();
   const summaries = useProfileSummaries();
-  const band = activity ? bandOf(activity, nowSec) : null;
+  const { height, fontScale } = useWindowDimensions();
+  const band = activity ? bandOf(activity, nowSec, bandMax({ height, fontScale })) : null;
   if (!band) return null;
   const byName = Object.fromEntries((summaries.data?.profiles ?? []).map((p) => [p.name, p]));
   return (

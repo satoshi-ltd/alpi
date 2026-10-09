@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Fold, SendButton } from "./index.js";
 import styles from "./Composer.module.css";
+import { isComposing } from "../lib/composition.js";
 
 export default function Composer({
   value,
@@ -99,6 +100,7 @@ export default function Composer({
   }
 
   function handleKeyDown(e) {
+    if (isComposing(e)) return;
     if (isMentionOpen) {
       if (e.key === "ArrowDown") {
         e.preventDefault();

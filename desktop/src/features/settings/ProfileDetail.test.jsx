@@ -287,6 +287,23 @@ describe("ProfileDetail — concurrency gating", () => {
 });
 
 describe("ProfileDetail unsaved state", () => {
+  it("writes a pending edit to the connection it was made on, even after the view moved to another daemon", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const { waitFor } = await import("@testing-library/react");
+    invoke.mockImplementation(async (cmd) => (cmd === "draft_identity" ? "drafted bio" : null));
+    const profile = { name: "doc", model: "a/b" };
+    const view = render(<ProfileDetail profile={profile} profiles={[]} activeConnection={{ id: "local", kind: "local" }} />);
+    fireEvent.change(screen.getByPlaceholderText("public identity — visible to peers"), { target: { value: "typed" } });
+    fireEvent.click(screen.getByRole("button", { name: "Draft" }));
+    await waitFor(() => expect(screen.getByPlaceholderText("public identity — visible to peers").value).toBe("drafted bio"));
+    view.rerender(<ProfileDetail profile={profile} profiles={[]} activeConnection={{ id: "remote", kind: "remote", role: "admin" }} />);
+    view.unmount();
+    const writes = invoke.mock.calls.filter(([cmd]) => cmd === "set_config_field");
+    expect(writes).toHaveLength(1);
+    expect(writes[0][1]).toMatchObject({ profile: "doc", value: "drafted bio", connectionId: "local" });
+    invoke.mockReset();
+  });
+
   it("reports an unsaved identity draft and saves a pending debounced field on unmount", async () => {
     const { invoke } = await import("@tauri-apps/api/core");
     const { hasDirtySettings } = await import("../../lib/settingsDirty.js");
@@ -303,7 +320,7 @@ describe("ProfileDetail unsaved state", () => {
     await waitFor(() => expect(screen.getByPlaceholderText("public identity — visible to peers").value).toBe("drafted bio"));
     expect(invoke).not.toHaveBeenCalledWith("set_config_field", expect.anything());
     view.unmount();
-    expect(invoke).toHaveBeenCalledWith("set_config_field", expect.objectContaining({ profile: "doc", value: "drafted bio" }));
+    expect(invoke).toHaveBeenCalledWith("set_config_field", expect.objectContaining({ profile: "doc", value: "drafted bio", connectionId: "local" }));
     expect(hasDirtySettings()).toBe(false);
     invoke.mockReset();
   });
@@ -352,7 +369,7 @@ describe("ProfileDetail appearance", () => {
     fireEvent.click(screen.getByRole("button", { name: "blue shield" }));
     fireEvent.click(screen.getByRole("button", { name: "heart" }));
     expect(screen.getByRole("button", { name: "blue heart" })).toBeInTheDocument();
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith("set_config_field", { profile: "doc", key: "tui.fold", value: "heart" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("set_config_field", { profile: "doc", key: "tui.fold", value: "heart", connectionId: "local" }));
     expect(invoke).not.toHaveBeenCalledWith("set_config_field", expect.objectContaining({ key: "tui.accent" }));
     invoke.mockReset();
   });
@@ -364,7 +381,7 @@ describe("ProfileDetail appearance", () => {
     mount();
     fireEvent.click(screen.getByRole("button", { name: "blue shield" }));
     fireEvent.click(screen.getByRole("button", { name: "rose #f36a8a" }));
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith("set_config_field", { profile: "doc", key: "tui.accent", value: "#f36a8a" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("set_config_field", { profile: "doc", key: "tui.accent", value: "#f36a8a", connectionId: "local" }));
     expect(invoke).not.toHaveBeenCalledWith("set_config_field", expect.objectContaining({ key: "tui.fold" }));
     invoke.mockReset();
   });
@@ -376,7 +393,7 @@ describe("ProfileDetail appearance", () => {
     mount();
     fireEvent.click(screen.getByRole("button", { name: "blue shield" }));
     fireEvent.click(screen.getByRole("button", { name: "Reset to diamond" }));
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith("set_config_field", { profile: "doc", key: "tui.fold", value: "diamond" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("set_config_field", { profile: "doc", key: "tui.fold", value: "diamond", connectionId: "local" }));
     invoke.mockReset();
   });
 });

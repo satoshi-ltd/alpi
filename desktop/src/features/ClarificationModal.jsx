@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Button, DialogFooter, Eyebrow, IconBtn, Modal, Textarea, Tip } from "../primitives/index.js";
 import { CheckIcon, EditIcon, XIcon } from "../primitives/icons.jsx";
 import styles from "./ClarificationModal.module.css";
+import { isComposing } from "../lib/composition.js";
 
 function modeFor(current) {
   if (!current) return "single";
@@ -181,6 +182,7 @@ function SingleBody({
             className={styles.otherInput}
             disabled={busy}
             onKeyDown={(e) => {
+              if (isComposing(e)) return;
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 onPick(otherText);

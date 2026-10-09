@@ -16,8 +16,9 @@ vi.mock('react-native', () => {
     visible
       ? React.createElement('div', { 'data-orientations': (supportedOrientations ?? []).join(',') }, children)
       : null;
+  const ScrollView = ({ children, keyboardShouldPersistTaps }) => React.createElement('div', { 'data-scroll': 'true', 'data-persist': keyboardShouldPersistTaps }, children);
   const Keyboard = { addListener: () => ({ remove() {} }) };
-  return { Keyboard, Modal, Pressable, Text, TextInput, View };
+  return { Keyboard, Modal, Pressable, ScrollView, Text, TextInput, View };
 });
 
 vi.mock('react-native-reanimated', () => ({
@@ -56,6 +57,17 @@ describe('TypedConfirm rotation', () => {
     expect(container.querySelector('[data-orientations]').getAttribute('data-orientations')).toBe(
       'portrait,landscape-left,landscape-right',
     );
+  });
+});
+
+describe('TypedConfirm on a short screen', () => {
+  it('scrolls its body and keeps taps working under the keyboard, so the buttons never clip', () => {
+    const { container } = render(<TypedConfirm open onClose={() => {}} title="Delete profile" body="Permanent." expected="roma" />);
+    const scroll = container.querySelector('[data-scroll="true"]');
+    expect(scroll).toBeTruthy();
+    expect(scroll.getAttribute('data-persist')).toBe('handled');
+    expect(scroll.textContent).toContain('Delete');
+    expect(scroll.textContent).toContain('Cancel');
   });
 });
 

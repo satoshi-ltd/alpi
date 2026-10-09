@@ -34,7 +34,7 @@ export function SoundWave({ accent }) {
   if (!state) return null;
   const c = state.accent || accent;
   return (
-    <Pressable onPress={clearReadAloud} hitSlop={8} accessibilityLabel="silence read-aloud" style={styles.wave}>
+    <Pressable onPress={clearReadAloud} hitSlop={{ top: 13, bottom: 13, left: 12, right: 12 }} accessibilityRole="button" accessibilityLabel="Silence read-aloud" style={styles.wave}>
       <Bar accent={c} delay={0} still={still} />
       <Bar accent={c} delay={150} still={still} />
       <Bar accent={c} delay={300} still={still} />

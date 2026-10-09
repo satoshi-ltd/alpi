@@ -58,7 +58,7 @@ export function CountBadge({ count, ring }) {
           justifyContent: 'center',
         }}
       >
-        <Text numberOfLines={1} allowFontScaling={false} style={countBadgeText(fonts, colors.onDanger ?? '#fff')}>
+        <Text allowFontScaling={false} style={countBadgeText(fonts, colors.onDanger ?? '#fff')}>
           {badgeCount(count)}
         </Text>
       </View>

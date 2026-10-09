@@ -8,6 +8,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { useReduceMotion } from '../lib/reduceMotion';
+
 export const EASE_IN = Easing.bezier(0.2, 0.7, 0.2, 1);
 // Time-reverse of EASE_IN. Reusing EASE_IN for the exit covered 70% of a viewport-tall travel in the first 16ms, so the sheet was gone in one frame.
 export const EASE_OUT = Easing.bezier(0.8, 0, 0.8, 0.3);
@@ -22,26 +24,29 @@ export function useSheetGesture(open, onClose, offScreen = OFF_SCREEN) {
   const tx = useSharedValue(offScreen);
   const backdrop = useSharedValue(0);
   const [mounted, setMounted] = useState(open);
+  const reduceMotion = useReduceMotion();
+  const durationIn = reduceMotion ? 0 : DURATION_IN;
+  const durationOut = reduceMotion ? 0 : DURATION_OUT;
 
   useEffect(() => {
     if (open) {
       setMounted(true);
-      tx.value = withTiming(0, { duration: DURATION_IN, easing: EASE_IN });
-      backdrop.value = withTiming(1, { duration: DURATION_IN, easing: EASE_IN });
+      tx.value = withTiming(0, { duration: durationIn, easing: EASE_IN });
+      backdrop.value = withTiming(1, { duration: durationIn, easing: EASE_IN });
       return undefined;
     }
-    tx.value = withTiming(offScreen, { duration: DURATION_OUT, easing: EASE_OUT });
-    backdrop.value = withTiming(0, { duration: DURATION_OUT, easing: EASE_OUT });
-    const t = setTimeout(() => setMounted(false), DURATION_OUT + UNMOUNT_BUFFER);
+    tx.value = withTiming(offScreen, { duration: durationOut, easing: EASE_OUT });
+    backdrop.value = withTiming(0, { duration: durationOut, easing: EASE_OUT });
+    const t = setTimeout(() => setMounted(false), durationOut + UNMOUNT_BUFFER);
     return () => clearTimeout(t);
-  }, [open, offScreen, tx, backdrop]);
+  }, [open, offScreen, tx, backdrop, durationIn, durationOut]);
 
   const close = () => {
     onClose?.();
   };
 
   const gesture = Gesture.Pan()
-    .activeOffsetY([8, 8])
+    .activeOffsetY([-8, 8])
     .onUpdate((e) => {
       if (e.translationY > 0) {
         tx.value = e.translationY;
@@ -49,10 +54,10 @@ export function useSheetGesture(open, onClose, offScreen = OFF_SCREEN) {
     })
     .onEnd((e) => {
       if (e.translationY > DISMISS_PX || e.velocityY > DISMISS_VELOCITY) {
-        tx.value = withTiming(offScreen, { duration: DURATION_OUT, easing: EASE_OUT }, () => runOnJS(close)());
-        backdrop.value = withTiming(0, { duration: DURATION_OUT, easing: EASE_OUT });
+        tx.value = withTiming(offScreen, { duration: durationOut, easing: EASE_OUT }, () => runOnJS(close)());
+        backdrop.value = withTiming(0, { duration: durationOut, easing: EASE_OUT });
       } else {
-        tx.value = withTiming(0, { duration: DURATION_IN, easing: EASE_IN });
+        tx.value = withTiming(0, { duration: durationIn, easing: EASE_IN });
       }
     });
 

@@ -11,6 +11,7 @@ import { fuzzyMatch, splitByRanges } from "../lib/fuzzy.js";
 import { canSelfUpdate, updateHint } from "../../../common/updateHint.mjs";
 import styles from "./Panels.module.css";
 import ConnectElsewhere from "./ConnectElsewhere.jsx";
+import { isComposing } from "../lib/composition.js";
 
 export function Scrim({ onClose, children, align = "flex-start", top = 96, dismissable = true }) {
   const ref = useRef(null);
@@ -149,7 +150,7 @@ export function ConnectionPanel({
                         onBlur={() => commitRename(r)}
                         onKeyDown={(e) => {
                           e.stopPropagation();
-                          if (e.key === "Enter") commitRename(r);
+                          if (!isComposing(e) && e.key === "Enter") commitRename(r);
                           if (e.key === "Escape") cancelRename(e);
                         }}
                       />
@@ -305,6 +306,7 @@ export function Palette({ open, onClose, groups = [], placeholder = "Search prof
   }
 
   function onKey(e) {
+    if (isComposing(e)) return;
     if (e.key === "ArrowDown" || (!e.shiftKey && e.key === "Tab")) {
       e.preventDefault();
       setIdx((i) => Math.min(actionableItems.length - 1, i + 1));

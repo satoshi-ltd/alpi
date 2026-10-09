@@ -14,6 +14,10 @@ export function isForeignConnection(activeId, connectionId) {
   return !!connectionId && !!activeId && connectionId !== activeId;
 }
 
+export function isRootLink(link) {
+  return link === '/' || link.startsWith('/?');
+}
+
 export function routeFromResponse(response) {
   const data = response?.notification?.request?.content?.data || {};
   const link = typeof data.link === 'string' && data.link ? data.link : '/';
@@ -95,7 +99,11 @@ export function useNotificationTapRouter() {
   known.current = { connections, endpoint };
   useEffect(() => {
     let cancelled = false;
-    const push = (link) => { if (!cancelled) router.push(link); };
+    const push = (link) => {
+      if (cancelled) return;
+      if (isRootLink(link)) router.navigate(link);
+      else router.push(link);
+    };
     const respond = (connectionId, requestId, choice) => respondFromNotification(connectionId, requestId, choice, known.current);
     const notify = (message) => toast(message);
 

@@ -153,3 +153,11 @@ describe('initial text', () => {
     expect(document.querySelector('textarea').value).toBe('> **Digest**\n\n');
   });
 });
+
+describe('small controls reach 44 pt', () => {
+  it('lets a thumb hit the mention link above and below its 18 pt line', () => {
+    render(<Composer onSend={() => {}} mentionSource={[{ id: 'abby' }]} />);
+    const slop = JSON.parse(screen.getByLabelText('Mention a peer').getAttribute('data-hitslop'));
+    expect(slop.top + slop.bottom + 18).toBeGreaterThanOrEqual(mobile.tap);
+  });
+});

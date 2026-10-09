@@ -670,11 +670,13 @@ export default function WorkgroupView({
               });
             }
             setRefreshTick((t) => t + 1);
+            return true;
           } catch (e) {
             setMessages((prev) =>
               prev ? prev.filter((m) => m.seq !== tempSeq) : prev,
             );
             setError(String(e));
+            return false;
           }
         }}
       />
@@ -913,7 +915,11 @@ function mentionsForWorkgroup(members, peers, profiles, ownPubkey) {
 
 function WorkgroupComposer({ paused, offline, mentions, onSend, hubName, hubAccent, hubFold, draftKey }) {
   const [text, setText] = useState(() => getDraft(draftKey));
+  const textRef = useRef(text);
+  textRef.current = text;
+  const draftKeyRef = useRef(draftKey);
   useEffect(() => {
+    draftKeyRef.current = draftKey;
     setText(getDraft(draftKey));
   }, [draftKey]);
   const updateText = (next) => {
@@ -935,13 +941,28 @@ function WorkgroupComposer({ paused, offline, mentions, onSend, hubName, hubAcce
   async function trySend() {
     if (!canSend) return;
     const payload = text.trim();
+    const sentKey = draftKey;
     setText("");
     clearDraft(draftKey);
     setPosting(true);
+    let sent;
     try {
-      await onSend?.(payload);
+      sent = await onSend?.(payload);
+    } catch {
+      sent = false;
     } finally {
       setPosting(false);
+    }
+    if (sent === false) {
+      if (draftKeyRef.current !== sentKey) {
+        {
+          const other = getDraft(sentKey);
+          setDraft(sentKey, other ? `${payload}\n\n${other}` : payload);
+        }
+        return;
+      }
+      const current = textRef.current;
+      updateText(current ? `${payload}\n\n${current}` : payload);
     }
   }
 

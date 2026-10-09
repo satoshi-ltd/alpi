@@ -393,21 +393,27 @@ export function useOutput(profile, id, connectionId) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  const loadSeqRef = useRef(0);
   const load = useCallback(async () => {
+    const seq = ++loadSeqRef.current;
     if (!profile || !id) {
       setRow(null);
+      setLoading(false);
+      setError(null);
       return;
     }
     setLoading(true);
     setError(null);
     try {
       const res = await invoke("outputs_read", { profile, id, ...(connectionId ? { connectionId } : {}) });
-      setRow(res || null);
+      if (seq === loadSeqRef.current) setRow(res || null);
     } catch (e) {
-      setError(e);
-      setRow(null);
+      if (seq === loadSeqRef.current) {
+        setError(e);
+        setRow(null);
+      }
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) setLoading(false);
     }
   }, [profile, id, connectionId]);
 

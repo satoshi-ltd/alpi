@@ -80,6 +80,7 @@ vi.mock('../src/lib/EndpointContext', () => ({
 }));
 
 import OutputDetailScreen from '../app/outputs/[profile]/[id].jsx';
+import { NotificationPage } from '../src/features/notifications/NotificationPage';
 import { _resetNotificationStoreForTests, notificationState, setTrail } from '../src/lib/notificationStore';
 
 const FAILED = {
@@ -292,5 +293,38 @@ describe('notification page, moving between notifications', () => {
     await act(async () => { fireEvent.click(screen.getByLabelText('Delete')); });
     expect(h.back).toHaveBeenCalled();
     expect(h.setParams).not.toHaveBeenCalled();
+  });
+});
+
+describe('notification page beside a list', () => {
+  beforeEach(() => {
+    h.row = DIGEST;
+    setTrail([entry('a'), entry('d1'), entry('z', 'mirai', 'sentinel')]);
+  });
+
+  const page = (props = {}) => render(<NotificationPage profile="abby" id="d1" connectionId="casa" embedded {...props} />);
+
+  it('keeps its own bar of arrows and draws no screen header or Back of its own', () => {
+    page();
+    expect(document.querySelector('header')).toBeNull();
+    expect(screen.getByText('2 of 3')).toBeTruthy();
+  });
+
+  it('hands a step to the list, switching connection first, instead of changing the route', async () => {
+    const onStep = vi.fn();
+    page({ onStep });
+    await act(async () => { fireEvent.click(screen.getByLabelText('Next notification')); });
+    expect(h.setActive).toHaveBeenCalledWith('mirai');
+    expect(onStep).toHaveBeenCalledWith(expect.objectContaining({ profile: 'sentinel', id: 'z', connectionId: 'mirai' }));
+    expect(h.setParams).not.toHaveBeenCalled();
+  });
+
+  it('closes itself, not the screen, after deleting the last notification', async () => {
+    const onClose = vi.fn();
+    h.activeId = 'mirai';
+    page({ profile: 'sentinel', id: 'z', connectionId: 'mirai', onClose });
+    await act(async () => { fireEvent.click(screen.getByLabelText('Delete')); });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(h.back).not.toHaveBeenCalled();
   });
 });

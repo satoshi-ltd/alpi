@@ -15,6 +15,7 @@ import { useBack } from '../src/hooks/useBack';
 import { useEndpoint } from '../src/lib/EndpointContext';
 import { exchangePairing, pairingLinkFromParams, parsePairing } from '../src/lib/pairing';
 import { RATE_LIMITED_STATUS } from '../src/lib/rateLimit';
+import { isSpentPairing, rememberSpentPairing } from '../src/lib/spentPairings';
 import { probe } from '../src/lib/probe';
 import { call } from '../src/lib/rpc';
 import { useTheme } from '../src/theme/ThemeContext';
@@ -32,15 +33,25 @@ export default function Pair() {
   const params = useLocalSearchParams();
   const routedLink = pairingLinkFromParams(params);
   const [mode, setMode] = useState(params.mode === 'scan' && !routedLink ? 'scan' : 'paste');
-  const [text, setText] = useState(routedLink);
+  const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [current, setCurrent] = useState(null);
   const [failure, setFailure] = useState(null);
   const [permission, requestPermission] = useCameraPermissions();
 
   useEffect(() => {
-    if (routedLink) setText(routedLink);
-  }, [routedLink]);
+    if (!routedLink) return undefined;
+    let cancelled = false;
+    isSpentPairing(params.pairing_token ?? params.token).then((spent) => {
+      if (cancelled) return;
+      if (spent) {
+        router.replace('/');
+        return;
+      }
+      setText(routedLink);
+    });
+    return () => { cancelled = true; };
+  }, [routedLink]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fail = (kind, host, failedAt, savedNote) => {
     const next = pairingFailure(kind, host);
@@ -83,7 +94,8 @@ export default function Pair() {
     }
     try {
       setCurrent('reach');
-      const usesOneTimeGrant = Boolean(endpoint.pairingToken);
+      const grant = endpoint.pairingToken;
+      const usesOneTimeGrant = Boolean(grant);
       const clientName = Platform.constants?.Model || Platform.OS;
       const appVersion = Constants.expoConfig?.version || '';
       endpoint = await exchangePairing(endpoint, {
@@ -92,9 +104,13 @@ export default function Pair() {
       }, call, addConnection);
       if (usesOneTimeGrant) {
         exchangedCredentialSaved = true;
+        rememberSpentPairing(grant);
       }
       const { status, deviceName, deviceId, role, summaries } = await probe(endpoint);
-      if (status === 'auth-failed') return fail('link-used', host, 'sign-in', exchangedCredentialSaved);
+      if (status === 'auth-failed') {
+        rememberSpentPairing(grant);
+        return fail('link-used', host, 'sign-in', exchangedCredentialSaved);
+      }
       if (status === 'disabled') return fail('disabled', host, 'sign-in', exchangedCredentialSaved);
       if (status === RATE_LIMITED_STATUS) return fail('rate-limited', host, 'reach', exchangedCredentialSaved);
       if (status !== 'online') return fail('unreachable', host, 'reach', exchangedCredentialSaved);
@@ -150,7 +166,7 @@ export default function Pair() {
               gap: space.s5,
             }}
           >
-            <Pressable onPress={() => setMode('paste')} hitSlop={12}>
+            <Pressable onPress={() => setMode('paste')} hitSlop={12} accessibilityRole="button" accessibilityLabel="Back to the pairing link">
               <Icon name="back" size="lg" color="#fff" />
             </Pressable>
             <View style={{ flex: 1 }}>
@@ -208,7 +224,7 @@ export default function Pair() {
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', padding: space.s7, gap: space.s5 }}>
-        <Pressable onPress={goBack} hitSlop={12}>
+        <Pressable onPress={goBack} hitSlop={12} accessibilityRole="button" accessibilityLabel="Back">
           <Icon name="back" size="lg" color={colors.ink} />
         </Pressable>
         <View style={{ flex: 1 }}>

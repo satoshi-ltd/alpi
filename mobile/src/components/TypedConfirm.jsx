@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Keyboard, Modal, Pressable, Text, TextInput, View } from 'react-native';
+import { Keyboard, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -131,6 +131,7 @@ export function TypedConfirm({
               {
                 width: '100%',
                 maxWidth: 420,
+                maxHeight: '100%',
                 backgroundColor: colors.bgPane,
                 borderRadius: radii.xs,
                 ...shadow.base,
@@ -138,78 +139,81 @@ export function TypedConfirm({
               dialogStyle,
             ]}
           >
-            <Pressable
-              onPress={() => {}}
-              accessible={false}
-              style={{
-                padding: space.s9,
-                gap: space.s7,
-              }}
-            >
-          <Text
-            style={{
-              fontFamily: fonts.sans.semibold,
-              fontSize: fontSizes[typography.dialogTitle.size],
-              color: danger ? colors.dangerText : colors.ink,
-              letterSpacing: -0.01 * fontSizes[typography.dialogTitle.size],
-            }}
-          >
-            {view.title}
-          </Text>
-          <Text
-            style={{
-              fontFamily: fonts.sans.regular,
-              fontSize: fontSizes.md,
-              color: colors.ink2,
-              lineHeight: fontSizes[typography.body.size] * lineHeights[typography.body.leading],
-            }}
-          >
-            {view.body}
-          </Text>
-          {typed ? <View style={{ gap: space.s3 }}>
+            <ScrollView keyboardShouldPersistTaps="handled" bounces={false}>
+              <Pressable
+                onPress={() => {}}
+                accessible={false}
+                style={{
+                  padding: space.s9,
+                  gap: space.s7,
+                }}
+              >
             <Text
               style={{
-                fontFamily: fonts.mono,
-                fontSize: fontSizes.xs,
-                color: colors.ink3,
-                letterSpacing: 0.6,
+                fontFamily: fonts.sans.semibold,
+                fontSize: fontSizes[typography.dialogTitle.size],
+                color: danger ? colors.dangerText : colors.ink,
+                letterSpacing: -0.01 * fontSizes[typography.dialogTitle.size],
               }}
             >
-              TYPE <Code>{view.expected}</Code> TO CONFIRM
+              {view.title}
             </Text>
-            <TextInput
-              value={value}
-              onChangeText={setValue}
-              placeholder={String(view.expected ?? '')}
-              placeholderTextColor={colors.ink4}
-              autoFocus
-              returnKeyType="done"
-              onSubmitEditing={confirm}
-              autoCapitalize="none"
-              autoCorrect={false}
-              spellCheck={false}
-              {...focus}
+            <Text
               style={{
-                ...well,
-                paddingHorizontal: space.s5,
-                height: 44,
-                fontFamily: fonts.mono,
+                fontFamily: fonts.sans.regular,
                 fontSize: fontSizes.md,
-                color: colors.ink,
+                color: colors.ink2,
+                lineHeight: fontSizes[typography.body.size] * lineHeights[typography.body.leading],
               }}
-            />
-          </View> : null}
-          <View style={{ gap: space.s3, marginTop: space.s1 }}>
-            <Button
-              title={view.confirmLabel}
-              variant={danger ? 'danger' : 'primary'}
-              onPress={confirm}
-              disabled={!ready}
-              fullWidth
-            />
-            <Button title="Cancel" variant="ghost" onPress={onClose} fullWidth />
-          </View>
-            </Pressable>
+            >
+              {view.body}
+            </Text>
+            {typed ? <View style={{ gap: space.s3 }}>
+              <Text
+                style={{
+                  fontFamily: fonts.mono,
+                  fontSize: fontSizes.xs,
+                  color: colors.ink3,
+                  letterSpacing: 0.6,
+                }}
+              >
+                TYPE <Code>{view.expected}</Code> TO CONFIRM
+              </Text>
+              <TextInput
+                value={value}
+                onChangeText={setValue}
+                placeholder={String(view.expected ?? '')}
+                placeholderTextColor={colors.ink4}
+                autoFocus
+                accessibilityLabel={`Type ${view.expected} to confirm`}
+                returnKeyType="done"
+                onSubmitEditing={confirm}
+                autoCapitalize="none"
+                autoCorrect={false}
+                spellCheck={false}
+                {...focus}
+                style={{
+                  ...well,
+                  paddingHorizontal: space.s5,
+                  minHeight: 44,
+                  fontFamily: fonts.mono,
+                  fontSize: fontSizes.md,
+                  color: colors.ink,
+                }}
+              />
+            </View> : null}
+            <View style={{ gap: space.s3, marginTop: space.s1 }}>
+              <Button
+                title={view.confirmLabel}
+                variant={danger ? 'danger' : 'primary'}
+                onPress={confirm}
+                disabled={!ready}
+                fullWidth
+              />
+              <Button title="Cancel" variant="ghost" onPress={onClose} fullWidth />
+            </View>
+              </Pressable>
+            </ScrollView>
           </Animated.View>
         </Pressable>
       </Animated.View>

@@ -129,7 +129,7 @@ pub async fn synthesize(voice: &str, text: &str) -> Result<Vec<u8>, String> {
          <voice name='{voice}'>\
          <prosody pitch='+0Hz' rate='+0%' volume='+0%'>{text}</prosody>\
          </voice></speak>",
-        voice = voice,
+        voice = escape_xml(voice),
         text = escape_xml(text),
     );
     ws.send(Message::Text(ssml))
@@ -222,4 +222,14 @@ pub async fn synthesize_cached(voice: &str, text: &str) -> Result<Arc<Vec<u8>>, 
     let audio = Arc::new(synthesize(voice, text).await?);
     cache().lock().await.put(key, Arc::clone(&audio));
     Ok(audio)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::escape_xml;
+
+    #[test]
+    fn a_voice_name_cannot_break_out_of_its_attribute() {
+        assert_eq!(escape_xml("en-US-Aria' onload='x"), "en-US-Aria&apos; onload=&apos;x");
+    }
 }

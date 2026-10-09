@@ -18,6 +18,7 @@ import { useProfileDetail } from "../hooks/useProfileDetail.js";
 import { profileLabel } from "../lib/profile-display.js";
 import styles from "./CreateWorkgroupModal.module.css";
 import { shortPubkey } from "../lib/pubkey.js";
+import { isComposing } from "../lib/composition.js";
 
 export default function CreateWorkgroupModal({
   open,
@@ -328,7 +329,7 @@ export default function CreateWorkgroupModal({
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && canSubmit) submit();
+                if (!isComposing(e) && e.key === "Enter" && canSubmit) submit();
               }}
               placeholder="team-alpha · roadmap · customers"
               spellCheck={false}

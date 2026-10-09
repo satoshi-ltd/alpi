@@ -2,13 +2,16 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 
-const h = vi.hoisted(() => ({ timings: [], calls: [] }));
+const h = vi.hoisted(() => ({ timings: [], calls: [], reduce: false, offsets: [] }));
 
 vi.mock('react-native-gesture-handler', () => {
   const pan = {};
-  for (const key of ['activeOffsetY', 'onUpdate', 'onEnd']) pan[key] = () => pan;
+  for (const key of ['onUpdate', 'onEnd']) pan[key] = () => pan;
+  pan.activeOffsetY = (range) => { h.offsets.push(range); return pan; };
   return { Gesture: { Pan: () => pan } };
 });
+
+vi.mock('../lib/reduceMotion', () => ({ useReduceMotion: () => h.reduce }));
 
 vi.mock('react-native-reanimated', () => ({
   default: {},
@@ -35,6 +38,8 @@ import {
 beforeEach(() => {
   h.timings.length = 0;
   h.calls.length = 0;
+  h.offsets.length = 0;
+  h.reduce = false;
 });
 
 describe('useSheetGesture off-screen distance', () => {
@@ -135,5 +140,22 @@ describe('useSheetGesture mount lifetime', () => {
     rerender({ open: true });
     act(() => vi.advanceTimersByTime(DURATION_OUT + UNMOUNT_BUFFER));
     expect(result.current.mounted).toBe(true);
+  });
+});
+
+describe('useSheetGesture touch and motion', () => {
+  it('starts the dismiss pan only after a real 8 pt drag, so a tap on Close is not stolen', () => {
+    renderHook(() => useSheetGesture(true, () => {}));
+    expect(h.offsets[0]).toEqual([-8, 8]);
+  });
+
+  it('opens and closes without travel time when the user asked for reduced motion', () => {
+    h.reduce = true;
+    const { rerender } = renderHook(({ open }) => useSheetGesture(open, () => {}), { initialProps: { open: true } });
+    expect(h.calls.every((call) => call.duration === 0)).toBe(true);
+    h.calls.length = 0;
+    rerender({ open: false });
+    expect(h.calls.length).toBeGreaterThan(0);
+    expect(h.calls.every((call) => call.duration === 0)).toBe(true);
   });
 });

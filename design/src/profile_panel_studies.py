@@ -222,36 +222,14 @@ def m_memory_page(flagged):
     return phone(inner, 560)
 
 
-def m_job_row(job):
-    paused = job["state"] == "paused"
-    failed = job["state"] == "failed"
-    tail = mono(job["word"], 10, P["danger"] if failed else P["ink3"]) if job["word"] else ""
-    top = flex(job_mark(job["state"]), ell(job["title"], 13, P["ink3"] if paused else P["ink"], 600, "flex: 1"), tail, gap=8)
-    return phone_row(top + f'<div style="padding-left: 15px">{ell(job["about"], 11, P["ink3"])}</div>')
-
-
 def m_schedule_list(flagged):
-    jobs = JOBS if flagged else [j for j in JOBS if j["state"] != "failed"]
-    groups = [(f"{label} · {len(items)}", [m_job_row(j) for j in items]) for label, items in job_groups(jobs) if items]
-    return phone(phone_head(f"SCHEDULES · {len(jobs)}") + phone_body(*[phone_group(label, rows) for label, rows in groups], gap=0, pad="0 10px"), 560)
+    import mobile_attention_studies as ms
+    return ms.schedule_list(flagged)
 
 
 def m_schedule_page(flagged):
-    job = JOBS[1] if flagged else JOBS[0]
-    banner = phone_banner(*job_banner()) if flagged else ""
-    def half(label, kind):
-        return f'<span style="flex: 1; display: flex">{button(label, kind, P, PAPER, 44)}</span>'
-
-    more = f'<span style="width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center">{glyph("more", 16, P["ink2"])}</span>'
-    title = stack(text(job["title"], 18, P["ink"], 600, "white-space: normal"), flex(phone_status("active"), mono(job["id"], 10, P["ink3"]), gap=8), gap=4)
-    cron = kw(job["cron"]) if job["cron"] else ""
-    last = f'<span style="color: {P["danger"] if flagged else P["ink2"]}">{job["last"]}</span>'
-    facts = "".join((phone_fact("ABOUT", job["about"], 62), phone_fact("WHEN", job["when"] + cron, 62), phone_fact("NEXT", f'{job["next"]} · {job["word"]}', 62),
-                     phone_fact("LAST RUN", last, 62), phone_fact("RUNS", "agent · 20 min timeout", 62), phone_fact("NOTIFY", "silent — failures still alert", 62)))
-    box = (f'<div style="padding: 8px 10px 10px; border-radius: 4px; box-shadow: 0 0 0 0.5px {P["line"]}; background: {P["bg"]}">{mono("PROMPT", 10, P["ink3"], extra="letter-spacing: 0.06em")}'
-           f'<div style="margin-top: 4px">{reading(PROMPT, 11.5)}</div></div>')
-    inner = phone_head("SCHEDULES", more) + phone_body(banner, title, flex(half("Run now", "primary"), half("Pause", "secondary"), gap=6), f"<div>{facts}</div>", box, gap=10)
-    return phone(inner, 640)
+    import mobile_attention_studies as ms
+    return ms.job_failed() if flagged else ms.job_healthy()
 
 
 def m_tools_list():
@@ -296,6 +274,11 @@ def desktop_panels_view():
     )
 
 
+def _ms():
+    import mobile_attention_studies as ms
+    return ms
+
+
 def mobile_panels_view():
     return stack(
         labelled("Skills · list and page, healthy", phones(m_skill_list(False), m_skill_page(False))),
@@ -304,6 +287,7 @@ def mobile_panels_view():
         labelled("Memories · flagged: Needs you group, the banner above the file", phones(m_memory_list(True), m_memory_page(True))),
         labelled("Schedules · list and page, healthy", phones(m_schedule_list(False), m_schedule_page(False))),
         labelled("Schedules · flagged: Needs you group, the failure banner on the page", phones(m_schedule_list(True), m_schedule_page(True))),
+        labelled("Schedules · running again: the banner stays, Run now becomes Running · m:ss, and More holds the last output, the id and a typed delete", phones(_ms().job_running(), _ms().job_more())),
         labelled("Tools · list", phones(m_tools_list())),
         labelled("Profile settings · the Brain and Schedule rows, healthy and flagged", phones(m_settings_rows(False), m_settings_rows(True))),
         gap=22,
@@ -311,7 +295,7 @@ def mobile_panels_view():
 
 
 PANELS_DESKTOP_H = 3860
-PANELS_MOBILE_H = 5000
+PANELS_MOBILE_H = 6300
 
 
 def panels_board(title, lede, inner, h):

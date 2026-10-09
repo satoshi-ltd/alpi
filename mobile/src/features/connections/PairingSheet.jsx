@@ -20,6 +20,12 @@ function endpointsOf(payload) {
   return payload?.url ? [{ url: payload.url, label: 'default' }] : [];
 }
 
+export const SPENT_LINK_NOTE = 'This link has been used or has expired. Generate a new one to pair another device.';
+
+export function liveLink(status, link) {
+  return status === 'pending' ? link : '';
+}
+
 export function PairingSheet({ open, onClose, payload, onSettled }) {
   const { colors, fonts, fontSizes } = useTheme();
   const toast = useToast();
@@ -56,7 +62,7 @@ export function PairingSheet({ open, onClose, payload, onSettled }) {
     return () => clearInterval(timer);
   }, [open, status, payload?.pairing_id, payload?.connection_id, call]);
 
-  const link = pairingLink(payload, endpointUrl);
+  const link = liveLink(status, pairingLink(payload, endpointUrl));
 
   const close = async () => {
     if (status === 'pending' && payload?.pairing_id) {
@@ -121,7 +127,7 @@ export function PairingSheet({ open, onClose, payload, onSettled }) {
             borderColor: colors.line2,
           }}
         >
-          {link || `${EMPTY.endpoint.title}. ${EMPTY.endpoint.hint}`}
+          {link || (status === 'pending' ? `${EMPTY.endpoint.title}. ${EMPTY.endpoint.hint}` : SPENT_LINK_NOTE)}
         </Text>
       </View>
       {endpoints.length > 1 ? (

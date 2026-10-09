@@ -112,3 +112,24 @@ describe('theme text scale', () => {
     expect(SecureStore.setItemAsync).toHaveBeenCalledWith('alpi.textScale', String(MAX_TEXT_SCALE));
   });
 });
+
+describe('ThemeProvider with a failing secure store', () => {
+  it('keeps the defaults and never leaves an unhandled rejection when the saved preference cannot be read or written', async () => {
+    const rejections = [];
+    const onRejection = (event) => rejections.push(event);
+    process.on('unhandledRejection', onRejection);
+    SecureStore.getItemAsync.mockRejectedValue(new Error('keychain locked'));
+    SecureStore.setItemAsync.mockRejectedValue(new Error('keychain locked'));
+    try {
+      mount();
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+      expect(Number(screen.getByTestId('scale').textContent)).toBe(1);
+      await act(async () => { setScale(1.2); await new Promise((resolve) => setTimeout(resolve, 20)); });
+      expect(rejections).toHaveLength(0);
+    } finally {
+      process.off('unhandledRejection', onRejection);
+      SecureStore.getItemAsync.mockImplementation(async (key) => (h.store.has(key) ? h.store.get(key) : null));
+      SecureStore.setItemAsync.mockImplementation(async (key, value) => { h.store.set(key, value); });
+    }
+  });
+});

@@ -7,6 +7,7 @@ import {
   subscribeSessionTitles,
 } from "../lib/session-titles.js";
 import styles from "./EditableSessionTitle.module.css";
+import { isComposing } from "../lib/composition.js";
 
 export default function EditableSessionTitle({
   session,
@@ -80,6 +81,7 @@ export default function EditableSessionTitle({
         onBlur={commit}
         onKeyDown={(event) => {
           event.stopPropagation();
+          if (isComposing(event)) return;
           if (event.key === "Enter") commit(event);
           if (event.key === "Escape") cancel(event);
         }}

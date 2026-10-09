@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { mobile, radii, space } from '../../theme/tokens';
 
@@ -6,16 +7,35 @@ import { Icon } from '../../components/Icon';
 import { useTheme } from '../../theme/ThemeContext';
 import { JUMP_SECTIONS, summaryRows } from './jumpSections';
 
+export function chipScrollX(box, viewWidth) {
+  if (!box || !(viewWidth > 0)) return null;
+  return Math.max(0, Math.round(box.x - (viewWidth - box.width) / 2));
+}
+
 export function JumpChips({ current, onJump }) {
   const { colors, fonts, fontSizes } = useTheme();
+  const strip = useRef(null);
+  const boxes = useRef({});
+  const viewWidth = useRef(0);
+  useEffect(() => {
+    const x = chipScrollX(boxes.current[current], viewWidth.current);
+    if (x !== null) strip.current?.scrollTo({ x, animated: true });
+  }, [current]);
   return (
     <View style={{ borderBottomWidth: 0.5, borderBottomColor: colors.line, backgroundColor: colors.bg }}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: space.s5, gap: space.s1 }}>
+      <ScrollView
+        ref={strip}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        onLayout={(e) => { viewWidth.current = e.nativeEvent.layout.width; }}
+        contentContainerStyle={{ paddingHorizontal: space.s5, gap: space.s1 }}
+      >
         {JUMP_SECTIONS.map((section) => {
           const on = section.id === current;
           return (
             <Pressable
               key={section.id}
+              onLayout={(e) => { boxes.current[section.id] = e.nativeEvent.layout; }}
               onPress={() => onJump(section.id)}
               accessibilityRole="button"
               accessibilityLabel={`Go to ${section.label}`}

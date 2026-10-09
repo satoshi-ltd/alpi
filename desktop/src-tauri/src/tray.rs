@@ -117,7 +117,11 @@ pub fn install(app: &mut App) -> tauri::Result<()> {
         .icon_as_template(true)
         .menu(&menu)
         .show_menu_on_left_click(true)
-        .on_menu_event(|app, event| match event.id.as_ref() {
+        .on_menu_event(|app, event| {
+            if matches!(event.id.as_ref(), "open" | "settings" | "notifications") {
+                crate::notifications::clear_activation();
+            }
+            match event.id.as_ref() {
             "open" => {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.show();
@@ -146,6 +150,7 @@ pub fn install(app: &mut App) -> tauri::Result<()> {
                 let _ = app.emit("tray:notifications-clicked", ());
             }
             _ => {}
+            }
         })
         .build(app)?;
 

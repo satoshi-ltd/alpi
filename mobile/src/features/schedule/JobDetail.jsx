@@ -107,7 +107,10 @@ export function JobDetail({ profile, jobId, embedded = false, onBack, onGone }) 
     }
   });
 
+  const acting = useRef(false);
   const act = async (method, params, onDone) => {
+    if (acting.current) return;
+    acting.current = true;
     setBusy(true);
     try {
       await call(method, { profile, id: job.id, ...params });
@@ -117,6 +120,7 @@ export function JobDetail({ profile, jobId, embedded = false, onBack, onGone }) 
       run.finished();
       toast({ message: String(e?.message ?? e), kind: 'danger', duration: 4000 });
     } finally {
+      acting.current = false;
       setBusy(false);
     }
   };
@@ -172,7 +176,7 @@ export function JobDetail({ profile, jobId, embedded = false, onBack, onGone }) 
           refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />}
           contentContainerStyle={{ padding: space.s8, gap: space.s6, paddingBottom: space.s10 }}
         >
-          {failed && !run.running ? <AlertBanner {...banner} /> : null}
+          {failed ? <AlertBanner {...banner} /> : null}
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space.s3 }}>
             <View style={{ flex: 1, gap: space.s3 }}>
               <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.xl, color: colors.ink }}>{jobTitle(job)}</Text>
@@ -220,7 +224,7 @@ export function JobDetail({ profile, jobId, embedded = false, onBack, onGone }) 
             {about ? <Fact label="ABOUT"><FactText>{about}</FactText></Fact> : null}
             <Fact label="WHEN">
               <FactText>{describeWhen(job)}</FactText>
-              {rawWhen(job) ? <Chip>{rawWhen(job)}</Chip> : null}
+              {rawWhen(job) && job.kind !== 'once' ? <Chip>{rawWhen(job)}</Chip> : null}
             </Fact>
             {next ? <Fact label="NEXT"><FactText>{[next, nextRunWord(job)].filter(Boolean).join(' · ')}</FactText></Fact> : null}
             <Fact label="LAST RUN">

@@ -161,6 +161,19 @@ describe("ConfirmDelete surfaces", () => {
   });
 });
 
+describe("typed confirm and input methods", () => {
+  it("does not confirm when Enter only commits an input-method composition", () => {
+    const onConfirm = vi.fn();
+    render(<ConfirmDelete open onClose={vi.fn()} onConfirm={onConfirm} title="Delete it" typeToConfirm="DELETE" />);
+    const field = screen.getByRole("textbox");
+    fireEvent.change(field, { target: { value: "DELETE" } });
+    fireEvent.keyDown(field, { key: "Enter", keyCode: 229, isComposing: true });
+    expect(onConfirm).not.toHaveBeenCalled();
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("ConfirmSheet keeps the sheet it borrows", () => {
   function Form() {
     const [value, setValue] = React.useState("");

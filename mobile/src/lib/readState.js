@@ -5,26 +5,30 @@ import * as SecureStore from 'expo-secure-store';
 
 const STORAGE_KEY = 'alpi.read-state.v1';
 
-let cache = null;
+let cache = {};
 let loaded = false;
 const listeners = new Set();
 
 async function ensureLoaded() {
   if (loaded) return cache;
+  let persisted = {};
   try {
     const raw = await SecureStore.getItemAsync(STORAGE_KEY);
-    cache = raw ? JSON.parse(raw) : {};
+    persisted = raw ? JSON.parse(raw) : {};
   } catch {
-    cache = {};
+    persisted = {};
   }
-  if (!cache || typeof cache !== 'object') cache = {};
-  loaded = true;
+  if (!persisted || typeof persisted !== 'object') persisted = {};
+  if (!loaded) {
+    cache = { ...persisted, ...cache };
+    loaded = true;
+  }
   return cache;
 }
 
-// Defaults to {} until ensureLoaded resolves — reads during load report "not unread" (safer than spurious dots).
+// Marks made before the keychain answered stay in the cache and win over the persisted ones.
 function snapshot() {
-  return loaded && cache ? cache : {};
+  return cache;
 }
 
 function emit() {
@@ -41,7 +45,8 @@ function schedulePersist() {
   persistTimer = setTimeout(async () => {
     persistTimer = null;
     try {
-      await SecureStore.setItemAsync(STORAGE_KEY, JSON.stringify(cache ?? {}));
+      await ensureLoaded();
+      await SecureStore.setItemAsync(STORAGE_KEY, JSON.stringify(cache));
     } catch { /* */ }
   }, PERSIST_DEBOUNCE_MS);
 }
@@ -51,8 +56,7 @@ function setKey(key, ts) {
   const next = ts ?? Math.floor(Date.now() / 1000);
   const prev = snapshot()[key];
   if (prev === next) return;
-  cache = { ...snapshot(), [key]: next };
-  loaded = true;
+  cache = { ...cache, [key]: next };
   schedulePersist();
   emit();
 }

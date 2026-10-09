@@ -128,6 +128,14 @@ describe('running', () => {
     expect(screen.getByText('Pause').disabled).toBe(true);
   });
 
+  it('keeps the failure banner while the job runs again so the buttons do not move', async () => {
+    mount();
+    expect(screen.getByRole('alert')).toBeTruthy();
+    fireEvent.click(screen.getByText('Run now'));
+    await screen.findByText('Running · 0:00');
+    expect(screen.getByRole('alert')).toBeTruthy();
+  });
+
   it('fires the job, shows Running at once and ends it with the event, toasting View for the output', async () => {
     mount();
     fireEvent.click(screen.getByText('Run now'));
@@ -157,12 +165,30 @@ describe('running', () => {
     expect(h.toast).not.toHaveBeenCalled();
   });
 
+  it('fires the job once when Run now is tapped twice before the screen has redrawn', async () => {
+    mount();
+    const button = screen.getByText('Run now');
+    act(() => { fireEvent.click(button); fireEvent.click(button); });
+    await waitFor(() => expect(h.call).toHaveBeenCalledWith('host.schedule.fire', { profile: 'scout', id: JOB.id }));
+    expect(h.call.mock.calls.filter(([method]) => method === 'host.schedule.fire')).toHaveLength(1);
+  });
+
   it('drops the running state when firing fails', async () => {
     h.call = vi.fn(async () => { throw new Error('daemon unreachable'); });
     mount();
     fireEvent.click(screen.getByText('Run now'));
     await waitFor(() => expect(h.toast).toHaveBeenCalledWith(expect.objectContaining({ kind: 'danger' })));
     expect(screen.getByText('Run now').disabled).toBe(false);
+  });
+});
+
+describe('one-shot jobs', () => {
+  it('describes the time in words and leaves the raw ISO stamp off the page', () => {
+    const runAt = new Date(NOW + 14 * 3600_000).toISOString();
+    h.jobs = [{ ...JOB, kind: 'once', expression: undefined, run_at: runAt, last_run_status: 'ok' }];
+    mount();
+    expect(screen.queryByText(runAt)).toBeNull();
+    expect(screen.getAllByText(/^once, /).length).toBeGreaterThan(0);
   });
 });
 

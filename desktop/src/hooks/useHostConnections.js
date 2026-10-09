@@ -515,14 +515,14 @@ export function useHostConnections({
 
   const onForgetHostConnection = useCallback(
     async (id) => {
+      await invoke("host_connection_forget", { id });
+      purgeConnectionStorage(id);
+      purgeConnectionReadState(id);
+      invalidateConnectionCaches(id);
+      invalidateProfileDetailCache(id);
+      invalidateTranscriptCache(id);
+      invalidateSessionCache(id);
       try {
-        await invoke("host_connection_forget", { id });
-        purgeConnectionStorage(id);
-        purgeConnectionReadState(id);
-        invalidateConnectionCaches(id);
-        invalidateProfileDetailCache(id);
-        invalidateTranscriptCache(id);
-        invalidateSessionCache(id);
         await reloadConnections({ acceptActiveChange: true });
         await reload();
       } catch {}

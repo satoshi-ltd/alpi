@@ -9,12 +9,13 @@ const h = vi.hoisted(() => ({ scale: 1.3 }));
 vi.mock('react-native', () => ({
   View: ({ children, style }) =>
     React.createElement('div', { 'data-h': style?.height, 'data-min-w': style?.minWidth, 'data-w': style?.width, 'data-border': style?.borderWidth }, children),
-  Text: ({ children, style, allowFontScaling, maxFontSizeMultiplier }) =>
+  Text: ({ children, style, allowFontScaling, maxFontSizeMultiplier, numberOfLines }) =>
     React.createElement('span', {
       'data-size': style?.fontSize,
       'data-lh': style?.lineHeight,
       'data-scaling': String(allowFontScaling),
       'data-max-mult': maxFontSizeMultiplier,
+      'data-lines': numberOfLines,
     }, children),
   Pressable: ({ children }) => React.createElement('button', { type: 'button' }, children),
 }));
@@ -47,6 +48,11 @@ describe('CountBadge', () => {
     expect(Number(text.getAttribute('data-size'))).toBe(countBadge.fontSize);
     expect(Number(text.getAttribute('data-lh'))).toBeLessThanOrEqual(inner);
     expect(Number(text.getAttribute('data-size'))).toBeLessThanOrEqual(Number(text.getAttribute('data-lh')));
+  });
+
+  it('never ellipsizes the count', () => {
+    render(<CountBadge count={2} ring="#fff" />);
+    expect(screen.getByText('2').getAttribute('data-lines')).toBeNull();
   });
 
   it('keeps an 18 pt floor and grows sideways for 9+', () => {

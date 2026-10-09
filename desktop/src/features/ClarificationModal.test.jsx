@@ -116,4 +116,17 @@ describe("ClarificationModal", () => {
     expect(screen.getByText("Type your own…")).toBeInTheDocument();
     expect(invoke).not.toHaveBeenCalled();
   });
+
+  it("does not submit a half-typed answer when Enter commits an input-method composition", async () => {
+    invoke.mockResolvedValue({ ok: true });
+    render(<ClarificationModal requests={[SAMPLE_SINGLE]} onResolved={() => {}} />);
+    fireEvent.click(screen.getByText("Type your own…"));
+    const box = screen.getByPlaceholderText("Type your answer…");
+    fireEvent.change(box, { target: { value: "に" } });
+    fireEvent.keyDown(box, { key: "Enter", keyCode: 229, isComposing: true });
+    expect(invoke).not.toHaveBeenCalled();
+    expect(screen.getByPlaceholderText("Type your answer…")).toBeInTheDocument();
+    fireEvent.keyDown(box, { key: "Escape", isComposing: true });
+    expect(screen.getByPlaceholderText("Type your answer…")).toBeInTheDocument();
+  });
 });

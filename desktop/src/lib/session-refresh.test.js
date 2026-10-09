@@ -6,8 +6,9 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a) => invokeMock(...a) }));
 import { createSessionRefresher } from "./session-refresh.js";
 import { loadCachedSession, saveCachedSession, _clearSessionCache } from "./session-cache.js";
 
-function harness({ activeId = "A" } = {}) {
+function harness({ activeId = "A", view } = {}) {
   const activeConnectionIdRef = { current: activeId };
+  const viewRef = view ? { current: view } : undefined;
   const sessionDataRef = { current: null };
   const setSessionData = vi.fn((next) => {
     sessionDataRef.current = typeof next === "function" ? next(sessionDataRef.current) : next;
@@ -16,11 +17,12 @@ function harness({ activeId = "A" } = {}) {
   const refresher = createSessionRefresher({
     activeConnectionIdRef,
     sessionDataRef,
+    viewRef,
     setSessionData,
     clearViewSession,
     isChatSessionData: () => true,
   });
-  return { activeConnectionIdRef, sessionDataRef, setSessionData, clearViewSession, ...refresher };
+  return { activeConnectionIdRef, viewRef, sessionDataRef, setSessionData, clearViewSession, ...refresher };
 }
 
 beforeEach(() => {
@@ -108,5 +110,22 @@ describe("createSessionRefresher", () => {
     await refresher.refresh("work", "s1");
     expect(h.setSessionData).not.toHaveBeenCalled();
     expect(loadCachedSession("A", "work", "s1")).toBeNull();
+  });
+
+  it("does not paint a session the user has already navigated away from", async () => {
+    const h = harness({ view: { kind: "profile", profile: "scout", sessionId: "s1" } });
+    invokeMock.mockImplementationOnce(async () => {
+      h.viewRef.current = { kind: "profile", profile: "scout", sessionId: "s2" };
+      return envelope([{ role: "user", text: "late" }]);
+    });
+    await h.refresh("scout", "s1");
+    expect(h.setSessionData).not.toHaveBeenCalled();
+  });
+
+  it("still applies a refresh while the same session stays in view", async () => {
+    const h = harness({ view: { kind: "profile", profile: "scout", sessionId: "s1" } });
+    invokeMock.mockResolvedValueOnce(envelope([{ role: "user", text: "now" }]));
+    await h.refresh("scout", "s1");
+    expect(h.setSessionData).toHaveBeenCalledTimes(1);
   });
 });

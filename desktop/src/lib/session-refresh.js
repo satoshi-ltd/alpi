@@ -5,6 +5,7 @@ import { saveCachedSession, removeCachedSession } from "./session-cache.js";
 export function createSessionRefresher({
   activeConnectionIdRef,
   sessionDataRef,
+  viewRef,
   setSessionData,
   clearViewSession,
   isChatSessionData,
@@ -25,6 +26,8 @@ export function createSessionRefresher({
       if (!isChatSessionData(data)) return;
       saveCachedSession(connId, profile, sessionId, data);
       if (activeConnectionIdRef.current !== connId) return;
+      const view = viewRef?.current;
+      if (view && !(view.kind === "profile" && view.profile === profile && view.sessionId === sessionId)) return;
       setSessionData(data);
     } catch (e) {
       if (isSessionGone(e)) dropDeadSession(connId, profile, sessionId);

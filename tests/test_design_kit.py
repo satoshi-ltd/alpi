@@ -95,7 +95,9 @@ def test_design_kit_draws_what_desktop_0_7_and_mobile_0_6_shipped(tmp_path):
     for name in ("Phone-Roster.dc.html", "Fold-Chat.dc.html"):
         html = read(name)
         assert 'data-state="needs-you"' in html and "Activity · 2 need you" in html
-    assert "Needs you · 2" in read("Phone-Activity.dc.html") and "Review" in read("Phone-Activity.dc.html")
+    activity = read("Phone-Activity.dc.html")
+    assert all(text in activity for text in ("Needs you · 3", "Next up · 4", "Run again", "Review", "Tomorrow"))
+    assert "Scheduled" not in activity
     tool = read("Phone-ToolSheet.dc.html")
     assert "Arguments" in tool and "Output" in tool and "Copy output" in tool
     assert "Select text" in read("Phone-SelectText.dc.html")
@@ -439,7 +441,7 @@ def test_kit_phone_rows_use_the_attention_wording_and_groups_of_the_mobile_app()
     flagged = _html_text(studies.m_settings_rows(True))
     for phrase in ("1 fails lint", "2 over their limit", "1 failed", "Cron jobs"):
         assert phrase in flagged
-    for screen in (REPO / "mobile" / "src" / "features" / "brain" / "SkillsList.jsx", REPO / "mobile" / "app" / "profile" / "[id]" / "brain" / "memory" / "index.jsx"):
+    for screen in (REPO / "mobile" / "src" / "features" / "brain" / "SkillsList.jsx", REPO / "mobile" / "src" / "features" / "brain" / "MemoryList.jsx"):
         assert "Needs you" in screen.read_text()
     assert "Needs you · 1" in _html_text(studies.m_skill_list(True))
     assert "Needs you · 2" in _html_text(studies.m_memory_list(True))
@@ -448,7 +450,7 @@ def test_kit_phone_rows_use_the_attention_wording_and_groups_of_the_mobile_app()
     assert [sched.index(label) for label in labels] == sorted(sched.index(label) for label in labels)
     job = (REPO / "mobile" / "src" / "features" / "schedule" / "JobDetail.jsx").read_text()
     assert "[next, nextRunWord(job)].filter(Boolean).join(' · ')" in job
-    assert "tomorrow 07:30 · failed" in _html_text(studies.m_schedule_page(True))
+    assert "Sat 10 Oct at 07:30 · failed" in _html_text(studies.m_schedule_page(True))
 
 
 def _node_json(script):

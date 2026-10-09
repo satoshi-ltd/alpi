@@ -67,6 +67,10 @@ The desktop and phone apps raise notifications from every paired daemon, not
 only the connection that is open; the open one arrives at once, the others
 within about half a minute while the app runs. A warning row the daemon files
 itself (memory or skill attention) shows in the inbox but raises no banner.
+On the desktop, coming back to the app within about 20 seconds of a banner opens
+what it announced (the chat, the notification, the approval or question, or a
+failed job's schedule); on the phone, tapping a banner does. A failed job opens
+its failure notification, or the job's page on an older daemon.
 
 ## Auto-simplified (don't bother — it is downgraded for you)
 

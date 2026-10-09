@@ -16,12 +16,16 @@ export function ThemeProvider({ children }) {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([loadThemePref(), loadTextScale()]).then(([theme, scale]) => {
-      if (cancelled) return;
-      setPref(theme ?? 'system');
-      setTextScaleState(clampTextScale(scale));
-      setHydrated(true);
-    });
+    Promise.all([loadThemePref(), loadTextScale()])
+      .then(([theme, scale]) => {
+        if (cancelled) return;
+        setPref(theme ?? 'system');
+        setTextScaleState(clampTextScale(scale));
+        setHydrated(true);
+      })
+      .catch(() => {
+        if (!cancelled) setHydrated(true);
+      });
     return () => {
       cancelled = true;
     };
@@ -33,13 +37,13 @@ export function ThemeProvider({ children }) {
 
   const setMode = useCallback((next) => {
     setPref(next);
-    saveThemePref(next);
+    Promise.resolve(saveThemePref(next)).catch(() => {});
   }, []);
 
   const setTextScale = useCallback((next) => {
     const value = clampTextScale(next);
     setTextScaleState(value);
-    saveTextScale(value);
+    Promise.resolve(saveTextScale(value)).catch(() => {});
   }, []);
 
   const { fontScale = 1 } = useWindowDimensions();

@@ -777,19 +777,22 @@ fn connections_disk_value(state: &ConnectionsState) -> Result<Value, String> {
     Ok(value)
 }
 
-pub fn load_connections() -> ConnectionsState {
-    let path = match connections_path() {
-        Ok(p) => p,
-        Err(_) => return ConnectionsState::default(),
-    };
-    let text = match fs::read_to_string(path) {
+enum ConnectionsLoadError {
+    Read(String),
+    Decode { path: PathBuf, message: String },
+}
+
+fn load_connections_checked() -> Result<ConnectionsState, ConnectionsLoadError> {
+    let path = connections_path().map_err(ConnectionsLoadError::Read)?;
+    let text = match fs::read_to_string(&path) {
         Ok(t) => t,
-        Err(_) => return ConnectionsState::default(),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(ConnectionsState::default()),
+        Err(e) => return Err(ConnectionsLoadError::Read(format!("read {}: {e}", path.display()))),
     };
-    let mut state: ConnectionsState = match decode_connections(&text) {
-        Ok(s) => s,
-        Err(_) => return ConnectionsState::default(),
-    };
+    let mut state: ConnectionsState = decode_connections(&text).map_err(|e| ConnectionsLoadError::Decode {
+        path: path.clone(),
+        message: e.to_string(),
+    })?;
     ensure_local(&mut state);
     if !state
         .connections
@@ -798,7 +801,24 @@ pub fn load_connections() -> ConnectionsState {
     {
         state.active_id = LOCAL_ID.to_string();
     }
-    state
+    Ok(state)
+}
+
+pub fn load_connections() -> ConnectionsState {
+    load_connections_checked().unwrap_or_default()
+}
+
+fn load_connections_for_write() -> Result<ConnectionsState, String> {
+    match load_connections_checked() {
+        Ok(state) => Ok(state),
+        Err(ConnectionsLoadError::Read(message)) => Err(message),
+        Err(ConnectionsLoadError::Decode { path, message }) => {
+            let aside = path.with_extension(format!("corrupt-{}.json", now_unix()));
+            fs::rename(&path, &aside)
+                .map_err(|e| format!("decode {}: {message}; could not move it aside: {e}", path.display()))?;
+            Ok(ConnectionsState::default())
+        }
+    }
 }
 
 fn ensure_local(state: &mut ConnectionsState) {
@@ -925,7 +945,9 @@ fn connections_mutex() -> &'static Mutex<()> {
 // Every connections.json writer runs load→mutate→save under this one lock — a background probe's metadata write must never interleave with (and lose to) a concurrent activate/add/forget/revoke. Reads stay lock-free; the atomic rename makes torn reads impossible.
 fn mutate_connections(f: impl FnOnce(&mut ConnectionsState) -> bool) {
     let _guard = connections_mutex().lock().unwrap_or_else(|e| e.into_inner());
-    let mut state = load_connections();
+    let Ok(mut state) = load_connections_for_write() else {
+        return;
+    };
     if f(&mut state) {
         let _ = save_connections(&state);
     }
@@ -935,7 +957,7 @@ fn try_mutate_connections<T>(
     f: impl FnOnce(&mut ConnectionsState) -> Result<T, String>,
 ) -> Result<T, String> {
     let _guard = connections_mutex().lock().unwrap_or_else(|e| e.into_inner());
-    let mut state = load_connections();
+    let mut state = load_connections_for_write()?;
     let out = f(&mut state)?;
     save_connections(&state)?;
     Ok(out)
@@ -1830,6 +1852,7 @@ where
     });
     ws.send_json(&request)?;
     let mut retried_too_many = false;
+    let mut saw_session_start = false;
     loop {
         let text = ws.read_text()?;
         if !frame_matches_id(&text, id) {
@@ -1855,12 +1878,10 @@ where
             ws.send_json(&request)?;
             continue;
         }
-        let done = frame
-            .get("event")
-            .and_then(|v| v.as_str())
-            .map(|ev| matches!(ev, "done" | "error" | "interrupted"))
-            .unwrap_or(false)
-            || frame.get("error").is_some();
+        if frame.get("event").and_then(|v| v.as_str()) == Some("session_start") {
+            saw_session_start = true;
+        }
+        let done = remote_frame_ends_stream(&frame, saw_session_start);
         let auth_error = frame.get("error").and_then(|err| {
             let code = err.get("code")?.as_i64()?;
             let message = err.get("message")?.as_str()?;
@@ -1895,6 +1916,15 @@ where
         }
     }
     Ok(())
+}
+
+fn remote_frame_ends_stream(frame: &Value, saw_session_start: bool) -> bool {
+    let by_event = match frame.get("event").and_then(|v| v.as_str()) {
+        Some("done" | "interrupted") => true,
+        Some("error") => !saw_session_start,
+        _ => false,
+    };
+    by_event || frame.get("error").is_some()
 }
 
 fn with_auth(mut params: Value, token: &str) -> Value {
@@ -2042,6 +2072,7 @@ fn resolve_addrs(host: &str, port: u16) -> Result<Vec<SocketAddr>, String> {
 
 // Ceiling for one inflated message — guards against a decompression bomb from a compromised daemon.
 const WS_MAX_INFLATED_BYTES: usize = 256 * 1024 * 1024;
+const WS_MAX_FRAME_BYTES: u64 = 64 * 1024 * 1024;
 
 fn ws_deflate_accepted(response_head: &str) -> bool {
     for line in response_head.lines() {
@@ -2344,6 +2375,9 @@ impl WsClient {
             } else {
                 None
             };
+            if len > WS_MAX_FRAME_BYTES {
+                return Err(format!("frame-too-large: {len} bytes exceeds the {WS_MAX_FRAME_BYTES} byte cap"));
+            }
             let mut payload = vec![0_u8; len as usize];
             self.stream
                 .read_exact(&mut payload)
@@ -2527,30 +2561,41 @@ pub fn probe_connection(conn: &HostConnection) {
     }
 }
 
-pub fn probe_active() {
-    use std::sync::atomic::{AtomicBool, Ordering};
-    static RUNNING: AtomicBool = AtomicBool::new(false);
-    if RUNNING.compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed).is_err() {
-        return;
+struct ProbeSlot(&'static std::sync::atomic::AtomicBool);
+
+impl ProbeSlot {
+    fn take(flag: &'static std::sync::atomic::AtomicBool) -> Option<Self> {
+        use std::sync::atomic::Ordering;
+        flag.compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed).ok().map(|_| Self(flag))
     }
+}
+
+impl Drop for ProbeSlot {
+    fn drop(&mut self) {
+        self.0.store(false, std::sync::atomic::Ordering::Release);
+    }
+}
+
+pub fn probe_active() {
+    static RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    let Some(_slot) = ProbeSlot::take(&RUNNING) else {
+        return;
+    };
     let state = load_connections();
     if let Some(conn) = state.connections.iter().find(|c| c.id() == state.active_id) {
         probe_connection(conn);
     }
-    RUNNING.store(false, Ordering::Release);
 }
 
 pub fn probe_all() {
-    use std::sync::atomic::{AtomicBool, Ordering};
-    static RUNNING: AtomicBool = AtomicBool::new(false);
-    if RUNNING.compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed).is_err() {
+    static RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    let Some(_slot) = ProbeSlot::take(&RUNNING) else {
         return;
-    }
+    };
     let state = load_connections();
     for conn in state.connections {
         probe_connection(&conn);
     }
-    RUNNING.store(false, Ordering::Release);
 }
 
 fn roles_backfill_targets(state: &ConnectionsState) -> Vec<&HostConnection> {
@@ -2853,6 +2898,95 @@ mod tests {
 
         *config_dir_override().lock().unwrap() = None;
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_corrupt_connections_file_is_kept_aside_not_overwritten() {
+        let _fs = TEST_FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!("alpi-corrupt-connections-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        *config_dir_override().lock().unwrap() = Some(dir.clone());
+        let path = connections_path().unwrap();
+        std::fs::write(&path, "{ not json, a token lives here").unwrap();
+
+        mutate_connections(|state| {
+            state.active_id = LOCAL_ID.to_string();
+            true
+        });
+
+        let kept: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|e| e.file_name().to_string_lossy().contains("corrupt"))
+            .collect();
+        assert_eq!(kept.len(), 1);
+        assert_eq!(std::fs::read_to_string(kept[0].path()).unwrap(), "{ not json, a token lives here");
+        assert!(load_connections_checked().is_ok());
+
+        *config_dir_override().lock().unwrap() = None;
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_unreadable_connections_file_is_never_overwritten() {
+        let _fs = TEST_FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!("alpi-unreadable-connections-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        *config_dir_override().lock().unwrap() = Some(dir.clone());
+        std::fs::create_dir(connections_path().unwrap()).unwrap();
+
+        assert!(try_mutate_connections(|_| Ok(())).is_err());
+        assert!(connections_path().unwrap().is_dir());
+
+        *config_dir_override().lock().unwrap() = None;
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_probe_slot_is_released_when_the_probe_panics() {
+        static FLAG: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        let outcome = std::panic::catch_unwind(|| {
+            let _slot = ProbeSlot::take(&FLAG).unwrap();
+            assert!(ProbeSlot::take(&FLAG).is_none());
+            panic!("probe failed");
+        });
+        assert!(outcome.is_err());
+        assert!(ProbeSlot::take(&FLAG).is_some());
+    }
+
+    #[test]
+    fn a_websocket_frame_header_claiming_a_huge_payload_is_refused_before_allocating() {
+        use std::io::Write;
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            let mut head = vec![0x81_u8, 127];
+            head.extend_from_slice(&u64::MAX.to_be_bytes());
+            socket.write_all(&head).unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        });
+        let stream = std::net::TcpStream::connect(addr).unwrap();
+        let mut ws = WsClient { stream: WsStream::Plain(stream), inflater: None };
+        let err = ws.read_text().unwrap_err();
+        assert!(err.contains("exceeds"), "{err}");
+        assert!(!should_retry_remote_ws(&err), "{err}");
+        assert_eq!(classify_remote_error(&err), ConnectionStatus::Offline);
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn an_error_before_session_start_ends_a_remote_stream_and_one_after_it_does_not() {
+        let error = json!({"event": "error", "text": "session already has a running turn", "code": "busy"});
+        assert!(remote_frame_ends_stream(&error, false));
+        assert!(!remote_frame_ends_stream(&error, true));
+        assert!(!remote_frame_ends_stream(&json!({"event": "reply", "text": "x"}), true));
+        assert!(remote_frame_ends_stream(&json!({"event": "done"}), true));
+        assert!(remote_frame_ends_stream(&json!({"event": "interrupted"}), false));
+        assert!(remote_frame_ends_stream(&json!({"error": {"code": -32000, "message": "auth-failed"}}), true));
+        assert!(!remote_frame_ends_stream(&json!({"event": "assistant_delta", "text": "hi"}), false));
     }
 
     #[test]

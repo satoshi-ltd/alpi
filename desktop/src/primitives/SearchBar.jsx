@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { I, Icon, Tip } from "./index.js";
 import styles from "./SearchBar.module.css";
+import { isComposing } from "../lib/composition.js";
 
 export default function SearchBar({
   query,
@@ -19,6 +20,7 @@ export default function SearchBar({
   }, []);
 
   function onKeyDown(e) {
+    if (isComposing(e)) return;
     if (e.key === "Escape") {
       e.preventDefault();
       onClose();

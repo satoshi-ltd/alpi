@@ -10,6 +10,7 @@ vi.mock('../../components/Toast', () => ({ useToast: () => () => {} }));
 import {
   applyResponse,
   isForeignConnection,
+  isRootLink,
   requestFromResponse,
   resolveConnection,
   respondFromNotification,
@@ -192,5 +193,14 @@ describe('answering from a cold start', () => {
   it('fails loudly for a connection that no longer exists, so the sheet takes over', async () => {
     await expect(respondFromNotification('gone', 'req-1', 'deny', { connections: [] }, { call: vi.fn(), load: async () => stored, dismiss: vi.fn() }))
       .rejects.toThrow('unknown connection');
+  });
+});
+
+describe('isRootLink', () => {
+  it('recognises the inbox, with or without a connection, so a tap does not stack a second inbox', () => {
+    expect(isRootLink('/')).toBe(true);
+    expect(isRootLink('/?connectionId=c2')).toBe(true);
+    expect(isRootLink('/chat/vera')).toBe(false);
+    expect(isRootLink('/outputs/vera/abc')).toBe(false);
   });
 });

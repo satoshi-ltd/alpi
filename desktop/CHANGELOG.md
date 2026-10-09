@@ -11,6 +11,16 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.8.9 — 2026-10-09 — what you type and what waits on you survive a bad moment
+
+- **A message that is not sent comes back to the box.** Sending while a turn runs, a failed upload or a refused send no longer clears what you typed, in a chat or a workgroup; anything typed meanwhile stays under it.
+- **Approvals and questions raised while the connection was down show up when it returns,** and one another device answered meanwhile disappears instead of staying as a blocking dialog.
+- **A settings edit goes to the daemon you made it on,** even if you switch connection within the second it waits to save, and a profile is deleted on the connection you chose.
+- **A chat cut off by a daemon restart says so** instead of ending as if it were finished, and a connections file that cannot be read is set aside rather than overwritten.
+- **A notification opens what it announces.** Coming back to the app within seconds of a banner opens its chat, workgroup, approval, question or failed schedule on the daemon that raised it; one raised while you were looking at the app never moves you. Also: Enter that confirms an input-method composition no longer sends half an answer, a late answer no longer paints the wrong session, and opening a chat from a notification asks before discarding unsaved settings.
+
+  Requires alpi 0.17.5.
+
 ## v0.8.8 — 2026-10-08 — a job's description shows two lines
 
 - **The schedules list shows two lines of each job's description**, like the skills list, instead of cutting it after one. The full text is still under About in the job's page.

@@ -18,6 +18,15 @@ function tooltipFor(_connection, status) {
     : "Switch connection";
 }
 
+export async function forgetWithNotice(onForget, notify, id) {
+  try {
+    await onForget?.(id);
+  } catch (e) {
+    notify({ message: `Could not forget the connection: ${e?.message || String(e)}`, variant: "danger" });
+    throw e;
+  }
+}
+
 export function connectionEndpoint(connection) {
   if (connection?.kind !== "remote") return "host.sock";
   if (connection.url) return connection.url;
@@ -121,7 +130,7 @@ export default function ConnectionSwitcher({
           onSetActive?.(r.id);
           closePanel();
         }}
-        onForget={(r) => onForget?.(r.id)}
+        onForget={(r) => forgetWithNotice(onForget, notify, r.id)}
         onRename={
           onRename
             ? async (r, name) => {

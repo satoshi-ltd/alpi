@@ -6,6 +6,7 @@ import Textarea from "../primitives/Textarea.jsx";
 import { Icon } from "../primitives/icons.jsx";
 import { profileLabel } from "../lib/profile-display.js";
 import styles from "./InlineRequest.module.css";
+import { isComposing } from "../lib/composition.js";
 
 const CANCEL_CLARIFICATION = "User cancelled clarification.";
 
@@ -178,6 +179,7 @@ export function InlineClarification({ request, onResolved }) {
                 disabled={busy}
                 className={styles.otherInput}
                 onKeyDown={(e) => {
+                  if (isComposing(e)) return;
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
                     send(otherText);

@@ -3,6 +3,7 @@ import Popover from "./Popover.jsx";
 import DialogFooter from "./DialogFooter.jsx";
 import { Field, Selectish, Eyebrow } from "./index.js";
 import styles from "./BudgetEdit.module.css";
+import { isComposing } from "../lib/composition.js";
 
 export function parseBudget(text) {
   const trimmed = String(text ?? "").trim();
@@ -48,7 +49,7 @@ export default function BudgetEdit({ value, label = "Daily USD cap", triggerLabe
               mono
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") save(); }}
+              onKeyDown={(e) => { if (!isComposing(e) && e.key === "Enter") save(); }}
               placeholder="empty = unlimited"
               aria-invalid={!valid}
               spellCheck={false}

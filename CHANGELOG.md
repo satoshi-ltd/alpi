@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.17.15 — 2026-10-09 — the agent knows what a banner opens
+
+- **The agent's notification reference says what tapping or returning to a banner does**: it opens the chat, the notification, the approval or question, or a failed job's schedule, on the desktop and the phone.
+
 ## v0.17.14 — 2026-10-09 — a fence and a tool list add up in a woken turn
 
 - **A workgroup turn woken by posts of different origins keeps every restriction.** A tool list mixed with a member or peer origin used to be replaced by the generic peer fence, which could allow a tool the list did not (a list of `web_search` and `workgroup_post` plus a member post let the turn write files). Now the strictest fence applies and the lists intersect.

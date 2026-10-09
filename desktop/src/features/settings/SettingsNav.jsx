@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import NavRow from "../../primitives/NavRow.jsx";
 import { SearchIcon } from "../../primitives/icons.jsx";
 import styles from "./Settings.module.css";
+import { isComposing } from "../../lib/composition.js";
 
 export const QueryCtx = createContext("");
 const SectionHitCtx = createContext(false);
@@ -98,6 +99,7 @@ export default function SettingsNav({ scrollRef, children }) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
+              if (isComposing(e)) return;
               if (e.key === "Enter") {
                 e.preventDefault();
                 jump(visible[0]?.id);

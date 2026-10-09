@@ -134,7 +134,7 @@ export default function ProfileSettings() {
   const emailAccounts = useEmailAccounts(id, { skipWhen: !needsFallback(snap, 'email') });
   const schedule = useScheduleList(id, { skipWhen: !needsFallback(snap, 'schedules') });
   const { att } = useAttention(id);
-  const { scrollRef, anchor, jump, section, onScroll } = useSectionJump();
+  const { scrollRef, anchor, jump, section, onScroll, onScrollBeginDrag } = useSectionJump();
   const storage = useProfileStorage(id, { skipWhen: !needsFallback(snap, 'storage') });
   const [sheet, setSheet] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -338,6 +338,7 @@ export default function ProfileSettings() {
         ref={scrollRef}
         scrollEventThrottle={64}
         onScroll={onScroll}
+        onScrollBeginDrag={onScrollBeginDrag}
         contentContainerStyle={contentStyle}
         keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />}

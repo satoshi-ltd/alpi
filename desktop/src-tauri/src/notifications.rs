@@ -31,6 +31,45 @@ fn window_focused(app: &AppHandle) -> bool {
         .unwrap_or(false)
 }
 
+const ACTIVATION_WINDOW: Duration = Duration::from_secs(20);
+static PENDING_ACTIVATION: Mutex<Option<(Deeplink, Instant)>> = Mutex::new(None);
+
+fn activation_rank(deeplink: &Deeplink) -> u8 {
+    match (deeplink.kind.as_str(), deeplink.id.as_deref()) {
+        ("approval" | "clarification", _) => 2,
+        ("settings", Some("schedules")) => 1,
+        ("settings", _) => 0,
+        _ => 1,
+    }
+}
+
+fn remember_for_activation(deeplink: &Deeplink, window_was_focused: bool, now: Instant) {
+    let mut pending = PENDING_ACTIVATION.lock().unwrap();
+    if window_was_focused {
+        *pending = None;
+        return;
+    }
+    let rank = activation_rank(deeplink);
+    if rank == 0 {
+        return;
+    }
+    let held_by_request = pending
+        .as_ref()
+        .is_some_and(|(held, at)| activation_rank(held) > rank && now.saturating_duration_since(*at) <= ACTIVATION_WINDOW);
+    if !held_by_request {
+        *pending = Some((deeplink.clone(), now));
+    }
+}
+
+pub fn clear_activation() {
+    PENDING_ACTIVATION.lock().unwrap().take();
+}
+
+pub fn take_activation(now: Instant) -> Option<Deeplink> {
+    let pending = PENDING_ACTIVATION.lock().unwrap().take();
+    pending.and_then(|(deeplink, at)| (now.saturating_duration_since(at) <= ACTIVATION_WINDOW).then_some(deeplink))
+}
+
 #[derive(Serialize, Clone)]
 pub struct Deeplink {
     pub kind: String,
@@ -94,6 +133,7 @@ fn schedule_failure_body(name: &str, reason: &str) -> String {
 }
 
 fn show(_app: &AppHandle, title: &str, body: &str, _deeplink: Deeplink) {
+    remember_for_activation(&_deeplink, window_focused(_app), Instant::now());
     #[cfg(all(debug_assertions, target_os = "macos"))]
     {
         // `tauri dev` runs unsigned; macOS Notification Center blocks the plugin silently. Fall back to osascript which uses the system Script Editor identity — no signing or permission grant needed for verification.
@@ -502,5 +542,102 @@ mod tests {
     #[test]
     fn schedule_failure_name_only() {
         assert_eq!(schedule_failure_body("weekly", ""), "weekly".to_string());
+    }
+}
+
+#[cfg(test)]
+mod activation_tests {
+    use super::{clear_activation, remember_for_activation, take_activation, Deeplink, ACTIVATION_WINDOW};
+    use std::sync::Mutex;
+    use std::time::{Duration, Instant};
+
+    static SERIAL: Mutex<()> = Mutex::new(());
+
+    fn link(id: &str) -> Deeplink {
+        Deeplink { kind: "chat".into(), profile: Some("scout".into()), id: Some(id.into()), connection_id: "local".into() }
+    }
+
+    #[test]
+    fn focusing_the_window_soon_after_a_banner_opens_that_banner_once() {
+        let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let shown = Instant::now();
+        remember_for_activation(&link("s1"), false, shown);
+        let opened = take_activation(shown + Duration::from_secs(3)).expect("a pending activation");
+        assert_eq!(opened.id.as_deref(), Some("s1"));
+        assert!(take_activation(shown + Duration::from_secs(4)).is_none());
+    }
+
+    #[test]
+    fn a_banner_older_than_the_window_is_not_opened() {
+        let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let shown = Instant::now();
+        remember_for_activation(&link("s1"), false, shown);
+        assert!(take_activation(shown + ACTIVATION_WINDOW + Duration::from_secs(1)).is_none());
+    }
+
+    #[test]
+    fn a_banner_raised_while_the_window_had_focus_never_navigates() {
+        let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let shown = Instant::now();
+        remember_for_activation(&link("s1"), false, shown);
+        remember_for_activation(&link("s2"), true, shown);
+        assert!(take_activation(shown + Duration::from_secs(1)).is_none());
+    }
+
+    #[test]
+    fn only_the_latest_banner_counts() {
+        let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let shown = Instant::now();
+        remember_for_activation(&link("old"), false, shown);
+        remember_for_activation(&link("new"), false, shown + Duration::from_secs(1));
+        assert_eq!(take_activation(shown + Duration::from_secs(2)).and_then(|d| d.id).as_deref(), Some("new"));
+    }
+
+    fn settings(id: &str) -> Deeplink {
+        Deeplink { kind: "settings".into(), profile: None, id: Some(id.into()), connection_id: "local".into() }
+    }
+
+    fn request(id: &str) -> Deeplink {
+        Deeplink { kind: "approval".into(), profile: Some("abby".into()), id: Some(id.into()), connection_id: "local".into() }
+    }
+
+    #[test]
+    fn a_connection_or_budget_notice_never_becomes_the_place_you_land() {
+        let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let shown = Instant::now();
+        clear_activation();
+        remember_for_activation(&settings("connection"), false, shown);
+        remember_for_activation(&settings("budget"), false, shown);
+        assert!(take_activation(shown + Duration::from_secs(1)).is_none());
+    }
+
+    #[test]
+    fn a_trivial_notice_does_not_replace_an_approval_waiting_on_you() {
+        let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let shown = Instant::now();
+        clear_activation();
+        remember_for_activation(&request("r1"), false, shown);
+        remember_for_activation(&link("s9"), false, shown + Duration::from_secs(2));
+        assert_eq!(take_activation(shown + Duration::from_secs(3)).and_then(|d| d.id).as_deref(), Some("r1"));
+    }
+
+    #[test]
+    fn an_approval_older_than_the_window_gives_way_to_a_newer_notice() {
+        let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let shown = Instant::now();
+        clear_activation();
+        remember_for_activation(&request("r1"), false, shown);
+        let later = shown + ACTIVATION_WINDOW + Duration::from_secs(5);
+        remember_for_activation(&link("s9"), false, later);
+        assert_eq!(take_activation(later + Duration::from_secs(1)).and_then(|d| d.id).as_deref(), Some("s9"));
+    }
+
+    #[test]
+    fn opening_the_app_from_the_tray_or_a_shortcut_drops_the_pending_banner() {
+        let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let shown = Instant::now();
+        remember_for_activation(&link("s1"), false, shown);
+        clear_activation();
+        assert!(take_activation(shown + Duration::from_secs(1)).is_none());
     }
 }

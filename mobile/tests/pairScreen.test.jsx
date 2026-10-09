@@ -66,3 +66,12 @@ describe('Pair screen typography', () => {
     expect(screen.getByText('Pair this phone').getAttribute('data-font')).toBe('Geist_600SemiBold');
   });
 });
+
+describe('Pair screen accessibility', () => {
+  it('names the icon-only Back control for a screen reader', () => {
+    render(<Pair />);
+    const back = document.querySelector('[accessibilitylabel="Back"]');
+    expect(back).toBeTruthy();
+    expect(back.getAttribute('accessibilityrole')).toBe('button');
+  });
+});

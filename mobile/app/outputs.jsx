@@ -1,5 +1,5 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, RefreshControl, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -13,12 +13,16 @@ import {
   triageCounts,
 } from '../../common/notificationTriage.mjs';
 import { Button } from '../src/components/Button';
+import { MasterDetail } from '../src/components/MasterDetail';
+import { NothingSelected } from '../src/components/NothingSelected';
 import { Eyebrow } from '../src/components/Eyebrow';
 import { ScreenHeader } from '../src/components/ScreenHeader';
 import { useToast } from '../src/components/Toast';
+import { NotificationPage } from '../src/features/notifications/NotificationPage';
 import { NotificationRow } from '../src/features/notifications/NotificationRow';
 import { TriageFilters } from '../src/features/notifications/TriageFilters';
 import { useBack } from '../src/hooks/useBack';
+import { useMasterDetail } from '../src/hooks/useMasterDetail';
 import { unreadMissingKey, useNotificationActions } from '../src/hooks/useOutputs';
 import { adminConnectionsOf, isMemberOnly, markAllUnifiedRead, outputsEmptyState, outputsSubtitle, useUnifiedOutputs } from '../src/hooks/useUnifiedOutputs';
 import { useEndpoint } from '../src/lib/EndpointContext';
@@ -46,6 +50,8 @@ export default function OutputsScreen() {
   const [filter, setFilter] = useState('all');
   const [readIds, setReadIds] = useState(() => new Set());
   const [unreadIds, setUnreadIds] = useState(() => new Set());
+  const wide = useMasterDetail();
+  const [picked, setPicked] = useState(null);
 
   const { rows, loading, refresh, hasAdmin, unreachable, unreachableCount } = useUnifiedOutputs();
   const adminConnections = useMemo(
@@ -105,8 +111,8 @@ export default function OutputsScreen() {
     refresh();
   }, [rows, adminConnections, refresh, toast]);
 
-  const openRow = useCallback(async (row) => {
-    const entries = items
+  const trailOf = useCallback(
+    () => items
       .filter((it) => it.kind === 'row')
       .map((it) => ({
         key: it.key,
@@ -115,17 +121,42 @@ export default function OutputsScreen() {
         connectionId: it.row.connectionId ?? '',
         pinned: it.pinned,
         unread: isUnread(it.row),
-      }));
+      })),
+    [items, isUnread],
+  );
+
+  const openSeq = useRef(0);
+  const openRow = useCallback(async (row) => {
+    const seq = ++openSeq.current;
+    const entries = trailOf();
     setTrail(entries);
     freeze(entries.find((e) => e.key === notificationKey(row)) ?? null);
     if (row.connectionId) {
       try { await setActive(row.connectionId); } catch { /* */ }
     }
+    if (seq !== openSeq.current) return;
+    if (wide) {
+      setPicked({ profile: row.profile, id: row.id, connectionId: row.connectionId ?? '', key: notificationKey(row) });
+      return;
+    }
     router.push({
       pathname: '/outputs/[profile]/[id]',
       params: { profile: row.profile, id: row.id, connectionId: row.connectionId ?? '' },
     });
-  }, [items, isUnread, router, setActive]);
+  }, [trailOf, router, setActive, wide]);
+
+  useEffect(() => {
+    if (wide && picked) setTrail(trailOf());
+  }, [wide, picked, trailOf]);
+
+  useEffect(() => {
+    if (picked?.key && hidden.has(picked.key)) setPicked(null);
+  }, [picked, hidden]);
+
+  const isPicked = useCallback(
+    (row) => !!picked && picked.profile === row.profile && picked.id === row.id && (picked.connectionId || '') === (row.connectionId ?? ''),
+    [picked],
+  );
 
   const canToggleRead = useCallback(
     (row) => !unreadMissing.has(unreadMissingKey(row.connectionId, activeId)),
@@ -187,13 +218,14 @@ export default function OutputsScreen() {
         row={item.row}
         unread={isUnread(item.row)}
         multi={multi}
+        selected={wide && isPicked(item.row)}
         canToggleRead={canToggleRead(item.row)}
         onOpen={openRow}
         onToggleRead={onToggleRead}
         onDelete={onDelete}
       />
     );
-  }, [isUnread, multi, canToggleRead, openRow, onToggleRead, onDelete]);
+  }, [isUnread, multi, canToggleRead, openRow, onToggleRead, onDelete, wide, isPicked]);
 
   const memberOnly = isMemberOnly(endpoint, connections, roleState);
   const empty = outputsEmptyState({
@@ -208,6 +240,41 @@ export default function OutputsScreen() {
   const emptyCopy = filtered ? { title: EMPTY.matches.title, detail: 'Nothing under this filter.' } : empty;
   const showSkeleton = loading && rows.length === 0;
   const showEmpty = !loading && items.length === 0;
+
+  const list = (
+    <FlatList
+      style={{ flex: 1, backgroundColor: colors.bgPane }}
+      data={items}
+      extraData={picked}
+      keyExtractor={(it) => it.key}
+      renderItem={renderItem}
+      ListHeaderComponent={visibleRows.length > 0 ? (
+        <TriageFilters
+          filter={filter}
+          counts={counts}
+          onFilter={onFilter}
+        />
+      ) : null}
+      contentContainerStyle={{ paddingBottom: space.s11, flexGrow: 1 }}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.ink3} />
+      }
+      ListEmptyComponent={
+        showSkeleton ? (
+          <ListSkeleton flat rows={5} label="Loading outputs" />
+        ) : showEmpty || filtered ? (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.s10, gap: space.s3 }}>
+            <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.ink2 }}>
+              {emptyCopy.title}
+            </Text>
+            <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink3, textAlign: 'center' }}>
+              {emptyCopy.detail}
+            </Text>
+          </View>
+        ) : null
+      }
+    />
+  );
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -226,37 +293,22 @@ export default function OutputsScreen() {
           <Button title="Mark all read" size="md" variant="ghost" onPress={onMarkAll} />
         ) : null}
       />
-      <FlatList
-        style={{ flex: 1, backgroundColor: colors.bgPane }}
-        data={items}
-        keyExtractor={(it) => it.key}
-        renderItem={renderItem}
-        ListHeaderComponent={visibleRows.length > 0 ? (
-          <TriageFilters
-            filter={filter}
-            counts={counts}
-            onFilter={onFilter}
-          />
-        ) : null}
-        contentContainerStyle={{ paddingBottom: space.s11, flexGrow: 1 }}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.ink3} />
-        }
-        ListEmptyComponent={
-          showSkeleton ? (
-            <ListSkeleton flat rows={5} label="Loading outputs" />
-          ) : showEmpty || filtered ? (
-            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.s10, gap: space.s3 }}>
-              <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.ink2 }}>
-                {emptyCopy.title}
-              </Text>
-              <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink3, textAlign: 'center' }}>
-                {emptyCopy.detail}
-              </Text>
-            </View>
-          ) : null
-        }
-      />
+      {wide ? (
+        <MasterDetail
+          list={list}
+          detail={picked ? (
+            <NotificationPage
+              key={`${picked.connectionId}:${picked.profile}:${picked.id}`}
+              profile={picked.profile}
+              id={picked.id}
+              connectionId={picked.connectionId}
+              embedded
+              onStep={(target) => setPicked({ profile: target.profile, id: target.id, connectionId: target.connectionId ?? '', key: target.key })}
+              onClose={() => setPicked(null)}
+            />
+          ) : <NothingSelected>Pick a notification to read it here</NothingSelected>}
+        />
+      ) : list}
     </SafeAreaView>
   );
 }

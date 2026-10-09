@@ -66,3 +66,25 @@ describe("resetReadState", () => {
     expect(isProfileUnread("local", "doc", 250)).toBe(true);
   });
 });
+
+describe("a mark made before the keychain has answered", () => {
+  it("is merged with the persisted marks instead of replacing them", async () => {
+    vi.useFakeTimers();
+    try {
+      let answer;
+      SecureStore.getItemAsync.mockImplementation(() => new Promise((resolve) => { answer = resolve; }));
+      SecureStore.setItemAsync.mockResolvedValue(undefined);
+      markProfileRead("local", "doc", 200);
+      await vi.advanceTimersByTimeAsync(300);
+      answer(JSON.stringify({ "local:profile:abby": 90 }));
+      await vi.advanceTimersByTimeAsync(10);
+      expect(SecureStore.setItemAsync).toHaveBeenCalledTimes(1);
+      const written = JSON.parse(SecureStore.setItemAsync.mock.calls[0][1]);
+      expect(written).toEqual({ "local:profile:abby": 90, "local:profile:doc": 200 });
+      expect(isProfileUnread("local", "abby", 80)).toBe(false);
+      expect(isProfileUnread("local", "doc", 150)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

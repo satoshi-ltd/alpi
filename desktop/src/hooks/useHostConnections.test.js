@@ -60,6 +60,21 @@ beforeEach(() => {
   });
 });
 
+describe("useHostConnections forget", () => {
+  it("rejects when the daemon-side forget fails and keeps the connection's cache", async () => {
+    localStorage.setItem("alf:profiles:v1:remote", JSON.stringify([{ name: "x" }]));
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("local");
+      if (cmd === "host_connection_forget") throw new Error("could not write connections.json");
+      return [];
+    });
+    const { result } = renderHostConnections();
+    await waitFor(() => expect(result.current.hostConnections.connections).toHaveLength(2));
+    await expect(result.current.onForgetHostConnection("remote")).rejects.toThrow("could not write");
+    expect(localStorage.getItem("alf:profiles:v1:remote")).not.toBeNull();
+  });
+});
+
 describe("useHostConnections cache persistence", () => {
   it("evicts only regenerable caches and retries a full workgroup snapshot", async () => {
     localStorage.setItem("alpi.session.cache.v1.local.mira.s-1", "cached session");

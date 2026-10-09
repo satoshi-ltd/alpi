@@ -11,7 +11,7 @@ this file is the whole contract of the kit.
 - `design/src/` is the source, one module per family of boards: `build.py` (page shell and nav), `gen.py` (canvas index, mobile screens),
   `system_boards.py`, `desktop_boards.py`, `desktop_overlays.py`, `conversation_boards.py`, `mobile_overlays.py`,
   `brand_boards.py` and `folds.py` (the Brand tab), `panel_kit.py` (the drawing helpers of the profile window and phone panels, one place for the views and the proposals),
-  `profile_panel_studies.py` (the Desktop and Mobile panel views, drawn from the shipped panels) and `proposals.py` (the proposal boards). Never edit a generated file by hand.
+  `profile_panel_studies.py` (the Desktop and Mobile panel views, drawn from the shipped panels), `mobile_state_studies.py` (the empty, error and offline states of the phone), `mobile_attention_studies.py` (the drawings of the schedule job pages, the roster band, the chat menu, the settings jump and the fold's two-pane schedule and notifications, drawn from the mobile components) and `proposals.py` (the proposal boards). Never edit a generated file by hand.
 - `design/drift.py` runs the build and exits 1 naming every file it had to regenerate; `scripts/validate.py` runs it as the
   `design` step. `scripts/` holds no design file.
 - `design/README.md` is the human note; this file owns the contract.
@@ -98,5 +98,5 @@ and a stale or orphaned artboard fails the tests.
   a task also changes a client.
 - Boards are drawn in the light palette and the build rewrites those literals to the kit's tokens so the theme switch
   reaches them; only the swatches of `System-Tokens.dc.html` stay literal.
-- Mobile boards show the phone's own grammar; a fold or tablet renders the desktop layout at scale.
+- Mobile boards show the phone's own grammar; a fold shows the same mobile components in two panes (list 300 pt and the page beside it from 760 pt of pane).
 - `CLAUDE.md`, here and at the root, is a local pointer listed in `.gitignore` and never committed; tests read it only where it exists.

@@ -104,7 +104,8 @@ export function deepLinkFor(event, _connection) {
       if (typeof data.deep_link === 'string' && data.deep_link) {
         return data.deep_link;
       }
-      return data.profile ? `/profile/${data.profile}/schedule` : '/';
+      if (!data.profile) return '/';
+      return data.job_id ? `/profile/${data.profile}/schedule/${encodeURIComponent(data.job_id)}` : `/profile/${data.profile}/schedule`;
     case 'budget.threshold':
       return data.profile ? `/profile/${data.profile}/settings` : '/';
     default:

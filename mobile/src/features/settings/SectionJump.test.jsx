@@ -2,12 +2,20 @@ import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, renderHook, screen, act } from '@testing-library/react';
 
+const h = vi.hoisted(() => ({ layouts: {}, scrolls: [], stripLayout: null }));
+
 vi.mock('react-native', () => {
   const View = ({ children, accessibilityRole }) => React.createElement('div', { role: accessibilityRole }, children);
   const Text = ({ children }) => React.createElement('span', {}, children);
-  const Pressable = ({ children, onPress, accessibilityLabel, accessibilityState, style }) =>
-    React.createElement('button', { type: 'button', onClick: onPress, 'aria-label': accessibilityLabel, 'aria-selected': accessibilityState?.selected, 'data-minheight': String(style?.minHeight ?? 0) }, children);
-  const ScrollView = ({ children }) => React.createElement('div', {}, children);
+  const Pressable = ({ children, onPress, onLayout, accessibilityLabel, accessibilityState, style }) => {
+    if (onLayout) h.layouts[accessibilityLabel] = onLayout;
+    return React.createElement('button', { type: 'button', onClick: onPress, 'aria-label': accessibilityLabel, 'aria-selected': accessibilityState?.selected, 'data-minheight': String(style?.minHeight ?? 0) }, children);
+  };
+  const ScrollView = React.forwardRef(({ children, onLayout }, ref) => {
+    React.useImperativeHandle(ref, () => ({ scrollTo: (arg) => h.scrolls.push(arg) }));
+    h.stripLayout = onLayout;
+    return React.createElement('div', {}, children);
+  });
   return { View, Text, Pressable, ScrollView };
 });
 vi.mock('../../components/Eyebrow', () => ({ Eyebrow: ({ children }) => React.createElement('h2', {}, children) }));
@@ -23,7 +31,7 @@ vi.mock('../../theme/ThemeContext', async () => {
   };
 });
 
-import { AttentionSummary, JumpChips } from './SectionJump';
+import { AttentionSummary, JumpChips, chipScrollX } from './SectionJump';
 import { JUMP_SECTIONS, sectionAt, summaryRows } from './jumpSections';
 import { useSectionJump } from './useSectionJump';
 
@@ -100,12 +108,42 @@ describe('section position', () => {
     result.current.scrollRef.current = { scrollTo };
     result.current.anchor('brain').onLayout({ nativeEvent: { layout: { y: 2600 } } });
     result.current.anchor('overview').onLayout({ nativeEvent: { layout: { y: 2 } } });
-    result.current.jump('brain');
+    act(() => result.current.jump('brain'));
     expect(scrollTo).toHaveBeenCalledWith({ y: 2596, animated: true });
-    result.current.jump('overview');
+    act(() => result.current.jump('overview'));
     expect(scrollTo).toHaveBeenLastCalledWith({ y: 0, animated: true });
-    result.current.jump('storage');
+    act(() => result.current.jump('storage'));
     expect(scrollTo).toHaveBeenCalledTimes(2);
+  });
+
+  it('marks the chip tapped at once and keeps it while the animated scroll reports stale offsets', () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useSectionJump());
+      result.current.scrollRef.current = { scrollTo: vi.fn() };
+      result.current.anchor('mcp').onLayout({ nativeEvent: { layout: { y: 2200 } } });
+      result.current.anchor('brain').onLayout({ nativeEvent: { layout: { y: 2600 } } });
+      act(() => result.current.jump('brain'));
+      expect(result.current.section).toBe('brain');
+      act(() => result.current.onScroll({ nativeEvent: { contentOffset: { y: 2300 } } }));
+      expect(result.current.section).toBe('brain');
+      act(() => { vi.advanceTimersByTime(1000); });
+      act(() => result.current.onScroll({ nativeEvent: { contentOffset: { y: 2300 } } }));
+      expect(result.current.section).toBe('mcp');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('follows the finger again as soon as the user drags during a jump', () => {
+    const { result } = renderHook(() => useSectionJump());
+    result.current.scrollRef.current = { scrollTo: vi.fn() };
+    result.current.anchor('mcp').onLayout({ nativeEvent: { layout: { y: 2200 } } });
+    result.current.anchor('brain').onLayout({ nativeEvent: { layout: { y: 2600 } } });
+    act(() => result.current.jump('brain'));
+    act(() => result.current.onScrollBeginDrag());
+    act(() => result.current.onScroll({ nativeEvent: { contentOffset: { y: 2300 } } }));
+    expect(result.current.section).toBe('mcp');
   });
 
   it('marks the section in view as the page scrolls', () => {
@@ -115,5 +153,23 @@ describe('section position', () => {
     expect(result.current.section).toBe('overview');
     act(() => result.current.onScroll({ nativeEvent: { contentOffset: { y: 950 } } }));
     expect(result.current.section).toBe('usage');
+  });
+});
+
+describe('chip strip follows the marked chip', () => {
+  it('centres a chip in the strip and never scrolls before the start', () => {
+    expect(chipScrollX({ x: 900, width: 100 }, 360)).toBe(770);
+    expect(chipScrollX({ x: 20, width: 80 }, 360)).toBe(0);
+    expect(chipScrollX(undefined, 360)).toBeNull();
+    expect(chipScrollX({ x: 900, width: 100 }, 0)).toBeNull();
+  });
+
+  it('scrolls the strip to the newly marked chip, which would otherwise sit off screen', () => {
+    h.scrolls.length = 0;
+    const { rerender } = render(<JumpChips current="overview" onJump={() => {}} />);
+    h.stripLayout({ nativeEvent: { layout: { width: 360 } } });
+    h.layouts['Go to Brain']({ nativeEvent: { layout: { x: 1100, width: 90 } } });
+    rerender(<JumpChips current="brain" onJump={() => {}} />);
+    expect(h.scrolls.at(-1)).toEqual({ x: 965, animated: true });
   });
 });

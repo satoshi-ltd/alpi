@@ -197,7 +197,8 @@ export function Composer({
             {mentionSource ? (
               <Pressable
                 onPress={disabled ? undefined : () => setText((cur) => (cur.endsWith('@') ? cur : `${cur}${cur && !cur.endsWith(' ') ? ' ' : ''}@`))}
-                hitSlop={space.s3}
+                hitSlop={{ top: 13, bottom: 13, left: space.s3, right: space.s3 }}
+                accessibilityRole="button"
                 accessibilityLabel="Mention a peer"
                 style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: space.s1, opacity: pressed ? 0.5 : 1 })}
               >
@@ -211,6 +212,7 @@ export function Composer({
               <Pressable
                 onPress={disabled ? undefined : onPickAttachment}
                 hitSlop={{ left: tapSlop(CHROME_BTN), right: tapSlop(CHROME_BTN), top: tapSlop(SEND_D), bottom: tapSlop(SEND_D) }}
+                accessibilityRole="button"
                 accessibilityLabel="Attach file"
                 style={({ pressed }) => ({
                   width: CHROME_BTN,
@@ -236,6 +238,7 @@ export function Composer({
                 alignItems: 'center',
                 justifyContent: 'center',
               })}
+              accessibilityRole="button"
               accessibilityLabel={stoppable ? 'Stop' : 'Send'}
             >
               <Icon

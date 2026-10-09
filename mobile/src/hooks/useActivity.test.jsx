@@ -219,13 +219,36 @@ describe('useActivity', () => {
     expect(seen.supported).toBe(true);
   });
 
-  it('a reconnect of the stream asks nothing while Activity is already supported', async () => {
+  it('a reconnect of the stream refreshes the list, since activity.changed is never replayed', async () => {
     h.call.mockResolvedValue(LIST);
     render(<Probe />);
     await act(async () => {});
     h.call.mockClear();
+    h.call.mockResolvedValue({ needs_you: [], running: [], scheduled: [] });
     await act(async () => { emit('stream.connected'); });
-    expect(h.call).not.toHaveBeenCalled();
+    expect(h.call).toHaveBeenCalledTimes(1);
+    expect(seen.needsYouCount).toBe(0);
+  });
+
+  it('says the first load failed instead of staying blank, and clears it once a load lands', async () => {
+    h.call.mockRejectedValueOnce(new Error('timeout'));
+    render(<Probe />);
+    await act(async () => {});
+    expect(seen.supported).toBe(false);
+    expect(seen.unsupported).toBe(false);
+    expect(String(seen.loadError)).toContain('timeout');
+    h.call.mockResolvedValue(LIST);
+    await act(async () => { await seen.refresh(); });
+    expect(seen.loadError).toBeNull();
+    expect(seen.supported).toBe(true);
+  });
+
+  it('keeps no load error once the daemon is known to lack the verb', async () => {
+    h.call.mockRejectedValue(Object.assign(new Error('unknown method'), { code: -32601 }));
+    render(<Probe />);
+    await act(async () => {});
+    expect(seen.unsupported).toBe(true);
+    expect(seen.loadError).toBeNull();
   });
 
   it('keeps asking nothing on activity.changed while the verb is still missing', async () => {

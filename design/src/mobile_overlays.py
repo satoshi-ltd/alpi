@@ -90,11 +90,17 @@ def phone_sheet():
     return page("Phone · sheet with picker rows", 390, 844, page_body)
 
 
+def _schedule_item():
+    import mobile_attention_studies as ms
+    from gen import DANGER
+    return ms.chat_menu_row("clock", "Schedule", "1 failed", DANGER)
+
+
 def phone_action_sheet():
-    items = (action_item("gear", "Profile settings") + separator(56) + action_item("clock", "Pause profile") + separator(56)
-             + action_item("bell", "Auto-read replies", "off") + separator(56) + action_item("chip", "Skills") + separator(56)
-             + action_item("copy", "Memory") + separator(56) + action_item("clock", "Schedule") + separator(56)
-             + action_item("refresh", "Refresh thread"))
+    divider = f'<div style="height: 0.5px; background: {LINE}; margin: 4px 0"></div>'
+    items = (action_item("settings", "Profile settings") + action_item("pause", "Pause profile") + action_item("volume-2", "Auto-read replies", "off") + divider
+             + action_item("sparkle", "Skills") + action_item("archive", "Memory") + action_item("cpu", "Tools") + _schedule_item() + divider
+             + action_item("refresh-cw", "Refresh thread"))
     body = f'<div style="height: 0.5px; background: {LINE}"></div><div style="padding-bottom: 24px">{items}</div>'
     page_body = f"""<div style="display: flex; flex-direction: column">{settings_backdrop_rows()}</div>
 {sheet(390, 844, "doc", "profile · deepseek-v4.1-flash", body)}

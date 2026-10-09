@@ -72,6 +72,16 @@ export function connectionsSignature(connections, probeState) {
     .join('|');
 }
 
+export function settledStatuses(previous, probeState) {
+  const next = new Map();
+  const ids = new Set([...(previous?.keys() ?? []), ...(probeState?.keys?.() ?? [])]);
+  for (const id of ids) {
+    const seen = probeState?.get?.(id);
+    next.set(id, seen === undefined || seen === 'probing' ? previous?.get(id) ?? '' : seen);
+  }
+  return next;
+}
+
 export function useUnifiedOutputs({ status } = {}) {
   const { connections, probeState, roleState } = useEndpoint();
   const { colors } = useTheme();
@@ -85,10 +95,11 @@ export function useUnifiedOutputs({ status } = {}) {
     () => adminConnectionsOf(connections, roleState),
     [connections, roleState],
   );
-  const connSig = useMemo(
-    () => connectionsSignature(adminConnections, probeState),
-    [adminConnections, probeState],
-  );
+  const settledRef = useRef(new Map());
+  const connSig = useMemo(() => {
+    settledRef.current = settledStatuses(settledRef.current, probeState);
+    return connectionsSignature(adminConnections, settledRef.current);
+  }, [adminConnections, probeState]);
 
   const refresh = useCallback(async () => {
     // Bump the token even on the empty path: a fetch started while admin must not restore rows after a demotion drops the last admin.

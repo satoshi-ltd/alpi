@@ -93,18 +93,25 @@ export default function ConnectionsPage({
   const notifyRef = useRef(notify);
   notifyRef.current = notify;
 
+  const reloadSeqRef = useRef(0);
   const reload = useCallback(async () => {
+    const seq = ++reloadSeqRef.current;
     try {
       const next = await invoke("connections_summary", connectionArg);
+      if (seq !== reloadSeqRef.current) return;
       setData(next || { connections: [], totals: {} });
       setLoadError(null);
     } catch (error) {
+      if (seq !== reloadSeqRef.current) return;
       setLoadError(String(error));
       if (dataRef.current) notifyRef.current({ message: `connections: ${String(error)}`, variant: "error" });
     }
   }, [activeConnection?.id]);
 
-  useEffect(() => { reload(); }, [reload]);
+  useEffect(() => {
+    setData(null);
+    reload();
+  }, [reload]);
 
   const rows = data?.connections || [];
   const totals = data?.totals || {};

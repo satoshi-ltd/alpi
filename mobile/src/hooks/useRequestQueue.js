@@ -59,7 +59,7 @@ export function useRequestQueue(domain, enqueueRequest) {
     landedRef.current = null;
     if (!endpoint) return;
     loadPending(endpointId);
-  }, [endpoint, call]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [endpointId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const listener = (target, requestId, connectionId) => {

@@ -67,6 +67,9 @@ export default function BiometricSettings() {
         <RowGroup>
           <Pressable
             onPress={toggle}
+            accessibilityRole="switch"
+            accessibilityLabel={`Require ${caps.label} on cold start`}
+            accessibilityState={{ checked: !!on }}
             android_ripple={{ color: colors.selected }}
             style={({ pressed }) => ({
               paddingHorizontal: space.s8,

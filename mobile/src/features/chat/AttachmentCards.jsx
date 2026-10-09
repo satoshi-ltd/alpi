@@ -67,6 +67,8 @@ function Glyph({ kind, localUri, name, colors }) {
   );
 }
 
+const REMOVE_SLOP = 15;
+
 export function AttachmentCards({ items, onRemove, variant = 'composer', profile }) {
   const { colors, fonts, fontSizes } = useTheme();
   const { call } = useEndpoint();
@@ -118,7 +120,7 @@ export function AttachmentCards({ items, onRemove, variant = 'composer', profile
               <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3 }}>{subtitle}</Text>
             </View>
             {!message && onRemove ? (
-              <Pressable onPress={() => onRemove(i)} hitSlop={8} accessibilityLabel={`Remove ${a.name}`}>
+              <Pressable onPress={() => onRemove(i)} hitSlop={REMOVE_SLOP} accessibilityRole="button" accessibilityLabel={`Remove ${a.name}`}>
                 <Icon name="x" size="sm" color={colors.ink3} />
               </Pressable>
             ) : null}

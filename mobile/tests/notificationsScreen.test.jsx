@@ -71,6 +71,10 @@ vi.mock('../src/components/Button', () => ({
 vi.mock('../src/components/ScreenHeader', () => ({
   ScreenHeader: ({ title, subtitle, right }) => React.createElement('header', {}, React.createElement('h1', {}, title), React.createElement('span', { 'data-subtitle': '' }, subtitle), right),
 }));
+vi.mock('../src/features/notifications/NotificationPage', () => ({ NotificationPage: ({ id, onClose }) => React.createElement('article', { 'data-page': id }, React.createElement('button', { type: 'button', onClick: onClose }, 'close page')) }));
+vi.mock('../src/hooks/useMasterDetail', () => ({ useMasterDetail: () => globalThis.__wide === true }));
+vi.mock('../src/components/MasterDetail', () => ({ MasterDetail: ({ list, detail }) => React.createElement('div', { 'data-master-detail': '' }, React.createElement('aside', {}, list), React.createElement('section', {}, detail)) }));
+vi.mock('../src/components/NothingSelected', () => ({ NothingSelected: ({ children }) => React.createElement('p', { 'data-nothing': '' }, children) }));
 vi.mock('../src/components/Toast', () => ({ useToast: () => h.toast }));
 vi.mock('../src/hooks/useBack', () => ({ useBack: () => vi.fn() }));
 vi.mock('../src/hooks/useEvents', () => ({ useEventEffect: () => {} }));
@@ -91,7 +95,8 @@ vi.mock('../src/lib/EndpointContext', () => ({
 }));
 
 import OutputsScreen from '../app/outputs.jsx';
-import { _resetNotificationStoreForTests, notificationState } from '../src/lib/notificationStore';
+import { _resetNotificationStoreForTests, notificationState, scheduleDelete } from '../src/lib/notificationStore';
+import { notificationKey } from '../../common/notificationTriage.mjs';
 
 const NOW = Date.now() / 1000;
 const START_OF_TODAY = new Date(new Date().setHours(0, 0, 0, 0)).getTime() / 1000;
@@ -112,6 +117,7 @@ const a11yAction = (title, label) => {
 };
 
 beforeEach(() => {
+  globalThis.__wide = false;
   _resetNotificationStoreForTests();
   h.rows = ROWS();
   for (const fn of [h.push, h.toast, h.refresh, h.setActive]) fn.mockClear();
@@ -323,5 +329,86 @@ describe('notifications list, leaving', () => {
     unmount();
     expect(notificationState().trail).toBeNull();
     expect(notificationState().frozen).toBeNull();
+  });
+});
+
+describe('notifications on a wide pane', () => {
+  it('shows the list and an empty reader, and opens nothing by itself so no unread row is marked read', () => {
+    globalThis.__wide = true;
+    render(<OutputsScreen />);
+    expect(document.querySelector('[data-master-detail]')).toBeTruthy();
+    expect(screen.getByText('Pick a notification to read it here')).toBeTruthy();
+    expect(document.querySelector('[data-page]')).toBeNull();
+    expect(rowTitles().length).toBe(4);
+  });
+
+  it('opens the tapped notification beside the list, marks its row selected and pushes no page', async () => {
+    globalThis.__wide = true;
+    render(<OutputsScreen />);
+    await act(async () => { fireEvent.click(screen.getByLabelText(/Daily mail digest/)); });
+    expect(h.push).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-page="i1"]')).toBeTruthy();
+    expect(screen.queryByText('Pick a notification to read it here')).toBeNull();
+    const selected = Array.from(document.querySelectorAll('[data-swipeable] > [role="button"][aria-selected="true"]'));
+    expect(selected).toHaveLength(1);
+    expect(selected[0].getAttribute('aria-label')).toContain('Daily mail digest');
+    expect(notificationState().trail.map((e) => e.id)).toContain('i1');
+  });
+
+  it('switches to the connection the notification came from before showing it', async () => {
+    globalThis.__wide = true;
+    render(<OutputsScreen />);
+    await act(async () => { fireEvent.click(screen.getByLabelText(/PR waiting/)); });
+    expect(h.setActive).toHaveBeenCalledWith('mirai');
+    expect(document.querySelector('[data-page="w1"]')).toBeTruthy();
+  });
+
+  it('empties the reader again when it asks to close', async () => {
+    globalThis.__wide = true;
+    render(<OutputsScreen />);
+    await act(async () => { fireEvent.click(screen.getByLabelText(/Daily mail digest/)); });
+    fireEvent.click(screen.getByText('close page'));
+    expect(screen.getByText('Pick a notification to read it here')).toBeTruthy();
+  });
+
+  it('keeps pushing the page on a narrow pane', async () => {
+    render(<OutputsScreen />);
+    await act(async () => { fireEvent.click(screen.getByLabelText(/Daily mail digest/)); });
+    expect(h.push).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('[data-master-detail]')).toBeNull();
+  });
+
+  it('rebuilds the reader trail from the list when the filter changes, so the arrows follow what the list shows', async () => {
+    globalThis.__wide = true;
+    render(<OutputsScreen />);
+    await act(async () => { fireEvent.click(screen.getByLabelText(/Daily mail digest/)); });
+    expect(notificationState().trail).toHaveLength(4);
+    fireEvent.click(screen.getByLabelText('Unread, 2'));
+    expect(notificationState().trail.map((e) => e.id)).toEqual(['e1', 'i1']);
+  });
+
+  it('closes the reader when the row it shows is deleted from the list', async () => {
+    globalThis.__wide = true;
+    render(<OutputsScreen />);
+    await act(async () => { fireEvent.click(screen.getByLabelText(/Daily mail digest/)); });
+    expect(document.querySelector('[data-page="i1"]')).toBeTruthy();
+    const shown = h.rows.find((r) => r.id === 'i1');
+    act(() => { scheduleDelete(notificationKey(shown), vi.fn(), { delayMs: 60000 }); });
+    expect(document.querySelector('[data-page="i1"]')).toBeNull();
+    expect(screen.getByText('Pick a notification to read it here')).toBeTruthy();
+  });
+
+  it('shows the last row tapped when two taps are in flight', async () => {
+    globalThis.__wide = true;
+    let releaseFirst;
+    h.setActive.mockImplementationOnce(() => new Promise((resolve) => { releaseFirst = resolve; }));
+    render(<OutputsScreen />);
+    let first;
+    act(() => { first = fireEvent.click(screen.getByLabelText(/PR waiting/)); });
+    await act(async () => { fireEvent.click(screen.getByLabelText(/Daily mail digest/)); });
+    await act(async () => { releaseFirst(); });
+    expect(document.querySelector('[data-page="i1"]')).toBeTruthy();
+    expect(document.querySelector('[data-page="w1"]')).toBeNull();
+    expect(first).toBeDefined();
   });
 });

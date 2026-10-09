@@ -9,7 +9,7 @@ const EMPTY = { needs_you: [], running: [], scheduled: [] };
 
 export function isMissingVerb(err) {
   const text = String(err?.message ?? err ?? "").toLowerCase();
-  return /-32601\b/.test(text) || /method[-_ ]not[-_ ]found/.test(text) || text.includes("unknown method");
+  return /-32601\b/.test(text) || /method[-_ ]not[-_ ]found/.test(text) || text.includes("unknown method") || /\bforbidden\b/.test(text);
 }
 
 export function normalizeActivity(raw) {

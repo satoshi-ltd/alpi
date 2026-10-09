@@ -67,6 +67,7 @@ vi.mock('react-native', () => {
     RefreshControl: () => null,
     Keyboard: { addListener: () => ({ remove: () => {} }) },
     StyleSheet: { create: (s) => s },
+    useWindowDimensions: () => ({ width: 390, height: 844, fontScale: 1 }),
   };
 });
 

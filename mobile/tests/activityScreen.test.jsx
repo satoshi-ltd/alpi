@@ -34,6 +34,7 @@ vi.mock('../src/components/Fold', () => ({ Fold: ({ fold, pulse }) => React.crea
 vi.mock('../src/components/Icon', () => ({ Icon: ({ name }) => React.createElement('i', { 'data-icon': name }) }));
 vi.mock('../src/components/Eyebrow', () => ({ Eyebrow: ({ children }) => React.createElement('h2', {}, children) }));
 vi.mock('../src/lib/EndpointContext', () => ({ useEndpoint: () => ({ call: h.call }) }));
+vi.mock('../src/components/LoadFailed', () => ({ LoadFailed: ({ label, onRetry }) => React.createElement('div', { role: 'alert' }, React.createElement('span', {}, `Couldn't load ${label}`), React.createElement('button', { type: 'button', onClick: onRetry }, 'Retry')) }));
 vi.mock('../src/components/Toast', () => ({ useToast: () => h.toast }));
 vi.mock('../src/hooks/useBack', () => ({ useBack: () => vi.fn() }));
 vi.mock('../src/hooks/usePullRefresh', () => ({ usePullRefresh: () => ({ refreshing: false, onRefresh: vi.fn() }) }));
@@ -148,6 +149,16 @@ describe('activity screen', () => {
     expect(screen.getByText('Activity needs a newer daemon')).toBeTruthy();
   });
 
+  it('offers a retry when the first list could not be loaded, instead of staying blank', () => {
+    const retry = vi.fn();
+    h.activity = state({ needsYou: [], running: [], scheduled: [] }, { supported: false, loadError: new Error('timeout'), refresh: retry });
+    render(<ActivityScreen />);
+    expect(screen.getByText("Couldn't load activity")).toBeTruthy();
+    expect(screen.queryByText('Nothing running')).toBeNull();
+    fireEvent.click(screen.getByText('Retry'));
+    expect(retry).toHaveBeenCalledTimes(1);
+  });
+
   it('shows neither message while the first list is still loading', () => {
     h.activity = state({ needsYou: [], running: [], scheduled: [] }, { supported: false });
     render(<ActivityScreen />);
@@ -164,6 +175,18 @@ describe('activity rows', () => {
       ['Today', [['clock', 'in 2h']]],
       ['No fixed time', [['clock', 'not scheduled']]],
     ]);
+  });
+
+  it('names the default profile alpi on every kind of row, as the chat does', () => {
+    const base = { title: 'digest', job_id: 'j9', next_fire: new Date((NOW + 7200) * 1000).toISOString(), last_run_at: NOW - 3600, last_run_status: 'error' };
+    const sections = activitySections({
+      needsYou: [{ kind: 'approval', request_id: 'r9', profile: 'default', title: 'a command', ts: NOW - 5 }],
+      running: [{ kind: 'turn', profile: 'default', title: 'summary', started_at: NOW - 5, source: 'chat' }],
+      scheduled: [{ ...base, profile: 'default' }],
+    }, NOW);
+    const titles = sections.flatMap((sec) => (sec.rows ?? sec.groups.flatMap((g) => g.rows)).map((r) => r.title));
+    expect(titles.length).toBeGreaterThan(3);
+    expect(titles.every((t) => t.startsWith('alpi · '))).toBe(true);
   });
 
   it('groups what comes next by day with the time on the right, soonest first', () => {

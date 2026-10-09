@@ -1511,6 +1511,34 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   The TUI is the exception — it consumes every `assistant_done` to
   rewrite the active bubble, which is correct for live streaming.
 
+- **A banner opens what it announces; a link lands where it says.** The
+  desktop raises each banner with a deeplink `{kind, profile, id,
+  connection_id}`. The desktop notification plugin reports no click, so the
+  app opens the latest banner raised while the window was unfocused when the
+  window gains focus within 20 s: only the latest, an approval or question
+  outranks a later notice, connection and budget notices are never opened, and
+  opening the app from the tray, the shortcut or a menu drops it. `chat`,
+  `profile` and `workgroup` open that view, `output` opens the notification,
+  `approval` and `clarification` bring that request to the front, and
+  `settings` with id `schedules` opens the profile's Schedule panel (an admin
+  connection only, decided on the connection the banner came from). The
+  client switches to the originating connection first, applies a request or a
+  schedule once the switch has landed, and never leaves unsaved settings.
+  On the phone a tap follows `deepLinkFor`: `schedule.failed` opens its output
+  row (`deep_link`) or, on a daemon without one, the job page; a link from
+  another app never carries a `draft`, and a pairing link the system hands over
+  again after its token was used leaves for the inbox.
+
+- **A chat send is accepted when the stream starts.** The desktop keeps what
+  was typed until the first frame of `host.chat.send` (`session_start`); an
+  `error` before `session_start` (a busy session, an unstaged attachment, a
+  session that is not found) ends the stream, removes the pending turn and
+  returns the text to the composer, while an `error` after it is the engine's
+  and is followed by `reply` and `done`. A stream that closes without `done` is
+  reported as an error, never as a finished turn. A connections file the
+  client cannot decode is set aside as `connections.corrupt-<time>.json` and an
+  unreadable one is never overwritten.
+
 - **Two messaging intents: `notify` (owner) vs `send_message` (third party).**
   `notify(text, title?, type?)` pushes to the OWNER's own paired Alpi apps —
   it files an inbox row in `~/.alpi/outputs/` and emits the `agent.message`

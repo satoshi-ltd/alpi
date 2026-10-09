@@ -310,7 +310,7 @@ export function NetworkAddressField({ profile, onSaved, onLoadingChange = null }
         await onSaved?.();
         notify({
           message: `Listen port ${portNumber} saved · restart failed: ${String(error)}`,
-          variant: "warn",
+          variant: "warning",
           duration: 4500,
         });
         setOpen(false);

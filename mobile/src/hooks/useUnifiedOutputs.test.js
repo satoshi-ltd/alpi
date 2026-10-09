@@ -8,7 +8,7 @@ vi.mock('../theme/ThemeContext', () => ({ useTheme: () => ({ colors: { accent: '
 
 import { EndpointContext } from '../lib/EndpointContext';
 import { call as rpcCall } from '../lib/rpc';
-import { adminConnectionsOf, connectionsSignature, fetchConnectionOutputs, isMemberOnly, markAllUnifiedRead, mergeOutputs, outputsEmptyState, outputsSubtitle, useUnifiedOutputs } from './useUnifiedOutputs';
+import { adminConnectionsOf, connectionsSignature, fetchConnectionOutputs, isMemberOnly, markAllUnifiedRead, mergeOutputs, outputsEmptyState, outputsSubtitle, settledStatuses, useUnifiedOutputs } from './useUnifiedOutputs';
 
 const conn = { id: 'c1', name: 'home', ip: '100.0.0.1', port: 8838, token: 't' };
 
@@ -336,6 +336,37 @@ describe('outputsSubtitle', () => {
     expect(outputsSubtitle({ unreachable: false, unreadCount: 0, hasRows: false })).toBe('INBOX ZERO');
     expect(outputsSubtitle({ unreachable: false, unreadCount: 2, hasRows: true })).toBe('2 UNREAD');
     expect(outputsSubtitle({ memberOnly: true, unreachable: true, unreadCount: 0, hasRows: false })).toBe('MEMBER');
+  });
+});
+
+describe('settledStatuses', () => {
+  const conns = [{ id: 'c1', name: 'home', ip: '1.1.1.1', port: 80 }];
+
+  it('keeps the last settled status through a probing round, so a probe does not fan out twice', () => {
+    const online = settledStatuses(new Map(), new Map([['c1', 'online']]));
+    const probing = settledStatuses(online, new Map([['c1', 'probing']]));
+    const again = settledStatuses(probing, new Map([['c1', 'online']]));
+    expect(connectionsSignature(conns, probing)).toBe(connectionsSignature(conns, online));
+    expect(connectionsSignature(conns, again)).toBe(connectionsSignature(conns, online));
+  });
+
+  it('still moves when a daemon really goes offline and when it comes back', () => {
+    const online = settledStatuses(new Map(), new Map([['c1', 'online']]));
+    const offline = settledStatuses(online, new Map([['c1', 'offline']]));
+    const back = settledStatuses(offline, new Map([['c1', 'online']]));
+    expect(connectionsSignature(conns, offline)).not.toBe(connectionsSignature(conns, online));
+    expect(connectionsSignature(conns, back)).toBe(connectionsSignature(conns, online));
+  });
+
+  it('does not wobble while an offline daemon is re-probed every few seconds', () => {
+    let state = settledStatuses(new Map(), new Map([['c1', 'offline']]));
+    const first = connectionsSignature(conns, state);
+    for (let i = 0; i < 3; i += 1) {
+      state = settledStatuses(state, new Map([['c1', 'probing']]));
+      expect(connectionsSignature(conns, state)).toBe(first);
+      state = settledStatuses(state, new Map([['c1', 'offline']]));
+      expect(connectionsSignature(conns, state)).toBe(first);
+    }
   });
 });
 

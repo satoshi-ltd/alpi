@@ -87,6 +87,11 @@ describe("isMissingVerb", () => {
     expect(isMissingVerb("alp -32004: not-found — no session 's1'")).toBe(false);
     expect(isMissingVerb("connection refused")).toBe(false);
   });
+
+  it("treats a scoped device's forbidden answer like a missing verb so the entry hides", () => {
+    expect(isMissingVerb("alp -32000: forbidden")).toBe(true);
+    expect(isMissingVerb(new Error("forbidden"))).toBe(true);
+  });
 });
 
 describe("useActivity", () => {

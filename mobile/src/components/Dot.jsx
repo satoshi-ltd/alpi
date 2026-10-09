@@ -1,14 +1,17 @@
 import { useEffect, useRef } from 'react';
 import { Animated, Easing } from 'react-native';
 
+import { useReduceMotion } from '../lib/reduceMotion';
 import { dotSize, pulseDuration } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeContext';
 
 export function Dot({ color, pulse = false }) {
   const { colors } = useTheme();
   const opacity = useRef(new Animated.Value(1)).current;
+  const reduceMotion = useReduceMotion();
+  const pulsing = pulse && !reduceMotion;
   useEffect(() => {
-    if (!pulse) return;
+    if (!pulsing) return;
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(opacity, { toValue: 0.4, duration: pulseDuration / 2, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
@@ -17,7 +20,7 @@ export function Dot({ color, pulse = false }) {
     );
     loop.start();
     return () => loop.stop();
-  }, [pulse, opacity]);
+  }, [pulsing, opacity]);
   return (
     <Animated.View
       style={{
@@ -25,7 +28,7 @@ export function Dot({ color, pulse = false }) {
         height: dotSize,
         borderRadius: dotSize / 2,
         backgroundColor: color ?? colors.ink3,
-        opacity: pulse ? opacity : 1,
+        opacity: pulsing ? opacity : 1,
       }}
     />
   );

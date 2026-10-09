@@ -40,7 +40,7 @@ function SwipeAction({ label, onPress, fg, bg }) {
   );
 }
 
-export function NotificationRow({ row, unread, multi, canToggleRead = true, onOpen, onToggleRead, onDelete }) {
+export function NotificationRow({ row, unread, multi, selected = false, canToggleRead = true, onOpen, onToggleRead, onDelete }) {
   const { colors, fonts, fontSizes } = useTheme();
   const reduceMotion = useReduceMotion();
   const swipeRef = useRef(null);
@@ -87,6 +87,7 @@ export function NotificationRow({ row, unread, multi, canToggleRead = true, onOp
       <Pressable
         onPress={() => onOpen?.(row)}
         accessibilityRole="button"
+        accessibilityState={{ selected }}
         accessibilityLabel={rowA11yLabel(row, { unread, multi })}
         accessibilityActions={a11yActions}
         onAccessibilityAction={onAccessibilityAction}
@@ -98,7 +99,7 @@ export function NotificationRow({ row, unread, multi, canToggleRead = true, onOp
           paddingVertical: space.s4,
           paddingLeft: space.s4,
           paddingRight: space.s6,
-          backgroundColor: pressed ? colors.selected : colors.bgPane,
+          backgroundColor: pressed || selected ? colors.selected : colors.bgPane,
           borderBottomWidth: 0.5,
           borderBottomColor: colors.line,
         })}

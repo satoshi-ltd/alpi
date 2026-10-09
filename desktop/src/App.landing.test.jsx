@@ -26,6 +26,7 @@ vi.mock("./lib/updater.js", () => ({
   subscribeUpdater: vi.fn(() => () => {}),
 }));
 
+import { _resetDaemonBus } from "./lib/daemon-bus.js";
 import App from "./App.jsx";
 
 configure({ asyncUtilTimeout: 5000 });
@@ -203,6 +204,32 @@ describe("App landing", () => {
     await waitFor(() => expect(state.calls.filter(([c]) => c === "chat_send_stream")).toHaveLength(2));
     expect(screen.queryByText(/A turn is already running/)).toBeNull();
     expect(state.calls.filter(([c]) => c === "chat_send_stream").map(([, a]) => a.sessionId)).toEqual([null, null]);
+  });
+
+  it("puts the message back in the box when the daemon refuses it after the send was launched", async () => {
+    const state = daemon();
+    const chatListeners = [];
+    listen.mockImplementation(async (name, cb) => {
+      listeners[name] = cb;
+      if (name === "chat-event") chatListeners.push(cb);
+      return () => {};
+    });
+    const notify = vi.fn();
+    window.notify = notify;
+    render(<App />);
+    await waitFor(() => expect(selected("alpi")).toBe(true));
+    pressNewSession();
+    await waitFor(() => expect(screen.getByText("Start a new thread")).toBeInTheDocument());
+    const box = screen.getByPlaceholderText(/Message/);
+    fireEvent.change(box, { target: { value: "while another device is running a turn" } });
+    fireEvent.keyDown(box, { key: "Enter", metaKey: true });
+    await waitFor(() => expect(state.calls.filter(([c]) => c === "chat_send_stream")).toHaveLength(1));
+    const [, args] = state.calls.find(([c]) => c === "chat_send_stream");
+    await act(async () => {
+      chatListeners.forEach((cb) => cb({ payload: { request_id: args.requestId, kind: "error", text: "session already has a running turn" } }));
+    });
+    await waitFor(() => expect(screen.getByPlaceholderText(/Message/).value).toBe("while another device is running a turn"));
+    expect(screen.queryByText("while another device is running a turn", { selector: "p, div:not(textarea)" })).toBeNull();
   });
 
   it("keeps an unsaved Settings draft when New session comes from ⌘N, the row menu or the palette", async () => {
@@ -387,6 +414,22 @@ describe("App landing", () => {
     await waitFor(() => expect(row("scout")).toBeTruthy());
     await waitFor(() => expect(selected("scout")).toBe(true));
     expect(selected("alpi")).toBe(false);
+  });
+
+  it("asks the daemon for its pending approvals and questions after a replayed burst", async () => {
+    daemon();
+    _resetDaemonBus();
+    render(<App />);
+    await waitFor(() => expect(selected("alpi")).toBe(true));
+    await waitFor(() => expect(listeners["daemon-event"]).toBeTruthy());
+    const pending = () => invoke.mock.calls.filter(([cmd]) => cmd === "approval_pending" || cmd === "clarification_pending").length;
+    const before = pending();
+    await act(async () => {
+      listeners["daemon-event"]({ payload: { replay: true, frame: { event: "approval.request", data: { request_id: "r1" } } } });
+      listeners["daemon-event"]({ payload: { replay: true, frame: { event: "clarification.resolved", data: { request_id: "q1" } } } });
+      await new Promise((resolve) => setTimeout(resolve, 450));
+    });
+    expect(pending()).toBe(before + 2);
   });
 
   it("welcomes a computer with no alpi with two paths instead of a locked panel", async () => {

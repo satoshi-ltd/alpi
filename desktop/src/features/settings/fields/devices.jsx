@@ -23,6 +23,7 @@ import styles from "../Settings.module.css";
 import { copyText } from "../../../lib/clipboard.js";
 import { pairingDisplayStatus, pairingExpiryText } from "../../../lib/pairing-expiry.js";
 import { EMPTY, emptyLine } from "../../../../../common/emptyCopy.mjs";
+import { isComposing } from "../../../lib/composition.js";
 
 function cacheKey(connectionId) {
   return connectionId || "local";
@@ -592,7 +593,7 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
           value={label}
           autoFocus
           onChange={(e) => setLabel(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && !payload) generate(); }}
+          onKeyDown={(e) => { if (!isComposing(e) && e.key === "Enter" && !payload) generate(); }}
           placeholder="MacBook Pro · Phone · …"
           spellCheck={false}
           disabled={busy || Boolean(payload)}

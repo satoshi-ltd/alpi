@@ -49,6 +49,11 @@ THEMED = (
     ("#fffffe", "var(--on-danger)"),
     ("#b3470e", "var(--c-warning-text)"),
 )
+APP_THEMED = (
+    ("#14110c", "var(--accent)"),
+    ("#217a45", "var(--c-success-text)"),
+)
+APP_PREFIXES = ("Phone-", "Fold-", "Desktop-", "Proposals-", "System-")
 LITERAL_BOARDS = {"System-Tokens.dc.html"}
 EMPTY_STATES = {"proposals": "No proposals open. A visual idea lands here as a board before it is approved."}
 
@@ -63,6 +68,9 @@ def board_root(path):
         return root
     for literal, token in THEMED:
         root = root.replace(literal, token)
+    if os.path.basename(path).startswith(APP_PREFIXES):
+        for literal, token in APP_THEMED:
+            root = root.replace(literal, token)
     return root
 
 

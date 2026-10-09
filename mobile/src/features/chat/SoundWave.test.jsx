@@ -15,7 +15,7 @@ vi.mock('react-native', () => {
     sequence: () => ({}),
     loop: () => ({ start() { h.loops += 1; }, stop() {} }),
   };
-  const Pressable = ({ children }) => React.createElement('button', { type: 'button' }, children);
+  const Pressable = ({ children, hitSlop, accessibilityLabel }) => React.createElement('button', { type: 'button', 'aria-label': accessibilityLabel, 'data-hitslop': JSON.stringify(hitSlop ?? null) }, children);
   return { Animated, Pressable, StyleSheet: { create: (s) => s } };
 });
 vi.mock('../../lib/readAloud', () => ({
@@ -38,5 +38,13 @@ describe('SoundWave', () => {
     render(<SoundWave accent="#abc" />);
     act(() => h.listener({ kind: 'playing' }));
     expect(h.loops).toBe(0);
+  });
+
+  it('is a named control with a 44 pt touch height around its 18 pt bars', () => {
+    const { getByLabelText } = render(<SoundWave accent="#abc" />);
+    act(() => h.listener({ kind: 'playing' }));
+    const button = getByLabelText('Silence read-aloud');
+    const slop = JSON.parse(button.getAttribute('data-hitslop'));
+    expect(slop.top + slop.bottom + 18).toBeGreaterThanOrEqual(44);
   });
 });

@@ -106,3 +106,30 @@ describe('resolved requests', () => {
     expect(h.dismiss).toHaveBeenCalledWith('a');
   });
 });
+
+describe('a pending prompt survives a refreshed connection object', () => {
+  it('keeps the queue, and asks nothing again, when the same endpoint arrives as a new object', async () => {
+    h.call.mockResolvedValue(pending('a'));
+    const view = render(<Probe />);
+    await act(async () => {});
+    expect(ids()).toEqual(['a']);
+    h.call.mockClear();
+    h.endpoint = { id: 'c1', label: 'renamed' };
+    h.call = vi.fn(async () => pending());
+    view.rerender(<Probe />);
+    await act(async () => {});
+    expect(ids()).toEqual(['a']);
+    expect(h.call).not.toHaveBeenCalled();
+  });
+
+  it('still drops the queue and asks the new daemon when the endpoint really changes', async () => {
+    h.call.mockResolvedValue(pending('a'));
+    const view = render(<Probe />);
+    await act(async () => {});
+    h.call.mockResolvedValue(pending('b'));
+    h.endpoint = { id: 'c2' };
+    view.rerender(<Probe />);
+    await act(async () => {});
+    expect(ids()).toEqual(['b']);
+  });
+});

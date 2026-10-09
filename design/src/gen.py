@@ -307,7 +307,7 @@ def m_button(title, variant="secondary", size="sm", accent=None):
     if variant == "primary":
         bg, fg, fw = (accent or "#141414"), "#ffffff", 600
     elif variant == "danger":
-        bg, fg, fw = "#c14545", "#ffffff", 600
+        bg, fg, fw = "#c14545", "#fffffe", 600
     elif variant == "ghost":
         bg, fg, fw = "transparent", "#454545", 500
     elif variant == "danger-ghost":
@@ -331,7 +331,7 @@ DAYS = [("W", 0.22, 0.02), ("T", 0.30, 0.02), ("F", 0.10, 0.01), ("S", 0.24, 0.0
 
 
 def usage_chart(accent=DOC_ACCENT, today="$0.00", tin="102K", tout="831", cap="$1.00", left="100% left",
-                footer="30-day total $1.61 · 17.2M in / 277K out", days=DAYS, mobile=True, empty=False, ground=None):
+                footer="30-day total $1.61 · 17.2M in / 277K out", days=DAYS, mobile=True, empty=False, ground=None, narrow=False):
     in_col = mix(accent, 0.24) if ground is None else mix(accent, 0.24, ground)
     bars = []
     labels = []
@@ -361,9 +361,9 @@ def usage_chart(accent=DOC_ACCENT, today="$0.00", tin="102K", tout="831", cap="$
     return f"""<div style="display: flex; flex-direction: column">
 <div style="display: flex; align-items: flex-start; padding-bottom: 14px; border-bottom: 0.5px solid rgba(20,20,20,0.14)">
 {tile("Today", f'<span style="font-weight: 600; font-size: 28px; line-height: 1; letter-spacing: -0.018em; color: {accent}">{today}</span>')}
-{tile("Input", mono(tin, "tok"))}
-{tile("Output", mono(tout, "tok"))}
-{tile("Cap / day" if cap else "Avg / day", mono(cap or "$0.00", left))}
+{tile("Input", mono(tin, None if narrow else "tok"))}
+{tile("Output", mono(tout, None if narrow else "tok"))}
+{tile(("Cap · " + left if narrow else "Cap / day") if cap else "Avg / day", mono(cap or "$0.00", None if narrow else left))}
 </div>
 {empty_line if empty else track}
 </div>"""
@@ -499,7 +499,7 @@ def m_chat_header(title, accent, meta_html, two_pane=False, back=True, meta_item
 {back_html}
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
 <div style="display: flex; align-items: center; gap: {gap}px">{identity_glyph(title, accent, 20, diamond(accent, 18))}<span style="flex: 1; min-width: 0; overflow: hidden">{app_crease(title, 28, accent, "#ffffff", track="-0.018em")}</span>
-<span style="display: flex; align-items: center; flex-shrink: 0"><button aria-label="Sessions" class="m-chrome">{ic("clock", 20, "#454545")}</button><button aria-label="More" class="m-chrome">{ic("more", 20, "#454545")}</button></span></div>
+<span style="display: flex; align-items: center; flex-shrink: 0"><button aria-label="Sessions" class="m-chrome">{ic("history", 20, "#454545")}</button><button aria-label="More" class="m-chrome">{ic("more", 20, "#454545")}</button></span></div>
 {m_meta_strip(meta_items, 14) if two_pane else f'<div style="display: flex; align-items: center; gap: 6px; margin-top: 1px; white-space: nowrap; overflow: hidden">{meta_html}</div>'}
 </div>
 </div>"""
@@ -558,13 +558,8 @@ def m_activity_row(icon, title, sub, tone="quiet", action=""):
 
 
 def m_activity_list():
-    group = lambda label, rows, color="#6b6b6b": f'<div role="list"><div style="padding: 16px 16px 6px">{m_eyebrow(label, color)}</div>{"".join(rows)}</div>'
-    return (group("Needs you · 2", [m_activity_row(identity_glyph("abby", "#df4b9d", 20), "abby · wants to run a command", "approval · 2m ago", "warning", "Review"),
-                                    m_activity_row(identity_glyph("doc", DOC_ACCENT, 20), "doc · Which lab should I book?", "question · 12s ago", "warning", "Review")], WARNING_TEXT)
-            + group("Running · 2", [m_activity_row(_wg_mark(DOC_ACCENT, 20), "alpha · #collect", "phase 2 of 4 · daily-digest", "accent"),
-                                    m_activity_row(identity_glyph("alpi", "#f0b447", 20), "alpi · Summarize yesterday’s deploys", "4m · chat", "accent")])
-            + group("Scheduled", [m_activity_row(identity_glyph("clonara", "#f05940", 20), "clonara · weekly labs", "failed 3h ago", "danger"),
-                                  m_activity_row(identity_glyph("doc", DOC_ACCENT, 20), "doc · Daily brief", "in 14h")]))
+    import mobile_attention_studies as ms
+    return ms.activity_list()
 
 
 def phone_activity():
@@ -592,6 +587,7 @@ def phone_roster():
     body = f"""<div style="display: flex; flex-direction: column; height: 100%; background: #ffffff">
 {m_conn_header(ring="#ffffff", collapse=False, bg="#ffffff")}
 <div style="height: 0.5px; background: rgba(20,20,20,0.07)"></div>
+{_ms().needs_band()}
 <div style="flex: 1; min-height: 0; overflow: hidden">{m_roster(compact=False)}</div>
 {m_shell_footer(theme=False, ring="#ffffff", border=True)}
 </div>
@@ -619,13 +615,24 @@ def phone_notification_page():
     return page("Phone · notification", 390, 844, body)
 
 
-PHONE_ACTIVITY_H = 540
-FOLD_ACTIVITY_H = 700
+PHONE_ACTIVITY_H = 880
+FOLD_ACTIVITY_H = 900
+
+
+PHONE_SETTINGS_H = 3640
+FOLD_SETTINGS_H = 3330
+
+
+def _ms():
+    import mobile_attention_studies as ms
+    return ms
 
 
 def phone_profile_settings():
     body = f"""<div style="display: flex; flex-direction: column">
 {m_screen_header("doc", "Profile · settings", creased=True)}
+{_ms().settings_head_chips("Overview")}
+{_ms().settings_summary()}
 {m_section("Overview", first=False)}
 {m_group(
     m_row("Paused", "paused profiles can't be chatted and sort last in new-chat", control=switch(False, DOC_ACCENT, "Paused"), chevron=False),
@@ -637,12 +644,12 @@ def phone_profile_settings():
     m_row("Vision model", "image inspection via read_image", "main model"),
     m_row("Budget", "daily spend cap", control=meter("$0.00", "/$1.00", 0)),
     m_row("Workspace", "", "/data/workspace/doc"),
-    m_row("Appearance", "", control='<span style="display: inline-flex; align-items: center; gap: 8px">' + identity_glyph("doc", DOC_ACCENT, 16) + '<span style="font-size: 13px; color: #141414">blue shield</span><span style="font-family: {MONO}; font-size: 12px; color: #454545">#3899e2</span></span>'),
+    m_row("Appearance", "", control='<span style="display: inline-flex; align-items: center; gap: 8px">' + identity_glyph("doc", DOC_ACCENT, 16) + '<span style="font-size: 13px; color: #141414">blue shield</span><span style="font-family: ' + MONO + '; font-size: 12px; color: #454545">#3899e2</span></span>'),
     m_row("Home", "", "~/.alpi/profiles/doc", chevron=False, sep=False),
 )}
 {m_section("Usage", "last 14 days")}
 {m_group(
-    m_band(usage_chart(ground="transparent")),
+    m_band(usage_chart(ground="transparent", narrow=True)),
 )}
 {m_section("Identity", "how peers see this agent")}
 {m_group(
@@ -669,7 +676,7 @@ def phone_profile_settings():
 )}
 {m_section("Schedule")}
 {m_group(
-    m_row("Cron jobs", "disable · fire · delete · add new", "5", sep=False),
+    m_row("Cron jobs", "disable · fire · delete · add new", "4", sep=False),
 )}
 {m_section("Sandbox")}
 {m_group(
@@ -681,20 +688,39 @@ def phone_profile_settings():
     m_row("Voice", "", "Alvaro · Spanish (ES) · male"),
     m_row("Auto-read replies", "reads each agent reply aloud as it arrives — never your messages", control=switch(False, DOC_ACCENT, "Auto-read replies"), chevron=False, sep=False),
 )}
+{m_section("MCP Servers")}
+{m_group(
+    m_row("Manage", "add, remove, inspect tools", "0", sep=False),
+)}
+{m_section("Brain", "skills, memories, tools")}
+{m_group(
+    m_row("Skills", "instructions loaded on demand", "5"),
+    m_row("Memories", "USER · MEMORY · AGENT", "3 files"),
+    m_row("Tools", "native callable functions", "view", sep=False),
+)}
+{m_section("Storage", "disk footprint")}
+{m_group(
+    m_row("sessions", "42 files", "3.1 MB", chevron=False),
+    m_row("skills", "18 files", "212 KB", chevron=False),
+    m_row("memories", "3 files", "14 KB", chevron=False),
+    m_row("knowledge", "1 file", "6.4 MB", chevron=False),
+    m_row("Reclaim space", "caches, logs, old transcripts, index bloat", sep=False),
+)}
 {m_section("Danger zone")}
 {m_group(
     m_row("Delete profile", "removes identity, memory, skills, schedule from disk. Cannot be undone.", danger=True, sep=False),
 )}
 </div>
 """
-    return page("Phone · profile settings", 390, 2540, body)
+    return page("Phone · profile settings", 390, PHONE_SETTINGS_H, body)
 
 
 def fold_profile_settings():
-    inner = f"""<div style="max-width: 968px; padding: 20px 24px 40px; box-sizing: border-box; display: flex; flex-direction: column">
-{m_wide_section("Overview", first=True)}
+    inner = f"""<div style="max-width: 968px; padding: 8px 24px 40px; box-sizing: border-box; display: flex; flex-direction: column">
+{_ms().settings_summary()}
+{m_wide_section("Overview", first=False)}
 {m_wide_row("Paused", "paused profiles can't be chatted and sort last in new-chat", control=switch(False, DOC_ACCENT, "Paused"), chevron=False)}
-{m_wide_row("Providers", "API keys + local Ollama", control='<span style="display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 2px; background: #f2f2f2; font-family: {MONO}; font-size: 12px; color: #454545">openrouter</span>')}
+{m_wide_row("Providers", "API keys + local Ollama", control='<span style="display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 2px; background: #f2f2f2; font-family: ' + MONO + '; font-size: 12px; color: #454545">openrouter</span>')}
 {m_wide_row("Model", "", "deepseek-v4.1-flash")}
 {m_wide_row("Reasoning", "how hard the model thinks before answering", "default")}
 {m_wide_row("Fast model", "cheap model for side-tasks &amp; delegation", "main model")}
@@ -702,7 +728,7 @@ def fold_profile_settings():
 {m_wide_row("Vision model", "image inspection via read_image", "main model")}
 {m_wide_row("Budget", "daily spend cap", control=meter("$0.00", "/$1.00", 0))}
 {m_wide_row("Workspace", "", "/data/workspace/doc")}
-{m_wide_row("Appearance", "", control='<span style="display: inline-flex; align-items: center; gap: 8px">' + identity_glyph("doc", DOC_ACCENT, 16) + '<span style="font-size: 13px; color: #141414">blue shield</span><span style="font-family: {MONO}; font-size: 12px; color: #454545">#3899e2</span></span>')}
+{m_wide_row("Appearance", "", control='<span style="display: inline-flex; align-items: center; gap: 8px">' + identity_glyph("doc", DOC_ACCENT, 16) + '<span style="font-size: 13px; color: #141414">blue shield</span><span style="font-family: ' + MONO + '; font-size: 12px; color: #454545">#3899e2</span></span>')}
 {m_wide_row("Home", "", "~/.alpi/profiles/doc", chevron=False)}
 {m_wide_section("Usage", "last 14 days")}
 {usage_chart()}
@@ -728,18 +754,33 @@ def fold_profile_settings():
 {m_wide_section("Voice")}
 {m_wide_row("Voice", "", "Alvaro · Spanish (ES) · male")}
 {m_wide_row("Auto-read replies", "reads each agent reply aloud as it arrives — never your messages", control=switch(False, DOC_ACCENT, "Auto-read replies"), chevron=False)}
+{m_wide_section("Schedule")}
+{m_wide_row("Cron jobs", "disable · fire · delete · add new", "4")}
+{m_wide_section("MCP Servers")}
+{m_wide_row("Manage", "add, remove, inspect tools", "0")}
+{m_wide_section("Brain", "skills, memories, tools")}
+{m_wide_row("Skills", "instructions loaded on demand", "5")}
+{m_wide_row("Memories", "USER · MEMORY · AGENT", "3 files")}
+{m_wide_row("Tools", "native callable functions", "view")}
+{m_wide_section("Storage", "disk footprint")}
+{m_wide_row("sessions", "42 files", "3.1 MB", chevron=False)}
+{m_wide_row("skills", "18 files", "212 KB", chevron=False)}
+{m_wide_row("memories", "3 files", "14 KB", chevron=False)}
+{m_wide_row("knowledge", "1 file", "6.4 MB", chevron=False)}
+{m_wide_row("Reclaim space", "caches, logs, old transcripts, index bloat")}
 {m_wide_section("Danger zone")}
 {m_wide_row("Delete profile", "removes identity, memory, skills, schedule from disk. Cannot be undone.", danger=True)}
 </div>"""
     body = f"""<div style="display: flex; height: 100%">
-{m_sidebar(2000)}
+{m_sidebar(FOLD_SETTINGS_H)}
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: #ffffff">
 {m_screen_header("doc", "Settings", wide=True, creased=True, meta=[f'<span style="font-family: {MONO}; font-size: 12px; color: #454545">deepseek-v4.1-flash</span>', meter("$0.00", "/$1.00", 0)])}
+{_ms().settings_head_chips("Overview")}
 {inner}
 </div>
 </div>
 """
-    return page("Fold · profile settings", 852, 2120, body)
+    return page("Fold · profile settings", 852, FOLD_SETTINGS_H, body)
 
 
 
@@ -756,7 +797,7 @@ def phone_wg_settings():
     m_row("Hub", "", "@mira", chevron=False),
     m_row("Status", "pause stops dispatch · leave drops membership", control=pill("active", tone="success"), chevron=False),
     m_row("Auto-read messages", "reads agents' automatic messages aloud — never your directives", control=switch(False, ALPI_ACCENT, "Auto-read messages"), chevron=False),
-    m_row("Accent", "", control='<span style="display: inline-flex; align-items: center; gap: 8px"><span style="width: 16px; height: 16px; border-radius: 4px; background: ' + ALPI_ACCENT + '"></span><span style="font-family: {MONO}; font-size: 12px; color: #454545">#14110c</span></span>'),
+    m_row("Accent", "", control='<span style="display: inline-flex; align-items: center; gap: 8px"><span style="width: 16px; height: 16px; border-radius: 4px; background: ' + ALPI_ACCENT + '"></span><span style="font-family: ' + MONO + '; font-size: 12px; color: #454545">&#35;14110c</span></span>'),
     m_row("Id", "", "wg_4f2a…9c1e", chevron=False, sep=False),
 )}
 {m_section("Budget", "workgroup spend cap")}
@@ -765,7 +806,7 @@ def phone_wg_settings():
 )}
 {m_section("Usage", "last 14 days")}
 {m_group(
-    m_band(usage_chart(ALPI_ACCENT, "$0.00", "12K", "310", None, None, "14-day total $0.40 · 0.9M in / 22K out", ground="transparent")),
+    m_band(usage_chart(ALPI_ACCENT, "$0.00", "12K", "310", None, None, "14-day total $0.40 · 0.9M in / 22K out", ground="transparent", narrow=True)),
 )}
 {m_section("Briefing")}
 {m_group(
@@ -819,14 +860,14 @@ def fold_wg_settings():
 {m_wide_row("Delete workgroup", "removes it for every member. Cannot be undone.", danger=True)}
 </div>"""
     body = f"""<div style="display: flex; height: 100%">
-{m_sidebar(2320, selected="", wg_selected=True)}
+{m_sidebar(2400, selected="", wg_selected=True)}
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: #ffffff">
-{m_screen_header("alpha", "Settings", accent=ALPI_ACCENT, creased=True, glyph=_wg_mark(ALPI_ACCENT, 20), wide=True, meta=['<span style="font-family: {MONO}; font-size: 12px; color: #454545">hub @mira</span>', '<span style="font-family: {MONO}; font-size: 12px; color: #454545">7 members</span>', '<span style="font-family: {MONO}; font-size: 12px; color: #217a45">active</span>', '<span style="font-family: {MONO}; font-size: 12px; color: #6b6b6b">wg_4f2a…9c1e</span>'])}
+{m_screen_header("alpha", "Settings", accent=ALPI_ACCENT, creased=True, glyph=_wg_mark(ALPI_ACCENT, 20), wide=True, meta=['<span style="font-family: ' + MONO + '; font-size: 12px; color: #454545">hub @mira</span>', '<span style="font-family: ' + MONO + '; font-size: 12px; color: #454545">7 members</span>', '<span style="font-family: ' + MONO + '; font-size: 12px; color: #217a45">active</span>', '<span style="font-family: ' + MONO + '; font-size: 12px; color: #6b6b6b">wg_4f2a…9c1e</span>'])}
 {inner}
 </div>
 </div>
 """
-    return page("Fold · workgroup settings", 852, 2320, body)
+    return page("Fold · workgroup settings", 852, 2400, body)
 
 
 
@@ -871,7 +912,7 @@ def phone_connection_detail():
 )}
 {m_section("Usage", "last 14 days")}
 {m_group(
-    m_band(usage_chart(ALPI_ACCENT, "$0.00", "0", "0", None, None, "14-day total $0.00 · 0 in / 0 out", empty=True, ground="transparent")),
+    m_band(usage_chart(ALPI_ACCENT, "$0.00", "0", "0", None, None, "14-day total $0.00 · 0 in / 0 out", empty=True, ground="transparent", narrow=True)),
 )}
 {m_section("Devices", "2 paired")}
 {m_group(
@@ -978,6 +1019,9 @@ def build(desktop_boards):
 
     def place(name, html, x, y, w, h, title, page):
         write(name, html)
+        drawn = re.search(r"position: relative; width: (\d+)px; height: (\d+)px", html)
+        if drawn:
+            w, h = int(drawn.group(1)), int(drawn.group(2))
         boards[name] = {"x": x, "y": y, "w": w, "h": h, "title": title, "page": page}
         order.append(name)
 
@@ -990,6 +1034,8 @@ def build(desktop_boards):
 
     from conversation_boards import CONVERSATION
     from onboarding_studies import DESKTOP_ONBOARDING_H, desktop_onboarding, phone_onboarding
+    from mobile_attention_studies import FOLD_NOTIFICATIONS_H, FOLD_SCHEDULE_H, fold_notifications, fold_schedule
+    from mobile_state_studies import STATES_H, phone_states
 
     y = 0
     for label, items in (
@@ -1002,7 +1048,7 @@ def build(desktop_boards):
         title(f"s-{label}", label, y - 223, "system")
         for i, (name, html, h, t) in enumerate(items):
             place(name, html, i * 1360, y, 1280, h, t, "system")
-        y += max(h for _, _, h, _ in items)
+        y += max(boards[name]["h"] for name, _, _, _ in items)
 
     y = 0
     for name, html, h, label in (
@@ -1019,7 +1065,7 @@ def build(desktop_boards):
         y += 240
         title(f"d-{label}", label, y - 223, "desktop")
         place(name, html, 0, y, 1280, h, f"Desktop · {label.lower()}", "desktop")
-        y += h
+        y += boards[name]["h"]
 
     X_FOLD, X_PHONE = 0, 932
     y = 0
@@ -1029,7 +1075,7 @@ def build(desktop_boards):
         ("Pairing failures", [("Phone-PairUnreachable.dc.html", first_run["unreachable"], X_PHONE, 390, 844, "Phone · host unreachable, link kept"), ("Phone-PairLinkUsed.dc.html", first_run["used"], X_PHONE + 470, 390, 844, "Phone · link used, cleared"), ("Phone-NothingShared.dc.html", first_run["member"], X_PHONE + 940, 390, 844, "Phone · member with nothing shared")]),
         ("Chat", [("Fold-Chat.dc.html", fold_chat(), X_FOLD, 852, 884, "Fold · chat"), ("Phone-Chat.dc.html", phone_chat(), X_PHONE, 390, 844, "Phone · chat")]),
         ("Profile settings", [("Fold-ProfileSettings.dc.html", fold_profile_settings(), X_FOLD, 852, 2000, "Fold · profile settings"), ("Phone-ProfileSettings.dc.html", phone_profile_settings(), X_PHONE, 390, 2360, "Phone · profile settings")]),
-        ("Workgroup settings", [("Fold-WorkgroupSettings.dc.html", fold_wg_settings(), X_FOLD, 852, 2320, "Fold · workgroup settings"), ("Phone-WorkgroupSettings.dc.html", phone_wg_settings(), X_PHONE, 390, 2960, "Phone · workgroup settings")]),
+        ("Workgroup settings", [("Fold-WorkgroupSettings.dc.html", fold_wg_settings(), X_FOLD, 852, 2400, "Fold · workgroup settings"), ("Phone-WorkgroupSettings.dc.html", phone_wg_settings(), X_PHONE, 390, 2960, "Phone · workgroup settings")]),
         ("Profile panels", [("Phone-ProfilePanels.dc.html", mobile_panels_board(), X_FOLD, 1280, PANELS_MOBILE_H, "Phone · profile panels")]),
         ("Connections", [("Fold-ConnectionDetail.dc.html", fold_connection_detail(), X_FOLD, 852, 1300, "Fold · connection detail"), ("Phone-Connections.dc.html", phone_connections(), X_PHONE, 390, 844, "Phone · connections"), ("Phone-ConnectionDetail.dc.html", phone_connection_detail(), X_PHONE + 470, 390, 1500, "Phone · connection detail")]),
         ("App settings", [("Phone-Settings.dc.html", phone_settings(), X_PHONE, 390, 1100, "Phone · app settings")]),
@@ -1037,13 +1083,15 @@ def build(desktop_boards):
         ("Activity", [("Fold-Activity.dc.html", fold_activity(), X_FOLD, 852, FOLD_ACTIVITY_H, "Fold · activity"), ("Phone-Roster.dc.html", phone_roster(), X_PHONE, 390, 844, "Phone · roster"), ("Phone-Activity.dc.html", phone_activity(), X_PHONE + 470, 390, PHONE_ACTIVITY_H, "Phone · activity")]),
         ("Overlays", [("Fold-Sheet.dc.html", MOBILE_OVERLAYS["fold_sheet"](), X_FOLD, 852, 884, "Fold · sheet as a centred dialog"), ("Phone-Sheet.dc.html", MOBILE_OVERLAYS["phone_sheet"](), X_PHONE, 390, 844, "Phone · sheet"), ("Phone-ActionSheet.dc.html", MOBILE_OVERLAYS["phone_action"](), X_PHONE + 470, 390, 844, "Phone · action sheet"), ("Phone-TypedConfirm.dc.html", MOBILE_OVERLAYS["phone_confirm"](), X_PHONE + 940, 390, 844, "Phone · typed confirm")]),
         ("Sheets", [("Phone-ToolSheet.dc.html", MOBILE_OVERLAYS["phone_tool"](), X_PHONE, 390, 844, "Phone · tool step sheet"), ("Phone-SelectText.dc.html", MOBILE_OVERLAYS["phone_select"](), X_PHONE + 470, 390, 844, "Phone · select text"), ("Phone-MessageActions.dc.html", MOBILE_OVERLAYS["phone_message"](), X_PHONE + 940, 390, 844, "Phone · message actions")]),
+        ("Schedule", [("Fold-Schedule.dc.html", fold_schedule(), X_FOLD, 1104, FOLD_SCHEDULE_H, "Fold · schedule, list and job side by side"), ("Fold-Notifications.dc.html", fold_notifications(), X_FOLD + 1180, 1104, FOLD_NOTIFICATIONS_H, "Fold · notifications, list and reader side by side")]),
+        ("States", [("Phone-States.dc.html", phone_states(), X_FOLD, 1280, STATES_H, "Phone · empty, error and offline states")]),
     )
     for label, items in rows:
         y += 240
         title(f"m-{label}", label, y - 223, "mobile")
         for name, html, x, w, h, t in items:
             place(name, html, x, y, w, h, t, "mobile")
-        y += max(h for _, _, _, _, h, _ in items)
+        y += max(boards[name]["h"] for name, *_ in items)
 
     from brand_boards import BRAND_BOARDS
     y = 0
@@ -1051,7 +1099,7 @@ def build(desktop_boards):
         y += 240
         title(f"b-{t}", t, y - 223, "brand")
         place(name, fn(), 0, y, 1280, h, f"Brand · {t.lower()}", "brand")
-        y += h
+        y += boards[name]["h"]
 
     from proposals import PROPOSAL_BOARDS
     y = 0
@@ -1059,7 +1107,7 @@ def build(desktop_boards):
         y += 240
         title(f"p-{t}", t, y - 223, "proposals")
         place(name, fn(), 0, y, 1280, h, f"Proposals · {t.lower()}", "proposals")
-        y += h
+        y += boards[name]["h"]
 
     live_path = os.path.join(os.path.dirname(ROOT), "live", "project", "canvas.json")
     created = {"v": 1, "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}

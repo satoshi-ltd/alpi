@@ -145,7 +145,13 @@ export default function ProviderKey() {
             autoCorrect={false}
             helper={isExisting ? 'leaving this blank keeps the current key' : undefined}
             rightSlot={
-              <Pressable onPress={() => setShow((v) => !v)} hitSlop={6}>
+              <Pressable
+                onPress={() => setShow((v) => !v)}
+                hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel={show ? 'Hide key' : 'Show key'}
+                accessibilityState={{ expanded: !!show }}
+              >
                 <Icon name="eye" size="md" color={colors.ink3} />
               </Pressable>
             }

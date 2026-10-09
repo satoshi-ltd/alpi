@@ -105,3 +105,12 @@ describe('AttachmentCards document share flow', () => {
     expect(h.shareAsync).not.toHaveBeenCalled();
   });
 });
+
+describe('AttachmentCards remove control', () => {
+  it('reaches 44 pt around a 14 pt icon', () => {
+    render(<AttachmentCards items={[PDF]} onRemove={() => {}} />);
+    const remove = screen.getByLabelText('Remove report.pdf');
+    expect(Number(remove.getAttribute('hitslop'))).toBeGreaterThanOrEqual(15);
+    expect(remove.getAttribute('accessibilityrole')).toBe('button');
+  });
+});

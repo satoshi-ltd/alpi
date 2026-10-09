@@ -958,3 +958,21 @@ describe("useAllOutputs unreachable daemons", () => {
     expect(result.current.unreachable).toEqual(["work"]);
   });
 });
+
+describe("useOutput selection changes", () => {
+  it("never shows a late answer for the notification that is no longer selected", async () => {
+    const pending = {};
+    invoke.mockImplementation((cmd, params) => {
+      if (cmd !== "outputs_read") return Promise.resolve(null);
+      return new Promise((resolve) => { pending[params.id] = resolve; });
+    });
+    const { result, rerender } = renderHook(({ id }) => useOutput("abby", id), { initialProps: { id: "old" } });
+    await waitFor(() => expect(pending.old).toBeTruthy());
+    rerender({ id: "new" });
+    await waitFor(() => expect(pending.new).toBeTruthy());
+    await act(async () => { pending.new({ id: "new", body: "fresh" }); });
+    await act(async () => { pending.old({ id: "old", body: "stale" }); });
+    expect(result.current.row?.id).toBe("new");
+    expect(result.current.loading).toBe(false);
+  });
+});

@@ -126,8 +126,10 @@ describe('deepLinkFor', () => {
     })).toBe('/outputs/vera/abc123');
   });
 
-  it('falls back to the profile schedule when schedule.failed has no deep_link (older daemons)', () => {
+  it('falls back to the failed job page, or the profile schedule, when schedule.failed has no deep_link (older daemons)', () => {
+    expect(deepLinkFor({ event: 'schedule.failed', data: { profile: 'vera', job_id: '7be40d19' } })).toBe('/profile/vera/schedule/7be40d19');
     expect(deepLinkFor({ event: 'schedule.failed', data: { profile: 'vera' } })).toBe('/profile/vera/schedule');
+    expect(deepLinkFor({ event: 'schedule.failed', data: { job_id: 'x' } })).toBe('/');
   });
 
   it('routes agent.message via explicit deep_link to the output row', () => {

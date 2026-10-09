@@ -100,7 +100,7 @@ const stores = new Map();
 function storeFor(id) {
   let store = stores.get(id);
   if (!store) {
-    store = { data: null, supported: true, inflight: null, listeners: new Set() };
+    store = { data: null, supported: true, error: null, inflight: null, listeners: new Set() };
     stores.set(id, store);
   }
   return store;
@@ -117,11 +117,15 @@ function fetchInto(store, call) {
     .then((res) => {
       store.data = normalizeActivity(res);
       store.supported = true;
+      store.error = null;
     })
     .catch((error) => {
       if (isMissingVerb(error)) {
         store.supported = false;
         store.data = null;
+        store.error = null;
+      } else {
+        store.error = error;
       }
     })
     .finally(() => {
@@ -175,7 +179,7 @@ export function useActivity() {
   const debounced = useDebouncedCallback(refreshIfSupported, ACTIVITY_DEBOUNCE_MS);
   useEventEffect(['activity.changed'], debounced);
   useEventEffect([STREAM_CONNECTED], () => {
-    if (id && !storeFor(id).supported) refresh();
+    if (id) refresh();
   });
 
   const store = id ? storeFor(id) : null;
@@ -186,6 +190,7 @@ export function useActivity() {
   return {
     supported,
     unsupported: store?.supported === false,
+    loadError: !supported && store?.supported !== false ? store?.error ?? null : null,
     activity,
     states,
     needsYouCount: activity.needsYou.length,

@@ -1,8 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Modal, Pressable, Text, View } from 'react-native';
+import { AccessibilityInfo, Animated, Easing, Modal, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { mobile, radii, space } from '../theme/tokens';
 
+import { useReduceMotion } from '../lib/reduceMotion';
 import { useTheme } from '../theme/ThemeContext';
 import { plainError } from '../../../common/plainError.mjs';
 
@@ -31,10 +32,17 @@ export function ToastProvider({ children }) {
   const slide = useRef(new Animated.Value(-100)).current;
   const fade = useRef(new Animated.Value(0)).current;
   const timer = useRef(null);
+  const reduceMotion = useReduceMotion();
+  const reduceMotionRef = useRef(reduceMotion);
+  reduceMotionRef.current = reduceMotion;
 
   const hide = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
+    if (reduceMotionRef.current) {
+      setToast(null);
+      return;
+    }
     Animated.parallel([
       Animated.timing(slide, { toValue: -100, duration: 200, useNativeDriver: true }),
       Animated.timing(fade, { toValue: 0, duration: 200, useNativeDriver: true }),
@@ -45,11 +53,19 @@ export function ToastProvider({ children }) {
     (next) => {
       if (timer.current) clearTimeout(timer.current);
       const danger = (next?.kind ?? inferKind(next?.title)) === 'danger';
-      setToast(danger && typeof next.message === 'string' ? { ...next, message: plainError(next.message) } : next);
-      Animated.parallel([
-        Animated.timing(slide, { toValue: 0, duration: 220, useNativeDriver: true }),
-        Animated.timing(fade, { toValue: 1, duration: 220, useNativeDriver: true }),
-      ]).start();
+      const shown = danger && typeof next.message === 'string' ? { ...next, message: plainError(next.message) } : next;
+      setToast(shown);
+      const spoken = [shown?.title, shown?.message].filter((part) => typeof part === 'string' && part).join('. ');
+      if (spoken) AccessibilityInfo.announceForAccessibility?.(spoken);
+      if (reduceMotionRef.current) {
+        slide.setValue(0);
+        fade.setValue(1);
+      } else {
+        Animated.parallel([
+          Animated.timing(slide, { toValue: 0, duration: 220, useNativeDriver: true }),
+          Animated.timing(fade, { toValue: 1, duration: 220, useNativeDriver: true }),
+        ]).start();
+      }
       timer.current = setTimeout(hide, next?.duration ?? 2800);
     },
     [slide, fade, hide],
@@ -75,8 +91,9 @@ function ToastView({ toast, slide, fade, onDismiss }) {
   const kind = toast.kind ?? inferKind(toast.title);
   const dotColor = dotColorFor(kind, colors);
   const pulse = useRef(new Animated.Value(1)).current;
+  const reduceMotion = useReduceMotion();
   useEffect(() => {
-    if (kind === 'info') return undefined;
+    if (kind === 'info' || reduceMotion) return undefined;
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(pulse, { toValue: 0.4, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
@@ -85,7 +102,7 @@ function ToastView({ toast, slide, fade, onDismiss }) {
     );
     loop.start();
     return () => loop.stop();
-  }, [kind, pulse]);
+  }, [kind, pulse, reduceMotion]);
   const actionable = !!(toast.action && toast.onAction);
   const onAction = () => {
     onDismiss();
@@ -100,7 +117,7 @@ function ToastView({ toast, slide, fade, onDismiss }) {
       animationType="none"
       statusBarTranslucent
       supportedOrientations={['portrait', 'landscape-left', 'landscape-right']}
-      onRequestClose={() => {}}
+      onRequestClose={onDismiss}
     >
       <View pointerEvents="box-none" style={{ flex: 1 }}>
         <SafeAreaView

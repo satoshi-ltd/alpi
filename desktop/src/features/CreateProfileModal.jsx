@@ -9,6 +9,7 @@ import ProviderPickerForm, {
   isProviderValueValid,
 } from "./settings/ProviderPickerForm.jsx";
 import styles from "./CreateProfileModal.module.css";
+import { isComposing } from "../lib/composition.js";
 
 export default function CreateProfileModal({
   open,
@@ -76,7 +77,7 @@ export default function CreateProfileModal({
             value={name}
             onChange={(e) => setName(e.target.value.toLowerCase())}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && canSubmit) submit();
+              if (!isComposing(e) && e.key === "Enter" && canSubmit) submit();
             }}
             placeholder="work · personal · home-server"
             spellCheck={false}

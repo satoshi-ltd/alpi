@@ -764,8 +764,10 @@ async fn set_config_field(
     profile: String,
     key: String,
     value: String,
+    connection_id: Option<String>,
 ) -> Result<(), String> {
-    alp_call_async(
+    alp_call_async_for(
+        connection_id,
         "host.config.set_field",
         serde_json::json!({"profile": profile, "key": key, "value": value}),
     )
@@ -773,8 +775,13 @@ async fn set_config_field(
 }
 
 #[tauri::command]
-async fn unset_config_field(profile: String, key: String) -> Result<(), String> {
-    alp_call_async(
+async fn unset_config_field(
+    profile: String,
+    key: String,
+    connection_id: Option<String>,
+) -> Result<(), String> {
+    alp_call_async_for(
+        connection_id,
         "host.config.unset_field",
         serde_json::json!({"profile": profile, "key": key}),
     )
@@ -2099,15 +2106,28 @@ fn percent_decode(s: &str) -> String {
     String::from_utf8(out).unwrap_or_default()
 }
 
+fn is_google_auth_url(url: &str) -> bool {
+    let Some(rest) = url.strip_prefix("https://accounts.google.com/") else {
+        return false;
+    };
+    !url.chars().any(|c| c.is_control() || c.is_whitespace()) && !rest.is_empty()
+}
+
 fn open_in_browser(url: &str) -> std::io::Result<()> {
+    if !is_google_auth_url(url) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "refusing to open a URL that is not a Google sign-in page",
+        ));
+    }
     #[cfg(target_os = "macos")]
     let mut cmd = Command::new("open");
     #[cfg(target_os = "linux")]
     let mut cmd = Command::new("xdg-open");
     #[cfg(target_os = "windows")]
     let mut cmd = {
-        let mut c = Command::new("cmd");
-        c.args(["/C", "start", ""]);
+        let mut c = Command::new("rundll32");
+        c.arg("url.dll,FileProtocolHandler");
         c
     };
     cmd.arg(url).stdout(Stdio::null()).stderr(Stdio::null()).spawn()?;
@@ -2392,8 +2412,8 @@ async fn profile_create(name: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn profile_delete(name: String) -> Result<(), String> {
-    alp_call_async("host.profile.delete", serde_json::json!({"name": name})).await
+async fn profile_delete(name: String, connection_id: Option<String>) -> Result<(), String> {
+    alp_call_async_for(connection_id, "host.profile.delete", serde_json::json!({"name": name})).await
 }
 
 #[tauri::command]
@@ -3108,6 +3128,10 @@ fn chat_send_stream(
     });
 }
 
+fn stream_ended_early(saw_done: bool, got_error: bool, got_interrupted: bool) -> bool {
+    !saw_done && !got_error && !got_interrupted
+}
+
 fn stream_chat(
     app: AppHandle,
     connection_id: String,
@@ -3155,6 +3179,7 @@ fn stream_chat(
 
     let mut got_error = false;
     let mut got_interrupted = false;
+    let mut saw_done = false;
     let mut resolved_id = String::new();
     let mut final_reply = String::new();
     let app_for_frames = app.clone();
@@ -3319,6 +3344,7 @@ fn stream_chat(
                 }
             }
             "done" => {
+                saw_done = true;
                 if let Some(sid) = frame.get("session_id").and_then(|v| v.as_str()) {
                     resolved_id = sid.to_string();
                 }
@@ -3337,8 +3363,10 @@ fn stream_chat(
     });
     host_client::forget_request_cancelled(&request_id);
 
+    let ended_early = result.is_ok() && stream_ended_early(saw_done, got_error, got_interrupted);
     if let Err(e) = result {
         if !got_error && !got_interrupted {
+            got_error = true;
             let _ = app.emit(
                 "chat-event",
                 ChatEvent::Error {
@@ -3347,6 +3375,15 @@ fn stream_chat(
                 },
             );
         }
+    } else if ended_early {
+        got_error = true;
+        let _ = app.emit(
+            "chat-event",
+            ChatEvent::Error {
+                request_id: request_id.clone(),
+                text: "The daemon closed the stream before the turn finished.".to_string(),
+            },
+        );
     }
 
     {
@@ -3872,6 +3909,7 @@ fn install_app_menu(app: &AppHandle) -> tauri::Result<()> {
     app.set_menu(menu)?;
     app.on_menu_event(|app, event| {
         if event.id.as_ref() == "menu:settings" {
+            notifications::clear_activation();
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
                 let _ = window.unminimize();
@@ -3888,6 +3926,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            notifications::clear_activation();
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.show();
                 let _ = w.unminimize();
@@ -3904,6 +3943,7 @@ pub fn run() {
                 .with_handler(move |app, shortcut, event| {
                     // Bring-to-front only — a toggle would hide the window when it's visible but unfocused, the exact moment the user is summoning it.
                     if event.state() == ShortcutState::Pressed && shortcut == &toggle_shortcut {
+                        notifications::clear_activation();
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.show();
                             let _ = window.unminimize();
@@ -3972,6 +4012,11 @@ pub fn run() {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let _ = window.hide();
                 api.prevent_close();
+            }
+            if let tauri::WindowEvent::Focused(true) = event {
+                if let Some(deeplink) = notifications::take_activation(std::time::Instant::now()) {
+                    let _ = window.app_handle().emit("notification-activated", serde_json::json!({ "deeplink": deeplink }));
+                }
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -4355,6 +4400,36 @@ mod attachment_size_tests {
                 validate_attachment_size(mime, ATTACHMENT_MAX_TEXT_BYTES + 1).is_err(),
                 "{mime} should use the text cap",
             );
+        }
+    }
+}
+
+#[cfg(test)]
+mod bridge_guard_tests {
+    use super::{is_google_auth_url, stream_ended_early};
+
+    #[test]
+    fn a_stream_that_closes_without_done_is_an_early_end() {
+        assert!(stream_ended_early(false, false, false));
+        assert!(!stream_ended_early(true, false, false));
+        assert!(!stream_ended_early(false, true, false));
+        assert!(!stream_ended_early(false, false, true));
+    }
+
+    #[test]
+    fn only_google_sign_in_urls_open_in_the_browser() {
+        assert!(is_google_auth_url("https://accounts.google.com/o/oauth2/v2/auth?client_id=1&state=s"));
+        for url in [
+            "https://accounts.google.com.evil.example/o/oauth2",
+            "http://accounts.google.com/o/oauth2",
+            "https://accounts.google.com/",
+            "https://accounts.google.com/a b",
+            "https://accounts.google.com/a\nb",
+            "-a /Applications/Calculator.app",
+            "file:///etc/passwd",
+            "",
+        ] {
+            assert!(!is_google_auth_url(url), "accepted {url:?}");
         }
     }
 }

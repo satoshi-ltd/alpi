@@ -52,8 +52,8 @@ older daemons that contain a final `token` remain readable.
 - **Schedule (admin).** Jobs grouped by need, with the last result,
   search and a running mark; the job page runs, pauses, deletes with a
   typed confirm, and hands changes to the agent in chat (no add or edit
-  verb exists). On a pane of 760 pt or more, Schedule, Skills and Tools
-  open their page beside the list.
+  verb exists). On a pane of 760 pt or more, Schedule, Skills, Tools, Memories and
+  Notifications open their page beside the list.
 - **Profile chat.** Streamed responses (`host.chat.send`) with tool
   rows, cancel via `host.chat.cancel`; latest session auto-loaded;
   session switcher via SessionsSheet; keyboard avoidance + inverted

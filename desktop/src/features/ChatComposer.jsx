@@ -37,6 +37,8 @@ export default function ChatComposer({
     : null;
   const [text, setText] = useState(() => getDraft(draftKey));
   const draftKeyRef = useRef(draftKey);
+  const textRef = useRef(text);
+  textRef.current = text;
   useEffect(() => {
     if (draftKeyRef.current === draftKey) return;
     draftKeyRef.current = draftKey;
@@ -163,16 +165,34 @@ export default function ChatComposer({
   const hasText = text.trim().length > 0;
   const canSend = (hasText || attachments.length > 0) && !!activeProfile && !daemonOffline && !paused;
 
-  function trySend() {
+  async function trySend() {
     if (!canSend) return;
     const payload = text.trim();
     const atts = attachments;
+    const sentKey = draftKeyRef.current;
     setText("");
     clearDraft(draftKeyRef.current);
     setAttachments([]);
-    onSend?.(payload, modelOverride ?? null, {
-      attachments: atts.map((a) => ({ path: a.path, name: a.name, mime: a.mime, size: a.size })),
-    });
+    let sent;
+    try {
+      sent = await onSend?.(payload, modelOverride ?? null, {
+        attachments: atts.map((a) => ({ path: a.path, name: a.name, mime: a.mime, size: a.size })),
+      });
+    } catch {
+      sent = false;
+    }
+    if (sent === false) {
+      if (draftKeyRef.current !== sentKey) {
+        {
+          const other = getDraft(sentKey);
+          setDraft(sentKey, other ? `${payload}\n\n${other}` : payload);
+        }
+        return;
+      }
+      const current = textRef.current;
+      updateText(current ? `${payload}\n\n${current}` : payload);
+      setAttachments((now) => [...atts, ...now]);
+    }
   }
 
   const placeholder = daemonOffline

@@ -11,6 +11,7 @@ export function useDirtyBack(isDirty, onConfirmLeave) {
 
   useEffect(() => {
     navigation?.setOptions?.({ gestureEnabled: !isDirty });
+    return () => navigation?.setOptions?.({ gestureEnabled: true });
   }, [navigation, isDirty]);
 
   useEffect(() => {

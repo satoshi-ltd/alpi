@@ -25,6 +25,10 @@ vi.mock('expo-router', () => ({
   },
 }));
 
+vi.mock('../src/components/Busy', () => ({ Busy: () => null }));
+vi.mock('../src/components/ScreenHeader', () => ({ ScreenHeader: () => null }));
+vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: ({ children }) => React.createElement('div', {}, children) }));
+vi.mock('../src/theme/ThemeContext', () => ({ useTheme: () => ({ colors: { bg: '#fff' } }) }));
 vi.mock('../src/hooks/useActiveRole', () => ({ useActiveRole: () => h.role }));
 
 import { PaneContext } from '../src/nav/PaneContext';

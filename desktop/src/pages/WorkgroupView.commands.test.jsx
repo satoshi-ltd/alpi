@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const invokeMock = vi.fn();
@@ -135,5 +135,29 @@ describe("WorkgroupView command ticks", () => {
     });
     expect(invokeMock.mock.calls.some(([command]) => command === "read_file")).toBe(false);
     expect(screen.getByText("42 · $0.0042")).toBeInTheDocument();
+  });
+});
+
+describe("WorkgroupView composer", () => {
+  it("puts the message back in the box when the post fails", async () => {
+    invokeMock.mockImplementation(async (cmd) => {
+      if (cmd === "workgroup_post") throw new Error("hub unreachable");
+      return "";
+    });
+    render(<WorkgroupView workgroup={workgroup} profiles={profiles} connectionId="local" />);
+    const box = await screen.findByPlaceholderText(/Send a message/);
+    fireEvent.change(box, { target: { value: "ship the draft" } });
+    await act(async () => { fireEvent.keyDown(box, { key: "Enter", metaKey: true }); });
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("workgroup_post", expect.objectContaining({ text: "ship the draft" })));
+    await waitFor(() => expect(screen.getByPlaceholderText(/Send a message/).value).toBe("ship the draft"));
+  });
+
+  it("clears the box once the post succeeds", async () => {
+    render(<WorkgroupView workgroup={workgroup} profiles={profiles} connectionId="local" />);
+    const box = await screen.findByPlaceholderText(/Send a message/);
+    fireEvent.change(box, { target: { value: "all good" } });
+    await act(async () => { fireEvent.keyDown(box, { key: "Enter", metaKey: true }); });
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("workgroup_post", expect.objectContaining({ text: "all good" })));
+    await waitFor(() => expect(screen.getByPlaceholderText(/Send a message/).value).toBe(""));
   });
 });

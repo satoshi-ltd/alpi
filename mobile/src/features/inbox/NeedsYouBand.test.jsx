@@ -2,12 +2,14 @@ import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
+const h = vi.hoisted(() => ({ height: 800, fontScale: 1 }));
+
 vi.mock('react-native', () => {
   const View = ({ children, accessibilityRole }) => React.createElement('div', { role: accessibilityRole }, children);
   const Text = ({ children }) => React.createElement('span', {}, children);
   const Pressable = ({ children, onPress, accessibilityLabel, disabled }) =>
     React.createElement('button', { type: 'button', onClick: onPress, 'aria-label': accessibilityLabel, disabled }, typeof children === 'function' ? children({ pressed: false }) : children);
-  return { View, Text, Pressable };
+  return { View, Text, Pressable, useWindowDimensions: () => ({ height: h.height, fontScale: h.fontScale }) };
 });
 vi.mock('../../components/Eyebrow', () => ({ Eyebrow: ({ children }) => React.createElement('h2', {}, children) }));
 vi.mock('../../components/Fold', () => ({ Fold: () => null }));
@@ -24,9 +26,13 @@ vi.mock('../../theme/ThemeContext', async () => {
   };
 });
 
-import { BAND_MAX, NeedsYouBand, bandOf } from './NeedsYouBand';
+import { BAND_MAX, NeedsYouBand, bandMax, bandOf } from './NeedsYouBand';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  h.height = 800;
+  h.fontScale = 1;
+});
 
 const NOW = Date.now() / 1000;
 const approval = (n) => ({ kind: 'approval', request_id: `r${n}`, profile: 'abby', title: `command ${n}`, ts: NOW - 60 * n });
@@ -78,5 +84,15 @@ describe('needs-you band', () => {
   it('leaves out the Activity link when Activity is unavailable', () => {
     mount({ ...empty, needsYou: [approval(1)] }, { onOpenActivity: null });
     expect(screen.queryByLabelText(/^Activity,/)).toBeNull();
+  });
+
+  it('shows one row, still counting them all, on a short screen or at large text so the roster keeps its room', () => {
+    expect(bandMax({ height: 800, fontScale: 1 })).toBe(BAND_MAX);
+    expect(bandMax({ height: 400, fontScale: 1 })).toBe(1);
+    expect(bandMax({ height: 800, fontScale: 1.3 })).toBe(1);
+    h.fontScale = 1.3;
+    mount({ ...empty, needsYou: [approval(1), approval(2), approval(3), approval(4)] });
+    expect(screen.getByText('Needs you · 4')).toBeTruthy();
+    expect(screen.queryAllByText(/command \d/)).toHaveLength(1);
   });
 });

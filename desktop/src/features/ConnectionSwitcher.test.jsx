@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
 
-import { connectionEndpoint, useFireOnce } from "./ConnectionSwitcher.jsx";
+import { connectionEndpoint, forgetWithNotice, useFireOnce } from "./ConnectionSwitcher.jsx";
 
 describe("connectionEndpoint", () => {
   it("shows the complete URL returned for current remote connections", () => {
@@ -52,5 +52,21 @@ describe("useFireOnce", () => {
     });
     rerender({ signal: false });
     expect(cb).not.toHaveBeenCalled();
+  });
+});
+
+describe("forgetWithNotice", () => {
+  it("says why a connection could not be forgotten and still rejects so the dialog stays open", async () => {
+    const notify = vi.fn();
+    const onForget = vi.fn(async () => { throw new Error("could not write connections.json"); });
+    await expect(forgetWithNotice(onForget, notify, "remote")).rejects.toThrow("could not write");
+    expect(onForget).toHaveBeenCalledWith("remote");
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ variant: "danger", message: expect.stringContaining("could not write") }));
+  });
+
+  it("stays quiet when the connection is forgotten", async () => {
+    const notify = vi.fn();
+    await forgetWithNotice(async () => {}, notify, "remote");
+    expect(notify).not.toHaveBeenCalled();
   });
 });

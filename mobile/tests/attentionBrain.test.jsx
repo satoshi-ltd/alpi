@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 afterEach(cleanup);
 
@@ -12,20 +12,22 @@ const h = vi.hoisted(() => ({
   detail: null,
   params: { id: 'abby' },
   push: vi.fn(),
+  alert: vi.fn(),
+  editorArgs: [],
 }));
 
 vi.mock('react-native', () => {
   const R = require('react');
-  const Pressable = ({ children, accessibilityLabel, style, onPress }) =>
-    R.createElement('button', { onClick: onPress, 'aria-label': accessibilityLabel, 'data-minheight': (typeof style === 'function' ? style({ pressed: false }) : style)?.minHeight }, typeof children === 'function' ? children({ pressed: false }) : children);
+  const Pressable = ({ children, accessibilityLabel, accessibilityState, style, onPress }) =>
+    R.createElement('button', { onClick: onPress, 'aria-label': accessibilityLabel, 'data-selected': String(!!accessibilityState?.selected), 'data-minheight': (typeof style === 'function' ? style({ pressed: false }) : style)?.minHeight }, typeof children === 'function' ? children({ pressed: false }) : children);
   const View = ({ children, accessibilityRole }) => R.createElement('div', { role: accessibilityRole }, children);
   return {
     View, Pressable,
     Text: ({ children }) => R.createElement('span', {}, children),
     ScrollView: ({ children }) => R.createElement('div', {}, children),
     RefreshControl: () => null,
-    TextInput: () => null,
-    Alert: { alert: () => {} },
+    TextInput: () => React.createElement('textarea', { 'data-editor': 'true' }),
+    Alert: { alert: (...args) => h.alert(...args) },
     StyleSheet: { create: (s) => s },
     useWindowDimensions: () => ({ width: 390, height: 844 }),
   };
@@ -60,7 +62,9 @@ vi.mock('../src/hooks/useAttention', () => ({ useAttention: () => ({ att: h.att,
 vi.mock('../src/hooks/useBack', () => ({ useBack: () => () => {} }));
 vi.mock('../src/hooks/useDirtyBack', () => ({ useDirtyBack: () => () => {} }));
 vi.mock('../src/hooks/usePullRefresh', () => ({ usePullRefresh: () => ({}) }));
-vi.mock('../src/hooks/useMemoryEditor', () => ({ useMemoryEditor: () => h.editor }));
+vi.mock('../src/components/KeyboardPane', () => ({ KeyboardPane: ({ children }) => React.createElement('section', { 'data-keyboard-pane': 'true' }, children) }));
+vi.mock('../src/hooks/useMemoryEditor', () => ({ useMemoryEditor: (id, name) => { h.editorArgs.push(name); return h.editor; } }));
+vi.mock('../src/hooks/useMasterDetail', () => ({ useMasterDetail: () => globalThis.__wide === true }));
 vi.mock('../src/hooks/useDaemonData', () => ({ useSkills: () => h.skills, useProfileMemory: () => h.mem }));
 vi.mock('../src/lib/EndpointContext', () => ({ useEndpoint: () => ({ call: async (_m, params) => ({ skill: { ...h.detail, category: params.category } }) }) }));
 
@@ -197,5 +201,90 @@ describe('memory page', () => {
     h.att = { memory: [{ file: 'USER.md', used: 1900, limit: 2000, pct: 95, over: false }] };
     render(<MemoryDetail />);
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('rides the keyboard while editing so the lower half of the text stays visible', () => {
+    h.att = null;
+    h.editor = { loading: false, raw: 'x', draft: 'x', setDraft: () => {}, editing: true, canEdit: true, dirty: false, startEdit: () => {}, loadError: null };
+    const { container } = render(<MemoryDetail />);
+    const pane = container.querySelector('[data-keyboard-pane]');
+    expect(pane).toBeTruthy();
+    expect(pane.querySelector('textarea')).toBeTruthy();
+  });
+});
+
+describe('memory page beside the list', () => {
+  const rowFor = (file) => screen.getByLabelText(new RegExp(`${file.replace('.', '\\.')}`));
+
+  beforeEach(() => {
+    globalThis.__wide = true;
+    h.params = { id: 'abby' };
+    h.att = null;
+    h.alert.mockClear();
+    h.editorArgs.length = 0;
+    h.editor = { loading: false, raw: 'x', draft: 'x', setDraft: () => {}, editing: false, canEdit: true, dirty: false, startEdit: () => {}, loadError: null };
+  });
+
+  afterEach(() => { globalThis.__wide = false; });
+
+  it('opens the first file on arrival and marks its row selected', () => {
+    render(<MemoryList />);
+    expect(h.editorArgs.at(-1)).toBe('AGENT.md');
+    expect(rowFor('AGENT.md').getAttribute('data-selected')).toBe('true');
+    expect(h.push).not.toHaveBeenCalled();
+  });
+
+  it('shows another file beside the list when its row is tapped', () => {
+    render(<MemoryList />);
+    fireEvent.click(rowFor('MEMORY.md'));
+    expect(h.editorArgs.at(-1)).toBe('MEMORY.md');
+    expect(h.push).not.toHaveBeenCalled();
+  });
+
+  it('asks before an unsaved edit is replaced by another file, and keeps it on Keep editing', () => {
+    h.editor = { ...h.editor, editing: true, dirty: true };
+    render(<MemoryList />);
+    fireEvent.click(rowFor('USER.md'));
+    expect(h.alert).toHaveBeenCalledTimes(1);
+    expect(h.editorArgs.at(-1)).toBe('AGENT.md');
+    const buttons = h.alert.mock.calls[0][2];
+    expect(buttons.map((b) => b.text)).toEqual(['Keep editing', 'Discard']);
+  });
+
+  it('switches once the edit is discarded', () => {
+    h.editor = { ...h.editor, editing: true, dirty: true };
+    render(<MemoryList />);
+    fireEvent.click(rowFor('USER.md'));
+    act(() => { h.alert.mock.calls[0][2][1].onPress(); });
+    expect(h.editorArgs.at(-1)).toBe('USER.md');
+  });
+
+  it('pushes the page on a narrow pane as before', () => {
+    globalThis.__wide = false;
+    render(<MemoryList />);
+    fireEvent.click(rowFor('USER.md'));
+    expect(h.push).toHaveBeenCalledWith({ pathname: '/profile/abby/brain/memory/[name]', params: { name: 'USER.md' } });
+  });
+
+  it('keeps an unsaved edit on screen when the pane narrows instead of dropping it, and returns to the list once it is done', () => {
+    h.editor = { ...h.editor, editing: true, dirty: true };
+    const { rerender } = render(<MemoryList />);
+    expect(document.querySelector('textarea')).toBeTruthy();
+    globalThis.__wide = false;
+    rerender(<MemoryList />);
+    expect(document.querySelector('textarea')).toBeTruthy();
+    h.editor = { ...h.editor, editing: false, dirty: false };
+    rerender(<MemoryList />);
+    expect(document.querySelector('textarea')).toBeNull();
+  });
+
+  it('refreshes the list after a save so counts and meters are not stale', async () => {
+    h.mem = { ...h.mem, refresh: vi.fn() };
+    h.editor = { ...h.editor, editing: true, dirty: true, save: vi.fn(async () => ({ ok: true })) };
+    render(<MemoryList />);
+    h.mem.refresh.mockClear();
+    await act(async () => { fireEvent.click(screen.getByLabelText('Save')); });
+    expect(h.editor.save).toHaveBeenCalledTimes(1);
+    expect(h.mem.refresh).toHaveBeenCalled();
   });
 });

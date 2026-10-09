@@ -7,6 +7,7 @@ import { Fold } from '../../components/Fold';
 import { Icon } from '../../components/Icon';
 import { useProfileSummaries } from '../../hooks/useDaemonData';
 import { recentlyFailed, toEpochSeconds } from '../../hooks/useActivity';
+import { profileLabel } from '../../lib/profileName';
 import { clockOf, dayLabel } from '../../lib/scheduleFormat';
 import { mobile, lineHeights, radii, space } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeContext';
@@ -38,7 +39,7 @@ function needsYouRow(item, nowSec) {
     tone: 'warning',
     profile: item.profile,
     icon: 'triangle-alert',
-    title: [item.profile, item.title || (question ? 'a question' : 'a command')].filter(Boolean).join(' · '),
+    title: [profileLabel(item.profile), item.title || (question ? 'a question' : 'a command')].filter(Boolean).join(' · '),
     sub: [question ? 'question' : 'approval', ago(item.ts, nowSec)].filter(Boolean).join(' · '),
     action: 'Review',
     target: { type: 'request', domain: question ? 'clarification' : 'approval', requestId: item.request_id },
@@ -76,7 +77,7 @@ function runningRow(run, nowSec) {
     tone: 'accent',
     profile: run.profile,
     icon: ICON_ROLES.activity,
-    title: [run.profile, run.title || 'working'].filter(Boolean).join(' · '),
+    title: [profileLabel(run.profile), run.title || 'working'].filter(Boolean).join(' · '),
     sub: [run.started_at ? span(nowSec - toEpochSeconds(run.started_at)) : null, run.job_id ? 'scheduled' : run.source].filter(Boolean).join(' · '),
     target,
   };
@@ -88,7 +89,7 @@ function failedJobRow(job, nowSec) {
     tone: 'danger',
     profile: job.profile,
     icon: 'x',
-    title: [job.profile, job.title || job.job_id].filter(Boolean).join(' · '),
+    title: [profileLabel(job.profile), job.title || job.job_id].filter(Boolean).join(' · '),
     sub: `failed ${ago(job.last_run_at, nowSec)}`.trim(),
     action: 'Run again',
     run: { profile: job.profile, jobId: job.job_id },
@@ -103,7 +104,7 @@ function nextRow(job, nowSec) {
     tone: 'quiet',
     profile: job.profile,
     icon: 'clock',
-    title: [job.profile, job.title || job.job_id].filter(Boolean).join(' · '),
+    title: [profileLabel(job.profile), job.title || job.job_id].filter(Boolean).join(' · '),
     sub: until(job.next_fire, nowSec) || 'not scheduled',
     when: at === null ? '' : clockOf(at),
     at,
