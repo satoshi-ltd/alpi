@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { BRAND_INK } from "../../../../common/folds.mjs";
 import Button from "../../primitives/Button.jsx";
 import ConfirmDelete, { ConfirmDeleteAction } from "../../primitives/ConfirmDelete.jsx";
 import Field from "../../primitives/Field.jsx";
@@ -117,7 +118,7 @@ export default function ConnectionsPage({
   const totals = data?.totals || {};
   const defaultProfile = profiles.find((profile) => profile.name === "default") || null;
   const heroTitle = profileLabel("default");
-  const heroAccent = defaultProfile?.accent || "var(--accent)";
+  const heroAccent = defaultProfile?.accent || BRAND_INK.light;
   const visibleRows = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return rows

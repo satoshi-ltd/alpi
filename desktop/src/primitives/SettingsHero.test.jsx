@@ -13,11 +13,11 @@ describe("SettingsHero", () => {
     expect(container.querySelector("h1 > span").className).toMatch(/crease/);
   });
 
-  it("keeps the connections heading plain", () => {
-    const { container } = render(<SettingsHero kind="connections" id="Connections" accent="#3899e2" />);
+  it("sets the connections heading in crease type too", () => {
+    const { container } = render(<SettingsHero kind="connections" id="alpi" accent="#3899e2" />);
     const h1 = container.querySelector("h1");
-    expect(h1.textContent).toBe("Connections");
-    expect(h1.querySelector("span")).toBeNull();
+    expect(h1.textContent).toBe("alpi");
+    expect(h1.querySelector("span").className).toMatch(/crease/);
   });
 
   it("draws a workgroup as the honeycomb in the hub's colour, unfolded in grey when paused", () => {

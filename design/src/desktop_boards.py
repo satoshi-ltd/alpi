@@ -423,7 +423,7 @@ def desktop_wg_settings():
 
 def desktop_connections():
     meta = f'<span>2 paired · 2 connected</span>{SEP}<span>14-day spend {mono12("$1.49")}</span>{SEP}<span>14 sessions</span>'
-    hero = d_hero(h1("alpi", identity_glyph("alpi", AMBER, 20)) + eyebrow("connections"), meta, button("Audit log", "ghost", "md", "history") + button("New connection", "ghost", "md", "plus") + iconbtn("back", "Back to chat"), AMBER)
+    hero = d_hero(h1("alpi", identity_glyph("alpi", AMBER, 20), AMBER) + eyebrow("connections"), meta, button("Audit log", "ghost", "md", "history") + button("New connection", "ghost", "md", "plus") + iconbtn("back", "Back to chat"), AMBER)
     head = (f'<div style="display: grid; grid-template-columns: minmax(240px, 1fr) 126px 88px 112px; min-height: 32px; align-items: center; padding: 0 10px; font-family: {MONO}; font-size: 11px; text-transform: uppercase; color: {INK3}">'
             f'<span>Connection</span><span style="text-align: right">Last activity</span><span style="text-align: right">Sessions</span><span style="text-align: right">14-day spend</span></div>')
 
@@ -488,7 +488,7 @@ def desktop_workgroups():
              + wrow("launch-crew", AMBER, "#e08a3c", "Queued · #2", 4, "$1.12", "9m", "setup done · media next")
              + wrow("digest", "#9b5ad9", INK4, "Idle", 2, "$0.08", "1d"))
     meta = f'<span>3 workgroups</span>{SEP}<span>1 working · 1 queued · 1 idle</span>'
-    hero = d_hero(h1("workgroups", wg_mark(AMBER, 20)) + eyebrow("all profiles"), meta, button("New workgroup", "ghost", "md", "plus"), AMBER)
+    hero = d_hero(h1("Workgroups", wg_mark(AMBER, 20), INK3), meta, button("New workgroup", "ghost", "md", "plus"), AMBER)
     body = f"""<div style="display: flex; height: 100%">
 {d_sidebar(560, selected="", settings_mode=False)}
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: {PANE}">

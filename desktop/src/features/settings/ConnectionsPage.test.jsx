@@ -271,7 +271,7 @@ describe("ConnectionsPage", () => {
 
   it("presents the internal default profile as alpi in the hero title", async () => {
     render(<ConnectionsPage profiles={[{ name: "default", accent: "#abc123" }]} activeConnection={{ id: "local" }} />);
-    expect(await screen.findByText("alpi", { selector: "h1" })).toBeInTheDocument();
+    expect(await screen.findByText("alpi", { selector: "h1 span" })).toBeInTheDocument();
   });
 
   it("reuses the existing device pairing modal for a new connection", async () => {

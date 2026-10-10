@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
 import { WORKGROUP_FOLD } from "../../../common/folds.mjs";
+import { palettes } from "../../../common/tokens.mjs";
 import {
   Button,
+  Crease,
   Fold,
   Mono,
   PlusIcon,
@@ -129,7 +131,7 @@ export default function WorkgroupsView({
         <div className={styles.titleBlock}>
           <div className="title-row">
             <Fold fold={WORKGROUP_FOLD} size="md" />
-            <h1>Workgroups</h1>
+            <h1><Crease text="Workgroups" accent={palettes.light.ink3} /></h1>
           </div>
           <div className="meta-row">
             <span>{workgroupLabel}</span>

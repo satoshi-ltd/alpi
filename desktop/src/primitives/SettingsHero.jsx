@@ -45,7 +45,7 @@ export default function SettingsHero({
         <div className={`col ${styles.titleCol}`}>
           <div className="title-row">
             {titleGlyph}
-            <h1>{isConnections ? id : <Crease text={id} accent={paused ? palettes.light.ink3 : accent} />}</h1>
+            <h1><Crease text={id} accent={paused ? palettes.light.ink3 : accent} /></h1>
             <span className="eyebrow">{isConnections ? "connections" : "settings"}</span>
           </div>
           {meta && <div className="meta-row">{meta}</div>}

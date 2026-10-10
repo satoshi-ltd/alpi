@@ -10,6 +10,13 @@ const WORKGROUPS = [
 ];
 
 describe("WorkgroupsView", () => {
+  it("sets its heading in crease type like every other page header", () => {
+    const { container } = render(<WorkgroupsView workgroups={WORKGROUPS} profiles={[]} onOpenWorkgroup={vi.fn()} />);
+    const h1 = container.querySelector("h1");
+    expect(h1.textContent).toBe("Workgroups");
+    expect(h1.querySelector("span").className).toMatch(/crease/);
+  });
+
   it("lists every workgroup and opens the selected row", () => {
     const onOpenWorkgroup = vi.fn();
     render(

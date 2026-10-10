@@ -11,6 +11,12 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.8.10 — 2026-10-10 — the Workgroups and Connections headers in crease type
+
+- **The Workgroups and Connections headers are set in crease type** like the profile, the workgroup and the chat headers, instead of plain bold text.
+
+  Requires alpi 0.17.5.
+
 ## v0.8.9 — 2026-10-09 — what you type and what waits on you survive a bad moment
 
 - **A message that is not sent comes back to the box.** Sending while a turn runs, a failed upload or a refused send no longer clears what you typed, in a chat or a workgroup; anything typed meanwhile stays under it.
