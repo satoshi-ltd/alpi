@@ -137,27 +137,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
   protected variables. The map is listed in the takes-effect table of
   [CONFIG.md](CONFIG.md#tools) and in the packaged config reference.
 
-- **WG.REWIND-RUN** — A workgroup spends its QA rewinds once for its whole life, not once per run
-  `bug · alpi · agent · high`
-  note: `_QA_REWIND_MAX = 2` counts per workgroup id for its lifetime (`qa_rewind_count[wg] = n` in
-  [service.py](../alpi/service.py) `_qa_rewind_count`/`_bump_qa_rewind_count`), and the table is not reset
-  by a new trigger. A chain workgroup runs `hotel` once per hotel, so its third red QA anywhere in the chain
-  blocks instead of rewinding; single-hotel workgroups hit it too after a `media-update` or `upgrade` run.
-  Measured on mira (2026-10-09): 44 workgroups have spent a rewind and 10 have none left. Two neighbours
-  fail the same way: a `qa_recheck[wg][phase]` checklist left unconsumed by a run that ended leaks into the
-  next run's opener, and `_save_poller_state` writes `poller_state.json` in place, so a crash mid-write loses
-  every poller table. Princess v117 (24 hotels, serial) is the evidence that chains stay serial in one
-  workgroup; the creator chose this over parallel hotel runs (see `reports/concurrencia-cadenas-v2.md`
-  §7.3.4), so this is the one daemon change a 3-6 hotel chain needs to run unattended.
-  accept: the budget is per run — the entry becomes `[started_seq, n]`, where `started_seq` is the seq of
-  the `pipeline_trigger` post that opened the run (a rewind posts a phase `#task`, not a trigger, so it stays
-  constant inside a run), and a legacy integer entry still counts for the run in progress; a
-  `qa_recheck` entry stores its `started_seq` and is ignored and dropped by a later run; `_save_poller_state`
-  writes a temporary file and `os.replace`s it. Tests: a workgroup with two rewinds spent in run A rewinds
-  again in run B; the third rewind inside one run still blocks; a legacy `wg → 2` entry blocks the run in
-  progress and not the next one; a recheck from run A never reaches run B's opener; a failed write leaves
-  the previous `poller_state.json` intact.
-
 ## In progress
 
 _None._
@@ -245,7 +224,6 @@ Each names the condition that promotes it; none is worked on before.
 
 - **WG.REPEAT** — A pipeline repeats itself until a command reports the work finished
   `feature · alpi · agent · normal`
-  depends: WG.REWIND-RUN
   note: a chain workgroup needs one `hotel` trigger per hotel; Princess v117 ran from an operator script
   outside alpi that polled `workgroup show` every 60 s and stopped twice on a transient state. With the
   typical chain of 3-6 hotels, triggering by hand or with that script is cheap, so this waits. Design in
@@ -259,17 +237,6 @@ Each names the condition that promotes it; none is worked on before.
   `max_runs` or on a blocked run, and never re-queues a run already handled; an unknown step key fails
   recipe parsing instead of being dropped; documented in `docs/WORKGROUPS.md` and the packaged workgroups
   reference; tests cover finished, repeat, error, cap, blocked and a daemon restart between runs.
-
-- **WG.BUILD-PROGRESS** — A red build delivery always counts as "no progress"
-  `bug · alpi · agent · low`
-  note: `owned_paths_changed` scans with `_scan_project`, which skips `dist`, `.astro` and `public`
-  ([alp/pipeline_gates.py](../alpi/alp/pipeline_gates.py)). A step whose `paths` live almost entirely there
-  (the template's `build` and `hotel-build`) reports no change unless `src/env.d.ts` moves, so a real repair
-  of a red build is judged as no progress. Two continuations hid it on Princess v117.
-  promote when: a build step blocks for "no progress" after a delivery that did change its outputs.
-  accept: progress for a step counts changes under its own declared `paths`, generated directories included
-  when the step declares them; a test with a build-like step whose only change is under `dist/` counts it as
-  progress, and other steps keep today's verdict.
 
 - **OUT.OWN** — A member rereads and edits its own earlier outputs
   `feature · alpi · agent · low`

@@ -1585,3 +1585,262 @@ async def test_empty_exchange_closes_once_through_the_real_sdk(tmp_path, monkeyp
     assert recent[-1]['text'].startswith('#done BLOCKED')
     assert 'hub exchange exhausted' in recent[-1]['text']
     assert service._empty_hub_exchange_phase(wg, recent) == ''
+
+
+def _meta(home, *wg_ids):
+    for wg_id in wg_ids:
+        d = home / "alp" / "workgroups" / wg_id
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "meta.yaml").write_text("{}\n")
+
+
+def _use_run(monkeypatch, box):
+    monkeypatch.setattr(service, "_current_run_seq", lambda h, wid: box["run"])
+
+
+def test_current_run_seq_is_the_latest_trigger_post(tmp_path, monkeypatch):
+    posts = [{"seq": 3, "pipeline_trigger": True}, {"seq": 9}, {"seq": 12, "pipeline_trigger": True}, {"seq": 15}]
+    monkeypatch.setattr("alpi.alp.workgroup.load", lambda h, wid: object())
+    monkeypatch.setattr(service, "_all_hub_posts_decrypted", lambda h, wg: posts)
+    assert service._current_run_seq(tmp_path, "wg") == 12
+    monkeypatch.setattr(service, "_all_hub_posts_decrypted", lambda h, wg: posts[1:2])
+    assert service._current_run_seq(tmp_path, "wg") == 0
+
+
+def test_rewind_budget_is_per_run(tmp_path, monkeypatch):
+    box = {"run": 5}
+    _use_run(monkeypatch, box)
+    assert service._bump_qa_rewind_count(tmp_path, "wg") == 1
+    assert service._bump_qa_rewind_count(tmp_path, "wg") == 2
+    assert service._qa_rewind_count(tmp_path, "wg") == 2
+    box["run"] = 40
+    assert service._qa_rewind_count(tmp_path, "wg") == 0
+    assert service._bump_qa_rewind_count(tmp_path, "wg") == 1
+    assert service._load_poller_state(tmp_path)["qa_rewind_count"]["wg"] == [40, 1]
+
+
+def test_single_run_budget_matches_the_lifetime_budget(tmp_path, monkeypatch):
+    _use_run(monkeypatch, {"run": 0})
+    for expected in (1, 2, 3):
+        assert service._bump_qa_rewind_count(tmp_path, "wg") == expected
+    assert service._qa_rewind_count(tmp_path, "wg") == 3
+
+
+def test_legacy_integer_budget_blocks_the_run_in_progress_only(tmp_path, monkeypatch):
+    box = {"run": 7}
+    _use_run(monkeypatch, box)
+    service._save_poller_state(tmp_path, {"qa_rewind_count": {"wg": 2}})
+    _meta(tmp_path, "wg")
+    service._migrate_qa_runs(tmp_path)
+    assert service._qa_rewind_count(tmp_path, "wg") == 2
+    assert service._load_poller_state(tmp_path)["qa_rewind_count"]["wg"] == [7, 2]
+    box["run"] = 30
+    assert service._qa_rewind_count(tmp_path, "wg") == 0
+
+
+def test_recheck_from_an_earlier_run_is_dropped(tmp_path, monkeypatch):
+    box = {"run": 4}
+    _use_run(monkeypatch, box)
+    service._set_qa_recheck(tmp_path, "wg", "qa", "QA FAIL · stale")
+    assert service._peek_qa_recheck(tmp_path, "wg", "qa") == ("qa", "QA FAIL · stale")
+    box["run"] = 20
+    assert service._peek_qa_recheck(tmp_path, "wg", "qa") == ("", "")
+    assert not service._load_poller_state(tmp_path).get("qa_recheck")
+
+
+def test_an_unreadable_run_leaves_budget_and_recheck_untouched(tmp_path, monkeypatch):
+    box = {"run": 12}
+    _use_run(monkeypatch, box)
+    service._bump_qa_rewind_count(tmp_path, "wg")
+    service._bump_qa_rewind_count(tmp_path, "wg")
+    service._set_qa_recheck(tmp_path, "wg", "qa", "QA FAIL · keep")
+    monkeypatch.setattr(service, "_current_run_seq", lambda h, wid: None)
+    assert service._qa_rewind_count(tmp_path, "wg") == 2
+    assert service._bump_qa_rewind_count(tmp_path, "wg") == 3
+    assert service._peek_qa_recheck(tmp_path, "wg", "qa") == ("qa", "QA FAIL · keep")
+
+
+def test_failed_poller_state_write_keeps_the_previous_file(tmp_path, monkeypatch):
+    service._save_poller_state(tmp_path, {"a": 1})
+    monkeypatch.setattr(service.os, "replace", lambda *a: (_ for _ in ()).throw(OSError("disk")))
+    with pytest.raises(OSError):
+        service._save_poller_state(tmp_path, {"a": 2})
+    assert service._load_poller_state(tmp_path) == {"a": 1}
+    assert not list((tmp_path / "alp").glob("*.tmp"))
+
+
+def test_startup_migrates_before_any_profile_tasks(tmp_path, monkeypatch):
+    box = {"run": 7}
+    _use_run(monkeypatch, box)
+    _meta(tmp_path, "wg")
+    service._save_poller_state(tmp_path, {
+        "qa_rewind_count": {"wg": 2, "deleted": 1},
+        "qa_recheck": {"wg": {"qa": {"kind": "qa", "excerpt": "old"}}},
+    })
+    monkeypatch.setattr(service, "_reload_fingerprints", lambda h: {})
+    monkeypatch.setattr(service, "_warn_legacy_service_switches", lambda *a: None)
+    monkeypatch.setattr(service, "_sweep_runs", lambda *a: None)
+    def tasks(home, profile):
+        assert service._load_poller_state(home)["qa_rewind_count"] == {"wg": [7, 2]}
+        box["run"] = 30
+        assert service._qa_rewind_count(home, "wg") == 0
+        assert service._peek_qa_recheck(home, "wg", "qa") == ("", "")
+        return {}
+    monkeypatch.setattr(service, "_profile_tasks", tasks)
+    registry = {}
+    service._start_new_profiles(tmp_path, ["default"], registry)
+    assert "default" in registry
+
+
+def _startable(monkeypatch):
+    monkeypatch.setattr(service, "_reload_fingerprints", lambda h: {})
+    monkeypatch.setattr(service, "_warn_legacy_service_switches", lambda *a: None)
+    monkeypatch.setattr(service, "_sweep_runs", lambda *a: None)
+    monkeypatch.setattr(service, "_profile_tasks", lambda *a: {})
+
+
+def test_unreadable_legacy_run_keeps_its_state_and_the_profile_starts(tmp_path, monkeypatch):
+    _meta(tmp_path, "wg")
+    monkeypatch.setattr(service, "_current_run_seq", lambda *a: None)
+    service._save_poller_state(tmp_path, {"qa_rewind_count": {"wg": 2}})
+    _startable(monkeypatch)
+    registry = {}
+    service._start_new_profiles(tmp_path, ["default"], registry)
+    assert "default" in registry
+    assert service._load_poller_state(tmp_path) == {"qa_rewind_count": {"wg": 2}}
+    with pytest.raises(ValueError, match="unreadable"):
+        service._migrate_qa_runs(tmp_path, "wg", strict=True)
+
+
+def test_a_broken_workgroup_or_table_never_blocks_startup_or_loses_state(tmp_path, monkeypatch):
+    _meta(tmp_path, "wg")
+    (tmp_path / "alp" / "workgroups" / "wg" / "meta.yaml").write_text("pipelines: [unclosed\n")
+    state = {
+        "qa_rewind_count": {"wg": [12, 1], "odd": "2"},
+        "qa_recheck": {"wg": "x", "gone": {"qa": {"kind": "qa", "excerpt": "e"}}},
+    }
+    service._save_poller_state(tmp_path, state)
+    _startable(monkeypatch)
+    registry = {}
+    service._start_new_profiles(tmp_path, ["default"], registry)
+    assert "default" in registry
+    kept = service._load_poller_state(tmp_path)
+    assert kept["qa_rewind_count"] == {"wg": [12, 1]}
+    assert kept["qa_recheck"] == {"wg": "x"}
+
+
+def test_legacy_string_counter_and_unknown_run_checklist_migrate(tmp_path, monkeypatch):
+    _meta(tmp_path, "wg")
+    _use_run(monkeypatch, {"run": 9})
+    service._save_poller_state(tmp_path, {
+        "qa_rewind_count": {"wg": "2"},
+        "qa_recheck": {"wg": {"qa": {"kind": "qa", "excerpt": "e", "started_seq": None}}},
+    })
+    service._migrate_qa_runs(tmp_path)
+    state = service._load_poller_state(tmp_path)
+    assert state["qa_rewind_count"]["wg"] == [9, 2]
+    assert state["qa_recheck"]["wg"]["qa"]["started_seq"] == 9
+
+
+def test_empty_transcript_is_unknown_and_does_not_reset_budget(tmp_path, monkeypatch):
+    monkeypatch.setattr(wg_mod, "load", lambda *a: object())
+    monkeypatch.setattr(service, "_all_hub_posts_decrypted", lambda *a: [])
+    service._save_poller_state(tmp_path, {"qa_rewind_count": {"wg": [12, 2]}})
+    assert service._current_run_seq(tmp_path, "wg") is None
+    assert service._qa_rewind_count(tmp_path, "wg") == 2
+    service._set_qa_recheck(tmp_path, "wg", "qa", "keep")
+    assert service._load_poller_state(tmp_path)["qa_recheck"]["wg"]["qa"]["started_seq"] is None
+    monkeypatch.setattr(service, "_all_hub_posts_decrypted", lambda *a: [{"seq": 12, "pipeline_trigger": True}])
+    assert service._peek_qa_recheck(tmp_path, "wg", "qa") == ("qa", "keep")
+
+
+def test_partial_poller_write_preserves_previous_state(tmp_path, monkeypatch):
+    service._save_poller_state(tmp_path, {"cursor": 42})
+    original = Path.write_text
+    def partial(path, text, *args, **kwargs):
+        original(path, text[:3], *args, **kwargs)
+        raise OSError("partial write")
+    monkeypatch.setattr(Path, "write_text", partial)
+    with pytest.raises(OSError, match="partial write"):
+        service._save_poller_state(tmp_path, {"cursor": 99})
+    assert service._load_poller_state(tmp_path) == {"cursor": 42}
+    assert not list((tmp_path / "alp").glob("*.tmp"))
+
+
+@pytest.mark.asyncio
+async def test_real_transcript_two_runs_get_independent_rewinds(tmp_path, monkeypatch):
+    from alpi import home as home_mod
+
+    root = tmp_path / 'root'
+    monkeypatch.setattr(home_mod, '_ROOT', root)
+    home = root / 'profiles' / 'mira'
+    home.mkdir(parents=True)
+    workspace = tmp_path / 'workspace'
+    workspace.mkdir()
+    worker = load_or_generate(root / 'profiles' / 'quill').pubkey_b64()
+    peers_mod.add(home, Peer(id='quill', pubkey=worker, allow=['workgroup.post']))
+    wg = wg_mod.create(
+        home, name='site', hub_kp=load_or_generate(home), member_pubkeys=[worker],
+        pipelines={'content': ['content', 'qa']}, launch_pipeline='content',
+        pipeline_steps={
+            'content': {'owner': 'quill', 'task': 'write', 'gate': {'argv': ['true'], 'cwd': ''}, 'paths': ['src/**']},
+            'qa': {'owner': 'quill', 'task': 'audit'},
+        },
+    )
+    from alpi import config as cfg_mod
+    real_load = cfg_mod.load
+    def config(home):
+        cfg = real_load(home)
+        cfg.workspace = str(workspace)
+        return cfg
+    monkeypatch.setattr('alpi.config.load', config)
+    await wc.trigger_pipeline(home, wg.meta.id, 'content')
+    first = service._current_run_seq(home, wg.meta.id)
+    step = types.SimpleNamespace(phase='qa')
+    for n in (1, 2):
+        assert await service._rewind_to(home, wg, step, 'content', label='QA FAIL', reason='repair', excerpt='run A finding')
+        assert f'(rewind {n}/2)' in _real_recent(home, wg)[-1]['text']
+        assert service._current_run_seq(home, wg.meta.id) == first
+    assert not await service._rewind_to(home, wg, step, 'content', label='QA FAIL', reason='repair', excerpt='third')
+    await wc.post(home, wg.meta.id, '#done BLOCKED · stopped for a new run'.encode())
+    state = service._load_poller_state(home)
+    state['qa_rewind_count'][wg.meta.id] = 2
+    del state['qa_recheck'][wg.meta.id]['qa']['started_seq']
+    service._save_poller_state(home, state)
+    await wc.trigger_pipeline(home, wg.meta.id, 'content')
+    assert service._current_run_seq(home, wg.meta.id) > first
+    assert service._load_poller_state(home)['qa_rewind_count'][wg.meta.id] == [first, 2]
+    assert service._peek_qa_recheck(home, wg.meta.id, 'qa') == ('', '')
+    assert await service._rewind_to(home, wg, step, 'content', label='QA FAIL', reason='repair', excerpt='run B finding')
+    assert '(rewind 1/2)' in _real_recent(home, wg)[-1]['text']
+    assert 'run A finding' not in _real_recent(home, wg)[-1]['text']
+
+
+@pytest.mark.asyncio
+async def test_a_failed_rewind_post_refunds_the_budget_and_a_cancelled_one_keeps_it(tmp_path, monkeypatch):
+    import asyncio
+
+    _use_run(monkeypatch, {"run": 3})
+    monkeypatch.setattr(service, "_set_hub_responded_seq", lambda *a: None)
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        id="wg", name="site", hub_pubkey="HUB", paused=False,
+        pipelines={"setup": ("content", "qa")}, launch_pipeline="setup",
+        pipeline_steps={"content": {"owner": "quill", "task": "write"}, "qa": {"owner": "lens", "task": "audit"}},
+    ))
+    step = types.SimpleNamespace(phase="qa")
+    service._save_poller_state(tmp_path, {"qa_rewind_count": {"wg": [3, 1]}})
+
+    async def failing(*a, **k):
+        raise RuntimeError("hub down")
+
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", failing)
+    assert not await service._rewind_to(tmp_path, wg, step, "content", label="QA FAIL", reason="r", excerpt="e")
+    assert service._load_poller_state(tmp_path)["qa_rewind_count"]["wg"] == [3, 1]
+
+    async def cancelled(*a, **k):
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", cancelled)
+    with pytest.raises(asyncio.CancelledError):
+        await service._rewind_to(tmp_path, wg, step, "content", label="QA FAIL", reason="r", excerpt="e")
+    assert service._load_poller_state(tmp_path)["qa_rewind_count"]["wg"] == [3, 2]

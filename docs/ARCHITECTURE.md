@@ -638,6 +638,17 @@ readable. These are internal capabilities, not configurable services:
   client always targets default's socket and reaches sibling
   profiles via the `profile` param on each verb.
 
+Before starting a profile's capabilities, the daemon binds legacy QA rewind counters
+and retained checklists to that workgroup's latest pipeline trigger. Workgroups without
+a `meta.yaml` are pruned from these tables. Trigger admission also migrates before opening
+a new run, including when the daemon is stopped. A workgroup whose run cannot be read keeps
+its state untouched without holding back the profile, and a trigger on it is refused.
+Hub post validation, baseline hashing and transcript admission run in a worker thread
+under one transcript lock. Peer post admission and cost settlement also wait for that
+lock outside the event loop, and a peer post re-checks membership and pause under the
+lock. Baselines include generated output files the phase's globs own, excluding Git
+internals, `.astro` operational logs and non-regular files.
+
 All capabilities start for every profile; the host plane is default-only.
 Jobs and workgroups retain their own enabled/paused state, and access control
 lives in peer grants and connection roles/scopes.

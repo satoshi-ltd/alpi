@@ -771,6 +771,11 @@ recovery after that explicit halt is an operator decision, so a permanently
 red gate cannot create a close/reopen loop. A repair round is counted only
 after its note reaches the owner. A transient or local delivery failure keeps
 the same round available and retries it after the normal gate cooldown.
+Generated directories count when explicitly named in `paths`, including nested output
+trees. Wildcards alone never opt into excluded dependency or cache directories;
+`.git` stays excluded. Operational `*.log` files under `.astro` and non-regular
+files do not count as progress. Hashes compare content, so a rebuild that only
+changes those logs or file timestamps does not count as a repair.
 For a phase with declared `paths`, a red delivery that changed none of those
 paths since the opener — or repeats the workspace signature of the preceding
 red delivery — is not a repair attempt. The daemon continues the same task at
@@ -792,7 +797,8 @@ Unresolved ownership fails closed and requires re-pinning or an explicit
 **Per-phase authorship (`pipeline_steps.*.paths`, hub-local).** A gated
 phase may declare the path globs its owner is allowed to touch. When the
 task opens the daemon snapshots the project's file state (derived trees
-— `node_modules`, `dist`, `.git`, `.astro`, `public` — excluded); when
+— `node_modules`, `dist`, `.git`, `.astro`, `public` — excluded unless the
+phase's own globs name them); when
 the gate would run, changes outside the declared globs red the phase
 *before the command executes*, naming each file and its owner — gate
 pressure is precisely what causes cross-phase edits, so the edit is
@@ -832,8 +838,14 @@ exactly one follow-up wake. When the chain has an earlier artifact-owning
 phase, the daemon rewinds at gate time instead: it closes the QA phase with
 the verdict and reopens the phase the verdict names — an explicit `#phase`,
 else the phase whose declared `paths` own a cited file, else `content` —
-carrying the findings, at most twice per workgroup before falling back to a
-hub-authored close. When the re-walk reaches QA again, the opener appends up
+carrying the findings, at most twice per run (a run starts at a pipeline trigger) before falling
+back to a hub-authored close. Before profile services start, the daemon migrates
+legacy counters and checklists to the latest recorded run and drops entries for
+removed workgroups (no `meta.yaml`). Trigger admission also migrates before opening a
+new run, including CLI triggers while the daemon is stopped. A workgroup whose run cannot
+be read keeps its state as it was and the profile starts; a trigger on it is refused until
+its transcript reads again. A new run discards the previous run's unconsumed checklist.
+When the re-walk reaches QA again, the opener appends up
 to 6,000 characters of the previous verdict as a checklist the auditor must
 resolve or confirm. A red `repair: hub` gate takes the same path first. The
 targeted phase owner is exempt from the one-post-per-round cap during a

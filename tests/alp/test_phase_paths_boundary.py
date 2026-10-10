@@ -583,3 +583,252 @@ async def test_encryption_failure_rolls_back_a_fresh_baseline(
         await wc.post(home, wg.meta.id, b"@pixel #task #media-build rebuild", operator_abandon=True)
     assert not gates._baseline_path(wg_dir, "media-build").exists()
     assert (wg_dir / "transcript.jsonl").read_text().strip() == ""
+
+
+def _build_wg():
+    steps = {
+        "build": {
+            "owner": "pixel", "task": "build", "gate": {"argv": ["true"], "cwd": "projects/casa"},
+            "paths": ["dist/**", "src/env.d.ts"],
+        },
+        "media-qa": {"owner": "lens", "task": "audit"},
+    }
+    wg = _wg("wg_build", steps)
+    wg.meta.pipelines = {"media-build": ("build", "media-qa")}
+    return wg
+
+
+def test_a_change_only_under_a_declared_generated_dir_is_progress(tmp_path: Path):
+    workspace = tmp_path / "ws"
+    root = _project(workspace)
+    (root / "dist").mkdir()
+    (root / "dist" / "index.html").write_text("old")
+    wg_dir = tmp_path / "wgdir"
+    step = gates.step_for(_build_wg().meta, "build")
+
+    gates.snapshot_baseline(wg_dir, step, workspace)
+    assert gates.owned_paths_changed(wg_dir, step, workspace) is False
+    (root / "dist" / "index.html").write_text("new build output")
+    assert gates.owned_paths_changed(wg_dir, step, workspace) is True
+
+
+def test_generated_dirs_stay_ignored_for_a_step_that_does_not_declare_them(tmp_path: Path):
+    workspace = tmp_path / "ws"
+    root = _project(workspace)
+    (root / "dist").mkdir()
+    wg_dir = tmp_path / "wgdir"
+    step = _step(_wg())
+
+    gates.snapshot_baseline(wg_dir, step, workspace)
+    (root / "dist" / "index.html").write_text("built")
+    assert gates.owned_paths_changed(wg_dir, step, workspace) is False
+
+
+def test_declaring_a_subpath_of_a_generated_dir_keeps_the_boundary_quiet(tmp_path: Path):
+    workspace = tmp_path / "ws"
+    root = _project(workspace)
+    (root / "public" / "images").mkdir(parents=True)
+    (root / "public" / "favicon.svg").write_text("<svg/>")
+    wg_dir = tmp_path / "wgdir"
+    wg = _build_wg()
+    wg.meta.pipeline_steps["build"]["paths"] = ["public/images/**"]
+    step = gates.step_for(wg.meta, "build")
+
+    gates.snapshot_baseline(wg_dir, step, workspace)
+    assert gates.paths_violations(wg_dir, step, workspace) == ""
+    (root / "public" / "images" / "a.png").write_text("png")
+    assert gates.owned_paths_changed(wg_dir, step, workspace) is True
+
+
+def test_nested_generated_dirs_under_a_declared_subtree_count(tmp_path: Path):
+    workspace = tmp_path / "ws"
+    root = _project(workspace)
+    (root / "dist" / "public").mkdir(parents=True)
+    (root / "apps" / "web" / "dist").mkdir(parents=True)
+    wg_dir = tmp_path / "wgdir"
+    wg = _build_wg()
+    wg.meta.pipeline_steps["build"]["paths"] = ["dist/**", "apps/web/dist/**"]
+    step = gates.step_for(wg.meta, "build")
+
+    gates.snapshot_baseline(wg_dir, step, workspace)
+    (root / "dist" / "public" / "page.html").write_text("x")
+    assert gates.owned_paths_changed(wg_dir, step, workspace) is True
+    gates.refresh_baseline(wg_dir, step, workspace)
+    assert gates.owned_paths_changed(wg_dir, step, workspace) is False
+    (root / "apps" / "web" / "dist" / "a.js").write_text("x")
+    assert gates.owned_paths_changed(wg_dir, step, workspace) is True
+
+
+@pytest.mark.parametrize("pattern", ["**", "hotels/*/src/content/**", "hotels/**"])
+def test_generated_scan_does_not_enter_implicit_dependencies(tmp_path, pattern):
+    for rel in ("hotels/a/node_modules/pkg/src/content/x.js", "hotels/a/.git/config", "hotels/a/src/content/page.json"):
+        path = tmp_path / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("x")
+    scanned = gates._scan_project(tmp_path, owned=(pattern,))
+    assert set(scanned) == {"hotels/a/src/content/page.json"}
+
+
+def test_generated_scan_excludes_git_and_operational_logs_but_keeps_deliverable_logs(tmp_path):
+    for rel in ("dist/.git/config", ".astro/build.log", ".astro/types.d.ts", "dist/report.log"):
+        path = tmp_path / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("x")
+    scanned = gates._scan_project(tmp_path, owned=("dist/**", ".astro/**", "dist/.git/**"))
+    assert set(scanned) == {".astro/types.d.ts", "dist/report.log"}
+
+
+def test_generated_scan_skips_fifo_without_opening_a_blocking_reader(tmp_path):
+    import os
+    (tmp_path / "dist").mkdir()
+    os.mkfifo(tmp_path / "dist" / "pipe")
+    assert gates._scan_project(tmp_path, owned=("dist/**",)) == {}
+
+
+@pytest.mark.asyncio
+async def test_hub_snapshot_does_not_block_the_loop(short_tmp, monkeypatch):
+    import asyncio
+    import threading
+    from alpi.alp import workgroup_client as wc
+
+    home, wg, _, _ = _factory(short_tmp, monkeypatch)
+    entered = threading.Event()
+    release = threading.Event()
+    original = gates.snapshot_baseline
+    def held(*args):
+        entered.set()
+        assert release.wait(3), "the event loop could not release the snapshot"
+        return original(*args)
+    monkeypatch.setattr(gates, "snapshot_baseline", held)
+    post = asyncio.create_task(wc.trigger_pipeline(home, wg.meta.id, "media-build"))
+    try:
+        assert await asyncio.to_thread(entered.wait, 2)
+        assert not post.done()
+        release.set()
+        await post
+    finally:
+        release.set()
+        await asyncio.gather(post, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('settlement', [False, True])
+async def test_peer_transcript_lock_is_acquired_off_loop(short_tmp, monkeypatch, settlement):
+    import threading
+    from alpi.alp import workgroup as wg_mod, server as server_mod, peers
+
+    home, wg, wg_dir, _ = _factory(short_tmp, monkeypatch)
+    member = next(m for m in wg.members if m.pubkey != wg.meta.hub_pubkey)
+    member.joined = True
+    wg_mod._save_members(wg_dir, wg.members)
+    server = server_mod.Server(home)
+    wg_mod.register(server, home)
+    main_thread = threading.get_ident()
+    def check_thread(*args, **kwargs):
+        assert threading.get_ident() != main_thread
+        if not settlement:
+            wg_mod._save_members(wg_dir, [m for m in wg.members if m.pubkey != member.pubkey])
+        return {'settled': True} if settlement else {'seq': 1, 'ts': '2026-10-10T00:00:00Z'}
+    monkeypatch.setattr(wg_mod, 'settle_turn_cost' if settlement else '_admit_post_locked', check_thread)
+    params = {'workgroup_id': wg.meta.id, 'nonce': 'n', 'ciphertext': 'c', 'settle_only': settlement, 'turn_id': 'a' * 32}
+    result = await server.handlers['workgroup.post'](params, peers.Peer(id='pixel', pubkey=member.pubkey), server)
+    assert result == ({'settled': True} if settlement else {'seq': 1, 'ts': '2026-10-10T00:00:00Z'})
+    if not settlement:
+        assert wg_mod.load(home, wg.meta.id).member(member.pubkey) is None
+
+
+def test_dot_prefix_is_normalized_before_progress_matching(tmp_path):
+    from alpi.alp import workgroup as wg_mod
+
+    steps = wg_mod.validate_pipeline_steps({'build': ('build',)}, {'build': {'owner': 'pixel', 'gate': {'argv': ['true']}, 'paths': ['./dist/**']}})
+    assert steps['build']['paths'] == ['dist/**']
+    (tmp_path / 'dist').mkdir()
+    (tmp_path / 'dist' / 'index.html').write_text('built')
+    assert 'dist/index.html' in gates._scan_project(tmp_path, owned=tuple(steps['build']['paths']))
+
+
+def test_timestamp_and_astro_log_changes_are_not_progress(tmp_path):
+    import os
+
+    workspace = tmp_path / 'ws'
+    root = _project(workspace)
+    (root / '.astro').mkdir()
+    (root / '.astro' / 'build.log').write_text('time 1')
+    (root / '.astro' / 'types.d.ts').write_text('same content')
+    wg = _build_wg()
+    wg.meta.pipeline_steps['build']['paths'] = ['.astro/**']
+    step = gates.step_for(wg.meta, 'build')
+    wg_dir = tmp_path / 'wgdir'
+    gates.snapshot_baseline(wg_dir, step, workspace)
+    (root / '.astro' / 'build.log').write_text('time 2')
+    os.utime(root / '.astro' / 'types.d.ts', None)
+    assert gates.owned_paths_changed(wg_dir, step, workspace) is False
+    (root / '.astro' / 'types.d.ts').write_text('changed content')
+    assert gates.owned_paths_changed(wg_dir, step, workspace) is True
+
+
+@pytest.mark.parametrize("pattern,generated", [
+    ("dist/**/*.html", "dist/index.html"),
+    ("public/**/*.webp", "public/hero.webp"),
+    ("**/dist/**", "dist/index.html"),
+    ("site/**/dist/**", "site/dist/index.html"),
+])
+def test_a_generated_file_outside_fnmatch_ownership_never_reads_as_deleted(tmp_path: Path, pattern, generated):
+    workspace = tmp_path / "ws"
+    root = _project(workspace)
+    (root / generated).parent.mkdir(parents=True, exist_ok=True)
+    (root / generated).write_text("built")
+    wg_dir = tmp_path / "wgdir"
+    wg = _build_wg()
+    wg.meta.pipeline_steps["build"]["paths"] = [pattern, "src/**"]
+    step = gates.step_for(wg.meta, "build")
+
+    gates.snapshot_baseline(wg_dir, step, workspace)
+    assert gates.paths_violations(wg_dir, step, workspace) == ""
+    (root / generated).write_text("rebuilt")
+    assert gates.paths_violations(wg_dir, step, workspace) == ""
+
+
+def test_a_stored_dot_prefixed_path_counts_and_stays_inside_the_boundary(tmp_path: Path):
+    workspace = tmp_path / "ws"
+    root = _project(workspace)
+    (root / "dist").mkdir()
+    (root / "dist" / "index.html").write_text("old")
+    wg_dir = tmp_path / "wgdir"
+    wg = _build_wg()
+    wg.meta.pipeline_steps["build"]["paths"] = ["./dist/**"]
+    step = gates.step_for(wg.meta, "build")
+    assert step.paths == ("dist/**",)
+
+    gates.snapshot_baseline(wg_dir, step, workspace)
+    (root / "dist" / "index.html").write_text("new")
+    assert gates.owned_paths_changed(wg_dir, step, workspace) is True
+    (root / "dist" / "index.html").unlink()
+    assert gates.paths_violations(wg_dir, step, workspace) == ""
+
+
+@pytest.mark.asyncio
+async def test_a_kick_landing_while_the_post_waits_for_the_lock_rejects_it(short_tmp, monkeypatch):
+    import contextlib
+    from alpi.alp import workgroup as wg_mod, server as server_mod, peers
+
+    home, wg, wg_dir, _ = _factory(short_tmp, monkeypatch)
+    member = next(m for m in wg.members if m.pubkey != wg.meta.hub_pubkey)
+    member.joined = True
+    wg_mod._save_members(wg_dir, wg.members)
+    server = server_mod.Server(home)
+    wg_mod.register(server, home)
+
+    @contextlib.contextmanager
+    def kicked_while_waiting(d):
+        wg_mod._save_members(wg_dir, [m for m in wg.members if m.pubkey != member.pubkey])
+        yield
+
+    admitted = []
+    monkeypatch.setattr(wg_mod, "_transcript_write_lock", kicked_while_waiting)
+    monkeypatch.setattr(wg_mod, "_admit_post_locked", lambda *a, **k: admitted.append(a))
+    params = {"workgroup_id": wg.meta.id, "nonce": "n", "ciphertext": "c", "turn_id": "a" * 32}
+    with pytest.raises(server_mod.HandlerError) as err:
+        await server.handlers["workgroup.post"](params, peers.Peer(id="pixel", pubkey=member.pubkey), server)
+    assert err.value.message == "workgroup-not-member"
+    assert admitted == []

@@ -285,6 +285,10 @@ def _start_new_profiles(
             continue
         home = _profile_home(root, profile)
         try:
+            _migrate_qa_runs(home)
+        except Exception:  # noqa: BLE001
+            log.exception("profile %s: QA state migration failed, its state is kept", profile)
+        try:
             fps = _reload_fingerprints(home)
             _warn_legacy_service_switches(home, profile)
         except Exception:  # noqa: BLE001
@@ -2537,7 +2541,13 @@ def _save_poller_state(home: Path, state: dict) -> None:
     import json
     p = _poller_state_path(home)
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(state, separators=(",", ":")))
+    tmp = p.with_name(f"{p.name}.{os.getpid()}.{os.urandom(4).hex()}.tmp")
+    try:
+        tmp.write_text(json.dumps(state, separators=(",", ":")))
+        os.replace(tmp, p)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 def _active_owner_budget_blocks_recovery(home: Path, wg, recent: list[dict]) -> bool:
@@ -3035,11 +3045,31 @@ def _bounded_qa_recheck(excerpt: str) -> str:
     return text[:_QA_RECHECK_MAX_CHARS - len(marker)].rstrip() + marker
 
 
-def _set_qa_recheck(home: Path, wg_id: str, phase: str, excerpt: str, kind: str = "qa") -> None:
+def _current_run_seq(home: Path, wg_id: str) -> int | None:
+    # A run starts at a `pipeline_trigger` post; a rewind posts a phase #task, so the value is constant inside a run and 0 when the transcript has no trigger metadata.
+    from alpi.alp import workgroup as wg_mod
+
+    try:
+        wg = wg_mod.load(home, wg_id)
+        posts = _all_hub_posts_decrypted(home, wg) if wg is not None else []
+        if not posts:
+            return None
+    except Exception:  # noqa: BLE001
+        return None
+    return max(
+        (int(p.get("seq", 0)) for p in posts if p.get("pipeline_trigger") is True),
+        default=0,
+    )
+
+
+def _set_qa_recheck(
+    home: Path, wg_id: str, phase: str, excerpt: str, kind: str = "qa", run: int | None = None,
+) -> None:
     # Keyed by phase so nested rewinds of different QA phases keep their own checklist; the same phase keeps its latest verdict. `kind` tells a QA FAIL from a red gate so the opener never invents a verdict.
     state = _load_poller_state(home)
     state.setdefault("qa_recheck", {}).setdefault(wg_id, {})[phase] = {
         "kind": kind, "excerpt": _bounded_qa_recheck(excerpt),
+        "started_seq": run if run is not None else _current_run_seq(home, wg_id),
     }
     _save_poller_state(home, state)
 
@@ -3048,6 +3078,11 @@ def _peek_qa_recheck(home: Path, wg_id: str, phase: str) -> tuple[str, str]:
     table = (_load_poller_state(home).get("qa_recheck") or {}).get(wg_id) or {}
     entry = table.get(phase) if isinstance(table, dict) else None
     if not isinstance(entry, dict):
+        return "", ""
+    run = _current_run_seq(home, wg_id)
+    stored = entry.get("started_seq")
+    if run is not None and isinstance(stored, int) and stored != run:
+        _ack_qa_recheck(home, wg_id, phase)
         return "", ""
     return str(entry.get("kind") or "qa"), str(entry.get("excerpt") or "")
 
@@ -3107,16 +3142,84 @@ def _ack_qa_recheck(home: Path, wg_id: str, phase: str) -> None:
     _save_poller_state(home, state)
 
 
-def _qa_rewind_count(home: Path, wg_id: str) -> int:
-    return int((_load_poller_state(home).get("qa_rewind_count") or {}).get(wg_id, 0))
+def _migrate_qa_runs(home: Path, only_wg: str = "", *, strict: bool = False) -> None:
+    from alpi.alp import workgroup as wg_mod
+
+    state = _load_poller_state(home)
+    counts = state.get("qa_rewind_count")
+    rechecks = state.get("qa_recheck")
+    counts = counts if isinstance(counts, dict) else {}
+    rechecks = rechecks if isinstance(rechecks, dict) else {}
+    changed = False
+    for wg_id in sorted(set(counts) | set(rechecks)):
+        if only_wg and wg_id != only_wg:
+            continue
+        try:
+            meta_missing = not (wg_mod._wg_dir(home, wg_id) / wg_mod._META).exists()
+        except ValueError:
+            meta_missing = True
+        if meta_missing:
+            counts.pop(wg_id, None)
+            rechecks.pop(wg_id, None)
+            changed = True
+            continue
+        raw = counts.get(wg_id)
+        entries = rechecks.get(wg_id)
+        entries = entries if isinstance(entries, dict) else {}
+        legacy_count = raw is not None and not isinstance(raw, (list, tuple))
+        legacy_checks = [
+            entry for entry in entries.values()
+            if isinstance(entry, dict) and not isinstance(entry.get("started_seq"), int)
+        ]
+        if not legacy_count and not legacy_checks:
+            continue
+        run = _current_run_seq(home, wg_id)
+        if run is None:
+            if strict:
+                raise ValueError(f"cannot migrate QA state for unreadable workgroup {wg_id}")
+            log.warning("workgroup %s: QA state kept unmigrated, its transcript is unreadable", wg_id)
+            continue
+        if legacy_count:
+            counts[wg_id] = [run, _rewind_entry(raw, run)[1]]
+        for entry in legacy_checks:
+            entry["started_seq"] = run
+        changed = True
+    if changed:
+        _save_poller_state(home, state)
 
 
-def _bump_qa_rewind_count(home: Path, wg_id: str) -> int:
+def _rewind_entry(raw, run: int) -> tuple[int, int]:
+    if isinstance(raw, (list, tuple)) and len(raw) == 2:
+        try:
+            return int(raw[0]), int(raw[1])
+        except (TypeError, ValueError):
+            return run, 0
+    try:
+        return run, int(raw or 0)
+    except (TypeError, ValueError):
+        return run, 0
+
+
+def _qa_rewind_count(home: Path, wg_id: str, run: int | None = None) -> int:
+    run = _current_run_seq(home, wg_id) if run is None else run
+    raw = (_load_poller_state(home).get("qa_rewind_count") or {}).get(wg_id)
+    if run is None:
+        run = _rewind_entry(raw, 0)[0]
+    started, used = _rewind_entry(raw, run)
+    return used if started == run else 0
+
+
+def _bump_qa_rewind_count(home: Path, wg_id: str, run: int | None = None) -> int:
+    run = _current_run_seq(home, wg_id) if run is None else run
     state = _load_poller_state(home)
     table = state.setdefault("qa_rewind_count", {})
-    table[wg_id] = int(table.get(wg_id, 0)) + 1
+    if run is None:
+        run = _rewind_entry(table.get(wg_id), 0)[0]
+    started, used = _rewind_entry(table.get(wg_id), run)
+    used = used + 1 if started == run else 1
+    table[wg_id] = [run, used]
     _save_poller_state(home, state)
-    return int(table[wg_id])
+    return used
 
 
 def _phases_owning_named_paths(verdict_text: str, authored: list[str], steps: dict) -> list[str]:
@@ -3213,7 +3316,8 @@ async def _rewind_to(home: Path, wg, step, target: str | None, *, label: str, re
 
     if target is None:
         return False
-    used = _qa_rewind_count(home, wg.meta.id)
+    run = _current_run_seq(home, wg.meta.id)
+    used = _qa_rewind_count(home, wg.meta.id, run)
     if used >= _QA_REWIND_MAX:
         return False
     phase_map = wg_mod.safe_phase_map(wg.meta)
@@ -3226,22 +3330,31 @@ async def _rewind_to(home: Path, wg, step, target: str | None, *, label: str, re
         f"@{owner} #task #{target} · {task} · {reason} "
         f"(rewind {attempt}/{_QA_REWIND_MAX}): {excerpt}"
     )
+    previous = (_load_poller_state(home).get("qa_rewind_count") or {}).get(wg.meta.id)
+    # Charged before posting: a cancelled await still lands the post from its worker thread.
+    _bump_qa_rewind_count(home, wg.meta.id, run)
     try:
         await wc.post(home, wg.meta.id, close.encode())
         res = await wc.post(home, wg.meta.id, opener.encode())
     except Exception as e:  # noqa: BLE001
         log.error("wg gate %s/%s rewind failed: %s", wg.meta.id, step.phase, e)
+        state = _load_poller_state(home)
+        table = state.setdefault("qa_rewind_count", {})
+        if previous is None:
+            table.pop(wg.meta.id, None)
+        else:
+            table[wg.meta.id] = previous
+        _save_poller_state(home, state)
         return False
-    _bump_qa_rewind_count(home, wg.meta.id)
     # The re-walk must re-verify what failed; the QA opener carries this excerpt as a checklist, worded by its origin.
-    _set_qa_recheck(home, wg.meta.id, step.phase, excerpt, kind="qa" if label == "QA FAIL" else "gate")
+    _set_qa_recheck(home, wg.meta.id, step.phase, excerpt, kind="qa" if label == "QA FAIL" else "gate", run=run)
     chain = next((list(chain) for chain in wg.meta.pipelines.values()
                   if target in chain and step.phase in chain
                   and list(chain).index(target) < list(chain).index(step.phase)), [])
     if chain:
         intermediates = chain[chain.index(target) + 1:chain.index(step.phase)]
         for phase in _phases_owning_named_paths(excerpt, intermediates, phase_map):
-            _set_qa_recheck(home, wg.meta.id, phase, excerpt, kind="qa" if label == "QA FAIL" else "gate")
+            _set_qa_recheck(home, wg.meta.id, phase, excerpt, kind="qa" if label == "QA FAIL" else "gate", run=run)
     if isinstance(res, dict) and res.get("seq") is not None:
         _set_hub_responded_seq(home, wg.meta.id, int(res["seq"]))
     log.info(

@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.17.16 — 2026-10-10 — a chain of runs keeps its rewinds
+
+- **A workgroup's QA rewind budget now belongs to each run, not to its whole life.** A workgroup that runs a pipeline once per hotel used to block on its third red QA anywhere in the chain; each new run now gets its two rewinds, and a run still stops at the third.
+- **A checklist left over by a finished run no longer reaches the next run's opener.**
+- **A red build that rewrote its own `dist`, `.astro` or `public` outputs counts as progress** when the step declares those paths, instead of being judged as no change. A rebuild that only touches file times or `.astro` logs does not count. A phase already open at upgrade may count one delivery as progress.
+- **The poller's saved state is written atomically**, so a crash mid-write cannot lose the cursors and counters of every workgroup.
+- **Opening a build phase keeps the daemon responsive** while its output files are hashed.
+
 ## v0.17.15 — 2026-10-09 — the agent knows what a banner opens
 
 - **The agent's notification reference says what tapping or returning to a banner does**: it opens the chat, the notification, the approval or question, or a failed job's schedule, on the desktop and the phone.

@@ -953,6 +953,42 @@ def admit_post(
         )
 
 
+def _member_can_post(wg: "Workgroup | None", pubkey: str) -> "Workgroup":
+    if wg is None:
+        raise alp_server.HandlerError(-32009, "workgroup-not-found")
+    member = wg.member(pubkey)
+    if member is None:
+        raise alp_server.HandlerError(-32008, "workgroup-not-member")
+    if not member.joined:
+        raise alp_server.HandlerError(
+            -32008, "workgroup-not-joined",
+            data={"detail": "run workgroup.join before posting"},
+        )
+    if wg.meta.paused:
+        raise alp_server.HandlerError(
+            -32010, "workgroup-paused",
+            data={
+                "paused_at": wg.meta.paused_at,
+                "paused_by": wg.meta.paused_by,
+            },
+        )
+    return wg
+
+
+def _admit_member_post(
+    home: Path, wg_id: str, pubkey: str, entry: dict[str, Any],
+    declared_usd: float, declared_tokens: int,
+) -> dict[str, Any]:
+    d = _wg_dir(home, wg_id)
+    with _transcript_write_lock(d):
+        # Re-checked under the lock: a kick or pause can land while this thread waits for it.
+        wg = _member_can_post(load(home, wg_id), pubkey)
+        return _admit_post_locked(
+            d, wg.meta, entry, declared_usd, declared_tokens,
+            enforce_cap=True, reject_nonce_reuse=True,
+        )
+
+
 def _admit_post_locked(
     d: Path, meta: "Meta", entry: dict[str, Any],
     declared_usd: float = 0.0, declared_tokens: int = 0,
@@ -1444,7 +1480,7 @@ def validate_pipeline_steps(
                     "cwd anchors the project root and its run is when the "
                     "boundary is checked"
                 )
-            step["paths"] = [g.strip() for g in paths]
+            step["paths"] = [str(PurePosixPath(g.strip())) for g in paths]
         out[phase] = step
     return out
 
@@ -1559,8 +1595,8 @@ def register(server: alp_server.Server, home: Path) -> None:
                 )
             try:
                 turn_id = validate_turn_id((params or {}).get("turn_id"))
-                return settle_turn_cost(
-                    home, wg_id, peer.pubkey, turn_id,
+                return await _asyncio.to_thread(
+                    settle_turn_cost, home, wg_id, peer.pubkey, turn_id,
                     (params or {}).get("cost"),
                 )
             except ValueError as e:
@@ -1594,25 +1630,7 @@ def register(server: alp_server.Server, home: Path) -> None:
                 -32602, "invalid-params", data={"detail": str(e)},
             ) from e
 
-        wg = load(home, wg_id)
-        if wg is None:
-            raise alp_server.HandlerError(-32009, "workgroup-not-found")
-        member = wg.member(peer.pubkey)
-        if member is None:
-            raise alp_server.HandlerError(-32008, "workgroup-not-member")
-        if not member.joined:
-            raise alp_server.HandlerError(
-                -32008, "workgroup-not-joined",
-                data={"detail": "run workgroup.join before posting"},
-            )
-        if wg.meta.paused:
-            raise alp_server.HandlerError(
-                -32010, "workgroup-paused",
-                data={
-                    "paused_at": wg.meta.paused_at,
-                    "paused_by": wg.meta.paused_by,
-                },
-            )
+        wg = _member_can_post(load(home, wg_id), peer.pubkey)
 
         declared = normalize_declared_cost(cost)
         declared_usd = declared["usd"]
@@ -1644,14 +1662,16 @@ def register(server: alp_server.Server, home: Path) -> None:
                 if declared_cached is not None:
                     entry["cost"]["cached_in"] = declared_cached
                     entry["cost"]["measured_in"] = declared_measured
-        entry = admit_post(
-            d, wg.meta, entry, declared_usd, declared_tokens,
-            enforce_cap=True, reject_nonce_reuse=True,
+        entry = await _asyncio.to_thread(
+            _admit_member_post, home, wg_id, peer.pubkey, entry, declared_usd, declared_tokens,
         )
         seq = int(entry["seq"])
 
-        member.last_seen_at = entry["ts"]
-        _save_members(d, wg.members)
+        current = load(home, wg_id)
+        current_member = current.member(peer.pubkey) if current is not None else None
+        if current_member is not None:
+            current_member.last_seen_at = entry["ts"]
+            _save_members(d, current.members)
 
         try:
             from alpi.host import events as host_events

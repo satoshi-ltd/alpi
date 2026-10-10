@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 import threading
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 GATE_TIMEOUT_SECONDS = 180
 GATE_OUTPUT_CAP = 6_000
@@ -142,12 +142,12 @@ def step_for(meta, phase: str) -> GateStep | None:
         phase=phase, owner=owner,
         next_phase=next_phase, next_owner=next_owner, next_task=next_task,
         argv=tuple(argv), cwd=cwd,
-        paths=tuple(str(g) for g in paths) if isinstance(paths, list) else (),
+        paths=tuple(str(PurePosixPath(str(g).strip())) for g in paths) if isinstance(paths, list) else (),
         repair=repair,
     )
 
 
-# Derived/heavy trees are outside every authoring boundary; pruning them keeps the walk cheap.
+# Generated trees require an explicit declaration; dependency trees stay pruned unless named.
 _SCAN_EXCLUDE = {".git", "node_modules", "dist", ".astro", "public", "__pycache__", ".venv", ".cache"}
 # A gate's own `npm install` rewrites these, so they are nobody's deliverable.
 _SCAN_EXCLUDE_FILES = {
@@ -179,7 +179,10 @@ def _file_stamp(fp: Path) -> str | None:
     """Content digest, never mtime: restoring a file must clear its violation, and a rewrite always moves mtime."""
     h = hashlib.blake2b(digest_size=16)
     try:
-        with fp.open("rb") as fh:
+        fd = os.open(fp, os.O_RDONLY | os.O_NONBLOCK)
+        with os.fdopen(fd, "rb") as fh:
+            if not stat.S_ISREG(os.fstat(fh.fileno()).st_mode):
+                return None
             for chunk in iter(lambda: fh.read(65536), b""):
                 h.update(chunk)
     except OSError:
@@ -200,21 +203,59 @@ def _state_roots(wg_dir: Path) -> frozenset[Path]:
     return frozenset(r.resolve() for r in roots)
 
 
-def _scan_project(root: Path, exclude: frozenset[Path] = frozenset()) -> dict[str, str]:
+def _matches_generated_path(rel: str, pattern: str, *, directory: bool = False) -> bool:
+    def match(parts, globs, generated=False):
+        if not parts:
+            return directory or all(g == "**" for g in globs)
+        if not globs or parts[0] == ".git":
+            return False
+        part, glob = parts[0], globs[0]
+        excluded = part in _SCAN_EXCLUDE
+        output = part in {"dist", "public", ".astro"}
+        if glob == "**":
+            return match(parts, globs[1:], generated) or (
+                (not excluded or (generated and output))
+                and match(parts[1:], globs, generated)
+            )
+        if excluded and glob != part:
+            return False
+        return fnmatch.fnmatchcase(part, glob) and match(
+            parts[1:], globs[1:], generated or (output and glob == part),
+        )
+
+    return match(rel.split("/"), pattern.split("/"))
+
+
+def _scan_project(
+    root: Path, exclude: frozenset[Path] = frozenset(), owned: tuple[str, ...] = (),
+) -> dict[str, str]:
     out: dict[str, str] = {}
     if not root.is_dir():
         return out
+    owned = tuple(str(PurePosixPath(g)) for g in owned)
     for dirpath, dirnames, filenames in os.walk(root):
+        base = Path(dirpath).relative_to(root).as_posix()
+        base = "" if base == "." else base
         dirnames[:] = [
             d for d in dirnames
-            if d not in _SCAN_EXCLUDE and (Path(dirpath) / d).resolve() not in exclude
+            if (d not in _SCAN_EXCLUDE or (d != ".git" and any(
+                _matches_generated_path(f"{base}/{d}".lstrip("/"), g, directory=True) for g in owned
+            )))
+            and (Path(dirpath) / d).resolve() not in exclude
         ]
+        generated = any(seg in _SCAN_EXCLUDE for seg in base.split("/"))
         for fn in filenames:
-            if fn in _SCAN_EXCLUDE_FILES:
+            if fn in _SCAN_EXCLUDE_FILES or (".astro" in base.split("/") and fn.endswith(".log")):
+                continue
+            rel = f"{base}/{fn}".lstrip("/")
+            # Ownership elsewhere is fnmatch; a generated file enters the baseline only when both agree, or paths_violations reports it deleted.
+            if generated and not any(
+                _matches_generated_path(rel, g) and fnmatch.fnmatchcase(rel, g) for g in owned
+            ):
                 continue
             stamp = _file_stamp(Path(dirpath) / fn)
             if stamp is not None:
-                out[(Path(dirpath) / fn).relative_to(root).as_posix()] = stamp
+                out[rel] = stamp
     return out
 
 
@@ -239,7 +280,7 @@ def snapshot_baseline(wg_dir: Path, step: GateStep, workspace: Path) -> bool:
     if bp.exists():
         return False
     _runtime_dir(wg_dir, "phase_baselines")
-    snapshot = _scan_project(root, _state_roots(wg_dir))
+    snapshot = _scan_project(root, _state_roots(wg_dir), tuple(step.paths))
     tmp = bp.with_suffix(".tmp")
     tmp.write_text(json.dumps(snapshot, separators=(",", ":")))
     os.replace(tmp, bp)
@@ -255,7 +296,7 @@ def refresh_baseline(wg_dir: Path, step: GateStep, workspace: Path) -> bool:
         return False
     bp = _baseline_path(wg_dir, step.phase)
     _runtime_dir(wg_dir, "phase_baselines")
-    snapshot = _scan_project(root, _state_roots(wg_dir))
+    snapshot = _scan_project(root, _state_roots(wg_dir), tuple(step.paths))
     tmp = bp.with_suffix(".tmp")
     tmp.write_text(json.dumps(snapshot, separators=(",", ":")))
     os.replace(tmp, bp)
@@ -277,7 +318,7 @@ def owned_paths_changed(
         return None
     if not isinstance(baseline, dict):
         return None
-    current = _scan_project(root, _state_roots(wg_dir))
+    current = _scan_project(root, _state_roots(wg_dir), tuple(step.paths))
     owned = tuple(step.paths)
     relevant = {
         rel for rel in set(baseline) | set(current)

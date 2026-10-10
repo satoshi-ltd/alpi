@@ -1025,8 +1025,12 @@ async def post(
     wg = wg_mod.load(home, wg_id)
     if wg is not None and wg.meta.hub_pubkey == kp.pubkey_b64():
         _check_hub_single_marker(_plaintext)
-        result = _post_as_hub(
-            home, wg, kp, text, cost,
+        if operator_abandon:
+            from alpi.service import _migrate_qa_runs
+
+            _migrate_qa_runs(home, wg_id, strict=True)
+        result = await asyncio.to_thread(
+            _post_as_hub, home, wg, kp, text, cost,
             operator_abandon=operator_abandon, turn_id=turn_id, origin=origin,
         )
         _emit_wg_post(home, wg_id, result)
