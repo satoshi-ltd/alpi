@@ -42,6 +42,7 @@ function Block({ b }) {
     );
   }
   if (b.kind === "code") return <pre className={styles.codeblock}><code>{b.text}</code></pre>;
+  if (b.strong) return <p className={`${styles.para} ${styles.strong}`}><Inline text={b.text} /></p>;
   if (b.kind === "list") {
     const Tag = b.ordered ? "ol" : "ul";
     return (
@@ -66,7 +67,7 @@ function Block({ b }) {
   return <p className={styles.para}><Inline text={b.text} /></p>;
 }
 
-export default function NotificationBody({ body, lead = false, className = "" }) {
+export default function NotificationBody({ body, lead = null, className = "" }) {
   let blocks = parseNotificationBody(body);
   if (!blocks.length) return null;
   let leadText = null;
@@ -76,13 +77,17 @@ export default function NotificationBody({ body, lead = false, className = "" })
   }
   return (
     <div className={`${styles.body} ${className}`.trim()}>
-      {leadText != null ? <div className={styles.lead}><Inline text={leadText} /></div> : null}
+      {leadText != null ? <div className={lead === "deck" ? styles.deck : styles.lead}><Inline text={leadText} /></div> : null}
       {blocks.map((b, i) => <Block key={i} b={b} />)}
     </div>
   );
 }
 
-export function ErrorCard({ title, body, actions = null }) {
+export function Deck({ text, asTitle = false }) {
+  return <p className={asTitle ? styles.lead : styles.deck}>{text}</p>;
+}
+
+export function ErrorCard({ title, summary = "", body, actions = null }) {
   const { lead, failed } = failedTitle(title);
   const { facts, details, rest } = errorParts(parseNotificationBody(body));
   return (
@@ -94,6 +99,7 @@ export function ErrorCard({ title, body, actions = null }) {
           {failed ? <> <span className={styles.failed}>failed</span></> : null}
         </span>
       </h2>
+      {summary ? <p className={styles.errorSummary}>{summary}</p> : null}
       {facts.length ? (
         <dl className={styles.facts}>
           {facts.map((f, i) => (

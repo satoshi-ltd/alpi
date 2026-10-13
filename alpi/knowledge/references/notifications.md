@@ -18,15 +18,30 @@ make it scannable, not a wall of text. To reach a third party use the
 - Do NOT fire just to duplicate an answer the user is already reading live
   and never asked to be pushed.
 
-## How to write one (allowed elements)
+## The three parts
 
-A study can arrive here, so there is a three-level hierarchy:
+Every notification is read as a title, a summary and a body, in that order
+on every surface:
+
+| Part | Field | Rule | Where it shows |
+|---|---|---|---|
+| Title | `title` | what happened, at most 60 characters, plain text | banner and push head (`@you · title`), inbox row, reader |
+| Summary | `summary` | one or two plain sentences with the outcome, at most 200 characters, never ending on a colon | banner and push body, the inbox row under the title, the reader under the title |
+| Body | `text` | the detail, in the elements below | the reader only |
+
+Do not repeat the title or the summary inside the body. Without a
+`summary`, the daemon takes the body's first prose paragraph (headings,
+short `**Label**` lines, tables and code are skipped, and a line ending on a
+colon is joined with what follows), so an intro like "Here is the report:"
+becomes a poor summary: pass `summary` instead. Banners and pushes for
+`warning` and `error` open with "Warning · " or "Failed · ".
+
+## How to write the body (allowed elements)
 
 | Element | Markdown | Use for |
 |---|---|---|
-| Title | `title` field, or first line | the report title (lead when no `title`) |
 | Heading | `## Section` | a major section of a long study |
-| Subheading | `**Label:** rest…` / `**Label**` / `### Sub` | scannable subsection head (≤32 chars, ≤5 words) |
+| Subheading | `**Label:** rest…` / `**Label**` / `### Sub` | scannable subsection head (≤32 chars, ≤5 words); a longer bold or `###` line renders as a bold paragraph |
 | Paragraph | plain text | the body |
 | Emphasis | `**bold**`, `*italic*`, `` `code` `` | inline only |
 | List | `- item` / `1. item` | bullets / ranked points |
@@ -35,9 +50,11 @@ A study can arrive here, so there is a three-level hierarchy:
 | Code block | ```` ```…``` ```` | a short trace or config |
 | Status | 🔴 🟡 🟢 | severity — the ONLY emoji that survive |
 
-A good daily-summary shape: a lead sentence, then `## Embudo`, with
-`**Veredicto:**` / `**Volumen:**` subsections, bullets or a small table
-under each, and 🔴🟡🟢 to flag status.
+A good daily report: `title` "Daily: normal — lowest volume in 8 days",
+`summary` "1,743 chats, 9% under yesterday; bookings converted at 1.2%, half
+of last week.", and a body of `## Volume` / `## Funnel` sections with
+`**Label:**` lines, bullets or a small table under each, and 🔴🟡🟢 to flag
+status.
 
 A digest of items (mail, PRs, alerts) lists one entry per line as
 `- **Name** meta — text`: the sender or subject owner in bold, a short meta

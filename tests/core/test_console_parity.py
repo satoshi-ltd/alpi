@@ -87,6 +87,22 @@ def test_schedule_list_cli(tmp_home_no_env: Path) -> None:
     assert rows[1]["status"] == "paused" and rows[1]["next_fire"] is None
 
 
+def test_outputs_cli_list_shows_the_summary_of_an_untitled_row(tmp_home_no_env: Path) -> None:
+    outputs.append(tmp_home_no_env, profile="default", body="## Detail\nUntitled rows list their summary.", delivered_to=[])
+    listed = CliRunner().invoke(cli.main, ["outputs", "list"])
+    assert "Untitled rows list their summary." in listed.output
+    assert "## Detail" not in listed.output
+
+
+def test_outputs_cli_show_prints_a_given_summary_between_meta_and_body(tmp_home_no_env: Path) -> None:
+    out = outputs.append(tmp_home_no_env, profile="default", body="## Detail\n- exit 1", title="Backup failed",
+                         summary="The NAS was unreachable; nothing was copied.", delivered_to=[])
+    shown = CliRunner().invoke(cli.main, ["outputs", "show", out["id"]]).output
+    assert shown.index("Backup failed") < shown.index("The NAS was unreachable") < shown.index("## Detail")
+    same = outputs.append(tmp_home_no_env, profile="default", body="Already the opening line.", summary="Already the opening line.", delivered_to=[])
+    assert CliRunner().invoke(cli.main, ["outputs", "show", same["id"]]).output.count("Already the opening line.") == 1
+
+
 def test_outputs_cli_list_show_read_all(tmp_home_no_env: Path) -> None:
     outputs.append(tmp_home_no_env, profile="default", body="first body",
                    type="info", title="First", delivered_to=[])

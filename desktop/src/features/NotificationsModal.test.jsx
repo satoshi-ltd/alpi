@@ -68,7 +68,7 @@ vi.mock("../hooks/useProfileDetail.js", () => ({
 }));
 
 import NotificationsModal, { READ_DWELL_MS } from "./NotificationsModal.jsx";
-import { headlineParts } from "../lib/notificationHeadline.js";
+import { copyText } from "../lib/clipboard.js";
 import { EMPTY } from "../../../common/emptyCopy.mjs";
 
 beforeEach(() => {
@@ -88,6 +88,10 @@ beforeEach(() => {
   h.markUnread.mockReset();
   h.markUnread.mockResolvedValue({});
 });
+
+function unreadFilter() {
+  return screen.getByRole("button", { name: /^Unread\d/ }).textContent;
+}
 
 function menuItem(name) {
   fireEvent.click(screen.getByRole("button", { name: "More" }));
@@ -194,12 +198,12 @@ describe("NotificationsModal — read aloud + body rendering", () => {
   it("names a warning or error row's severity with a word, not a dot", () => {
     h.rows = [{ ...h.ROW, type: "warning" }];
     renderModal();
-    expect(screen.getByRole("option").querySelector('[class*="rowSev"]').textContent).toBe("warning");
+    expect(screen.getByRole("option").querySelector('[class*="warnState"]').textContent).toBe("warning");
   });
 
   it("leaves info rows without a severity tag", () => {
     renderModal();
-    expect(document.body.querySelector('[class*="rowSev"]')).toBeNull();
+    expect(screen.getByRole("option").querySelector('[class*="warnState"], [class*="errorState"]')).toBeNull();
   });
 
   it("groups the list by date", () => {
@@ -258,32 +262,6 @@ describe("NotificationsModal — read aloud + body rendering", () => {
     );
     fireEvent.click(menuItem("Read aloud"));
     expect(h.playTts.mock.calls.at(-1)[0].voice).toBe("en-GB-SoniaNeural");
-  });
-});
-
-describe("headlineParts", () => {
-  it("uses the explicit title and a body preview", () => {
-    expect(headlineParts({ title: "Sync failed", body: "python3 run.py exited." }))
-      .toEqual({ title: "Sync failed", preview: "python3 run.py exited." });
-  });
-
-  it("derives the first sentence as the headline when there is no title", () => {
-    expect(headlineParts({ body: "Recovery is low. HRV down 8ms vs baseline." }))
-      .toEqual({ title: "Recovery is low.", preview: "HRV down 8ms vs baseline." });
-  });
-
-  it("uses the whole body as the headline when there is no sentence break", () => {
-    expect(headlineParts({ body: "just a short note" }))
-      .toEqual({ title: "just a short note", preview: "" });
-  });
-
-  it("strips emojis from the headline", () => {
-    expect(headlineParts({ title: "🔥 PR #482 ready ✅" }).title).toBe("PR #482 ready");
-    expect(headlineParts({ body: "⚠️ Recovery is low. HRV down 8ms." }).title).toBe("Recovery is low.");
-  });
-
-  it("strips emojis from the preview too", () => {
-    expect(headlineParts({ title: "Recovery", body: "🔴 25% de recovery." }).preview).toBe("25% de recovery.");
   });
 });
 
@@ -359,14 +337,15 @@ describe("NotificationsModal — reply + download", () => {
 });
 
 describe("NotificationsModal — read / unread", () => {
-  it("header shows the count of unread items", () => {
+  it("counts unread items on the Unread filter and leaves the header without a kicker", () => {
     h.rows = [
       { ...h.ROW, id: "a", status: "unread" },
       { ...h.ROW, id: "b", status: "unread" },
       { ...h.ROW, id: "c", status: "read" },
     ];
     renderModal();
-    expect(document.body.textContent).toContain("2 unread");
+    expect(unreadFilter()).toBe("Unread2");
+    expect(document.body.textContent).not.toMatch(/\d unread/);
   });
 
   it("marks unread with an ink dot and leaves the profile's object whole, the alpaca included", () => {
@@ -395,12 +374,12 @@ describe("NotificationsModal — read / unread", () => {
       { ...h.ROW, id: "b", status: "unread" },
     ];
     renderModal();
-    expect(document.body.textContent).toContain("2 unread");
+    expect(unreadFilter()).toBe("Unread2");
     await act(async () => {
       fireEvent.click(screen.getAllByRole("option")[0]);
     });
-    expect(document.body.textContent).toContain("2 unread");
-    await waitFor(() => expect(document.body.textContent).toContain("1 unread"));
+    expect(unreadFilter()).toBe("Unread2");
+    await waitFor(() => expect(unreadFilter()).toBe("Unread1"));
     expect(h.markRead).toHaveBeenCalledTimes(1);
   });
 
@@ -414,8 +393,8 @@ describe("NotificationsModal — read / unread", () => {
     fireEvent.keyDown(document.activeElement, { key: "ArrowDown" });
     fireEvent.keyDown(document.activeElement, { key: "ArrowDown" });
     await new Promise((resolve) => setTimeout(resolve, READ_DWELL_MS / 2));
-    expect(document.body.textContent).toContain("2 unread");
-    await waitFor(() => expect(document.body.textContent).toContain("1 unread"));
+    expect(unreadFilter()).toBe("Unread2");
+    await waitFor(() => expect(unreadFilter()).toBe("Unread1"));
     expect(screen.getAllByRole("option")[1].getAttribute("aria-selected")).toBe("true");
   });
 
@@ -436,7 +415,7 @@ describe("NotificationsModal — read / unread", () => {
         onOpenChat={() => {}}
       />,
     );
-    return waitFor(() => expect(document.body.textContent).toContain("1 unread"));
+    return waitFor(() => expect(unreadFilter()).toBe("Unread1"));
   });
 
   it("deleting an unread row drops the count while it is hidden in the undo window", async () => {
@@ -445,11 +424,11 @@ describe("NotificationsModal — read / unread", () => {
       { ...h.ROW, id: "b", status: "unread" },
     ];
     renderModal();
-    expect(document.body.textContent).toContain("2 unread");
+    expect(unreadFilter()).toBe("Unread2");
     await act(async () => {
       fireEvent.click(screen.getAllByLabelText("Delete notification")[0]);
     });
-    expect(document.body.textContent).toContain("1 unread");
+    expect(unreadFilter()).toBe("Unread1");
   });
 
   it("does not claim inbox zero while the first sync is still running", async () => {
@@ -651,7 +630,7 @@ describe("NotificationsModal triage", () => {
     await act(async () => { fireEvent.keyDown(warning, { key: "u" }); });
     expect(h.markUnread).toHaveBeenCalledTimes(1);
     expect(warning.querySelector('[aria-label="Unread"]')).toBeTruthy();
-    expect(document.body.textContent).toContain("3 unread");
+    expect(unreadFilter()).toBe("Unread3");
     await new Promise((resolve) => setTimeout(resolve, READ_DWELL_MS + 100));
     expect(h.markRead).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "Mark unread" })).toBeNull();
@@ -851,13 +830,115 @@ describe("NotificationsModal triage", () => {
     expect(onSendToChat).not.toHaveBeenCalled();
   });
 
-  it("leads the reader with Reply and offers Open chat when the row knows its session", () => {
+  it("leads the reader's meta bar with Reply and offers Open chat in its menu when the row knows its session", () => {
     const onOpenChat = vi.fn();
     h.rows = [{ ...h.ROW, session_id: "s-9" }];
     render(<NotificationsModal open onClose={() => {}} connections={[{ id: "c1", name: "casa" }]} onSelect={() => {}} onOpenChat={onOpenChat} />);
-    const buttons = [...document.body.querySelector("article").querySelectorAll("button")].map((b) => b.textContent).filter(Boolean);
-    expect(buttons.slice(0, 2)).toEqual(["Reply", "Open chat"]);
-    fireEvent.click(screen.getByRole("button", { name: "Open chat" }));
+    const meta = document.body.querySelector("article").firstElementChild;
+    const buttons = [...meta.querySelectorAll("button")].map((b) => b.textContent).filter(Boolean);
+    expect(buttons[0]).toBe("Reply");
+    fireEvent.click(menuItem("Open chat"));
     expect(onOpenChat).toHaveBeenCalledWith("alice", "s-9", "c1");
+  });
+});
+
+describe("NotificationsModal — parts and formats", () => {
+  const article = () => document.body.querySelector("article");
+
+  it("shows a given summary as the deck between the title and the whole body", () => {
+    h.rows = [{ ...h.ROW, title: "Daily: normal", summary: "1,743 chats, 9% under yesterday.", body: "## Volume\n- 1,743 chats" }];
+    renderModal();
+    const text = article().textContent;
+    expect(text.indexOf("Daily: normal")).toBeLessThan(text.indexOf("1,743 chats, 9% under yesterday."));
+    expect(text.indexOf("1,743 chats, 9% under yesterday.")).toBeLessThan(text.indexOf("Volume"));
+  });
+
+  it("draws a derived summary once, as the body's first paragraph in the deck", () => {
+    const lead = "Normal day, lowest volume in eight days and nothing broke.";
+    h.rows = [{ ...h.ROW, title: "Daily: normal", summary: lead, body: `**${lead}**\n\n## Volume\n- 1,743 chats` }];
+    renderModal();
+    expect(article().textContent.split(lead)).toHaveLength(2);
+    expect(article().querySelector('[class*="deck"]').textContent).toBe(lead);
+    expect(article().querySelector('[class*="eyebrow"]')).toBeNull();
+  });
+
+  it("reads the meta bar as @handle · connection · time with the level chip after it", () => {
+    h.rows = [{ ...h.ROW, type: "warning" }];
+    renderModal([{ id: "c1", name: "casa" }, { id: "c2", name: "mirai" }]);
+    const meta = article().firstElementChild.textContent;
+    expect(meta).toMatch(/^@alice · casa · .+warning/);
+    expect(meta).not.toContain("casa/");
+  });
+
+  it("keeps five key hints on one line and opens the rest with ?", () => {
+    renderModal();
+    const strip = () => [...document.body.querySelectorAll('[class*="keyItem"]')].map((k) => k.textContent);
+    expect(strip()).toEqual(["↑↓move", "⏎open", "Rreply", "⌫delete", "?all keys"]);
+    fireEvent.keyDown(screen.getByRole("option"), { key: "?" });
+    expect(strip()).toEqual(expect.arrayContaining(["Uunread", "/search", "1–3filter", "Escclose"]));
+    fireEvent.keyDown(screen.getByRole("option"), { key: "?" });
+    expect(strip()).toHaveLength(5);
+  });
+
+  it("searches the summary too", () => {
+    h.rows = [{ ...h.ROW, summary: "Checkout fell to 2 percent." }];
+    renderModal();
+    fireEvent.change(screen.getByLabelText("Search notifications"), { target: { value: "checkout fell" } });
+    expect(screen.getAllByRole("option")).toHaveLength(1);
+  });
+});
+
+describe("NotificationsModal — a given summary travels with the notification", () => {
+  const FAILED = {
+    ...h.ROW, type: "error", title: "Backup failed", summary: "The NAS was unreachable; nothing was copied.",
+    body: "**Exit:** 1\n\n```text\nTraceback\n```",
+  };
+
+  it("shows it on an error card, under the failure title", () => {
+    h.rows = [FAILED];
+    renderModal();
+    const card = document.body.querySelector('[class*="errorCard"]');
+    expect(card.textContent).toContain("The NAS was unreachable; nothing was copied.");
+    expect(card.textContent.indexOf("Backup")).toBeLessThan(card.textContent.indexOf("The NAS"));
+  });
+
+  it("puts it in the Reply file and the copy, ahead of the body", async () => {
+    h.rows = [FAILED];
+    h.invoke.mockClear();
+    render(<NotificationsModal open onClose={() => {}} connections={[{ id: "c1", name: "casa" }]} onSelect={() => {}} onSendToChat={() => {}} />);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Reply" })); });
+    const { content } = h.invoke.mock.calls.at(-1)[1];
+    expect(content.indexOf("The NAS was unreachable")).toBeGreaterThan(-1);
+    expect(content.indexOf("The NAS was unreachable")).toBeLessThan(content.indexOf("**Exit:** 1"));
+  });
+
+  it("copies and reads it aloud ahead of the body", async () => {
+    h.rows = [FAILED];
+    copyText.mockClear();
+    h.playTts.mockClear();
+    renderModal();
+    const item = async (name) => {
+      fireEvent.click(screen.getByRole("button", { name: "More" }));
+      let found = null;
+      await waitFor(() => {
+        found = [...document.querySelectorAll('[role="menuitem"]')].find((el) => el.textContent === name);
+        expect(found).toBeTruthy();
+      });
+      return found;
+    };
+    const copy = await item("Copy");
+    await act(async () => { fireEvent.click(copy); });
+    expect(copyText).toHaveBeenCalledWith(`${FAILED.summary}\n\n${FAILED.body}`);
+    fireEvent.click(await item("Read aloud"));
+    expect(h.playTts.mock.calls.at(-1)[0].text).toBe(`${FAILED.summary}\n\n${FAILED.body}`);
+  });
+
+  it("leaves a summary the body already opens with out of the exports", async () => {
+    const lead = "Three replies are waiting on you today.";
+    h.rows = [{ ...h.ROW, title: "Digest", summary: lead, body: `${lead}\n\n## Inbox\n- a` }];
+    h.invoke.mockClear();
+    render(<NotificationsModal open onClose={() => {}} connections={[{ id: "c1", name: "casa" }]} onSelect={() => {}} onSendToChat={() => {}} />);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Reply" })); });
+    expect(h.invoke.mock.calls.at(-1)[1].content.split(lead)).toHaveLength(2);
   });
 });

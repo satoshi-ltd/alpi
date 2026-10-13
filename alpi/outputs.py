@@ -5,6 +5,7 @@ Row schema (one JSON object per line):
     profile      ``default`` or ``<name>``
     created_at   epoch seconds (float)
     title        optional short headline (omitted when not set)
+    summary      the caller's one or two plain sentences (omitted when none was given; readers derive one from the body)
     body         message body
     type         ``info`` | ``warning`` | ``error``
     status       ``unread`` | ``read``
@@ -62,7 +63,7 @@ def sanitize_emoji(text: str) -> str:
 _HEADING_RE = re.compile(r"^\s*(#{1,6})\s+(.*?)\s*$")
 _HR_RE = re.compile(r"^\s*([-*_])\1{2,}\s*$")
 _QUOTE_RE = re.compile(r"^\s*>\s?(.*)$")
-_LIST_RE = re.compile(r"^\s*([-*•]|\d+[.)])\s+(.*)$")
+_LIST_RE = re.compile(r"^\s*([-*•]|[0-9]+[.)])\s+(.*)$")
 _LINK_RE = re.compile(r"!?\[([^\]]*)\]\([^)]*\)")
 _HTML_RE = re.compile(r"</?[A-Za-z][^>]*>")
 
@@ -73,10 +74,192 @@ def _normalize_inline(s: str) -> str:
     return s
 
 
+_CODE_SPAN_RE = re.compile(r"`[^`]*`")
+_URL_RE = re.compile(r"https?://[^\s<>]*[^\s<>*_~.,;:!?'\")\]]")
+_SLOT_RE = re.compile("\x00([0-9]+)\x00")
+_STRONG_RE = re.compile(r"\*\*(.+?)\*\*")
+_EM_STAR_RE = re.compile(r"(^|[^A-Za-z0-9_*])\*([^\s*](?:[^*]*[^\s*])?)\*(?![A-Za-z0-9_*])")
+_EM_UNDERSCORE_RE = re.compile(r"(^|[^A-Za-z0-9_])_([^\s_](?:[^_]*[^\s_])?)_(?![A-Za-z0-9_])")
+_STRIKE_RE = re.compile(r"~~(.+?)~~")
+_LINE_BREAK_RE = re.compile("\r\n?|[\u2028\u2029\x85]")
+_SEPARATOR_CHAR_RE = re.compile("[\x1c-\x1f]")
+
+
+def canonical_text(text: str) -> str:
+    return _SEPARATOR_CHAR_RE.sub(" ", _LINE_BREAK_RE.sub("\n", text or "")).replace("\ufeff", "")
+
+
+def text_arg(value: Any, joiner: str = " ") -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (list, tuple)) and all(isinstance(item, str) for item in value):
+        return joiner.join(value)
+    return ""
+
+
+def plain_inline(text: str) -> str:
+    held: list[str] = []
+
+    def hold(m: re.Match) -> str:
+        token = m.group(0)
+        held.append(token[1:-1] if token.startswith("`") else token)
+        return f"\x00{len(held) - 1}\x00"
+
+    s = _CODE_SPAN_RE.sub(hold, (text or "").replace("\x00", ""))
+    s = _URL_RE.sub(hold, _normalize_inline(s))
+    s = _STRONG_RE.sub(r"\1", s)
+    s = _EM_STAR_RE.sub(r"\1\2", s)
+    s = _EM_UNDERSCORE_RE.sub(r"\1\2", s)
+    s = _STRIKE_RE.sub(r"\1", s)
+    return _SLOT_RE.sub(lambda m: held[int(m.group(1))], s)
+
+
 def normalize_notification_title(text: str) -> str:
     if not text:
         return text or ""
-    return sanitize_emoji(_normalize_inline(text))
+    text = canonical_text(text)
+    heading = _HEADING_RE.match(text)
+    if heading:
+        text = heading.group(2)
+    return re.sub(r"\s+", " ", sanitize_emoji(plain_inline(text))).strip()
+
+
+def stored_title(text: Any) -> str:
+    if not isinstance(text, str) or not text:
+        return ""
+    return re.sub(r"\s+", " ", sanitize_emoji(_normalize_inline(canonical_text(text)))).strip()
+
+
+# Mirrored by common/notificationSummary.mjs; common/notificationSummary.fixtures.mjs holds the corpus both test against.
+SUMMARY_MAX = 200
+LABEL_MAX_CHARS = 32
+LABEL_MAX_WORDS = 5
+_SUMMARY_FLOOR = 60
+_OPEN_ENDS = (":", "：")
+_LABEL_ONLY_RE = re.compile(r"^\*\*\s*([^*]+?)\s*\*\*\s*:?$")
+_LABEL_LINE_RE = re.compile(r"^\*\*[^*]+\*\*:?\s+\S")
+_STATUS_LINE_RE = re.compile(r"^[\U0001F534\U0001F7E1\U0001F7E2]\s+\S")
+_SEPARATOR_CELL_RE = re.compile(r":?-+:?")
+_SENTENCE_END_RE = re.compile(r"[.!?](?=\s)")
+
+
+def _is_label(line: str) -> bool:
+    m = _LABEL_ONLY_RE.match(line)
+    if not m:
+        return False
+    label = m.group(1).rstrip(":").strip()
+    return len(label) <= LABEL_MAX_CHARS and len(label.split()) <= LABEL_MAX_WORDS
+
+
+def _is_table_separator(line: str) -> bool:
+    if "|" not in line:
+        return False
+    s = line.strip()
+    s = s[1:] if s.startswith("|") else s
+    s = s[:-1] if s.endswith("|") else s
+    cells = [cell.strip() for cell in s.split("|")]
+    return all(_SEPARATOR_CELL_RE.fullmatch(cell) for cell in cells)
+
+
+def _fence_of(line: str) -> str:
+    return line[:3] if line.startswith(("```", "~~~")) else ""
+
+
+def _prose_units(body: str) -> Iterable[str]:
+    lines = body.split("\n")
+    para: list[str] = []
+    fence = ""
+    table = False
+    for i, raw in enumerate(lines):
+        line = sanitize_emoji(raw)
+        marker = _fence_of(line)
+        if fence:
+            if marker == fence:
+                fence = ""
+            continue
+        if table and line and "|" in line:
+            continue
+        table = False
+        if marker or not line or _HR_RE.match(line) or _HEADING_RE.match(line) or _is_label(line):
+            fence = marker
+        elif "|" in line and i + 1 < len(lines) and _is_table_separator(lines[i + 1]):
+            table = True
+        elif not line.startswith("|"):
+            quote = _QUOTE_RE.match(line)
+            content = quote.group(1).strip() if quote else line
+            item = _LIST_RE.match(content)
+            if not (item or _LABEL_LINE_RE.match(content) or _STATUS_LINE_RE.match(content)):
+                text = plain_inline(content).strip()
+                if text:
+                    para.append(text)
+                continue
+            if para:
+                yield " ".join(para)
+                para = []
+            text = plain_inline(item.group(2) if item else content).strip()
+            if text:
+                yield text
+            continue
+        if para:
+            yield " ".join(para)
+            para = []
+    if para:
+        yield " ".join(para)
+
+
+def _clip_summary(text: str) -> str:
+    text = re.sub(r"\s+", " ", text).strip()
+    if len(text) > SUMMARY_MAX:
+        head = text[: SUMMARY_MAX + 1]
+        ends = [m.end() for m in _SENTENCE_END_RE.finditer(head) if _SUMMARY_FLOOR <= m.end() <= SUMMARY_MAX]
+        if ends:
+            text = text[: ends[-1]]
+        else:
+            cut = text[: SUMMARY_MAX - 1]
+            space = cut.rfind(" ")
+            text = (cut[:space] if space >= _SUMMARY_FLOOR else cut).rstrip(" ,;:：") + "…"
+    if text.endswith(_OPEN_ENDS):
+        text = text[:-1].rstrip() + "…"
+    return text
+
+
+def normalize_summary(text: str) -> str:
+    parts: list[str] = []
+    fence = ""
+    for raw in canonical_text(text_arg(text)).split("\n"):
+        line = sanitize_emoji(raw)
+        marker = _fence_of(line)
+        if fence or marker:
+            fence = "" if marker == fence else (fence or marker)
+            continue
+        if not line or _HR_RE.match(line) or _is_table_separator(line):
+            continue
+        marked = _HEADING_RE.match(line) or _QUOTE_RE.match(line)
+        if marked:
+            line = marked.group(marked.lastindex).strip()
+        item = _LIST_RE.match(line)
+        if item:
+            line = item.group(2)
+        parts.append(plain_inline(line).strip())
+    return _clip_summary(" ".join(part for part in parts if part))
+
+
+def derive_summary(body: str) -> str:
+    text = ""
+    for unit in _prose_units(canonical_text(text_arg(body))):
+        text = f"{text} {unit}" if text else unit
+        if not text.endswith(_OPEN_ENDS) or len(text) >= SUMMARY_MAX:
+            break
+    return _clip_summary(text) if text else ""
+
+
+def message_summary(output: dict[str, Any]) -> str:
+    return output.get("summary") or derive_summary(output.get("body") or "")
+
+
+def given_summary(output: dict[str, Any]) -> str:
+    summary = output.get("summary") or ""
+    return summary if summary != derive_summary(output.get("body") or "") else ""
 
 
 def normalize_notification_body(text: str) -> str:
@@ -146,7 +329,7 @@ def _read_all(home: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
+        lines = path.read_text(encoding="utf-8").split("\n")
     except OSError:
         return []
     out: list[dict[str, Any]] = []
@@ -160,11 +343,14 @@ def _read_all(home: Path) -> list[dict[str, Any]]:
             continue
         if isinstance(obj, dict) and isinstance(obj.get("id"), str) and obj["id"]:
             obj["body"] = normalize_notification_body(obj.get("body") or "")
-            title = normalize_notification_title(obj.get("title") or "")
+            title = stored_title(obj.get("title") or "")
             if title:
                 obj["title"] = title
             elif "title" in obj:
                 del obj["title"]
+            stored = obj.get("summary")
+            if not (isinstance(stored, str) and stored.strip()) and "summary" in obj:
+                del obj["summary"]
             out.append(obj)
     return out
 
@@ -199,11 +385,13 @@ def append(
     title: str = "",
     job_id: str = "",
     run_id: str = "",
+    summary: str = "",
 ) -> dict[str, Any]:
     if type not in VALID_TYPE:
         type = "info"
     body = normalize_notification_body(body or "")
     title = normalize_notification_title(title or "")
+    summary = normalize_summary(summary)
 
     output = {
         "id": _new_id(),
@@ -217,6 +405,8 @@ def append(
     }
     if title:
         output["title"] = title
+    if summary:
+        output["summary"] = summary
     if job_id:
         output["job_id"] = job_id
     if run_id:
@@ -314,14 +504,15 @@ def mark_all_read(home: Path) -> int:
 
 def normalize_native_notification_args(args: dict) -> dict | None:
     """Returns None when the call wasn't user-facing (empty text) so callers skip it."""
-    text = str(args.get("text") or "").strip()
+    text = text_arg(args.get("text"), "\n").strip()
     if not text:
         return None
     type = str(args.get("type") or "info").strip().lower()
     if type not in VALID_TYPE:
         type = "info"
     return {
-        "notification_title": str(args.get("title") or "").strip(),
+        "notification_title": text_arg(args.get("title")).strip(),
+        "summary": text_arg(args.get("summary")).strip(),
         "body": text,
         "type": type,
         "delivered_to": ["alpi"],
@@ -353,6 +544,7 @@ def record_child_native_message(home: Path, args: dict, *, job_id: str = "", run
             title=record["notification_title"],
             job_id=job_id,
             run_id=run_id,
+            summary=record["summary"],
         )
     except Exception:  # noqa: BLE001
         return ""
@@ -370,6 +562,7 @@ def record_child_native_message(home: Path, args: dict, *, job_id: str = "", run
     payload = {
         "profile": profile,
         "title": output.get("title") or profile or "alpi",
+        "summary": message_summary(output),
         "body": output["body"],
         "type": type,
         "output_id": output_id,
@@ -394,6 +587,7 @@ def create_output(
     *, text: str, type: str,
     delivered_to: list[str],
     title: str = "",
+    summary: str = "",
 ) -> dict | None:
     # Persistence is opportunistic — failures never block delivery.
     try:
@@ -413,7 +607,7 @@ def create_output(
         return append(
             home, profile=prof,
             body=text, type=type, session_id=session_id,
-            delivered_to=delivered_to, title=title,
+            delivered_to=delivered_to, title=title, summary=summary,
         )
     except Exception:  # noqa: BLE001
         return None
@@ -422,17 +616,19 @@ def create_output(
 def create_output_and_emit_message(
     *, text: str, title: str, type: str,
     delivered_to: list[str],
+    summary: str = "",
 ) -> str:
     """Callers must guard with _suppress_native_emit() — schedule children defer to the parent."""
     output = create_output(
         text=text, type=type,
-        delivered_to=delivered_to, title=title,
+        delivered_to=delivered_to, title=title, summary=summary,
     )
     if output is None:
         return ""
     payload: dict = {
         "profile": output["profile"],
         "title": output.get("title") or output["profile"] or "alpi",
+        "summary": message_summary(output),
         "body": output["body"],
         "type": output["type"],
         "output_id": output["id"],
@@ -458,6 +654,9 @@ __all__ = [
     "VALID_TYPE",
     "VALID_STATUS",
     "append",
+    "derive_summary",
+    "message_summary",
+    "given_summary",
     "mark_unread",
     "list_outputs",
     "read",

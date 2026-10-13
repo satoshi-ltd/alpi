@@ -25,7 +25,7 @@ const h = vi.hoisted(() => ({
 
 vi.mock('react-native', () => {
   const View = ({ children, style, accessibilityRole, ...p }) => React.createElement('div', p, children);
-  const Text = ({ children, style, numberOfLines, selectable, ...p }) => React.createElement('span', p, children);
+  const Text = ({ children, style, numberOfLines, selectable, ...p }) => React.createElement('span', { ...p, ...(selectable ? { 'data-selectable': 'true' } : {}) }, children);
   const Pressable = ({ children, onPress, style, accessibilityRole, accessibilityState, accessibilityLabel, hitSlop, ...p }) =>
     React.createElement('button', { type: 'button', onClick: onPress, 'aria-label': accessibilityLabel, 'aria-expanded': accessibilityState?.expanded }, typeof children === 'function' ? children({ pressed: false }) : children);
   return {
@@ -326,5 +326,48 @@ describe('notification page beside a list', () => {
     await act(async () => { fireEvent.click(screen.getByLabelText('Delete')); });
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(h.back).not.toHaveBeenCalled();
+  });
+});
+
+describe('notification page, parts', () => {
+  const LEAD = 'Normal day, lowest volume in eight days and nothing broke.';
+
+  it('reads @handle · connection · time with no age and the level as the pill word', () => {
+    h.connections = [{ id: 'casa', name: 'casa' }, { id: 'mirai', name: 'mirai' }];
+    h.params = { profile: 'abby', id: 'w1', connectionId: 'casa' };
+    h.row = { id: 'w1', profile: 'abby', type: 'warning', status: 'read', created_at: 1_700_000_000, title: 'Key expiring', body: 'Rotate it this week.' };
+    const { container } = render(<OutputDetailScreen />);
+    expect(screen.getByText('@abby')).toBeTruthy();
+    expect(container.textContent).toMatch(/· casa · \S/);
+    expect(container.textContent).not.toMatch(/ago|now/);
+    expect(screen.getByText('warning')).toBeTruthy();
+  });
+
+  it('shows a given summary once, between the title and the body', () => {
+    h.params = { profile: 'abby', id: 'd1' };
+    h.row = { id: 'd1', profile: 'abby', type: 'info', status: 'read', created_at: 1_700_000_000, title: 'Daily: normal', summary: '1,743 chats, 9% under yesterday.', body: '## Volume\n- 1,743 chats' };
+    const { container } = render(<OutputDetailScreen />);
+    const text = container.textContent;
+    expect(text.indexOf('Daily: normal')).toBeLessThan(text.indexOf('1,743 chats, 9% under yesterday.'));
+    expect(text.indexOf('1,743 chats, 9% under yesterday.')).toBeLessThan(text.indexOf('Volume'));
+  });
+
+  it('draws a derived summary once, from the body, as selectable text', () => {
+    h.params = { profile: 'abby', id: 'd2' };
+    h.row = { id: 'd2', profile: 'abby', type: 'info', status: 'read', created_at: 1_700_000_000, title: 'Daily: normal', summary: LEAD, body: `**${LEAD}**\n\n## Volume\n- 1,743 chats` };
+    const { container } = render(<OutputDetailScreen />);
+    expect(container.textContent.split(LEAD)).toHaveLength(2);
+    expect(screen.getByText('1,743 chats').closest('[data-selectable]')).toBeTruthy();
+    expect(screen.queryByText(LEAD.toUpperCase())).toBeNull();
+  });
+});
+
+describe('notification page, a given summary on a failure', () => {
+  it('shows it on the error card under the failure title', () => {
+    h.params = { profile: 'abby', id: 'e1' };
+    h.row = { id: 'e1', profile: 'abby', type: 'error', status: 'read', created_at: 1_700_000_000, title: 'Backup failed', summary: 'The NAS was unreachable; nothing was copied.', body: '**Exit:** 1' };
+    const { container } = render(<OutputDetailScreen />);
+    expect(container.textContent).toContain('The NAS was unreachable; nothing was copied.');
+    expect(container.textContent.indexOf('Backup')).toBeLessThan(container.textContent.indexOf('The NAS'));
   });
 });

@@ -87,6 +87,8 @@ def test_event_carries_agent_reply_when_notify_true(
     assert payload["delivered_to"] == "alpi"
     assert payload["silent"] is False
     assert any(k == "agent.message" for k, _ in emits)  # native push fired
+    message = next(d for k, d in emits if k == "agent.message")
+    assert message["summary"] == "hi there"
 
 
 def test_event_reply_empty_when_agent_notified(
@@ -133,6 +135,7 @@ def test_notify_from_schedule_reemits_agent_message_in_daemon(
                 "args": {
                     "text": "Research finished.",
                     "title": "Research done",
+                    "summary": "Three **sources** agree; one is stale.",
                     "type": "warning",
                 },
             },
@@ -157,6 +160,7 @@ def test_notify_from_schedule_reemits_agent_message_in_daemon(
     assert msg["profile"] == "default"
     assert msg["title"] == "Research done"
     assert msg["body"] == "Research finished."
+    assert msg["summary"] == "Three sources agree; one is stale."
     assert msg["type"] == "warning"
     assert msg["output_id"]
     assert msg["deep_link"] == f"/outputs/{msg['profile']}/{msg['output_id']}"

@@ -48,19 +48,6 @@
   flex-shrink: 0;
 }
 
-.rowSev {
-  flex-shrink: 0;
-  padding: 0 var(--space-2);
-  border-radius: var(--r-tag);
-  font-family: var(--font-mono);
-  font-size: var(--text-meta);
-  line-height: 1.5;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-}
-.rowSevError { color: var(--c-danger-text); background: color-mix(in srgb, var(--c-danger) 12%, transparent); }
-.rowSevWarning { color: var(--c-warning-text); background: color-mix(in srgb, var(--c-warning) 14%, transparent); }
-
 .rowGutter {
   flex: 0 0 6px;
   display: inline-flex;
@@ -175,7 +162,7 @@
   z-index: 1;
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-2);
   min-height: calc(var(--ctrl-lg) + var(--space-3));
   margin: 0 calc(-1 * var(--space-9));
   padding: 0 var(--space-9);
@@ -188,24 +175,26 @@
 .detailMeta :global(.mono) { font-size: var(--text-meta); color: var(--ink-3); }
 .article > .detailMeta + * { margin-top: var(--space-6); }
 
-.detailMetaPart { color: var(--ink-3); }
-
-.detailMetaDot { color: var(--ink-3); }
-
 .detailMetaProfile {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
+  min-width: 0;
   font-family: var(--font-mono);
-  font-size: var(--text-chat);
+  font-size: var(--text-ui);
 }
-.detailMetaConn { color: var(--ink-3); }
-.detailMetaName { font-weight: var(--fw-semibold); color: var(--ink); }
-.detailMetaDate { color: var(--ink-3); }
-.detailMetaProfile + * { margin-left: var(--space-2); }
+.detailMetaName { flex-shrink: 0; font-weight: var(--fw-semibold); color: var(--ink); }
+.detailMetaWhen {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
 
 .detailTitle {
-  font-size: var(--text-title);
+  font-size: var(--fs-xxl);
   font-weight: var(--fw-semibold);
   color: var(--ink);
   letter-spacing: -0.012em;
@@ -239,13 +228,6 @@
   padding-top: var(--space-4);
 }
 
-.actions {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding-top: var(--space-2);
-}
-
 .filters {
   display: flex;
   flex-direction: column;
@@ -266,7 +248,9 @@
 
 .keys {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  white-space: nowrap;
   gap: var(--space-2) var(--space-5);
   padding: var(--space-3) var(--space-5);
   background: var(--bg-side);
@@ -274,6 +258,7 @@
   color: var(--ink-3);
   font-size: var(--text-meta);
 }
+.keysAll { flex-wrap: wrap; }
 .keyItem {
   display: inline-flex;
   align-items: center;

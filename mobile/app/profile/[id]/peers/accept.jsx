@@ -118,7 +118,7 @@ export default function AcceptPendingPeer() {
                     onPress={() => toggleScope(s.id)}
                     style={{ flexDirection: 'row', alignItems: 'center', gap: space.s4, paddingVertical: space.s1 }}
                   >
-                    <Pill tone={on ? 'on' : undefined} off={!on}>● {s.label}</Pill>
+                    <Pill tone={on ? 'on' : undefined} off={!on}>{s.label}</Pill>
                     <Text
                       style={{ flex: 1, fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}
                     >

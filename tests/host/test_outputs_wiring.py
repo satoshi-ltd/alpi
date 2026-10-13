@@ -273,6 +273,8 @@ def test_scheduler_child_notify_creates_one_output(
     assert len(msgs) == 1
     assert msgs[0]["output_id"] == out["id"]
     assert msgs[0]["title"] == "from cron"
+    assert msgs[0]["summary"] == "hi"
+    assert "summary" not in out
     assert msgs[0]["deep_link"] == f"/outputs/atlas/{out['id']}"
     done = next(d for k, d in events if k == "schedule.done")
     assert "output_id" not in done
@@ -280,12 +282,20 @@ def test_scheduler_child_notify_creates_one_output(
 
 def test_normalize_native_notification_args() -> None:
     msg = outputs_mod.normalize_native_notification_args({
-        "text": "hi", "title": "t", "type": "warning",
+        "text": "hi", "title": "t", "type": "warning", "summary": " all good ",
     })
     assert msg is not None
     assert msg["delivered_to"] == ["alpi"]
     assert msg["type"] == "warning"
     assert msg["body"] == "hi"
+    assert msg["summary"] == "all good"
+
+
+def test_normalize_keeps_text_args_text_from_a_child() -> None:
+    msg = outputs_mod.normalize_native_notification_args({"text": "hi", "summary": ["Done.", "All good."], "title": 7})
+    assert msg["summary"] == "Done. All good."
+    assert msg["notification_title"] == ""
+    assert outputs_mod.normalize_native_notification_args({"text": ["line one", "line two"]})["body"] == "line one\nline two"
 
 
 def test_normalize_drops_empty_text() -> None:

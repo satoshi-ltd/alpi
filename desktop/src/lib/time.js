@@ -11,7 +11,7 @@ const LONG = new Intl.DateTimeFormat(undefined, {
 const CLOCK = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
 const WEEKDAY = new Intl.DateTimeFormat(undefined, { weekday: "short" });
 
-export function notificationTime(unixSeconds, nowMs = Date.now()) {
+export function clockOrAge(unixSeconds, nowMs = Date.now()) {
   if (!unixSeconds) return "";
   if (dateBucket(unixSeconds, nowMs) === "Today") {
     return CLOCK.format(new Date(unixSeconds * 1000));
@@ -23,7 +23,7 @@ export function lastRunShort(iso, nowMs = Date.now()) {
   if (!iso) return "";
   const ms = Date.parse(iso);
   if (Number.isNaN(ms)) return "";
-  return notificationTime(Math.floor(ms / 1000), nowMs);
+  return clockOrAge(Math.floor(ms / 1000), nowMs);
 }
 
 export function formatNextFire(iso, nowMs = Date.now()) {

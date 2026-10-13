@@ -17,23 +17,36 @@ function topMargin(block, prev) {
 
 function Lead({ text, theme }) {
   return (
-    <Text style={{ fontFamily: theme.fonts.sans.semibold, fontSize: theme.fontSizes.xl, lineHeight: theme.fontSizes.xl * lineHeights.cozy, color: theme.colors.ink }}>
+    <Text selectable accessibilityRole="header" style={{ fontFamily: theme.fonts.sans.semibold, fontSize: theme.fontSizes.xxl, lineHeight: theme.fontSizes.xxl * lineHeights.cozy, color: theme.colors.ink }}>
       <Inline text={text} theme={theme} />
     </Text>
   );
+}
+
+function DeckText({ children, theme }) {
+  return (
+    <Text selectable style={{ fontFamily: theme.fonts.sans.regular, fontSize: theme.fontSizes.xl, lineHeight: theme.fontSizes.xl * lineHeights.normal, color: theme.colors.ink2 }}>
+      {children}
+    </Text>
+  );
+}
+
+export function Deck({ text, asTitle = false }) {
+  const theme = useTheme();
+  return asTitle ? <Lead text={text} theme={theme} /> : <DeckText theme={theme}>{text}</DeckText>;
 }
 
 function Heading({ text, theme }) {
   return (
-    <Text style={{ fontFamily: theme.fonts.sans.semibold, fontSize: theme.fontSizes.lg, lineHeight: theme.fontSizes.lg * lineHeights.cozy, color: theme.colors.ink }}>
+    <Text selectable style={{ fontFamily: theme.fonts.sans.semibold, fontSize: theme.fontSizes.xl, lineHeight: theme.fontSizes.xl * lineHeights.cozy, color: theme.colors.ink }}>
       <Inline text={text} theme={theme} />
     </Text>
   );
 }
 
-function Para({ text, theme }) {
+function Para({ text, theme, strong = false }) {
   return (
-    <Text style={{ fontFamily: theme.fonts.sans.regular, fontSize: theme.fontSizes.md, lineHeight: theme.fontSizes.md * lineHeights.relaxed, color: theme.colors.ink2 }}>
+    <Text selectable style={{ fontFamily: strong ? theme.fonts.sans.semibold : theme.fonts.sans.regular, fontSize: theme.fontSizes.lg, lineHeight: theme.fontSizes.lg * lineHeights.relaxed, color: strong ? theme.colors.ink : theme.colors.ink2 }}>
       <Inline text={text} theme={theme} />
     </Text>
   );
@@ -42,7 +55,7 @@ function Para({ text, theme }) {
 function Quote({ text, theme }) {
   return (
     <View style={{ paddingLeft: space.s4, borderLeftWidth: 2, borderLeftColor: theme.colors.line2 }}>
-      <Text style={{ fontFamily: theme.fonts.sans.regular, fontSize: theme.fontSizes.md, lineHeight: theme.fontSizes.md * lineHeights.relaxed, color: theme.colors.ink2, fontStyle: 'italic' }}>
+      <Text selectable style={{ fontFamily: theme.fonts.sans.regular, fontSize: theme.fontSizes.lg, lineHeight: theme.fontSizes.lg * lineHeights.relaxed, color: theme.colors.ink2, fontStyle: 'italic' }}>
         <Inline text={text} theme={theme} />
       </Text>
     </View>
@@ -90,7 +103,7 @@ function Entry({ entry, last, theme }) {
   return (
     <View style={{ gap: space.s1, paddingVertical: space.s4, borderBottomWidth: last ? 0 : 0.5, borderBottomColor: theme.colors.line }}>
       <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: space.s3 }}>
-        <Text style={{ flexShrink: 0, fontFamily: theme.fonts.sans.semibold, fontSize: theme.fontSizes.md, lineHeight: theme.fontSizes.md * lineHeights.normal, color: theme.colors.ink }}>
+        <Text selectable style={{ flexShrink: 0, fontFamily: theme.fonts.sans.semibold, fontSize: theme.fontSizes.lg, lineHeight: theme.fontSizes.lg * lineHeights.normal, color: theme.colors.ink }}>
           {entry.name}
         </Text>
         {entry.meta ? (
@@ -100,7 +113,7 @@ function Entry({ entry, last, theme }) {
         ) : null}
       </View>
       {entry.text ? (
-        <Text style={{ fontFamily: theme.fonts.sans.regular, fontSize: theme.fontSizes.md, lineHeight: theme.fontSizes.md * lineHeights.normal, color: theme.colors.ink2 }}>
+        <Text selectable style={{ fontFamily: theme.fonts.sans.regular, fontSize: theme.fontSizes.lg, lineHeight: theme.fontSizes.lg * lineHeights.normal, color: theme.colors.ink2 }}>
           <Inline text={entry.text} theme={theme} />
         </Text>
       ) : null}
@@ -120,10 +133,10 @@ function List({ block, theme }) {
     <View style={{ paddingLeft: space.s4, gap: space.s2 }}>
       {block.items.map((it, j) => (
         <View key={j} style={{ flexDirection: 'row', gap: space.s3 }}>
-          <Text style={{ fontFamily: block.ordered ? theme.fonts.mono : theme.fonts.sans.regular, fontSize: theme.fontSizes.md, lineHeight: theme.fontSizes.md * lineHeights.normal, color: theme.colors.ink3, minWidth: block.ordered ? 18 : undefined }}>
+          <Text style={{ fontFamily: block.ordered ? theme.fonts.mono : theme.fonts.sans.regular, fontSize: theme.fontSizes.lg, lineHeight: theme.fontSizes.lg * lineHeights.normal, color: theme.colors.ink3, minWidth: block.ordered ? 18 : undefined }}>
             {it.marker}
           </Text>
-          <Text style={{ flex: 1, fontFamily: theme.fonts.sans.regular, fontSize: theme.fontSizes.md, lineHeight: theme.fontSizes.md * lineHeights.normal, color: theme.colors.ink2 }}>
+          <Text selectable style={{ flex: 1, fontFamily: theme.fonts.sans.regular, fontSize: theme.fontSizes.lg, lineHeight: theme.fontSizes.lg * lineHeights.normal, color: theme.colors.ink2 }}>
             <Inline text={it.text} theme={theme} />
           </Text>
         </View>
@@ -195,11 +208,11 @@ function ReportTable({ block, theme }) {
 function renderBlock(block, theme) {
   switch (block.kind) {
     case 'heading': return <Heading text={block.text} theme={theme} />;
-    case 'label': return <Eyebrow>{block.label}</Eyebrow>;
+    case 'label': return <Eyebrow style={{ lineHeight: theme.fontSizes.xs * lineHeights.cozy }}>{block.label}</Eyebrow>;
     case 'labelBody':
       return (
         <View style={{ gap: space.s1 }}>
-          <Eyebrow>{block.label}</Eyebrow>
+          <Eyebrow style={{ lineHeight: theme.fontSizes.xs * lineHeights.cozy }}>{block.label}</Eyebrow>
           <Para text={block.body} theme={theme} />
         </View>
       );
@@ -207,11 +220,11 @@ function renderBlock(block, theme) {
     case 'code': return <CodeBlock text={block.text} theme={theme} />;
     case 'table': return <ReportTable block={block} theme={theme} />;
     case 'list': return <List block={block} theme={theme} />;
-    default: return <Para text={block.text} theme={theme} />;
+    default: return <Para text={block.text} theme={theme} strong={!!block.strong} />;
   }
 }
 
-export function NotificationBody({ body, lead = false }) {
+export function NotificationBody({ body, lead = null }) {
   const theme = useTheme();
   let blocks = parseNotificationBody(body);
   if (!blocks.length) return null;
@@ -224,7 +237,11 @@ export function NotificationBody({ body, lead = false }) {
 
   let prev = leadText != null ? { kind: 'lead' } : null;
   const children = [];
-  if (leadText != null) children.push(<Lead key="lead" text={leadText} theme={theme} />);
+  if (leadText != null) {
+    children.push(lead === 'deck'
+      ? <DeckText key="lead" theme={theme}><Inline text={leadText} theme={theme} /></DeckText>
+      : <Lead key="lead" text={leadText} theme={theme} />);
+  }
   blocks.forEach((block, i) => {
     const mt = children.length === 0 ? 0 : topMargin(block, prev);
     children.push(
@@ -263,7 +280,7 @@ function Details({ blocks, theme }) {
   );
 }
 
-export function ErrorCard({ title, body, actions = null }) {
+export function ErrorCard({ title, summary = '', body, actions = null }) {
   const theme = useTheme();
   const { colors, fonts, fontSizes, mode } = theme;
   const { lead, failed } = failedTitle(title);
@@ -277,6 +294,11 @@ export function ErrorCard({ title, body, actions = null }) {
           {failed ? <Text style={{ color: colors.dangerText }}>{' failed'}</Text> : null}
         </Text>
       </View>
+      {summary ? (
+        <Text selectable style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.lg, lineHeight: fontSizes.lg * lineHeights.normal, color: colors.ink2 }}>
+          {summary}
+        </Text>
+      ) : null}
       {facts.length ? (
         <View>
           {facts.map((f, i) => (

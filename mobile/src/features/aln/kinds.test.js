@@ -52,39 +52,39 @@ describe('formatNotification', () => {
     expect(body).toBe('rm -rf /');
   });
 
-  it('renders agent.message with custom title + body (info adds no tag)', () => {
+  it('titles agent.message @handle · title and bodies the summary', () => {
     const ev = {
       event: 'agent.message',
       data: {
         profile: 'abby',
         title: 'Meeting in 10 min',
-        body: 'Standup with the design team at 10:30.',
+        summary: 'Standup with the design team at 10:30.',
+        body: '## Agenda\n- design review',
         type: 'info',
       },
     };
-    const { title, body } = formatNotification(ev, conn);
-    expect(title).toBe('Meeting in 10 min');
-    expect(body).toBe('Standup with the design team at 10:30.');
+    expect(formatNotification(ev, conn)).toEqual({ title: '@abby · Meeting in 10 min', body: 'Standup with the design team at 10:30.' });
   });
 
-  it('appends the type to a custom title for warning/error', () => {
-    const ev = {
-      event: 'agent.message',
-      data: { profile: 'abby', title: 'Meeting in 10 min', type: 'warning' },
-    };
-    const { title } = formatNotification(ev, conn);
-    expect(title).toBe('Meeting in 10 min · warning');
+  it('opens the body with the level word for warning and error', () => {
+    const data = { profile: 'abby', title: 'Meeting in 10 min', summary: 'Moved to 11.' };
+    expect(formatNotification({ event: 'agent.message', data: { ...data, type: 'warning' } }, conn).body).toBe('Warning · Moved to 11.');
+    expect(formatNotification({ event: 'agent.message', data: { ...data, type: 'error' } }, conn).body).toBe('Failed · Moved to 11.');
   });
 
-  it('falls back to conn + profile + type when agent.message has no title', () => {
-    const ev = {
-      event: 'agent.message',
-      data: { profile: 'abby', body: 'hello', type: 'error' },
-    };
-    const { title } = formatNotification(ev, conn);
-    expect(title).toContain('home');
-    expect(title).toContain('abby');
-    expect(title).toContain('error');
+  it('derives the summary from the body for an older daemon instead of printing markdown', () => {
+    const ev = { event: 'agent.message', data: { profile: 'abby', title: 'Digest', body: '**Three replies are waiting on you today.**\n\n## Inbox\n- a' } };
+    expect(formatNotification(ev, conn).body).toBe('Three replies are waiting on you today.');
+  });
+
+  it('cleans a raw title from an older daemon and never prints a body without prose', () => {
+    const ev = { event: 'agent.message', data: { profile: 'abby', title: '## **Alert**', body: '```\ncode\n```' } };
+    expect(formatNotification(ev, conn)).toEqual({ title: '@abby · Alert', body: 'Open it to read the detail.' });
+  });
+
+  it('shows the handle alone when the row has no title', () => {
+    expect(formatNotification({ event: 'agent.message', data: { profile: 'abby', title: 'abby', body: 'hello' } }, conn).title).toBe('@abby');
+    expect(formatNotification({ event: 'agent.message', data: { profile: 'default', body: 'hello' } }, conn).title).toBe('@alpi');
   });
 
   it('renders schedule.failed with the job title + enriched reason, flattening newlines', () => {

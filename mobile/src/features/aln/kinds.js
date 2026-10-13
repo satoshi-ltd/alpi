@@ -1,3 +1,7 @@
+import { NO_PROSE } from '../../../../common/notificationParts.mjs';
+import { deriveSummary, legacyTitle, notificationTitle } from '../../../../common/notificationSummary.mjs';
+import { profileLabel } from '../../lib/profileName';
+
 export const NOTIFIABLE_KINDS = [
   'agent.message',
   'wg.done',
@@ -37,6 +41,23 @@ export function isStale(event, nowMs) {
 }
 
 
+const LEVEL_WORD = { warning: 'Warning', error: 'Failed' };
+
+// The daemon sends the profile name as the title when the row has none, so that value means "untitled".
+export function agentMessageLines(data) {
+  const profile = String(data?.profile || '').trim();
+  const handle = profile ? `@${profileLabel(profile)}` : '';
+  const raw = String(data?.title || '').trim();
+  const title = raw === profile ? '' : typeof data?.summary === 'string' ? notificationTitle(raw) : legacyTitle(raw);
+  const body = typeof data?.body === 'string' ? data.body : '';
+  const text = String(data?.summary || '').trim() || deriveSummary(body) || (body.trim() ? NO_PROSE : '');
+  const word = LEVEL_WORD[data?.type];
+  return {
+    title: [handle, title].filter(Boolean).join(' · ') || 'alpi',
+    body: text ? (word ? `${word} · ${text}` : text) : 'New message from your agent.',
+  };
+}
+
 export function formatNotification(event, connection) {
   const kind = event?.event;
   const data = event?.data || {};
@@ -44,13 +65,8 @@ export function formatNotification(event, connection) {
   const profile = data.profile || '';
   const prefix = profile ? `${conn} · ${profile}` : conn;
   switch (kind) {
-    case 'agent.message': {
-      const tag = data.type && data.type !== 'info' ? ` · ${data.type}` : '';
-      return {
-        title: `${data.title || prefix}${tag}`,
-        body: data.body || 'New message from your agent.',
-      };
-    }
+    case 'agent.message':
+      return agentMessageLines(data);
     case 'wg.done':
       return {
         title: `${prefix} · task done`,

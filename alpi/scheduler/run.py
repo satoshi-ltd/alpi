@@ -802,6 +802,7 @@ def _emit_schedule_event(home: Path, job: dict, outcome: JobOutcome) -> None:
             host_events.emit("agent.message", {
                 "profile": profile,
                 "title": output.get("title") or profile or "alpi",
+                "summary": outputs_mod.message_summary(output),
                 "body": output["body"],
                 "type": out_type or "info",
                 "output_id": output_id,

@@ -542,7 +542,7 @@ def desktop_app_settings():
 {card("Default profile · appearance is read-only: always the alpaca in the brand accent", locked_row, 360)}
 {card("Version popover · from the footer version, the alpaca and wordmark in crease type", popover, 220)}
 </div>
-{card("Notifications · from the bell or ⌘O: a Needs you group, All / Needs you / Unread, an ink dot for unread and a word for severity, the reader led by Reply, ↑↓ ⏎ R U ⌫ / 1–3 from the list", panel, 1200)}
+{card("Notifications · from the bell or ⌘O: a Needs you group, All / Needs you / Unread carrying the counts, an ink dot for unread and the level Chip; rows read @handle · connection · time over the title and a two-line summary; the reader’s meta bar holds Reply, Mark unread and ••• above the title, the summary and the body; ↑↓ ⏎ R ⌫ ? on one line, ? opens the rest", panel, 1200)}
 <div style="display: flex; flex-direction: column; gap: 12px"><span style="font-size: 12px; color: {INK3}">Command palette · the View group carries zoom, Preferences carries Switch theme</span>{zoom}</div>
 </div>"""
     return page("Desktop · app-level settings", 1280, 1230, body, bg=BG)

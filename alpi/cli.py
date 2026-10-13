@@ -1322,7 +1322,7 @@ def outputs_list(ctx: click.Context, limit: int, unread: bool, all_profiles: boo
         dot = "●" if it.get("status") == "unread" else "○"
         ts = datetime.fromtimestamp(float(it.get("created_at") or 0)).strftime("%m-%d %H:%M")
         prof = f" @{it.get('profile')}" if all_profiles else ""
-        title = it.get("title") or (it.get("body") or "")[:60].replace("\n", " ")
+        title = it.get("title") or outputs_mod.message_summary(it) or (it.get("body") or "")[:60].replace("\n", " ")
         click.echo(f"{dot} {ts}  [{it.get('type', 'info')}] {it.get('id')}{prof}  {title}")
 
 
@@ -1346,6 +1346,10 @@ def outputs_show(ctx: click.Context, output_id: str) -> None:
     click.echo(f"{it.get('title') or '(untitled)'}")
     source = " · ".join(f"{key} {it[key]}" for key in ("job_id", "run_id", "session_id") if it.get(key))
     click.echo(f"{ts} · {it.get('type', 'info')} · {it.get('id')}" + (f" · {source}" if source else ""))
+    summary = outputs_mod.given_summary(it)
+    if summary:
+        click.echo("")
+        click.echo(summary)
     click.echo("")
     click.echo(it.get("body") or "")
 

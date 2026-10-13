@@ -11,23 +11,33 @@
 
 .lead {
   margin: 0;
-  font-size: var(--text-title);
+  font-size: var(--fs-xxl);
   font-weight: var(--fw-semibold);
   letter-spacing: -0.012em;
   line-height: var(--lh-cozy);
   color: var(--ink);
 }
 
+.deck {
+  margin: 0;
+  font-size: var(--fs-xl);
+  line-height: var(--lh-normal);
+  color: var(--ink-2);
+  text-wrap: pretty;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 .heading {
   margin: 0;
-  font-size: var(--text-chat);
+  font-size: var(--fs-xl);
   font-weight: var(--fw-semibold);
   letter-spacing: -0.01em;
   line-height: var(--lh-cozy);
   color: var(--ink);
 }
 
-.label { margin: 0; }
+.label { margin: 0; line-height: var(--lh-cozy); }
 
 .para {
   margin: 0;
@@ -154,6 +164,14 @@ ol.list .marker {
   color: var(--ink);
 }
 .errorTitle { min-width: 0; }
+.errorSummary {
+  margin: 0;
+  font-size: var(--text-chat);
+  line-height: var(--lh-normal);
+  color: var(--ink-2);
+  -webkit-user-select: text;
+  user-select: text;
+}
 .failed { color: var(--c-danger-text); }
 .facts { margin: 0; }
 .fact {
@@ -211,6 +229,7 @@ ol.list .marker {
 }
 
 .bold { font-weight: var(--fw-semibold); color: var(--ink); }
+.strong { font-weight: var(--fw-semibold); color: var(--ink); }
 .italic { font-style: italic; }
 
 .code {
@@ -236,6 +255,7 @@ ol.list .marker {
 }
 
 .body > .lead,
+.body > .deck,
 .body > .label,
 .body > .para,
 .body > .quote,

@@ -4,7 +4,7 @@ import { FlatList, RefreshControl, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { EMPTY } from '../../common/emptyCopy.mjs';
-import { headlineParts } from '../../common/notificationHeadline.mjs';
+import { notificationParts } from '../../common/notificationParts.mjs';
 import { deletedMessage } from '../../common/undoBatch.mjs';
 import {
   filterNotifications,
@@ -198,7 +198,7 @@ export default function OutputsScreen() {
   const onDelete = useCallback((row) => {
     const count = actions.remove(row, { onError: (e) => toast({ message: `Delete failed: ${String(e?.message ?? e)}`, kind: 'danger' }) });
     toast({
-      message: deletedMessage(count, clip(headlineParts(row).title || 'notification', 48)),
+      message: deletedMessage(count, clip(notificationParts(row).headline || 'notification', 48)),
       action: 'Undo',
       onAction: () => { if (!actions.undoRemove()) toast({ message: 'Already deleted' }); },
       duration: UNDO_MS,
@@ -218,6 +218,7 @@ export default function OutputsScreen() {
         row={item.row}
         unread={isUnread(item.row)}
         multi={multi}
+        dayGroup={!item.pinned}
         selected={wide && isPicked(item.row)}
         canToggleRead={canToggleRead(item.row)}
         onOpen={openRow}

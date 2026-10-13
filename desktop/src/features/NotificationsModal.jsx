@@ -17,14 +17,13 @@ import {
   VolumeIcon,
   XIcon,
 } from "../primitives/index.js";
-import NotificationBody, { ErrorCard } from "./NotificationBody.jsx";
+import NotificationBody, { Deck, ErrorCard } from "./NotificationBody.jsx";
 import WaveBars from "../primitives/WaveBars.jsx";
 import { SkeletonRows } from "../primitives/Skeleton.jsx";
 import Eyebrow from "../primitives/Eyebrow.jsx";
 import { playTts, subscribeTts, VOICE_POOL } from "../lib/tts.js";
 import { useOnline } from "../lib/useOnline.js";
 import { useNotify } from "../primitives/Notification.jsx";
-import { notificationTime } from "../lib/time.js";
 import { profileLabel } from "../lib/profile-display.js";
 import {
   pendingDeleteKeys,
@@ -39,7 +38,8 @@ import { useProfileDetail } from "../hooks/useProfileDetail.js";
 import { isMissingVerb } from "../hooks/useActivity.js";
 import styles from "./NotificationsModal.module.css";
 import { copyText } from "../lib/clipboard.js";
-import { headlineParts } from "../lib/notificationHeadline.js";
+import { notificationParts } from "../../../common/notificationParts.mjs";
+import { notificationStamp, notificationTime } from "../../../common/notificationTime.mjs";
 import { EMPTY } from "../../../common/emptyCopy.mjs";
 import { deletedMessage, UNDO_WINDOW_MS } from "../../../common/undoBatch.mjs";
 import {
@@ -84,9 +84,12 @@ export const READ_DWELL_MS = 600;
 
 const FILTERS = NOTIFICATION_FILTERS.map((f, i) => ({ ...f, key: String(i + 1) }));
 
-const KEYS = [["↑↓", "move"], ["⏎", "open"], ["R", "reply"], ["U", "unread"], ["⌫", "delete"], ["/", "search"], ["1–3", "filter"]];
+const KEYS = [["↑↓", "move"], ["⏎", "open"], ["R", "reply"], ["⌫", "delete"], ["?", "all keys"]];
+const MORE_KEYS = [["U", "unread"], ["/", "search"], ["1–3", "filter"], ["Esc", "close"]];
 
 const clip = (text, max) => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text);
+
+const withGivenSummary = (row) => [notificationParts(row).givenSummary, row?.body || ""].filter(Boolean).join("\n\n");
 
 const UNDO_TOAST_ID = "notif-delete-undo";
 
@@ -133,6 +136,7 @@ export default function NotificationsModal({
   const [filter, setFilter] = useState("all");
   const [unreadMissing, setUnreadMissing] = useState(() => new Set());
   const [frozen, setFrozen] = useState(null);
+  const [allKeys, setAllKeys] = useState(false);
   const listRef = useRef(null);
 
   const isUnread = useCallback((r) => {
@@ -154,6 +158,7 @@ export default function NotificationsModal({
       const hay = [
         row.body,
         row.title,
+        row.summary,
         row.profile,
         row.type,
       ].filter(Boolean).join(" ").toLowerCase();
@@ -214,6 +219,7 @@ export default function NotificationsModal({
       setHeldUnread(null);
       setFilter("all");
       setFrozen(null);
+      setAllKeys(false);
       return;
     }
     // hiddenIds reseeds from in-flight pending deletes so a row in its undo window stays hidden across modal reopens.
@@ -314,7 +320,7 @@ export default function NotificationsModal({
     });
     notify({
       id: UNDO_TOAST_ID,
-      message: deletedMessage(count, clip(headlineParts(row).title || "notification", 48)),
+      message: deletedMessage(count, clip(notificationParts(row).headline || "notification", 48)),
       action: "Undo",
       duration: UNDO_WINDOW_MS,
       onPause: pauseDeletes,
@@ -336,7 +342,7 @@ export default function NotificationsModal({
 
   const onCopy = useCallback(async () => {
     if (!detail) return;
-    if (await copyText(detail.body || "")) notify({ message: "Copied" });
+    if (await copyText(withGivenSummary(detail))) notify({ message: "Copied" });
     else notify({ message: "Copy failed", variant: "error" });
   }, [detail, notify]);
 
@@ -346,7 +352,7 @@ export default function NotificationsModal({
     const meta = [`@${profileLabel(detail.profile)}`, conn, fmtAbsolute(detail.created_at)]
       .filter(Boolean)
       .join(" · ");
-    return `# ${title}\n_${meta}_\n\n${detail.body || ""}\n`;
+    return `# ${title}\n_${meta}_\n\n${withGivenSummary(detail)}\n`;
   }, [detail, activeConnId, activeRow]);
 
   const onReply = useCallback(async () => {
@@ -449,6 +455,7 @@ export default function NotificationsModal({
     const filterKey = FILTERS.find((f) => f.key === e.key);
     if (filterKey) setFilter(filterKey.id);
     else if (e.key === "/") e.currentTarget.closest('[role="dialog"]')?.querySelector('input[type="text"]')?.focus();
+    else if (e.key === "?") setAllKeys((on) => !on);
     else if (e.key === "r" || e.key === "R") onReply();
     else if (e.key === "u" || e.key === "U") onMarkUnread();
     else if ((e.key === "Backspace" || e.key === "Delete") && activeRow) {
@@ -483,8 +490,8 @@ export default function NotificationsModal({
   ) : null;
 
   const keys = visibleRows.length > 0 ? (
-    <div className={styles.keys} aria-hidden="true">
-      {KEYS.map(([k, what]) => <span key={k} className={styles.keyItem}><Kbd>{k}</Kbd>{what}</span>)}
+    <div className={`${styles.keys} ${allKeys ? styles.keysAll : ""}`.trim()} aria-hidden="true">
+      {(allKeys ? [...KEYS, ...MORE_KEYS] : KEYS).map(([k, what]) => <span key={k} className={styles.keyItem}><Kbd>{k}</Kbd>{what}</span>)}
     </div>
   ) : null;
 
@@ -526,6 +533,7 @@ export default function NotificationsModal({
               accent={row.accent}
               fold={row.fold}
               multi={multi}
+              dayGroup={group.id.startsWith("day:")}
               unread={isUnread(row)}
               active={row.id === activeId && row.profile === activeProfile && row.connectionId === activeConnId}
               onSelect={onSelectRow}
@@ -546,7 +554,6 @@ export default function NotificationsModal({
       title="Notifications"
       loading={loading}
       loadingLabel="Syncing notifications"
-      kicker={unreadCount > 0 ? `${unreadCount} unread` : null}
       actions={unreadCount > 0 ? <Button variant="ghost" onClick={onMarkAll}>Mark all read</Button> : null}
       search={{ value: query, onChange: setQuery, placeholder: "Search notifications…", label: "Search notifications" }}
       list={list}
@@ -576,9 +583,9 @@ export default function NotificationsModal({
 }
 
 
-function NotificationRow({ row, accent, fold, multi, unread, active, onSelect, onDelete }) {
+function NotificationRow({ row, accent, fold, multi, dayGroup = true, unread, active, onSelect, onDelete }) {
   const label = profileLabel(row.profile);
-  const { title, preview } = headlineParts(row);
+  const { headline, preview } = notificationParts(row);
   const sev = typeTag(row);
   const handleDelete = (e) => {
     e.stopPropagation();
@@ -610,8 +617,8 @@ function NotificationRow({ row, accent, fold, multi, unread, active, onSelect, o
             {multi && row.connectionName ? <Mono className={styles.rowConn}>· {row.connectionName}</Mono> : null}
           </span>
           <span className={styles.rowSlot}>
-            {sev ? <span className={`${styles.rowSev} ${sev === "error" ? styles.rowSevError : styles.rowSevWarning}`}>{sev}</span> : null}
-            <Mono className={styles.rowTs}>{notificationTime(row.created_at)}</Mono>
+            {sev ? <Chip state={sev === "error" ? "error" : "warn"} size="sm">{sev}</Chip> : null}
+            <Mono className={styles.rowTs}>{notificationTime(row.created_at, { dayGroup })}</Mono>
             <span className={styles.rowDelete}>
               <Tip text="Delete" side="up">
                 <IconBtn aria-label="Delete notification" onClick={handleDelete}>
@@ -621,7 +628,7 @@ function NotificationRow({ row, accent, fold, multi, unread, active, onSelect, o
             </span>
           </span>
         </div>
-        <div className={styles.rowTitle}>{title}</div>
+        <div className={styles.rowTitle}>{headline}</div>
         {preview ? <div className={styles.rowPreview}>{preview}</div> : null}
       </div>
     </li>
@@ -651,22 +658,25 @@ function DetailPane({ row, accent, fold, connId, connectionName, voiceId, onCopy
   const speakName = isLoading ? "Read aloud, preparing audio" : speakLabel;
   const onSpeak = () => {
     if (!row.body) return;
-    playTts({ key: ttsKey, profile: row.profile, voice: voiceId ?? row.voice_id ?? VOICE_POOL[0], text: row.body, accent });
+    playTts({ key: ttsKey, profile: row.profile, voice: voiceId ?? row.voice_id ?? VOICE_POOL[0], text: withGivenSummary(row), accent });
   };
   const run = (fn) => () => {
     setMenuOpen(false);
     fn?.();
   };
 
+  const parts = notificationParts(row);
+  const { title, summary, fromBody } = parts;
+
   return (
     <article className={styles.article}>
       <div className={styles.detailMeta}>
         <span className={styles.detailMetaProfile}>
-          {!isHost && connectionName ? <span className={styles.detailMetaConn}>{connectionName}/</span> : null}
           <Fold fold={fold} color={accent} />
           <span className={styles.detailMetaName}>@{label}</span>
-          <span className={styles.detailMetaDot}>·</span>
-          <span className={styles.detailMetaDate}>{fmtAbsolute(row.created_at)}</span>
+          <span className={styles.detailMetaWhen}>
+            {[!isHost ? connectionName : null, notificationStamp(row.created_at)].filter(Boolean).map((part) => ` · ${part}`).join("")}
+          </span>
         </span>
         {tag ? <Chip state={tag === "error" ? "error" : "warn"} size="sm">{tag}</Chip> : null}
         <span className={styles.detailMetaSpacer} />
@@ -677,12 +687,26 @@ function DetailPane({ row, accent, fold, connId, connectionName, voiceId, onCopy
             </IconBtn>
           </Tip>
         ) : null}
+        <Button size="sm" variant={failure ? "secondary" : "primary"} onClick={onReply}>Reply</Button>
+        {onMarkUnread ? <Button size="sm" variant="ghost" onClick={onMarkUnread}>Mark unread</Button> : null}
         <span className={styles.overflow}>
           <IconBtn tip="More" tipSide="l" aria-label="More" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>
             <Icon name="ellipsis" />
           </IconBtn>
           <Popover open={menuOpen} onClose={() => setMenuOpen(false)} align="right" navigable role="menu">
             <div className={styles.menu}>
+              {onOpenChat ? (
+                <Button role="menuitem" fullWidth className={styles.menuItem} onClick={run(onOpenChat)}>
+                  <Icon name="history" className={styles.menuIcon} />
+                  <span className={styles.menuLabel}>Open chat</span>
+                </Button>
+              ) : null}
+              {onOpenJob && !failure ? (
+                <Button role="menuitem" fullWidth className={styles.menuItem} onClick={run(onOpenJob)}>
+                  <Icon name="clock" className={styles.menuIcon} />
+                  <span className={styles.menuLabel}>Open job</span>
+                </Button>
+              ) : null}
               <Button role="menuitem" fullWidth className={styles.menuItem} disabled={ttsDisabled} onClick={run(onSpeak)} aria-label={isLoading ? speakName : undefined}>
                 {isLoading ? <DSSpinnerIcon className={styles.menuIcon} /> : <VolumeIcon className={styles.menuIcon} />}
                 <span className={styles.menuLabel}>{speakLabel}</span>
@@ -700,16 +724,10 @@ function DetailPane({ row, accent, fold, connId, connectionName, voiceId, onCopy
         </span>
       </div>
 
-      <div className={styles.actions}>
-        <Button variant={failure ? "secondary" : "primary"} onClick={onReply}>Reply</Button>
-        {onOpenChat ? <Button variant="secondary" onClick={onOpenChat}>Open chat</Button> : null}
-        {onOpenJob && !failure ? <Button variant="secondary" onClick={onOpenJob}>Open job</Button> : null}
-        {onMarkUnread ? <Button variant="ghost" onClick={onMarkUnread}>Mark unread</Button> : null}
-      </div>
-
       {failure ? (
         <ErrorCard
-          title={(row.title || "").trim()}
+          title={title}
+          summary={parts.givenSummary}
           body={row.body || ""}
           actions={onRunAgain || onOpenJob ? (
             <>
@@ -720,10 +738,9 @@ function DetailPane({ row, accent, fold, connId, connectionName, voiceId, onCopy
         />
       ) : (
         <>
-          {(row.title || "").trim() ? (
-            <h2 className={styles.detailTitle}>{row.title}</h2>
-          ) : null}
-          <NotificationBody body={row.body || ""} lead={!(row.title || "").trim()} />
+          {title ? <h2 className={styles.detailTitle}>{title}</h2> : null}
+          {!fromBody && summary ? <Deck text={summary} asTitle={!title} /> : null}
+          <NotificationBody body={row.body || ""} lead={fromBody ? (title ? "deck" : "title") : null} />
         </>
       )}
 

@@ -14,6 +14,15 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.8.2 — 2026-10-11 — a notification reads as a title, a summary and the detail
+
+- **The push shows who sent it and the title, then the summary,** instead of raw markdown; warnings and failures open with Warning or Failed.
+- **A notification's page reads like the desktop's:** @handle · connection · time on top (no more "now ago"), then the title, the summary and the detail at 15 pt, which you can now select. A long bold line is no longer drawn in capitals.
+- **The list shows the title on one line and the summary on two,** a clock on every row of a day group, and @alpi for the default profile.
+- **Pills follow the desktop chips:** a warning stays neutral with an orange dot instead of an orange tag, and every state pill draws its dot.
+
+  Requires alpi 0.17.5; the summary comes from alpi 0.17.17, and older daemons get one worked out on the phone.
+
 ## v0.8.1 — 2026-10-09 — fixes after the first device pass and a sweep
 
 - **Activity stays true after a reconnect and says when it cannot load.** A job that finished while the connection was down no longer shows as running, and a failed first load offers Retry instead of a blank screen.

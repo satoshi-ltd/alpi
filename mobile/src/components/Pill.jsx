@@ -1,6 +1,6 @@
 import { mixHex } from "../../../common/color.mjs";
 import { Text, View } from 'react-native';
-import { alpha, lineHeights, radii, space } from '../theme/tokens';
+import { alpha, dotSize, lineHeights, radii, space } from '../theme/tokens';
 
 import { useTheme } from '../theme/ThemeContext';
 import { useGroundTone } from './groupTone';
@@ -11,14 +11,15 @@ const TONES = {
   warn: 'warning',
 };
 
-
+// Keep in step with desktop/src/primitives/Chip.jsx states.
 export function Pill({ tone, children, off = false }) {
   const { colors, fonts , fontSizes} = useTheme();
   const accentKey = TONES[tone];
-  const tint = accentKey ? colors[accentKey] : null;
   const ground = useGroundTone();
-  const bg = tint ? mixHex(tint, 0.16, ground) : colors.hover;
-  const fg = accentKey ? colors[`${accentKey}Text`] : colors.ink2;
+  const tinted = accentKey && tone !== 'warn';
+  const bg = tinted ? mixHex(colors[accentKey], 0.16, ground) : colors.hover;
+  const fg = tinted ? colors[`${accentKey}Text`] : tone === 'warn' ? colors.ink : colors.ink2;
+  const dot = accentKey ? colors[accentKey] : off ? colors.ink3 : null;
 
   return (
     <View
@@ -33,6 +34,7 @@ export function Pill({ tone, children, off = false }) {
         opacity: off ? alpha.muted : 1,
       }}
     >
+      {dot ? <View style={{ width: dotSize, height: dotSize, borderRadius: dotSize / 2, backgroundColor: dot }} /> : null}
       <Text
         style={{
           fontFamily: fonts.monoMedium,

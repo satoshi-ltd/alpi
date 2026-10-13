@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.17.17 — 2026-10-11 — a notification is a title, a summary and a body
+
+- **`notify` takes a `summary`**: one or two plain sentences that the banner, the phone push and the inbox row show under the title. A summary or title sent as a list or a number no longer drops the notification.
+- **A notification without a summary still gets one.** The push and the apps take the body's first prose paragraph, skipping headings, labels, tables and code, and never stop on a colon.
+- **The agent writes a title, a summary and a body** instead of a bold lead line, and keeps the title and summary out of the body.
+- **Titles lose their markdown while code keeps its underscores and stars.** `alpi outputs list` shows an untitled row's summary, and `alpi outputs show` and the TUI print a given summary.
+- **A notification whose text contains a line or paragraph separator no longer disappears from the inbox.**
+
 ## v0.17.16 — 2026-10-10 — a chain of runs keeps its rewinds
 
 - **A workgroup's QA rewind budget now belongs to each run, not to its whole life.** A workgroup that runs a pipeline once per hotel used to block on its third red QA anywhere in the chain; each new run now gets its two rewinds, and a run still stops at the third.

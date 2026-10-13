@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from alpi.outputs import _suppress_native_emit, create_output_and_emit_message
+from alpi.outputs import _suppress_native_emit, create_output_and_emit_message, text_arg
 from alpi.tools.base import Tool, ToolResult
 
 VALID_TYPE = ("info", "warning", "error")
@@ -21,20 +21,27 @@ class Notify(Tool):
         "it just to duplicate an answer the user is already reading in the live "
         "chat and never asked to be pushed.\n"
         "\n"
-        "Format it as a scannable report: a lead line, `**Label:**` sections, "
-        "`- ` bullets, and 🔴🟡🟢 for status. Richer markdown (tables, images, "
-        "headings, other emoji) is simplified automatically — don't fuss over format."
+        "A notification has three parts, in this order everywhere it shows: "
+        "`title` says what happened (at most 60 characters, no markdown); "
+        "`summary` is one or two plain sentences with the outcome (at most 200 "
+        "characters, never ending on a colon) that the banner and the inbox row "
+        "show; `text` is the detail the user opens, in `## Section` headings, "
+        "`**Label:**` lines, `- ` bullets and 🔴🟡🟢 for status. Do not repeat the "
+        "title or the summary in `text`. Richer markdown (tables, images, other "
+        "emoji) is simplified automatically — don't fuss over format."
     )
     parameters = {
         "type": "object",
         "properties": {
-            "text": {"type": "string", "description": "The notification body — the full message the user reads when they open it."},
-            "title": {"type": "string", "description": "Optional short headline. When set, the apps show it bold above the body and the native push uses it as the headline above the body; omit for a body-only notification."},
+            "text": {"type": "string", "description": "The body: the detail the user reads when they open the notification, without the title or the summary."},
+            "title": {"type": "string", "description": "What happened, at most 60 characters, plain text. The push, the inbox row and the reader lead with it."},
+            "summary": {"type": "string", "description": "One or two plain sentences with the outcome, at most 200 characters. The push and the inbox row show it under the title; omitted, the daemon takes the body's first paragraph."},
             "type": {
                 "type": "string",
                 "description": (
-                    "info | warning | error (default: info). info = neutral; "
-                    "warning = prominent; error = red alert styling."
+                    "info | warning | error (default: info). warning and error pin "
+                    "the notification under Needs you until it is read: set them "
+                    "only when the owner has to act."
                 ),
                 "default": "info",
             },
@@ -43,19 +50,19 @@ class Notify(Tool):
     }
 
     def run(
-        self, text: str = "", title: str = "", type: str = "info",
+        self, text: str = "", title: str = "", type: str = "info", summary: str = "",
     ) -> ToolResult:
-        text = text or ""
+        text = text_arg(text, "\n")
         if not text.strip():
             return ToolResult(ok=False, output="", error="notify requires non-empty text")
-        type = (type or "info").strip().lower()
+        type = text_arg(type).strip().lower() or "info"
         if type not in VALID_TYPE:
             type = "info"
         # Schedule children defer to the parent: it parses tool_end and files the single canonical output.
         if not _suppress_native_emit():
             create_output_and_emit_message(
-                text=text, title=title or "", type=type,
-                delivered_to=["alpi"],
+                text=text, title=text_arg(title), type=type,
+                delivered_to=["alpi"], summary=text_arg(summary),
             )
         return ToolResult(ok=True, output="delivered: alpi")
 

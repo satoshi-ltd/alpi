@@ -36,11 +36,18 @@ function isSeparatorRow(line) {
   return cells.length > 0 && cells.every((c) => SEP_CELL.test(c));
 }
 
+const isShortLabel = (label) => label.length <= LABEL_MAX_CHARS && wordCount(label) <= LABEL_MAX_WORDS;
+
+function standalone(text) {
+  const label = text.replace(/:\s*$/, "");
+  return isShortLabel(label) ? { kind: "label", label } : { kind: "p", text, strong: true };
+}
+
 function labelBody(line) {
   const m = line.match(INLINE_LABEL_COLON_IN) || line.match(INLINE_LABEL_COLON_OUT);
   if (!m) return null;
   const label = m[1].trim();
-  if (label.length > LABEL_MAX_CHARS || wordCount(label) > LABEL_MAX_WORDS) return null;
+  if (!isShortLabel(label)) return null;
   return { kind: "labelBody", label, body: m[2] };
 }
 
@@ -111,8 +118,7 @@ export function parseNotificationBody(body) {
 
     let m = line.match(HEADING);
     if (m) {
-      if (m[1].length <= 2) blocks.push({ kind: "heading", text: m[2] });
-      else blocks.push({ kind: "label", label: m[2].replace(/:\s*$/, "") });
+      blocks.push(m[1].length <= 2 ? { kind: "heading", text: m[2] } : standalone(m[2]));
       i += 1;
       continue;
     }
@@ -155,7 +161,7 @@ export function parseNotificationBody(body) {
     }
 
     m = line.match(STANDALONE_LABEL);
-    if (m) { blocks.push({ kind: "label", label: m[1].replace(/:\s*$/, "") }); i += 1; continue; }
+    if (m) { blocks.push(standalone(m[1])); i += 1; continue; }
 
     const lb = labelBody(line.trim());
     if (lb) { blocks.push(lb); i += 1; continue; }

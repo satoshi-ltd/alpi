@@ -11,6 +11,16 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.8.11 — 2026-10-11 — a notification reads as a title, a summary and the detail
+
+- **The macOS banner shows who sent it and the title, then the summary,** instead of raw markdown; warnings and failures open with Warning or Failed.
+- **The list shows the title over a two-line summary that keeps hyphens, underscores and dates,** a clock on every row of a day group, and the same level chip as the reader.
+- **The reader opens with the title, the summary and the detail.** A long bold line is a bold paragraph instead of colliding capitals, and headings sit a step above the text.
+- **The reader's top bar reads @handle · connection · time and holds Reply, Mark unread and the menu,** which now has Open chat and Open job.
+- **The header drops the unread count the Unread filter already shows, and the key hints fit on one line;** press ? for the rest.
+
+  Requires alpi 0.17.5; the banner shows the summary from alpi 0.17.17.
+
 ## v0.8.10 — 2026-10-10 — the Workgroups and Connections headers in crease type
 
 - **The Workgroups and Connections headers are set in crease type** like the profile, the workgroup and the chat headers, instead of plain bold text.

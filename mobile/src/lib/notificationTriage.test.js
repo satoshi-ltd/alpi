@@ -8,7 +8,7 @@ import {
   notificationKey,
   triageCounts,
 } from '../../../common/notificationTriage.mjs';
-import { headlineParts } from '../../../common/notificationHeadline.mjs';
+import { notificationParts } from '../../../common/notificationParts.mjs';
 
 const NOW = new Date(2026, 9, 3, 12, 0, 0).getTime();
 const at = (hoursAgo) => Math.floor(NOW / 1000 - hoursAgo * 3600);
@@ -57,7 +57,7 @@ describe('notification triage', () => {
   });
 
   it('splits a body-only notification into a headline and a preview', () => {
-    expect(headlineParts({ body: 'Build finished. All 40 checks passed.' })).toEqual({ title: 'Build finished.', preview: 'All 40 checks passed.' });
-    expect(headlineParts({ title: 'Digest', body: '\n**14** new emails' })).toEqual({ title: 'Digest', preview: '14 new emails' });
+    expect(notificationParts({ body: 'Build finished. All 40 checks passed.' })).toMatchObject({ headline: 'Build finished.', preview: 'All 40 checks passed.' });
+    expect(notificationParts({ title: 'Digest', body: '\n**14** new emails' })).toMatchObject({ headline: 'Digest', preview: '14 new emails' });
   });
 });

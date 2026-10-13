@@ -1,47 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { fmtRelative, openChatTarget, REPLY_QUOTE_MAX, replyDraft, rowTitle, severityTag, stripPreviewMarkdown } from './outputsFormat';
-
-describe('rowTitle', () => {
-  it('prefers the persisted title over body', () => {
-    expect(rowTitle({ title: 'Build done', body: 'lots of stuff\n more' })).toBe('Build done');
-  });
-
-  it('strips markdown noise from the persisted title', () => {
-    expect(rowTitle({ title: '**Alert** ~~stale~~', body: 'x' })).toBe('Alert stale');
-  });
-
-  it('falls back to the first meaningful body line when title is missing', () => {
-    expect(rowTitle({ body: '\n# Heading\nrest' })).toBe('Heading');
-  });
-
-  it('falls back to em-dash when both title and body are empty', () => {
-    expect(rowTitle({ title: '', body: '' })).toBe('—');
-    expect(rowTitle({})).toBe('—');
-  });
-
-  it('ignores whitespace-only persisted title', () => {
-    expect(rowTitle({ title: '   ', body: 'real content' })).toBe('real content');
-  });
-});
-
-describe('severityTag', () => {
-  it('labels warning and error from the real type contract', () => {
-    expect(severityTag({ type: 'warning' })).toBe('WARNING');
-    expect(severityTag({ type: 'error' })).toBe('ERROR');
-  });
-
-  it('returns null for info and missing type (no badge on routine notifications)', () => {
-    expect(severityTag({ type: 'info' })).toBeNull();
-    expect(severityTag({})).toBeNull();
-    expect(severityTag(null)).toBeNull();
-  });
-
-  it('ignores the legacy kind/severity schema that never shipped on the daemon', () => {
-    expect(severityTag({ kind: 'alert' })).toBeNull();
-    expect(severityTag({ severity: 'urgent' })).toBeNull();
-  });
-});
+import { openChatTarget, REPLY_QUOTE_MAX, replyDraft } from './outputsFormat';
 
 describe('openChatTarget', () => {
   it('carries the originating connection and session so the right chat opens', () => {
@@ -64,25 +23,19 @@ describe('openChatTarget', () => {
   });
 });
 
-describe('stripPreviewMarkdown', () => {
-  it('handles null/undefined safely', () => {
-    expect(stripPreviewMarkdown(null)).toBe('');
-    expect(stripPreviewMarkdown(undefined)).toBe('');
-  });
-
-  it('strips code spans, emphasis, blockquotes, headings', () => {
-    expect(stripPreviewMarkdown('`code` *em* > quote # title')).toBe('code em quote title');
-  });
-
-  it('preserves link text', () => {
-    expect(stripPreviewMarkdown('see [docs](https://x)')).toBe('see docs');
-  });
-});
-
 describe('replyDraft', () => {
   it('quotes the title and the body, leaving a blank line to write under', () => {
     expect(replyDraft({ title: 'Daily mail digest', body: 'Line one\n\nLine two' }))
       .toBe('> **Daily mail digest**\n>\n> Line one\n>\n> Line two\n\n');
+  });
+
+  it('quotes the stored title as written, decorative emoji aside', () => {
+    expect(replyDraft({ title: 'Fix snake_case keys ✅', body: 'x' })).toBe('> **Fix snake_case keys**\n>\n> x\n\n');
+  });
+
+  it('quotes a given summary ahead of the body, and only once when the body opens with it', () => {
+    expect(replyDraft({ title: 'T', summary: 'Moved to 11.', body: '## Detail' })).toBe('> **T**\n>\n> Moved to 11.\n>\n> ## Detail\n\n');
+    expect(replyDraft({ title: 'T', summary: 'Moved to 11.', body: 'Moved to 11.' })).toBe('> **T**\n>\n> Moved to 11.\n\n');
   });
 
   it('quotes the body alone when there is no title', () => {
@@ -98,19 +51,6 @@ describe('replyDraft', () => {
   it('is empty for nothing to quote', () => {
     expect(replyDraft(null)).toBe('');
     expect(replyDraft({ title: '', body: '' })).toBe('');
-  });
-});
-
-describe('fmtRelative', () => {
-  it('steps from now through minutes, hours, days and weeks', () => {
-    const now = 1_000_000_000_000;
-    const at = (s) => now / 1000 - s;
-    expect(fmtRelative(at(10), now)).toBe('now');
-    expect(fmtRelative(at(600), now)).toBe('10m');
-    expect(fmtRelative(at(7200), now)).toBe('2h');
-    expect(fmtRelative(at(86400 * 3), now)).toBe('3d');
-    expect(fmtRelative(at(86400 * 14), now)).toBe('2w');
-    expect(fmtRelative(0, now)).toBe('');
   });
 });
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dateBucket, formatNextFire, groupByDate, lastRunShort, notificationTime, relativeTime, shortDate } from "./time.js";
+import { dateBucket, formatNextFire, groupByDate, lastRunShort, clockOrAge, relativeTime, shortDate } from "./time.js";
 
 const NOW = new Date(2026, 5, 17, 12, 0, 0).getTime();
 const DAY = 86400000;
@@ -37,20 +37,20 @@ describe("groupByDate", () => {
   });
 });
 
-describe("notificationTime", () => {
+describe("clockOrAge", () => {
   it("shows the clock time for today's notifications", () => {
     const at = new Date(2026, 5, 17, 9, 5, 0).getTime();
-    expect(notificationTime(sec(at), NOW)).toBe(CLOCK.format(new Date(at)));
+    expect(clockOrAge(sec(at), NOW)).toBe(CLOCK.format(new Date(at)));
   });
 
   it("falls back to relative age before today", () => {
     const yesterday = sec(NOW - DAY);
-    expect(notificationTime(yesterday, NOW)).toBe(relativeTime(yesterday));
-    expect(notificationTime(yesterday, NOW)).not.toContain(":");
+    expect(clockOrAge(yesterday, NOW)).toBe(relativeTime(yesterday));
+    expect(clockOrAge(yesterday, NOW)).not.toContain(":");
   });
 
   it("returns empty for a missing timestamp", () => {
-    expect(notificationTime(0, NOW)).toBe("");
+    expect(clockOrAge(0, NOW)).toBe("");
   });
 });
 

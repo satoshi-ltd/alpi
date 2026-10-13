@@ -482,7 +482,7 @@ def _alert_stale_runs(home: Path, profile: str, closed: list[dict[str, Any]]) ->
                 f"journal was closed after {row.get('silent_for_s')}s of silence."
             )
         body = (
-            f"{headline}\n"
+            f"{headline}\n\n"
             f"run: {row.get('run_id')}\n"
             f"job: {job_id or 'none'}\n"
             f"source: {row.get('source') or 'unknown'}"

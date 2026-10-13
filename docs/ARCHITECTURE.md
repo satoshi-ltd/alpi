@@ -1072,12 +1072,29 @@ Verb namespaces in current shape:
   of truth: the child's `notify` is suppressed and the parent
   parses the `tool_end` args to file one canonical output with the
   full `delivered_to` list. Each row carries
-  `{id, profile, created_at, title?, body,
+  `{id, profile, created_at, title?, summary?, body,
   type: info|warning|error, status: unread|read, session_id, job_id?, run_id?, delivered_to}`
   (`title` present when a `notify` caller set one, or on scheduler
   failure rows — "<job> failed", whose body opens with `**Reason:**`, then
   `**Exit:**` / `**Timeout:**` when they apply and any trace in a fenced
-  `text` block, capped at 2000 characters).
+  `text` block, capped at 2000 characters). A notification is read in three
+  parts, in this order on every surface: the title (markdown stripped), the
+  summary and the body. A row stores `summary` only when the `notify` caller
+  gave one (flattened to plain text, at most 200 characters); every reader
+  derives one otherwise with the same rule (`outputs.derive_summary`, mirrored
+  by `common/notificationSummary.mjs` and tested against the shared corpus in
+  `common/notificationSummary.fixtures.mjs`): the first prose paragraph,
+  skipping headings, short labels, tables and code, joined with the next block
+  while it ends on a colon, cut at a sentence, never ending on a colon. A stored
+  summary equal to the derived one counts as derived, so readers draw it once.
+  The apps lead the list row with the title over a two-line summary, open the
+  reader with the title, the summary and the body (a derived summary is the
+  body's first paragraph, drawn as the deck), carry a given summary into Reply,
+  Copy, Download and Read aloud, and raise the banner and the phone push as
+  `@handle · title` over the summary, opened with "Warning · " or "Failed · "
+  for those types, or "Open it to read the detail." when the body has no prose.
+  `alpi outputs show` and the TUI print a given summary between the header and
+  the body.
   No `archive` action — the 500-row cap handles retention so
   clients only render a two-state inbox. `agent.message`,
   `schedule.done` and `schedule.failed` events ship `output_id`
@@ -1148,7 +1165,9 @@ queries those stores, not ``host.events.history``.
   - `agent.message` — emitted by `notify` (the owner-push tool). In
     daemon turns it fires from the tool process; for scheduled jobs
     the parent re-emits after parsing the child subprocess events.
-    Always carries `output_id` + `deep_link`
+    Carries `{profile, title, summary, body, type}`: `summary` is the given
+    one or the derived one, empty only when the body has no prose, and
+    `title` falls back to the profile name on an untitled row. Always carries `output_id` + `deep_link`
     (`/outputs/<profile>/<id>`) so clients land on the canonical
     output instead of the chat window.
   - `output.created` — companion event for every new outputs row
@@ -1551,7 +1570,7 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   unreadable one is never overwritten.
 
 - **Two messaging intents: `notify` (owner) vs `send_message` (third party).**
-  `notify(text, title?, type?)` pushes to the OWNER's own paired Alpi apps —
+  `notify(text, title?, summary?, type?)` pushes to the OWNER's own paired Alpi apps —
   it files an inbox row in `~/.alpi/outputs/` and emits the `agent.message`
   host event (the only native push). `type` is the single presentation axis:
   `info` (default) | `warning` | `error`. `send_message(text, channel,

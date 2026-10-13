@@ -151,11 +151,12 @@ describe('notifications list, triage', () => {
     expect(screen.queryByLabelText(/^@abby/)).toBeNull();
   });
 
-  it('marks unread with an ink dot and severity with a word', () => {
+  it('marks unread with an ink dot and the level with the Pill, a dot and the word', () => {
     render(<OutputsScreen />);
-    expect(screen.getByText('ERROR')).toBeTruthy();
-    expect(screen.getByText('WARNING')).toBeTruthy();
-    expect(screen.queryByText('INFO')).toBeNull();
+    expect(screen.getByText('error')).toBeTruthy();
+    expect(screen.getByText('warning')).toBeTruthy();
+    expect(screen.queryByText('info')).toBeNull();
+    expect(screen.queryByText('WARNING')).toBeNull();
   });
 
   it('keeps the row being read in Unread after it turns read, until the reader moves on', async () => {

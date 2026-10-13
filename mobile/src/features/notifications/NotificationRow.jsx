@@ -3,26 +3,35 @@ import { Pressable, Text, View } from 'react-native';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 
 import { FALLBACK_ACCENT } from '../../../../common/folds.mjs';
-import { headlineParts } from '../../../../common/notificationHeadline.mjs';
+import { notificationParts } from '../../../../common/notificationParts.mjs';
+import { notificationTime } from '../../../../common/notificationTime.mjs';
 import { Fold } from '../../components/Fold';
-import { fmtRelative, severityTag } from '../../lib/outputsFormat';
+import { Pill } from '../../components/Pill';
+import { profileLabel } from '../../lib/profileName';
 import { useReduceMotion } from '../../lib/reduceMotion';
 import { useTheme } from '../../theme/ThemeContext';
-import { dotSize, mobile, radii, space } from '../../theme/tokens';
-import { SeverityTag } from './SeverityTag';
+import { dotSize, lineHeights, mobile, radii, space } from '../../theme/tokens';
 
 const REDUCED = { reduceMotion: 'always' };
 const ACTION_W = 76;
 
-export function rowA11yLabel(row, { unread, multi }) {
-  const { title } = headlineParts(row);
-  const sev = severityTag(row);
+export function levelOf(row) {
+  return row?.type === 'warning' || row?.type === 'error' ? row.type : null;
+}
+
+export function LevelPill({ row }) {
+  const level = levelOf(row);
+  return level ? <Pill tone={level === 'error' ? 'err' : 'warn'}>{level}</Pill> : null;
+}
+
+export function rowA11yLabel(row, { unread, multi, dayGroup = true }) {
+  const { headline } = notificationParts(row);
   return [
     unread ? 'Unread' : null,
-    sev ? sev.toLowerCase() : null,
-    `@${row.profile}${multi && row.connectionName ? ` on ${row.connectionName}` : ''}`,
-    title,
-    fmtRelative(row.created_at),
+    levelOf(row),
+    `@${profileLabel(row.profile)}${multi && row.connectionName ? ` on ${row.connectionName}` : ''}`,
+    headline,
+    notificationTime(row.created_at, { dayGroup }),
   ].filter(Boolean).join(', ');
 }
 
@@ -40,12 +49,12 @@ function SwipeAction({ label, onPress, fg, bg }) {
   );
 }
 
-export function NotificationRow({ row, unread, multi, selected = false, canToggleRead = true, onOpen, onToggleRead, onDelete }) {
+export function NotificationRow({ row, unread, multi, dayGroup = true, selected = false, canToggleRead = true, onOpen, onToggleRead, onDelete }) {
   const { colors, fonts, fontSizes } = useTheme();
   const reduceMotion = useReduceMotion();
   const swipeRef = useRef(null);
   const accent = row.accent ?? FALLBACK_ACCENT;
-  const { title, preview } = headlineParts(row);
+  const { headline, preview } = notificationParts(row);
   const toggleLabel = unread ? 'Mark read' : 'Mark unread';
   const showToggle = unread || canToggleRead;
 
@@ -88,7 +97,7 @@ export function NotificationRow({ row, unread, multi, selected = false, canToggl
         onPress={() => onOpen?.(row)}
         accessibilityRole="button"
         accessibilityState={{ selected }}
-        accessibilityLabel={rowA11yLabel(row, { unread, multi })}
+        accessibilityLabel={rowA11yLabel(row, { unread, multi, dayGroup })}
         accessibilityActions={a11yActions}
         onAccessibilityAction={onAccessibilityAction}
         style={({ pressed }) => ({
@@ -113,24 +122,24 @@ export function NotificationRow({ row, unread, multi, selected = false, canToggl
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2, flexWrap: 'wrap' }}>
             <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: ink, flexShrink: 1 }}>
-              @{row.profile}
+              @{profileLabel(row.profile)}
             </Text>
             {multi && row.connectionName ? (
               <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3, flexShrink: 1 }}>
-                {row.connectionName}
+                · {row.connectionName}
               </Text>
             ) : null}
             <View style={{ flex: 1 }} />
-            <SeverityTag row={row} />
+            <LevelPill row={row} />
             <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
-              {fmtRelative(row.created_at)}
+              {notificationTime(row.created_at, { dayGroup })}
             </Text>
           </View>
-          <Text style={{ fontFamily: weight, fontSize: fontSizes.lg, color: ink }} numberOfLines={2}>
-            {title}
+          <Text style={{ fontFamily: weight, fontSize: fontSizes.lg, color: ink }} numberOfLines={1}>
+            {headline}
           </Text>
           {preview ? (
-            <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }} numberOfLines={1}>
+            <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * lineHeights.cozy, color: colors.ink3 }} numberOfLines={2}>
               {preview}
             </Text>
           ) : null}

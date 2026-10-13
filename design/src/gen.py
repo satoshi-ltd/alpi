@@ -250,7 +250,9 @@ def pill(text, on=False, tone="off"):
     if tone == "success":
         return f'<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 2px; background: rgba(63,179,122,0.16); font-family: {MONO}; font-size: 12px; color: #217a45"><span style="width: 7px; height: 7px; border-radius: 999px; background: #217a45"></span>{text}</span>'
     if tone == "warning":
-        return f'<span style="display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 2px; background: rgba(224,138,60,0.16); font-family: {MONO}; font-size: 12px; color: #b3470e">{text}</span>'
+        return f'<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 2px; background: rgba(20,20,20,0.04); font-family: {MONO}; font-size: 12px; color: #141414"><span style="width: 7px; height: 7px; border-radius: 999px; background: #e08a3c"></span>{text}</span>'
+    if tone == "danger":
+        return f'<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 2px; background: rgba(193,69,69,0.16); font-family: {MONO}; font-size: 12px; color: #b73737"><span style="width: 7px; height: 7px; border-radius: 999px; background: #c14545"></span>{text}</span>'
     dot = "#217a45" if on else "#b4b4b4"
     return f'<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 2px; background: #f2f2f2; font-family: {MONO}; font-size: 12px; color: {"#217a45" if on else "#6b6b6b"}"><span style="width: 7px; height: 7px; border-radius: 999px; background: {dot}"></span>{"on" if on else "off"}</span>'
 

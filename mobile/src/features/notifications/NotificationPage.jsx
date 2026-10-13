@@ -4,20 +4,20 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { mixHex } from '../../../../common/color.mjs';
 import { FALLBACK_ACCENT } from '../../../../common/folds.mjs';
-import { headlineParts } from '../../../../common/notificationHeadline.mjs';
+import { notificationParts } from '../../../../common/notificationParts.mjs';
+import { notificationStamp } from '../../../../common/notificationTime.mjs';
 import { notificationKey } from '../../../../common/notificationTriage.mjs';
 import { deletedMessage } from '../../../../common/undoBatch.mjs';
 import { ActionSheet } from '../../components/ActionSheet';
 import { Button } from '../../components/Button';
 import { Fold } from '../../components/Fold';
 import { Icon } from '../../components/Icon';
-import { ErrorCard, NotificationBody } from '../../components/NotificationBody';
+import { Deck, ErrorCard, NotificationBody } from '../../components/NotificationBody';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { useToast } from '../../components/Toast';
 import { isForeignConnection } from '../aln/deeplink';
-import { SeverityTag } from './SeverityTag';
+import { LevelPill } from './NotificationRow';
 import { useIsAdmin } from '../../hooks/useActiveRole';
 import { isMissingVerb } from '../../hooks/useActivity';
 import { useBack } from '../../hooks/useBack';
@@ -25,9 +25,10 @@ import { useProfileSummaries } from '../../hooks/useDaemonData';
 import { unreadMissingKey, useNotificationActions, useOutput } from '../../hooks/useOutputs';
 import { useEndpoint } from '../../lib/EndpointContext';
 import { freeze, noteUnreadMissing, trailPosition, UNDO_MS, useNotificationStore } from '../../lib/notificationStore';
-import { clip, fmtRelative, openChatTarget, replyDraft } from '../../lib/outputsFormat';
+import { clip, openChatTarget, replyDraft } from '../../lib/outputsFormat';
+import { profileLabel } from '../../lib/profileName';
 import { useTheme } from '../../theme/ThemeContext';
-import { mobile, radii, space } from '../../theme/tokens';
+import { lineHeights, mobile, radii, space } from '../../theme/tokens';
 import { ReaderSkeleton } from '../../components/ReaderSkeleton';
 
 
@@ -54,7 +55,7 @@ function IconButton({ name, label, onPress }) {
 
 
 export function NotificationPage({ profile, id, connectionId, embedded = false, onStep, onClose }) {
-  const { colors, fonts, fontSizes, mode } = useTheme();
+  const { colors, fonts, fontSizes } = useTheme();
   const router = useRouter();
   const routeBack = useBack();
   const goBack = embedded ? (onClose ?? (() => {})) : routeBack;
@@ -85,7 +86,6 @@ export function NotificationPage({ profile, id, connectionId, embedded = false, 
     [summaries.data, row?.profile, profile],
   );
   const accent = summary?.accent ?? FALLBACK_ACCENT;
-  const nameInk = typeof accent === 'string' && accent.startsWith('#') ? mixHex(accent, mode === 'dark' ? 0.78 : 0.62, colors.ink) : colors.ink;
   const connectionName = (connections ?? []).length > 1
     ? (connections ?? []).find((c) => c.id === connectionId)?.name ?? null
     : null;
@@ -103,7 +103,7 @@ export function NotificationPage({ profile, id, connectionId, embedded = false, 
   const onCopy = async () => {
     if (!row) return;
     try {
-      await Clipboard.setStringAsync(String(row.body ?? ''));
+      await Clipboard.setStringAsync([notificationParts(row).givenSummary, String(row.body ?? '')].filter(Boolean).join('\n\n'));
       toast({ title: 'Copied' });
     } catch {
       toast({ title: 'Copy failed', kind: 'danger' });
@@ -137,7 +137,7 @@ export function NotificationPage({ profile, id, connectionId, embedded = false, 
     const next = position?.next ?? null;
     const count = actions.remove(target, { onError: (e) => toast({ message: `Delete failed: ${String(e?.message ?? e)}`, kind: 'danger' }) });
     toast({
-      message: deletedMessage(count, clip(headlineParts(row).title || 'notification', 48)),
+      message: deletedMessage(count, clip(notificationParts(row).headline || 'notification', 48)),
       action: 'Undo',
       onAction: () => { if (!actions.undoRemove()) toast({ message: 'Already deleted' }); },
       duration: UNDO_MS,
@@ -176,7 +176,8 @@ export function NotificationPage({ profile, id, connectionId, embedded = false, 
     </>
   ) : null;
 
-  const title = (row?.title || '').trim();
+  const parts = notificationParts(row);
+  const title = parts.title;
   const menu = [
     { id: 'copy', label: 'Copy', onPress: onCopy },
     ...(chatTarget ? [{ id: 'chat', label: 'Open chat', onPress: () => router.push(chatTarget) }] : []),
@@ -222,27 +223,28 @@ export function NotificationPage({ profile, id, connectionId, embedded = false, 
       ) : (
         <>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: space.s7, gap: space.s5, paddingBottom: space.s10 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3, flexWrap: 'wrap' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2, flexWrap: 'wrap' }}>
               <Fold fold={summary?.fold} color={accent} size={20} />
-              <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: nameInk }}>
-                {row.profile}
+              <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.md, color: colors.ink }}>
+                @{profileLabel(row.profile)}
               </Text>
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
-                {[connectionName, `${fmtRelative(row.created_at)} ago`].filter(Boolean).join(' · ')}
+              <Text style={{ flexShrink: 1, fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
+                {[connectionName, notificationStamp(row.created_at)].filter(Boolean).map((part) => `· ${part}`).join(' ')}
               </Text>
-              {failure ? null : <SeverityTag row={row} />}
+              {failure ? null : <LevelPill row={row} />}
             </View>
 
             {failure ? (
-              <ErrorCard title={title} body={row.body || ''} actions={jobActions} />
+              <ErrorCard title={title} summary={parts.givenSummary} body={row.body || ''} actions={jobActions} />
             ) : (
               <>
                 {title ? (
-                  <Text accessibilityRole="header" style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.xxl, color: colors.ink }}>
+                  <Text selectable accessibilityRole="header" style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.xxl, lineHeight: fontSizes.xxl * lineHeights.cozy, color: colors.ink }}>
                     {title}
                   </Text>
                 ) : null}
-                <NotificationBody body={row.body || ''} lead={!title} />
+                {!parts.fromBody && parts.summary ? <Deck text={parts.summary} asTitle={!title} /> : null}
+                <NotificationBody body={row.body || ''} lead={parts.fromBody ? (title ? 'deck' : 'title') : null} />
               </>
             )}
           </ScrollView>

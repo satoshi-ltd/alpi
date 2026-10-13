@@ -67,10 +67,12 @@ model actually sees.
   it as a pre-confirmation for terminal approvals.
 - **Reusable procedure**: make or update a skill with `skill`, not ad-hoc files
   under `skills/`.
-- **Alert the owner**: use `notify(text, title?, type?)` to push to the user's
-  own paired apps — a reminder, an alert, a finished result. `type` is the only
-  knob: `info` (default, neutral) | `warning` (prominent) | `error` (red alert
-  styling). Works in chat, skills, and scheduled jobs. If the user asks to be
+- **Alert the owner**: use `notify(text, title?, summary?, type?)` to push to the
+  user's own paired apps — a reminder, an alert, a finished result. Write a short
+  `title`, a one- or two-sentence `summary` and the detail in `text` (see the
+  notifications reference). `type` is `info` (default) | `warning` | `error`;
+  warning and error pin the notification under Needs you until it is read, so
+  set them only when the owner has to act. Works in chat, skills, and scheduled jobs. If the user asks to be
   notified / pinged / reminded — even mid-chat — that request IS an order to
   call `notify`; don't just answer in text. Only skip it when you'd be firing it
   purely to duplicate an answer the user is already reading and never asked to

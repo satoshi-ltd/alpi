@@ -79,10 +79,101 @@ pub struct Deeplink {
     pub connection_id: String,
 }
 
-fn notification_lines(title: &str, body: &str, profile: &str) -> (String, String) {
-    let title = title.trim();
-    let head = if title.is_empty() { profile.to_string() } else { title.to_string() };
-    (head, body.trim().to_string())
+fn profile_handle(profile: &str) -> String {
+    match profile.trim() {
+        "" => String::new(),
+        "default" => "@alpi".to_string(),
+        name => format!("@{}", name),
+    }
+}
+
+const NO_PROSE: &str = "Open it to read the detail.";
+
+fn strip_inline_marks(text: &str) -> String {
+    text.replace("**", "").replace('`', "")
+}
+
+fn strip_line_marks(line: &str) -> &str {
+    let mut rest = line.trim_start();
+    loop {
+        let hashes = rest.len() - rest.trim_start_matches('#').len();
+        let after = &rest[hashes..];
+        if (1..=6).contains(&hashes) && after.starts_with(char::is_whitespace) {
+            rest = after.trim_start();
+        } else if let Some(after) = ["> ", "- ", "* ", "• ", "| "].iter().find_map(|mark| rest.strip_prefix(mark)) {
+            rest = after.trim_start();
+        } else {
+            return rest;
+        }
+    }
+}
+
+fn clean_title(title: &str, legacy: bool) -> String {
+    let title = strip_line_marks(title.trim());
+    if legacy { strip_inline_marks(title).trim().to_string() } else { title.trim().to_string() }
+}
+
+fn is_rule_line(line: &str) -> bool {
+    line.chars().all(|c| matches!(c, '-' | '|' | ':' | ' ' | '*' | '_'))
+}
+
+// Older daemons send no summary, so the banner takes the body's first readable line instead of its raw markdown.
+fn is_heading(line: &str) -> bool {
+    let hashes = line.len() - line.trim_start_matches('#').len();
+    (1..=6).contains(&hashes) && line[hashes..].starts_with(char::is_whitespace)
+}
+
+fn first_readable_line(body: &str) -> String {
+    let mut fence = false;
+    let mut heading = String::new();
+    for raw in body.lines() {
+        let line = raw.trim();
+        if line.starts_with("```") || line.starts_with("~~~") {
+            fence = !fence;
+            continue;
+        }
+        if fence || line.is_empty() || line.starts_with('|') || is_rule_line(line) {
+            continue;
+        }
+        let text = strip_inline_marks(strip_line_marks(line)).trim().to_string();
+        if text.is_empty() {
+            continue;
+        }
+        if !is_heading(line) {
+            return text;
+        }
+        if heading.is_empty() {
+            heading = text;
+        }
+    }
+    heading
+}
+
+// The daemon sends the profile name as the title when the row has none, so that value means "untitled".
+fn notification_lines(title: &str, summary: Option<&str>, body: &str, level: &str, profile: &str) -> (String, String) {
+    let handle = profile_handle(profile);
+    let title = if title.trim() == profile.trim() { String::new() } else { clean_title(title, summary.is_none()) };
+    let head = match (handle.is_empty(), title.is_empty()) {
+        (true, _) => title,
+        (false, true) => handle,
+        (false, false) => format!("{} · {}", handle, title),
+    };
+    let text = match summary.map(str::trim) {
+        Some(given) if !given.is_empty() => given.to_string(),
+        _ if body.trim().is_empty() => String::new(),
+        Some(_) => NO_PROSE.to_string(),
+        None => {
+            let line = first_readable_line(body);
+            if line.is_empty() { NO_PROSE.to_string() } else { line }
+        }
+    };
+    let prefix = match level {
+        "warning" => "Warning · ",
+        "error" => "Failed · ",
+        _ => "",
+    };
+    let line = if text.is_empty() { String::new() } else { format!("{}{}", prefix, text) };
+    (head, line)
 }
 
 // Polled and replayed frames only: the daemon auto-resolves a request at ts + timeout_s, and a live frame must not hinge on clock skew between hosts.
@@ -342,8 +433,10 @@ pub fn dispatch_daemon_frame(
                 .unwrap_or("")
                 .to_string();
             let title = data.get("title").and_then(|v| v.as_str()).unwrap_or("");
+            let summary = data.get("summary").and_then(|v| v.as_str());
             let body = data.get("body").and_then(|v| v.as_str()).unwrap_or("");
-            let (notif_title, notif_body) = notification_lines(title, body, &profile);
+            let level = data.get("type").and_then(|v| v.as_str()).unwrap_or("info");
+            let (notif_title, notif_body) = notification_lines(title, summary, body, level, &profile);
             if notif_body.is_empty() {
                 return;
             }
@@ -460,7 +553,7 @@ pub fn dispatch_daemon_disconnect(app: &AppHandle, connection_id: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::{clarification_lines, notification_lines, replay_expired, request_expired, schedule_failure_body};
+    use super::{clarification_lines, notification_lines, replay_expired, request_expired, schedule_failure_body, NO_PROSE};
 
     #[test]
     fn a_replayed_request_past_its_deadline_raises_no_banner() {
@@ -495,34 +588,82 @@ mod tests {
     }
 
     #[test]
-    fn explicit_title_keeps_the_body() {
+    fn banner_leads_with_handle_and_title_over_the_summary() {
         assert_eq!(
-            notification_lines("Sync failed", "details", "doc"),
-            ("Sync failed".to_string(), "details".to_string()),
+            notification_lines("Sync failed", Some("Exit 1 after 3 retries."), "## Detail\n- trace", "info", "doc"),
+            ("@doc · Sync failed".to_string(), "Exit 1 after 3 retries.".to_string()),
         );
     }
 
     #[test]
-    fn missing_title_falls_back_to_profile() {
+    fn banner_falls_back_to_the_body_for_an_older_daemon() {
         assert_eq!(
-            notification_lines("", "details", "doc"),
-            ("doc".to_string(), "details".to_string()),
+            notification_lines("Sync failed", None, "  details  ", "info", "doc"),
+            ("@doc · Sync failed".to_string(), "details".to_string()),
+        );
+        assert_eq!(
+            notification_lines("## **Alert**", None, "```text\ntrace\n```\n> **Three** replies `wait`", "info", "doc"),
+            ("@doc · Alert".to_string(), "Three replies wait".to_string()),
+        );
+        assert_eq!(notification_lines("T", None, "| a |\n|---|", "info", "doc").1, NO_PROSE.to_string());
+    }
+
+    #[test]
+    fn a_hash_or_sign_that_is_not_markup_stays() {
+        assert_eq!(notification_lines("#482 needs your review", Some("s"), "b", "info", "sentinel").0, "@sentinel · #482 needs your review".to_string());
+        assert_eq!(notification_lines("Fix __init__ and **kwargs**", Some("s"), "b", "info", "p").0, "@p · Fix __init__ and **kwargs**".to_string());
+        assert_eq!(notification_lines("T", None, "-9% chats today", "info", "p").1, "-9% chats today".to_string());
+        assert_eq!(notification_lines("T", None, "- *really* done", "info", "p").1, "*really* done".to_string());
+    }
+
+    #[test]
+    fn an_older_daemon_banner_skips_headings_for_the_first_prose_line() {
+        assert_eq!(notification_lines("T", None, "## Volume\nTraffic fell 9% today.", "info", "p").1, "Traffic fell 9% today.".to_string());
+        assert_eq!(notification_lines("T", None, "## Only a heading", "info", "p").1, "Only a heading".to_string());
+    }
+
+    #[test]
+    fn a_body_without_prose_reads_as_open_it_never_as_markdown() {
+        assert_eq!(notification_lines("T", Some(""), "```\ncode\n```", "info", "doc").1, NO_PROSE.to_string());
+        assert_eq!(notification_lines("T", Some(""), "```\ncode\n```", "error", "doc").1, format!("Failed · {}", NO_PROSE));
+    }
+
+    #[test]
+    fn untitled_banner_is_the_handle_alone() {
+        assert_eq!(
+            notification_lines("doc", Some("summary"), "body", "info", "doc"),
+            ("@doc".to_string(), "summary".to_string()),
+        );
+        assert_eq!(
+            notification_lines("", Some("summary"), "body", "info", "doc"),
+            ("@doc".to_string(), "summary".to_string()),
         );
     }
 
     #[test]
-    fn empty_title_and_profile_yields_empty_head() {
+    fn default_profile_reads_as_alpi() {
         assert_eq!(
-            notification_lines("   ", "details", ""),
-            (String::new(), "details".to_string()),
+            notification_lines("Ready", Some("s"), "b", "info", "default").0,
+            "@alpi · Ready".to_string(),
         );
     }
 
     #[test]
-    fn trims_title_and_body() {
+    fn banner_opens_with_the_level_word() {
+        assert_eq!(notification_lines("T", Some("s"), "b", "warning", "p").1, "Warning · s".to_string());
+        assert_eq!(notification_lines("T", Some("s"), "b", "error", "p").1, "Failed · s".to_string());
+    }
+
+    #[test]
+    fn empty_summary_and_body_yield_an_empty_line() {
+        assert_eq!(notification_lines("T", Some(" "), "  ", "warning", "p").1, String::new());
+    }
+
+    #[test]
+    fn missing_profile_keeps_the_title_alone() {
         assert_eq!(
-            notification_lines("  T  ", "  b  ", "p"),
-            ("T".to_string(), "b".to_string()),
+            notification_lines("  T  ", Some("s"), "b", "info", ""),
+            ("T".to_string(), "s".to_string()),
         );
     }
 

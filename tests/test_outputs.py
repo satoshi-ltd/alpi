@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -258,3 +259,112 @@ def test_cli_unread_goes_through_the_daemon_when_it_runs(tmp_path, monkeypatch) 
     assert result.exit_code == 0, result.output
     assert calls == [("host.outputs.mark_unread", {"profile": "default", "id": out["id"]})]
     assert outputs_mod.read(tmp_path, out["id"])["status"] == "read"
+
+
+FIXTURES = Path(__file__).resolve().parents[1] / "common" / "notificationSummary.fixtures.mjs"
+CASE_ROW = re.compile(r'^\s*\[("(?:[^"\\]|\\.)*"), ("(?:[^"\\]|\\.)*")\],$', re.M)
+CASES = [(json.loads(body), json.loads(summary)) for body, summary in CASE_ROW.findall(FIXTURES.read_text(encoding="utf-8"))]
+
+
+def test_the_shared_summary_corpus_is_readable() -> None:
+    assert len(CASES) == FIXTURES.read_text(encoding="utf-8").count("\n  [")
+
+
+@pytest.mark.parametrize(("body", "summary"), CASES, ids=lambda v: v[:32] or "empty")
+def test_derive_summary_matches_the_shared_corpus(body: str, summary: str) -> None:
+    assert outputs_mod.derive_summary(body) == summary
+
+
+def test_derived_summary_never_exceeds_the_cap_or_ends_on_a_colon() -> None:
+    for body, _expected in CASES:
+        summary = outputs_mod.derive_summary(body)
+        assert len(summary) <= outputs_mod.SUMMARY_MAX
+        assert not summary.endswith(":")
+
+
+def test_append_stores_no_derived_summary_but_the_message_derives_one(home: Path) -> None:
+    out = _append(home, body="**Normal day, volume at the floor of the week, alert is a base effect.**\n\n## Volume\n- 1,743 chats")
+    assert "summary" not in out
+    assert "summary" not in outputs_mod.read(home, out["id"])
+    assert outputs_mod.message_summary(out) == "Normal day, volume at the floor of the week, alert is a base effect."
+
+
+def test_append_keeps_a_given_summary_as_plain_text(home: Path) -> None:
+    out = _append(home, body="detail", summary="## **Three** findings fixed:\n- one")
+    assert out["summary"] == "Three findings fixed: one"
+
+
+def test_append_clips_a_long_given_summary(home: Path) -> None:
+    out = _append(home, body="detail", summary="word " * 80)
+    assert len(out["summary"]) <= outputs_mod.SUMMARY_MAX
+    assert out["summary"].endswith("…")
+
+
+def test_append_omits_the_summary_when_the_body_has_no_prose(home: Path) -> None:
+    out = _append(home, body="```text\ntrace\n```")
+    assert "summary" not in out
+
+
+def test_rows_keep_a_given_summary_and_drop_a_malformed_one_without_deriving(home: Path) -> None:
+    path = outputs_mod._store_path(home)
+    path.parent.mkdir(parents=True)
+    legacy = {"id": "aaaaaaaaaaaa", "profile": "default", "created_at": 1.0, "body": "Intro line:\n- the point", "type": "info", "status": "unread"}
+    kept = {"id": "bbbbbbbbbbbb", "profile": "default", "created_at": 2.0, "body": "body", "summary": "stored", "type": "info", "status": "unread"}
+    broken = {"id": "cccccccccccc", "profile": "default", "created_at": 3.0, "body": "body", "summary": ["x"], "type": "info", "status": "unread"}
+    path.write_text("\n".join(json.dumps(row) for row in (legacy, kept, broken)) + "\n")
+    assert "summary" not in outputs_mod.read(home, "aaaaaaaaaaaa")
+    assert outputs_mod.read(home, "bbbbbbbbbbbb")["summary"] == "stored"
+    assert "summary" not in outputs_mod.read(home, "cccccccccccc")
+    outputs_mod.mark_read(home, "aaaaaaaaaaaa")
+    assert "summary" not in json.loads(path.read_text().split("\n")[0])
+
+
+def test_title_loses_markdown_but_keeps_hashes_inside() -> None:
+    assert outputs_mod.normalize_notification_title("## **PR #482** is `ready`") == "PR #482 is ready"
+
+
+def test_a_line_separator_inside_a_row_does_not_drop_it(home: Path) -> None:
+    first = _append(home, body="before")
+    odd = _append(home, body="one\u2028two\u2029three\x85four")
+    last = _append(home, body="after")
+    ids = {it["id"] for it in outputs_mod.list_outputs(home)}
+    assert ids == {first["id"], odd["id"], last["id"]}
+    outputs_mod.mark_read(home, first["id"])
+    assert {it["id"] for it in outputs_mod.list_outputs(home)} == ids
+
+
+def test_code_spans_and_urls_keep_their_underscores_and_stars() -> None:
+    assert outputs_mod.normalize_notification_title("Fix `__init__` and `**kwargs**` handling") == "Fix __init__ and **kwargs** handling"
+    assert outputs_mod.derive_summary("See https://x.example/_private_/path and `2**10 and 3**4`.") == "See https://x.example/_private_/path and 2**10 and 3**4."
+
+
+def test_a_nul_in_the_text_cannot_reach_the_placeholders(home: Path) -> None:
+    out = _append(home, body="x\x005\x00 y", title="a\x000\x00b `c`")
+    assert out["title"] == "a0b c"
+    assert outputs_mod.message_summary(out) == "x5 y"
+    assert outputs_mod.list_outputs(home)[0]["id"] == out["id"]
+
+
+@pytest.mark.parametrize("value", [5, True, {"text": "x"}, None])
+def test_text_arg_turns_non_text_into_nothing(value) -> None:
+    assert outputs_mod.text_arg(value) == ""
+
+
+def test_text_arg_joins_a_list_of_strings() -> None:
+    assert outputs_mod.text_arg(["Done.", "All good."]) == "Done. All good."
+
+
+def test_given_summary_hides_one_the_body_already_opens_with(home: Path) -> None:
+    out = _append(home, body="Three replies wait on you.\n\n## Inbox\n- a", summary="Three replies wait on you.")
+    assert outputs_mod.given_summary(out) == ""
+    other = _append(home, body="## Inbox\n- a", summary="Three replies wait on you.")
+    assert outputs_mod.given_summary(other) == "Three replies wait on you."
+
+
+def test_a_stored_title_survives_reads_and_rewrites_unchanged(home: Path) -> None:
+    out = _append(home, body="b", title="Fix `**kwargs**` and `_private_`")
+    assert out["title"] == "Fix **kwargs** and _private_"
+    assert outputs_mod.read(home, out["id"])["title"] == "Fix **kwargs** and _private_"
+    outputs_mod.mark_read(home, out["id"])
+    outputs_mod.mark_unread(home, out["id"])
+    assert outputs_mod.read(home, out["id"])["title"] == "Fix **kwargs** and _private_"

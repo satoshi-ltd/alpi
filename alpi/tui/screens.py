@@ -642,6 +642,7 @@ class OutputsPanel(FloatingPanel):
     def compose_body(self) -> ComposeResult:
         from datetime import datetime
 
+        from alpi import outputs as outputs_mod
         from alpi.tui.list_row import build_options
 
         rows = list_output_rows(self.home)
@@ -654,7 +655,7 @@ class OutputsPanel(FloatingPanel):
             self._rows[oid] = it
             dot = "●" if it.get("status") == "unread" else "○"
             ts = datetime.fromtimestamp(float(it.get("created_at") or 0)).strftime("%m-%d %H:%M")
-            title = it.get("title") or (it.get("body") or "")[:60].replace("\n", " ")
+            title = it.get("title") or outputs_mod.message_summary(it) or (it.get("body") or "")[:60].replace("\n", " ")
             items.append((oid, f"{dot} {title}", f"{ts} · {it.get('type', 'info')}"))
         accent = self.app.theme_variables.get("accent")
         yield OptionList(*build_options(items, accent=accent), id="outputs-options", compact=True)
@@ -694,9 +695,14 @@ class OutputDetailPanel(FloatingPanel):
     def compose_body(self) -> ComposeResult:
         from datetime import datetime
 
+        from alpi import outputs as outputs_mod
+
         ts = datetime.fromtimestamp(float(self.item.get("created_at") or 0)).strftime("%Y-%m-%d %H:%M")
         yield Static(f"{ts} · {self.item.get('type', 'info')} · {self.item.get('id')}", classes="entry-desc")
+        summary = outputs_mod.given_summary(self.item)
         with VerticalScroll():
+            if summary:
+                yield Static(summary, markup=False)
             yield Markdown(str(self.item.get("body") or ""))
 
 

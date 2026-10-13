@@ -223,3 +223,16 @@ describe("error parts", () => {
     expect(failedTitle("Backup")).toEqual({ lead: "Backup", failed: false });
   });
 });
+
+describe("parseNotificationBody — long bold and ### lines", () => {
+  it("keeps a short whole-line bold or ### as a label", () => {
+    expect(parseNotificationBody("**Volume**")).toEqual([{ kind: "label", label: "Volume" }]);
+    expect(parseNotificationBody("### Funnel:")).toEqual([{ kind: "label", label: "Funnel" }]);
+  });
+
+  it("turns a long whole-line bold or ### into a bold paragraph, never a label", () => {
+    const lead = "Normal day, volume at the week's floor and the alert is a base effect.";
+    expect(parseNotificationBody(`**${lead}**`)).toEqual([{ kind: "p", text: lead, strong: true }]);
+    expect(parseNotificationBody(`### ${lead}`)).toEqual([{ kind: "p", text: lead, strong: true }]);
+  });
+});

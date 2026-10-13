@@ -118,7 +118,7 @@ export default function AddPeer() {
                     onPress={() => toggle(s.id)}
                     style={{ flexDirection: 'row', alignItems: 'center', gap: space.s4, paddingVertical: space.s1 }}
                   >
-                    <Pill tone={on ? 'on' : undefined} off={!on}>● {s.id}</Pill>
+                    <Pill tone={on ? 'on' : undefined} off={!on}>{s.id}</Pill>
                     <Text
                       style={{ flex: 1, fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}
                     >
