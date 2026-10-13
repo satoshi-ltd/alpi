@@ -1569,6 +1569,18 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   client cannot decode is set aside as `connections.corrupt-<time>.json` and an
   unreadable one is never overwritten.
 
+- **A chart is a ```` ```chart ```` block of JSON inside the text.** Every profile learns it from one
+  line of the system prompt's environment block (`prompt_cache.CHART_LINE`); there is no chart tool.
+  The spec is `{type: line|bar, stacked?, title?, unit?, x: [labels], series: [{name?, values: [numbers or
+  null]}]}` with one value per label, at most four series, 2 to 60 points for a line and up to 24 bars;
+  `stacked` refuses negative values and only stacks a bar with two series or more. `alpi/charts.py` (`parse_chart`, `render_text`, `textify`)
+  and `common/chartSpec.mjs` (`parseChart`, `chartLayout`, `chartSvg`, `describeChart`) validate the
+  same way, tested against `common/chartSpec.fixtures.mjs`. Desktop draws a valid block as SVG in chat,
+  workgroup and notification Markdown, the phone with `react-native-svg`, both with the first series in
+  the speaking profile's accent and the rest in ink (a comparison line dashed), bars lying down when a
+  label is longer than 8 characters or there are more than 8 and no value is negative; the TUI and `alpi outputs show` draw a
+  sparkline or block bars. An invalid block, and every block on an older client, stays a code block;
+  banners and inbox rows never show charts, since the summary derivation skips code.
 - **Two messaging intents: `notify` (owner) vs `send_message` (third party).**
   `notify(text, title?, summary?, type?)` pushes to the OWNER's own paired Alpi apps —
   it files an inbox row in `~/.alpi/outputs/` and emits the `agent.message`

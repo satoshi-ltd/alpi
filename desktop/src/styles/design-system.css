@@ -518,6 +518,45 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
   border-top: .5px solid var(--line);
 }
 
+.md-chart {
+  --chart-1: var(--ink);
+  --chart-2: var(--ink-3);
+  --chart-3: var(--ink-4);
+  --chart-4: var(--ink-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: 560px;
+  margin: var(--space-5) 0;
+}
+[style*="--chart-accent"] .md-chart,
+.md-chart[style*="--chart-accent"] {
+  --chart-1: var(--chart-accent);
+  --chart-2: color-mix(in oklch, var(--chart-accent) 58%, var(--ink));
+  --chart-3: color-mix(in oklch, var(--chart-accent) 40%, var(--bg-pane));
+  --chart-4: color-mix(in oklch, var(--chart-accent) 55%, var(--ink-3));
+}
+.md-chart svg { width: 100%; height: auto; }
+.md-chart .ch-title { font-size: var(--fs-sm); font-weight: var(--fw-semibold); color: var(--ink); }
+.md-chart .ch-grid { stroke: var(--line-2); stroke-width: .5; }
+.md-chart .ch-tick,
+.md-chart .ch-value { font-family: var(--font-mono); font-size: 10px; fill: var(--ink-3); }
+.md-chart .ch-value { fill: var(--ink); }
+.md-chart .ch-label { font-size: 11px; fill: var(--ink-2); }
+.md-chart .ch-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.md-chart .ch-line.ch-dashed { stroke-width: 1.5; stroke-dasharray: 3 3; }
+.md-chart .ch-s0 { --chart-series: var(--chart-1); }
+.md-chart .ch-s1 { --chart-series: var(--chart-2); }
+.md-chart .ch-s2 { --chart-series: var(--chart-3); }
+.md-chart .ch-s3 { --chart-series: var(--chart-4); }
+.md-chart .ch-line { stroke: var(--chart-series); }
+.md-chart .ch-bar,
+.md-chart .ch-dot { fill: var(--chart-series); }
+.md-chart .ch-legend { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); font-family: var(--font-mono); font-size: var(--text-meta); color: var(--ink-2); }
+.md-chart .ch-key { display: inline-flex; align-items: center; gap: var(--space-2); }
+.md-chart .ch-swatch { width: 9px; height: 9px; border-radius: 2px; background: var(--chart-series); }
+.md-chart .ch-swatch.ch-dashed { width: 12px; height: 0; border-radius: 0; background: none; border-top: 1.5px dashed var(--chart-series); }
+
 /* Fenced code — header strip (language label) wrapping a reset <pre>. */
 .alpi-md .md-code {
   margin: var(--space-5) 0;

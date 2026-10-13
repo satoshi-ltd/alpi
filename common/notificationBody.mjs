@@ -1,3 +1,5 @@
+import { parseChart } from "./chartSpec.mjs";
+
 export const LABEL_MAX_CHARS = 32;
 export const LABEL_MAX_WORDS = 5;
 
@@ -100,11 +102,13 @@ export function parseNotificationBody(body) {
     const line = lines[i].replace(/\s+$/, "");
 
     if (FENCE.test(line)) {
+      const lang = line.trim().slice(3).trim().split(/\s+/)[0];
       const buf = [];
       i += 1;
       while (i < lines.length && !FENCE.test(lines[i])) { buf.push(lines[i]); i += 1; }
       i += 1;
-      blocks.push({ kind: "code", text: buf.join("\n") });
+      const spec = lang === "chart" ? parseChart(buf.join("\n")) : null;
+      blocks.push(spec ? { kind: "chart", spec } : { kind: "code", text: buf.join("\n") });
       continue;
     }
     if (!line.trim() || HR.test(line)) { i += 1; continue; }

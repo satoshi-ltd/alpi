@@ -411,3 +411,14 @@ def test_the_openai_endpoint_is_judged_by_host_like_litellm_does(monkeypatch, ap
     for name, value in env.items():
         monkeypatch.setenv(name, value)
     assert pc._is_openai_endpoint(api_base) is is_openai
+
+
+def test_every_profile_learns_it_can_draw_a_chart(tmp_path: Path) -> None:
+    from alpi import charts
+
+    env = pc.build_parts(tmp_path, _make_cfg(tmp_path))["env"]
+    assert "```chart" in env
+    example = '{"type": "line", "title": "Chats per day", "x": ["Mon", "Tue"], "series": [{"name": "Chats", "values": [3, 4]}]}'
+    assert charts.parse_chart(example) is not None
+    for word in ('"line"|"bar"', '"stacked"', '"series"', '"values"', "never for one or two numbers"):
+        assert word in env

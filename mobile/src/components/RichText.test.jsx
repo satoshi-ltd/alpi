@@ -37,6 +37,10 @@ vi.mock('react-native', () => {
   };
 });
 
+vi.mock('./Chart', () => ({
+  Chart: ({ spec, accent }) => React.createElement('figure', { 'data-chart': spec.type, 'data-accent': accent ?? '' }, spec.title),
+}));
+
 vi.mock('../theme/ThemeContext', async () => {
   const tokens = await import('../theme/tokens');
   return {
@@ -102,5 +106,22 @@ describe('RichText image viewer dismissal', () => {
     const { container } = openViewer();
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(container.querySelector('[data-orientations]')).toBeNull();
+  });
+});
+
+describe('RichText — chart blocks', () => {
+  const block = '```chart\n' + JSON.stringify({ type: 'bar', title: 'Chats by locale', x: ['es-ES', 'en-GB'], series: [{ values: [863, 509] }] }) + '\n```';
+
+  it('draws a valid chart block with the accent it is given', () => {
+    const { container } = render(<RichText accent="#2e7d4f">{`Locales.\n\n${block}`}</RichText>);
+    const figure = container.querySelector('figure[data-chart="bar"]');
+    expect(figure.getAttribute('data-accent')).toBe('#2e7d4f');
+    expect(container.textContent).not.toContain('"series"');
+  });
+
+  it('keeps a broken chart block as code', () => {
+    const { container } = render(<RichText>{'```chart\n{bad}\n```'}</RichText>);
+    expect(container.querySelector('figure')).toBeNull();
+    expect(container.textContent).toContain('{bad}');
   });
 });

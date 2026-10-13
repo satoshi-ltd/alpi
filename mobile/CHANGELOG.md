@@ -14,6 +14,12 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.8.3 — 2026-10-13 — charts in chats, notifications and workgroups
+
+- **Charts drawn by your agents appear in the chat, the notification page and workgroup posts**, fitted to the phone's width, in the profile's colour, with a spoken description for the screen reader.
+
+  Requires alpi 0.17.18 for agents to draw them; older daemons' messages are unchanged.
+
 ## v0.8.2 — 2026-10-11 — a notification reads as a title, a summary and the detail
 
 - **The push shows who sent it and the title, then the summary,** instead of raw markdown; warnings and failures open with Warning or Failed.

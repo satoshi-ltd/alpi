@@ -8,6 +8,8 @@ import { segmentBlocks } from '../lib/markdownBlocks';
 import { useCachedImage } from '../hooks/useCachedImage';
 import { useEndpoint } from '../lib/EndpointContext';
 import { useTheme } from '../theme/ThemeContext';
+import { parseChart } from '../../../common/chartSpec.mjs';
+import { Chart } from './Chart';
 
 function MarkdownImage({ path, alt, note, profile, theme }) {
   const { colors, fonts, fontSizes } = theme;
@@ -207,7 +209,7 @@ function MdTable({ header, rows, theme, inlineOpts }) {
   );
 }
 
-export function RichText({ children, color, size, imageProfile, codeColor, codeBackground }) {
+export function RichText({ children, color, size, imageProfile, codeColor, codeBackground, accent = null }) {
   const theme = useTheme();
   const { colors, fonts, fontSizes } = theme;
   const fg = color ?? colors.ink;
@@ -219,7 +221,11 @@ export function RichText({ children, color, size, imageProfile, codeColor, codeB
   return (
     <View>
       {blocks.map((b, i) => {
-        if (b.type === 'code') return <CodeBlock key={`code-${i}`} lang={b.lang} code={b.code} theme={theme} />;
+        if (b.type === 'code') {
+          const chart = b.lang === 'chart' ? parseChart(b.code) : null;
+          if (chart) return <View key={`chart-${i}`} style={{ marginVertical: space.s4 }}><Chart spec={chart} accent={accent} /></View>;
+          return <CodeBlock key={`code-${i}`} lang={b.lang} code={b.code} theme={theme} />;
+        }
         if (b.type === 'table') return <MdTable key={`tbl-${i}`} header={b.header} rows={b.rows} theme={theme} inlineOpts={inlineOpts} />;
         if (b.type === 'image') return <MarkdownImage key={`img-${i}`} path={b.path} alt={b.alt} note={b.note} profile={imageProfile} theme={theme} />;
         if (b.type === 'space') return <View key={`s-${i}`} style={{ height: 8 }} />;

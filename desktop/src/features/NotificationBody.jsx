@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import Eyebrow from "../primitives/Eyebrow.jsx";
 import Icon from "../primitives/Icon.jsx";
+import { chartSvg } from "../../../common/chartSpec.mjs";
 import { errorParts, failedTitle, inlineSegments, parseNotificationBody } from "../../../common/notificationBody.mjs";
 import styles from "./NotificationBody.module.css";
 
@@ -13,7 +14,10 @@ function Inline({ text }) {
   });
 }
 
-function Block({ b }) {
+function Block({ b, accent }) {
+  if (b.kind === "chart") {
+    return <figure className={`md-chart ${styles.chart}`} style={accent ? { "--chart-accent": accent } : undefined} dangerouslySetInnerHTML={{ __html: chartSvg(b.spec) }} />;
+  }
   if (b.kind === "heading") return <div className={styles.heading}><Inline text={b.text} /></div>;
   if (b.kind === "label") return <Eyebrow as="div" className={styles.label}>{b.label}</Eyebrow>;
   if (b.kind === "labelBody") {
@@ -67,7 +71,7 @@ function Block({ b }) {
   return <p className={styles.para}><Inline text={b.text} /></p>;
 }
 
-export default function NotificationBody({ body, lead = null, className = "" }) {
+export default function NotificationBody({ body, lead = null, className = "", accent = null }) {
   let blocks = parseNotificationBody(body);
   if (!blocks.length) return null;
   let leadText = null;
@@ -78,7 +82,7 @@ export default function NotificationBody({ body, lead = null, className = "" }) 
   return (
     <div className={`${styles.body} ${className}`.trim()}>
       {leadText != null ? <div className={lead === "deck" ? styles.deck : styles.lead}><Inline text={leadText} /></div> : null}
-      {blocks.map((b, i) => <Block key={i} b={b} />)}
+      {blocks.map((b, i) => <Block key={i} b={b} accent={accent} />)}
     </div>
   );
 }
@@ -87,7 +91,7 @@ export function Deck({ text, asTitle = false }) {
   return <p className={asTitle ? styles.lead : styles.deck}>{text}</p>;
 }
 
-export function ErrorCard({ title, summary = "", body, actions = null }) {
+export function ErrorCard({ title, summary = "", body, actions = null, accent = null }) {
   const { lead, failed } = failedTitle(title);
   const { facts, details, rest } = errorParts(parseNotificationBody(body));
   return (
@@ -110,7 +114,7 @@ export function ErrorCard({ title, summary = "", body, actions = null }) {
           ))}
         </dl>
       ) : null}
-      {rest.length ? <div className={styles.body}>{rest.map((b, i) => <Block key={i} b={b} />)}</div> : null}
+      {rest.length ? <div className={styles.body}>{rest.map((b, i) => <Block key={i} b={b} accent={accent} />)}</div> : null}
       {details.length ? (
         <details className={styles.details}>
           <summary className={styles.detailsSummary}>Details</summary>

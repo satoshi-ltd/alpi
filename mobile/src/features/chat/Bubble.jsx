@@ -108,13 +108,13 @@ export function ProfileUserMessage({ text, ts, attachments, onLongPress, profile
   );
 }
 
-export function ProfileAssistantMessage({ text, ts, attachments, onLongPress, profile }) {
+export function ProfileAssistantMessage({ text, ts, attachments, onLongPress, profile, accent = null }) {
   const { colors, fontSizes } = useTheme();
   const body = stripProducedImageMarkdown(text, attachments);
   return (
     <MessagePress onLongPress={onLongPress} style={S.agentWrap}>
       {body ? (
-        <RichText size={fontSizes[typography.chat.size]} color={colors.ink} imageProfile={profile}>
+        <RichText size={fontSizes[typography.chat.size]} color={colors.ink} imageProfile={profile} accent={accent}>
           {body}
         </RichText>
       ) : null}
@@ -174,7 +174,7 @@ export function WorkgroupMessage({ body, speakerName, speakerAccent, speakerFold
         )}
       </View>
       <MessagePress onLongPress={onLongPress} style={bubbleStyle}>
-        <RichText size={fontSizes[typography.chat.size]} color={colors.ink} imageProfile={profile}>
+        <RichText size={fontSizes[typography.chat.size]} color={colors.ink} imageProfile={profile} accent={speakerAccent}>
           {body}
         </RichText>
       </MessagePress>

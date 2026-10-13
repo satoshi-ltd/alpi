@@ -6,7 +6,7 @@ import { getImageRoots } from "../lib/imageRoots.js";
 import { copyText } from "../lib/clipboard.js";
 import ImageLightbox from "./ImageLightbox.jsx";
 
-export default function Markdown({ source, as = "div", className = "", style }) {
+export default function Markdown({ source, as = "div", className = "", style, accent }) {
   const html = useRenderedMarkdown(source);
   const [zoom, setZoom] = useState(null);
 
@@ -48,7 +48,7 @@ export default function Markdown({ source, as = "div", className = "", style }) 
     <>
       {createElement(as, {
         className,
-        style,
+        style: accent ? { ...style, "--chart-accent": accent } : style,
         onClick,
         dangerouslySetInnerHTML: { __html: html },
       })}

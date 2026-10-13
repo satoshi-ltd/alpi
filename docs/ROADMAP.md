@@ -222,6 +222,14 @@ _None._
 
 Each names the condition that promotes it; none is worked on before.
 
+- **CHART.PNG** — A chart block rendered to a PNG for email and attachments
+  `feature · alpi · agent · low`
+  note: promote when an agent has to send a chart to a third party (`email`, a gateway) or the creator wants a
+  chart as a file. Pillow is already a dependency, so `alpi/charts.py` can draw the same spec without adding one;
+  the apps and the TUI keep drawing natively.
+  accept: `charts.png(spec)` writes a themed PNG; the `email` tool attaches one per chart block and replaces the
+  block with its summary line; a test renders each chart type.
+
 - **WG.REPEAT** — A pipeline repeats itself until a command reports the work finished
   `feature · alpi · agent · normal`
   note: a chain workgroup needs one `hotel` trigger per hotel; Princess v117 ran from an operator script

@@ -136,6 +136,7 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profil
           ts={turn.pending ? '' : answeredTs}
           attachments={turn.output_attachments}
           profile={profileName}
+          accent={accent}
           onLongPress={() => onActionTarget({
             kind: 'agent',
             text: turn.assistant,

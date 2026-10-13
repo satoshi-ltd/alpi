@@ -71,8 +71,19 @@ def _generated_files_line(home: Path) -> str:
     )
 
 
+CHART_LINE = (
+    "- **charts**: replies, notifications and workgroup posts can carry a chart as a "
+    "```chart block of JSON `{\"type\": \"line\"|\"bar\", \"stacked\"?: true, \"title\": \"…\", "
+    "\"unit\"?: \"%\", \"x\": [labels], \"series\": [{\"name\": \"…\", \"values\": [numbers or null]}]}` "
+    "(one value per label, at most 4 series, 2 to 60 points for a line, up to 24 bars, no negatives "
+    "when stacked). Draw one for a trend over several points or a "
+    "comparison of several categories, never for one or two numbers, and say in a sentence what it "
+    "shows. The apps draw it and the terminal shows it as text; email cannot."
+)
+
+
 def _env_block(home: Path, workspace) -> str:
-    parts = ["# ENVIRONMENT"]
+    parts = ["# ENVIRONMENT", CHART_LINE]
     parts.append(
         f"- **host Python**: `{sys.version_info.major}.{sys.version_info.minor}` — a scripted "
         "skill's `scripts/run.py` runs on exactly this interpreter, so target it (e.g. no "

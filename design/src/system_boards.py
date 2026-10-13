@@ -56,6 +56,16 @@ def label(text):
     return f'<span style="font-family: {MONO}; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: {INK3}">{text}</span>'
 
 
+def desktop_charts():
+    from chart_studies import chart_gallery
+    return "".join(f'<div style="width: 330px">{card}</div>' for card in chart_gallery(330))
+
+
+def phone_charts():
+    from chart_studies import chart_gallery
+    return "".join(f'<div style="width: 240px">{card}</div>' for card in chart_gallery(240, compact=True))
+
+
 def specimen(title, inner, w=None, bg=PANE):
     width = f"width: {w}px;" if w else ""
     return (f'<div style="display: flex; flex-direction: column; gap: 8px; {width} flex-shrink: 0">{label(title)}'
@@ -163,6 +173,7 @@ def desktop_components_board():
 <div style="display: flex; gap: 22px; align-items: flex-start">{specimen("Tip · ink 11 medium, radius 4, arrow", tip, 440)}{specimen("KeyHint · modifiers and key as Kbd chips, text when it is not a chord", keys, 710)}</div>
 {specimen("Roster state chips · needs you · failed · working (pulses on --dur-loop) · workgroup phase · footer badges (one danger count, capped at 9+)", states)}
 {specimen("Chips, code chip, keys", chips)}
+{specimen("Chart · a ```chart block in a reply, a notification or a workgroup post: line, bar (lying down when labels are long) and stacked bar, the first series in the profile’s accent, a comparison in ink", desktop_charts())}
 {specimen("SettingsNav · section rail with search", rail)}
 {specimen("Fields · Field 32 · Textarea · ds-field · Selectish (mono, voice + budget) · Dropdown field (every choice) · ds-seg · Checkbox · Radio", fields)}
 {specimen("Meters and status dots", meters)}
@@ -213,6 +224,7 @@ def mobile_components_board():
 {specimen("Roster rows · Fold compact 44 and phone 64 with preview, state under the time", roster)}
 <div style="display: flex; gap: 22px; align-items: flex-start">{specimen("ToolCallRow · 44 pt, family icon, tap opens the sheet", tools, 422)}{specimen("CountBadge", badges, 400)}</div>
 <div style="display: flex; gap: 22px; align-items: flex-start">{specimen("Row · phone (15 px label, mono helper, chevron gutter, danger)", rows, 422)}{specimen("WideRow · fold and tablet (eyebrow label, control right, gutter reserved)", wide, 552)}</div>
+{specimen("Chart · the same blocks at phone width; ticks that would crowd thin out, labels are never cut", phone_charts())}
 {specimen("Pill (the desktop Chip’s states: on and err tint the ground, warn stays neutral with its dot), OnOff, Meter, Toggle (optimistic, snaps back on failure)", pills + switch(True, DOC_ACCENT) + switch(False, DOC_ACCENT))}
 {specimen("Field · 44 high, radius 4 · error state (border and helper in dangerText)", fields)}
 <div style="display: flex; gap: 22px; align-items: flex-start">{specimen("PickerRow · 7 px dot, selected fill, one style everywhere", picker, 392)}{specimen("ActionSheet items · 20 px icon slot, mono detail, danger", actions, 392)}</div>

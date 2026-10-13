@@ -78,6 +78,17 @@ lines, clipped) at the top of the message. A digest is
 drawn as entries only when it has two or more items, every one a plain `-` bullet
 in that form with a plain meta of at most four words; any other list stays a list.
 
+## Charts
+
+A reply, a notification body or a workgroup post can carry a chart: a ```` ```chart ```` block holding
+`{"type": "line"|"bar", "stacked"?: true, "title": "…", "unit"?: "%", "x": [labels], "series": [{"name": "…",
+"values": [numbers or null]}]}`: one value per label, at most 4 series, 2 to 60 points for a line, up to 24 bars,
+no negatives when stacked. Use a line for a trend over
+several points, bars to compare several categories (they lie down by themselves when labels are long) and a
+stacked bar for how a total splits; never chart one or two numbers, and say in a sentence what the chart shows.
+`null` leaves a gap. The apps draw it in your profile's colour, the terminal as a sparkline or block bars; an
+invalid block shows as code, and banners and the inbox row show the summary instead. Email cannot draw charts.
+
 ## Which daemons reach the owner
 
 The desktop and phone apps raise notifications from every paired daemon, not

@@ -695,7 +695,7 @@ class OutputDetailPanel(FloatingPanel):
     def compose_body(self) -> ComposeResult:
         from datetime import datetime
 
-        from alpi import outputs as outputs_mod
+        from alpi import charts, outputs as outputs_mod
 
         ts = datetime.fromtimestamp(float(self.item.get("created_at") or 0)).strftime("%Y-%m-%d %H:%M")
         yield Static(f"{ts} · {self.item.get('type', 'info')} · {self.item.get('id')}", classes="entry-desc")
@@ -703,7 +703,7 @@ class OutputDetailPanel(FloatingPanel):
         with VerticalScroll():
             if summary:
                 yield Static(summary, markup=False)
-            yield Markdown(str(self.item.get("body") or ""))
+            yield Markdown(charts.textify(str(self.item.get("body") or "")))
 
 
 class SkillsPanel(FloatingPanel):

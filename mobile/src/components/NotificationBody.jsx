@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 
+import { Chart } from './Chart';
 import { Eyebrow } from './Eyebrow';
 import { groupTone } from './groupTone';
 import { Icon } from './Icon';
@@ -205,8 +206,9 @@ function ReportTable({ block, theme }) {
   );
 }
 
-function renderBlock(block, theme) {
+function renderBlock(block, theme, accent = null) {
   switch (block.kind) {
+    case 'chart': return <Chart spec={block.spec} accent={accent} />;
     case 'heading': return <Heading text={block.text} theme={theme} />;
     case 'label': return <Eyebrow style={{ lineHeight: theme.fontSizes.xs * lineHeights.cozy }}>{block.label}</Eyebrow>;
     case 'labelBody':
@@ -224,7 +226,7 @@ function renderBlock(block, theme) {
   }
 }
 
-export function NotificationBody({ body, lead = null }) {
+export function NotificationBody({ body, lead = null, accent = null }) {
   const theme = useTheme();
   let blocks = parseNotificationBody(body);
   if (!blocks.length) return null;
@@ -246,7 +248,7 @@ export function NotificationBody({ body, lead = null }) {
     const mt = children.length === 0 ? 0 : topMargin(block, prev);
     children.push(
       <View key={i} style={{ marginTop: mt }}>
-        {renderBlock(block, theme)}
+        {renderBlock(block, theme, accent)}
       </View>,
     );
     prev = block;
@@ -280,7 +282,7 @@ function Details({ blocks, theme }) {
   );
 }
 
-export function ErrorCard({ title, summary = '', body, actions = null }) {
+export function ErrorCard({ title, summary = '', body, actions = null, accent = null }) {
   const theme = useTheme();
   const { colors, fonts, fontSizes, mode } = theme;
   const { lead, failed } = failedTitle(title);
@@ -313,7 +315,7 @@ export function ErrorCard({ title, summary = '', body, actions = null }) {
           ))}
         </View>
       ) : null}
-      {rest.map((b, i) => <View key={i}>{renderBlock(b, theme)}</View>)}
+      {rest.map((b, i) => <View key={i}>{renderBlock(b, theme, accent)}</View>)}
       {details.length ? <Details blocks={details} theme={theme} /> : null}
       {actions ? <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.s3 }}>{actions}</View> : null}
     </View>

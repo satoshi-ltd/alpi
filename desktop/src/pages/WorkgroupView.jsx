@@ -880,7 +880,7 @@ const WgMessage = memo(function WgMessage({
         footer={footer}
       >
         {content ? (
-          <Markdown as="div" className="alpi-md" source={content} />
+          <Markdown as="div" className="alpi-md" source={content} accent={speaker.accent} />
         ) : null}
       </MarkerCard>
     );
@@ -893,7 +893,7 @@ const WgMessage = memo(function WgMessage({
       meta={meta}
       footer={footer}
     >
-      <Markdown as="div" className="alpi-md" source={body} />
+      <Markdown as="div" className="alpi-md" source={body} accent={speaker.accent} />
     </MessageBubble>
   );
 });

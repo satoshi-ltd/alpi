@@ -58,6 +58,9 @@ vi.mock('../src/theme/ThemeContext', async () => {
   };
 });
 vi.mock('../src/components/Fold', () => ({ Fold: () => null }));
+vi.mock('../src/components/Chart', () => ({
+  Chart: ({ spec, accent }) => React.createElement('figure', { 'data-chart': spec.type, 'data-accent': accent ?? '' }, spec.title),
+}));
 vi.mock('../src/components/Icon', () => ({ Icon: ({ name, color }) => React.createElement('i', { 'data-icon': name, 'data-color': color }) }));
 vi.mock('../src/components/Button', () => ({
   Button: ({ title, onPress, loading }) => React.createElement('button', { type: 'button', onClick: onPress, disabled: loading }, title),
@@ -369,5 +372,16 @@ describe('notification page, a given summary on a failure', () => {
     const { container } = render(<OutputDetailScreen />);
     expect(container.textContent).toContain('The NAS was unreachable; nothing was copied.');
     expect(container.textContent.indexOf('Backup')).toBeLessThan(container.textContent.indexOf('The NAS'));
+  });
+});
+
+describe('notification page, chart blocks', () => {
+  it('draws a chart block in the body in the profile accent', () => {
+    h.params = { profile: 'abby', id: 'c1' };
+    const chart = JSON.stringify({ type: 'line', title: 'Chats per day', x: ['Mon', 'Tue', 'Wed'], series: [{ values: [3, 1, 4] }] });
+    h.row = { id: 'c1', profile: 'abby', type: 'info', status: 'read', created_at: 1_700_000_000, title: 'Daily', body: `Trend.\n\n\`\`\`chart\n${chart}\n\`\`\`` };
+    const { container } = render(<OutputDetailScreen />);
+    expect(container.querySelector('figure[data-chart="line"]').textContent).toBe('Chats per day');
+    expect(container.textContent).not.toContain('"series"');
   });
 });

@@ -789,6 +789,7 @@ const Turn = memo(function Turn({
             as="div"
             source={stripProducedImageMarkdown(turn.assistant, turn.output_attachments)}
             className="alpi-md"
+            accent={accent}
           />
           {imageProduced(turn.output_attachments).length > 0 && (
             <ProducedImages images={imageProduced(turn.output_attachments)} />
@@ -880,7 +881,7 @@ function PeerReplyCard({ peerId, reply, accent, fold }) {
   );
   return (
     <MessageBubble side="left" tint={tint} meta={meta}>
-      <Markdown as="div" source={reply} className="alpi-md" />
+      <Markdown as="div" source={reply} className="alpi-md" accent={accent} />
     </MessageBubble>
   );
 }

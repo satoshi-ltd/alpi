@@ -103,6 +103,13 @@ def test_outputs_cli_show_prints_a_given_summary_between_meta_and_body(tmp_home_
     assert CliRunner().invoke(cli.main, ["outputs", "show", same["id"]]).output.count("Already the opening line.") == 1
 
 
+def test_outputs_cli_show_draws_a_chart_block_as_text(tmp_home_no_env: Path) -> None:
+    block = '```chart\n{"type": "bar", "x": ["es-ES", "en-GB"], "series": [{"values": [863, 509]}]}\n```'
+    out = outputs.append(tmp_home_no_env, profile="default", body=f"Locales today.\n\n{block}", title="Daily", delivered_to=[])
+    shown = CliRunner().invoke(cli.main, ["outputs", "show", out["id"]]).output
+    assert "es-ES  ████" in shown and '"series"' not in shown
+
+
 def test_outputs_cli_list_show_read_all(tmp_home_no_env: Path) -> None:
     outputs.append(tmp_home_no_env, profile="default", body="first body",
                    type="info", title="First", delivered_to=[])

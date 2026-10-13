@@ -942,3 +942,15 @@ describe("NotificationsModal — a given summary travels with the notification",
     expect(h.invoke.mock.calls.at(-1)[1].content.split(lead)).toHaveLength(2);
   });
 });
+
+describe("NotificationsModal — chart blocks", () => {
+  it("draws a chart block in the reader in the profile's accent", () => {
+    const chart = JSON.stringify({ type: "bar", title: "Chats by locale", x: ["es-ES", "en-GB"], series: [{ values: [863, 509] }] });
+    h.rows = [{ ...h.ROW, accent: "#2e7d4f", title: "Daily", body: `Locales today.\n\n\`\`\`chart\n${chart}\n\`\`\`` }];
+    renderModal();
+    const figure = document.body.querySelector("article figure.md-chart");
+    expect(figure.querySelector("svg").getAttribute("aria-label")).toBe("Bar chart, Chats by locale. 2 categories. es-ES 863, en-GB 509.");
+    expect(figure.style.getPropertyValue("--chart-accent")).toBe("#2e7d4f");
+    expect(document.body.querySelector("article").textContent).not.toContain('"series"');
+  });
+});

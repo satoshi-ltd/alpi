@@ -729,6 +729,7 @@ function DetailPane({ row, accent, fold, connId, connectionName, voiceId, onCopy
           title={title}
           summary={parts.givenSummary}
           body={row.body || ""}
+          accent={accent}
           actions={onRunAgain || onOpenJob ? (
             <>
               {onRunAgain ? <Button variant="primary" onClick={onRunAgain} disabled={running}>Run again</Button> : null}
@@ -740,7 +741,7 @@ function DetailPane({ row, accent, fold, connId, connectionName, voiceId, onCopy
         <>
           {title ? <h2 className={styles.detailTitle}>{title}</h2> : null}
           {!fromBody && summary ? <Deck text={summary} asTitle={!title} /> : null}
-          <NotificationBody body={row.body || ""} lead={fromBody ? (title ? "deck" : "title") : null} />
+          <NotificationBody body={row.body || ""} lead={fromBody ? (title ? "deck" : "title") : null} accent={accent} />
         </>
       )}
 

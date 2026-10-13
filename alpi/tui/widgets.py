@@ -16,6 +16,7 @@ from textual.widget import Widget
 from textual.widgets import Markdown, OptionList, Static, TextArea
 from textual.widgets.option_list import Option
 
+from alpi import charts
 from alpi.tool_hints import FAMILY_GLYPHS, arg_hint, result_hint, tool_family, truncate
 from alpi.tui.formatting import fmt_count, fmt_duration
 from alpi.tui.turns import reasoning_duration, steps_span, thought_label
@@ -234,7 +235,7 @@ class AssistantMessage(Widget):
 
     def compose(self) -> ComposeResult:
         if self._finalized:
-            self._body = Markdown(self._initial)
+            self._body = Markdown(charts.textify(self._initial))
         else:
             self._body = Static("")
         yield self._body
@@ -270,7 +271,7 @@ class AssistantMessage(Widget):
         if self._body is None:
             return
         old = self._body
-        new = Markdown(text)
+        new = Markdown(charts.textify(text))
         self._body = new
         if self.is_mounted:
             asyncio.create_task(self._swap_body(old, new))

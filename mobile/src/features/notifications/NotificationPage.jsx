@@ -235,7 +235,7 @@ export function NotificationPage({ profile, id, connectionId, embedded = false, 
             </View>
 
             {failure ? (
-              <ErrorCard title={title} summary={parts.givenSummary} body={row.body || ''} actions={jobActions} />
+              <ErrorCard title={title} summary={parts.givenSummary} body={row.body || ''} actions={jobActions} accent={accent} />
             ) : (
               <>
                 {title ? (
@@ -244,7 +244,7 @@ export function NotificationPage({ profile, id, connectionId, embedded = false, 
                   </Text>
                 ) : null}
                 {!parts.fromBody && parts.summary ? <Deck text={parts.summary} asTitle={!title} /> : null}
-                <NotificationBody body={row.body || ''} lead={parts.fromBody ? (title ? 'deck' : 'title') : null} />
+                <NotificationBody body={row.body || ''} lead={parts.fromBody ? (title ? 'deck' : 'title') : null} accent={accent} />
               </>
             )}
           </ScrollView>

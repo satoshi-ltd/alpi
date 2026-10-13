@@ -1,5 +1,6 @@
 import { marked } from "marked";
 import DOMPurify from "dompurify";
+import { chartSvg, parseChart } from "../../../common/chartSpec.mjs";
 
 marked.setOptions({
   gfm: true,
@@ -38,6 +39,11 @@ marked.use({
     },
     code({ text, lang }) {
       const label = (lang || "").trim().split(/\s+/)[0] || "text";
+      const chart = label === "chart" ? parseChart(text) : null;
+      if (chart) {
+        charts.push(chart);
+        return `<div class="md-chart-slot">${slotNonce}:${charts.length - 1}</div>`;
+      }
       return (
         `<div class="md-code">` +
         `<div class="md-code-head"><span class="md-code-lang">${escapeHtml(label)}</span>` +
@@ -87,6 +93,19 @@ const PURIFY_OPTS = {
   ALLOWED_ATTR: ["class", "align", "src", "alt", "data-src", "type", "aria-label"],
 };
 
+let charts = [];
+let slotNonce = "";
+
+// Charts are spliced in after sanitizing so model-written HTML can never draw SVG; the nonce stops forged slots.
+function parseWithCharts(text) {
+  charts = [];
+  slotNonce = Math.random().toString(36).slice(2);
+  const html = DOMPurify.sanitize(marked.parse(text), PURIFY_OPTS);
+  const drawn = charts;
+  return html.replace(new RegExp(`<div class="md-chart-slot">${slotNonce}:(\\d+)</div>`, "g"),
+    (_, i) => `<figure class="md-chart">${chartSvg(drawn[Number(i)])}</figure>`);
+}
+
 const cache = new Map();
 const CACHE_MAX = 500;
 
@@ -95,7 +114,7 @@ export function renderMarkdown(text) {
   const key = String(text);
   const hit = cache.get(key);
   if (hit !== undefined) return hit;
-  const html = DOMPurify.sanitize(marked.parse(key), PURIFY_OPTS);
+  const html = parseWithCharts(key);
   if (cache.size >= CACHE_MAX) {
     const firstKey = cache.keys().next().value;
     cache.delete(firstKey);

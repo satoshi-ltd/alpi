@@ -1333,7 +1333,7 @@ def outputs_show(ctx: click.Context, output_id: str) -> None:
     """Print one output in full and mark it read."""
     from datetime import datetime
 
-    from alpi import outputs as outputs_mod
+    from alpi import charts, outputs as outputs_mod
 
     h: Path = ctx.obj["home"]
     _bootstrap(h)
@@ -1351,7 +1351,7 @@ def outputs_show(ctx: click.Context, output_id: str) -> None:
         click.echo("")
         click.echo(summary)
     click.echo("")
-    click.echo(it.get("body") or "")
+    click.echo(charts.textify(it.get("body") or ""))
 
 
 @outputs_group.command("unread")

@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.17.18 — 2026-10-13 — the agent draws charts
+
+- **Every profile can draw a chart** in a reply, a notification or a workgroup post: a line for a trend, bars to compare categories, a stacked bar for how a total splits. It writes a small ```` ```chart ```` block of data; no setup and no new tool.
+- **The terminal draws it too.** The TUI and `alpi outputs show` turn a chart into a sparkline or block bars, which work over SSH.
+- **A broken chart is harmless:** it stays a code block, and banners and the inbox row keep showing the summary.
+
 ## v0.17.17 — 2026-10-11 — a notification is a title, a summary and a body
 
 - **`notify` takes a `summary`**: one or two plain sentences that the banner, the phone push and the inbox row show under the title. A summary or title sent as a list or a number no longer drops the notification.

@@ -254,7 +254,10 @@ ol.list .marker {
   overflow-x: auto;
 }
 
+.chart { margin: 0; }
+
 .body > .lead,
+.body > .chart,
 .body > .deck,
 .body > .label,
 .body > .para,
