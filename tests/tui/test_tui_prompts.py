@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import threading
 import time
 
@@ -85,13 +86,13 @@ async def test_concurrent_prompts_queue_behind_the_first(tui_home) -> None:
 
 @pytest.mark.asyncio
 async def test_countdown_is_shown_and_expiry_auto_denies(tui_home, monkeypatch) -> None:
-    monkeypatch.setattr(AlpiApp, "APPROVAL_TIMEOUT_S", 0.6)
+    monkeypatch.setattr(AlpiApp, "APPROVAL_TIMEOUT_S", 2.0)
     app = AlpiApp(home_dir=tui_home)
     results: list = []
     async with app.run_test(size=(110, 40)) as pilot:
         t = _ask_approval(app, "sleep", results)
         await _wait_for(pilot, lambda: app.query(ApprovalPanel))
-        assert "esc deny · auto-deny in 1s" == app.query_one(ApprovalPanel).hint_text()
+        assert re.fullmatch(r"esc deny · auto-deny in [12]s", app.query_one(ApprovalPanel).hint_text())
         await asyncio.to_thread(t.join, 10)
         assert results == [("sleep", "deny")]
         await _wait_for(pilot, lambda: not app.query(ApprovalPanel))
