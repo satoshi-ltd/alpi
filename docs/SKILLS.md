@@ -278,10 +278,10 @@ db(action="query", skill="whoop-tracker",
 ```
 
 Backed by `<profile-home>/skills/<cat>/<skill>/state/db.sqlite`.
-The tool is not offered to a member device's turn or to an ALP peer turn without
-`tools.allow`: it reaches any skill's database, which the `skills/` fence keeps
-out of those turns. A member connection whose `tools_allow` names `db` keeps it. A
-skill's own scripts still open their database directly.
+The tool is not offered to an ALP peer turn without `tools.allow`: it reaches any
+skill's database, which the `skills/` fence keeps out of file tools. A member
+device keeps it, so state a member must not read belongs in a profile members do
+not drive. A skill's own scripts still open their database directly.
 Always parameterised — `params=[…]` binds to `?` placeholders;
 never string-interpolate user data into the SQL. Schema is owned
 by the skill body — the LLM runs `CREATE TABLE IF NOT EXISTS …`

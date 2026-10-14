@@ -118,7 +118,11 @@ def schemas(deny: frozenset[str] | set[str] | None = None) -> list[dict]:
     from alpi.tools._paths import private_areas_fenced
     if not private_areas_fenced():
         return schemas
-    return [_member_schema(schema) for schema in schemas if _schema_name(schema) not in _FENCED_OUT_TOOLS]
+    peer = _policy.fences_private_areas()
+    return [
+        _member_schema(schema) for schema in schemas
+        if not (peer and _schema_name(schema) in _FENCED_OUT_TOOLS)
+    ]
 
 
 def _schema_name(schema: dict) -> str:
@@ -242,7 +246,7 @@ def _refusal_reason(name: str, action: str) -> str:
 
 def _member_mutation_refusal(name: str, arguments: dict) -> ToolResult | None:
     from alpi.tools._paths import private_areas_fenced
-    if name in _FENCED_OUT_TOOLS and private_areas_fenced():
+    if name in _FENCED_OUT_TOOLS and _policy.fences_private_areas():
         return ToolResult(
             ok=False,
             output="",

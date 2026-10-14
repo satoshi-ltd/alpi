@@ -37,8 +37,8 @@ MATRIX: dict[tuple[str, str], str] = {
     **{("schedule", a): "AL" for a in ("add", "update", "remove", "fire")},
     ("session_search", ""): "AML",
     **{(name, ""): "AM" for name in HISTORY_TOOLS},
-    ("db", "query"): "AL",
-    ("db", "exec"): "AL",
+    ("db", "query"): "AML",
+    ("db", "exec"): "AML",
     ("web_search", ""): "AMP",
     ("read_file", ""): "AMPL",
 }

@@ -71,15 +71,13 @@ def test_an_admin_reads_and_writes_a_skill_database(skill_db: Path) -> None:
         assert tools.execute("db", {"action": "exec", "skill": "ledger", "sql": "DELETE FROM notes"}).ok
 
 
-def test_a_member_has_no_db_tool_and_cannot_call_it(skill_db: Path) -> None:
+def test_a_member_reads_and_writes_a_skill_database_through_db(skill_db: Path) -> None:
     with use_connection(MEMBER):
-        assert "db" not in _db_names()
-        for action, sql in (("query", "SELECT body FROM notes"), ("exec", "DELETE FROM notes")):
-            result = tools.execute("db", {"action": action, "skill": "ledger", "sql": sql})
-            assert not result.ok and ROW not in f"{result.output}{result.error}"
-            assert "cannot use db" in result.error
+        assert "db" in _db_names()
+        assert ROW in _query().output
+        assert tools.execute("db", {"action": "exec", "skill": "ledger", "sql": "DELETE FROM notes"}).ok
     with sqlite3.connect(skill_db) as conn:
-        assert conn.execute("SELECT count(*) FROM notes").fetchone() == (1,)
+        assert conn.execute("SELECT count(*) FROM notes").fetchone() == (0,)
 
 
 def test_a_peer_without_a_tool_policy_has_no_db_tool_and_a_granting_policy_restores_it(skill_db: Path) -> None:
@@ -91,15 +89,18 @@ def test_a_peer_without_a_tool_policy_has_no_db_tool_and_a_granting_policy_resto
         assert ROW in _query().output
 
 
-def test_a_member_under_a_tool_list_still_has_no_db(skill_db: Path) -> None:
-    with use_connection(MEMBER), _policy.use(frozenset({"db"}), "listed"):
+def test_a_member_under_a_tool_list_that_leaves_db_out_has_no_db(skill_db: Path) -> None:
+    with use_connection(MEMBER), _policy.use(frozenset({"read_file"}), "listed"):
+        assert "db" not in _db_names()
         assert not _query().ok
 
 
-def test_a_member_cannot_reach_db_through_a_workflow(skill_db: Path, home: Path) -> None:
+def test_a_member_reaches_db_through_a_workflow_and_a_peer_does_not(skill_db: Path, home: Path) -> None:
     context = RunContext("run", home, home.parent / "ws", "default", "peer", "s", "c2")
     step = {"id": "a", "tool": "db", "arguments": {"action": "query", "skill": "ledger", "sql": "SELECT body FROM notes"}}
     with use_connection(MEMBER), use_executor(ToolExecutor(context)):
+        assert ROW in tools.execute("workflow", {"steps": [step]}).output
+    with use_connection(PEER), _as_peer(None), use_executor(ToolExecutor(context)):
         result = tools.execute("workflow", {"steps": [step]})
     assert ROW not in f"{result.output}{result.error}"
 

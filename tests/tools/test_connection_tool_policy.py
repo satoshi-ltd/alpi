@@ -63,10 +63,11 @@ def _names() -> set[str]:
     return {item["function"]["name"] for item in tools.schemas()}
 
 
-def test_a_member_connection_without_a_tool_list_keeps_the_fence(skill_db: Path) -> None:
+def test_a_member_connection_without_a_tool_list_keeps_the_file_fence(skill_db: Path) -> None:
     with use_connection(_member()):
-        assert "db" not in _names()
-        assert "cannot use db" in _query().error
+        assert "db" in _names()
+        refused = tools.execute("read_file", {"path": str(skill_db)})
+        assert not refused.ok and ROW not in f"{refused.output}{refused.error}"
 
 
 def test_a_member_connection_with_a_tool_list_gets_exactly_that_list(skill_db: Path) -> None:
@@ -106,7 +107,7 @@ def test_the_authority_of_a_member_with_a_tool_list_carries_the_list_to_nested_t
         assert authority.current() == {"fence": "allow", "allow": ["db", "skill"]}
     with authority.apply({"fence": "allow", "allow": ["db"]}):
         assert ROW in _query().output
-    with authority.apply({"fence": "member"}):
+    with authority.apply({"fence": "allow", "allow": ["read_file"]}):
         assert not _query().ok
 
 
