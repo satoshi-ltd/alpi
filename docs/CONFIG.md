@@ -811,7 +811,12 @@ The host plane lives with the `default` profile and its single socket serves
 every sibling profile. **Admin** connections plus direct local socket access
 reach any profile. To limit which profiles a paired **member** connection may
 address, scope that connection with `profile_scope`; daemon task configuration
-is not an access-control boundary.
+is not an access-control boundary. A member connection can also carry `tools_allow`, the
+same list a peer's `tools.allow` takes (names, `*` patterns, `tool:action`): it replaces the member
+fence with exactly that list, nested calls included, so a connection that must use `db` or
+another fenced tool names it and nothing else. Without the key the fence is unchanged and an
+admin ignores it. Set it from `alpi setup` → connections → Edit tools or `host.connections.update`;
+a change closes the connection's open sockets, like `role` and `profile_scope`.
 
 On regular macOS/Linux installs, leaving `network.host` empty keeps auto
 mode: Tailscale first, then LAN, used as both the advertised address and the

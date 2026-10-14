@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.17.19 — 2026-10-14 — a member connection can carry its own tool list
+
+- **A member connection takes `tools_allow`**, the grammar a peer's `tools.allow` already has (names, `*` patterns, `tool:action`). The list replaces the member fence with exactly those tools, nested calls and workflow steps included; an empty list grants nothing, a connection without the key behaves as before and an admin ignores it.
+- **`db` reaches the connections that name it again.** v0.17.11 withdrew it from every member turn, which stopped profiles whose skills log to their own database from a connection that drives them; granting it to that one connection restores them without opening it to the others.
+- **Set it in the console:** `alpi setup` → connections → Edit tools (blank restores the fence), or `host.connections.update` with `tools_allow`. Changing it closes the connection's open sockets, like `role` and `profile_scope`.
+
 ## v0.17.18 — 2026-10-13 — the agent draws charts
 
 - **Every profile can draw a chart** in a reply, a notification or a workgroup post: a line for a trend, bars to compare categories, a stacked bar for how a total splits. It writes a small ```` ```chart ```` block of data; no setup and no new tool.

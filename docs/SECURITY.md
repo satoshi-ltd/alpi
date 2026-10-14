@@ -102,7 +102,12 @@ not reach.
   gets all of the above (file tools, `search`, `terminal`, skills, jobs) and
   no session history tools, without changing its role. The `db` tool is not
   offered to these turns and is refused if called, nested calls included: it reads and writes any skill's state database,
-  which the `skills/` fence keeps out of file tools. MCP tools are not
+  which the `skills/` fence keeps out of file tools. A member connection that carries `tools_allow`
+  (same grammar as a peer's `tools.allow`: names, `*` patterns, `tool:action`) is not fenced: it gets exactly that list,
+  nested calls included, so `db` or a file tool reaches it only when the list names it, and an empty list grants nothing. A
+  connection without the key, and every admin, behave as before; an admin's list is dropped. Set it with the console
+  (`alpi setup` → connections → Edit tools) or `host.connections.update`, and treat it as the grant it is: a member that
+  holds `db` reads every skill's state. MCP tools are not
   fenced: what a configured MCP server can read is the operator's grant, and
   the `browser` tool shares the profile's one browser page and its saved cookies. A workgroup post a fenced
   caller makes (a member device through `host.workgroup.post` or the agent's

@@ -96,10 +96,12 @@ async def _data_chat_delegate(
 
     forwarded = dict(params)
     forwarded.pop("connection_id", None)
+    granted = target.get("tools_allow")
     delegated = ConnectionContext(
         connection_id=connection_id,
         source="local-delegate",
         role=role,
+        tool_allow=None if role == "admin" or granted is None else tuple(granted),
     )
     with use(delegated):
         await _data_chat_send(forwarded, server, send_frame)

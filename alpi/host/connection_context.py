@@ -19,6 +19,7 @@ class ConnectionContext:
     session_scope: str = "connection"
     provisioner: bool = False
     profile_scope: tuple[str, ...] = ()
+    tool_allow: tuple[str, ...] | None = None
 
 
 _current: ContextVar[ConnectionContext] = ContextVar(

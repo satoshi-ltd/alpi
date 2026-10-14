@@ -19,7 +19,7 @@ def current() -> dict[str, Any] | None:
     allowed = _policy.allowed()
     if _policy.fences_private_areas():
         fence = "peer"
-    elif connection().role != "admin":
+    elif connection().role != "admin" and connection().tool_allow is None:
         fence = "member"
     elif allowed is not None:
         return {"fence": "allow", "allow": sorted(allowed)}

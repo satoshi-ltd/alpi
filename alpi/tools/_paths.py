@@ -104,7 +104,8 @@ def _member_home_area(*paths: Path | str) -> str | None:
 def private_areas_fenced() -> bool:
     from alpi.host.connection_context import current
     from alpi.tools import _policy
-    return current().role != "admin" or _policy.fences_private_areas()
+    ctx = current()
+    return (ctx.role != "admin" and ctx.tool_allow is None) or _policy.fences_private_areas()
 
 
 def _member_denied_area(p: Path | str, resolved: Path, *, for_write: bool) -> str | None:

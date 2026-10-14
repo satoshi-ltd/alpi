@@ -1571,6 +1571,41 @@ def test_console_profile_edit_rejects_unknown_names_and_hides_action_for_admin(
     )
 
 
+def test_console_edits_a_member_tool_list_and_blank_restores_the_fence(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    root = _root(monkeypatch, tmp_path)
+    member, _device = connections.create_connection("Member")
+    choices = iter(["tools_allow", "tools_allow", None])
+    values = iter(["lobby__*, db", ""])
+    monkeypatch.setattr(ui, "menu", lambda *_args, **_kwargs: next(choices))
+    monkeypatch.setattr(ui, "text", lambda *_args, **_kwargs: next(values))
+
+    def stored():
+        return next(row for row in connections.list_connections() if row["id"] == member["id"])
+
+    seen = []
+    original = connections.update_connection
+
+    def spy(connection_id, **kwargs):
+        seen.append(kwargs.get("tools_allow"))
+        return original(connection_id, **kwargs)
+
+    monkeypatch.setattr(connections, "update_connection", spy)
+    cli._device_detail(root, member["id"])
+
+    assert seen == [["db", "lobby__*"], None]
+    assert "tools_allow" not in stored()
+
+    admin, _device = connections.create_connection("Admin", role="admin")
+    menus = []
+    monkeypatch.setattr(ui, "menu", lambda _title, entries, **_kwargs: menus.append(entries))
+    cli._device_detail(root, admin["id"])
+    assert not any(
+        isinstance(entry, tuple) and len(entry) > 1 and entry[1] == "tools_allow" for entry in menus[0]
+    )
+
+
 def test_console_disable_and_delete_require_confirmation(
     monkeypatch, tmp_path: Path,
 ) -> None:

@@ -45,7 +45,12 @@ def fences_private_areas() -> bool:
 
 
 def allowed() -> frozenset[str] | None:
-    return _allowed.get()
+    policy = _allowed.get()
+    if policy is not None:
+        return policy
+    from alpi.host.connection_context import current
+    granted = current().tool_allow
+    return None if granted is None else frozenset(granted)
 
 
 def effective_denies(profile_denies: Iterable[str]) -> frozenset[str]:
@@ -64,7 +69,7 @@ def is_denied(name: str, deny: Iterable[str] | None) -> bool:
 
 
 def allowed_actions(name: str) -> frozenset[str] | None:
-    policy = _allowed.get()
+    policy = allowed()
     if name in _withheld.get():
         return frozenset()
     if policy is None:
@@ -134,4 +139,4 @@ def refusal(name: str, arguments: object = None) -> str:
         )
     action = _action(arguments)
     shown = f"{name}:{action}" if action and allowed_actions(name) else name
-    return f"tool not allowed by the tool policy for {_label.get() or 'this turn'}: {shown} (tools.allow in peers.yaml)"
+    return f"tool not allowed by the tool policy for {_label.get() or 'this turn'}: {shown} (a peer's tools.allow in peers.yaml, a member connection's tools_allow)"

@@ -71,6 +71,7 @@ class AuthResult:
     reason: str = ""
     session_scope: str = "connection"
     provisioner: bool = False
+    tool_allow: tuple[str, ...] | None = None
 
     @property
     def context(self) -> ConnectionContext:
@@ -81,6 +82,7 @@ class AuthResult:
             role=self.role or "member",
             session_scope=self.session_scope,
             provisioner=self.provisioner,
+            tool_allow=self.tool_allow,
         )
 
 
@@ -224,6 +226,35 @@ def _session_scope(value: Any) -> str:
     return value if value in _VALID_SESSION_SCOPES else "device"
 
 
+_MAX_TOOL_ALLOW = 256
+_MAX_TOOL_NAME = 128
+_UNSET: Any = object()
+
+
+def _tool_allow(value: Any) -> list[str] | None:
+    if value is None:
+        return None
+    if not isinstance(value, list):
+        return []
+    names = sorted({e.strip() for e in value if isinstance(e, str) and 0 < len(e.strip()) <= _MAX_TOOL_NAME})
+    return names[:_MAX_TOOL_ALLOW]
+
+
+def validate_tool_allow(value: Any) -> list[str] | None:
+    if value is None:
+        return None
+    if not isinstance(value, list) or any(not isinstance(e, str) or not e.strip() for e in value):
+        raise host_server.HandlerError(
+            -32602, "invalid-params", data={"detail": "tools_allow must be a list of tool names or null"},
+        )
+    cleaned = _tool_allow(value)
+    if cleaned is None or len(cleaned) != len({e.strip() for e in value}):
+        raise host_server.HandlerError(
+            -32602, "invalid-params", data={"detail": f"tools_allow takes at most {_MAX_TOOL_ALLOW} entries of {_MAX_TOOL_NAME} characters"},
+        )
+    return cleaned
+
+
 def _scope(value: Any) -> list[str]:
     if value is None:
         return []
@@ -331,18 +362,23 @@ def _normalise_connection(row: Any) -> dict[str, Any] | None:
         pairing for raw in (row.get("pairings") or [])
         if (pairing := _normalise_pairing(raw)) is not None
     ])
-    return {
+    role = _role(row.get("role"))
+    record = {
         "id": str(row.get("id") or _new_id("conn")),
         "label": label,
         "created": int(row.get("created") or time.time()),
         "status": _status(row.get("status")),
-        "role": _role(row.get("role")),
+        "role": role,
         "profile_scope": _scope(row.get("profile_scope")),
         "session_scope": _session_scope(row.get("session_scope")),
         "devices": devices,
         "pairings": pairings,
         "deleted_at": int(row["deleted_at"]) if row.get("deleted_at") else None,
     }
+    tools_allow = None if role == "admin" else _tool_allow(row.get("tools_allow"))
+    if tools_allow is not None:
+        record["tools_allow"] = tools_allow
+    return record
 
 
 def _from_legacy(rows: Any) -> dict[str, Any]:
@@ -683,6 +719,7 @@ def public_connection(row: dict[str, Any]) -> dict[str, Any]:
         "status": row.get("status") or "active",
         "role": row.get("role") or "member",
         "profile_scope": list(row.get("profile_scope") or []),
+        "tools_allow": None if row.get("tools_allow") is None else list(row["tools_allow"]),
         "session_scope": _session_scope(row.get("session_scope")),
         "devices": devices,
     }
@@ -911,7 +948,7 @@ def add_device(connection_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
 def update_connection(
     connection_id: str, *, label: str | None = None, role: str | None = None,
     profile_scope: list[str] | None = None, status: str | None = None,
-    session_scope: str | None = None,
+    session_scope: str | None = None, tools_allow: Any = _UNSET,
 ) -> bool:
     with _locked():
         clean_label = None
@@ -921,6 +958,10 @@ def update_connection(
                 return False
         if session_scope is not None and session_scope not in _VALID_SESSION_SCOPES:
             return False
+        if tools_allow is not _UNSET and tools_allow is not None:
+            if not isinstance(tools_allow, list):
+                return False
+            tools_allow = _tool_allow(tools_allow)
         data = _load_inside_lock()
         row = next((c for c in data["connections"] if c["id"] == connection_id), None)
         if row is None:
@@ -935,8 +976,14 @@ def update_connection(
             row["role"] = role
             if role == "admin":
                 row["profile_scope"] = []
+                row.pop("tools_allow", None)
         if profile_scope is not None and row["role"] != "admin":
             row["profile_scope"] = list(profile_scope)
+        if tools_allow is not _UNSET and row["role"] != "admin":
+            if tools_allow is None:
+                row.pop("tools_allow", None)
+            else:
+                row["tools_allow"] = list(tools_allow)
         if status is not None:
             if status not in {"active", "disabled"}:
                 return False
@@ -1067,6 +1114,10 @@ def authenticate(token: str, min_interval: float = 60.0) -> AuthResult:
                 device["id"],
                 session_scope=_session_scope(connection.get("session_scope")),
                 provisioner=bool(device.get("provisioner")),
+                tool_allow=(
+                    None if connection["role"] == "admin" or connection.get("tools_allow") is None
+                    else tuple(connection["tools_allow"])
+                ),
             )
             if now - int(device.get("last_seen") or 0) >= min_interval:
                 _touch(presented, now, min_interval)
@@ -1277,12 +1328,14 @@ async def _update(params: dict[str, Any], _server: host_server.Server) -> dict[s
         raise host_server.HandlerError(-32602, "invalid-params", data={"detail": "invalid role"})
     profiles = validate_profiles(params["profiles"]) if "profiles" in params else None
     session_scope = _session_scope_param(params) if "session_scope" in params else None
+    tools_allow = validate_tool_allow(params["tools_allow"]) if "tools_allow" in params else _UNSET
     ok = update_connection(
         connection_id,
         label=label,
         role=str(role) if role is not None else None,
         profile_scope=profiles,
         session_scope=session_scope,
+        tools_allow=tools_allow,
     )
     if not ok:
         raise host_server.HandlerError(-32004, "not-found", data={"detail": "connection not found"})
