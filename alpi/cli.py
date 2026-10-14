@@ -2935,11 +2935,6 @@ def _device_detail(h: Path, connection_id: str) -> None:
         entries: list = [
             ("Role", "noop", public["role"]),
             ("Profiles", "noop", profiles_display),
-            *(
-                [("Tools", "noop", ", ".join(public["tools_allow"]) if public["tools_allow"] else "none")]
-                if public["role"] != "admin" and public.get("tools_allow") is not None
-                else []
-            ),
             ("Session scope", "session_scope", "per device" if session_scope == "device" else "per connection"),
             ("Status", "noop", public["status"]),
             ("Last seen", "noop", _format_last_seen(public.get("last_seen"))),
@@ -2972,7 +2967,6 @@ def _device_detail(h: Path, connection_id: str) -> None:
         ]
         if public["role"] != "admin":
             entries.append(("Edit profiles", "scope", "blank = all"))
-            entries.append(("Edit tools", "tools_allow", "blank = the member fence"))
         entries.extend([
             ("Toggle role", "role", "admin / member"),
             ("Enable" if public["status"] == "disabled" else "Disable", "status", "keeps sessions and usage"),
@@ -3037,21 +3031,6 @@ def _device_detail(h: Path, connection_id: str) -> None:
                     connection_id,
                     profile_scope=selected,
                 )
-        elif choice == "tools_allow" and public["role"] != "admin":
-            raw = ui.text(
-                "Tools this connection may use, comma-separated (names, * patterns, tool:action); "
-                "blank restores the member fence:",
-                default=", ".join(public.get("tools_allow") or []),
-            )
-            if raw is not None:
-                names = [part.strip() for part in raw.split(",") if part.strip()]
-                try:
-                    allow = connections_mod.validate_tool_allow(names) if names else None
-                except Exception as exc:
-                    ui.fail(str(getattr(exc, "data", {}).get("detail") or exc))
-                    ui.press_enter()
-                else:
-                    connections_mod.update_connection(connection_id, tools_allow=allow)
         elif choice == "role":
             role = "member" if public["role"] == "admin" else "admin"
             if ui.confirm(f"Change {public['label']} to {role}?", default=False):

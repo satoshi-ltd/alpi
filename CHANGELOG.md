@@ -1,15 +1,9 @@
 # Changelog
 
-## v0.17.20 — 2026-10-14 — a member device has the db tool again
+## v0.17.21 — 2026-10-14 — a member device has the db tool again
 
-- **Member devices get `db` again.** v0.17.11 withdrew it from every member turn, which stopped profiles whose skills log to their own database from any connection that drives them. An ALP peer turn without `tools.allow` still has no `db`, and a member connection whose `tools_allow` leaves it out still has none.
+- **Member devices get `db` again.** v0.17.11 withdrew it from every member turn, which stopped profiles whose skills log to their own database from any connection that drives them. An ALP peer turn without `tools.allow` still has no `db`.
 - **A profile that members drive must hold no skill state they should not read or change:** `db` reaches every skill's database.
-
-## v0.17.19 — 2026-10-14 — a member connection can carry its own tool list
-
-- **A member connection takes `tools_allow`**, the grammar a peer's `tools.allow` already has (names, `*` patterns, `tool:action`). The list replaces the member fence with exactly those tools, nested calls and workflow steps included; an empty list grants nothing, a connection without the key behaves as before and an admin ignores it.
-- **`db` reaches the connections that name it again.** v0.17.11 withdrew it from every member turn, which stopped profiles whose skills log to their own database from a connection that drives them; granting it to that one connection restores them without opening it to the others.
-- **Set it in the console:** `alpi setup` → connections → Edit tools (blank restores the fence), or `host.connections.update` with `tools_allow`. Changing it closes the connection's open sockets, like `role` and `profile_scope`.
 
 ## v0.17.18 — 2026-10-13 — the agent draws charts
 

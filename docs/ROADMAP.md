@@ -264,6 +264,12 @@ Each names the condition that promotes it; none is worked on before.
   promote when: a profile is in workgroups that members or untrusted peers of one must not see.
   accept: a fenced turn reads `alp/` only for the workgroup its turn serves, or none; tests cover a second workgroup's transcript and the subscriptions file.
 
+- **POL.2** — A member connection can carry the tool policy a peer carries
+  `feature · alpi · agent · low`
+  note: a member device runs and invokes the profile's skills since v0.17.1 and is otherwise fenced; an ALP peer can already carry `tools.allow` (names, `*` patterns, `tool:action`) that replaces the fence with an exact list, but a member connection cannot. A profile that untrusted members drive has no way to open one skill and close another.
+  promote when: a profile is driven by members who are not trusted with every mode of its skills.
+  accept: a connection record takes the same `tools.allow` grammar as a peer and replaces the member fence with exactly that list, nested execution included; a connection without it behaves as today; the setting is in the takes-effect table of [CONFIG.md](CONFIG.md) and next to the member fence in [SECURITY.md](SECURITY.md); tests drive a member through a granted and an ungranted tool.
+
 - **SK.2** — Safe skill import
   `feature · alpi · agent · low`
   promote when: users repeatedly exchange skills outside their own profile.

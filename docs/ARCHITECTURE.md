@@ -795,7 +795,7 @@ listener other alpis use for `link.*` and `workgroup.*`.
 #### Connections and device credentials (`alpi/host/connections.py`)
 
 The store lives at `~/.alpi/host/connections.yaml` (mode 0600). A connection
-is the operational identity: `{id, label, role, profile_scope, tools_allow?, status}`. Its
+is the operational identity: `{id, label, role, profile_scope, status}`. Its
 `devices[]` each hold the SHA-256 digest of a separate opaque token
 (`token_hash`; the cleartext exists only on the client) plus self-reported
 client/name/version metadata and `last_seen`. Auth hashes the presented token
@@ -897,8 +897,8 @@ Lifecycle:
 - **Revoke / delete**: `host.connections.revoke_device` invalidates one
   device. `host.connections.delete` tombstones the parent and clears every
   linked token while retaining historical session/ledger attribution.
-- **Policy change**: every WebSocket remembers the `role`, `profile_scope`, `session_scope` and
-  `tools_allow` it authenticated under, and the authorization watcher closes it with `1008
+- **Policy change**: every WebSocket remembers the `role`, `profile_scope` and
+  `session_scope` it authenticated under, and the authorization watcher closes it with `1008
   "Authorization changed"` on its next pass (`ALPI_HOST_WS_AUTH_RECHECK`) once the stored
   connection differs, whoever edited it: `host.connections.update`, the legacy `host.devices.*`
   verbs or `alpi setup connections`. An open stream, `host.events.subscribe` included, never

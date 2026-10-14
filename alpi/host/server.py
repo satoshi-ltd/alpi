@@ -705,7 +705,7 @@ class Server:
             return False
         sockets.add(ws)
         self._ws_identities[ws] = key
-        self._ws_policies[ws] = _auth_policy(meta.role, meta.scope, meta.session_scope, meta.tool_allow)
+        self._ws_policies[ws] = _auth_policy(meta.role, meta.scope, meta.session_scope)
         return True
 
     def _awaiting_policy_reply(self, ws: ServerConnection) -> bool:
@@ -916,7 +916,6 @@ class Server:
                     session_scope=meta.session_scope,
                     provisioner=meta.provisioner,
                     profile_scope=tuple(meta.scope),
-                    tool_allow=meta.tool_allow,
                 )
                 remote_meta = meta
         if bootstrap and method != "host.connections.exchange_pairing":
@@ -1426,12 +1425,11 @@ def _check_token_role(body: dict[str, Any]) -> tuple[bool, str]:
     return valid, role
 
 
-AuthPolicy = tuple[str, frozenset[str], str, frozenset[str] | None]
+AuthPolicy = tuple[str, frozenset[str], str]
 
 
-def _auth_policy(role: str, scope: Any, session_scope: str, tool_allow: Any = None) -> AuthPolicy:
-    granted = None if role == "admin" or tool_allow is None else frozenset(tool_allow)
-    return role, frozenset(scope), session_scope, granted
+def _auth_policy(role: str, scope: Any, session_scope: str) -> AuthPolicy:
+    return role, frozenset(scope), session_scope
 
 
 def _authorization_policies() -> dict[tuple[str, str], AuthPolicy | None]:
@@ -1443,7 +1441,6 @@ def _authorization_policies() -> dict[tuple[str, str], AuthPolicy | None]:
         return {
             (connection["id"], device["id"]): _auth_policy(
                 connection["role"], connection["profile_scope"], connection["session_scope"],
-                connection.get("tools_allow"),
             )
             for connection in data["connections"]
             if connection["status"] == "active"
@@ -1475,7 +1472,6 @@ class AuthMeta:
     reason: str = ""
     session_scope: str = "connection"
     provisioner: bool = False
-    tool_allow: tuple[str, ...] | None = None
 
     def __iter__(self):
         yield self.valid
@@ -1534,5 +1530,4 @@ def _check_token_meta(body: dict[str, Any]) -> AuthMeta:
         auth.device_id,
         session_scope=auth.session_scope,
         provisioner=auth.provisioner,
-        tool_allow=auth.tool_allow,
     )
