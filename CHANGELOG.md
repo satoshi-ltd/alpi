@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.17.25 — 2026-10-15 — repeated key headers no longer stall a turn
+
+- **Redacting text with many `-----BEGIN ... PRIVATE KEY-----` lines and no matching end takes milliseconds, not a minute.** The pattern rescanned to the end of the text from every unmatched header, so 200 KB took over two seconds; it runs on every journal event, saved turn and tool result. A complete key block still redacts whole.
+
 ## v0.17.24 — 2026-10-15 — a lone surrogate no longer breaks a client's stream
 
 - **A frame holding an unpaired surrogate (a binary filename, a scraped page) no longer breaks the transport to a client.** It carries U+FFFD where the character was; the Unix path used to log `host unix connection crashed` and the WebSocket dropped the stream.

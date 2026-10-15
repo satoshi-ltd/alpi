@@ -198,28 +198,6 @@ _None._
   reaches a peer with a valid signature, and a `--once` turn whose tool output holds one prints its events; tests
   drive the ALP client and server, the CLI line and a provider-bound message.
 
-- **REDACT.2** — The PEM pattern in `redact` is quadratic on repeated BEGIN markers
-  `bug · alpi · agent · high`
-  note: found while reviewing REDACT.1. `-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END ...` with `re.S` in
-  [_redact.py](../alpi/_redact.py) scans to the end of the string from every BEGIN that has no END: 100 KB of
-  `-----BEGIN RSA PRIVATE KEY-----` lines took 0.6 s and 200 KB 2.4 s (about 60 s at 1 MB), on the same path as
-  every journal event, saved turn and tool result.
-  accept: the body between the markers is bounded or scanned linearly; a test redacts 1 MB of repeated BEGIN
-  markers within a second and a real PEM block, with and without headers, still redacts whole.
-
-- **WG.REWIND-TARGET** — A QA rewind reopens the phase that can fix the finding, never a build-only phase
-  `bug · alpi · agent · high`
-  note: Princess v118 (2026-10-11), hotel 4: lens returned QA FAIL naming
-  `hotels/<slug>/src/content/amenities/beach-club.{es,en,de}.json`, and both rewinds went to `#hotel-build`, whose
-  paths are only `dist/**`, `public/img/**`, `.astro/**`; the rebuild could not change the copy and the run closed
-  `BLOCKED` until the operator reopened `#hotel-content`. In `_phases_owning_named_paths` the cited file matches
-  `hotel-content` and `hotel-translation` (same `hotels/*/src/content/**` scope), and the tie rule drops a path claimed
-  by half the candidates (2 of 4); `_qa_rewind_target` then finds no `content`/`content-copy` phase by name and falls
-  back to `authored[-1]`, the build phase.
-  accept: a tie between phases with the same scope goes to the earliest of them; the name fallback also matches a
-  `*-content` phase; a phase whose paths are all generated outputs is never a rewind target; a test drives the chain
-  recipe's hotel pipeline with this verdict and gets `hotel-content`.
-
 ### Requires a design board
 
 - **CHART.1** — The mobile Usage chart follows the cost too

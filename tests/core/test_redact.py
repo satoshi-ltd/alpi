@@ -105,6 +105,31 @@ def test_pem_private_key_block_redacted() -> None:
     assert redact(f"key:\n{pem}\ndone") == "key:\n[REDACTED]\ndone"
 
 
+def test_repeated_pem_markers_without_an_end_redact_quickly() -> None:
+    for text in (
+        "-----BEGIN RSA PRIVATE KEY-----\n" * 32_000,
+        "-----BEGIN PRIVATE KEY-----\n-----END PUBLIC KEY-----\n" * 20_000,
+    ):
+        started = time.perf_counter()
+        assert redact(text) == text
+        assert time.perf_counter() - started < 1.0
+
+
+def test_pem_blocks_redact_whole_with_or_without_headers_and_around_other_text() -> None:
+    plain = "-----BEGIN PRIVATE KEY-----\nMIIE+/=\n-----END PRIVATE KEY-----"
+    headed = "-----BEGIN RSA PRIVATE KEY-----\nProc-Type: 4,ENCRYPTED\nDEK-Info: AES\n\nMIIE\n-----END RSA PRIVATE KEY-----"
+    assert redact(f"a {plain} b {headed} c") == f"a {_REDACTED} b {_REDACTED} c"
+    assert redact(f"-----BEGIN PRIVATE KEY-----\n{plain}") == _REDACTED
+    assert redact("-----BEGIN PRIVATE KEY-----\nMIIE\n-----END RSA PRIVATE KEY-----") == _REDACTED
+
+
+def test_a_pem_begin_without_an_end_and_public_keys_pass_through() -> None:
+    text = "-----BEGIN PRIVATE KEY-----\nMIIE truncated"
+    assert redact(text) == text
+    public = "-----BEGIN PUBLIC KEY-----\nMIIB\n-----END PUBLIC KEY-----"
+    assert redact(public) == public
+
+
 def test_attachment_metadata_redacted_recursively() -> None:
     out = redact([{"name": "sk-1234567890abcdefABCDEF.png", "size": 10, "mime": "image/png"}])
     assert out == [{"name": "[REDACTED].png", "size": 10, "mime": "image/png"}]

@@ -24,10 +24,9 @@ _VALUE_PATTERNS: tuple[tuple[re.Pattern, str], ...] = (
     # user:pass@ in a URL — keep the scheme, drop the credentials; the scheme stays bounded to keep the scan linear.
     (re.compile(r"(?P<scheme>[a-zA-Z0-9+.-]{1,32}://)[^/\s:@]+:[^/\s@]+@"),
      r"\g<scheme>[REDACTED]@"),
-    # PEM private-key blocks.
-    (re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----",
-                re.S), _REDACTED),
 )
+_PEM_BEGIN = re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----")
+_PEM_END = re.compile(r"-----END [A-Z0-9 ]*PRIVATE KEY-----")
 
 
 def redact(value: Any) -> Any:
@@ -50,4 +49,21 @@ def _redact_string(s: str) -> str:
     out = _LONE_SURROGATE.sub("\ufffd", s)
     for pat, repl in _VALUE_PATTERNS:
         out = pat.sub(repl, out)
-    return out
+    return _redact_pem(out)
+
+
+def _redact_pem(s: str) -> str:
+    # Stops at the first BEGIN without an END, so unmatched markers cannot rescan the tail.
+    parts: list[str] = []
+    pos = 0
+    while (begin := _PEM_BEGIN.search(s, pos)) is not None:
+        end = _PEM_END.search(s, begin.end())
+        if end is None:
+            break
+        parts.append(s[pos:begin.start()])
+        parts.append(_REDACTED)
+        pos = end.end()
+    if not parts:
+        return s
+    parts.append(s[pos:])
+    return "".join(parts)
