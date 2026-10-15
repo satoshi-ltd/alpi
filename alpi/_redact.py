@@ -21,8 +21,8 @@ _VALUE_PATTERNS: tuple[tuple[re.Pattern, str], ...] = (
     (re.compile(r"AIza[A-Za-z0-9_-]{30,}"), _REDACTED),
     (re.compile(r"AKIA[0-9A-Z]{16}"), _REDACTED),
     (re.compile(r"\d{8,12}:[A-Za-z0-9_-]{30,}"), _REDACTED),
-    # user:pass@ in a URL — keep the scheme, drop the credentials.
-    (re.compile(r"(?P<scheme>[a-zA-Z][a-zA-Z0-9+.-]*://)[^/\s:@]+:[^/\s@]+@"),
+    # user:pass@ in a URL — keep the scheme, drop the credentials; the scheme stays bounded to keep the scan linear.
+    (re.compile(r"(?P<scheme>[a-zA-Z0-9+.-]{1,32}://)[^/\s:@]+:[^/\s@]+@"),
      r"\g<scheme>[REDACTED]@"),
     # PEM private-key blocks.
     (re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----",

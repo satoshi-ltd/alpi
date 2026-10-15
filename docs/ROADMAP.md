@@ -61,14 +61,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **REDACT.1** — The URL-credentials pattern in `redact` is quadratic
-  `bug · alpi · agent · high`
-  note: found while reviewing RUN.1. `(?P<scheme>[a-zA-Z][a-zA-Z0-9+.-]*://)[^/\s:@]+:[^/\s@]+@` in
-  [_redact.py](../alpi/_redact.py) takes 2.2 s on 50 KB of `a` and a 5 MB string did not finish in 120 s; `redact`
-  runs on every journal event, saved turn and tool result, so one large alphanumeric output can stall a turn.
-  accept: the scheme length is bounded; a test redacts 1 MB of `a` within a second and the URL, userinfo and
-  credential cases still redact as before.
-
 - **RES.1** — One `research` call has no cost cap of its own
   `bug · alpi · agent · high`
   note: [research.py](../alpi/tools/research.py) already limits each sub-agent to 8/15/30 iterations
@@ -202,6 +194,15 @@ _None._
   findings on each.
 
 ## Proposed
+
+- **REDACT.2** — The PEM pattern in `redact` is quadratic on repeated BEGIN markers
+  `bug · alpi · agent · high`
+  note: found while reviewing REDACT.1. `-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END ...` with `re.S` in
+  [_redact.py](../alpi/_redact.py) scans to the end of the string from every BEGIN that has no END: 100 KB of
+  `-----BEGIN RSA PRIVATE KEY-----` lines took 0.6 s and 200 KB 2.4 s (about 60 s at 1 MB), on the same path as
+  every journal event, saved turn and tool result.
+  accept: the body between the markers is bounded or scanned linearly; a test redacts 1 MB of repeated BEGIN
+  markers within a second and a real PEM block, with and without headers, still redacts whole.
 
 ### Requires a design board
 

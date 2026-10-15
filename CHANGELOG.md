@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.17.23 — 2026-10-15 — a large block of letters no longer stalls a turn
+
+- **Redacting a long run of letters, digits, `+`, `.` or `-` takes milliseconds, not minutes.** The pattern that hides credentials in a URL rescanned the whole run from every position, so 50 KB took over a second and 5 MB did not finish in two minutes; it runs on every journal event, saved turn and tool result.
+- **A scheme is read up to 32 characters.** A credential URL after a longer run still loses its user and password.
+
 ## v0.17.22 — 2026-10-15 — questions stay with their connection
 
 - **Remote admins receive only their own connection's questions and command approvals**, including pending requests and notifications recovered after reconnecting.

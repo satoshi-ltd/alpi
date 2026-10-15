@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 from alpi._redact import redact, _REDACTED
 
 
@@ -75,6 +77,23 @@ def test_credential_url_keeps_scheme_drops_userinfo() -> None:
 
 def test_url_without_userinfo_passes_through() -> None:
     assert redact("see https://example.com/path?x=1") == "see https://example.com/path?x=1"
+
+
+def test_a_megabyte_of_scheme_like_text_redacts_quickly() -> None:
+    for text in ("a" * 1_000_000, "ab+" * 333_000, "a.b-" * 250_000):
+        started = time.perf_counter()
+        assert redact(text) == text
+        assert time.perf_counter() - started < 1.0
+
+
+def test_a_credential_url_after_a_long_run_of_scheme_characters_still_loses_its_userinfo() -> None:
+    out = redact("x" * 5000 + "https://alice:s3cr3t@host/p")
+    assert "s3cr3t" not in out and "alice" not in out
+    assert out.endswith("https://[REDACTED]@host/p")
+    for run in ("a" + "1" * 32, "a" + "." * 40, "a" + "-" * 33, "a" + "+" * 100, "1" * 40):
+        out = redact(f"{run}://alice:s3cr3t@host/p")
+        assert "s3cr3t" not in out and "alice" not in out
+        assert out.endswith("://[REDACTED]@host/p")
 
 
 def test_pem_private_key_block_redacted() -> None:
