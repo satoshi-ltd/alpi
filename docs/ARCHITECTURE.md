@@ -831,8 +831,11 @@ scheduler or `host.chat.delegate`) stay visible to every device of the
 connection. `ask_user` clarifications and command approvals carry the owner of
 the turn that raised them: `host.clarification.pending` / `host.approval.pending`,
 their `respond` verbs and the `clarification.*` / `approval.*` events follow the
-same rule for member devices. The local socket and admin-role reads are
-unaffected. A device
+same rule for member devices. Remote admins also receive, list and answer prompts
+only from their own connection, but share them across its devices regardless of
+`session_scope`. Prompts without an owner are hidden from remote event streams and
+history. The local socket can still handle every connection's prompts. Other
+admin-role session reads are unaffected. A device
 flagged `provisioner` (minted from a pairing grant that carried the flag) may
 call `add_device`, `pairing_status`, `cancel_pairing` and `revoke_device` for
 its own connection without the admin role; it cannot grant provisioning, revoke
@@ -1658,7 +1661,10 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   what the verb returns joins `activity._TRIGGERS`. `activity.changed` is
   live-only (`emit(..., history=False)`) so it never evicts replay rows; the read
   path never writes the phase-change baseline. Running turns use the
-  `can_handle_prompt` rule, the same check as `needs_you`. Chat frames:
+  `can_handle_prompt` rule, the same check as `needs_you`: remote admins and members
+  see their own connection's chat turns and prompts; member devices also apply
+  `session_scope`. Local callers see all connections; scheduled and workgroup runs
+  keep their separate visibility rules. Chat frames:
   `tool_start.started_at`, `tool_end.duration_s`, and one `reasoning_done
   {seconds}` per reasoning span (consecutive deltas closed by the next tool
   call, text delta or step end); `seconds` is time spent reasoning — the first
@@ -1691,7 +1697,10 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   `chat.turn_done` (the first 200 characters of the reply), `file_mutations` (a diff
   preview) and the `approval.*` and `clarification.*` prompts, carry both ids, and
   `server._filter_session_events` (`_OWNED_EVENTS`) drops foreign ones for members, next to the
-  role redaction; a new event that carries session text joins that set. Never filter by
+  role redaction. `_PROMPT_EVENTS` also filters questions and approvals by connection
+  for remote admins, without narrowing their other session events or sharing within
+  the connection. Ownerless prompts are hidden from all remote clients. A new event
+  that carries session text joins the owned set. Never filter by
   `owns_connection` alone in a new session verb. Those two
   events recorded without an owner are hidden from members altogether. `tests/host/test_device_scope_matrix.py`
   writes as device A and reads as device B through each path it lists (the session verbs, replay,

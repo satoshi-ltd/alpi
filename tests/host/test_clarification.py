@@ -503,19 +503,21 @@ def test_pending_profile_resolves_and_fails_closed(monkeypatch):
         clar._reset_for_tests()
 
 
+@pytest.mark.parametrize("owner_role", ["member", "admin"])
 @pytest.mark.asyncio
-async def test_pending_and_respond_follow_the_turn_owner(tmp_path: Path, monkeypatch) -> None:
+async def test_pending_and_respond_follow_the_turn_owner(tmp_path: Path, monkeypatch, owner_role: str) -> None:
     from alpi.host import events as host_events
     from alpi.host.connection_context import ConnectionContext, use
     srv = host_server.Server(home=tmp_path)
     host_clar.register(srv)
     emitted: list[tuple[str, dict]] = []
     monkeypatch.setattr(host_events, "emit", lambda kind, data=None: emitted.append((kind, data or {})))
-    owner = ConnectionContext("conn", "dev_a", "remote", "member", session_scope="device")
+    owner = ConnectionContext("conn", "dev_a", "remote", owner_role, session_scope="device")
     sibling = ConnectionContext("conn", "dev_b", "remote", "member", session_scope="device")
     shared_sibling = ConnectionContext("conn", "dev_b", "remote", "member", session_scope="connection")
     stranger = ConnectionContext("conn_other", "dev_x", "remote", "member")
     admin = ConnectionContext("conn_admin", "dev_admin", "remote", "admin")
+    own_admin = ConnectionContext("conn", "dev_admin", "remote", "admin", session_scope="device")
     loop = asyncio.get_running_loop()
 
     def _run_handler() -> str:
@@ -531,9 +533,11 @@ async def test_pending_and_respond_follow_the_turn_owner(tmp_path: Path, monkeyp
 
     rid = (await pending_as(owner))[0]["request_id"]
     assert (await pending_as(sibling)) == [] and (await pending_as(stranger)) == []
-    assert len(await pending_as(shared_sibling)) == 1 and len(await pending_as(admin)) == 1
+    assert len(await pending_as(shared_sibling)) == 1
+    assert await pending_as(admin) == []
+    assert len(await pending_as(own_admin)) == 1
     assert len((await host_clar._pending_handler({}, srv))["requests"]) == 1
-    for ctx in (sibling, stranger):
+    for ctx in (sibling, stranger, admin):
         with use(ctx):
             refused = await host_clar._respond_handler({"request_id": rid, "choice": "X"}, srv)
         assert refused == {"ok": False, "reason": "unknown or already resolved"}

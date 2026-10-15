@@ -1058,7 +1058,7 @@ class Server:
             return
         scoped = require_token and role != "admin" and bool(profile_scope)
         member = require_token and role != "admin"
-        if scoped or member:
+        if require_token:
             async def send_filtered(payload: dict[str, Any]) -> None:
                 out = payload
                 if scoped:
@@ -1069,9 +1069,9 @@ class Server:
                     out = _redact_payload_by_role(method, out)
                     if out is None:
                         return
-                    out = _filter_session_events(method, out, request_context)
-                    if out is None:
-                        return
+                out = _filter_session_events(method, out, request_context)
+                if out is None:
+                    return
                 await send(out)
             delivery = send_filtered
         else:
@@ -1296,12 +1296,17 @@ def _session_event_visible(data: Any, ctx: Any, strict: bool = False) -> bool:
         return not strict
     if data["connection_id"] != ctx.connection_id:
         return False
-    if ctx.session_scope != "device" or not data.get("device_id"):
+    if ctx.role == "admin" or ctx.session_scope != "device" or not data.get("device_id"):
         return True
     return data["device_id"] == ctx.device_id
 
 
-_OWNERLESS_HIDDEN_EVENTS = frozenset({"chat.turn_done", "file_mutations"})
+_PROMPT_EVENTS = frozenset({
+    "clarification.request", "clarification.resolved",
+    "approval.request", "approval.resolved",
+})
+
+_OWNERLESS_HIDDEN_EVENTS = frozenset({"chat.turn_done", "file_mutations"}) | _PROMPT_EVENTS
 
 _OWNED_EVENTS = frozenset({
     "session_changed", "chat.turn_done", "file_mutations",
@@ -1313,7 +1318,8 @@ _OWNED_EVENTS = frozenset({
 def _filter_session_events(method: str, payload: dict[str, Any], ctx: Any) -> dict[str, Any] | None:
     if not isinstance(payload, dict):
         return payload
-    if "data" in payload and payload.get("event") in _OWNED_EVENTS:
+    owned_events = _PROMPT_EVENTS if ctx.role == "admin" else _OWNED_EVENTS
+    if "data" in payload and payload.get("event") in owned_events:
         strict = payload.get("event") in _OWNERLESS_HIDDEN_EVENTS
         return payload if _session_event_visible(payload.get("data"), ctx, strict) else None
     if method == "host.events.history":
@@ -1322,7 +1328,7 @@ def _filter_session_events(method: str, payload: dict[str, Any], ctx: Any) -> di
         if isinstance(events, list):
             result["events"] = [
                 ev for ev in events
-                if not isinstance(ev, dict) or ev.get("event") not in _OWNED_EVENTS
+                if not isinstance(ev, dict) or ev.get("event") not in owned_events
                 or _session_event_visible(
                     ev.get("data"), ctx, ev.get("event") in _OWNERLESS_HIDDEN_EVENTS,
                 )

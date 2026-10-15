@@ -257,7 +257,8 @@ async def test_prompt_events_reach_only_the_turn_owner(
     task = asyncio.create_task(srv._handle_request(json.dumps(body), send, require_token=True))
     try:
         await asyncio.wait_for(subscribed.wait(), timeout=2.0)
-        for data in _prompt_payloads(prefix, connection_id, first["id"], second["id"]):
+        for data in [*_prompt_payloads(prefix, connection_id, first["id"], second["id"]),
+                     {"request_id": f"{prefix}-ownerless", "profile": "default"}]:
             host_events.emit(kind, data)
         host_events.emit(kind, {"request_id": f"{prefix}-end", "profile": "default", "connection_id": connection_id, "device_id": first["id"]})
         for _ in range(200):
@@ -279,6 +280,7 @@ async def test_prompt_events_reach_only_the_turn_owner(
     history = [e["data"].get("request_id") for e in history_sent[0]["result"]["events"] if e["event"] == kind]
     for ids in (live, history):
         assert f"{prefix}-mine" in ids
-        assert (f"{prefix}-foreign" in ids) is (role == "admin")
+        assert f"{prefix}-foreign" not in ids
+        assert f"{prefix}-ownerless" not in ids
         assert (f"{prefix}-sibling" in ids) is sibling_visible
 

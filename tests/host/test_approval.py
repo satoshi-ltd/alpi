@@ -433,17 +433,19 @@ async def test_safe_command_skips_the_prompt_entirely(short_tmp: Path) -> None:
         await srv.stop()
 
 
+@pytest.mark.parametrize("owner_role", ["member", "admin"])
 @pytest.mark.asyncio
-async def test_pending_and_respond_follow_the_turn_owner(short_tmp: Path, monkeypatch) -> None:
+async def test_pending_and_respond_follow_the_turn_owner(short_tmp: Path, monkeypatch, owner_role: str) -> None:
     from alpi.host.connection_context import ConnectionContext, use
     srv = host_server.Server(home=short_tmp)
     host_approval.register(srv)
     emitted: list[tuple[str, dict]] = []
     monkeypatch.setattr(host_events, "emit", lambda kind, data=None: emitted.append((kind, data or {})))
-    owner = ConnectionContext("conn", "dev_a", "remote", "member", session_scope="device")
+    owner = ConnectionContext("conn", "dev_a", "remote", owner_role, session_scope="device")
     sibling = ConnectionContext("conn", "dev_b", "remote", "member", session_scope="device")
     stranger = ConnectionContext("conn_other", "dev_x", "remote", "member")
     admin = ConnectionContext("conn_admin", "dev_admin", "remote", "admin")
+    own_admin = ConnectionContext("conn", "dev_admin", "remote", "admin", session_scope="device")
     loop = asyncio.get_running_loop()
 
     def _run_callback() -> str:
@@ -459,8 +461,9 @@ async def test_pending_and_respond_follow_the_turn_owner(short_tmp: Path, monkey
 
     rid = (await pending_as(owner))[0]["request_id"]
     assert (await pending_as(sibling)) == [] and (await pending_as(stranger)) == []
-    assert len(await pending_as(admin)) == 1
-    for ctx in (sibling, stranger):
+    assert await pending_as(admin) == []
+    assert len(await pending_as(own_admin)) == 1
+    for ctx in (sibling, stranger, admin):
         with use(ctx):
             refused = await host_approval._respond_handler({"request_id": rid, "choice": "once"}, srv)
         assert refused == {"ok": False, "reason": "unknown or already resolved"}

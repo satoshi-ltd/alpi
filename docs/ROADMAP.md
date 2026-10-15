@@ -147,12 +147,12 @@ _None._
 
 - **SCOPE.D1** — Does `session_scope: device` bind an admin connection?
   `decision · alpi · creator · high`
-  note: found by the SCOPE.4 inventory. `can_read_session` and `can_handle_prompt` return
-  true for `role == admin`, and the member-only event filters never run for an admin, so a
-  remote admin device with `session_scope: device` sees device A's sessions through
-  `session_search`, `session_read`, `recall_sessions`, `host.activity.list`, prompts and
-  every event, while `host.sessions.*`, `host.chat.*` and `host.runs.*` hide them. Today the
-  scope is a partition for admins, not a privacy boundary.
+  note: `can_read_session` retains the admin bypass, so a remote admin with
+  `session_scope: device` sees sibling sessions through `session_search`, `session_read`,
+  `recall_sessions` and session events, while `host.sessions.*`, `host.chat.*` and
+  `host.runs.*` hide them. Prompts and running chat turns are bound to the admin's own
+  connection but remain shared across its devices. Decide the remaining device boundary
+  for admins and the cross-connection boundary for other session text.
   accept: decide whether remote admins are bound for session text, and whether that applies
   within their connection or across connections. Create a separate agent task for consistent
   enforcement, documentation and matrix tests; preserve the local socket owner semantics.

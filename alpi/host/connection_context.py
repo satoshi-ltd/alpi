@@ -70,8 +70,10 @@ def owns_session_row(row: dict[str, Any]) -> bool:
 
 def can_handle_prompt(owner_connection_id: str | None, owner_device_id: str | None = None) -> bool:
     ctx = current()
-    if ctx.source != "remote" or ctx.role == "admin":
+    if ctx.source != "remote":
         return True
+    if ctx.role == "admin":
+        return owns_connection(owner_connection_id)
     return owns_session(owner_connection_id, owner_device_id)
 
 

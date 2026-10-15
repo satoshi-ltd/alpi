@@ -123,8 +123,8 @@ def test_member_sees_only_its_own_connection(monkeypatch, tmp_path: Path) -> Non
 
     with use(ConnectionContext(connection_id="conn-b", source="remote", role="admin")):
         remote_admin = activity.snapshot()
-    assert {r["request_id"] for r in remote_admin["needs_you"]} == {"mine", "theirs", "host-q"}
-    assert {r.get("session_id") for r in remote_admin["running"]} == {"sa", "sb", "sh", None}
+    assert {r["request_id"] for r in remote_admin["needs_you"]} == {"theirs"}
+    assert {r.get("session_id") for r in remote_admin["running"]} == {"sb", None}
 
 
 def test_scope_filter_drops_out_of_scope_profiles() -> None:

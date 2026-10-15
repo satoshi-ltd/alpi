@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.17.22 — 2026-10-15 — questions stay with their connection
+
+- **Remote admins receive only their own connection's questions and command approvals**, including pending requests and notifications recovered after reconnecting.
+- **Another connection cannot answer or cancel those requests.** The local console retains access to every connection's prompts.
+- **Running chat activity stays with its connection** for remote admins too.
+
 ## v0.17.21 — 2026-10-14 — a member device has the db tool again
 
 - **Member devices get `db` again.** v0.17.11 withdrew it from every member turn, which stopped profiles whose skills log to their own database from any connection that drives them. An ALP peer turn without `tools.allow` still has no `db`.
