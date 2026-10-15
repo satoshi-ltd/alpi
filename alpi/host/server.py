@@ -15,6 +15,7 @@ from typing import Any, Awaitable, Callable
 import websockets
 from websockets.asyncio.server import ServerConnection, serve as ws_serve
 
+from alpi._redact import scrub_surrogates
 from alpi.alp.rate_limit import RateLimiter
 from alpi.host.tailscale import is_tailscale_ip
 
@@ -521,10 +522,7 @@ class Server:
         writer: asyncio.StreamWriter,
     ) -> None:
         async def send(payload: dict[str, Any]) -> None:
-            data = (
-                json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
-                + "\n"
-            ).encode("utf-8")
+            data = (_frame_text(payload) + "\n").encode("utf-8")
             writer.write(data)
             await writer.drain()
 
@@ -547,9 +545,7 @@ class Server:
 
     async def _handle_websocket(self, ws: ServerConnection) -> None:
         async def send(payload: dict[str, Any]) -> None:
-            await ws.send(
-                json.dumps(payload, separators=(",", ":"), ensure_ascii=False),
-            )
+            await ws.send(_frame_text(payload))
 
         async def dispatch(line: str, body: dict[str, Any], meta: "AuthMeta") -> None:
             replying = str(body.get("method") or "") in _POLICY_MUTATING_METHODS
@@ -1466,6 +1462,10 @@ def _authorization_policies() -> dict[tuple[str, str], AuthPolicy | None]:
 
 def _active_authorizations() -> set[tuple[str, str]]:
     return set(_authorization_policies())
+
+
+def _frame_text(payload: dict[str, Any]) -> str:
+    return scrub_surrogates(json.dumps(payload, separators=(",", ":"), ensure_ascii=False))
 
 
 @dataclass(frozen=True)

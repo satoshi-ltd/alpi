@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.17.24 — 2026-10-15 — a lone surrogate no longer breaks a client's stream
+
+- **A frame holding an unpaired surrogate (a binary filename, a scraped page) no longer breaks the transport to a client.** It carries U+FFFD where the character was; the Unix path used to log `host unix connection crashed` and the WebSocket dropped the stream.
+- **The same text is scrubbed before the inbox, the run ledger, the administrative audit, the workgroup transcript and its file records write it**, so a notification or a ledger row holding one is stored instead of lost.
+
 ## v0.17.23 — 2026-10-15 — a large block of letters no longer stalls a turn
 
 - **Redacting a long run of letters, digits, `+`, `.` or `-` takes milliseconds, not minutes.** The pattern that hides credentials in a URL rescanned the whole run from every position, so 50 KB took over a second and 5 MB did not finish in two minutes; it runs on every journal event, saved turn and tool result.

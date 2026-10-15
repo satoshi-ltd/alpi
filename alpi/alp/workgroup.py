@@ -44,6 +44,7 @@ from typing import Any
 
 
 from alpi import yamlfast
+from alpi._redact import scrub_surrogates
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric.x25519 import (
     X25519PrivateKey,
@@ -1050,7 +1051,7 @@ def _read_transcript(d: Path) -> list[dict[str, Any]]:
 def _append_transcript(d: Path, entry: dict[str, Any]) -> None:
     p = d / _TRANSCRIPT
     p.parent.mkdir(parents=True, exist_ok=True)
-    line = json.dumps(entry, separators=(",", ":"), ensure_ascii=False)
+    line = scrub_surrogates(json.dumps(entry, separators=(",", ":"), ensure_ascii=False))
     with p.open("a", encoding="utf-8") as f:
         f.write(line + "\n")
 

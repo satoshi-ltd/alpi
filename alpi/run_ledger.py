@@ -10,6 +10,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
+from alpi._redact import scrub_surrogates
+
 try:
     import fcntl
 except ImportError:  # pragma: no cover
@@ -278,7 +280,7 @@ def _atomic_rewrite(path: Path, items: Iterable[dict[str, Any]]) -> None:
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             for it in items:
-                f.write(json.dumps(it, ensure_ascii=False) + "\n")
+                f.write(scrub_surrogates(json.dumps(it, ensure_ascii=False)) + "\n")
             f.flush()
             os.fsync(f.fileno())
     except Exception:

@@ -235,7 +235,8 @@ parameter that admits strings, or one without a readable type, passes through
 untouched.
 
 Each turn writes `runs/<run_id>.jsonl` with bounded, redacted events (an unpaired surrogate in
-any persisted text, journal or saved session, becomes U+FFFD): the
+any persisted text, journal or saved session, and in every frame the host sends a client over the Unix socket or a
+WebSocket, becomes U+FFFD): the
 start record (pid, model, input), tool starts / states / ends, `model_state`
 when it changes, `usage`, every `assistant_done` (only the one closing the
 turn carries `final=True`), errors and the finish outcome. Streaming deltas

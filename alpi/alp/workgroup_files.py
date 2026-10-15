@@ -16,6 +16,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+from alpi._redact import scrub_surrogates
 from alpi import attachments, authority
 from alpi.alp import server as alp_server
 from alpi.alp.keys import Keypair
@@ -166,7 +167,7 @@ def _atomic_json(path: Path, value: dict[str, Any]) -> None:
     tmp = Path(tmp_name)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(value, f, separators=(",", ":"), ensure_ascii=False)
+            f.write(scrub_surrogates(json.dumps(value, separators=(",", ":"), ensure_ascii=False)))
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, path)

@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from alpi._redact import scrub_surrogates
 from alpi.host.connection_context import ConnectionContext, current
 
 
@@ -125,7 +126,7 @@ def is_audited(method: str) -> bool:
 
 
 def _safe_text(value: Any) -> str:
-    text = " ".join(str(value or "").split())
+    text = scrub_surrogates(" ".join(str(value or "").split()))
     encoded = text.encode("utf-8")
     if len(encoded) <= MAX_FIELD_LENGTH:
         return text
@@ -254,10 +255,10 @@ def _rotate(path: Path, incoming_bytes: int) -> None:
 
 
 def _append(home: Path, record: dict[str, Any]) -> bool:
-    encoded = (json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
+    encoded = (scrub_surrogates(json.dumps(record, ensure_ascii=False, separators=(",", ":"))) + "\n").encode()
     if len(encoded) > MAX_RECORD_BYTES:
         record = {**record, "target": {}, "target_truncated": True}
-        encoded = (json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
+        encoded = (scrub_surrogates(json.dumps(record, ensure_ascii=False, separators=(",", ":"))) + "\n").encode()
     if len(encoded) > MAX_RECORD_BYTES:
         log.error("administrative audit event exceeds the hard record limit")
         return False

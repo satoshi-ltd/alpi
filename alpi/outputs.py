@@ -26,6 +26,8 @@ import time
 from pathlib import Path
 from typing import Any, Iterable
 
+from alpi._redact import scrub_surrogates
+
 MAX_OUTPUTS = 500
 
 VALID_TYPE = frozenset({"info", "warning", "error"})
@@ -362,7 +364,7 @@ def _atomic_rewrite(path: Path, items: Iterable[dict[str, Any]]) -> None:
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             for it in items:
-                f.write(json.dumps(it, ensure_ascii=False) + "\n")
+                f.write(scrub_surrogates(json.dumps(it, ensure_ascii=False)) + "\n")
             f.flush()
             os.fsync(f.fileno())
     except Exception:
@@ -422,7 +424,7 @@ def append(
         else:
             path.parent.mkdir(parents=True, exist_ok=True)
             with path.open("a", encoding="utf-8") as f:
-                f.write(json.dumps(output, ensure_ascii=False) + "\n")
+                f.write(scrub_surrogates(json.dumps(output, ensure_ascii=False)) + "\n")
     return output
 
 
