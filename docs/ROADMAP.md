@@ -61,18 +61,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **RES.1** — One `research` call has no cost cap of its own
-  `bug · alpi · agent · high`
-  note: [research.py](../alpi/tools/research.py) already limits each sub-agent to 8/15/30 iterations
-  and a batch to three briefs. It checks the daily budget, but has no per-call monetary budget;
-  reaching the daily cap returns an error before synthesis and can leave the main turn unable to answer.
-  accept: a configurable per-call cap bounds the whole batch, shared across workers, with explicit
-  headroom for synthesis and the parent answer. Exhaustion returns partial findings and a truncation
-  note; no new provider calls start after exhaustion, and already in-flight calls have documented
-  overshoot semantics. Fake-provider tests cover single and parallel calls, exhausted daily headroom
-  and the parent still answering. Document the cap's default and takes-effect behavior in CONFIG and
-  its knowledge reference; preserve the existing depth constants unless separately approved.
-
 - **SCOPE.5** — Profile session counts respect scope
   `bug · alpi · agent · normal`
   note: `counts.sessions` in `host.profile.summaries` counts every session file of the

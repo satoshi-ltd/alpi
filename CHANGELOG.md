@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.17.26 — 2026-10-15 — a research call has its own cost cap
+
+- **`tools.research.max_usd` (default 1.0 USD, `0` for none) bounds one `research` call**, a whole `tasks` batch included: every worker charges the same cap. The sub-agent stops investigating at 75% of it and keeps the rest for the final report.
+- **Hitting the cap or the daily headroom returns what was gathered, with a one-line note, instead of an error.** Research also stops when today's spend reaches 90% of `budget.daily_usd`, so the main turn can still answer; a call that cannot start returns an error. Calls already running finish, so the overshoot is at most one call per running worker.
+
 ## v0.17.25 — 2026-10-15 — repeated key headers no longer stall a turn
 
 - **Redacting text with many `-----BEGIN ... PRIVATE KEY-----` lines and no matching end takes milliseconds, not a minute.** The pattern rescanned to the end of the text from every unmatched header, so 200 KB took over two seconds; it runs on every journal event, saved turn and tool result. A complete key block still redacts whole.

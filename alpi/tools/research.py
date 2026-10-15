@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import contextlib
 import contextvars
+import math
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
@@ -16,6 +19,11 @@ from alpi.tools.base import Tool, ToolResult, failure_payload
 from alpi.tools import _state as tool_state_mod
 
 MAX_PARALLEL_TASKS = 3
+DEFAULT_MAX_USD = 1.0
+SYNTHESIS_RESERVE = 0.25
+PARENT_RESERVE = 0.10
+PARTIAL_ITEMS = 10
+PARTIAL_EXCERPT_CHARS = 600
 
 
 SUB_AGENT_TOOLS = {
@@ -43,6 +51,42 @@ Constraints:
 
 def _resolve_depth(cfg: cfg_mod.Config, depth: str) -> int:
     return max(1, DEPTH_STEPS_DEFAULTS[depth])
+
+
+def max_usd(cfg: cfg_mod.Config) -> float | None:
+    raw = (cfg.raw.get("tools") or {}).get("research") or {}
+    value = raw.get("max_usd", DEFAULT_MAX_USD) if isinstance(raw, dict) else DEFAULT_MAX_USD
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+        return DEFAULT_MAX_USD
+    return float(value) or None
+
+
+_call_budget: contextvars.ContextVar["_CallBudget | None"] = contextvars.ContextVar("research_call_budget", default=None)
+
+
+class _CallBudget:
+    def __init__(self, cap_usd: float | None) -> None:
+        self.cap = cap_usd
+        self.spent = 0.0
+        self._lock = threading.Lock()
+
+    def charge(self, usd: Any) -> None:
+        try:
+            amount = max(0.0, float(usd or 0.0))
+        except (TypeError, ValueError):
+            return
+        with self._lock:
+            self.spent += amount
+
+    def stop_reason(self, cfg: cfg_mod.Config, *, synthesis: bool) -> str:
+        from alpi import ledger
+        limit = self.cap if synthesis or self.cap is None else self.cap * (1 - SYNTHESIS_RESERVE)
+        if limit is not None and self.spent >= limit:
+            return f"the per-call cost cap (${self.cap:.2f})"
+        fraction = ledger.spend_fraction(get_home(), cfg.budget)
+        if fraction is not None and fraction >= 1 - PARENT_RESERVE:
+            return "the daily budget headroom reserved for the main answer"
+        return ""
 
 
 class Research(Tool):
@@ -166,13 +210,17 @@ class Research(Tool):
             with use(parent_connection):
                 return self._run_single(task["brief"], task.get("depth", "normal"))
 
-        with ThreadPoolExecutor(max_workers=min(MAX_PARALLEL_TASKS, total)) as ex:
-            contexts = [contextvars.copy_context() for _task in tasks]
-            futures = [
-                ex.submit(contexts[idx].run, _worker, idx, task)
-                for idx, task in enumerate(tasks)
-            ]
-            results = [future.result() for future in futures]
+        budget_token = _call_budget.set(_CallBudget(max_usd(cfg_mod.load(get_home()))))
+        try:
+            with ThreadPoolExecutor(max_workers=min(MAX_PARALLEL_TASKS, total)) as ex:
+                contexts = [contextvars.copy_context() for _task in tasks]
+                futures = [
+                    ex.submit(contexts[idx].run, _worker, idx, task)
+                    for idx, task in enumerate(tasks)
+                ]
+                results = [future.result() for future in futures]
+        finally:
+            _call_budget.reset(budget_token)
 
         parts: list[str] = []
         for i, (task, r) in enumerate(zip(tasks, results)):
@@ -181,6 +229,11 @@ class Research(Tool):
         return ToolResult(ok=True, output="\n\n---\n\n".join(parts))
 
     def _run_single(self, brief: str, depth: str = "normal") -> ToolResult:
+        budget = _call_budget.get() or _CallBudget(max_usd(cfg_mod.load(get_home())))
+        with _charging(budget):
+            return self._investigate(brief, depth, budget)
+
+    def _investigate(self, brief: str, depth: str, budget: _CallBudget) -> ToolResult:
         from alpi.tools import execute, schemas as all_schemas
 
         depth = (depth or "normal").strip().lower()
@@ -205,19 +258,21 @@ class Research(Tool):
             {"role": "user", "content": brief},
         ]
 
-        from alpi import ledger
-
         iteration = 0
         final_text = ""
+        stopped = ""
+        notes: list[str] = []
+        gathered: list[tuple[str, str]] = []
         while iteration < max_steps:
             if tool_state_mod.is_interrupted():
                 return ToolResult(ok=True, output=(
                     "[research: interrupted by user before completing]"
                 ))
-            try:
-                ledger.check(get_home(), cfg.budget)
-            except ledger.BudgetExceeded as e:
-                return ToolResult(ok=False, output="", error=str(e))
+            stopped = budget.stop_reason(cfg, synthesis=False)
+            if stopped:
+                if iteration == 0:
+                    return ToolResult(ok=False, output="", error=f"research skipped: no room under {stopped}")
+                break
             iteration += 1
             prefix = f"step {iteration}/{max_steps}"
             tool_state_mod.emit_state(f"{depth} · {prefix}")
@@ -232,6 +287,8 @@ class Research(Tool):
 
             content = out.content or ""
             tool_calls = out.tool_calls or []
+            if tool_calls and content.strip():
+                notes.append(content.strip())
 
             cut_index = len(tool_calls) - 1 if getattr(out, "finish_reason", None) == "length" else -1
             decoded_args = [
@@ -267,7 +324,9 @@ class Research(Tool):
                             "[research: interrupted by user mid-investigation]"
                         ))
                     name = tc["name"]
-                    if name not in SUB_AGENT_TOOLS:
+                    if budget.stop_reason(cfg, synthesis=False):
+                        payload = "ERROR: skipped, the research cost budget is reached"
+                    elif name not in SUB_AGENT_TOOLS:
                         payload = f"ERROR: tool '{name}' not available to research sub-agent"
                     else:
                         args, args_error = decoded_args[i]
@@ -281,6 +340,8 @@ class Research(Tool):
                         payload = _budget_apply(name, payload)
                         from alpi.tools._sanitizer import sanitize_tool_payload
                         payload = sanitize_tool_payload(name, payload, is_error=not result.ok)
+                        if result.ok:
+                            gathered.append((_visited_line(name, args), payload))
                     messages.append({
                         "role": "tool", "tool_call_id": tc["id"],
                         "name": name, "content": payload,
@@ -289,15 +350,15 @@ class Research(Tool):
                 tool_state_mod.set_emit(outer_emit)
 
         if not final_text:
-            try:
-                ledger.check(get_home(), cfg.budget)
-            except ledger.BudgetExceeded as e:
-                return ToolResult(ok=False, output="", error=str(e))
+            synthesis_stop = budget.stop_reason(cfg, synthesis=True)
+            if synthesis_stop:
+                return ToolResult(ok=True, output=_partial_report(notes, gathered, stopped or synthesis_stop))
             tool_state_mod.emit_state("writing final report…")
+            reached = "reached your research cost budget" if stopped else f"used your {max_steps}-iteration budget"
             messages.append({
                 "role": "user",
                 "content": (
-                    f"You've used your {max_steps}-iteration budget. "
+                    f"You've {reached}. "
                     "Stop investigating and write your final report now with "
                     "what you've gathered. Cite URLs. Do not call any tools."
                 ),
@@ -310,8 +371,46 @@ class Research(Tool):
                                   error=f"research synthesis failed: {e}")
             tool_state_mod.record_completion_usage(out)
             if not final_text:
-                final_text = f"[research: {max_steps}-step budget exhausted, no synthesis]"
+                final_text = (
+                    f"[research: stopped by {stopped}, no synthesis]" if stopped
+                    else f"[research: {max_steps}-step budget exhausted, no synthesis]"
+                )
+            elif stopped:
+                final_text += f"\n\n[research: stopped early by {stopped}; the report covers what was gathered so far]"
         return ToolResult(ok=True, output=final_text)
+
+
+@contextlib.contextmanager
+def _charging(budget: _CallBudget):
+    parent = tool_state_mod.get_usage_sink()
+
+    def sink(input_tokens, output_tokens, cost_usd, *rest, **kwargs):
+        budget.charge(cost_usd)
+        if parent is not None:
+            parent(input_tokens, output_tokens, cost_usd, *rest, **kwargs)
+
+    tool_state_mod.set_usage_sink(sink)
+    try:
+        yield
+    finally:
+        tool_state_mod.set_usage_sink(parent)
+
+
+def _visited_line(name: str, args: Any) -> str:
+    detail = ""
+    if isinstance(args, dict):
+        detail = str(args.get("url") or args.get("query") or args.get("path") or args.get("pattern") or "")
+    return f"{name}: {detail[:160]}" if detail else name
+
+
+def _partial_report(notes: list[str], gathered: list[tuple[str, str]], stopped: str) -> str:
+    parts = [f"[research: stopped by {stopped} before a final report; partial findings follow]"]
+    if notes:
+        parts.append("\n\n".join(notes[-5:]))
+    if gathered:
+        lines = [f"- {source}\n  {' '.join(excerpt.split())[:PARTIAL_EXCERPT_CHARS]}" for source, excerpt in gathered[-PARTIAL_ITEMS:]]
+        parts.append("Gathered so far:\n" + "\n".join(lines))
+    return "\n\n".join(parts)
 
 
 TOOL = Research

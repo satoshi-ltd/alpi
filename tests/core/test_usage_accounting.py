@@ -209,10 +209,8 @@ def test_research_stops_before_llm_when_budget_exhausted(
         "alpi.llm.complete", lambda **kw: llm_calls.append(1) or _completion(),
     )
 
-    def raise_exceeded(*a, **kw):
-        raise ledger.BudgetExceeded("usd", 1.0, 2.0)
-
-    monkeypatch.setattr("alpi.ledger.check", raise_exceeded)
+    (tmp_home_no_env / "config.yaml").write_text("budget:\n  daily_usd: 1.0\n")
+    ledger.record(tmp_home_no_env, usd=1.0, tokens=1)
     out = Research().run(brief="what is X")
     assert not out.ok
     assert "budget" in out.error.lower()
@@ -300,34 +298,30 @@ def test_delegate_synthesis_blocked_when_cap_crossed_after_last_step(
     assert len(completions) == MAX_STEPS
 
 
-def test_research_synthesis_blocked_when_cap_crossed_after_last_step(
+def test_research_stops_on_daily_headroom_and_skips_the_synthesis(
     monkeypatch, tmp_home_no_env: Path,
 ) -> None:
     from alpi.tools.research import DEPTH_STEPS_DEFAULTS, Research
 
-    steps = DEPTH_STEPS_DEFAULTS["fast"]
+    (tmp_home_no_env / "config.yaml").write_text(
+        "budget:\n  daily_usd: 1.0\ntools:\n  research:\n    max_usd: 0\n"
+    )
     completions = []
 
     def fake_complete(**kw):
-        completions.append(1)
+        completions.append(kw.get("tools"))
+        ledger.record(tmp_home_no_env, usd=0.5, tokens=2)
         return SimpleNamespace(
             content="", input_tokens=1, output_tokens=1, cost_usd=0.5, raw=None,
             tool_calls=[{"id": "t1", "name": "nope", "arguments": "{}"}],
         )
 
     monkeypatch.setattr("alpi.llm.complete", fake_complete)
-    checks = {"n": 0}
-
-    def check(home, budget):
-        checks["n"] += 1
-        if checks["n"] > steps:
-            raise ledger.BudgetExceeded("usd", 1.0, 2.0)
-
-    monkeypatch.setattr("alpi.ledger.check", check)
     out = Research().run(brief="loop forever", depth="fast")
-    assert not out.ok
-    assert "budget" in out.error.lower()
-    assert len(completions) == steps
+    assert out.ok and "daily budget headroom" in out.output
+    assert 0 < len(completions) < DEPTH_STEPS_DEFAULTS["fast"]
+    assert all(completions)
+    ledger.check(tmp_home_no_env, {"daily_usd": 1.0 + 0.5})
 
 
 def test_identity_draft_blocked_when_budget_exhausted(
