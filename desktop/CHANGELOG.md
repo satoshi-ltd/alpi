@@ -11,6 +11,13 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.8.13 — 2026-10-16 — a cold start with no daemon stops redrawing
+
+- **The welcome panel holds still when this computer has no daemon.** Each background re-check used to flip the connection through "probing", which closed the panel and opened it again every few seconds.
+- **A connection that is offline is re-checked without changing its status,** so nothing redraws and the repeated disconnect notices stop. Switching to a connection still shows "probing" while it is checked.
+
+  Requires alpi 0.17.5.
+
 ## v0.8.12 — 2026-10-13 — charts in chats, notifications and workgroups
 
 - **Charts drawn by your agents appear in the chat, the notification reader and workgroup posts**, in the profile's colour, following light and dark, with a comparison line dashed.

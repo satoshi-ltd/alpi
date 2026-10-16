@@ -450,7 +450,7 @@ async fn host_connection_probe(id: String) -> String {
     tauri::async_runtime::spawn_blocking(move || {
         let state = host_client::load_connections();
         if let Some(conn) = state.connections.iter().find(|c| c.id() == id) {
-            host_client::probe_connection(conn);
+            host_client::probe_connection_for_user(conn);
         }
         match host_client::status_for(&id).0 {
             host_client::ConnectionStatus::Online => "online",

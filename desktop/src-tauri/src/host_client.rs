@@ -2424,17 +2424,29 @@ impl WsClient {
     }
 }
 
-// Re-probing a healthy connection must not flip Online→Probing→Online — each transition fans out to the UI and re-triggers per-profile refetches.
-fn should_mark_probing(id: &str) -> bool {
+// A background re-probe leaves a settled Online or Offline connection alone; only a probe the user asked for marks an Offline one Probing.
+fn should_mark_probing(id: &str, user_initiated: bool) -> bool {
     status_map()
         .lock()
-        .map(|map| !matches!(map.get(id), Some(entry) if entry.status == ConnectionStatus::Online))
+        .map(|map| match map.get(id).map(|entry| entry.status) {
+            Some(ConnectionStatus::Online) => false,
+            Some(ConnectionStatus::Offline) => user_initiated,
+            _ => true,
+        })
         .unwrap_or(true)
 }
 
 pub fn probe_connection(conn: &HostConnection) {
+    probe_connection_as(conn, false);
+}
+
+pub fn probe_connection_for_user(conn: &HostConnection) {
+    probe_connection_as(conn, true);
+}
+
+fn probe_connection_as(conn: &HostConnection, user_initiated: bool) {
     let id = conn.id().to_string();
-    if should_mark_probing(&id) {
+    if should_mark_probing(&id, user_initiated) {
         set_status(&id, ConnectionStatus::Probing, None);
     }
     let timeout = probe_timeout_for(conn);
@@ -3813,13 +3825,18 @@ mod tests {
     }
 
     #[test]
-    fn probing_is_skipped_for_online_connections_only() {
+    fn probing_is_skipped_for_settled_connections_unless_the_user_asked() {
         let id = "probe-flip-online";
-        assert!(should_mark_probing(id), "unknown connections still show probing");
+        assert!(should_mark_probing(id, false), "unknown connections still show probing");
         set_status(id, ConnectionStatus::Online, None);
-        assert!(!should_mark_probing(id), "a healthy connection must not flip to probing");
-        set_status(id, ConnectionStatus::AuthFailed, Some("bad token".into()));
-        assert!(should_mark_probing(id), "non-online states re-enter the probing flow");
+        assert!(!should_mark_probing(id, false), "a healthy connection must not flip to probing");
+        assert!(!should_mark_probing(id, true), "not even when the user asked");
+        let offline = "probe-flip-offline";
+        set_status(offline, ConnectionStatus::Offline, Some("connection refused".into()));
+        assert!(!should_mark_probing(offline, false), "a background re-probe of an offline connection must not flip to probing");
+        assert!(should_mark_probing(offline, true), "a probe the user asked for on an offline connection shows probing");
+        set_status(offline, ConnectionStatus::AuthFailed, Some("bad token".into()));
+        assert!(should_mark_probing(offline, false), "other non-online states re-enter the probing flow");
     }
 
     #[test]
