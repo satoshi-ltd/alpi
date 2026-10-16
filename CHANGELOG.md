@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.17.27 — 2026-10-16 — a litellm import race no longer breaks the CLI
+
+- **The prompt-cache check imports `litellm` as a package, never a submodule.** `from litellm.utils import …` in one thread while another was inside the first `import litellm` left it half-initialised, and a command could fail with "cannot import name 'client' from partially initialized module 'litellm.utils' (most likely due to a circular import)". It needed two threads to start cold together, so it came and went.
+- **A test starts those threads in a fresh interpreter** and fails on the old import.
+
 ## v0.17.26 — 2026-10-15 — a research call has its own cost cap
 
 - **`tools.research.max_usd` (default 1.0 USD, `0` for none) bounds one `research` call**, a whole `tasks` batch included: every worker charges the same cap. The sub-agent stops investigating at 75% of it and keeps the rest for the final report.

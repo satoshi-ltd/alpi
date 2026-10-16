@@ -178,8 +178,8 @@ PREFIX_CACHING_PROVIDERS = frozenset({"openai"})
 
 def _provider_of(model: str) -> str | None:
     try:
-        from litellm.utils import get_llm_provider
-        return get_llm_provider(model)[1]
+        import litellm
+        return litellm.utils.get_llm_provider(model)[1]
     except Exception:  # noqa: BLE001
         return None
 
@@ -199,8 +199,8 @@ def cache_kwargs_for_model(model: str, api_base: str | None = None) -> dict:
     if not model:
         return {}
     try:
-        from litellm.utils import supports_prompt_caching
-        if not supports_prompt_caching(model=model):
+        import litellm
+        if not litellm.utils.supports_prompt_caching(model=model):
             return {}
     except Exception:  # noqa: BLE001
         return {}

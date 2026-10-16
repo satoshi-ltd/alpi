@@ -422,3 +422,37 @@ def test_every_profile_learns_it_can_draw_a_chart(tmp_path: Path) -> None:
     assert charts.parse_chart(example) is not None
     for word in ('"line"|"bar"', '"stacked"', '"series"', '"values"', "never for one or two numbers"):
         assert word in env
+
+
+def test_a_cold_litellm_import_in_one_thread_does_not_break_another_asking_for_cache_support() -> None:
+    import subprocess
+    import sys
+    import textwrap
+
+    probe = textwrap.dedent("""
+        import threading
+        from alpi import prompt_cache as pc
+
+        errors = []
+
+        def importer():
+            try:
+                import litellm
+            except Exception as exc:
+                errors.append(repr(exc))
+
+        def asker():
+            try:
+                pc._provider_of("openai/gpt-4o")
+                pc.cache_kwargs_for_model("anthropic/claude-3.5-sonnet")
+                import litellm
+            except Exception as exc:
+                errors.append(repr(exc))
+
+        threads = [threading.Thread(target=importer), threading.Thread(target=asker), threading.Thread(target=asker)]
+        [t.start() for t in threads]
+        [t.join() for t in threads]
+        print("ERR" + "; ".join(errors) if errors else "ok")
+    """)
+    result = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True, timeout=180)
+    assert result.stdout.strip().endswith("ok"), result.stdout + result.stderr
