@@ -53,6 +53,11 @@ function daemon({ profiles = [ALPI, DOC], workgroups = [CREW], role = "admin", l
     }
     if (cmd === "host_connection_probe") return "online";
     if (cmd === "local_daemon_state") return { state: state.local };
+    if (cmd === "local_daemon_install") {
+      if (state.installFails) throw new Error(state.installFails);
+      state.local = "stopped";
+      return null;
+    }
     if (cmd === "local_daemon_start") {
       if (state.startFails) throw new Error(state.startFails);
       state.localStatus = "online";
@@ -439,6 +444,42 @@ describe("App landing", () => {
     expect(screen.getByText("Run alpi here")).toBeInTheDocument();
     expect(screen.getByText("Connect to alpi elsewhere")).toBeInTheDocument();
     expect(screen.queryByText("No host yet. Add a connection to continue.")).toBeNull();
+  });
+
+  it("installs and starts from the welcome, then opens the roster", async () => {
+    const state = daemon({ localStatus: "offline", local: "absent" });
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Install and start alpi" })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Install and start alpi" }));
+    await waitFor(() => expect(selected("alpi")).toBe(true));
+    expect(state.calls.filter(([cmd]) => cmd === "local_daemon_install")).toHaveLength(1);
+    expect(state.calls.filter(([cmd]) => cmd === "local_daemon_start")).toHaveLength(1);
+  });
+
+  it("retries a failed install without starting an absent daemon", async () => {
+    const state = daemon({ localStatus: "offline", local: "absent" });
+    state.installFails = "Download failed";
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Install and start alpi" })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Install and start alpi" }));
+    await waitFor(() => expect(screen.getByText("alpi couldn't be installed")).toBeInTheDocument());
+    expect(state.calls.some(([cmd]) => cmd === "local_daemon_start")).toBe(false);
+    state.installFails = null;
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(selected("alpi")).toBe(true));
+  });
+
+  it("retries only the start when installation succeeded but starting failed", async () => {
+    const state = daemon({ localStatus: "offline", local: "absent", startFails: "Start failed" });
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Install and start alpi" })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Install and start alpi" }));
+    await waitFor(() => expect(screen.getByText("alpi didn't start")).toBeInTheDocument());
+    state.startFails = null;
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(selected("alpi")).toBe(true));
+    expect(state.calls.filter(([cmd]) => cmd === "local_daemon_install")).toHaveLength(1);
+    expect(state.calls.filter(([cmd]) => cmd === "local_daemon_start")).toHaveLength(2);
   });
 
   it("starts an installed alpi on its own and lands on the roster once it answers", async () => {

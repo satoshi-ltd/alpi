@@ -35,13 +35,25 @@ describe("Welcome", () => {
 
   it("gives a computer with no alpi two paths: install it here or connect elsewhere", () => {
     const onCheckAgain = vi.fn();
-    render(<Welcome localState="absent" onCheckAgain={onCheckAgain} onConnect={vi.fn()} />);
+    const onInstall = vi.fn();
+    render(<Welcome localState="absent" onInstall={onInstall} onCheckAgain={onCheckAgain} onConnect={vi.fn()} />);
     expect(screen.getByText("Run alpi here")).toBeTruthy();
-    expect(screen.getByText("uv tool install alpi-agent")).toBeTruthy();
-    expect(screen.getByText("alpi setup")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Install and start alpi" }));
+    expect(onInstall).toHaveBeenCalledTimes(1);
     expect(screen.getByText("Connect to alpi elsewhere")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Check again" }));
     expect(onCheckAgain).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows installation progress and retries installation failures", () => {
+    const onInstall = vi.fn();
+    const { rerender } = render(<Welcome localState="absent" phase="installing" />);
+    expect(screen.getByText("Installing alpi…")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Install and start alpi" })).toBeNull();
+    rerender(<Welcome localState="absent" phase="install-failed" error="Download failed" onInstall={onInstall} />);
+    expect(screen.getByText("Download failed")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(onInstall).toHaveBeenCalledOnce();
   });
 
   it("only offers to connect elsewhere where alpi cannot run", () => {

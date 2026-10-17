@@ -1424,6 +1424,7 @@ export default function App() {
               phase={localDaemon.phase}
               error={localDaemon.error}
               onStart={localDaemon.start}
+              onInstall={localDaemon.install}
               onCheckAgain={localDaemon.detect}
               onConnect={onAddHostConnection}
             />

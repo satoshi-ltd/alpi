@@ -16,7 +16,7 @@ export function useLocalDaemon({ enabled, onStarted }) {
       const result = await invoke("local_daemon_state");
       const next = result?.state ?? "absent";
       setState(next);
-      if (next === "running" && phaseRef.current !== "starting") onStartedRef.current?.();
+      if (next === "running" && !["starting", "installing"].includes(phaseRef.current)) onStartedRef.current?.();
       return next;
     } catch {
       setState("absent");
@@ -25,6 +25,8 @@ export function useLocalDaemon({ enabled, onStarted }) {
   }, []);
 
   const start = useCallback(async () => {
+    if (phaseRef.current === "starting") return;
+    phaseRef.current = "starting";
     setPhase("starting");
     setError(null);
     try {
@@ -37,6 +39,20 @@ export function useLocalDaemon({ enabled, onStarted }) {
       setPhase("failed");
     }
   }, []);
+
+  const install = useCallback(async () => {
+    if (["installing", "starting"].includes(phaseRef.current)) return;
+    phaseRef.current = "installing";
+    setPhase("installing");
+    setError(null);
+    try {
+      await invoke("local_daemon_install");
+      await start();
+    } catch (e) {
+      setError(String(e?.message ?? e));
+      setPhase("install-failed");
+    }
+  }, [start]);
 
   useEffect(() => {
     if (!enabled) {
@@ -51,7 +67,7 @@ export function useLocalDaemon({ enabled, onStarted }) {
       autoStartedRef.current = true;
       start();
     });
-    const onFocus = () => { if (phaseRef.current !== "starting") detect(); };
+    const onFocus = () => { if (!["starting", "installing"].includes(phaseRef.current)) detect(); };
     window.addEventListener("focus", onFocus);
     return () => {
       cancelled = true;
@@ -59,5 +75,5 @@ export function useLocalDaemon({ enabled, onStarted }) {
     };
   }, [enabled, detect, start]);
 
-  return { state: enabled ? state : null, phase, error, start, detect };
+  return { state: enabled ? state : null, phase, error, start, install, detect };
 }

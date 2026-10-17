@@ -1020,6 +1020,115 @@ async fn local_daemon_state() -> serde_json::Value {
     .unwrap_or_else(|e| serde_json::json!({"state": "absent", "error": e}))
 }
 
+static LOCAL_INSTALL_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn run_install_step(cmd: &mut Command, label: &str) -> Result<(), String> {
+    use std::io::Read;
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+    let mut child = cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::piped())
+        .spawn().map_err(|e| format!("{label}: {e}"))?;
+    let mut stderr = child.stderr.take().ok_or("Missing installer output")?;
+    let (tx, output) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut tail = std::collections::VecDeque::with_capacity(4096);
+        let mut buf = [0; 1024];
+        while let Ok(n) = stderr.read(&mut buf) {
+            if n == 0 { break; }
+            for byte in &buf[..n] {
+                if tail.len() == 4096 { tail.pop_front(); }
+                tail.push_back(*byte);
+            }
+        }
+        let _ = tx.send(String::from_utf8_lossy(&tail.into_iter().collect::<Vec<_>>()).into_owned());
+    });
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(600);
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let tail = output.recv_timeout(std::time::Duration::from_secs(1)).unwrap_or_default();
+                return if status.success() { Ok(()) } else { Err(format!("{label} failed ({status}).\n{tail}")) };
+            }
+            Ok(None) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            result => {
+                #[cfg(unix)]
+                unsafe { libc::kill(-(child.id() as i32), libc::SIGKILL); }
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!("{label}: {}", result.err().map(|e| e.to_string()).unwrap_or_else(|| "timed out after 10 minutes; try again".into())));
+            }
+        }
+    }
+}
+
+fn uv_install_command(uv: &std::path::Path, bin: &std::path::Path) -> Command {
+    let mut cmd = Command::new(uv);
+    cmd.args(["tool", "install", "--python", "3.12", "alpi-agent"])
+        .env("UV_TOOL_BIN_DIR", bin)
+        .env("UV_NO_PROGRESS", "1");
+    cmd
+}
+
+fn install_local_daemon() -> Result<(), String> {
+    let _guard = LOCAL_INSTALL_LOCK.try_lock().map_err(|_| "An installation is already in progress".to_string())?;
+    if cfg!(windows) {
+        return Err("Local installation is supported on macOS and Linux".into());
+    }
+    if host_client::local_answers() {
+        return Ok(());
+    }
+    let home = std::env::var_os("HOME").map(std::path::PathBuf::from).ok_or("Cannot locate your home directory")?;
+    if find_alpi_binary(std::env::var_os("PATH").as_deref(), Some(&home)).is_some() {
+        return Ok(());
+    }
+    let bin = home.join(".local/bin");
+    let search = child_path(&bin.join("uv"), Some(&home));
+    let uv = std::env::split_paths(&search).map(|d| d.join("uv")).find(|p| p.is_file());
+    let uv = match uv {
+        Some(uv) => uv,
+        None => {
+            let mut download = Command::new("curl");
+            download.args(["--fail", "--silent", "--show-error", "--location", "--proto", "=https", "--proto-redir", "=https", "--max-time", "120", "https://astral.sh/uv/install.sh"]);
+            let script = download.output().map_err(|e| format!("Downloading uv requires curl: {e}"))?;
+            if !script.status.success() {
+                return Err("Could not download uv. Check your internet connection and try again.".into());
+            }
+            let path = std::env::temp_dir().join(format!("alpi-uv-{}.sh", uuid::Uuid::new_v4()));
+            let mut options = std::fs::OpenOptions::new();
+            options.write(true).create_new(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
+            }
+            use std::io::Write;
+            let mut file = options.open(&path).map_err(|e| e.to_string())?;
+            file.write_all(&script.stdout).map_err(|e| e.to_string())?;
+            drop(file);
+            let result = run_install_step(Command::new("/bin/sh").arg(&path)
+                .env("UV_INSTALL_DIR", &bin).env("UV_NO_MODIFY_PATH", "1"), "Installing uv");
+            let _ = std::fs::remove_file(path);
+            result?;
+            bin.join("uv")
+        }
+    };
+    run_install_step(&mut uv_install_command(&uv, &bin), "Installing alpi and Python")?;
+    if !bin.join("alpi").is_file() {
+        return Err("Installation finished without an alpi executable. Try again.".into());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn local_daemon_install() -> Result<(), String> {
+    off_main(install_local_daemon).await?
+}
+
 #[tauri::command]
 async fn local_daemon_start() -> Result<String, String> {
     off_main(start_local_daemon).await?
@@ -4065,6 +4174,7 @@ pub fn run() {
             port_available,
             local_daemon_state,
             local_daemon_start,
+            local_daemon_install,
             reveal_in_finder,
             save_file_as,
             email_status,
@@ -4490,6 +4600,36 @@ mod local_daemon_tests {
         assert_eq!(dirs[0], home.join(".local/bin"));
         assert!(dirs.contains(&std::path::PathBuf::from("/opt/homebrew/bin")));
         assert_eq!(dirs.iter().filter(|d| **d == home.join(".local/bin")).count(), 1);
+    }
+
+    #[test]
+    fn install_uses_an_isolated_supported_python_and_discoverable_bin_directory() {
+        let home = scratch("install-plan");
+        let uv = home.join("uv");
+        let bin = home.join(".local/bin");
+        let cmd = super::uv_install_command(&uv, &bin);
+        assert_eq!(cmd.get_program(), uv.as_os_str());
+        assert_eq!(cmd.get_args().collect::<Vec<_>>(), ["tool", "install", "--python", "3.12", "alpi-agent"]);
+        assert!(cmd.get_envs().any(|(k, v)| k == "UV_TOOL_BIN_DIR" && v == Some(bin.as_os_str())));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn installer_waits_for_completion_and_reports_failure() {
+        assert!(super::run_install_step(std::process::Command::new("/bin/sh").args(["-c", "exit 0"]), "Test install").is_ok());
+        let error = super::run_install_step(std::process::Command::new("/bin/sh").args(["-c", "echo 'Download unavailable' >&2; exit 7"]), "Test install").unwrap_err();
+        assert!(error.contains("Test install failed"));
+        assert!(error.contains("Download unavailable"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn caps_installer_errors_without_blocking_on_large_output() {
+        let error = super::run_install_step(std::process::Command::new("/bin/sh").args([
+            "-c", "i=0; while [ $i -lt 6000 ]; do printf x >&2; i=$((i+1)); done; printf end >&2; exit 1",
+        ]), "Test install").unwrap_err();
+        assert!(error.len() < 4200);
+        assert!(error.ends_with("end"));
     }
 
     #[test]

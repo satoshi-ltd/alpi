@@ -134,6 +134,19 @@ def d_starting(p=VIEW):
     return window(p, sidebar(p, "offline"), main, h=170)
 
 
+def d_installing(p=VIEW):
+    main = welcome(p, "Installing alpi…", "Downloading uv, Python and alpi. This can take a few minutes. Keep this window open.",
+                   ladder(p, [("now", "Installing alpi and its runtime"), ("todo", "Start alpi")]))
+    return window(p, sidebar(p, "offline"), main, h=210)
+
+
+def d_install_failed(p=VIEW):
+    inner = wrap("Could not download uv. Check your internet connection and try again.", 9.5, p["danger"])
+    inner += wrap("Check your internet connection, then try again.", 9.5, p["ink3"])
+    inner += line_up(button("Retry", "secondary", p, PAPER, 24), button("Connect to another computer", "ghost", p, PAPER, 24), gap=6, wrap=False)
+    return window(p, sidebar(p, "offline"), welcome(p, "alpi couldn't be installed", "", inner), h=210)
+
+
 def d_failed(p=VIEW):
     error = (f'<pre style="margin: 0; padding: 6px 8px; border-radius: 4px; background: color-mix(in srgb, {p["danger"]} 8%, transparent); font-family: {MONO}; '
              f'font-size: 8.5px; line-height: 1.45; color: {p["danger"]}; white-space: pre-wrap">alpi did not answer within 45 seconds\n~/.alpi/logs/service.log:\nERROR config.yaml: line 12 · bad indentation</pre>')
@@ -156,8 +169,8 @@ def connect_form(p, link="", ladder_states=None, failure=None, action="Connect")
 
 
 def d_absent(p=VIEW, form=None, h=300):
-    here = choice(p, "Run alpi here", "Install it, then pick a model in setup. This window notices when it starts.",
-                  "".join(command(p, c) for c in COPY["install"]) + f'<div style="margin-top: auto">{button("Check again", "secondary", p, PAPER, 24)}</div>')
+    here = choice(p, "Run alpi here", "Install alpi and its runtime here, then choose a model in Settings. Requires an internet connection.",
+                  f'<div style="margin-top: auto">{button("Install and start alpi", "primary", p, PAPER, 24)} {button("Check again", "ghost", p, PAPER, 24)}</div>')
     away = choice(p, "Connect to alpi elsewhere", "Paste the link made on the computer that runs it.", form or connect_form(p))
     main = welcome(p, "Set up alpi", "No alpi on this computer yet. Both paths end in the same window.", f'<div style="flex: 1; display: flex; gap: 8px; min-height: 0">{here}{away}</div>')
     return window(p, sidebar(p, "offline"), main, h=h)
@@ -178,10 +191,12 @@ DESKTOP_ONBOARDING = (
     ("Installed, not running", "Detected from the alpi binary or its launchd / systemd unit. The first detection starts it once on its own; after that Start alpi kicks the unit, or runs alpi daemon start on its own when there is none.", d_stopped),
     ("Starting", "Shown until host.sock answers, up to 45 seconds; the welcome gives way to the roster on its own. Once alpi has answered in a session, a later outage keeps the open view under the reconnecting banner, whose Retry starts it again.", d_starting),
     ("Didn't start", "The tail of the launcher's error and of ~/.alpi/logs/service.log, the command that shows the rest, Retry, and the way out to another computer.", d_failed),
-    ("No alpi on this computer", "Two paths, never a dead end: the install commands with copy, re-checked when the window gains focus, or a pasted alpi:// link. Where alpi cannot run, only the second card shows.", d_absent),
+    ("No alpi on this computer", "Two paths, never a dead end: Install and start alpi downloads uv, Python and alpi, then starts the daemon. Installation shows progress and a retry on failure. Check again re-detects installation, also when the window gains focus, or a pasted alpi:// link. Where alpi cannot run, only the second card shows.", d_absent),
+    ("Installing", "Install and start alpi installs the runtime and alpi before requesting a start. Keep the window open while downloads finish.", d_installing),
+    ("Installation failed", "Installation errors keep Retry on the installation step; a start failure retries only the start.", d_install_failed),
     ("Connecting elsewhere", "The link is read, the host reached and the device signed in, each step named. A failure names its cause and next step; a used or expired link is cleared, any other keeps it. The connection switcher's foot uses the same form.", d_unreachable),
 )
-DESKTOP_ONBOARDING_H = 2400
+DESKTOP_ONBOARDING_H = 3100
 
 
 def desktop_onboarding():

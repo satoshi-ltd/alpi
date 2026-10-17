@@ -11,6 +11,12 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.8.14 — 2026-10-17 — install alpi from Desktop
+
+- The welcome can install alpi, uv and Python, then start the local daemon without a terminal.
+- Installation shows progress and offers Retry after a failed download or install.
+  Requires alpi 0.17.5.
+
 ## v0.8.13 — 2026-10-16 — a cold start with no daemon stops redrawing
 
 - **The welcome panel holds still when this computer has no daemon.** Each background re-check used to flip the connection through "probing", which closed the panel and opened it again every few seconds.

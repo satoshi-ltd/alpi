@@ -1507,7 +1507,14 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   reaped when it exits, and not spawned again while a previous one lives),
   waits up to 45 s of wall clock for `host.version` on the local socket and
   on failure returns the tail of the launcher's stderr and of
-  `logs/service.log`. It never installs a service.
+  `logs/service.log`. It does not register a login service. `local_daemon_install` is a second
+  off-main lifecycle exception, called only from the welcome button: it reuses
+  an existing alpi, otherwise finds uv or downloads its official HTTPS installer
+  with curl, installs uv into `~/.local/bin` without changing shell files, then
+  runs `uv tool install --python 3.12 alpi-agent` with `UV_TOOL_BIN_DIR` set to
+  that directory. uv downloads Python when needed. Install steps have a ten-minute
+  deadline and concurrent installs are refused. The client then uses the same
+  start/readiness flow; failures offer a separate installation retry.
 
 - **First run is one welcome, not an error.** On a local connection that
   has not answered yet in this session, the desktop replaces the main pane
@@ -1516,8 +1523,9 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   starts alpi once on its own, then offers Start alpi; while starting it
   shows the steps (start requested, waiting for alpi to answer); a failed
   start shows the error, `alpi daemon start` to run by hand and Retry;
-  `absent` offers the install commands (re-detected when the window gains
-  focus) beside a pasted `alpi://` link; `unsupported` offers only the
+  `absent` offers Install and start alpi (with installation progress and retry),
+  plus Check again (also re-detected when the window gains focus), beside a
+  pasted `alpi://` link; `unsupported` offers only the
   link. Once alpi answers, a one-time card says how to add a phone. Both
   clients pair through the same three named steps (link read, reaching
   the host, signing in) and name each failure with its next action from

@@ -4,7 +4,7 @@ import { CopyIcon } from "../primitives/icons.jsx";
 import StepLadder from "../primitives/StepLadder.jsx";
 import ConnectElsewhere from "../primitives/ConnectElsewhere.jsx";
 import { copyText } from "../lib/clipboard.js";
-import { INSTALL_COMMANDS, START_COMMAND } from "../../../common/onboarding.mjs";
+import { START_COMMAND } from "../../../common/onboarding.mjs";
 import styles from "./Welcome.module.css";
 
 const FIRST_RUN_HINT_KEY = "alpi.firstRunHint.v1";
@@ -48,8 +48,22 @@ function Command({ value }) {
 
 export { ConnectElsewhere };
 
-export default function Welcome({ localState, phase = "idle", error = null, onStart, onCheckAgain, onConnect }) {
+export default function Welcome({ localState, phase = "idle", error = null, onStart, onInstall, onCheckAgain, onConnect }) {
   const [elsewhere, setElsewhere] = useState(false);
+
+  if (phase === "installing") {
+    return (
+      <section className={styles.welcome} aria-live="polite" aria-busy="true">
+        <Fold fold="alpaca" size={40} />
+        <h1 className={styles.title}>Installing alpi…</h1>
+        <p className={styles.sub}>Downloading uv, Python and alpi. This can take a few minutes. Keep this window open.</p>
+        <StepLadder steps={[
+          { id: "install", state: "now", label: "Installing alpi and its runtime" },
+          { id: "start", state: "todo", label: "Start alpi" },
+        ]} />
+      </section>
+    );
+  }
 
   if (phase === "starting") {
     return (
@@ -66,16 +80,17 @@ export default function Welcome({ localState, phase = "idle", error = null, onSt
     );
   }
 
-  if (phase === "failed") {
+  if (["failed", "install-failed"].includes(phase)) {
     return (
       <section className={styles.welcome}>
         <Fold fold="alpaca" size={40} />
-        <h1 className={styles.title}>alpi didn't start</h1>
+        <h1 className={styles.title}>{phase === "install-failed" ? "alpi couldn't be installed" : "alpi didn't start"}</h1>
         {error ? <pre className={styles.error}>{error}</pre> : null}
-        <p className={styles.sub}>Start it from a terminal to see what it says:</p>
-        <Command value={START_COMMAND} />
+        {phase === "install-failed"
+          ? <p className={styles.sub}>Check your internet connection, then try again.</p>
+          : <><p className={styles.sub}>Start it from a terminal to see what it says:</p><Command value={START_COMMAND} /></>}
         <div className={styles.actions}>
-          <Button variant="secondary" onClick={onStart}>Retry</Button>
+          <Button variant="secondary" onClick={phase === "install-failed" ? onInstall : onStart}>Retry</Button>
           <Button variant="ghost" onClick={() => setElsewhere(true)}>Connect to another computer</Button>
         </div>
         {elsewhere ? <ConnectElsewhere onConnect={onConnect} autoFocus /> : null}
@@ -112,10 +127,10 @@ export default function Welcome({ localState, phase = "idle", error = null, onSt
         {unsupported ? null : (
           <div className={styles.choice}>
             <h2 className={styles.choiceTitle}>Run alpi here</h2>
-            <p className={styles.choiceSub}>Install it, then pick a model in setup. This window notices when it starts.</p>
-            {INSTALL_COMMANDS.map((c) => <Command key={c} value={c} />)}
+            <p className={styles.choiceSub}>Install alpi and its runtime here, then choose a model in Settings. Requires an internet connection.</p>
             <div className={styles.actions}>
-              <Button variant="secondary" onClick={onCheckAgain}>Check again</Button>
+              <Button variant="primary" onClick={onInstall}>Install and start alpi</Button>
+              <Button variant="ghost" onClick={onCheckAgain}>Check again</Button>
             </div>
           </div>
         )}

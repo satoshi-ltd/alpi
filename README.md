@@ -82,6 +82,10 @@ alpi
 alpi doctor
 ```
 
+On macOS and Linux, Desktop can also install and start alpi from its welcome
+screen: choose **Install and start alpi**, then configure a model in Settings.
+It downloads uv and Python when needed; curl and internet access are required.
+
 During setup, pick a model, paste the relevant key, and pin a
 workspace. For local-only inference, install Ollama first and add it in
 `alpi setup -> Model`.

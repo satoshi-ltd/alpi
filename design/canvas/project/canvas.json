@@ -156,13 +156,13 @@
    "x": 0,
    "y": 14190,
    "w": 1280,
-   "h": 2400,
+   "h": 3100,
    "title": "Desktop \u00b7 first run",
    "page": "desktop"
   },
   "Desktop-Overlays.dc.html": {
    "x": 0,
-   "y": 16830,
+   "y": 17530,
    "w": 1280,
    "h": 2660,
    "title": "Desktop \u00b7 overlays",
@@ -611,7 +611,7 @@
   },
   "d-Overlays": {
    "x": 0,
-   "y": 16607,
+   "y": 17307,
    "text": "Overlays",
    "kind": "title1",
    "maxW": 2600,

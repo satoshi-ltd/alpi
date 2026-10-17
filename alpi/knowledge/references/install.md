@@ -2,6 +2,7 @@
 
 ## Answer directly
 
+- Desktop on macOS/Linux: choose **Install and start alpi** in the welcome. Desktop installs uv and Python 3.12 when needed, installs alpi-agent and starts the daemon; pick a model in Settings. Requires curl and internet access, no terminal setup. Existing installs are reused; this does not register a login service.
 - Default install: `uv tool install alpi-agent`.
 - First run: `alpi setup` (auto-installs + starts the daemon), then `alpi`.
 - Update: `uv tool upgrade alpi-agent`, then restart the daemon if running.
