@@ -1034,6 +1034,17 @@ Verb namespaces in current shape:
   `host.events.history`) are filtered to the device's scope before
   delivery; the event-subscribe stream drops out-of-scope frames
   the same way.
+- **Roster reads stay responsive during agent turns.** `host.profile.summaries`
+  and `host.workgroups.list` run their filesystem aggregation on a dedicated four-worker
+  executor, preserving the caller's context variables and scope. Agent turns and pipeline gates
+  use the default executor and cannot occupy the roster's workers.
+
+- **CLI workgroup mutations notify through the daemon.** `workgroup launch` and
+  `workgroup remove` use the existing host verbs when its socket exists, so the daemon emits
+  lifecycle events to subscribed clients. Without a socket they retain their standalone behavior.
+  An RPC error is reported without repeating the mutation locally: a timeout can mean the daemon
+  already performed it.
+
 - **`host.email.probe`**, **`host.peers.ping`**,
   **`host.model.ctx_window`** — diagnostic probes the desktop / TUI
   used to invoke via `alpi email probe`, `alpi peers ping`, and

@@ -233,3 +233,33 @@ def test_workgroup_launch_resolves_saved_recipe_id(tmp_path, monkeypatch) -> Non
             "inputs": {},
         },
     }
+
+
+def test_workgroup_launch_does_not_repeat_mutation_after_rpc_timeout(tmp_path, monkeypatch):
+    from alpi.host import recipes as host_recipes
+    from alpi.tui import host_client
+
+    recipes = tmp_path / "recipes"
+    recipes.mkdir()
+    (recipes / "hotel.yaml").write_text("hub: default\nname: hotel\n")
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
+    monkeypatch.setattr(cli, "_bootstrap", lambda _home: None)
+    monkeypatch.setattr(host_client, "daemon_present", lambda: True)
+    calls = []
+
+    async def timeout(method, params, **kwargs):
+        calls.append((method, params, kwargs))
+        raise host_client.HostUnavailable("daemon did not answer; check the workgroup list before retrying")
+
+    async def duplicate(*args, **kwargs):
+        raise AssertionError("must not launch twice")
+
+    monkeypatch.setattr(host_client, "acall", timeout)
+    monkeypatch.setattr(host_recipes, "launch", duplicate)
+    result = CliRunner().invoke(cli.main, ["workgroup", "launch", "--recipe", "hotel"])
+    assert result.exit_code != 0
+    assert "daemon did not answer" in result.output
+    assert len(calls) == 1
+    assert calls[0][0] == "host.workgroup.launch_recipe"
+    assert calls[0][1]["profile"] == "default"
+    assert calls[0][2]["timeout"] >= 6 * host_recipes._CLONE_TIMEOUT

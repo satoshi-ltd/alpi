@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.17.28 — 2026-10-17 — workgroup lists stay responsive during runs
+
+- Profile and workgroup lists remain responsive while agent turns and pipeline checks are busy.
+- Launching or removing a workgroup from the CLI informs connected apps immediately through the daemon.
+- A failed CLI request reports the error without repeating a potentially completed mutation.
+
 ## v0.17.27 — 2026-10-16 — a litellm import race no longer breaks the CLI
 
 - **The prompt-cache check imports `litellm` as a package, never a submodule.** `from litellm.utils import …` in one thread while another was inside the first `import litellm` left it half-initialised, and a command could fail with "cannot import name 'client' from partially initialized module 'litellm.utils' (most likely due to a circular import)". It needed two threads to start cold together, so it came and went.

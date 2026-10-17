@@ -7,6 +7,9 @@ import os
 import re
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
+from functools import partial
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -29,6 +32,14 @@ KNOWN_PROVIDER_KEYS = (
     "OPENROUTER_API_KEY",
     "GEMINI_API_KEY",
 )
+
+
+_roster_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="alpi-roster")
+
+
+async def _roster_read(fn, *args, **kwargs):
+    call = partial(copy_context().run, fn, *args, **kwargs)
+    return await asyncio.get_running_loop().run_in_executor(_roster_pool, call)
 
 
 def register(server: host_server.Server) -> None:
@@ -247,7 +258,7 @@ async def _summaries_coalesced() -> list[dict[str, Any]]:
     if _summary_gate is None or _summary_gate[0] is not loop:
         _summary_gate = (loop, asyncio.Lock())
     async with _summary_gate[1]:
-        return await asyncio.to_thread(_summary_rows)
+        return await _roster_read(_summary_rows)
 
 
 def _has_any_provider(home: Path, cfg: cfg_mod.Config) -> bool:
@@ -890,7 +901,7 @@ async def _workgroups_list(
 ) -> dict[str, Any]:
     profile = params.get("profile")
     include_pipeline_status = params.get("include_pipeline_status") is True
-    rows = await asyncio.to_thread(
+    rows = await _roster_read(
         _aggregate_workgroups,
         profile,
         include_pipeline_status=include_pipeline_status,

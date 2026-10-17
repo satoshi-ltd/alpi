@@ -274,6 +274,11 @@ renders the same fields: hub, name, briefing, a field per declared param and a
 textarea per declared input. The operator can edit the briefing draft before
 launching.
 
+With a daemon socket present, CLI `workgroup launch` and `workgroup remove`
+execute through the daemon so connected clients receive lifecycle events. With no
+socket they run standalone. An RPC failure does not trigger a second local attempt;
+check the workgroup list before retrying a timed-out mutation.
+
 A worked recipe (only `{slug}` varies per launch):
 
 ```yaml

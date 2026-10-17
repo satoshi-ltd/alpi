@@ -4594,6 +4594,7 @@ def workgroup_launch(
 
     from alpi import recipes as recipes_mod
     from alpi.host import recipes as host_recipes
+    from alpi.tui import host_client
 
     h: Path = ctx.obj["home"]
     recipe_path = Path(recipe_ref).expanduser()
@@ -4632,12 +4633,19 @@ def workgroup_launch(
                 "binary media to the project's git after launch."
             )
     try:
-        result = asyncio.run(host_recipes.launch(
-            h, recipe_yaml, params,
-            briefing_override=briefing, recipe_id=recipe_id,
-            inputs=inputs,
-        ))
-    except ValueError as e:
+        if host_client.daemon_present():
+            result = asyncio.run(host_client.acall("host.workgroup.launch_recipe", {
+                "profile": home.profile_name(h), "yaml": recipe_yaml,
+                "params": params, "briefing": briefing,
+                "recipe_id": recipe_id, "inputs": inputs,
+            }, timeout=3600.0))
+        else:
+            result = asyncio.run(host_recipes.launch(
+                h, recipe_yaml, params,
+                briefing_override=briefing, recipe_id=recipe_id,
+                inputs=inputs,
+            ))
+    except (ValueError, host_client.HostError, host_client.HostUnavailable) as e:
         raise click.ClickException(str(e))
     proj = f" · project {result['project_path']}" if result.get("project_path") else ""
     queued = (
@@ -4796,6 +4804,7 @@ def workgroup_remove(ctx: click.Context, wg_id: str, yes: bool) -> None:
     """Hub-only: delete a workgroup permanently and purge local subscriptions."""
     from alpi.alp import workgroup as wg_mod
     from alpi.alp.keys import load_or_generate
+    from alpi.tui import host_client
 
     h: Path = ctx.obj["home"]
     wg = wg_mod.load(h, wg_id)
@@ -4811,8 +4820,14 @@ def workgroup_remove(ctx: click.Context, wg_id: str, yes: bool) -> None:
     ):
         raise click.ClickException("aborted")
     try:
-        purged = wg_mod.remove(h, wg_id)
-    except OSError as e:
+        if host_client.daemon_present():
+            result = asyncio.run(host_client.acall("host.workgroup.remove", {
+                "profile": home.profile_name(h), "wg_id": wg_id,
+            }, timeout=60.0))
+            purged = result.get("purged", [])
+        else:
+            purged = wg_mod.remove(h, wg_id)
+    except (OSError, host_client.HostError, host_client.HostUnavailable) as e:
         raise click.ClickException(str(e))
 
     click.echo(f"removed {wg_id}")

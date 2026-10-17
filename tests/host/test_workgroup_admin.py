@@ -816,3 +816,42 @@ async def test_workgroups_list_rows_carry_safe_pipeline_shape(
 
     assert hub_row["is_hub"] is True
     assert sub_row["is_hub"] is False
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_cli_launch_and_remove_notify_through_the_daemon(short_tmp, monkeypatch):
+    import asyncio
+    import threading
+    from click.testing import CliRunner
+    from alpi import cli, home as home_mod
+    from alpi.host import recipes as host_recipes
+
+    home = short_tmp / "home"
+    _seed(home)
+    monkeypatch.setenv("ALPI_HOME", str(home))
+    monkeypatch.setattr(home_mod, "_ROOT", home)
+    monkeypatch.setattr(cli, "_bootstrap", lambda _home: None)
+    recipes = home / "recipes"
+    recipes.mkdir()
+    (recipes / "idle.yaml").write_text("hub: default\nname: idle\nmembers: []\n")
+    events = []
+    daemon_thread = threading.get_ident()
+    monkeypatch.setattr(workgroup_admin, "_emit_workgroup_changed", lambda h, wg, action: events.append((h, wg, action, threading.get_ident())))
+    server = host_server.Server(home=home)
+    workgroup_admin.register(server)
+    host_recipes.register(server)
+    await server.start()
+    try:
+        launched = await asyncio.to_thread(CliRunner().invoke, cli.main, ["workgroup", "launch", "--recipe", "idle"])
+        assert launched.exit_code == 0, launched.output
+        assert len(events) == 1
+        assert events[0][0] == home
+        assert events[0][2:] == ("created", daemon_thread)
+        wg_id = events[0][1]
+        removed = await asyncio.to_thread(CliRunner().invoke, cli.main, ["workgroup", "remove", wg_id, "--yes"])
+        assert removed.exit_code == 0, removed.output
+        assert events[-1] == (home, wg_id, "removed", daemon_thread)
+        assert not (home / "alp" / "workgroups" / wg_id).exists()
+    finally:
+        await server.stop()

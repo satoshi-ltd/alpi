@@ -1658,3 +1658,47 @@ async def test_a_retired_grey_reaches_the_apps_as_its_colour(
     (home / "config.yaml").write_text("tui:\n  fold: box\n  accent: '#7e8792'\n")
     host_device_state.invalidate_summary()
     assert (await _fold_summary(srv))["accent"] == "#3ac9f3"
+
+
+@pytest.mark.parametrize("method", ["host.profile.summaries", "host.workgroups.list"])
+def test_roster_reads_bypass_saturated_default_executor_and_preserve_scope(monkeypatch, method):
+    import asyncio
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    from alpi.host.connection_context import ConnectionContext, current, use
+
+    entered, release = threading.Event(), threading.Event()
+    context = ConnectionContext(connection_id="member", source="remote", role="member", profile_scope=("doc",))
+    seen = []
+
+    def read(*args, **kwargs):
+        seen.append(current())
+        return []
+
+    def busy():
+        entered.set()
+        release.wait(5)
+
+    monkeypatch.setattr(host_device_state, "_summary_rows", read)
+    monkeypatch.setattr(host_device_state, "_aggregate_workgroups", read)
+
+    async def check():
+        loop = asyncio.get_running_loop()
+        loop.set_default_executor(ThreadPoolExecutor(max_workers=1))
+        running = loop.run_in_executor(None, busy)
+        while not entered.is_set():
+            await asyncio.sleep(0)
+        server = host_server.Server(home=Path("/unused"))
+        host_device_state.register(server)
+        try:
+            with use(context):
+                result = await asyncio.wait_for(server._dispatch({
+                    "id": "roster", "method": method, "params": {},
+                }), timeout=1)
+            assert "result" in result
+            assert seen == [context]
+        finally:
+            release.set()
+            await running
+
+    asyncio.run(check())
