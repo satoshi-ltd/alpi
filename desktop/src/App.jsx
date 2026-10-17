@@ -387,6 +387,7 @@ export default function App() {
     workgroups,
     dropWorkgroup,
     connectionSyncing,
+    rosterStale,
     connectionSwitching,
     rosterAnswered,
     rosterSettled,
@@ -722,6 +723,7 @@ export default function App() {
         break;
       }
       case "workgroup_transcript": {
+        if (ev.refreshRoster) scheduleReload();
         const key = `${ev.profile}/${ev.wg_id}`;
         const connectionId = hostConnectionsRef.current?.active_id;
         setActivityByWorkgroup((prev) => ({ ...prev, [key]: Date.now() }));
@@ -1465,6 +1467,8 @@ export default function App() {
                   workgroups={workgroups}
                   profiles={profiles}
                   syncing={connectionSyncing}
+                  stale={rosterStale}
+                  onRefresh={reload}
                   taskByWorkgroup={taskByWorkgroup}
                   activityByWorkgroup={activityByWorkgroup}
                   onOpenWorkgroup={onOpenWorkgroup}

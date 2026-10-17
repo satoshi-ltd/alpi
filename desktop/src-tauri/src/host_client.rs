@@ -1390,11 +1390,17 @@ pub fn call_for_fetch(connection_id: &str, method: &str, params: Value) -> Resul
     )
 }
 
-fn read_timeout_for(conn: &HostConnection, over: Option<Duration>) -> Duration {
-    over.unwrap_or_else(|| match conn {
+fn read_timeout_for(conn: &HostConnection, method: &str, over: Option<Duration>) -> Duration {
+    if let Some(timeout) = over {
+        return timeout;
+    }
+    if matches!(method, "host.workgroups.list" | "host.profile.summaries") {
+        return Duration::from_secs(READ_TIMEOUT_FETCH_SECS);
+    }
+    match conn {
         HostConnection::Local { .. } => Duration::from_secs(READ_TIMEOUT_LOCAL_SECS),
         HostConnection::Remote { .. } => Duration::from_secs(READ_TIMEOUT_REMOTE_SECS),
-    })
+    }
 }
 
 const SLOW_RPC_LOG_MS: u128 = 1000;
@@ -1416,7 +1422,7 @@ fn call_conn_with_retry(
     retry_remote: bool,
 ) -> Result<Value, String> {
     let id = conn.id().to_string();
-    let timeout = read_timeout_for(conn, read_timeout);
+    let timeout = read_timeout_for(conn, method, read_timeout);
     let started = Instant::now();
     let result = match conn {
         HostConnection::Local { .. } => call_local_inner(method, params, timeout),
@@ -2692,15 +2698,20 @@ mod tests {
             last_connected: None,
             last_role: None,
         };
-        assert_eq!(read_timeout_for(&local, None), Duration::from_secs(READ_TIMEOUT_LOCAL_SECS));
-        assert_eq!(read_timeout_for(&remote, None), Duration::from_secs(READ_TIMEOUT_REMOTE_SECS));
+        assert_eq!(read_timeout_for(&local, "host.version", None), Duration::from_secs(READ_TIMEOUT_LOCAL_SECS));
+        assert_eq!(read_timeout_for(&remote, "host.version", None), Duration::from_secs(READ_TIMEOUT_REMOTE_SECS));
+        for method in ["host.workgroups.list", "host.profile.summaries"] {
+            assert_eq!(read_timeout_for(&local, method, None), Duration::from_secs(60));
+            assert_eq!(read_timeout_for(&remote, method, None), Duration::from_secs(60));
+            assert_eq!(read_timeout_for(&local, method, Some(Duration::from_secs(2))), Duration::from_secs(2));
+        }
         let fetch = Duration::from_secs(READ_TIMEOUT_FETCH_SECS);
-        assert_eq!(read_timeout_for(&local, Some(fetch)), Duration::from_secs(60));
-        assert_eq!(read_timeout_for(&remote, Some(fetch)), Duration::from_secs(60));
+        assert_eq!(read_timeout_for(&local, "host.version", Some(fetch)), Duration::from_secs(60));
+        assert_eq!(read_timeout_for(&remote, "host.version", Some(fetch)), Duration::from_secs(60));
         let update = Duration::from_secs(READ_TIMEOUT_UPDATE_SECS);
-        assert_eq!(read_timeout_for(&local, Some(update)), Duration::from_secs(360));
-        assert_eq!(read_timeout_for(&remote, Some(update)), Duration::from_secs(360));
-        assert_eq!(read_timeout_for(&remote, None), Duration::from_secs(20));
+        assert_eq!(read_timeout_for(&local, "host.version", Some(update)), Duration::from_secs(360));
+        assert_eq!(read_timeout_for(&remote, "host.version", Some(update)), Duration::from_secs(360));
+        assert_eq!(read_timeout_for(&remote, "host.version", None), Duration::from_secs(20));
     }
 
     #[test]

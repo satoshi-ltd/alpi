@@ -24,7 +24,8 @@ const TRANSIENT_CACHE_PREFIXES = [
   "alpi.workgroup.cache.",
   "alpi:workgroup-task-cache:",
 ];
-export const RELOAD_RETRY_MS = [1500, 5000];
+export const RELOAD_RETRY_MS = [1500, 5000, 15000, 30000, 60000];
+const ROSTER_POLL_MS = 60000;
 const OFFLINE_REPROBE_MIN_MS = 4000;
 const OFFLINE_REPROBE_MAX_MS = 60000;
 
@@ -69,6 +70,7 @@ export function useHostConnections({
   const [profiles, setProfiles] = useState([]);
   const [workgroups, setWorkgroups] = useState([]);
   const [connectionSyncing, setConnectionSyncing] = useState(false);
+  const [rosterStale, setRosterStale] = useState(true);
   const [rosterAnsweredId, setRosterAnsweredId] = useState(null);
   const [rosterSettledId, setRosterSettledId] = useState(null);
   const [rosterGeneration, setRosterGeneration] = useState(0);
@@ -81,8 +83,14 @@ export function useHostConnections({
   const connectionSwitchRef = useRef(0);
   const syncedStatusRef = useRef("");
   const reloadAttemptRef = useRef(0);
+  const reloadGenerationRef = useRef(0);
+  const reloadInFlightRef = useRef(null);
   const reloadRetryRef = useRef(null);
-  useEffect(() => () => clearTimeout(reloadRetryRef.current), []);
+  useEffect(() => () => {
+    clearTimeout(reloadRetryRef.current);
+    reloadGenerationRef.current += 1;
+    reloadInFlightRef.current = null;
+  }, []);
 
   const reloadConnections = useCallback(async ({ acceptActiveChange = false } = {}) => {
     const switchId = connectionSwitchRef.current;
@@ -147,6 +155,7 @@ export function useHostConnections({
     (connectionId = null) => {
       const activeId =
         connectionId ?? hostConnectionsRef.current?.active_id ?? "local";
+      setRosterStale(true);
       try {
         const cachedPs = JSON.parse(
           localStorage.getItem(`${PROFILES_CACHE_PREFIX}${activeId}`) ?? "[]",
@@ -162,23 +171,14 @@ export function useHostConnections({
     [applyProfilesAndWorkgroups],
   );
 
-  const readCachedWorkgroups = (connectionId) => {
-    try {
-      const cached = JSON.parse(localStorage.getItem(`${WORKGROUPS_CACHE_PREFIX}${connectionId}`) ?? "[]");
-      return Array.isArray(cached) ? cached : [];
-    } catch {
-      return [];
-    }
-  };
-
   const saveToCache = useCallback((connectionId, ps, ws) => {
     const profilesKey = `${PROFILES_CACHE_PREFIX}${connectionId}`;
     const workgroupsKey = `${WORKGROUPS_CACHE_PREFIX}${connectionId}`;
     const serializedProfiles = JSON.stringify(ps);
     const serializedWorkgroups = JSON.stringify(ws);
     const write = () => {
-      localStorage.setItem(profilesKey, serializedProfiles);
-      localStorage.setItem(workgroupsKey, serializedWorkgroups);
+      if (ps !== undefined) localStorage.setItem(profilesKey, serializedProfiles);
+      if (ws !== undefined) localStorage.setItem(workgroupsKey, serializedWorkgroups);
     };
     try {
       write();
@@ -228,92 +228,87 @@ export function useHostConnections({
     [clearConnectionContent, loadFromCache],
   );
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(({ trailing = true } = {}) => {
     const cur = hostConnectionsRef.current;
     const activeId = cur?.active_id ?? "local";
     const switchId = connectionSwitchRef.current;
-    const active = cur?.connections?.find((c) => c.id === cur.active_id);
-    const status = active?.status;
-    if (status !== "online") {
-      showCachedOrClear(activeId, status);
-      if (status === "offline" || status === "disabled" || status === "auth-failed") {
-        setConnectionSyncing(false);
-      }
-      reloadConnections();
-      return;
+    const active = cur?.connections?.find((c) => c.id === activeId);
+    const pending = reloadInFlightRef.current;
+    if (active?.status === "online" && pending?.activeId === activeId && pending.switchId === switchId) {
+      pending.dirty ||= trailing;
+      return pending.promise;
     }
-    setConnectionSyncing(true);
-    const stillCurrent = () =>
-      hostConnectionsRef.current?.active_id === activeId && connectionSwitchRef.current === switchId;
-    // A cold start can lose the first round trip while the socket settles; the sidebar must not stay empty until the next status change.
-    const retryLater = () => {
-      const delay = RELOAD_RETRY_MS[reloadAttemptRef.current];
-      if (delay == null) return;
-      reloadAttemptRef.current += 1;
+    const request = { activeId, switchId, dirty: false, promise: null };
+    reloadInFlightRef.current = request;
+    request.promise = (async () => {
+      const requestId = ++reloadGenerationRef.current;
       clearTimeout(reloadRetryRef.current);
-      reloadRetryRef.current = setTimeout(() => {
-        if (stillCurrent()) reloadRef.current();
-      }, delay);
-    };
-    try {
-      const [summaries, workgroupList] = await Promise.allSettled([
-        invoke("profile_summaries", { connectionId: activeId }),
-        invoke("workgroups", { profile: null, connectionId: activeId }),
-      ]);
-      if (summaries.status === "rejected") throw summaries.reason;
-      let ps = summaries.value;
-      let ws = workgroupList.status === "fulfilled" ? workgroupList.value : readCachedWorkgroups(activeId);
-      if (workgroupList.status === "rejected" && stillCurrent()) retryLater();
-      if (activeId === "local" && Array.isArray(ps) && ps.length === 0) {
-        const fallbackProfiles = await invoke("profiles");
-        if (Array.isArray(fallbackProfiles) && fallbackProfiles.length > 0) {
-          ps = fallbackProfiles;
-        }
-      }
-      if (Array.isArray(ps)) ps = ps.map(defaultAsAlpaca("var(--accent)"));
-      // switchId guards A→B→A races where active_id alone would match
-      if (
-        hostConnectionsRef.current?.active_id !== activeId ||
-        connectionSwitchRef.current !== switchId
-      ) {
+      if (active?.status !== "online") {
+        showCachedOrClear(activeId, active?.status);
+        setRosterStale(true);
+        setConnectionSyncing(false);
+        reloadConnections();
         return;
       }
-      const looksLikeFailure =
-        Array.isArray(ps) && Array.isArray(ws) && ps.length === 0 && ws.length === 0;
-      const refreshed = hostConnectionsRef.current?.connections?.find(
-        (c) => c.id === hostConnectionsRef.current?.active_id,
-      );
-      if (looksLikeFailure && refreshed?.status && refreshed.status !== "online") {
-        showCachedOrClear(activeId, refreshed.status);
-      } else {
-        if (workgroupList.status === "fulfilled") reloadAttemptRef.current = 0;
-        applyProfilesAndWorkgroups(ps, ws);
-        saveToCache(activeId, ps, ws);
+      setConnectionSyncing(true);
+      const stillCurrent = () =>
+        reloadGenerationRef.current === requestId &&
+        hostConnectionsRef.current?.active_id === activeId &&
+        connectionSwitchRef.current === switchId;
+      const canApply = () => stillCurrent() &&
+        hostConnectionsRef.current?.connections?.find((c) => c.id === activeId)?.status === "online";
+      const results = await Promise.allSettled([
+        (async () => {
+          let ps = await invoke("profile_summaries", { connectionId: activeId });
+          if (activeId === "local" && Array.isArray(ps) && ps.length === 0) {
+            const fallback = await invoke("profiles");
+            if (Array.isArray(fallback) && fallback.length > 0) ps = fallback;
+          }
+          if (!canApply()) return;
+          if (Array.isArray(ps)) ps = ps.map(defaultAsAlpaca("var(--accent)"));
+          setProfiles(ps);
+          saveToCache(activeId, ps, undefined);
+          return true;
+        })().catch((error) => {
+          if (canApply()) setRosterStale(true);
+          throw error;
+        }),
+        (async () => {
+          const ws = await invoke("workgroups", { profile: null, connectionId: activeId });
+          if (!canApply()) return;
+          setWorkgroups(ws);
+          saveToCache(activeId, undefined, ws);
+          pruneCachedMessages(activeId, ws);
+          return true;
+        })().catch((error) => {
+          if (canApply()) setRosterStale(true);
+          throw error;
+        }),
+      ]);
+      if (!stillCurrent()) return;
+      const complete = canApply() && results.every((r) => r.status === "fulfilled" && r.value === true);
+      setRosterStale(!complete);
+      if (complete) {
+        reloadAttemptRef.current = 0;
         setRosterAnsweredId(activeId);
         setRosterGeneration((n) => n + 1);
+      } else if (canApply()) {
+        const delay = RELOAD_RETRY_MS[Math.min(reloadAttemptRef.current, RELOAD_RETRY_MS.length - 1)];
+        reloadAttemptRef.current += 1;
+        reloadRetryRef.current = setTimeout(() => {
+          if (stillCurrent()) reloadRef.current();
+        }, delay);
       }
-    } catch {
-      if (stillCurrent()) {
-        const status = hostConnectionsRef.current?.connections?.find((c) => c.id === activeId)?.status;
-        showCachedOrClear(activeId, status);
-        if (status === "online") retryLater();
-      }
-    } finally {
-      if (
-        hostConnectionsRef.current?.active_id === activeId &&
-        connectionSwitchRef.current === switchId
-      ) {
-        setConnectionSyncing(false);
-        setRosterSettledId(activeId);
-      }
+      setConnectionSyncing(false);
+      setRosterSettledId(activeId);
       reloadConnections();
-    }
-  }, [
-    applyProfilesAndWorkgroups,
-    reloadConnections,
-    saveToCache,
-    showCachedOrClear,
-  ]);
+    })().finally(() => {
+      if (reloadInFlightRef.current !== request) return;
+      reloadInFlightRef.current = null;
+      if (request.dirty) reloadRef.current();
+    });
+    return request.promise;
+  }, [reloadConnections, saveToCache, showCachedOrClear]);
   const reloadRef = useRef(reload);
   reloadRef.current = reload;
 
@@ -375,7 +370,7 @@ export function useHostConnections({
     syncedStatusRef.current = activeStatusKey;
     if (!active) return;
     if (status === "online") {
-      reloadConnections().finally(() => reload());
+      reloadConnections().finally(() => reload({ trailing: false }));
     } else if (status === "auth-failed") {
       setConnectionSyncing(false);
       reloadConnections().finally(() => clearConnectionContent());
@@ -395,10 +390,18 @@ export function useHostConnections({
         return;
       }
       const active = value.connections?.find((c) => c.id === value.active_id);
-      if (active?.status !== "online") showCachedOrClear(value.active_id, active?.status);
+      showCachedOrClear(value.active_id, active?.status);
     });
     invoke("host_connections_probe_active").catch(() => {});
   }, [reload, reloadConnections, showCachedOrClear]);
+
+  useEffect(() => {
+    if (activeConnectionForSync?.status !== "online") return undefined;
+    const timer = setInterval(() => {
+      if (document.visibilityState !== "hidden") reloadRef.current();
+    }, ROSTER_POLL_MS);
+    return () => clearInterval(timer);
+  }, [activeStatusKey]);
 
   // Offline has no liveness stream to recover on; terminal authentication states wait for user or host action. A rate-limited source re-probes once a minute: sooner only extends the daemon's window.
   useEffect(() => {
@@ -455,7 +458,7 @@ export function useHostConnections({
             .then((status) => {
               if (connectionSwitchRef.current !== switchId) return;
               if (status === "online") {
-                reloadConnections().finally(() => reload());
+                reloadConnections().finally(() => reload({ trailing: false }));
               } else if (status === "offline" || status === "disabled" || status === "auth-failed" || status === RATE_LIMITED) {
                 setConnectionSyncing(false);
               }
@@ -556,6 +559,7 @@ export function useHostConnections({
     workgroups,
     dropWorkgroup,
     connectionSyncing,
+    rosterStale,
     connectionSwitching: switchTargetId != null && connectionSyncing,
     rosterAnswered: rosterAnsweredId != null && rosterAnsweredId === hostConnections.active_id,
     rosterSettled: rosterSettledId != null && rosterSettledId === hostConnections.active_id,

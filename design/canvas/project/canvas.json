@@ -136,9 +136,17 @@
    "title": "Desktop \u00b7 workgroups",
    "page": "desktop"
   },
-  "Desktop-Connections.dc.html": {
+  "Desktop-WorkgroupsStale.dc.html": {
    "x": 0,
    "y": 11660,
+   "w": 1280,
+   "h": 560,
+   "title": "Desktop \u00b7 workgroups \u00b7 stale",
+   "page": "desktop"
+  },
+  "Desktop-Connections.dc.html": {
+   "x": 0,
+   "y": 12460,
    "w": 1280,
    "h": 820,
    "title": "Desktop \u00b7 connections",
@@ -146,7 +154,7 @@
   },
   "Desktop-AppSettings.dc.html": {
    "x": 0,
-   "y": 12720,
+   "y": 13520,
    "w": 1280,
    "h": 1230,
    "title": "Desktop \u00b7 app settings",
@@ -154,7 +162,7 @@
   },
   "Desktop-FirstRun.dc.html": {
    "x": 0,
-   "y": 14190,
+   "y": 14990,
    "w": 1280,
    "h": 3100,
    "title": "Desktop \u00b7 first run",
@@ -162,7 +170,7 @@
   },
   "Desktop-Overlays.dc.html": {
    "x": 0,
-   "y": 17530,
+   "y": 18330,
    "w": 1280,
    "h": 2660,
    "title": "Desktop \u00b7 overlays",
@@ -471,6 +479,7 @@
   "Desktop-WorkgroupSettings.dc.html",
   "Desktop-ProfilePanels.dc.html",
   "Desktop-Workgroups.dc.html",
+  "Desktop-WorkgroupsStale.dc.html",
   "Desktop-Connections.dc.html",
   "Desktop-AppSettings.dc.html",
   "Desktop-FirstRun.dc.html",
@@ -585,9 +594,17 @@
    "maxW": 2600,
    "page": "desktop"
   },
-  "d-Connections": {
+  "d-Workgroups \u00b7 stale": {
    "x": 0,
    "y": 11437,
+   "text": "Workgroups \u00b7 stale",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "desktop"
+  },
+  "d-Connections": {
+   "x": 0,
+   "y": 12237,
    "text": "Connections",
    "kind": "title1",
    "maxW": 2600,
@@ -595,7 +612,7 @@
   },
   "d-App settings": {
    "x": 0,
-   "y": 12497,
+   "y": 13297,
    "text": "App settings",
    "kind": "title1",
    "maxW": 2600,
@@ -603,7 +620,7 @@
   },
   "d-First run": {
    "x": 0,
-   "y": 13967,
+   "y": 14767,
    "text": "First run",
    "kind": "title1",
    "maxW": 2600,
@@ -611,7 +628,7 @@
   },
   "d-Overlays": {
    "x": 0,
-   "y": 17307,
+   "y": 18107,
    "text": "Overlays",
    "kind": "title1",
    "maxW": 2600,

@@ -39,7 +39,7 @@ export function fromDaemonFrame(frame) {
     event === "wg.skip"
   ) {
     if (!data.profile || !data.wg_id) return null;
-    return { kind: "workgroup_transcript", profile: data.profile, wg_id: data.wg_id };
+    return { kind: "workgroup_transcript", profile: data.profile, wg_id: data.wg_id, refreshRoster: event !== "wg.post" };
   }
   if (event === "workgroup_changed" || event === "workgroup_meta" || event === "workgroup_members") {
     return { kind: "workgroup_meta" };

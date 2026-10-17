@@ -565,3 +565,25 @@ describe("App landing", () => {
     expect(screen.queryByText("Start a new thread")).toBeNull();
   });
 });
+
+it("refreshes pipeline status and spend on terminal events, without reloading per post", async () => {
+  _resetDaemonBus();
+  daemon();
+  render(<App />);
+  await waitFor(() => expect(selected("alpi")).toBe(true));
+  await waitFor(() => expect(listeners["daemon-event"]).toBeTruthy());
+  const count = () => invoke.mock.calls.filter(([cmd]) => cmd === "workgroups").length;
+  const before = count();
+  await act(async () => {
+    for (let i = 0; i < 15; i += 1) {
+      listeners["daemon-event"]({ payload: { connection_id: "local", frame: { event: "wg.post", data: { profile: "doc", wg_id: "crew" } } } });
+    }
+    await new Promise((resolve) => setTimeout(resolve, 650));
+  });
+  expect(count()).toBe(before);
+  await act(async () => {
+    listeners["daemon-event"]({ payload: { connection_id: "local", frame: { event: "wg.done", data: { profile: "doc", wg_id: "crew" } } } });
+    await new Promise((resolve) => setTimeout(resolve, 650));
+  });
+  expect(count()).toBe(before + 1);
+});

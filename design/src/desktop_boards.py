@@ -469,7 +469,7 @@ def desktop_connections():
 WG_GRID = "grid-template-columns: minmax(240px, 1fr) 10.5rem 76px 112px 92px; gap: 20px; padding: 0 10px"
 
 
-def desktop_workgroups():
+def desktop_workgroups(stale=False):
     head = "".join(f'<span style="{"text-align: right" if i > 2 else ""}">{t}</span>' for i, t in enumerate(("Workgroup", "Status", "Members", "Spend", "Updated"), start=1))
     head = f'<div style="display: grid; {WG_GRID}; align-items: center; min-height: 32px; font-family: {MONO}; font-size: 11px; text-transform: uppercase; color: {INK3}">{head}</div>'
 
@@ -489,11 +489,12 @@ def desktop_workgroups():
              + wrow("digest", "#9b5ad9", INK4, "Idle", 2, "$0.08", "1d"))
     meta = f'<span>3 workgroups</span>{SEP}<span>1 working · 1 queued · 1 idle</span>'
     hero = d_hero(h1("Workgroups", wg_mark(AMBER, 20), INK3), meta, button("New workgroup", "ghost", "md", "plus"), AMBER)
+    warning = (f'<div role="status" style="display: flex; align-items: center; gap: 10px; padding: 8px 32px; flex-shrink: 0; border-bottom: 0.5px solid {LINE}; background: color-mix(in srgb, #e08a3c 12%, {PANE}); font-size: 12px; color: {INK2}; line-height: 1.45"><span style="width: 7px; height: 7px; border-radius: 50%; background: #e08a3c; flex-shrink: 0"></span><span style="flex: 1">Workgroups may be out of date. Retrying automatically.</span><button style="border: 0; background: transparent; padding: 0; font: inherit; font-weight: 500; color: {INK}">Retry</button></div>' if stale else "")
     body = f"""<div style="display: flex; height: 100%">
 {d_sidebar(560, selected="", settings_mode=False)}
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: {PANE}">
 <div style="height: 2px; background: {LINE}"></div>
-{hero}{d_body(table)}
+{hero}{warning}{d_body(table)}
 </div>
 </div>
 """
@@ -553,6 +554,7 @@ DESKTOP = {
     "profile": desktop_profile_settings(),
     "wg": desktop_wg_settings(),
     "workgroups": desktop_workgroups(),
+    "workgroups-stale": desktop_workgroups(stale=True),
     "connections": desktop_connections(),
     "app": desktop_app_settings(),
 }

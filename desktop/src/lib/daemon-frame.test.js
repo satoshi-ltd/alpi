@@ -90,7 +90,7 @@ describe("fromDaemonFrame", () => {
       "maps %s with profile + wg_id",
       (event) => {
         const out = fromDaemonFrame({ event, data: { profile: "doc", wg_id: "wg-1" } });
-        expect(out).toEqual({ kind: "workgroup_transcript", profile: "doc", wg_id: "wg-1" });
+        expect(out).toEqual({ kind: "workgroup_transcript", profile: "doc", wg_id: "wg-1", refreshRoster: event !== "wg.post" });
       },
     );
 

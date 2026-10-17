@@ -74,3 +74,13 @@ With no socket they run standalone. On an RPC timeout, inspect the list before
 retrying; the command never repeats the mutation locally after a failed request.
 The daemon runs profile and workgroup roster reads on a separate four-worker
 executor, preserving the caller context and avoiding waits behind turns or gates.
+
+Desktop keeps its in-memory workgroups when a list request fails, labels the page
+as potentially out of date and offers Retry. It retries with backoff capped at one
+minute and reconciles visible online windows every minute. Successful profiles and
+workgroups update independently; skipped responses stay stale and retry when online.
+One refresh runs at a time, with at most one
+follow-up for events received while it is pending. Old-connection replies are ignored.
+Terminal task events refresh pipeline state and spend; ordinary posts update recency.
+Both desktop roster RPCs have a 60-second deadline. A connected daemon does not imply
+that every displayed roster field is current: heed the stale-data warning.

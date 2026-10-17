@@ -192,3 +192,16 @@ describe("WorkgroupsView", () => {
     expect(glyph.style.width).toBe("20px");
   });
 });
+
+it("warns about stale workgroups, preserves rows and offers a retry until recovery", () => {
+  const onRefresh = vi.fn();
+  const { rerender } = render(<WorkgroupsView workgroups={WORKGROUPS} stale onRefresh={onRefresh} />);
+  expect(screen.getByText("Workgroups may be out of date. Retrying automatically.")).toBeInTheDocument();
+  expect(screen.getByText("Active hotel")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  expect(onRefresh).toHaveBeenCalledOnce();
+  rerender(<WorkgroupsView workgroups={WORKGROUPS} stale syncing onRefresh={onRefresh} />);
+  expect(screen.getByText("Updating workgroups… Displayed data may be out of date.")).toBeInTheDocument();
+  rerender(<WorkgroupsView workgroups={WORKGROUPS} onRefresh={onRefresh} />);
+  expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+});

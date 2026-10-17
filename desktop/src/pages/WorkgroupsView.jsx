@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { WORKGROUP_FOLD } from "../../../common/folds.mjs";
 import { palettes } from "../../../common/tokens.mjs";
 import {
+  Banner,
   Button,
   Crease,
   Fold,
@@ -61,6 +62,8 @@ export default function WorkgroupsView({
   onOpenWorkgroup,
   onNewWorkgroup,
   syncing = false,
+  stale = false,
+  onRefresh,
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
@@ -144,6 +147,11 @@ export default function WorkgroupsView({
         )}
       </header>
 
+      {stale && (
+        <Banner kind="warning" action={onRefresh ? "Retry" : null} onAction={onRefresh}>
+          {syncing ? "Updating workgroups… Displayed data may be out of date." : "Workgroups may be out of date. Retrying automatically."}
+        </Banner>
+      )}
       <div className={styles.body}>
         <div className={styles.table}>
           <div className={styles.toolbar}>

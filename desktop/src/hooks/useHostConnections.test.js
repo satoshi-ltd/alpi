@@ -1080,3 +1080,230 @@ describe("useHostConnections offline auto-reprobe", () => {
     }
   });
 });
+
+describe("roster recovery", () => {
+  it("keeps memory and does not rewrite cached workgroups when their RPC fails", async () => {
+    let fail = false;
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("local");
+      if (cmd === "profile_summaries") return [{ name: "doc" }];
+      if (cmd === "workgroups") {
+        if (fail) throw new Error("read-timeout");
+        return [{ id: "wg-1", profile: "doc", mtime: 100 }];
+      }
+      return null;
+    });
+    const { result } = renderHostConnections();
+    await waitFor(() => expect(result.current.rosterStale).toBe(false));
+    act(() => result.current.touchWorkgroup("doc", "wg-1"));
+    const before = result.current.workgroups;
+    const writes = vi.spyOn(Storage.prototype, "setItem");
+    fail = true;
+    await act(async () => { await result.current.reload(); });
+    expect(result.current.workgroups).toBe(before);
+    expect(result.current.rosterStale).toBe(true);
+    expect(writes.mock.calls.filter(([key]) => key === "alf:workgroups:v1:local")).toEqual([]);
+  });
+
+  it("coalesces reload bursts during a slow request and refreshes again after it lands", async () => {
+    let calls = 0;
+    let finishOlder;
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("local");
+      if (cmd === "profile_summaries") return [{ name: "doc" }];
+      if (cmd === "workgroups") {
+        calls += 1;
+        if (calls === 2) return new Promise((resolve) => { finishOlder = resolve; });
+        return [{ id: calls === 1 ? "initial" : "newer", profile: "doc" }];
+      }
+      return null;
+    });
+    const { result } = renderHostConnections();
+    await waitFor(() => expect(result.current.workgroups[0]?.id).toBe("initial"));
+    let older;
+    act(() => { older = result.current.reload(); });
+    await waitFor(() => expect(finishOlder).toBeTypeOf("function"));
+    act(() => {
+      for (let i = 0; i < 15; i += 1) result.current.reload();
+    });
+    expect(calls).toBe(2);
+    await act(async () => {
+      finishOlder([{ id: "older", profile: "doc" }]);
+      await older;
+    });
+    await waitFor(() => expect(result.current.workgroups[0].id).toBe("newer"));
+    expect(calls).toBe(3);
+    expect(JSON.parse(localStorage.getItem("alf:workgroups:v1:local"))[0].id).toBe("newer");
+    expect(result.current.rosterStale).toBe(false);
+  });
+
+  it("applies workgroups independently while summaries hangs and when it fails", async () => {
+    let failProfiles;
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("local");
+      if (cmd === "profile_summaries") return new Promise((_resolve, reject) => { failProfiles = reject; });
+      if (cmd === "workgroups") return [{ id: "fresh", profile: "doc" }];
+      return null;
+    });
+    const { result } = renderHostConnections();
+    await waitFor(() => expect(result.current.workgroups[0]?.id).toBe("fresh"));
+    expect(result.current.connectionSyncing).toBe(true);
+    await act(async () => { failProfiles(new Error("read-timeout")); });
+    expect(result.current.workgroups[0].id).toBe("fresh");
+    expect(result.current.rosterStale).toBe(true);
+    expect(JSON.parse(localStorage.getItem("alf:workgroups:v1:local"))[0].id).toBe("fresh");
+  });
+
+  it("shows fresh profiles while the workgroup list is still pending", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("local");
+      if (cmd === "profile_summaries") return [{ name: "fresh" }];
+      if (cmd === "workgroups") return new Promise(() => {});
+      return null;
+    });
+    const { result } = renderHostConnections();
+    await waitFor(() => expect(result.current.profiles[0]?.name).toBe("fresh"));
+    expect(result.current.connectionSyncing).toBe(true);
+  });
+
+  it("keeps retrying beyond two failures and clears stale state after recovery", async () => {
+    vi.useFakeTimers();
+    let fail = true;
+    let calls = 0;
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("local");
+      if (cmd === "profile_summaries") return [{ name: "doc" }];
+      if (cmd === "workgroups") {
+        calls += 1;
+        if (fail) throw new Error("read-timeout");
+        return [{ id: "fresh", profile: "doc" }];
+      }
+      return null;
+    });
+    try {
+      const { result, unmount } = renderHostConnections();
+      await act(async () => {});
+      for (const delay of [1500, 5000, 15000, 30000, 60000, 60000]) {
+        await act(async () => { await vi.advanceTimersByTimeAsync(delay); });
+      }
+      expect(calls).toBeGreaterThanOrEqual(6);
+      expect(result.current.rosterStale).toBe(true);
+      fail = false;
+      await act(async () => { await vi.advanceTimersByTimeAsync(60000); });
+      expect(result.current.workgroups[0].id).toBe("fresh");
+      expect(result.current.rosterStale).toBe(false);
+      unmount();
+      const settledCalls = calls;
+      await vi.advanceTimersByTimeAsync(120000);
+      expect(calls).toBe(settledCalls);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reconciles a healthy online roster periodically even without events", async () => {
+    vi.useFakeTimers();
+    let id = "old";
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("local");
+      if (cmd === "profile_summaries") return [{ name: "doc" }];
+      if (cmd === "workgroups") return [{ id, profile: "doc" }];
+      return null;
+    });
+    try {
+      const { result, unmount } = renderHostConnections();
+      await act(async () => {});
+      expect(result.current.workgroups[0].id).toBe("old");
+      id = "new";
+      await act(async () => { await vi.advanceTimersByTimeAsync(60000); });
+      expect(result.current.workgroups[0].id).toBe("new");
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+it("does not launch a dirty trailing refresh after unmount", async () => {
+  let finish;
+  let calls = 0;
+  invoke.mockImplementation(async (cmd) => {
+    if (cmd === "host_connections") return makeConnections("local");
+    if (cmd === "profile_summaries") return [{ name: "doc" }];
+    if (cmd === "workgroups") {
+      calls += 1;
+      return new Promise((resolve) => { finish = resolve; });
+    }
+    return null;
+  });
+  const { result, unmount } = renderHostConnections();
+  await waitFor(() => expect(finish).toBeTypeOf("function"));
+  let pending;
+  act(() => { pending = result.current.reload(); });
+  unmount();
+  await act(async () => { finish([]); await pending; });
+  expect(calls).toBe(1);
+});
+
+it("marks a failed list stale immediately while the sibling summary request is pending", async () => {
+  let fail = false;
+  let finish;
+  invoke.mockImplementation(async (cmd) => {
+    if (cmd === "host_connections") return makeConnections("local");
+    if (cmd === "profile_summaries") {
+      if (fail) return new Promise((resolve) => { finish = resolve; });
+      return [{ name: "doc" }];
+    }
+    if (cmd === "workgroups") {
+      if (fail) throw new Error("read-timeout");
+      return [{ id: "fresh", profile: "doc" }];
+    }
+    return null;
+  });
+  const { result } = renderHostConnections();
+  await waitFor(() => expect(result.current.rosterStale).toBe(false));
+  fail = true;
+  let pending;
+  act(() => { pending = result.current.reload(); });
+  await waitFor(() => expect(result.current.rosterStale).toBe(true));
+  expect(result.current.connectionSyncing).toBe(true);
+  expect(result.current.workgroups[0].id).toBe("fresh");
+  await act(async () => { finish([{ name: "doc" }]); await pending; });
+});
+
+it("retries a roster half skipped while the same connection was probing", async () => {
+  let status = "online";
+  let profileCalls = 0;
+  let workgroupCalls = 0;
+  let finishProfiles;
+  let finishWorkgroups;
+  invoke.mockImplementation(async (cmd) => {
+    if (cmd === "host_connections") return makeConnections("local", { local: status });
+    if (cmd === "profile_summaries") {
+      profileCalls += 1;
+      if (profileCalls === 2) return new Promise((resolve) => { finishProfiles = resolve; });
+      return [{ name: "doc" }];
+    }
+    if (cmd === "workgroups") {
+      workgroupCalls += 1;
+      if (workgroupCalls === 2) return new Promise((resolve) => { finishWorkgroups = resolve; });
+      return [{ id: workgroupCalls === 1 ? "cached" : "fresh", profile: "doc" }];
+    }
+    return null;
+  });
+  const { result } = renderHostConnections();
+  await waitFor(() => expect(result.current.rosterStale).toBe(false));
+  let pending;
+  act(() => { pending = result.current.reload(); });
+  await waitFor(() => expect(finishWorkgroups).toBeTypeOf("function"));
+  status = "probing";
+  await act(async () => { connectionStatusListener({ payload: { id: "local", status } }); });
+  await act(async () => { finishWorkgroups([{ id: "skipped", profile: "doc" }]); });
+  status = "online";
+  await act(async () => { connectionStatusListener({ payload: { id: "local", status } }); });
+  await act(async () => { finishProfiles([{ name: "doc" }]); await pending; });
+  expect(result.current.workgroups[0].id).toBe("cached");
+  expect(result.current.rosterStale).toBe(true);
+  await waitFor(() => expect(result.current.workgroups[0].id).toBe("fresh"), { timeout: 3000 });
+  expect(result.current.rosterStale).toBe(false);
+});

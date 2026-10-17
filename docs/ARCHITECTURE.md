@@ -1037,7 +1037,16 @@ Verb namespaces in current shape:
 - **Roster reads stay responsive during agent turns.** `host.profile.summaries`
   and `host.workgroups.list` run their filesystem aggregation on a dedicated four-worker
   executor, preserving the caller's context variables and scope. Agent turns and pipeline gates
-  use the default executor and cannot occupy the roster's workers.
+  use the default executor and cannot occupy the roster's workers. The desktop gives both reads
+  a 60-second deadline. It applies each successful half independently and persists only that half;
+  a failed or unapplied response retains memory and marks the workgroups page as potentially out
+  of date, with Retry. Only applied responses count as synchronized.
+  Retries back off through 1.5, 5, 15, 30 and 60 seconds, then keep the 60-second ceiling until
+  recovery. Reloads run one at a time per connection, coalescing events during a pending read into
+  one follow-up refresh; replies from a previous connection or switch are ignored. Online desktop
+  windows also reconcile every minute while visible. Terminal task events (`wg.done`, `wg.task`,
+  `wg.skip`) request a coalesced roster refresh for pipeline state and spend; ordinary `wg.post`
+  frames only touch recency, avoiding a full-list request per post.
 
 - **CLI workgroup mutations notify through the daemon.** `workgroup launch` and
   `workgroup remove` use the existing host verbs when its socket exists, so the daemon emits

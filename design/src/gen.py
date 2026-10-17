@@ -1059,6 +1059,7 @@ def build(desktop_boards):
         ("Desktop-WorkgroupSettings.dc.html", desktop_boards["wg"], 2480, "Workgroup settings"),
         ("Desktop-ProfilePanels.dc.html", desktop_panels_board(), PANELS_DESKTOP_H, "Profile panels"),
         ("Desktop-Workgroups.dc.html", desktop_boards["workgroups"], 560, "Workgroups"),
+        ("Desktop-WorkgroupsStale.dc.html", desktop_boards["workgroups-stale"], 560, "Workgroups · stale"),
         ("Desktop-Connections.dc.html", desktop_boards["connections"], 820, "Connections"),
         ("Desktop-AppSettings.dc.html", desktop_boards["app"], 740, "App settings"),
         ("Desktop-FirstRun.dc.html", desktop_onboarding(), DESKTOP_ONBOARDING_H, "First run"),

@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.8.15 — 2026-10-17 — reliable workgroup synchronization
+
+- Failed refreshes preserve the latest displayed workgroups and show an out-of-date warning with Retry.
+- Automatic recovery continues after repeated failures, and visible online windows reconcile every minute.
+- Pipeline task events refresh status and spend; older responses cannot overwrite newer data.
+- Profiles and workgroups refresh independently, with more time for busy daemons to answer.
+  Requires alpi 0.17.28.
+
 ## v0.8.14 — 2026-10-17 — install alpi from Desktop
 
 - The welcome can install alpi, uv and Python, then start the local daemon without a terminal.
