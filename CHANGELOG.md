@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.17.29 — 2026-10-17 — pipeline state no longer waits behind agent turns
+
+- Pipeline state in connected apps stays responsive while agent turns or transcript loads occupy the daemon.
+- The pipeline can appear before its conversation finishes loading, preserving the existing interface.
+
 ## v0.17.28 — 2026-10-17 — workgroup lists stay responsive during runs
 
 - Profile and workgroup lists remain responsive while agent turns and pipeline checks are busy.

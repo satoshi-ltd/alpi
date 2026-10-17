@@ -72,8 +72,10 @@ CLI `workgroup launch` and `workgroup remove` go through the daemon's existing h
 verbs when its socket exists, delivering lifecycle events to connected clients.
 With no socket they run standalone. On an RPC timeout, inspect the list before
 retrying; the command never repeats the mutation locally after a failed request.
-The daemon runs profile and workgroup roster reads on a separate four-worker
-executor, preserving the caller context and avoiding waits behind turns or gates.
+The daemon runs profile/workgroup lists and canonical pipeline state (`host.workgroup.tasks`)
+on a separate four-worker executor, preserving caller context and avoiding waits behind
+turns, gates or transcript loads. Both apps request pipeline state independently of the
+transcript, so its phases can render while the conversation is still loading.
 
 Desktop keeps its in-memory workgroups when a list request fails, labels the page
 as potentially out of date and offers Retry. It retries with backoff capped at one

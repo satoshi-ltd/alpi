@@ -9,6 +9,7 @@ from alpi import home as home_mod
 from alpi.host import sessions as host_sessions
 from alpi.host import server as host_server
 from alpi.host import workgroup as host_workgroup
+from alpi.host.read_pool import run_read
 
 
 _SAFE_ID = re.compile(r"^[A-Za-z0-9_-]+$")
@@ -73,8 +74,7 @@ async def _workgroup_tasks(
     wg_id = str((params or {}).get("wg_id") or "").strip()
     _check_id(wg_id, "wg_id")
     home = _resolve_home(profile)
-    # Decrypt + fold is CPU-bound; keep it off the event loop.
-    return await asyncio.to_thread(host_workgroup.fold_task_state, home, wg_id)
+    return await run_read(host_workgroup.fold_task_state, home, wg_id)
 
 
 async def _sessions_list(

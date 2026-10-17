@@ -1,3 +1,4 @@
+import { Profiler } from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -1026,4 +1027,39 @@ describe("WorkgroupView pipeline strip owners", () => {
     expect(phaseEl("enrich").querySelector("[data-fold]")).toBeNull();
     expect(document.querySelector("[data-phase-trigger]")).toHaveTextContent("1 of 2");
   });
+});
+
+
+it("renders canonical pipeline state while the transcript is held pending", async () => {
+  let resolveTasks;
+  let resolveTranscript;
+  let transcriptResolved = false;
+  const commits = [];
+  fetchWorkgroupTranscriptMock.mockImplementation(() => new Promise((resolve) => {
+    resolveTranscript = (rows) => { transcriptResolved = true; resolve(rows); };
+  }));
+  invokeMock.mockImplementation((cmd) => cmd === "workgroup_tasks"
+    ? new Promise((resolve) => { resolveTasks = resolve; })
+    : Promise.resolve([]));
+  render(
+    <Profiler id="pipeline" onRender={(_id, phase, duration) => commits.push({ phase, duration })}>
+      <WorkgroupView workgroup={workgroup} profiles={profiles} connectionId="local" />
+    </Profiler>,
+  );
+  const accepted = performance.now();
+  await act(async () => {
+    resolveTasks({
+      active: { slug: "enrich", title: "go", opened_seq: 42 }, closed: [], blocked: null,
+      pipeline_run: {
+        pipeline: "setup", status: "running", current_phase: "enrich",
+        phases: [{ slug: "setup", state: "completed", seq: 41 }, { slug: "enrich", state: "current", seq: 42 }],
+      },
+    });
+  });
+  expect(phaseEl("enrich").dataset.state).toBe("current");
+  expect(transcriptResolved).toBe(false);
+  if (process.env.ALPI_FLOW_TIMINGS === "1") {
+    process.stdout.write(JSON.stringify({ responseToRenderMs: performance.now() - accepted, commits }) + "\n");
+  }
+  await act(async () => { resolveTranscript(POSTS); });
 });

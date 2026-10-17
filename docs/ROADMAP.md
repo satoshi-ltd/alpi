@@ -78,17 +78,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
   accept: a job fired from the CLI or the TUI appears as a running row with its `job_id` while it
   runs (handed to the daemon when one answers); a test fires through the CLI path against a daemon.
 
-- **WG.FLOW-LATENCY** — Remove the measured delay before pipeline state appears
-  `bug · alpi, desktop, mobile · agent · normal`
-  note: the clients already request tasks and transcript independently; the desktop bridge uses
-  `off_main` and both daemon handlers use `asyncio.to_thread`. A fast isolated fold does not identify
-  the source of the reported multi-second delay.
-  accept: reproduce with a defined transcript size and local/remote connection, measure request,
-  bridge/transport, handler and render time, then fix the measured bottleneck. A regression test
-  reproduces that bottleneck and proves state can render while transcript loading is held pending;
-  record before/after timings under the same conditions. Narrow the release products to the layers
-  actually changed. Preserve the existing visual design and regenerate affected design views.
-
 - **TERM.3** — Profile environment for `terminal`
   `feature · alpi · agent · low`
   note: a skill toolchain installed in the volume (JDK and Maven under

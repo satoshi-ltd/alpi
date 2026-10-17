@@ -166,6 +166,7 @@ alpi/
 ├── host/                   control plane for desktop / mobile clients (default profile only)
 │   ├── server.py          Unix-socket JSON-RPC server (no envelope, no Noise — fs perms = trust)
 │   ├── handlers.py        read verbs (host.workgroup.transcript, host.sessions.*)
+│   ├── read_pool.py       isolated executor for roster and pipeline-state reads
 │   ├── chat.py            host.chat.send/delegate (streaming) + host.chat.cancel
 │   ├── runs.py            host.runs.list + host.run.{read,cancel}
 │   ├── config.py          config mutation verbs (providers, peers, mcp, email, …)
@@ -943,6 +944,11 @@ Verb namespaces in current shape:
   long-lived workgroup ships the recent window, not the oldest 200.
   `decrypt_transcript` opens the hub sealed group key once outside
   the per-post loop (was O(N) Curve25519 unseals per fetch).
+- **`host.workgroup.tasks`** — canonical task and pipeline state. Its fold runs through
+  `host.read_pool.run_read`, on the same four-worker executor as roster reads, with the
+  caller's context variables preserved. Engine turns, gates and transcript loads use the default
+  executor and cannot occupy those workers. Desktop and mobile request task state independently
+  of the transcript and can render the pipeline while transcript loading remains pending.
 - **`host.profile.summaries`** — lightweight inbox/sidebar shape:
   `name`, `model`, `accent`, `fold`, `latest_session`, `counts`, `budget_*`,
   `pubkey_b64`, `has_any_provider`. A profile's identity is its `fold` in its `accent`, and the apps draw it wherever the diamond
@@ -1036,7 +1042,7 @@ Verb namespaces in current shape:
   the same way.
 - **Roster reads stay responsive during agent turns.** `host.profile.summaries`
   and `host.workgroups.list` run their filesystem aggregation on a dedicated four-worker
-  executor, preserving the caller's context variables and scope. Agent turns and pipeline gates
+  executor in `host.read_pool`, preserving the caller's context variables and scope. Agent turns and pipeline gates
   use the default executor and cannot occupy the roster's workers. The desktop gives both reads
   a 60-second deadline. It applies each successful half independently and persists only that half;
   a failed or unapplied response retains memory and marks the workgroups page as potentially out
