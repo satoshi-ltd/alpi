@@ -185,6 +185,14 @@ async def test_a_sibling_device_never_reads_what_device_a_wrote(world, path: str
     assert marker not in sibling_sees, path
 
 
+@pytest.mark.asyncio
+async def test_profile_session_count_does_not_reveal_a_sibling_devices_session(world) -> None:
+    for device, expected in [(world.a, 1), (world.b, 0), (world.a, 1)]:
+        payload = json.loads(await _call(world, device, "host.profile.summaries"))
+        profile = next(p for p in payload[0]["result"]["profiles"] if p["name"] == "default")
+        assert profile["counts"]["sessions"] == expected
+
+
 def _tool_context(world, device) -> ConnectionContext:
     return ConnectionContext(world.conn, device["id"], "remote", "member", session_scope="device")
 

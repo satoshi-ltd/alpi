@@ -1553,6 +1553,48 @@ def test_session_view_key_never_merges_a_device_scoped_caller_with_the_connectio
     assert views["local"] == ("host", "")
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["member", "admin"])
+async def test_profile_session_counts_follow_ownership_across_cached_views(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, role: str,
+) -> None:
+    from alpi.host.connection_context import ConnectionContext, use
+
+    home = _bootstrap(tmp_path / "h")
+    monkeypatch.setattr(host_device_state.home_mod, "_ROOT", home)
+    host_device_state.invalidate_summary()
+    for sid, connection, device in [
+        ("a1", "conn_a", "dev_a"),
+        ("a2", "conn_a", "dev_b"),
+        ("a3", "conn_a", "dev_b"),
+        ("a_legacy", "conn_a", None),
+        ("b1", "conn_b", "dev_a"),
+    ]:
+        (home / "sessions" / f"{sid}.json").write_text(json.dumps({
+            "connection_id": connection, "device_id": device,
+            "turns": [{"user": sid}],
+        }))
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+    host_handlers.register(srv)
+    views = [
+        (ConnectionContext(), 2),
+        (ConnectionContext("conn_a", "dev_a", "remote", role), 4),
+        (ConnectionContext("conn_a", "dev_a", "remote", role, session_scope="device"), 2),
+        (ConnectionContext("conn_a", "dev_b", "remote", role, session_scope="device"), 3),
+        (ConnectionContext("conn_b", "dev_a", "remote", role, session_scope="device"), 1),
+        (ConnectionContext("conn_a", None, "remote", role, session_scope="device"), 1),
+        (ConnectionContext("unknown", "dev_a", "remote", role), 0),
+    ]
+    for context, expected in views + list(reversed(views)):
+        with use(context):
+            summary = await srv._dispatch({"id": "s", "method": "host.profile.summaries", "params": {}})
+            listed = await srv._dispatch({"id": "l", "method": "host.sessions.list", "params": {"profile": "default"}})
+        profile = next(p for p in summary["result"]["profiles"] if p["name"] == "default")
+        assert profile["counts"]["sessions"] == expected
+        assert len(listed["result"]["sessions"]) == expected
+
+
 async def _fold_summary(srv: host_server.Server, name: str = "doc") -> dict:
     resp = await srv._dispatch({"id": "s", "method": "host.profile.summaries", "params": {}})
     return next(p for p in resp["result"]["profiles"] if p["name"] == name)

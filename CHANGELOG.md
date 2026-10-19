@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.17.30 — 2026-10-19 — profile session counts respect connection scope
+
+- Connected apps count only their connection's sessions, so another connection's history no longer inflates the total.
+- Device-scoped connections count only that device's sessions and older sessions shared by the connection.
+
 ## v0.17.29 — 2026-10-17 — pipeline state no longer waits behind agent turns
 
 - Pipeline state in connected apps stays responsive while agent turns or transcript loads occupy the daemon.

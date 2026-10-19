@@ -78,15 +78,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ### Approved fixes, then the terminal capability
 
-- **SCOPE.5** — Profile session counts respect scope
-  `bug · alpi · agent · high`
-  note: `counts.sessions` in `host.profile.summaries` counts every session file of the
-  profile, so a member or a device-scoped device learns how many sessions other
-  connections and sibling devices hold (a count only, no text).
-  accept: the count includes only sessions `owns_session_row` lets the caller see in both
-  summaries and profile detail/snapshot; tests cover two connections and two devices under
-  `session_scope: device`, the summary cache, and the local socket owner's full view.
-
 - **ACT.2** — Jobs fired from the console never show as running
   `bug · alpi · agent · normal`
   note: found while reviewing ACT.1. `alpi schedule fire`, `alpi setup → Fire now` and the TUI's
@@ -117,7 +108,14 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## In progress
 
-_None._
+- **SCOPE.5** — Profile session counts respect scope
+  `bug · alpi · agent · high`
+  note: `counts.sessions` in `host.profile.summaries` counts every session file of the
+  profile, so a member or a device-scoped device learns how many sessions other
+  connections and sibling devices hold (a count only, no text).
+  accept: the count includes only sessions `owns_session_row` lets the caller see in
+  summaries (detail and snapshot carry no count); tests cover two connections and two devices under
+  `session_scope: device`, the summary cache, and the local host/legacy view without a device restriction.
 
 ## Needs creator
 

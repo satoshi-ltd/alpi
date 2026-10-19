@@ -951,7 +951,11 @@ Verb namespaces in current shape:
   of the transcript and can render the pipeline while transcript loading remains pending.
 - **`host.profile.summaries`** — lightweight inbox/sidebar shape:
   `name`, `model`, `accent`, `fold`, `latest_session`, `counts`, `budget_*`,
-  `pubkey_b64`, `has_any_provider`. A profile's identity is its `fold` in its `accent`, and the apps draw it wherever the diamond
+  `pubkey_b64`, `has_any_provider`. `counts.sessions` uses the same `owns_session_row` filter as the
+  session list and `latest_session`, including remote admins: connection ownership always applies,
+  and `session_scope: device` narrows remote devices while retaining deviceless sessions of that
+  connection. Local requests count host-owned and legacy ownerless sessions without a device clause.
+  Detail and settings snapshots do not carry a session count. A profile's identity is its `fold` in its `accent`, and the apps draw it wherever the diamond
   identified a profile (a missing or unknown fold is the diamond; status marks stay diamonds):
   the twelve objects and the twelve colours (all hues, no grey, so no profile reads as the ink alpaca; the
   `nearestAccent` map from any stored colour, with the retired grey `#7e8792` read as sky) live in
@@ -1428,6 +1432,8 @@ profile tree before and after a digest run.
 Turn-based JSON: `schema_version: 2`, `turns: [{at, user, tools[], assistant}]`, and cumulative metrics. `ToolLog` carries `at, name, args, result, ok, duration_s, reasoning`; large `user` / `assistant` / `reasoning` / tool payloads are persisted as bounded previews plus `{bytes, sha256, truncated}` metadata, not raw unbounded blobs. `host.session.read` normalizes both legacy and v2 payloads back to the client-facing shape, so desktop/mobile can render old and new sessions the same way. Empty sessions (no user message) are NOT saved.
 
 Listings are bounded. `host.sessions.list` fully parses normal files but uses a cheap summary path for files above the large-session threshold; `host.profile.summaries` uses `count_sessions()` and `latest_chat_summary()` so profile/sidebar RPCs never parse 50 MB histories just to show a count or latest row.
+Scoped counts reuse the same cached session rows and bounded large-file metadata path as listings;
+an unfiltered internal count enumerates session files without parsing them.
 
 Live replay is a separate sidecar (`sessions/_events_<id>.jsonl`). It is append-only within the active turn, sequence-numbered, and bounded: incremental `assistant_delta` / `reasoning_delta` frames are preserved exactly, while very large text fields are clipped. The canonical durable review remains `sessions/<id>.json`; the sidecar is for reconnect/backfill, not long-term full-fidelity storage.
 
@@ -1743,8 +1749,7 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   writes as device A and reads as device B through each path it lists (the session verbs, replay,
   runs, activity, prompts, summaries, events and the session tools); a new path is one more row.
   Profile-wide data is shared by design: workgroup posts, memory and the files an admin may read.
-  The known gaps, staged attachments, the profile session count and the admin reading of
-  the scope, are tasks in `docs/ROADMAP.md`. A device with `provisioner: true` may call the `_SELF_SERVICE_METHODS`
+  The remaining scope gaps are tracked in `docs/ROADMAP.md`. A device with `provisioner: true` may call the `_SELF_SERVICE_METHODS`
   (`add_device`, `pairing_status`, `cancel_pairing`, `revoke_device`) on its own
   `connection_id` without the admin role; those verbs are `_SCOPE_FREE_METHODS`
   because they carry no profile.

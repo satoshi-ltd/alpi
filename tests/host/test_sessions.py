@@ -72,6 +72,33 @@ def test_count_sessions_ignores_sidecars_hidden_and_appledouble(tmp_path: Path) 
     assert [r["id"] for r in data_sessions.list_sessions(tmp_path)] == ["abc"]
 
 
+def test_scoped_count_reuses_bounded_rows_and_invalidates_changed_owners(tmp_path, monkeypatch) -> None:
+    from alpi.host.connection_context import ConnectionContext, owns_session_row, use
+
+    mine = _seed_large_session(tmp_path, "mine")
+    mine.write_text(mine.read_text().replace('{"id":', '{"connection_id":"conn_a","device_id":"dev_a","id":', 1))
+    foreign = _seed_session(tmp_path, "foreign", "other", connection_id="conn_b")
+    original_loads = data_sessions.json.loads
+
+    def bounded_loads(src, *args, **kwargs):
+        if isinstance(src, str) and len(src) > 1_000_000:
+            raise AssertionError("large session JSON was fully parsed")
+        return original_loads(src, *args, **kwargs)
+
+    monkeypatch.setattr(data_sessions.json, "loads", bounded_loads)
+    with use(ConnectionContext("conn_a", "dev_a", "remote", "member", session_scope="device")):
+        assert data_sessions.count_sessions(tmp_path, can_read=owns_session_row) == 1
+        data_sessions._clear_row_cache()
+        assert data_sessions.count_sessions(tmp_path, can_read=owns_session_row) == 1
+        data = json.loads(foreign.read_text())
+        data.update(connection_id="conn_a", device_id="dev_a")
+        foreign.write_text(json.dumps(data))
+        assert data_sessions.count_sessions(tmp_path, can_read=owns_session_row) == 2
+        foreign.unlink()
+        assert data_sessions.count_sessions(tmp_path, can_read=owns_session_row) == 1
+    assert data_sessions.count_sessions(tmp_path) == 1
+
+
 def test_list_sessions_tolerates_corrupt_started_at(tmp_path: Path) -> None:
     """One session JSON with a non-numeric ``started_at`` must not nuke
     the whole listing. The bad row falls back to mtime; good rows are

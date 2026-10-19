@@ -50,11 +50,19 @@ def list_sessions(home: Path, limit: int | None = None) -> list[dict[str, Any]]:
     return rows
 
 
-def count_sessions(home: Path) -> int:
+def count_sessions(
+    home: Path, *, can_read: Callable[[dict[str, Any]], bool] | None = None,
+) -> int:
     d = home / "sessions"
     if not d.exists():
         return 0
-    return sum(1 for _ in _session_files(d))
+    files = _session_files(d)
+    if can_read is None:
+        return len(files)
+    disk = _DiskIndex(d)
+    count = sum(1 for p in files if can_read(_session_row(p, disk=disk)))
+    disk.flush({p.name for p in files})
+    return count
 
 
 def latest_chat_summary(

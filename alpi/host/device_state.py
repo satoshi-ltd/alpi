@@ -1215,7 +1215,7 @@ def _counts(home: Path) -> dict[str, int]:
     return {
         "peers": _yaml_entry_count(home / "alp" / "peers.yaml", "- id:"),
         "workgroups": _subdir_count(home / "alp" / "workgroups"),
-        "sessions": host_sessions.count_sessions(home),
+        "sessions": host_sessions.count_sessions(home, can_read=owns_session_row),
         "skills": _count_skill_dirs(home),
         "memory_bytes": _path_stats(home / "memories")[0],
     }

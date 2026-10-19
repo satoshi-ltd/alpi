@@ -7,6 +7,15 @@
 - Create a new profile for a separate identity/memory/credentials/ALP-trust/budget boundary. Use workspace (not a profile) when identity and memory can be shared across projects.
 - Profile Git/versioning: recommend a separate profile-source repo + explicit allowlisted sync into `~/.alpi`; do not recommend `git init ~/.alpi` as the default. In containers/Kubernetes, use profile-source Git + init/entrypoint sync + persistent runtime volume/PVC + external secrets.
 
+## Session counts in connected apps
+
+`host.profile.summaries` reports only sessions owned by the caller's connection, including
+for remote admins. With `session_scope: device`, the count includes that device and sessions
+of the connection saved without a device id. Local requests count host-owned and legacy
+ownerless sessions without a device restriction. Counts use the session list's ownership
+filter and cached bounded metadata; they do not reveal another connection's session total.
+Profile detail and settings snapshots do not carry a separate session count.
+
 ## Active profile resolution (first match wins)
 
 1. `ALPI_HOME` env var — absolute override, bypasses everything.
