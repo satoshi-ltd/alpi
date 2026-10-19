@@ -182,6 +182,10 @@ contributor workflow, `docs/ROADMAP.md` is the task pool (Queue, Needs creator,
 Proposed), `docs/ARCHITECTURE.md` describes how alpi works today and the contracts
 clients rely on, and each product (alpi, desktop, mobile) has its own changelog. A
 change that releases several products ships one commit per product, daemon first.
+Roadmap release candidates describe future work, not available capabilities. Check the
+installed product's version and documented host behavior before recommending a feature;
+the daemon and the two clients advance their versions independently. Roadmap maintenance
+alone changes no runtime contract and needs no product version bump.
 
 ## Related topics
 

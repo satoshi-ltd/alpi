@@ -1,6 +1,6 @@
 # alpi roadmap
 
-Updated 2026-10-10. Current versions live in the changelogs. The Queue runs top to bottom; the creator
+Updated 2026-10-19. Current versions live in the changelogs. The Queue runs top to bottom; the creator
 approves the next tasks from Proposed.
 
 This is the task pool. [ARCHITECTURE.md](ARCHITECTURE.md) owns current state and
@@ -59,15 +59,33 @@ release SHA (`publish.yml` runs only `pytest -q`); no new runtime dependency, RP
 framework or persisted state unless the task names it; a large file is not a
 defect, so a helper is extracted only when it removes evidenced duplication.
 
+## Release direction
+
+- **Stabilize the current lines first.** Queue keeps the approved scope and console fixes ahead of new
+  capabilities. Proposed reliability work below addresses mobile synchronization and recipe validation;
+  it needs approval before entering Queue. A new feature does not hold up an independently releasable fix.
+- **Candidate for alpi 0.18.0: bounded pipeline repetition.** `WG.REPEAT` is the proposed feature boundary,
+  with `WG.RECIPE-KEYS` as its prerequisite. The goal is to finish a sequence of work without an external
+  script triggering every run, with finite limits and restart-safe progress. Approval of this roadmap
+  cleanup does not approve implementing the feature.
+- **The clients keep their own versions.** Desktop and mobile release only when their shipped code changes;
+  they do not inherit the daemon's minor number. Any new pipeline state needs an optional host field,
+  console parity and compatibility tests before clients consume it.
+- **Release evidence is separate.** Local suites prove implementation; a deployed busy-daemon check and
+  a mobile device check belong in Needs creator. Existing synchronization fixes are not reopened here.
+
 ## Queue
 
+### Approved fixes, then the terminal capability
+
 - **SCOPE.5** — Profile session counts respect scope
-  `bug · alpi · agent · normal`
+  `bug · alpi · agent · high`
   note: `counts.sessions` in `host.profile.summaries` counts every session file of the
   profile, so a member or a device-scoped device learns how many sessions other
   connections and sibling devices hold (a count only, no text).
-  accept: the count includes only sessions `owns_session_row` lets the caller see; a
-  test with sessions from two devices under `session_scope: device` counts one each.
+  accept: the count includes only sessions `owns_session_row` lets the caller see in both
+  summaries and profile detail/snapshot; tests cover two connections and two devices under
+  `session_scope: device`, the summary cache, and the local socket owner's full view.
 
 - **ACT.2** — Jobs fired from the console never show as running
   `bug · alpi · agent · normal`
@@ -76,7 +94,9 @@ defect, so a helper is extracted only when it removes evidenced duplication.
   registry is off, so `host.activity.list` never lists the run and the apps never show it working.
   The apps' Fire button (`host.schedule.fire`) and cron fires are listed.
   accept: a job fired from the CLI or the TUI appears as a running row with its `job_id` while it
-  runs (handed to the daemon when one answers); a test fires through the CLI path against a daemon.
+  runs (handed to the daemon when one answers), with the same terminal events both apps consume;
+  tests cover CLI/setup/tool dispatch, daemon absence, and an ambiguous RPC timeout that must not
+  execute a possibly accepted job twice. An offline console keeps its existing local execution.
 
 - **TERM.3** — Profile environment for `terminal`
   `feature · alpi · agent · low`
@@ -143,6 +163,15 @@ _None._
   accept: the creator picks which of these ideas ship and the copy of the empty states; the answer becomes a
   `ui` task with its board.
 
+- **MOB.ROSTER-STALE** — How does a populated phone roster say that its data is old?
+  `decision · mobile · creator · normal`
+  note: [Roster.jsx](../mobile/src/features/inbox/Roster.jsx) sends request errors only to its empty
+  state; with cached rows and an online daemon, a failed refresh has no visible error. Automatic
+  recovery is tracked separately in `WG.MOBILE-SYNC`.
+  accept: approve the stale-data and Retry treatment for an already populated roster, including
+  partial profile/workgroup failure, large text and reduced motion. Draw board UI-MOB.ROSTER-STALE;
+  its implementation becomes a separate mobile `ui` task and regenerates the design views.
+
 - **BRAND.SPLASH** — Mount the boot splash with the crease wordmark
   `decision · desktop · creator · low`
   note: `BootSplash` in [desktop/src/primitives](../desktop/src/primitives/) is exported but nothing renders
@@ -159,7 +188,48 @@ _None._
   has been run on every deployed daemon and `alpi doctor` reports no credential
   findings on each.
 
+### Verification
+
+- **WG.SYNC-VERIFY** — Busy workgroups stay current on the creator's desktop and phone
+  `verify · alpi, desktop, mobile · creator · normal`
+  depends: WG.MOBILE-SYNC, MOB.ROSTER-STALE
+  note: blocked until the mobile UI task resulting from `MOB.ROSTER-STALE` is implemented and
+  installed by the creator; replace the decision dependency with that task's ID when it is created.
+  accept: on a deployed daemon with multiple active pipelines, compare the roster, canonical phase
+  and spend against read-only host responses over local Unix and remote WebSocket connections;
+  create/remove a workgroup from the console, interrupt/reconnect the client transport, and resume
+  the phone after backgrounding. Record installed versions and recovery time; a populated stale
+  list shows its warning and recovers, and pipeline state can appear while transcript loading is
+  pending. Use a creator-approved run; no agent launches, installs or daemon restarts are implied.
+
 ## Proposed
+
+### Reliability before another feature
+
+- **WG.MOBILE-SYNC** — The phone reconciles workgroup state after failures and event bursts
+  `bug · mobile · agent · high`
+  note: `useDaemonData.fetchAndStore` returns an existing in-flight promise without queuing a
+  trailing refresh. `app/index.jsx` omits `wg.task`, `wg.skip` and `stream.connected`; the workgroup
+  page listens only to `wg.post`, `wg.done` and `workgroup_members`. A terminal event during a slow
+  read, or one lost beyond the replay window, can leave cached rows or canonical task state old
+  until another event or manual refresh. Event reconnect already has replay; retain it.
+  accept: cover canonical task/skip/change events and stream reconnection on the inbox and open
+  workgroup; coalesce bursts but perform one trailing read when an invalidation arrives in flight.
+  Retry transient failures with bounded backoff while active and reconcile periodically in the
+  foreground; stop timers in background and on endpoint change. Profiles, tasks and transcripts
+  remain independent, old-endpoint replies never replace the active endpoint's data, and auth
+  failures still clear inaccessible data. Hook/screen tests hold a read pending through the final
+  event, drop events across reconnect, resume the app and recover after multiple timeouts. Expose
+  per-resource stale/error state for the separate `MOB.ROSTER-STALE` interface work.
+
+- **WG.RECIPE-KEYS** — An unsupported pipeline-step option never disappears silently
+  `bug · alpi · agent · normal`
+  note: `validate_pipeline_steps` copies known keys and drops the rest, so a misspelt gate or a
+  future `repeat` rule can turn into a successful recipe load without the requested behavior.
+  accept: recipe/workgroup validation rejects unknown step options with the phase and option name;
+  all currently supported keys keep their behavior and legacy valid recipes still load. Tests
+  cover a misspelling, unsupported `repeat`, every accepted key and CLI recipe loading. Document
+  the supported grammar and minimum version in WORKGROUPS and the packaged workgroups reference.
 
 - **FRAME.2** — Other writers still encode agent text with `ensure_ascii=False` and raise on a lone surrogate
   `bug · alpi · agent · normal`
@@ -174,6 +244,24 @@ _None._
   accept: each site either scrubs or is shown not to receive agent or tool text; a post carrying a lone surrogate
   reaches a peer with a valid signature, and a `--once` turn whose tool output holds one prints its events; tests
   drive the ALP client and server, the CLI line and a provider-bound message.
+
+### Next minor candidate — bounded pipeline repetition
+
+- **WG.REPEAT** — A pipeline repeats itself until a command reports the work finished
+  `feature · alpi · agent · normal`
+  depends: WG.RECIPE-KEYS
+  note: repeated pipeline triggers currently need an operator or an external polling script.
+  `repeat: {until: {argv, cwd}, max_runs}` on a pipeline's first step is a candidate design,
+  not a supported recipe field. Keep the implementation inside the existing admission, gate
+  and workgroup lifecycle instead of adding a second scheduler.
+  accept: after a completed run the daemon evaluates the finish command (exit 0 finished,
+  1 repeat, anything else blocked), re-queues within normal admission and persists only the
+  progress needed to avoid handling the same run twice. A finite cap, a blocked run, pause/remove
+  and command timeout stop further automatic launches; restart between completion and re-queue
+  never duplicates a run. CLI/TUI expose progress, stop reason and manual controls through the
+  canonical host state; new fields are optional for existing desktop/mobile clients. Tests cover
+  finish, repeat, failure, cap, pause/remove, command timeout, cancellation and restart boundaries.
+  Document opt-in syntax, minimum daemon version and recovery in WORKGROUPS and its reference.
 
 ### Requires a design board
 
@@ -194,6 +282,12 @@ _None._
 
 Each names the condition that promotes it; none is worked on before.
 
+- **WG.ORIGIN-WIRE** — A post that arrives over the wire without a claim counts as admin's
+  `bug · alpi · agent · normal`
+  note: SCOPE.11 stamps the fence of every post a caller on this daemon makes and lets another daemon's profile claim one, but a peer that posts to the hub directly (not through a turn here) carries no claim, and the hub cannot verify what authority that profile's turn ran under. Its post wakes turns as admin. The same claim lets any member of a workgroup degrade the turns its post wakes: a `peer` claim takes `terminal` away from a pipeline owner, and an empty `allow` leaves only `workgroup_post`.
+  promote when: a hub takes posts from profiles on daemons the creator does not run, or the creator asks for it.
+  accept: the hub derives the origin of a wire post from the posting peer's record (`tools.allow` absent means fenced) instead of trusting the claim alone, with a per-member way to trust a profile fully so local multi-profile pipelines keep working; tests cover a local trusted member, an untrusted one and a forged claim.
+
 - **CHART.PNG** — A chart block rendered to a PNG for email and attachments
   `feature · alpi · agent · low`
   note: promote when an agent has to send a chart to a third party (`email`, a gateway) or the creator wants a
@@ -202,33 +296,11 @@ Each names the condition that promotes it; none is worked on before.
   accept: `charts.png(spec)` writes a themed PNG; the `email` tool attaches one per chart block and replaces the
   block with its summary line; a test renders each chart type.
 
-- **WG.REPEAT** — A pipeline repeats itself until a command reports the work finished
-  `feature · alpi · agent · normal`
-  note: a chain workgroup needs one `hotel` trigger per hotel; Princess v117 ran from an operator script
-  outside alpi that polled `workgroup show` every 60 s and stopped twice on a transient state. With the
-  typical chain of 3-6 hotels, triggering by hand or with that script is cheap, so this waits. Design in
-  `reports/concurrencia-cadenas-v2.md` §7.3.3: `repeat: {until: {argv, cwd}, max_runs}` on a pipeline's first
-  step only; after a `completed` run the daemon runs `until` (exit 0 finished, 1 repeat, anything else stops
-  with `wg.blocked`) and re-queues the pipeline; state `repeat[wg] = {handled_seq, auto}` in
-  `poller_state.json`. Today `validate_pipeline_steps` drops an unknown step key silently, so a recipe with
-  `repeat` on an older daemon would lose the rule without a word.
-  promote when: a chain of more than ~6 hotels is launched, or triggering each hotel becomes the bottleneck.
-  accept: a recipe with `repeat` runs `hotel` until `until` exits 0, stops and notifies on any other code, on
-  `max_runs` or on a blocked run, and never re-queues a run already handled; an unknown step key fails
-  recipe parsing instead of being dropped; documented in `docs/WORKGROUPS.md` and the packaged workgroups
-  reference; tests cover finished, repeat, error, cap, blocked and a daemon restart between runs.
-
 - **OUT.OWN** — A member rereads and edits its own earlier outputs
   `feature · alpi · agent · low`
   note: since SCOPE.12 a fenced turn (member device, peer without `tools.allow`) reaches `out/` only for files it creates in that turn or its skill produces; the next turn cannot reread, edit or attach them, because `out/` carries no owner and the only ownership records are the sessions' offered paths, which cost a session scan per file check.
   promote when: members ask the agent to revise or resend a document it made for them earlier.
   accept: a fenced turn reads, edits and attaches the files its own connection produced in earlier turns (its device too under `session_scope: device`) and still none another connection produced; no new persisted state beyond what ownership needs, named in the change; tests cover two connections on one profile.
-
-- **WG.ORIGIN-WIRE** — A post that arrives over the wire without a claim counts as admin's
-  `bug · alpi · agent · normal`
-  note: SCOPE.11 stamps the fence of every post a caller on this daemon makes and lets another daemon's profile claim one, but a peer that posts to the hub directly (not through a turn here) carries no claim, and the hub cannot verify what authority that profile's turn ran under. Its post wakes turns as admin. The same claim lets any member of a workgroup degrade the turns its post wakes: a `peer` claim takes `terminal` away from a pipeline owner, and an empty `allow` leaves only `workgroup_post`.
-  promote when: a hub takes posts from profiles on daemons the creator does not run, or the creator asks for it.
-  accept: the hub derives the origin of a wire post from the posting peer's record (`tools.allow` absent means fenced) instead of trusting the claim alone, with a per-member way to trust a profile fully so local multi-profile pipelines keep working; tests cover a local trusted member, an untrusted one and a forged claim.
 
 - **ALP.READ** — Fenced turns read every workgroup transcript under `alp/`
   `bug · alpi · agent · low`
