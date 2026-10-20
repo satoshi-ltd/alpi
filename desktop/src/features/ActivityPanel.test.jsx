@@ -33,6 +33,20 @@ function mount(overrides = {}) {
 }
 
 describe("ActivityPanel", () => {
+  it("opens each running job by its own id instead of opening an empty chat", () => {
+    const onOpenJob = vi.fn();
+    const props = mount({ onOpenJob, activity: {
+      needs_you: [], scheduled: [], running: [
+        { kind: "turn", profile: "doc", job_id: "j1", title: "First job", source: "schedule" },
+        { kind: "turn", profile: "doc", job_id: "j2", title: "Second job", source: "schedule" },
+      ],
+    } });
+    fireEvent.click(screen.getByText("doc · First job"));
+    fireEvent.click(screen.getByText("doc · Second job"));
+    expect(onOpenJob.mock.calls).toEqual([["doc", "j1"], ["doc", "j2"]]);
+    expect(props.onOpenSession).not.toHaveBeenCalled();
+  });
+
   it("orders needs you, running, scheduled", () => {
     mount();
     const labels = screen.getAllByRole("region").map((r) => r.getAttribute("aria-label"));

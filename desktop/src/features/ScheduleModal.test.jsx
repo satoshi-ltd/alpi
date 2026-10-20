@@ -1,9 +1,16 @@
-import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const invokeMock = vi.fn();
+const h = vi.hoisted(() => ({ activity: { running: [] }, refresh: vi.fn(), listeners: [] }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a) => invokeMock(...a) }));
-vi.mock("../lib/daemon-bus.js", () => ({ subscribeDaemonEvent: () => () => {} }));
+vi.mock("../lib/daemon-bus.js", () => ({ subscribeDaemonEvent: (fn) => {
+  h.listeners.push(fn);
+  return () => { h.listeners = h.listeners.filter((x) => x !== fn); };
+} }));
+vi.mock("../hooks/useActivity.js", async (load) => ({
+  ...await load(), useActivity: () => ({ activity: h.activity, refresh: h.refresh }),
+}));
 vi.mock("../primitives/Notification.jsx", () => ({ useNotify: () => () => {} }));
 
 import ScheduleModal from "./ScheduleModal.jsx";
@@ -17,6 +24,9 @@ const JOBS = [
 ];
 
 beforeEach(() => {
+  h.activity = { running: [] };
+  h.listeners = [];
+  h.refresh.mockReset();
   invokeMock.mockReset();
   invokeMock.mockResolvedValue(JOBS);
 });
@@ -25,7 +35,82 @@ function open() {
   return render(<ScheduleModal open onClose={vi.fn()} profile="lens" connectionId={null} />);
 }
 
+afterEach(() => vi.useRealTimers());
+
 describe("ScheduleModal", () => {
+  it("cannot confirm an earlier deletion after the job starts elsewhere", async () => {
+    const { rerender } = open();
+    await screen.findByText("Run the whoop skill");
+    fireEvent.click(screen.getByRole("button", { name: "Delete", exact: true }));
+    const dialog = await screen.findByRole("dialog", { name: /Delete "WHOOP sync"/ });
+    h.activity = { running: [{ profile: "lens", job_id: JOBS[0].id, started_at: Date.now() / 1000 }] };
+    rerender(<ScheduleModal open profile="lens" onClose={vi.fn()} />);
+    await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: "Delete", exact: true })); });
+    expect(invokeMock.mock.calls.some(([method]) => method === "schedule_remove")).toBe(false);
+  });
+
+  it("does not resurrect a quick job whose completion preceded its acceptance reply", async () => {
+    let accept;
+    invokeMock.mockImplementation((method) => method === "schedule_fire"
+      ? new Promise((resolve) => { accept = resolve; }) : Promise.resolve(JOBS));
+    open();
+    await screen.findByText("Run the whoop skill");
+    fireEvent.click(screen.getByRole("button", { name: "Run now" }));
+    await act(async () => {
+      for (const fn of [...h.listeners]) fn({ payload: { event: "schedule.done", data: { profile: "lens", job_id: JOBS[0].id } } });
+      accept({ ok: true });
+    });
+    expect(screen.getByRole("button", { name: "Run now" })).not.toBeDisabled();
+  });
+
+  it("expires pending state when an older daemon never supplies running activity", async () => {
+    vi.useFakeTimers();
+    invokeMock.mockImplementation((method) => Promise.resolve(method === "schedule_fire" ? { ok: true } : JOBS));
+    await act(async () => { open(); });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Run now" })); });
+    expect(screen.getByRole("button", { name: /^Running/ })).toBeDisabled();
+    act(() => vi.advanceTimersByTime(11000));
+    expect(screen.getByRole("button", { name: "Run now" })).not.toBeDisabled();
+  });
+
+  it("shows a daemon-owned run after reopening and ends when canonical activity clears", async () => {
+    h.activity = { running: [{ profile: "lens", job_id: JOBS[0].id, started_at: Date.now() / 1000 - 42 }] };
+    const { rerender } = open();
+    await screen.findByRole("button", { name: /^Running · 0:4/ });
+    expect(screen.getByRole("button", { name: /^Running/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Pause" })).toBeDisabled();
+    expect(screen.getByText("running now")).toBeTruthy();
+    rerender(<ScheduleModal open={false} profile="lens" onClose={vi.fn()} />);
+    rerender(<ScheduleModal open profile="lens" onClose={vi.fn()} />);
+    await screen.findByRole("button", { name: /^Running/ });
+    h.activity = { running: [] };
+    rerender(<ScheduleModal open profile="lens" onClose={vi.fn()} />);
+    await screen.findByRole("button", { name: "Run now" });
+    expect(screen.getByRole("button", { name: "Run now" })).not.toBeDisabled();
+  });
+
+  it.each(["schedule.done", "schedule.failed"])("holds an accepted fire until %s and cannot fire it twice", async (event) => {
+    invokeMock.mockImplementation((method) => Promise.resolve(method === "schedule_fire" ? { ok: true } : JOBS));
+    open();
+    await screen.findByText("Run the whoop skill");
+    fireEvent.click(screen.getByRole("button", { name: "Run now" }));
+    await screen.findByRole("button", { name: /^Running/ });
+    fireEvent.click(screen.getByRole("button", { name: /^Running/ }));
+    expect(invokeMock.mock.calls.filter(([method]) => method === "schedule_fire")).toHaveLength(1);
+    await act(async () => {
+      for (const fn of [...h.listeners]) fn({ payload: { event, data: { profile: "lens", job_id: JOBS[0].id } } });
+    });
+    await screen.findByRole("button", { name: "Run now" });
+    expect(screen.getByRole("button", { name: "Run now" })).not.toBeDisabled();
+  });
+
+  it("does not show another profile's running job", async () => {
+    h.activity = { running: [{ profile: "other", job_id: JOBS[0].id, started_at: Date.now() / 1000 }] };
+    open();
+    await screen.findByText("Run the whoop skill");
+    expect(screen.getByRole("button", { name: "Run now" })).not.toBeDisabled();
+  });
+
   it("waits for the schedule with placeholder rows and lines, never the word", async () => {
     invokeMock.mockImplementation(() => new Promise(() => {}));
     open();

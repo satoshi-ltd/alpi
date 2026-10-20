@@ -1266,11 +1266,11 @@ def schedule_run_once(ctx: click.Context) -> None:
 @click.pass_context
 def schedule_fire(ctx: click.Context, job_id: str) -> None:
     """Fire one specific job ad-hoc; bypasses schedule checks but does not delete ``once`` jobs."""
-    from alpi.scheduler.run import fire_by_id
+    from alpi.scheduler.run import fire_from_console
 
     h: Path = ctx.obj["home"]
     _bootstrap(h)
-    ok, msg = fire_by_id(h, job_id)
+    ok, msg = fire_from_console(h, job_id)
     click.echo(f"{'OK' if ok else 'FAIL'}  {msg}")
     if not ok:
         ctx.exit(1)
@@ -3639,8 +3639,8 @@ def _schedules_setup(h: Path) -> None:
             job.get("title") or str(job.get("id")), actions, home=h, close="Back",
         )
         if action == "fire":
-            from alpi.scheduler.run import fire_by_id
-            ok, msg = fire_by_id(h, str(job.get("id")))
+            from alpi.scheduler.run import fire_from_console
+            ok, msg = fire_from_console(h, str(job.get("id")))
             ui.ok_and_wait(f"{'OK' if ok else 'FAIL'} — {msg}")
         elif action == "toggle":
             # Mirrors host.schedule.set_paused exactly: flip the flag, never touch last_run_at.

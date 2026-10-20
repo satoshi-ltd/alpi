@@ -1595,6 +1595,16 @@ export default function App() {
           setView({ kind: "profile", profile, sessionId: sessionId || null });
         }}
         onOpenWorkgroup={(profile, id) => setView({ kind: "workgroup", profile, id })}
+        onOpenJob={(profile, jobId) => {
+          if (!panelsMayLeave()) return;
+          if (viewRef.current?.kind === "settings" && hasDirtySettings()) {
+            window.notify?.("Save or discard your settings changes first", { variant: "info" });
+            return;
+          }
+          setView({ kind: "profile", profile, sessionId: null });
+          setScheduleJob({ id: jobId });
+          setBrowse("schedule");
+        }}
         onOpenProfile={(name) => {
           const p = profilesRef.current.find((x) => x.name === name);
           if (p) onOpenProfile(p);

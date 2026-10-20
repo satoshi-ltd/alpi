@@ -19,6 +19,10 @@ class HostUnavailable(Exception):
     pass
 
 
+class HostNotConnected(HostUnavailable):
+    pass
+
+
 class HostError(Exception):
     def __init__(self, code: int | None, message: str) -> None:
         super().__init__(message)
@@ -45,11 +49,11 @@ async def _open(path: Path):
 async def acall(method: str, params: dict[str, Any] | None = None, *, timeout: float = 5.0) -> Any:
     path = socket_path()
     if not path.exists():
-        raise HostUnavailable("daemon not running")
+        raise HostNotConnected("daemon not running")
     try:
         reader, writer = await asyncio.wait_for(_open(path), timeout)
     except (OSError, asyncio.TimeoutError) as e:
-        raise HostUnavailable(str(e) or "daemon not running") from None
+        raise HostNotConnected(str(e) or "daemon not running") from None
     request_id = f"tui-{next(_ids)}"
     try:
         writer.write((json.dumps({"id": request_id, "method": method, "params": params or {}}) + "\n").encode())

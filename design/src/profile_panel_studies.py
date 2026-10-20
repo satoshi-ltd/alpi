@@ -133,20 +133,22 @@ def job_groups(jobs):
             for key, label in JOB_GROUPS]
 
 
-def schedules_window(flagged, side_w=SIDE_W):
+def schedules_window(flagged, side_w=SIDE_W, running=False):
     jobs = JOBS if flagged else [j for j in JOBS if j["state"] != "failed"]
     groups = [(f"{label} · {len(items)}", items) for label, items in job_groups(jobs) if items]
     chosen = groups[0][1][0]
-    rows = grouped(*[(label, [job_row(j, j is chosen) for j in items]) for label, items in groups])
+    rows = grouped(*[(label, [job_row({**j, "word": "running"} if running and j is chosen else j, j is chosen) for j in items]) for label, items in groups])
     failed = chosen["state"] == "failed"
-    shown = {"active": "active", "paused": "paused", "failed": "failed"}[chosen["state"]]
+    shown = "running" if running else {"active": "active", "paused": "paused", "failed": "failed"}[chosen["state"]]
     meta = detail_meta(text(chosen["title"], 15, P["ink"], 600), flex(job_mark(chosen["state"]), mono(shown, 11, P["ink2"]), gap=6), spacer(), mono(chosen["id"], 11, P["ink3"]))
     banner = alert_banner(*job_banner(), "Run now") if failed else ""
-    run = "" if failed else button("Run now", "secondary", P, PAPER, 28)
+    run = "" if failed else button("Running · 0:42" if running else "Run now", "secondary", P, PAPER, 28)
     actions = f'<div style="display: flex; align-items: center; justify-content: flex-end; gap: 8px">{run}{button("Pause", "ghost", P, PAPER, 28)}{icon_cell("trash", 14)}</div>'
+    if running:
+        actions = f'<div aria-disabled="true" style="opacity: 0.5">{actions}</div>'
     cron = kw(chosen["cron"]) if chosen["cron"] else ""
     fields = "".join((fact("about", chosen["about"]), fact("when", f'{chosen["when"]}{cron}'), fact("next", chosen["next"]),
-                      fact("last run", f'<span style="color: {P["danger"] if failed else P["ink2"]}">{chosen["last"]}</span>'), fact("runs", "agent · 20 min timeout"), fact("notify", "silent — failures still alert")))
+                      fact("last run", f'<span style="color: {P["danger"] if failed else P["ink2"]}">{"running now" if running else chosen["last"]}</span>'), fact("runs", "agent · 20 min timeout"), fact("notify", "silent — failures still alert")))
     rail = (f'<div style="width: 148px; flex-shrink: 0; box-sizing: border-box; padding: 8px; background: {P["side"]}; box-shadow: inset -0.5px 0 0 {P["line"]}">'
             f'{mono("prompt", 11, P["ink3"], 500, "letter-spacing: 0.06em; text-transform: uppercase; padding: 6px 8px 8px")}'
             f'<div style="padding: 6px 8px; border-radius: 4px; background: {P["selected"]}; font-family: {MONO}; font-size: 12px; color: {P["ink"]}">Prompt</div></div>')
@@ -270,6 +272,7 @@ def desktop_panels_view():
         labelled("Tools · native functions by category, parameters as a table", tools_window()),
         labelled("Schedules · grouped by state, when in words with the cron as a chip", schedules_window(False)),
         labelled("Schedules · flagged: Needs you group, the failure banner with Run now", schedules_window(True)),
+        labelled("Schedules · running: the job row and detail agree, the clock advances, and Run now, Pause and Delete are disabled", schedules_window(False, running=True)),
         gap=22,
     )
 
@@ -294,7 +297,7 @@ def mobile_panels_view():
     )
 
 
-PANELS_DESKTOP_H = 3860
+PANELS_DESKTOP_H = 4460
 PANELS_MOBILE_H = 6300
 
 

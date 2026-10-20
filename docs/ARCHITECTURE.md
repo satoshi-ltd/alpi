@@ -1310,6 +1310,15 @@ running engine reads the current `.env` on its next turn.
 
 ### Schedule (`alpi/scheduler/`)
 
+Ad-hoc fires from `alpi schedule fire`, setup's Fire now and the schedule tool use
+`fire_from_console`: when the local host socket exists they request `host.schedule.fire`,
+and success means accepted, not completed. A missing socket or failed connection before any
+request is sent keeps local execution, including an orphaned socket. `HostNotConnected` is
+a `HostUnavailable` subtype raised only before the connection opens. After it opens, an RPC
+error, response timeout or malformed acknowledgment never triggers a second local run.
+The daemon retains `fire_by_id` as its execution path, registering the job in
+Activity until completion and emitting `schedule.done` or `schedule.failed` afterward.
+
 Tick loop (default 30s) hosted inside the alpi daemon. `add`
 schedules a job (`kind: cron|once`, expression or `after_hours`).
 `run-once` ticks manually for testing. LLM time grounding: when
@@ -1337,7 +1346,7 @@ default-executor turns. A regression test in
 `tests/core/test_schedule.py::test_serve_runs_tick_off_loop_so_chat_can_progress`
 pins the contract.
 
-**First run.** A cron job runs at its next occurrence, never on the tick it appears. The `schedule` tool records `last_run_at` when it adds a job; a job that arrives without run state (written into `jobs.json` by hand or by a deploy, or whose `schedule/runs.json` entry was lost) gets `first_seen_at` in `runs.json` from the first tick that sees it, or, if it arrives paused, from the first tick after it is resumed. A fired job is stamped (`last_run_at`, `last_run_status`; a one-shot that succeeded is removed) the moment its run returns, before its outputs and events are written and not at the end of the pass, so a daemon restart in the middle of a long pass does not fire a job that already finished. A run that raises (the agent subprocess cannot start, a file is missing) is a failed outcome stamped and reported like any other failure, and the pass goes on with the next job. Each job is re-read from `jobs.json` just before it fires and skipped if it was removed, paused, fired by hand or no longer due meanwhile, and fires from the fresh copy; a due check that raises skips that job with a logged reason; a stamp that cannot be written is logged and kept in memory, laid over the job on every later tick while the job's kind and `run_at` are the ones that ran (so it is not fired again, and a one-shot stays gone, but a job edited into something else in the meantime is left alone) and retried first thing on each tick until it lands, without overwriting a newer stamp on disk (a daemon restart while the disk keeps failing loses it); an unreadable `jobs.json` mid-pass ends the pass. `fire_by_id` stamps the outcome (a failed stamp is logged, not raised) before it emits `schedule.done`, so the first `host.activity.list` after `activity.changed` already reads it. `schedule(action="fire")` runs a job now.
+**First run.** A cron job runs at its next occurrence, never on the tick it appears. The `schedule` tool records `last_run_at` when it adds a job; a job that arrives without run state (written into `jobs.json` by hand or by a deploy, or whose `schedule/runs.json` entry was lost) gets `first_seen_at` in `runs.json` from the first tick that sees it, or, if it arrives paused, from the first tick after it is resumed. A fired job is stamped (`last_run_at`, `last_run_status`; a one-shot that succeeded is removed) the moment its run returns, before its outputs and events are written and not at the end of the pass, so a daemon restart in the middle of a long pass does not fire a job that already finished. A run that raises (the agent subprocess cannot start, a file is missing) is a failed outcome stamped and reported like any other failure, and the pass goes on with the next job. Each job is re-read from `jobs.json` just before it fires and skipped if it was removed, paused, fired by hand or no longer due meanwhile, and fires from the fresh copy; a due check that raises skips that job with a logged reason; a stamp that cannot be written is logged and kept in memory, laid over the job on every later tick while the job's kind and `run_at` are the ones that ran (so it is not fired again, and a one-shot stays gone, but a job edited into something else in the meantime is left alone) and retried first thing on each tick until it lands, without overwriting a newer stamp on disk (a daemon restart while the disk keeps failing loses it); an unreadable `jobs.json` mid-pass ends the pass. `fire_by_id` stamps the outcome (a failed stamp is logged, not raised) before it emits `schedule.done`, so the first `host.activity.list` after `activity.changed` already reads it. `schedule(action="fire")` requests a job now.
 
 **Job fields.** A job carries an optional one-line `description` (at most 160 characters, set through `schedule(add|update, description=…)` and listed by `host.schedule.list`), and its run state keeps `last_run_message` (the redacted failure, 300 characters, cleared by the next success) and `last_ok_at`.
 
@@ -1690,7 +1699,12 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   `host_in_use` against `candidates` to detect this and warn.
 
 - **`host.activity.list` is the one "what needs me / what is running" read.**
-  It aggregates `needs_you` (pending approvals + clarifications, each with
+  Schedule list/detail views identify a running job by `(profile, job_id)`, show `running`
+  and the elapsed time, and disable another Run now while it runs. Desktop holds a just-accepted
+  request briefly while canonical activity arrives; terminal schedule events clear that local
+  pending state. Reopening a job reads current activity, and a job row in Activity opens its
+  schedule detail rather than an empty chat. Older daemons without Activity retain schedule controls.
+  `host.activity.list` aggregates `needs_you` (pending approvals + clarifications, each with
   `session_id`), `running` (`turn` rows from the in-process registry in
   `alpi/host/activity.py` — engine turns, workgroup dispatch in
   `service._dispatch_workgroup_turn`, scheduler fires via `scheduled_run` — plus

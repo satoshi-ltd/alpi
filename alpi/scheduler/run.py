@@ -608,6 +608,27 @@ def _emit_agent_messages(home: Path, messages: list[dict], *, job_id: str = "", 
 # Tick + main loop
 
 
+def fire_from_console(home: Path, job_id: str) -> tuple[bool, str]:
+    import asyncio
+
+    from alpi.home import profile_name
+    from alpi.tui import host_client
+
+    if not host_client.daemon_present():
+        return fire_by_id(home, job_id)
+    try:
+        result = asyncio.run(host_client.acall("host.schedule.fire", {
+            "profile": profile_name(home), "id": job_id,
+        }))
+    except host_client.HostNotConnected:
+        return fire_by_id(home, job_id)
+    except (host_client.HostError, host_client.HostUnavailable) as exc:
+        return False, f"daemon fire failed: {exc}; check Activity before retrying"
+    if not isinstance(result, dict) or result.get("ok") is not True:
+        return False, "invalid daemon fire response; check Activity before retrying"
+    return True, f"job {job_id} accepted by daemon; follow its result in Activity or outputs"
+
+
 def fire_by_id(home: Path, job_id: str) -> tuple[bool, str]:
     """Run one specific job ad-hoc, bypassing the schedule check. Same
     threat-scan + dispatch path as the daemon tick, so what you test is

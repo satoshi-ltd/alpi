@@ -78,17 +78,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ### Approved fixes, then the terminal capability
 
-- **ACT.2** — Jobs fired from the console never show as running
-  `bug · alpi · agent · normal`
-  note: found while reviewing ACT.1. `alpi schedule fire`, `alpi setup → Fire now` and the TUI's
-  in-process `schedule(action="fire")` run `scheduled_run` in their own process, where the activity
-  registry is off, so `host.activity.list` never lists the run and the apps never show it working.
-  The apps' Fire button (`host.schedule.fire`) and cron fires are listed.
-  accept: a job fired from the CLI or the TUI appears as a running row with its `job_id` while it
-  runs (handed to the daemon when one answers), with the same terminal events both apps consume;
-  tests cover CLI/setup/tool dispatch, daemon absence, and an ambiguous RPC timeout that must not
-  execute a possibly accepted job twice. An offline console keeps its existing local execution.
-
 - **TERM.3** — Profile environment for `terminal`
   `feature · alpi · agent · low`
   note: a skill toolchain installed in the volume (JDK and Maven under
@@ -108,14 +97,7 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## In progress
 
-- **SCOPE.5** — Profile session counts respect scope
-  `bug · alpi · agent · high`
-  note: `counts.sessions` in `host.profile.summaries` counts every session file of the
-  profile, so a member or a device-scoped device learns how many sessions other
-  connections and sibling devices hold (a count only, no text).
-  accept: the count includes only sessions `owns_session_row` lets the caller see in
-  summaries (detail and snapshot carry no count); tests cover two connections and two devices under
-  `session_scope: device`, the summary cache, and the local host/legacy view without a device restriction.
+_None._
 
 ## Needs creator
 

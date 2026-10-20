@@ -11,6 +11,13 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.8.16 — 2026-10-20 — scheduled jobs stay visibly running
+
+- Schedule shows a running job in its list and detail, with elapsed time and Run now disabled until it finishes.
+- Reopening a job restores its running state, and Activity opens the exact job instead of an empty chat.
+- A requested run stays visible while its activity arrives; completion or failure restores the controls.
+  Requires alpi 0.17.28; console-started jobs appear with alpi 0.17.31.
+
 ## v0.8.15 — 2026-10-17 — reliable workgroup synchronization
 
 - Failed refreshes preserve the latest displayed workgroups and show an out-of-date warning with Retry.

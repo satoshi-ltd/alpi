@@ -58,6 +58,7 @@ export default function ActivityPanel({
   onOpenSession,
   onOpenWorkgroup,
   onOpenProfile,
+  onOpenJob,
 }) {
   const now = useNow();
   if (!open) return null;
@@ -125,7 +126,7 @@ export default function ActivityPanel({
                   />
                 ) : (
                   <Row
-                    key={`turn:${run.profile}/${run.session_id ?? ""}`}
+                    key={run.job_id ? `job:${run.profile}/${run.job_id}` : `turn:${run.profile}/${run.session_id ?? ""}`}
                     tone="accent"
                     color={accentByProfile[run.profile]}
                     glyph={<Fold fold={foldByProfile[run.profile]} color={accentByProfile[run.profile] || undefined} pulse />}
@@ -134,7 +135,7 @@ export default function ActivityPanel({
                       run.started_at ? relativeTime(toEpochSeconds(run.started_at), now) : null,
                       run.source && run.source !== "chat" ? run.source : null,
                     ].filter(Boolean).join(" · ")}
-                    onClick={close(() => onOpenSession?.(run.profile, run.session_id ?? null))}
+                    onClick={close(() => run.job_id ? onOpenJob?.(run.profile, run.job_id) : onOpenSession?.(run.profile, run.session_id ?? null))}
                   />
                 ),
               )}
@@ -157,7 +158,7 @@ export default function ActivityPanel({
                           ? formatNextFire(job.next_fire, now)
                           : "not scheduled"
                     }
-                    onClick={close(() => onOpenProfile?.(job.profile))}
+                    onClick={close(() => onOpenJob ? onOpenJob(job.profile, job.job_id) : onOpenProfile?.(job.profile))}
                   />
                 );
               })}

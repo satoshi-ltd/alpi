@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.17.31 — 2026-10-20 — console jobs appear in daemon activity
+
+- Jobs fired from the CLI, setup or the schedule tool run through the daemon when available, so connected apps show their activity.
+- A successful daemon request reports acceptance; completion and failures appear in Activity and outputs. Without a reachable local daemon, jobs still run locally, including when an orphaned socket remains.
+- Failed or timed-out requests never repeat a possibly accepted job locally.
+
 ## v0.17.30 — 2026-10-19 — profile session counts respect connection scope
 
 - Connected apps count only their connection's sessions, so another connection's history no longer inflates the total.

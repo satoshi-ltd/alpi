@@ -35,6 +35,13 @@ alpi -p <profile> digest --since 7d
 
 ## Daemon
 
+Ad-hoc schedule fires (`alpi schedule fire <id>`, setup's Fire now and `schedule(action="fire")`)
+are handed to the local daemon when its host socket is present. A successful request means
+accepted, not completed: follow Activity or outputs for the result. A missing socket or failed
+connection before sending a request runs locally and returns the outcome, even when an orphaned
+socket remains. After a request was sent, check Activity before retrying a timeout/error;
+the console never repeats it locally.
+
 ```bash
 alpi daemon start|status|restart|stop
 ```

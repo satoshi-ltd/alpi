@@ -29,10 +29,11 @@ class Schedule(Tool):
         "\n"
         "Actions: list, add, update, remove, fire.\n"
         "\n"
-        "`fire` runs a specific job ad-hoc — same threat-scan + "
-        "dispatch path as the scheduler daemon. Useful right after "
-        "`add` to verify the prompt works end-to-end without waiting "
-        "for the cron window. Once-jobs are NOT consumed by fire.\n"
+        "`fire` requests an ad-hoc run through the daemon when available; "
+        "success means accepted, not completed. Follow Activity or outputs for "
+        "the result. Without a daemon it runs locally and returns the result. "
+        "Both use the scheduler's threat-scan and dispatch path. "
+        "Once-jobs are NOT consumed by fire.\n"
         "\n"
         "Pick `kind`:\n"
         "  once       — fires on a single date/time, then deletes itself "
@@ -481,8 +482,8 @@ class Schedule(Tool):
         if action == "fire":
             if not id:
                 return ToolResult(ok=False, output="", error="'id' required")
-            from alpi.scheduler.run import fire_by_id
-            ok, msg = fire_by_id(home, id)
+            from alpi.scheduler.run import fire_from_console
+            ok, msg = fire_from_console(home, id)
             return ToolResult(ok=ok, output=msg, error=None if ok else msg)
 
         return ToolResult(ok=False, output="", error=f"unknown action: {action}")

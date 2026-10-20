@@ -124,13 +124,13 @@
    "x": 0,
    "y": 6760,
    "w": 1280,
-   "h": 3860,
+   "h": 4460,
    "title": "Desktop \u00b7 profile panels",
    "page": "desktop"
   },
   "Desktop-Workgroups.dc.html": {
    "x": 0,
-   "y": 10860,
+   "y": 11460,
    "w": 1280,
    "h": 560,
    "title": "Desktop \u00b7 workgroups",
@@ -138,7 +138,7 @@
   },
   "Desktop-WorkgroupsStale.dc.html": {
    "x": 0,
-   "y": 11660,
+   "y": 12260,
    "w": 1280,
    "h": 560,
    "title": "Desktop \u00b7 workgroups \u00b7 stale",
@@ -146,7 +146,7 @@
   },
   "Desktop-Connections.dc.html": {
    "x": 0,
-   "y": 12460,
+   "y": 13060,
    "w": 1280,
    "h": 820,
    "title": "Desktop \u00b7 connections",
@@ -154,7 +154,7 @@
   },
   "Desktop-AppSettings.dc.html": {
    "x": 0,
-   "y": 13520,
+   "y": 14120,
    "w": 1280,
    "h": 1230,
    "title": "Desktop \u00b7 app settings",
@@ -162,7 +162,7 @@
   },
   "Desktop-FirstRun.dc.html": {
    "x": 0,
-   "y": 14990,
+   "y": 15590,
    "w": 1280,
    "h": 3100,
    "title": "Desktop \u00b7 first run",
@@ -170,7 +170,7 @@
   },
   "Desktop-Overlays.dc.html": {
    "x": 0,
-   "y": 18330,
+   "y": 18930,
    "w": 1280,
    "h": 2660,
    "title": "Desktop \u00b7 overlays",
@@ -588,7 +588,7 @@
   },
   "d-Workgroups": {
    "x": 0,
-   "y": 10637,
+   "y": 11237,
    "text": "Workgroups",
    "kind": "title1",
    "maxW": 2600,
@@ -596,7 +596,7 @@
   },
   "d-Workgroups \u00b7 stale": {
    "x": 0,
-   "y": 11437,
+   "y": 12037,
    "text": "Workgroups \u00b7 stale",
    "kind": "title1",
    "maxW": 2600,
@@ -604,7 +604,7 @@
   },
   "d-Connections": {
    "x": 0,
-   "y": 12237,
+   "y": 12837,
    "text": "Connections",
    "kind": "title1",
    "maxW": 2600,
@@ -612,7 +612,7 @@
   },
   "d-App settings": {
    "x": 0,
-   "y": 13297,
+   "y": 13897,
    "text": "App settings",
    "kind": "title1",
    "maxW": 2600,
@@ -620,7 +620,7 @@
   },
   "d-First run": {
    "x": 0,
-   "y": 14767,
+   "y": 15367,
    "text": "First run",
    "kind": "title1",
    "maxW": 2600,
@@ -628,7 +628,7 @@
   },
   "d-Overlays": {
    "x": 0,
-   "y": 18107,
+   "y": 18707,
    "text": "Overlays",
    "kind": "title1",
    "maxW": 2600,
