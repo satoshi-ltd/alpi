@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 from pathlib import Path
 
@@ -604,6 +605,63 @@ async def test_profile_detail_reports_unsupported_for_non_reasoning_model(
     detail = resp["result"]
     assert detail["model_reasoning_supported"] is False
     assert detail["model_reasoning_effort"] == ""
+
+
+@pytest.mark.asyncio
+async def test_profile_detail_reports_reasoning_support_for_an_ollama_thinking_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ollama_mod = importlib.import_module("alpi.providers.ollama")
+
+    monkeypatch.setattr(ollama_mod, "supports_thinking", lambda url, model: model == "gpt-oss:20b")
+    home = _bootstrap(tmp_path / "h")
+    cfg = cfg_mod.load(home)
+    cfg.model = "local/gpt-oss:20b"
+    cfg.model_reasoning.effort = "low"
+    cfg.tiers.fast.model = "local/llama3:8b"
+    cfg_mod.save(cfg)
+
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    resp = await srv._dispatch({
+        "id": "detail",
+        "method": "host.profile.detail",
+        "params": {"profile": "default"},
+    })
+    detail = resp["result"]
+    assert detail["model_reasoning_supported"] is True
+    assert detail["model_reasoning_effort"] == "low"
+    assert detail["tiers"]["fast"]["reasoning_supported"] is False
+
+
+@pytest.mark.asyncio
+async def test_reasoning_effort_persists_for_an_ollama_thinking_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ollama_mod = importlib.import_module("alpi.providers.ollama")
+
+    monkeypatch.setattr(ollama_mod, "supports_thinking", lambda url, model: model == "gpt-oss:20b")
+    home = _bootstrap(tmp_path / "h")
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    for key, value in (("model", "local/gpt-oss:20b"), ("model_reasoning.effort", "medium")):
+        await srv._dispatch({
+            "id": key,
+            "method": "host.config.set_field",
+            "params": {"profile": "default", "key": key, "value": value},
+        })
+    assert cfg_mod.load(home).model_reasoning.effort == "medium"
+
+    await srv._dispatch({
+        "id": "swap",
+        "method": "host.config.set_field",
+        "params": {"profile": "default", "key": "model", "value": "local/llama3:8b"},
+    })
+    assert cfg_mod.load(home).model_reasoning.effort == ""
 
 
 @pytest.mark.asyncio

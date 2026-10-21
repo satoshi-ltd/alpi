@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 
 import pytest
@@ -45,7 +46,8 @@ def test_normalise_effort_canonicalises_or_drops(raw, expected) -> None:
     "anthropic/claude-opus-5-5",  # curated catalog
     "anthropic/claude-sonnet-5-5", # curated catalog
     "anthropic/claude-sonnet-5",  # custom-typed (regex fallback)
-    "anthropic/claude-haiku-4-5", # curated catalog
+    "anthropic/claude-haiku-5-5", # curated catalog
+    "anthropic/claude-haiku-4-5", # custom-typed (regex fallback)
     "anthropic/claude-opus-4",    # custom-typed (regex fallback)
     "anthropic/claude-mythos-5",  # custom-typed (regex fallback: fable|mythos branch)
     "google/gemini-2.5-pro",
@@ -305,3 +307,62 @@ def test_tui_model_panel_session_switch_does_not_leak_reasoning(
     persisted = cfg_mod.load(tmp_home_no_env)
     assert persisted.model == "openai/o3-mini"
     assert persisted.model_reasoning.effort == "medium"
+
+
+_OLLAMA = {"ollama": [{"name": "macbook-pro", "url": "http://localhost:11434"}]}
+
+
+def _ollama_thinking(monkeypatch, models) -> None:
+    ollama_mod = importlib.import_module("alpi.providers.ollama")
+
+    monkeypatch.setattr(ollama_mod, "supports_thinking", lambda url, model: model in models)
+
+
+def test_supports_reasoning_asks_the_named_ollama_endpoint(monkeypatch) -> None:
+    _ollama_thinking(monkeypatch, {"gpt-oss:20b"})
+
+    assert supports_reasoning("macbook-pro/gpt-oss:20b", _OLLAMA) is True
+    assert supports_reasoning("macbook-pro/llama3:8b", _OLLAMA) is False
+    assert supports_reasoning("macbook-pro/gpt-oss:20b") is False
+    assert supports_reasoning("other/gpt-oss:20b", _OLLAMA) is False
+
+
+def test_reasoning_kwargs_for_an_ollama_thinking_model(monkeypatch) -> None:
+    _ollama_thinking(monkeypatch, {"gpt-oss:20b"})
+
+    assert reasoning_kwargs("macbook-pro/gpt-oss:20b", "low", _OLLAMA) == {"reasoning_effort": "low"}
+    assert reasoning_kwargs("macbook-pro/llama3:8b", "low", _OLLAMA) == {}
+
+
+def test_resolve_model_attaches_effort_for_an_ollama_default_model(
+    tmp_home_no_env: Path, monkeypatch,
+) -> None:
+    _ollama_thinking(monkeypatch, {"gpt-oss:20b"})
+    cfg_mod.seed_defaults(tmp_home_no_env)
+    cfg = cfg_mod.load(tmp_home_no_env)
+    cfg.providers["ollama"] = _OLLAMA["ollama"]
+    cfg.model = "macbook-pro/gpt-oss:20b"
+    cfg.model_reasoning.effort = "high"
+
+    assert cfg_mod.resolve_model(cfg) == {
+        "model": "openai/gpt-oss:20b",
+        "api_base": "http://localhost:11434/v1",
+        "api_key": "dummy",
+        "reasoning_effort": "high",
+    }
+    cfg.model = "macbook-pro/llama3:8b"
+    assert "reasoning_effort" not in cfg_mod.resolve_model(cfg)
+    assert "reasoning_effort" not in cfg_mod.resolve_model(cfg, model="macbook-pro/gpt-oss:20b", include_reasoning=False)
+
+
+def test_resolve_model_attaches_tier_effort_for_an_ollama_model(
+    tmp_home_no_env: Path, monkeypatch,
+) -> None:
+    _ollama_thinking(monkeypatch, {"gpt-oss:20b"})
+    cfg_mod.seed_defaults(tmp_home_no_env)
+    cfg = cfg_mod.load(tmp_home_no_env)
+    cfg.providers["ollama"] = _OLLAMA["ollama"]
+    cfg.tiers.fast.model = "macbook-pro/gpt-oss:20b"
+    cfg.tiers.fast.effort = "low"
+
+    assert cfg_mod.resolve_model(cfg, tier="fast")["reasoning_effort"] == "low"

@@ -32,7 +32,7 @@
 | `host` | Control-plane port, device label, public-bind opt-in. |
 | `tui` | TUI cosmetics; `tui.accent` colours a profile and `tui.fold` names the origami model that marks it in the apps (a new profile is seeded with the next unworn pair of the twelve, so it already has one before anyone chooses); the console draws that object as half-block art in `alpi profile show` and the `alpi setup` header and as a one-cell glyph on the active entry of profile and TUI lists, only on a truecolor UTF-8 terminal (a plain diamond elsewhere); set both with `/fold [object] [colour]` in the TUI (the default profile is always the alpaca in the brand accent and cannot be restyled), `alpi setup → Appearance` or the appearance row in the apps. |
 | `memory` | Reviewer cadence. |
-| `model_reasoning.effort` | `"" \| low \| medium \| high` reasoning hint passed alongside `cfg.model`. Default model only; mid-chat overrides and tool sub-models ignore it. |
+| `model_reasoning.effort` | `"" \| low \| medium \| high` reasoning hint passed alongside `cfg.model`. Default model only; mid-chat overrides and tool sub-models ignore it. On a named Ollama endpoint it applies only when Ollama reports the `thinking` capability for the model. |
 | `public_bio` | One-line public tag-line broadcast to every workgroup this profile joins (source of truth for `Member.bio`). Empty = no publication. |
 | `paused` | Profile-level pause flag, surfaced to desktop / mobile via `host.device_state.profile_summary`. UI-only signal; the daemon does not gate turns on it. |
 | `tools.browser.allow_local` | Let the `browser` tool navigate **loopback** only (`127.0.0.1`, `::1`, `localhost`). RFC1918 / CGNAT / Tailscale stay blocked; the exemption is loopback-only (`_guards._is_loopback`). |

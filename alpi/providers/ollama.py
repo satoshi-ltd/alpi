@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Iterable
 
@@ -13,6 +14,8 @@ DEFAULT_URL = "http://localhost:11434"
 
 _IS_OLLAMA_CACHE: dict[str, bool] = {}
 _NUM_CTX_CACHE: dict[tuple[str, str], int] = {}
+_THINKING_CACHE: dict[tuple[str, str], tuple[bool, float]] = {}
+_THINKING_MISS_TTL = 30.0
 _DEFAULT_NUM_CTX = 32768
 
 
@@ -115,4 +118,21 @@ def resolve_num_ctx(base_url: str, model: str) -> int:
     except Exception:
         pass
     _NUM_CTX_CACHE[key] = value
+    return value
+
+
+def supports_thinking(base_url: str, model: str) -> bool:
+    key = (base_url, model)
+    cached = _THINKING_CACHE.get(key)
+    if cached and (cached[0] or time.monotonic() - cached[1] < _THINKING_MISS_TTL):
+        return cached[0]
+    value = False
+    try:
+        with httpx.Client(timeout=2.0) as client:
+            r = client.post(_root(base_url) + "/api/show", json={"name": model})
+            r.raise_for_status()
+            value = "thinking" in ((r.json() or {}).get("capabilities") or [])
+    except Exception:
+        pass
+    _THINKING_CACHE[key] = (value, time.monotonic())
     return value

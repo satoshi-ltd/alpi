@@ -37,10 +37,12 @@ _DIRECT_PATTERNS: tuple[re.Pattern, ...] = (
 _CATALOG_PROVIDERS = frozenset({"openai", "anthropic"})
 
 
-def supports_reasoning(model: str) -> bool:
+def supports_reasoning(model: str, providers: dict[str, Any] | None = None) -> bool:
     """True when the wizard / settings UI should expose the effort dropdown.
 
     Order of evidence:
+    0. ``<endpoint>/<model>`` for a named Ollama endpoint in ``providers`` — Ollama's own
+       ``capabilities`` list for that model decides.
     1. ``openrouter/*`` — always True; OpenRouter's unified ``reasoning`` param
        is silently ignored upstream when not supported, so we let the user pick.
     2. ``openai/<id>`` / ``anthropic/<id>`` — consult `curated_models.yaml`. The
@@ -53,6 +55,11 @@ def supports_reasoning(model: str) -> bool:
     if not model:
         return False
     m = model.strip()
+    head, _, rest = m.partition("/")
+    for entry in (providers or {}).get("ollama") or []:
+        if entry.get("name") == head:
+            from alpi.providers.ollama import supports_thinking
+            return supports_thinking(entry.get("url", ""), rest)
     if m.startswith("openrouter/"):
         return True
     if "/" in m:
@@ -68,13 +75,13 @@ def supports_reasoning(model: str) -> bool:
     return False
 
 
-def reasoning_kwargs(model: str, effort: str) -> dict[str, Any]:
+def reasoning_kwargs(model: str, effort: str, providers: dict[str, Any] | None = None) -> dict[str, Any]:
     """Return the kwargs to merge into the litellm call for `model` + `effort`.
 
     Empty effort or unsupported model → empty dict (no param sent). The caller must merge this into its own kwargs without overwriting nested keys like `extra_body.options.num_ctx`.
     """
     eff = normalise_effort(effort)
-    if not eff or not supports_reasoning(model):
+    if not eff or not supports_reasoning(model, providers):
         return {}
     if model.startswith("openrouter/"):
         return {"extra_body": {"reasoning": {"effort": eff}}}

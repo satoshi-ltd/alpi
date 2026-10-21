@@ -90,19 +90,19 @@ daily interactive alpi use.
 
 | Model | OpenRouter ID | Why |
 |---|---|---|
-| **DeepSeek V4.1 Flash** | `deepseek/deepseek-v4.1-flash` | **The alpi team's recommended default.** Low cache-read price, which suits an agent whose system prompt is large and stable. Text and image input, up to 1M context. First by weekly tokens on OpenRouter's public leaderboard (week ending 2026-09-28); released 2026-09-10 and not yet scored on the agentic index. |
+| **DeepSeek V4.1 Flash** | `deepseek/deepseek-v4.1-flash` | **The alpi team's recommended default.** Low cache-read price, which suits an agent whose system prompt is large and stable. Text and image input, up to 1M context. First by weekly tokens among tool-capable models on OpenRouter (read 2026-10-21); released 2026-09-10 and not yet scored on the agentic index. |
+| **DeepSeek V4.1 Flash 1017** | `deepseek/deepseek-v4.1-flash-1017` | The 2026-10-17 build of V4.1 Flash. Text and image input, 1M context, $0.15 / $0.60 per MTok (V4.1 Flash is $0.06 / $0.12). Third by weekly tokens among tool-capable models (read 2026-10-21); not evaluated against V4.1 Flash. |
 | **GLM 5.3 Flash** | `z-ai/glm-5.3-flash` | Highest published agentic index of the cheap tier (Artificial Analysis, via OpenRouter, read 2026-09-11); up to 1.25M context, image and video input. Reasoning is mandatory and defaults to `max`; `low` and `high` are also accepted, so set `model_reasoning.effort` deliberately. |
-| **DeepSeek V4 Flash 0731** | `deepseek/deepseek-v4-flash-0731` | Text only, up to 1.25M context, served by a large number of providers. Sixth by weekly tokens on OpenRouter's public leaderboard (week ending 2026-09-28). |
+| **DeepSeek V4 Flash 0731** | `deepseek/deepseek-v4-flash-0731` | Text only, up to 1.25M context, served by a large number of providers. Eleventh by weekly tokens among tool-capable models on OpenRouter (read 2026-10-21). |
 | **Claude Sonnet 5.5** | `anthropic/claude-sonnet-5.5` | Premium daily driver; strongest tool discipline and coding judgement at this tier. $2 / $10 per MTok, 1M context. |
-| **MiMo V2.5 Pro** | `xiaomi/mimo-v2.5-pro` | Text only, up to 1M context. Scores above the base MiMo on the published agentic and coding indices, at about three times the input price. |
+| **MiMo V2.6 Pro** | `xiaomi/mimo-v2.6-pro` | Pro tier of MiMo V2.6. Text, image, video and audio input, 1M context, $0.43 / $0.87 per MTok. |
 | **MiniMax M3** | `minimax/minimax-m3` | Mid-tier agent model. 1M is the announced ceiling; several of its endpoints serve 512K or 256K, so the window you get depends on routing. |
 
 If you can only choose one model for a skill-heavy profile, start with
 DeepSeek V4.1 Flash, the alpi team's recommendation. Move to Sonnet 5.5
 when budget allows and tool discipline matters more than price.
-`deepseek/deepseek-v4-pro` is no longer a recommended daily driver: the bare
-id is pinned to the 2026-04 build, and a measured audit put it behind the
-flash tier at many times the price.
+`deepseek/deepseek-v4-pro-0813` is the pro tier (2026-08 build); the alpi
+team recommends the flash tier for cost and quality.
 
 ### Cheap service turns
 
@@ -114,8 +114,8 @@ creating or debugging skills.
 |---|---|---|
 | **DeepSeek V4.1 Flash** | `deepseek/deepseek-v4.1-flash` | Recommended default for service turns too; cheap cache read when the prompt is large and barely changes between turns. |
 | **DeepSeek V4 Flash 0731** | `deepseek/deepseek-v4-flash-0731` | Cheapest model with a real agentic score; 1.25M context and broad provider support. |
-| **MiMo V2.5** | `xiaomi/mimo-v2.5` | Budget sibling to MiMo V2.5 Pro; 1M context, useful for A/B testing cheap service profiles. |
-| **Claude Haiku 4.5** | `anthropic/claude-haiku-4.5` | Cheap and fast with reasoning support; reliable for short-chain turns. $1 / $5 per MTok, 200K context. |
+| **MiMo V2.6 Flash** | `xiaomi/mimo-v2.6-flash` | Budget sibling to MiMo V2.6 Pro; 1M context, text, image, video and audio input, $0.14 / $0.28 per MTok; useful for A/B testing cheap service profiles. |
+| **Claude Haiku 5.5** | `anthropic/claude-haiku-5.5` | Cheap and fast with reasoning support and a 1M context. $0.10 / $0.50 per MTok. |
 | **GPT-6 Luna** | `openai/gpt-6-luna` | Cheapest OpenAI tier ($0.10 / $0.50 per MTok, cached input $0.01, 1.05M context); fine for mechanical, high-volume turns, not for skill work. |
 
 ### Vision for `read_image`
@@ -159,7 +159,7 @@ cloud frontier models and tighter context windows.
 For privacy-constrained work that needs more headroom than your
 hardware allows, consider an open-weight cloud model like
 `nvidia/nemotron-3-super-120b-a12b` (256K) or
-`deepseek/deepseek-v4-pro` (1M) — not local, but no proprietary
+`deepseek/deepseek-v4-pro-0813` (1M) — not local, but no proprietary
 frontier dependency.
 
 ### Native routes for Anthropic and OpenAI
@@ -173,7 +173,7 @@ latency and one less layer to break.
 | Anthropic | `anthropic/claude-fable-5.1` | `claude-fable-5-1` (hyphens, not dots) |
 | Anthropic | `anthropic/claude-opus-5.5` | `claude-opus-5-5` |
 | Anthropic | `anthropic/claude-sonnet-5.5` | `claude-sonnet-5-5` |
-| Anthropic | `anthropic/claude-haiku-4.5` | `claude-haiku-4-5` |
+| Anthropic | `anthropic/claude-haiku-5.5` | `claude-haiku-5-5` |
 | OpenAI | `openai/gpt-6-astra` | `gpt-6-astra` |
 | OpenAI | `openai/gpt-6.1-sol` | `gpt-6.1-sol` |
 | OpenAI | `openai/gpt-6-luna` | `gpt-6-luna` |
@@ -254,9 +254,9 @@ Unconfigured tiers always resolve to the main model, so none of this
 changes behavior until you opt in. Profiles still split roles best:
 
 - **Personal skill-heavy profile**: GLM 5.3 Flash, Sonnet 5.5, or
-  MiMo V2.5 Pro.
+  MiMo V2.6 Pro.
 - **High-volume service profile**: DeepSeek V4 Flash 0731,
-  DeepSeek V4.1 Flash, MiMo V2.5, Haiku 4.5, or GPT-6 Luna, with
+  DeepSeek V4.1 Flash, MiMo V2.6 Flash, Haiku 5.5, or GPT-6 Luna, with
   fewer skills and tighter prompts.
 - **Engineering profile**: Sonnet 5.5, Opus 5.5, Fable 5.1,
   GPT-6.1 Sol or GPT-6 Astra.
@@ -273,4 +273,33 @@ Three ways, any of them works:
   `~/.alpi/profiles/<name>/config.yaml`.
 
 The choice is per-profile. `alpi -p work` can run Sonnet 5.5 while
-`alpi -p personal` runs MiMo V2.5 without interference.
+`alpi -p personal` runs MiMo V2.6 Flash without interference.
+
+## Keeping the catalog current
+
+Two files, two jobs:
+
+- `alpi/providers/openrouter_models.yaml` maps every OpenRouter id to a safe
+  input limit. Regenerate it with `python3 scripts/refresh_models.py` (it
+  reads `https://openrouter.ai/api/v1/models` and keeps the old file if the
+  fetch fails).
+- `alpi/providers/curated_models.yaml` is the hand-picked picker list
+  (OpenRouter, OpenAI, Anthropic). Nothing updates it; edit it by hand and
+  mirror it in `mobile/src/lib/curatedModels.js`.
+
+To see what people actually use before editing the curated list, ask the same
+endpoint for its usage order, restricted to models that accept tools:
+
+- `https://openrouter.ai/api/v1/models?sort=top-weekly&supported_parameters=tools`
+  lists tool-capable models by weekly usage.
+- `category=` only takes `programming`, `roleplay`, `marketing`,
+  `marketing/seo`, `technology`, `science`, `translation`, `legal`, `finance`,
+  `health`, `trivia` and `academia`. There is no agents or tools category, and
+  the categories barely change the top of the list, so leave it out.
+- `https://openrouter.ai/rankings` is the same data as a web page.
+
+Usage shows what to evaluate, not which model calls tools best.
+
+Anthropic and OpenAI move to their newest models in the curated list; older
+ids stay out of the pickers. The ordering parameters are not part of
+OpenRouter's documented API, so check the result looks like a usage ranking.

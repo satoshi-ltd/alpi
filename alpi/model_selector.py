@@ -150,7 +150,7 @@ def _configure_tier(cfg: cfg_mod.Config, tier_name: str) -> None:
 
 def _pick_tier_effort(cfg: cfg_mod.Config, model_id: str, current: str) -> str:
     from alpi.providers.reasoning import supports_reasoning
-    if not supports_reasoning(model_id):
+    if not supports_reasoning(model_id, cfg.providers):
         return ""
     items = [
         ("Default", "",       "use provider default"),
@@ -170,7 +170,7 @@ def _pick_tier_effort(cfg: cfg_mod.Config, model_id: str, current: str) -> str:
 def _pick_reasoning_effort(cfg: cfg_mod.Config, model_id: str) -> None:
     """Prompt for reasoning effort only on models that declare support."""
     from alpi.providers.reasoning import supports_reasoning
-    if not supports_reasoning(model_id):
+    if not supports_reasoning(model_id, cfg.providers):
         cfg.model_reasoning.effort = ""
         return
     current = cfg.model_reasoning.effort or "medium"

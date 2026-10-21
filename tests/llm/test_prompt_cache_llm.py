@@ -24,7 +24,7 @@ import pytest
 pytestmark = pytest.mark.llm
 
 
-_MODEL = "anthropic/claude-haiku-4-5"
+_MODEL = "anthropic/claude-haiku-5-5"
 _ENV_VAR = "ANTHROPIC_API_KEY"
 
 

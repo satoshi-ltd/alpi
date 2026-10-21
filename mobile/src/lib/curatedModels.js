@@ -10,7 +10,7 @@ export const CURATED_BY_PROVIDER = {
     { id: 'claude-fable-5-1', note: 'flagship · 1M' },
     { id: 'claude-opus-5-5', note: 'agentic coding · 1M' },
     { id: 'claude-sonnet-5-5', note: 'balanced · 1M' },
-    { id: 'claude-haiku-4-5', note: 'cheap · fast' },
+    { id: 'claude-haiku-5-5', note: 'cheap · fast · 1M' },
   ],
 };
 

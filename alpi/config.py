@@ -718,7 +718,7 @@ def resolve_model(
             out = resolve_model(cfg, model=tcfg.model, include_reasoning=False)
             if tcfg.effort:
                 from alpi.providers.reasoning import merge_into_kwargs, reasoning_kwargs
-                extra = reasoning_kwargs(tcfg.model, tcfg.effort)
+                extra = reasoning_kwargs(tcfg.model, tcfg.effort, cfg.providers)
                 if extra:
                     out = merge_into_kwargs(out, extra)
             return out
@@ -730,11 +730,17 @@ def resolve_model(
     ollama_eps = {c.get("name"): c for c in cfg.providers.get("ollama", [])}
     if head in ollama_eps:
         ep = ollama_eps[head]
-        return {
+        local: dict[str, Any] = {
             "model": f"openai/{rest}",
             "api_base": ep.get("url", "").rstrip("/") + "/v1",
             "api_key": "dummy",
         }
+        if include_reasoning and is_default_model and cfg.model_reasoning.effort:
+            from alpi.providers.reasoning import merge_into_kwargs, reasoning_kwargs
+            extra = reasoning_kwargs(model_str, cfg.model_reasoning.effort, cfg.providers)
+            if extra:
+                local = merge_into_kwargs(local, extra)
+        return local
 
     out: dict[str, Any] = {"model": model_str}
     env_var = _CLOUD_API_KEY_ENV.get(head)
@@ -745,7 +751,7 @@ def resolve_model(
             out["api_key"] = key
     if include_reasoning and is_default_model and cfg.model_reasoning.effort:
         from alpi.providers.reasoning import merge_into_kwargs, reasoning_kwargs
-        extra = reasoning_kwargs(model_str, cfg.model_reasoning.effort)
+        extra = reasoning_kwargs(model_str, cfg.model_reasoning.effort, cfg.providers)
         if extra:
             out = merge_into_kwargs(out, extra)
     ignore = openrouter_ignore(cfg)

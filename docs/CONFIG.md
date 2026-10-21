@@ -369,6 +369,8 @@ model_reasoning:
   effort: medium
 ```
 
+On a named Ollama endpoint (`<endpoint>/<model>`) the hint is sent, and the apps show the selector, only when Ollama reports the `thinking` capability for that model.
+
 ### Memory
 
 | Field | Default | Notes |

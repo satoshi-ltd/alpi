@@ -18,8 +18,8 @@ anthropic:
   - id: claude-sonnet-5-5
     note: balanced · 1M
     reasoning: true
-  - id: claude-haiku-4-5
-    note: cheap · fast
+  - id: claude-haiku-5-5
+    note: cheap · fast · 1M
     reasoning: true
 openrouter:
   - id: deepseek/deepseek-v4.1-flash
@@ -27,6 +27,9 @@ openrouter:
     reasoning: true
   - id: z-ai/glm-5.3-flash
     note: text+image+video · up to 1.25M · reasoning always on, defaults to max
+    reasoning: true
+  - id: deepseek/deepseek-v4.1-flash-1017
+    note: text+image · up to 1M · 2026-10-17 build of V4.1 Flash
     reasoning: true
   - id: deepseek/deepseek-v4-flash-0731
     note: text · up to 1.25M · broad provider coverage
@@ -37,8 +40,8 @@ openrouter:
   - id: minimax/minimax-m3
     note: text+image+video · up to 1M · mid-tier
     reasoning: true
-  - id: deepseek/deepseek-v4-pro
-    note: text · up to 1M · pro tier · id pinned to the 2026-04 build
+  - id: deepseek/deepseek-v4-pro-0813
+    note: text · up to 1M · pro tier · 2026-08 build
     reasoning: true
   - id: stepfun/step-3.7-flash
     note: text+image+video · up to 256K · reasoning always on
@@ -46,15 +49,18 @@ openrouter:
   - id: nvidia/nemotron-3-super-120b-a12b
     note: text · up to 256K · open weights
     reasoning: true
+  - id: anthropic/claude-haiku-5.5
+    note: text+image+file · up to 1M · cheap · fast
+    reasoning: true
   - id: anthropic/claude-sonnet-5.5
     note: text+image+file · up to 1M · balanced
     reasoning: true
   - id: anthropic/claude-opus-5.5
     note: text+image+file · up to 1M · agentic coding
     reasoning: true
-  - id: xiaomi/mimo-v2.5
+  - id: xiaomi/mimo-v2.6-flash
     note: multimodal · up to 1M · audio and video in
     reasoning: true
-  - id: xiaomi/mimo-v2.5-pro
-    note: text · up to 1M · higher agentic score than the base
+  - id: xiaomi/mimo-v2.6-pro
+    note: multimodal · up to 1M · pro tier of MiMo V2.6
     reasoning: true

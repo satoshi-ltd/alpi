@@ -1796,11 +1796,11 @@ class Engine:
             frac = None
         if frac is not None and frac >= _BUDGET_ESCALATION_GUARD:
             return None
-        if current_effort != "high" and supports_reasoning(current_model):
+        if current_effort != "high" and supports_reasoning(current_model, self.cfg.providers):
             kwargs = cfg_mod.resolve_model(
                 self.cfg, model=current_model, include_reasoning=False,
             )
-            kwargs = merge_into_kwargs(kwargs, reasoning_kwargs(current_model, "high"))
+            kwargs = merge_into_kwargs(kwargs, reasoning_kwargs(current_model, "high", self.cfg.providers))
             kwargs.update(_pc.cache_kwargs_for_model(kwargs.get("model", ""), kwargs.get("api_base")))
             return self._with_affinity(kwargs), current_model, "high", f"escalated effort to high ({reason})"
         deep = self.cfg.tiers.deep

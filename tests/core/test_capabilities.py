@@ -27,6 +27,7 @@ def test_models_that_reject_forced_tool_use(model) -> None:
     "anthropic/claude-sonnet-5",
     "anthropic/claude-opus-4-8",
     "anthropic/claude-haiku-4-5",
+    "anthropic/claude-haiku-5-5",
     "anthropic/claude-opus-4-20250514",
     "openai/gpt-6.1-sol",
     "openrouter/deepseek/deepseek-v4.1-flash",
@@ -43,6 +44,7 @@ def test_models_that_accept_forced_tool_use(model) -> None:
 def test_a_claude_call_that_asks_for_reasoning_is_never_forced(kwargs) -> None:
     assert forced_tool_choice("anthropic/claude-sonnet-5", kwargs) is False
     assert forced_tool_choice("openrouter/anthropic/claude-haiku-4.5", kwargs) is False
+    assert forced_tool_choice("anthropic/claude-haiku-5-5", kwargs) is False
 
 
 def test_a_claude_call_without_reasoning_and_other_providers_keep_forcing() -> None:

@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.17.32 — 2026-10-21 — reasoning effort for Ollama models, Claude Haiku 5.5
+
+- Ollama models with the `thinking` capability now show the reasoning-effort selector in the apps and accept an effort in settings.
+- The main-model effort is now sent to Ollama endpoints; before, only tier efforts could reach other providers.
+- The curated Anthropic catalog lists Claude Haiku 5.5 in place of Haiku 4.5.
+- The OpenRouter picker adds DeepSeek V4.1 Flash 1017 and Claude Haiku 5.5, and moves MiMo to V2.6 Flash and Pro; the OpenRouter limits table is refreshed.
+
 ## v0.17.31 — 2026-10-20 — console jobs appear in daemon activity
 
 - Jobs fired from the CLI, setup or the schedule tool run through the daemon when available, so connected apps show their activity.

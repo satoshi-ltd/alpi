@@ -181,10 +181,43 @@ def test_ollama_is_ollama_fail_open(monkeypatch) -> None:
     assert ollama.is_ollama("http://localhost:11434") is False
 
 
+def test_ollama_supports_thinking_reads_the_capabilities_list(monkeypatch) -> None:
+    fake = _FakeClient(show={"capabilities": ["completion", "tools", "thinking"]})
+    monkeypatch.setattr(ollama.httpx, "Client", lambda timeout=0: fake)
+    ollama._THINKING_CACHE.clear()
+
+    assert ollama.supports_thinking("http://localhost:11434/v1", "gpt-oss:20b") is True
+    assert ollama.supports_thinking("http://localhost:11434/v1", "gpt-oss:20b") is True
+    assert fake.calls == [("post", "http://localhost:11434/api/show", {"name": "gpt-oss:20b"})]
+
+
+def test_ollama_supports_thinking_is_false_without_the_capability(monkeypatch) -> None:
+    for show in ({"capabilities": ["completion", "tools"]}, {}):
+        fake = _FakeClient(show=show)
+        monkeypatch.setattr(ollama.httpx, "Client", lambda timeout=0, fake=fake: fake)
+        ollama._THINKING_CACHE.clear()
+
+        assert ollama.supports_thinking("http://localhost:11434", "llama3") is False
+
+
+def test_ollama_supports_thinking_retries_a_failed_lookup_after_the_miss_ttl(monkeypatch) -> None:
+    clients = iter([_FakeClient(fail=True), _FakeClient(show={"capabilities": ["thinking"]})])
+    now = [1000.0]
+    monkeypatch.setattr(ollama.httpx, "Client", lambda timeout=0: next(clients))
+    monkeypatch.setattr(ollama.time, "monotonic", lambda: now[0])
+    ollama._THINKING_CACHE.clear()
+
+    assert ollama.supports_thinking("http://remote:11434", "m") is False
+    now[0] += ollama._THINKING_MISS_TTL - 1
+    assert ollama.supports_thinking("http://remote:11434", "m") is False
+    now[0] += 2
+    assert ollama.supports_thinking("http://remote:11434", "m") is True
+
+
 def test_the_curated_anthropic_and_openai_lists_are_the_current_models() -> None:
     from alpi.providers.curated import load_curated
 
-    assert [m["id"] for m in load_curated("anthropic")] == ["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-4-5"]
+    assert [m["id"] for m in load_curated("anthropic")] == ["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"]
     assert [m["id"] for m in load_curated("openai")] == ["gpt-6-astra", "gpt-6.1-sol", "gpt-6-luna"]
     for provider in ("anthropic", "openai"):
         assert all(m.get("reasoning") is True for m in load_curated(provider)), provider

@@ -283,12 +283,12 @@ def _profile_detail_payload(home: Path) -> dict[str, Any]:
         "provider_catalog": _provider_catalog(),
         "vision_model": cfg.tools.read_image.model,
         "model_reasoning_effort": cfg.model_reasoning.effort,
-        "model_reasoning_supported": supports_reasoning(cfg.model),
+        "model_reasoning_supported": supports_reasoning(cfg.model, cfg.providers),
         "tiers": {
             name: {
                 "model": tier.model,
                 "effort": tier.effort,
-                "reasoning_supported": bool(tier.model) and supports_reasoning(tier.model),
+                "reasoning_supported": bool(tier.model) and supports_reasoning(tier.model, cfg.providers),
             }
             for name, tier in (("fast", cfg.tiers.fast), ("deep", cfg.tiers.deep))
         },
@@ -618,13 +618,14 @@ async def _config_set_field(
     _reject_locked_appearance(str(params.get("profile") or ""), key)
     value = params.get("value")
     data = _load_user_yaml(home)
+    providers = data.get("providers") or {}
     coerced = _coerce_config_value(key, value)
     if key == "model_reasoning.effort":
         from alpi.providers.reasoning import normalise_effort, supports_reasoning
         normalised = normalise_effort(coerced)
         current_model = str(data.get("model") or "")
         # Refuse to persist effort when the current model can't act on it — otherwise profile.detail would report effort="high" + supported=false, which is confusing dead state. The user can resolve it by setting effort AFTER switching to a supported model.
-        if normalised and supports_reasoning(current_model):
+        if normalised and supports_reasoning(current_model, providers):
             _set_dotted(data, key, normalised)
         else:
             _unset_dotted(data, key)
@@ -634,7 +635,7 @@ async def _config_set_field(
         _set_dotted(data, key, coerced)
         # Switching to an unsupported model auto-clears the effort so the dropdown disappears without a stale value lurking.
         from alpi.providers.reasoning import supports_reasoning
-        if not supports_reasoning(str(coerced)):
+        if not supports_reasoning(str(coerced), providers):
             _unset_dotted(data, "model_reasoning.effort")
             if isinstance(data.get("model_reasoning"), dict) and not data["model_reasoning"]:
                 data.pop("model_reasoning", None)
@@ -647,7 +648,7 @@ async def _config_set_field(
             _unset_dotted(data, f"tiers.{tier}")
         else:
             _set_dotted(data, key, model_val)
-            if not supports_reasoning(model_val):
+            if not supports_reasoning(model_val, providers):
                 _unset_dotted(data, f"tiers.{tier}.effort")
         _prune_empty_tiers(data)
     elif key in ("tiers.fast.effort", "tiers.deep.effort"):
@@ -655,7 +656,7 @@ async def _config_set_field(
         tier = key.split(".")[1]
         normalised = normalise_effort(coerced)
         tier_model = str(((data.get("tiers") or {}).get(tier) or {}).get("model") or "")
-        if normalised and tier_model and supports_reasoning(tier_model):
+        if normalised and tier_model and supports_reasoning(tier_model, providers):
             _set_dotted(data, key, normalised)
         else:
             _unset_dotted(data, key)
