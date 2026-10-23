@@ -1515,6 +1515,11 @@ Hard runtime deps are kept tight — every line in `pyproject.toml`'s `dependenc
 
 Optional `dev` extra: `pytest` + `pytest-asyncio` for the test suite, `ruff` for lint, `pip-audit` for CVE scans.
 
+Project dependencies and Python build/check tools use a seven-day PyPI artifact cooldown in
+uv resolution, Docker pip installs and CI, including twine and wheel smoke installs. Bootstrap
+pip is pinned; user installs resolve the published dependency ranges without this cooldown.
+The policy and exclusions live in [SECURITY.md](SECURITY.md#policy).
+
 Security posture: `uv run --with pip-audit pip-audit` must run clean against the full lockfile before each release. Known-CVE deps are not allowed to accumulate — drop or upgrade.
 
 ## Testing

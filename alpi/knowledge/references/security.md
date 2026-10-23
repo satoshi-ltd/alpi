@@ -348,6 +348,12 @@ fleet pulls for it.
 - Compromised provider or local OS account.
 - Every prompt-injection variant.
 - Bugs or behavior changes in third-party integrations.
+- Supply-chain: project dependencies and Python build/check tools use a 7-day PyPI artifact
+  cooldown in the lockfile, Docker and CI, including twine and smoke installs. Bootstrap pip is
+  pinned to 26.2.1; changes to that pin require checking its age and advisories. Base images,
+  OS/Node packages, GitHub Actions and uv itself are outside this cooldown. A user's own
+  `pip install alpi-agent` or `uv tool install` resolves dependency ranges fresh without it;
+  most dependencies have only minimum versions, with upper bounds on selected packages.
 - Enterprise audit: human-bound, tamper-evident trail with an external sink
   (remaining roadmap AUDIT.2 work).
 

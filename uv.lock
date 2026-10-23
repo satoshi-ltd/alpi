@@ -7,6 +7,10 @@ resolution-markers = [
     "python_full_version < '3.12'",
 ]
 
+[options]
+exclude-newer = "2026-10-15T14:52:15.809469Z"
+exclude-newer-span = "P7D"
+
 [[package]]
 name = "aiohappyeyeballs"
 version = "2.6.1"
@@ -108,7 +112,7 @@ wheels = [
 
 [[package]]
 name = "alpi-agent"
-version = "0.17.32"
+version = "0.17.33"
 source = { editable = "." }
 dependencies = [
     { name = "click" },

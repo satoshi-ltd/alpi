@@ -30,7 +30,8 @@ WORKDIR /app
 # would otherwise leak ~1GB into the image).
 COPY pyproject.toml README.md LICENSE ./
 COPY alpi ./alpi
-RUN pip install .
+RUN pip install --upgrade "pip==26.2.1" \
+    && pip install --uploaded-prior-to P7D .
 
 # Chromium's system libraries, resolved by the playwright that pip just installed rather than a hand-written list, so the image cannot drift from the browser it ships for. `browser` launches chromium-headless-shell; the browser build itself still downloads on first use.
 RUN apt-get update \

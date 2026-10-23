@@ -387,6 +387,22 @@ Risk profile of the runtime set:
 ### Policy
 
 - **`pip-audit` before every release.** Zero tolerance for known CVEs on the lockfile.
+- **Seven-day dependency cooldown.** Project dependencies and Python build/check tools resolve only
+  PyPI artifacts at least 7 days old:
+  `[tool.uv] exclude-newer = "7 days"` for `uv lock`/`uv sync`, and `pip install --uploaded-prior-to P7D`
+  in `docker/Dockerfile` and the CI test installs. CI also passes `--exclude-newer "7 days"`
+  to `uv build`, `uvx twine` and the smoke job's `uv tool install`, which has no repository config.
+  Bootstrap pip is pinned to `26.2.1` in Docker and CI; review its age and advisories before changing
+  that pin. The cooldown does not cover base images, OS/Node packages, GitHub Actions or uv itself.
+  It does not reach `pip install alpi-agent` / `uv tool install` on a user's machine, which
+  resolve `pyproject.toml`'s ranges fresh. Only selected dependencies have upper bounds; most specify
+  a minimum version.
+  `tests/core/test_dependency_cooldown.py` checks the lockfile, pip bootstrap pins and each explicit
+  pip/uv install or build command.
+  A release newer than the window cannot be added or upgraded to, by design. For one package that cannot wait
+  (an urgent CVE fix), `uv lock --upgrade-package <pkg> --exclude-newer-package <pkg>=<now>` moves only the lockfile; the image and CI
+  keep refusing it until it ages in, so shortening the span (same value in every configured cutoff) is the only full
+  override, and it goes back to 7 days in the next change.
 - **`alpi audit` for local posture.** Run it before releases and after changing
   daemon/network/security config. It scans every profile in the install,
   reports known CVEs via OSV when online, and never mutates files or packages.

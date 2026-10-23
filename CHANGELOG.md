@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.17.33 — 2026-10-23 — seven-day dependency cooldown
+
+- The Docker image installs only dependency releases published at least 7 days ago, so a hijacked
+  release pulled from PyPI within days never reaches the image.
+- Releases are tested, built and smoke-installed under the same cooldown.
+
 ## v0.17.32 — 2026-10-21 — reasoning effort for Ollama models, Claude Haiku 5.5
 
 - Ollama models with the `thinking` capability now show the reasoning-effort selector in the apps and accept an effort in settings.
