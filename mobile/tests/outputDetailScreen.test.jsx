@@ -21,6 +21,8 @@ const h = vi.hoisted(() => ({
   markUnread: vi.fn(async () => ({})),
   remove: vi.fn(),
   undoRemove: vi.fn(),
+  shareMarkdown: vi.fn(async () => {}),
+  sharePdf: vi.fn(async () => {}),
 }));
 
 vi.mock('react-native', () => {
@@ -58,6 +60,8 @@ vi.mock('../src/theme/ThemeContext', async () => {
   };
 });
 vi.mock('../src/components/Fold', () => ({ Fold: () => null }));
+vi.mock('../src/components/useSheetGesture', () => ({ DURATION_OUT: 0, UNMOUNT_BUFFER: 0 }));
+vi.mock('../src/lib/messageExport', () => ({ shareMarkdown: h.shareMarkdown, sharePdf: h.sharePdf }));
 vi.mock('../src/components/Chart', () => ({
   Chart: ({ spec, accent }) => React.createElement('figure', { 'data-chart': spec.type, 'data-accent': accent ?? '' }, spec.title),
 }));
@@ -98,6 +102,8 @@ beforeEach(() => {
   h.params = { profile: 'abby', id: 'f1' };
   h.row = FAILED;
   h.runJob.mockClear();
+  h.shareMarkdown.mockClear();
+  h.sharePdf.mockClear();
   h.push.mockClear();
   h.activeId = 'casa';
   h.role = 'admin';
@@ -209,6 +215,38 @@ describe('notification page, bottom bar', () => {
     expect(screen.getByText('Copy')).toBeTruthy();
     fireEvent.click(screen.getByText('Open chat'));
     expect(h.push).toHaveBeenCalledWith({ pathname: '/chat/[id]', params: { id: 'abby', sid: 's-9', connectionId: 'casa' } });
+  });
+
+  it('downloads the notification as markdown and exports it to PDF, signed with its profile and server', async () => {
+    h.row = { ...DIGEST, title: 'Daily mail digest', body: 'Three need a reply.' };
+    h.params = { profile: 'abby', id: 'd1', connectionId: 'casa' };
+    render(<OutputDetailScreen />);
+    fireEvent.click(screen.getByLabelText('More'));
+    fireEvent.click(screen.getByText('Download .md'));
+    await vi.waitFor(() => expect(h.shareMarkdown).toHaveBeenCalledTimes(1));
+    expect(h.shareMarkdown.mock.calls[0][0]).toMatchObject({ title: 'Daily mail digest', profile: 'abby', server: 'casa', at: DIGEST.created_at });
+    expect(h.shareMarkdown.mock.calls[0][0].body).toContain('Three need a reply.');
+    fireEvent.click(screen.getByText('Export PDF…'));
+    await vi.waitFor(() => expect(h.sharePdf).toHaveBeenCalledTimes(1));
+    expect(h.sharePdf.mock.calls[0][0]).toMatchObject({ profile: 'abby', server: 'casa' });
+    expect(h.sharePdf.mock.calls[0][1]).toEqual(expect.any(String));
+  });
+
+  it('drops a pending export when the page closes first', async () => {
+    const { unmount } = render(<OutputDetailScreen />);
+    fireEvent.click(screen.getByLabelText('More'));
+    fireEvent.click(screen.getByText('Export PDF…'));
+    unmount();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(h.sharePdf).not.toHaveBeenCalled();
+  });
+
+  it('says why an export failed', async () => {
+    h.sharePdf.mockRejectedValueOnce(new Error('no printer'));
+    render(<OutputDetailScreen />);
+    fireEvent.click(screen.getByLabelText('More'));
+    fireEvent.click(screen.getByText('Export PDF…'));
+    await vi.waitFor(() => expect(h.toast).toHaveBeenCalledWith({ message: 'Export failed: no printer', kind: 'danger' }));
   });
 
   it('leaves Open chat out of the overflow when the row knows no session', () => {

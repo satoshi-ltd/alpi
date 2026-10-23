@@ -14,6 +14,14 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.8.4 — 2026-10-23 — export any message to a PDF
+
+- **A notification, an assistant reply or a workgroup post can be shared as a PDF, charts and tables included**, or downloaded as Markdown, from the notification menu and the long-press sheet.
+- Every page of the PDF carries a footer naming alpi, the profile, the server and the date.
+- Workgroup status cards now open the same long-press sheet as other posts.
+
+  Needs a new build (adds a print module). Requires alpi 0.17.28.
+
 ## v0.8.3 — 2026-10-13 — charts in chats, notifications and workgroups
 
 - **Charts drawn by your agents appear in the chat, the notification page and workgroup posts**, fitted to the phone's width, in the profile's colour, with a spoken description for the screen reader.

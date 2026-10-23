@@ -104,5 +104,25 @@ describe('Select text', () => {
     expect(onSelectText).toHaveBeenCalledWith(target);
     expect(buildMessageActions({ kind: 'agent', text: '' }, { onSelectText }).map((a) => a.id)).toEqual([]);
   });
+
+  it('agent text gets Download and Export PDF only when it has text and handlers', () => {
+    const handlers = { onCopy: vi.fn(), onDownload: vi.fn(), onExportPdf: vi.fn() };
+    const agent = { kind: 'agent', text: 'Aquí tienes el resumen…' };
+    expect(buildMessageActions(agent, handlers).map((a) => a.id)).toEqual(['copy', 'download', 'pdf']);
+    expect(buildMessageActions({ ...agent, text: '' }, handlers).map((a) => a.id)).toEqual(['copy']);
+    expect(buildMessageActions(agent, { onCopy: vi.fn() }).map((a) => a.id)).toEqual(['copy']);
+    expect(buildMessageActions({ kind: 'user', text: 'hola' }, handlers).map((a) => a.id)).toEqual(['copy']);
+  });
+
+  it('Download and Export PDF hand the target to their handlers', () => {
+    const onDownload = vi.fn();
+    const onExportPdf = vi.fn();
+    const target = { kind: 'agent', text: 'hola' };
+    const actions = buildMessageActions(target, { onDownload, onExportPdf });
+    actions.find((a) => a.id === 'download').onPress();
+    actions.find((a) => a.id === 'pdf').onPress();
+    expect(onDownload).toHaveBeenCalledWith(target);
+    expect(onExportPdf).toHaveBeenCalledWith(target);
+  });
 });
 

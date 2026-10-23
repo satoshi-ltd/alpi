@@ -1,6 +1,6 @@
 import { mixHex } from "../../../../common/color.mjs";
 import { formatCostLine } from "../../../../common/format.mjs";
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { radii, space, lineHeights, tracking } from '../../theme/tokens';
 
 import { Fold } from '../../components/Fold';
@@ -53,7 +53,7 @@ function MarkerIcon({ variant, color, stale }) {
   return <View style={[S.taskDot, { backgroundColor: color }]} />;
 }
 
-export function MarkerCard({ variant = 'task', side = 'left', hubColor, hubFold, speakerName, isFromHub, seq, cost, title, children, label, stale = false }) {
+export function MarkerCard({ variant = 'task', side = 'left', hubColor, hubFold, speakerName, isFromHub, seq, cost, title, children, label, stale = false, onLongPress }) {
   const { colors, fonts, fontSizes } = useTheme();
   const { twoPane } = usePane();
   const pct = TINTS[variant] ?? 0.11;
@@ -63,6 +63,7 @@ export function MarkerCard({ variant = 'task', side = 'left', hubColor, hubFold,
   const hasBody = Boolean(children);
   const compact = !title && !hasBody;
   const corner = { borderRadius: radii.xs };
+  const Card = onLongPress ? Pressable : View;
 
   const costStr = cost?.tokens > 0 || cost?.usd > 0 ? formatCostLine(cost) : null;
 
@@ -95,7 +96,7 @@ export function MarkerCard({ variant = 'task', side = 'left', hubColor, hubFold,
           )}
         </View>
       ) : null}
-      <View style={[S.card, twoPane && S.paneCap, compact && S.cardCompact, corner, { backgroundColor: tint }]}>
+      <Card {...(onLongPress ? { onLongPress } : null)} style={[S.card, twoPane && S.paneCap, compact && S.cardCompact, corner, { backgroundColor: tint }]}>
         <View style={[S.eyebrowRow, compact && { marginBottom: 0 }]}>
           <View style={S.iconSlot}>
             <MarkerIcon variant={variant} color={baseAccent} stale={stale} />
@@ -114,7 +115,7 @@ export function MarkerCard({ variant = 'task', side = 'left', hubColor, hubFold,
             ? <RichText size={fontSizes.md} color={colors.ink}>{children}</RichText>
             : children
         ) : null}
-      </View>
+      </Card>
     </View>
   );
 }

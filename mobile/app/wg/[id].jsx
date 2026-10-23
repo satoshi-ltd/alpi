@@ -26,6 +26,7 @@ import { JumpToLatest, JUMP_THRESHOLD } from '../../src/features/chat/JumpToLate
 import { LoadFailed } from '../../src/components/LoadFailed';
 import { MarkerCard } from '../../src/features/chat/MarkerCard';
 import { MessageActionsSheet } from '../../src/features/chat/MessageActionsSheet';
+import { wgPostSeconds } from '../../src/lib/messageExport';
 import { EnterOnce, listDismissMode, ownConfirmation, useSeenIds } from '../../src/features/chat/chatMotion';
 import { useReduceMotion } from '../../src/lib/reduceMotion';
 import { postsOf, unlandedPosts } from '../../src/features/chat/optimisticPosts';
@@ -94,7 +95,7 @@ const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, acc
   const c = classifyMessage(m.body);
   const isStaleWorking = c.variant === 'working' && workingStale.has(m.seq);
   const makeTarget = () => (
-    isOwn ? { kind: 'user', text: m.body } : { kind: 'agent', text: m.body }
+    isOwn ? { kind: 'user', text: m.body } : { kind: 'agent', text: m.body, exportProfile: speakerName, exportAt: wgPostSeconds(m.at), exportAccent: speakerAccent }
   );
 
   if (c.variant === 'task') {
@@ -108,6 +109,7 @@ const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, acc
         isFromHub={isFromHub}
         seq={m.seq}
         cost={m.cost}
+        onLongPress={isOwn ? undefined : () => setActionTarget({ ...makeTarget(), text: c.task?.content || m.body })}
       >
         {c.task?.content || ''}
       </MarkerCard>
@@ -126,6 +128,7 @@ const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, acc
         isFromHub={isFromHub}
         seq={m.seq}
         cost={m.cost}
+        onLongPress={isOwn ? undefined : () => setActionTarget({ ...makeTarget(), text: c.text })}
       >
         {c.text}
       </MarkerCard>

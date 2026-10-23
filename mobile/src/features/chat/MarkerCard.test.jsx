@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 afterEach(cleanup);
 
@@ -25,7 +25,9 @@ vi.mock('react-native', () => {
       children,
     );
   };
-  return { View, Text, StyleSheet: { create: (s) => s } };
+  const Pressable = ({ children, style, onLongPress, ...p }) =>
+    React.createElement('div', { ...p, 'data-pressable': '', 'data-style': JSON.stringify(flatStyle(style)), onContextMenu: onLongPress }, children);
+  return { View, Text, Pressable, StyleSheet: { create: (s) => s } };
 });
 
 vi.mock('../../theme/ThemeContext', () => ({
@@ -137,3 +139,14 @@ describe('MarkerCard chat floor', () => {
   });
 });
 
+
+describe('MarkerCard long press', () => {
+  it('is a plain card until a long press is wanted, then opens it from the card', () => {
+    const { container, rerender } = render(<MarkerCard variant="done" speakerName="lingo">Finished.</MarkerCard>);
+    expect(container.querySelector('[data-pressable]')).toBeNull();
+    const onLongPress = vi.fn();
+    rerender(<MarkerCard variant="done" speakerName="lingo" onLongPress={onLongPress}>Finished.</MarkerCard>);
+    fireEvent.contextMenu(container.querySelector('[data-pressable]'));
+    expect(onLongPress).toHaveBeenCalledTimes(1);
+  });
+});

@@ -20,6 +20,7 @@ import { SoundWave } from '../../src/features/chat/SoundWave';
 import { useBack } from '../../src/hooks/useBack';
 import { enqueueReadAloud } from '../../src/lib/readAloud';
 import { Composer } from '../../src/features/chat/Composer';
+import { stripProducedImageMarkdown } from '../../../common/producedAttachments.mjs';
 import { MessageActionsSheet } from '../../src/features/chat/MessageActionsSheet';
 import { ModelEffortSheets } from '../../src/features/chat/ModelEffortSheets';
 import { modelChipLabel } from '../../src/features/chat/modelChip';
@@ -140,8 +141,12 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profil
           onLongPress={() => onActionTarget({
             kind: 'agent',
             text: turn.assistant,
+            exportBody: stripProducedImageMarkdown(turn.assistant, turn.output_attachments),
             retryText: turn.user,
             turnIndex,
+            exportProfile: profileName,
+            exportAt: turn.ended_at || turn.at,
+            exportAccent: accent,
           })}
         />
       ) : null}

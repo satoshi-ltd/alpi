@@ -25,11 +25,15 @@ import { useProfileSummaries } from '../../hooks/useDaemonData';
 import { unreadMissingKey, useNotificationActions, useOutput } from '../../hooks/useOutputs';
 import { useEndpoint } from '../../lib/EndpointContext';
 import { freeze, noteUnreadMissing, trailPosition, UNDO_MS, useNotificationStore } from '../../lib/notificationStore';
+import { shareMarkdown, sharePdf } from '../../lib/messageExport';
 import { clip, openChatTarget, replyDraft } from '../../lib/outputsFormat';
 import { profileLabel } from '../../lib/profileName';
 import { useTheme } from '../../theme/ThemeContext';
 import { lineHeights, mobile, radii, space } from '../../theme/tokens';
 import { ReaderSkeleton } from '../../components/ReaderSkeleton';
+import { DURATION_OUT, UNMOUNT_BUFFER } from '../../components/useSheetGesture';
+
+const EXPORT_HANDOFF_MS = DURATION_OUT + UNMOUNT_BUFFER;
 
 
 function IconButton({ name, label, onPress }) {
@@ -178,8 +182,30 @@ export function NotificationPage({ profile, id, connectionId, embedded = false, 
 
   const parts = notificationParts(row);
   const title = parts.title;
+  const exportMessage = row ? {
+    title: String(row.title ?? '').trim() || 'Notification',
+    profile: profileLabel(row.profile),
+    server: (connections ?? []).find((c) => c.id === (connectionId || activeId))?.name ?? '',
+    at: row.created_at,
+    body: [parts.givenSummary, String(row.body ?? '')].filter(Boolean).join('\n\n'),
+  } : null;
+  const exportTimer = useRef(null);
+  useEffect(() => () => clearTimeout(exportTimer.current), []);
+  const exportWith = (share, failure) => () => {
+    if (!exportMessage) return;
+    clearTimeout(exportTimer.current);
+    exportTimer.current = setTimeout(async () => {
+      try {
+        await share(exportMessage, accent);
+      } catch (e) {
+        toast({ message: `${failure}: ${String(e?.message ?? e)}`, kind: 'danger' });
+      }
+    }, EXPORT_HANDOFF_MS);
+  };
   const menu = [
     { id: 'copy', label: 'Copy', onPress: onCopy },
+    { id: 'download', label: 'Download .md', onPress: exportWith((message) => shareMarkdown(message), 'Download failed') },
+    { id: 'pdf', label: 'Export PDF…', onPress: exportWith(sharePdf, 'Export failed') },
     ...(chatTarget ? [{ id: 'chat', label: 'Open chat', onPress: () => router.push(chatTarget) }] : []),
   ];
 
