@@ -163,7 +163,7 @@ def phone_select_text():
 
 
 def phone_message_actions():
-    items = action_item("copy", "Copy") + separator(56) + action_item("file", "Select text") + separator(56) + action_item("refresh", "Ask again")
+    items = action_item("copy", "Copy") + separator(56) + action_item("file", "Select text") + separator(56) + action_item("download", "Download .md") + separator(56) + action_item("file-text", "Export PDF…") + separator(56) + action_item("refresh", "Ask again")
     body = f'<div style="height: 0.5px; background: {LINE}"></div><div style="padding-bottom: 24px">{items}</div>'
     page_body = f"""{chat_backdrop()}
 {sheet(390, 844, "Agent message", "", body)}

@@ -1481,6 +1481,7 @@ export default function App() {
                   workgroup={activeWorkgroup}
                   profiles={profiles}
                   connectionId={hostConnections.active_id}
+                  connectionName={activeConnection?.name ?? null}
                   onReload={reload}
                   daemonOffline={daemonOffline}
                   onGone={onWorkgroupGone}
@@ -1522,6 +1523,7 @@ export default function App() {
                   profiles={profiles}
                   activeProfile={activeProfile}
                   connectionId={hostConnections.active_id}
+                  connectionName={activeConnection?.name ?? null}
                   sessionData={sessionData}
                   sessionSync={sessionSync}
                   loadError={sessionLoadFailure}

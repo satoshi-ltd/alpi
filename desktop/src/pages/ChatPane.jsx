@@ -26,6 +26,7 @@ import { useContextWindow } from "../hooks/useContextWindow.js";
 import { useNotify } from "../primitives/Notification.jsx";
 import Markdown from "../primitives/Markdown.jsx";
 import { ACCENT_HEXES } from "../../../common/accents.mjs";
+import ExportMenu from "../features/ExportMenu.jsx";
 import { FOLD_SIZES } from "../../../common/folds.mjs";
 import ProducedImages from "../primitives/ProducedImages.jsx";
 import { setImageRoots } from "../lib/imageRoots.js";
@@ -65,6 +66,7 @@ export default function ChatPane({
   profiles,
   activeProfile,
   connectionId,
+  connectionName = null,
   sessionData,
   sessionSync = null,
   pendingTurn,
@@ -334,6 +336,7 @@ export default function ChatPane({
         <SessionView
           data={sessionData}
           connectionId={connectionId}
+          connectionName={connectionName}
           profiles={profiles}
           pendingTurn={pendingTurn}
           accent={activeProfile?.accent ?? null}
@@ -381,6 +384,7 @@ export default function ChatPane({
 function SessionView({
   data,
   connectionId,
+  connectionName,
   profiles,
   pendingTurn,
   accent,
@@ -405,6 +409,7 @@ function SessionView({
       <Transcript
         data={data}
         connectionId={connectionId}
+        connectionName={connectionName}
         profiles={profiles}
         pendingTurn={pendingTurn}
         accent={accent}
@@ -431,6 +436,7 @@ function SessionView({
 const Transcript = memo(function Transcript({
   data,
   connectionId,
+  connectionName,
   profiles,
   pendingTurn,
   accent,
@@ -554,6 +560,7 @@ const Transcript = memo(function Transcript({
               turns={renderTurns}
               turnBase={turnBase}
               connectionId={connectionId}
+              connectionName={connectionName}
               baseModel={baseModel}
               profiles={profiles}
               accent={accent}
@@ -588,6 +595,7 @@ const HistoryTurns = memo(function HistoryTurns({
   turns,
   turnBase = 0,
   connectionId,
+  connectionName,
   baseModel,
   profiles,
   accent,
@@ -608,6 +616,7 @@ const HistoryTurns = memo(function HistoryTurns({
           fresh={freshKeys?.get(t.at ?? turnBase + i) === true}
           turn={t}
           connectionId={connectionId}
+          connectionName={connectionName}
           baseModel={baseModel}
           profiles={profiles}
           accent={accent}
@@ -628,6 +637,7 @@ const HistoryTurns = memo(function HistoryTurns({
 const Turn = memo(function Turn({
   turn,
   connectionId,
+  connectionName,
   baseModel,
   profiles,
   accent,
@@ -782,6 +792,11 @@ const Turn = memo(function Turn({
                   )}
                 </IconBtn>
               </Tip>
+              <ExportMenu
+                message={{ profile: profileLabel(profileName), server: connectionName, at: turn.ended_at || turn.at, body: stripProducedImageMarkdown(turn.assistant, turn.output_attachments) }}
+                accent={accent}
+                className={styles.agentActionBtn}
+              />
             </TurnFooter>
           }
         >

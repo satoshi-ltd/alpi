@@ -73,7 +73,7 @@ def d_assistant(body, meta=True, hover=True):
         tip = (f'<span style="display: inline-flex; flex-direction: column; gap: 3px; margin-left: 10px; padding: 6px 9px; border-radius: 4px; background: {INK}">'
                f'{mono("3.4K tokens · $0.0123", 11, PANE)}{mono("sonnet-4 · 12.4s", 11, INK4)}</span>')
         footer = (f'<div style="display: flex; align-items: center; gap: 2px; margin-top: 4px">{mono("2m", 11)}'
-                  f'<span style="display: inline-flex; margin-left: 6px; opacity: {1 if hover else 0.4}">{iconbtn("copy", 26, 13)}{iconbtn("refresh", 26, 13)}{iconbtn("volume", 26, 13)}</span>{tip if hover else ""}</div>')
+                  f'<span style="display: inline-flex; margin-left: 6px; opacity: {1 if hover else 0.4}">{iconbtn("copy", 26, 13)}{iconbtn("refresh", 26, 13)}{iconbtn("volume", 26, 13)}{iconbtn("download", 26, 13)}</span>{tip if hover else ""}</div>')
     return f'<div style="display: flex; flex-direction: column; gap: 6px"><div style="font-size: 15px; line-height: 1.65; letter-spacing: -0.003em; color: {INK}">{body}</div>{footer}</div>'
 
 

@@ -57,6 +57,7 @@ import {
   VolumeIcon,
 } from "../primitives/index.js";
 import styles from "./WorkgroupView.module.css";
+import ExportMenu from "../features/ExportMenu.jsx";
 import { EMPTY, postsHint } from "../../../common/emptyCopy.mjs";
 
 const MY_SEQS_KEY = "alpi.workgroup.mySeqs";
@@ -100,6 +101,7 @@ export default function WorkgroupView({
   workgroup,
   profiles,
   connectionId,
+  connectionName = null,
   onActiveTask,
   onGone,
   onOpenSettings,
@@ -621,6 +623,7 @@ export default function WorkgroupView({
                       online={online}
                       voice={voiceMap[m.from_pubkey] || voiceForPubkey(m.from_pubkey)}
                       profile={workgroup.profile}
+                      connectionName={connectionName}
                     />
                   );
                 })}
@@ -685,7 +688,7 @@ export default function WorkgroupView({
 }
 
 function renderWgFooter({
-  plainText, at, styles, ttsKey, profile, voice, ttsKind, online,
+  plainText, exportMessage, exportAccent, at, styles, ttsKey, profile, voice, ttsKind, online,
 }) {
   const isLoading = ttsKind === "loading";
   const isPlaying = ttsKind === "playing";
@@ -728,6 +731,7 @@ function renderWgFooter({
           )}
         </IconBtn>
       </Tip>
+      <ExportMenu message={exportMessage} accent={exportAccent} className={styles.footerBtn} />
       {stampTs ? (
         <Mono className={`tnum ${styles.footerTime}`}><RelativeTime ts={stampTs} /></Mono>
       ) : null}
@@ -821,6 +825,7 @@ const WgMessage = memo(function WgMessage({
   online,
   voice,
   profile,
+  connectionName,
 }) {
   const speaker = { name: speakerName, accent: speakerAccent, fold: speakerFold, bio: speakerBio };
   const cls = classifyMessage(body);
@@ -838,6 +843,8 @@ const WgMessage = memo(function WgMessage({
     : (working?.content || skip?.content || done?.content || body);
   const footer = renderWgFooter({
     plainText: speakableText,
+    exportMessage: { profile: speakerName, server: connectionName, at: at ? Date.parse(at) / 1000 : 0, body: speakableText },
+    exportAccent: speakerAccent,
     at,
     styles,
     ttsKey,

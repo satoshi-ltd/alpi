@@ -37,6 +37,8 @@ import {
 import { useProfileDetail } from "../hooks/useProfileDetail.js";
 import { isMissingVerb } from "../hooks/useActivity.js";
 import styles from "./NotificationsModal.module.css";
+import { useMessageExport } from "./ExportMenu.jsx";
+import { exportFileName, exportMarkdown } from "../../../common/messageExport.mjs";
 import { copyText } from "../lib/clipboard.js";
 import { notificationParts } from "../../../common/notificationParts.mjs";
 import { notificationStamp, notificationTime } from "../../../common/notificationTime.mjs";
@@ -49,28 +51,6 @@ import {
   isNeedsYou,
   triageCounts,
 } from "../../../common/notificationTriage.mjs";
-
-
-function fmtAbsolute(ts) {
-  if (!ts) return "";
-  const d = new Date(ts * 1000);
-  return d.toLocaleString(undefined, {
-    day: "numeric", month: "short", year: "numeric",
-    hour: "2-digit", minute: "2-digit",
-  });
-}
-
-
-function slugify(s) {
-  const out = String(s || "")
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
-  return out || "notification";
-}
 
 
 function typeTag(row) {
@@ -346,38 +326,35 @@ export default function NotificationsModal({
     else notify({ message: "Copy failed", variant: "error" });
   }, [detail, notify]);
 
-  const buildMarkdown = useCallback(() => {
-    const title = (detail?.title || "").trim() || "Notification";
-    const conn = activeConnId === "local" ? "local" : (activeRow?.connectionName || activeConnId || "");
-    const meta = [`@${profileLabel(detail.profile)}`, conn, fmtAbsolute(detail.created_at)]
-      .filter(Boolean)
-      .join(" · ");
-    return `# ${title}\n_${meta}_\n\n${withGivenSummary(detail)}\n`;
-  }, [detail, activeConnId, activeRow]);
+  const exportMessage = useMemo(() => (detail ? {
+    title: (detail.title || "").trim() || "Notification",
+    profile: profileLabel(detail.profile),
+    server: activeConnId === "local" ? "local" : (activeRow?.connectionName || activeConnId || ""),
+    at: detail.created_at,
+    body: withGivenSummary(detail),
+  } : null), [detail, activeConnId, activeRow]);
+  const { download: downloadMessage, print: printExport } = useMessageExport();
 
   const onReply = useCallback(async () => {
     if (!detail) return;
     commitRead(true);
-    const name = `${slugify(detail.title)}.md`;
+    const name = exportFileName(exportMessage, "md");
     try {
-      const meta = await invoke("save_text_file", { name, content: buildMarkdown(), dest: "temp" });
+      const meta = await invoke("save_text_file", { name, content: exportMarkdown(exportMessage), dest: "temp" });
       onReplyProp?.(detail.profile, activeConnId, { path: meta.path, name, size: meta.size, mime: "text/markdown" });
       onClose?.();
     } catch (e) {
       notify({ message: `Reply failed: ${e}`, variant: "error" });
     }
-  }, [detail, activeConnId, buildMarkdown, onReplyProp, notify, onClose, commitRead]);
+  }, [detail, activeConnId, exportMessage, onReplyProp, notify, onClose, commitRead]);
 
-  const onDownload = useCallback(async () => {
-    if (!detail) return;
-    const name = `${slugify(detail.title)}.md`;
-    try {
-      const meta = await invoke("save_text_file", { name, content: buildMarkdown(), dest: "download" });
-      notify({ message: `Downloaded ${meta.name}` });
-    } catch (e) {
-      notify({ message: `Download failed: ${e}`, variant: "error" });
-    }
-  }, [detail, buildMarkdown, notify]);
+  const onDownload = useCallback(() => {
+    if (exportMessage) downloadMessage(exportMessage);
+  }, [exportMessage, downloadMessage]);
+
+  const onExportPdf = useCallback(() => {
+    if (exportMessage) printExport(exportMessage, activeRow?.accent);
+  }, [exportMessage, printExport, activeRow]);
 
   const onOpenChatRow = useCallback(() => {
     if (!detail?.session_id) return;
@@ -569,6 +546,7 @@ export default function NotificationsModal({
           onCopy={onCopy}
           onReply={onReply}
           onDownload={onDownload}
+          onExportPdf={onExportPdf}
           onOpenChat={detail.session_id ? onOpenChatRow : null}
           onMarkUnread={canMarkUnread && !detailUnread ? onMarkUnread : null}
           onRunAgain={jobOf(detail) ? onRunAgain : null}
@@ -636,7 +614,7 @@ function NotificationRow({ row, accent, fold, multi, dayGroup = true, unread, ac
 }
 
 
-function DetailPane({ row, accent, fold, connId, connectionName, voiceId, onCopy, onReply, onDownload, onOpenChat, onMarkUnread, onRunAgain, onOpenJob, running = false }) {
+function DetailPane({ row, accent, fold, connId, connectionName, voiceId, onCopy, onReply, onDownload, onExportPdf, onOpenChat, onMarkUnread, onRunAgain, onOpenJob, running = false }) {
   const label = profileLabel(row.profile);
   const failure = row.type === "error";
   const tag = failure ? null : typeTag(row);
@@ -718,6 +696,10 @@ function DetailPane({ row, accent, fold, connId, connectionName, voiceId, onCopy
               <Button role="menuitem" fullWidth className={styles.menuItem} onClick={run(onDownload)}>
                 <DownloadIcon className={styles.menuIcon} />
                 <span className={styles.menuLabel}>Download .md</span>
+              </Button>
+              <Button role="menuitem" fullWidth className={styles.menuItem} onClick={run(onExportPdf)}>
+                <Icon name="file-text" className={styles.menuIcon} />
+                <span className={styles.menuLabel}>Export PDF…</span>
               </Button>
             </div>
           </Popover>

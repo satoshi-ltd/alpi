@@ -321,6 +321,22 @@ describe("NotificationsModal — reply + download", () => {
     );
   });
 
+  it("Export PDF prints only the notification, signed with its profile and server", async () => {
+    renderTitled();
+    window.print = vi.fn(async () => {});
+    const item = menuItem("Export PDF…");
+    await act(async () => {
+      fireEvent.click(item);
+    });
+    expect(window.print).toHaveBeenCalledTimes(1);
+    const sheet = document.querySelector(".alpi-print-root .alpi-export");
+    expect(sheet.querySelector("h1").textContent).toBe("whoop sync failed");
+    expect(sheet.textContent).toContain("python3 run.py exited with code 1.");
+    expect(sheet.querySelector(".ax-foot").textContent).toContain("@alice on casa");
+    expect(sheet.dataset.exportServer).toBe("casa");
+    document.querySelector(".alpi-print-root").remove();
+  });
+
   it("slugifies an accented, punctuated title into a clean filename", async () => {
     h.rows = [{ ...TITLED, title: "Lobby · insights del día" }];
     h.detail = { ...TITLED, title: "Lobby · insights del día" };

@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.8.18 — 2026-10-23 — export any message to a PDF
+
+- Notifications, assistant replies and workgroup posts can be exported to a PDF, charts and tables included: the print sheet opens with only that message on a light page.
+- Every page carries a footer naming alpi, the profile that wrote the message, the server it came from and the date.
+- Replies and posts get a Download button with Download .md and Export PDF…; notifications gain Export PDF… beside Download .md.
+- Downloaded Markdown now names the server too.
+  Requires alpi 0.17.28.
+
 ## v0.8.17 — 2026-10-23 — unused boot splash removed
 
 - Nothing changes on screen: unused startup code was removed, and startup keeps showing the connection banner.
