@@ -112,3 +112,11 @@ def test_empty_output_reported(monkeypatch) -> None:
     r = Tts().run(text="hi", voice="bogus")
     assert not r.ok
     assert "empty" in (r.error or "").lower()
+
+
+def test_installed_edge_tts_sends_the_v2_token() -> None:
+    from edge_tts import constants
+    from edge_tts.drm import DRM
+    assert constants.SEC_MS_GEC_VERSION.startswith("2-")
+    cs64, _, sha = DRM.generate_sec_ms_gec().partition("-")
+    assert len(cs64) == 16 and len(sha) == 64

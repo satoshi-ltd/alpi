@@ -5,12 +5,14 @@ use tokio::sync::Mutex;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::Message;
 
+mod gec;
+
 const TRUSTED_TOKEN: &str = "6A5AA1D4EAFF4E9FB37E23D68491D6F4";
 const WSS_URL: &str = "wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1";
 // Chromium version must match a current Edge release or Microsoft 403s. Bump in sync with edge-tts upstream.
 const UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
                   (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0";
-const GEC_VERSION: &str = "1-143.0.3650.75";
+const GEC_VERSION: &str = "2-143.0.3650.75";
 
 fn random_muid() -> String {
     let bytes: [u8; 16] = *uuid::Uuid::new_v4().as_bytes();
@@ -21,23 +23,12 @@ fn random_muid() -> String {
     s
 }
 
-// SHA-256(ticks + TrustedClientToken), ticks = Windows FILETIME rounded to 5-min window.
 fn gec_token() -> String {
-    use sha2::{Digest, Sha256};
     let unix_secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
-    // Windows epoch is 1601-01-01; offset to Unix epoch is 11644473600s.
-    let ticks = ((unix_secs + 11_644_473_600) as i128) * 10_000_000;
-    let ticks = ticks - (ticks % 3_000_000_000); // 5-min granularity
-    let payload = format!("{ticks}{TRUSTED_TOKEN}");
-    let digest = Sha256::digest(payload.as_bytes());
-    let mut hex = String::with_capacity(64);
-    for b in digest.iter() {
-        hex.push_str(&format!("{b:02X}"));
-    }
-    hex
+    gec::token_at(unix_secs, TRUSTED_TOKEN)
 }
 
 fn escape_xml(s: &str) -> String {

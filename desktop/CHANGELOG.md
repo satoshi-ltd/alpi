@@ -11,6 +11,15 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.8.19 — 2026-10-23 — read-aloud works again, dependency security updates
+
+- Read-aloud works again: Microsoft's speech service now rejects the old request token, and the app sends the new one. It also connects through the same current TLS stack as the rest of the app.
+- Rendered messages are sanitized with DOMPurify 3.4.17, closing the advisories against 3.4.1.
+- Tauri moves to 2.11.1, rustls to 0.23.46 and tar to 0.4.46.
+- rustls-webpki moves to 0.103.15 and webpki-roots to 1.0.9; their fixes for distrusted intermediates (0.103.16, 1.0.10) wait out the seven-day cooldown.
+- Build and test tooling moves to patched releases: Vite 7.3.7, Vitest 4.1.12, PostCSS, nanoid and undici.
+  Requires alpi 0.17.28.
+
 ## v0.8.18 — 2026-10-23 — export any message to a PDF
 
 - Notifications, assistant replies and workgroup posts can be exported to a PDF, charts and tables included: the print sheet opens with only that message on a light page.

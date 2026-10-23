@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.17.35 — 2026-10-23 — voice replies work again, dependency security updates
+
+- Voice replies work again: Microsoft's read-aloud service now rejects the old request token, and alpi requires edge-tts 7.3.1, which sends the new one.
+- The locked development environment moves to newer releases of anyio, certifi, aiohttp, cryptography (50), urllib3, pypdf, pillow, fsspec, idna, msgpack, multidict and pip, closing most of their advisories.
+- pillow 13, certifi 2026.10.19 and pypdf 6.21.1 carry the remaining fixes and wait out the seven-day cooldown.
+
 ## v0.17.34 — 2026-10-23 — your agent knows how to take a message out of the app
 
 - The agent can now tell you that a notification, a reply or a workgroup post downloads as Markdown or exports to a PDF with its charts, and that the PDF is the one to forward.

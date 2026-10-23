@@ -224,6 +224,7 @@ jobs:
           sudo -E apt-get update -qq
           sudo -E apt-get install -y -qq --no-install-recommends \
             libwebkit2gtk-4.1-dev \
+            libdbus-1-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
             patchelf
