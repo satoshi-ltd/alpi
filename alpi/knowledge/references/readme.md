@@ -53,6 +53,7 @@ alpi --version
 - Profile isolation; optional macOS/Linux OS sandbox per profile.
 - Unified per-machine daemon (scheduler + ALP + workgroups + host plane); one launchd/systemd user unit.
 - ALP identity + peer/workgroup features; desktop/mobile companion state behind `host.*`.
+- The Android app is on Google Play: https://play.google.com/store/apps/details?id=com.satoshilimited.alpi (it pairs with the user's own daemon like the desktop app).
 - Docker image `satoshiltd/alpi`, persistent storage under `/data/.alpi`.
 
 ## Security posture

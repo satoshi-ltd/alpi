@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.17.34 — 2026-10-23 — your agent knows how to take a message out of the app
+
+- The agent can now tell you that a notification, a reply or a workgroup post downloads as Markdown or exports to a PDF with its charts, and that the PDF is the one to forward.
+- The agent can point you to the Android app on Google Play.
+
 ## v0.17.33 — 2026-10-23 — seven-day dependency cooldown
 
 - The Docker image installs only dependency releases published at least 7 days ago, so a hijacked

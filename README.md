@@ -49,7 +49,8 @@ The design goal is sovereignty:
 
 - **Chat surfaces.** A Textual TUI with streaming replies, slash commands,
   live tool cards, interrupt and session resume; a desktop app and a mobile
-  app that pair with your own daemon over the host plane.
+  app that pair with your own daemon over the host plane. The Android app is
+  on [Google Play](https://play.google.com/store/apps/details?id=com.satoshilimited.alpi).
 - **Attachments and knowledge.** Attach images, PDFs and source files to a
   turn. Ask alpi to learn a document and it synthesises durable Markdown
   knowledge in your workspace instead of storing the raw file. Semantic

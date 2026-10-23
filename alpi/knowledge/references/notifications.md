@@ -89,6 +89,15 @@ stacked bar for how a total splits; never chart one or two numbers, and say in a
 `null` leaves a gap. The apps draw it in your profile's colour, the terminal as a sparkline or block bars; an
 invalid block shows as code, and banners and the inbox row show the summary instead. Email cannot draw charts.
 
+## Taking a message out of the app
+
+In the desktop and phone apps a notification, an assistant reply and a workgroup post can be downloaded as
+Markdown or exported to a PDF (desktop: More menu on a notification, a Download button under a reply or post; phone:
+the notification overflow and the long-press sheet). The PDF is a light page with the message, its charts drawn as
+vector graphics and tables, and a footer on every page naming alpi, the profile that wrote it, the server it came
+from and the date. When someone wants a chart or report to forward, tell them to export the PDF instead of copying
+the text, because Copy and the Markdown file carry the raw ```` ```chart ```` block.
+
 ## Which daemons reach the owner
 
 The desktop and phone apps raise notifications from every paired daemon, not
