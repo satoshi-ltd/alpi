@@ -329,6 +329,8 @@
   .surface .alt a:hover{opacity:1;color:var(--accent)}
   .stores{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px}
   .store{border:var(--seam) solid var(--line);border-radius:var(--radius-btn);padding:9px 16px;display:flex;flex-direction:column;gap:3px}
+  a.store{color:inherit;text-decoration:none}
+  a.store:hover{border-color:var(--accent)}
   .store b{font-size:15px;font-weight:600}
   .store span{font-family:"Geist Mono",ui-monospace,monospace;font-size:10.5px;color:var(--muted)}
   .btn svg,.surface .alt svg,.store svg{flex-shrink:0;opacity:.9}
@@ -782,12 +784,12 @@
       <div class="surface">
         <div class="top"><span class="lbl">in your pocket</span></div>
         <h3>alpi for mobile</h3>
-        <p><b>In internal testing.</b> Scan a QR to pair with your daemon; chat, workgroups, inbox and approvals, sized for one hand.</p>
+        <p><b>Android is on Google Play; iOS is in internal testing.</b> Scan a QR to pair with your daemon; chat, workgroups, inbox and approvals, sized for one hand.</p>
         <div class="stores">
           <div class="store"><svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true"><path d="M16.1 12.7c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.15-2.8.85-3.5.85-.7 0-1.85-.83-3-.81-1.55.02-3 .9-3.8 2.29-1.62 2.81-.41 6.97 1.16 9.25.77 1.11 1.68 2.36 2.88 2.32 1.16-.05 1.6-.75 3-.75s1.79.75 3.01.72c1.24-.02 2.03-1.13 2.79-2.25.88-1.29 1.24-2.54 1.26-2.6-.03-.01-2.41-.93-2.4-3.71zM13.9 5.6c.63-.77 1.06-1.83.94-2.9-.91.04-2.02.61-2.67 1.37-.58.68-1.09 1.77-.95 2.81 1.02.08 2.05-.52 2.68-1.28z"/></svg><b>App Store</b><span>iPhone &amp; iPad</span></div>
-          <div class="store"><svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true"><path d="M16.6 9.5l1.6-2.8c.1-.2 0-.4-.1-.5-.2-.1-.4 0-.5.1l-1.6 2.8c-1.2-.55-2.6-.86-4-.86s-2.8.3-4 .86L6.4 6.3c-.1-.2-.3-.2-.5-.1-.2.1-.2.3-.1.5l1.6 2.8C4.7 11 3 13.5 3 16.4h18c0-2.9-1.7-5.4-4.4-6.9zM8 14c-.4 0-.8-.4-.8-.8s.4-.8.8-.8.8.4.8.8-.4.8-.8.8zm8 0c-.4 0-.8-.4-.8-.8s.4-.8.8-.8.8.4.8.8-.4.8-.8.8z"/></svg><b>Google Play</b><span>Android</span></div>
+          <a class="store" href="https://play.google.com/store/apps/details?id=com.satoshilimited.alpi"><svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true"><path d="M16.6 9.5l1.6-2.8c.1-.2 0-.4-.1-.5-.2-.1-.4 0-.5.1l-1.6 2.8c-1.2-.55-2.6-.86-4-.86s-2.8.3-4 .86L6.4 6.3c-.1-.2-.3-.2-.5-.1-.2.1-.2.3-.1.5l1.6 2.8C4.7 11 3 13.5 3 16.4h18c0-2.9-1.7-5.4-4.4-6.9zM8 14c-.4 0-.8-.4-.8-.8s.4-.8.8-.8.8.4.8.8-.4.8-.8.8zm8 0c-.4 0-.8-.4-.8-.8s.4-.8.8-.8.8.4.8.8-.4.8-.8.8z"/></svg><b>Google Play</b><span>Android</span></a>
         </div>
-        <p class="meta">Builds are in internal testing. Biometric unlock; pairing tokens never leave the device.</p>
+        <p class="meta">Biometric unlock; pairing tokens never leave the device.</p>
       </div>
     </div>
 

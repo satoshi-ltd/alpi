@@ -302,3 +302,10 @@ test('the blog leads with the newest post, lists the rest by year and files ever
   assert.match(post, /<span>\d+ min read<\/span>/);
   for (const [, href] of post.matchAll(/<a class="chip" href="(tag-[^"]+)"/g)) assert.ok(existsSync(join(dist, 'blog', href)), href);
 });
+
+test('the landing links the Android app on Google Play and says where each platform stands', () => {
+  const html = read('index.html');
+  assert.match(html, /<a class="store" href="https:\/\/play\.google\.com\/store\/apps\/details\?id=com\.satoshilimited\.alpi">[\s\S]*?<b>Google Play<\/b>/);
+  assert.match(html, /Android is on Google Play; iOS is in internal testing/);
+  assert.doesNotMatch(html, /Builds are in internal testing/);
+});
