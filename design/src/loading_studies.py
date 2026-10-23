@@ -173,8 +173,7 @@ def waiting(mobile=False):
                      gap=6, extra="width: 240px")
     else:
         marks = flex(
-            specimen(busy_page("Reaching the daemon", 56, "wd1", 10), "primitives/Busy · page", f"the brand alpaca at 56 px; {timing}"),
-            specimen(busy_inline("Fetching latest settings", "wd2"), "primitives/Busy · 18 + words", "a section that waits says for what, in ink-2"),
+            specimen(busy_inline("Fetching latest settings", "wd2"), "primitives/Busy · 18 + words", f"a section that waits says for what, in ink-2; {timing}"),
             specimen(flex(desktop_button(), desktop_stopping(), gap=14), "SpinnerIcon · Button, Chip, Send",
                      f"a dashed circle (r {DESKTOP_CIRCLE[0]}, dash {DESKTOP_CIRCLE[1]}) turning every {DUR_SPIN} s; Send is icon-only and spins only while stopping; also attachments and read aloud"),
             specimen(flex(alpaca(BUSY["mark"]), text("Fetching latest settings", 12, P["ink2"]), gap=6), "reduced motion", "the alpaca stands still and the words carry the wait"),

@@ -152,14 +152,6 @@ _None._
   partial profile/workgroup failure, large text and reduced motion. Draw board UI-MOB.ROSTER-STALE;
   its implementation becomes a separate mobile `ui` task and regenerates the design views.
 
-- **BRAND.SPLASH** — Mount the boot splash with the crease wordmark
-  `decision · desktop · creator · low`
-  note: `BootSplash` in [desktop/src/primitives](../desktop/src/primitives/) is exported but nothing renders
-  it; startup shows only the connecting banner. Decide where a splash belongs (first paint before the
-  daemon answers) before drawing the alpaca beside the crease "alpi" there.
-  accept: decide whether a splash belongs before first connection; if yes, approve its board
-  and create the implementation task.
-
 ### Builds and deployments
 
 - **OPS-CRED-SWEEP** — Credential hygiene on every daemon

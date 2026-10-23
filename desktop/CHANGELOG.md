@@ -11,6 +11,11 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.8.17 — 2026-10-23 — unused boot splash removed
+
+- Nothing changes on screen: unused startup code was removed, and startup keeps showing the connection banner.
+  Requires alpi 0.17.28; console-started jobs appear with alpi 0.17.31.
+
 ## v0.8.16 — 2026-10-20 — scheduled jobs stay visibly running
 
 - Schedule shows a running job in its list and detail, with elapsed time and Run now disabled until it finishes.

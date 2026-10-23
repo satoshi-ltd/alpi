@@ -1,8 +1,7 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
 
 import EmptyState from "./EmptyState.jsx";
-import BootSplash from "./BootSplash.jsx";
 
 const glyphOf = (heading) => screen.getByRole("heading", { name: heading }).parentElement.firstElementChild;
 
@@ -20,19 +19,5 @@ describe("brand glyphs are folds", () => {
     const glyph = glyphOf("No workgroups");
     expect(glyph.dataset.fold).toBe("honeycomb");
     expect([...glyph.querySelectorAll("polygon")].map((c) => c.getAttribute("fill"))).toContain("#3388ff");
-  });
-
-  afterEach(() => vi.useRealTimers());
-
-  it("BootSplash waits with the ink alpaca and says what it waits for", () => {
-    vi.useFakeTimers();
-    const { container } = render(<BootSplash />);
-    expect(container.querySelector("[data-fold]")).toBeNull();
-    act(() => vi.advanceTimersByTime(300));
-    const glyph = container.querySelector("[data-fold]");
-    expect(glyph.dataset.fold).toBe("alpaca");
-    expect(glyph.style.getPropertyValue("--alp-l")).toBe("#14110c");
-    expect(glyph.style.width).toBe("56px");
-    expect(screen.getByRole("status", { name: "Reaching the daemon" })).toHaveTextContent("Reaching the daemon");
   });
 });
