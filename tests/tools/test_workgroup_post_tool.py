@@ -474,3 +474,8 @@ def test_baselines_are_member_only_pruned_per_workgroup_and_written_atomically(m
     _state.reset_turn_usage()
     _state.snapshot_write_scope()
     assert not (baselines / "wg_target-10.json").exists()
+
+
+def test_workgroup_post_text_invites_a_chart_block() -> None:
+    text = WorkgroupPostTool.parameters["properties"]["text"]["description"]
+    assert "```chart" in text and "Showing numbers" in text

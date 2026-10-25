@@ -1629,8 +1629,13 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   client cannot decode is set aside as `connections.corrupt-<time>.json` and an
   unreadable one is never overwritten.
 
-- **A chart is a ```` ```chart ```` block of JSON inside the text.** Every profile learns it from one
-  line of the system prompt's environment block (`prompt_cache.CHART_LINE`); there is no chart tool.
+- **A chart is a ```` ```chart ```` block of JSON inside the text.** Every profile learns the syntax, with a
+  worked example, from the system prompt's environment block (`prompt_cache.CHART_LINE`) and when to draw one
+  from the base prompt's "Showing numbers" section: three or more values over time or three or more categories
+  measured the same way, in a reply, a notification, a scheduled report or a workgroup post, led by a sentence on
+  what the chart shows, aggregated to fit the limits, never one or two numbers or values in different units, never in
+  `email` or a `peer` message. The `notify` and `workgroup_post` descriptions and the scheduled-job surface hint point
+  to the same rule; there is no chart tool.
   The spec is `{type: line|bar, stacked?, title?, unit?, x: [labels], series: [{name?, values: [numbers or
   null]}]}` with one value per label, at most four series, 2 to 60 points for a line and up to 24 bars;
   `stacked` refuses negative values and only stacks a bar with two series or more. `alpi/charts.py` (`parse_chart`, `render_text`, `textify`)

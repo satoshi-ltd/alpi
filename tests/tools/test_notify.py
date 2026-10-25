@@ -109,6 +109,12 @@ def test_notify_schema_describes_title_summary_and_body() -> None:
     assert "`summary`" in Notify.description
 
 
+def test_notify_description_invites_a_chart_for_a_series() -> None:
+    assert "```chart" in Notify.description
+    assert "measured the same way" in Notify.description
+    assert "Tables draw as tables" in Notify.description
+
+
 @pytest.mark.parametrize("summary", [5, True, {"text": "x"}, ["Done.", "All good."]])
 def test_a_non_text_summary_still_delivers_the_notification(monkeypatch, tmp_path: Path, summary) -> None:
     monkeypatch.setenv("ALPI_HOME", str(tmp_path))

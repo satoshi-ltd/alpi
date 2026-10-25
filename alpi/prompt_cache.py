@@ -50,7 +50,10 @@ PLATFORM_HINTS: dict[str, str] = {
         "primary content directly in your response. The scheduled run's "
         "automatic delivery carries only your reply text, not "
         "attachments: do not write a report to a file to attach it, and "
-        "write files only where the job says."
+        "write files only where the job says. A notified report that presents "
+        "three or more values over time, or three or more categories measured "
+        "the same way, carries them as a chart (see Showing numbers): the apps "
+        "draw it."
     ),
 }
 
@@ -76,9 +79,14 @@ CHART_LINE = (
     "```chart block of JSON `{\"type\": \"line\"|\"bar\", \"stacked\"?: true, \"title\": \"…\", "
     "\"unit\"?: \"%\", \"x\": [labels], \"series\": [{\"name\": \"…\", \"values\": [numbers or null]}]}` "
     "(one value per label, at most 4 series, 2 to 60 points for a line, up to 24 bars, no negatives "
-    "when stacked). Draw one for a trend over several points or a "
-    "comparison of several categories, never for one or two numbers, and say in a sentence what it "
-    "shows. The apps draw it and the terminal shows it as text; email cannot."
+    "when stacked, `null` for a gap). A line for a trend over time, bars to compare categories, a "
+    "stacked bar for how a total splits. The apps draw it and the terminal shows it as text; "
+    "email cannot. When to draw one: see Showing numbers. The fence and the JSON each sit on "
+    "their own line:\n"
+    "  ```chart\n"
+    "  {\"type\": \"line\", \"title\": \"Sleep performance\", \"unit\": \"%\", \"x\": [\"Mon\", \"Tue\", "
+    "\"Wed\", \"Thu\"], \"series\": [{\"name\": \"Sleep\", \"values\": [71, 78, 81, 76]}]}\n"
+    "  ```"
 )
 
 

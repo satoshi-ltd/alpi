@@ -27,8 +27,12 @@ class Notify(Tool):
         "characters, never ending on a colon) that the banner and the inbox row "
         "show; `text` is the detail the user opens, in `## Section` headings, "
         "`**Label:**` lines, `- ` bullets and 🔴🟡🟢 for status. Do not repeat the "
-        "title or the summary in `text`. Richer markdown (tables, images, other "
-        "emoji) is simplified automatically — don't fuss over format."
+        "title or the summary in `text`. When `text` carries three or more values "
+        "over time, or three or more categories measured the same way, add a "
+        "```chart block (syntax in ENVIRONMENT): the apps draw it, while the "
+        "banner and the inbox row show the summary. Tables draw as tables; deeper "
+        "headings, rules and other emoji are simplified automatically — don't "
+        "fuss over format."
     )
     parameters = {
         "type": "object",

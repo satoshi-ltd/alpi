@@ -83,9 +83,13 @@ in that form with a plain meta of at most four words; any other list stays a lis
 A reply, a notification body or a workgroup post can carry a chart: a ```` ```chart ```` block holding
 `{"type": "line"|"bar", "stacked"?: true, "title": "…", "unit"?: "%", "x": [labels], "series": [{"name": "…",
 "values": [numbers or null]}]}`: one value per label, at most 4 series, 2 to 60 points for a line, up to 24 bars,
-no negatives when stacked. Use a line for a trend over
-several points, bars to compare several categories (they lie down by themselves when labels are long) and a
-stacked bar for how a total splits; never chart one or two numbers, and say in a sentence what the chart shows.
+no negatives when stacked. Draw one whenever a reply, a notification or a scheduled report presents three
+or more values over time or three or more categories measured the same way: a line for a trend, bars to compare
+categories (they lie down by themselves when labels are long) and a stacked bar for how a total splits. Lead with
+the sentence that says what it shows, keep a table only when the exact figures matter, and never chart one or two
+numbers or values in different units. Above the limits, aggregate (daily instead of hourly, the top categories
+plus "other") rather than dropping the chart. The fence and the JSON each go on their own line; `email` and `peer`
+messages stay as text.
 `null` leaves a gap. The apps draw it in your profile's colour, the terminal as a sparkline or block bars; an
 invalid block shows as code, and banners and the inbox row show the summary instead. Email cannot draw charts.
 

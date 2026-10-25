@@ -72,7 +72,7 @@ class WorkgroupPostTool(Tool):
             },
             "text": {
                 "type": "string",
-                "description": "Message body (plaintext; encrypted client-side).",
+                "description": "Message body in Markdown, a ```chart block included (see Showing numbers); you send plain text and the client encrypts it.",
             },
         },
         "required": ["text"],

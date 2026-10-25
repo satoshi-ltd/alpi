@@ -414,14 +414,30 @@ def test_the_openai_endpoint_is_judged_by_host_like_litellm_does(monkeypatch, ap
 
 
 def test_every_profile_learns_it_can_draw_a_chart(tmp_path: Path) -> None:
+    import re
+
     from alpi import charts
 
     env = pc.build_parts(tmp_path, _make_cfg(tmp_path))["env"]
     assert "```chart" in env
-    example = '{"type": "line", "title": "Chats per day", "x": ["Mon", "Tue"], "series": [{"name": "Chats", "values": [3, 4]}]}'
-    assert charts.parse_chart(example) is not None
-    for word in ('"line"|"bar"', '"stacked"', '"series"', '"values"', "never for one or two numbers"):
+    for word in ('"line"|"bar"', '"stacked"', '"series"', '"values"', "When to draw one: see Showing numbers"):
         assert word in env
+    example = re.search(r"^[ \t]*```chart\n[ \t]*(\{.*\})\n[ \t]*```$", env, re.M)
+    assert example and charts.parse_chart(example.group(1)) is not None
+
+
+def test_the_base_prompt_tells_every_profile_when_to_draw_a_chart(tmp_path: Path) -> None:
+    base = pc.build_parts(tmp_path, _make_cfg(tmp_path))["base_prompt"]
+    section = base.split("## Showing numbers", 1)[1].split("\n## ", 1)[0]
+    for phrase in ("three or more values over time", "three or more categories", "workgroup post", "never chart one or two numbers",
+                   "aggregated", "`email` and `peer`"):
+        assert phrase in section
+
+
+def test_a_scheduled_report_is_told_its_numbers_can_be_a_chart(monkeypatch) -> None:
+    monkeypatch.setenv("ALPI_PLATFORM", "cron")
+    hint = pc._platform_hint()
+    assert "A notified report" in hint and "three or more values" in hint and "Showing numbers" in hint
 
 
 def test_a_cold_litellm_import_in_one_thread_does_not_break_another_asking_for_cache_support() -> None:

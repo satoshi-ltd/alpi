@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.17.36 — 2026-10-25 — your agent shows numbers as charts
+
+- When a reply, a notification, a scheduled report or a workgroup post carries three or more values over time or three or more categories measured the same way, the agent draws them as a chart, led by a sentence on what it shows.
+- Long series are aggregated to fit a chart (daily instead of hourly, the top categories plus "other") instead of turning into raw code.
+- One or two numbers, values in different units, email and messages to other agents stay as text.
+
 ## v0.17.35 — 2026-10-23 — voice replies work again, dependency security updates
 
 - Voice replies work again: Microsoft's read-aloud service now rejects the old request token, and alpi requires edge-tts 7.3.1, which sends the new one.
