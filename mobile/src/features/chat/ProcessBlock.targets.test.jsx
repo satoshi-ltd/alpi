@@ -96,6 +96,7 @@ function renderBlock(turn, extra = {}) {
 describe('process block touch targets', () => {
   it('gives every row its own target: neighbours touch, never overlap, and the outer slop stays inside the block', () => {
     renderBlock(failingTurn);
+    fireEvent.click(screen.getByText('3 tool calls').closest('button'));
     const rects = targets();
     expect(rects.length).toBe(6);
     for (let k = 1; k < rects.length; k += 1) {

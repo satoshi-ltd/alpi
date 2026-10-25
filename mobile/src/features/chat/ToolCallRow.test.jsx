@@ -81,15 +81,15 @@ describe('ToolModule', () => {
     expect(screen.queryByText('aaa')).toBeNull();
   });
 
-  it('opens a bucket with a failure so the failed row is one tap away, and counts it once collapsed', () => {
+  it('keeps a bucket with a failure closed and counts the failure', () => {
     render(<ToolModule tools={[
       { name: 'aaa', ok: true, tool_id: 't1' },
       { name: 'bbb', ok: false, tool_id: 't2' },
     ]} accent="#0af" />);
-    expect(screen.getByText('bbb')).toBeTruthy();
-    fireEvent.click(screen.getByText('Hide tool calls').closest('button'));
     expect(screen.queryByText('bbb')).toBeNull();
     expect(screen.getByText('1 failed')).toBeTruthy();
+    fireEvent.click(screen.getByText('2 tool calls').closest('button'));
+    expect(screen.getByText('bbb')).toBeTruthy();
   });
 });
 

@@ -14,6 +14,12 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.8.5 — 2026-10-25 — failed tool calls stay closed
+
+- A group with a failed tool call no longer opens by itself: it still shows `N failed` and you tap it to read the error.
+  Requires alpi 0.17.28.
+
+
 ## v0.8.4 — 2026-10-23 — export any message to a PDF
 
 - **A notification, an assistant reply or a workgroup post can be shared as a PDF, charts and tables included**, or downloaded as Markdown, from the notification menu and the long-press sheet.

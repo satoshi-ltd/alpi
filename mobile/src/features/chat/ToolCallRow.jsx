@@ -98,7 +98,7 @@ export function ToolModule({ tools, accent, edges }) {
   const n = bucket.length;
   const noun = pluralize(n, 'tool call');
   const failed = bucket.filter((t) => toolStatus(t) === 'error').length;
-  const expanded = expandedPref ?? failed > 0;
+  const expanded = expandedPref ?? false;
   const collapsedLabel = active ? `+${n} previous ${noun}` : `${n} ${noun}`;
   const expandedLabel = active ? 'Hide previous tool calls' : 'Hide tool calls';
   const shownBelow = (expanded ? bucket.length : 0) + (primary ? 1 : 0);
