@@ -11,6 +11,12 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.8.20 — 2026-10-25 — failed tool calls stay closed
+
+- A tool call that fails no longer opens itself or its group: the group still shows `N failed` and you open the call to read the error.
+  Requires alpi 0.17.28.
+
+
 ## v0.8.19 — 2026-10-23 — read-aloud works again, dependency security updates
 
 - Read-aloud works again: Microsoft's speech service now rejects the old request token, and the app sends the new one. It also connects through the same current TLS stack as the rest of the app.

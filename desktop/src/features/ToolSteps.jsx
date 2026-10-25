@@ -53,7 +53,7 @@ function CopyButton({ text, label }) {
 export const ToolStep = memo(function ToolStep({ tool, accent, open: openProp, onToggle }) {
   const status = toolStatus(tool);
   const [own, setOwn] = useState(null);
-  const open = openProp ?? own ?? status === "fail";
+  const open = openProp ?? own ?? false;
   const toggle = () => (onToggle ? onToggle(!open) : setOwn(!open));
 
   const started = startMs(tool);
@@ -127,7 +127,7 @@ export const ProcessBlock = memo(function ProcessBlock({ entries, accent, fold, 
     ? [...base, { kind: "reasoning", key: `r${base.filter((e) => e.kind === "reasoning").length}`, text: "", tail: true }]
     : base;
   if (!list.length) return null;
-  const isOpen = (e) => overrides[e.key] ?? toolStatus(e.tool) === "fail";
+  const isOpen = (e) => overrides[e.key] ?? false;
   const row = (e) => (e.kind === "tool" ? (
     <ToolStep
       key={e.key}

@@ -32,19 +32,20 @@ describe("ToolStep", () => {
     expect(screen.getByLabelText("Copy result")).toBeTruthy();
   });
 
-  it("starts a failed call expanded with its output", () => {
+  it("starts a failed call closed and shows its output once opened", () => {
     render(<ToolStep tool={{ name: "terminal", args: { command: "npm run lint" }, ok: false, duration_s: 4.1, output: "1 error" }} />);
-    expect(screen.getByRole("button", { name: /terminal/ })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: /terminal/ })).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(screen.getByRole("button", { name: /terminal/ }));
     expect(screen.getByText("failed · 4.1s")).toBeTruthy();
     expect(screen.getByText("1 error")).toBeTruthy();
     expect(screen.getByText("Output")).toBeTruthy();
   });
 
-  it("opens itself when a live call fails", () => {
+  it("stays closed when a live call fails", () => {
     const { rerender } = render(<ToolStep tool={{ name: "terminal", args: {}, ok: null }} />);
     expect(screen.getByRole("button", { name: /terminal/ })).toHaveAttribute("aria-expanded", "false");
     rerender(<ToolStep tool={{ name: "terminal", args: {}, ok: false, output: "boom" }} />);
-    expect(screen.getByRole("button", { name: /terminal/ })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: /terminal/ })).toHaveAttribute("aria-expanded", "false");
   });
 
   it("ticks the live duration from the daemon's started_at", () => {
@@ -77,16 +78,17 @@ describe("ProcessBlock", () => {
     expect(screen.getByText("read_file")).toBeTruthy();
   });
 
-  it("opens the group when it holds a failure and shows that call expanded", () => {
+  it("keeps the group and the failed call closed, and counts the failure", () => {
     const tools = [
       { tool_id: "a", name: "read_file", args: { path: "a" }, ok: true },
       { tool_id: "b", name: "terminal", args: { command: "lint" }, ok: false, output: "1 error" },
     ];
     render(<ToolModule tools={tools} />);
     expect(screen.getByText("1 failed")).toBeTruthy();
-    expect(screen.getByLabelText("Hide tool calls")).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("button", { name: /terminal/ })).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText("1 error")).toBeTruthy();
+    expect(screen.getByLabelText("Show 2 tool calls")).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(screen.getByLabelText("Show 2 tool calls"));
+    expect(screen.getByRole("button", { name: /terminal/ })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("1 error")).toBeNull();
   });
 
   it("keeps a step the user opened open and visible when the next call starts", () => {
