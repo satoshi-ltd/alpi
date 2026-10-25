@@ -1267,10 +1267,7 @@ class AlpiApp(App):
             card = ToolCard(tool_id=f"replay-{id(turn)}-{i}", name=tl.name, args=tl.args, started=tl.at)
             card.finish(tl.result, ok=tl.ok, duration_s=tl.duration_s)
             cards.append(card)
-        group = StepsGroup(cards)
-        if any(not c.ok for c in cards):
-            group.add_class("-expanded")
-        return group
+        return StepsGroup(cards)
 
     def _replay_process_rows(self, turn) -> list:
         timeline = process_rows(turn, include_reasoning=self._show_reasoning())

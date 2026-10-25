@@ -86,7 +86,7 @@ async def test_live_reasoning_collapses_into_a_thought_row(tui_home) -> None:
 
 
 @pytest.mark.asyncio
-async def test_live_steps_group_counts_tools_and_opens_on_failure(tui_home) -> None:
+async def test_live_steps_group_counts_tools_and_stays_closed_on_failure(tui_home) -> None:
     app = AlpiApp(home_dir=tui_home)
     async with app.run_test(size=(110, 40)) as pilot:
         _start_turn(app)
@@ -109,9 +109,9 @@ async def test_live_steps_group_counts_tools_and_opens_on_failure(tui_home) -> N
         _feed(app, AgentEvent(kind="tool_end", tool_id="t2", name="terminal", output="ERROR: 1 error", ok=False))
         await pilot.pause()
         assert not group.running
-        assert group.expanded
+        assert not group.expanded
         failed = [c for c in group.cards if not c.ok][0]
-        assert failed.expanded
+        assert not failed.expanded
         assert "npm run lint" in failed.detail_text()
         assert "1 failed" in group.head_text().plain
         ok_card = group.cards[0]
@@ -168,9 +168,9 @@ async def test_replay_uses_reasoned_s_and_groups_steps(tui_home) -> None:
         assert "2 steps · 2.0s" in str(group.query_one(".steps-head").render())
         assert "read_file" in str(group.cards[0].query_one(".tool-head").render())
         assert app.query_one(UserMessage).region.height <= 2
-        assert group.expanded
+        assert not group.expanded
         cards = list(group.query(ToolCard))
-        assert [c.expanded for c in cards] == [False, True]
+        assert [c.expanded for c in cards] == [False, False]
         assert "500ms" in cards[0].head_text().plain
 
 
@@ -424,12 +424,12 @@ async def test_replay_places_stored_spans_between_steps(tui_home) -> None:
         assert [t.label for t in thoughts] == ["Thought for 6s", "Thought for 2s"]
         assert [t.text for t in thoughts] == ["first", "second\n\nRun it."]
         groups = list(block.query(StepsGroup))
-        assert [g.expanded for g in groups] == [False, True]
+        assert [g.expanded for g in groups] == [False, False]
         _assert_tight(block)
         await pilot.press("ctrl+o")
-        assert len(block.details) == 4 and not any(w.expanded for w in block.details)
+        assert len(block.details) == 4 and all(w.expanded for w in block.details)
         await pilot.press("ctrl+o")
-        assert all(w.expanded for w in block.details)
+        assert not any(w.expanded for w in block.details)
 
 
 def test_span_text_wins_and_prose_is_not_repeated() -> None:

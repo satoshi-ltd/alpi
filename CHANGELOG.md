@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.17.37 — 2026-10-25 — failed tool calls stay closed
+
+- In the terminal chat, a failed tool call no longer opens itself or its group: the group head still counts `N failed`, and you open the call to read the error.
+- Resumed sessions follow the same rule.
+
+
 ## v0.17.36 — 2026-10-25 — your agent shows numbers as charts
 
 - When a reply, a notification, a scheduled report or a workgroup post carries three or more values over time or three or more categories measured the same way, the agent draws them as a chart, led by a sentence on what it shows.

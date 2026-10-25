@@ -505,8 +505,6 @@ class ToolCard(_Collapsible):
             self._timer = None
         self.remove_class("-running")
         self.add_class("-done" if ok else "-error")
-        if not ok:
-            self.add_class("-expanded")
         self._refresh_detail()
         self.refresh_head()
 
@@ -630,8 +628,6 @@ class StepsGroup(_Collapsible):
         self._arm()
 
     def card_finished(self, card: ToolCard) -> None:
-        if not card.ok:
-            self.add_class("-expanded")
         self.refresh_head()
         if not self.running:
             self._disarm()
