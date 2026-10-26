@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.17.38 — 2026-10-26 — asking about a profile no longer creates it
+
+- A connected app that asked a daemon about a profile it does not have (a schedule list, usage, sessions, settings) used to leave an empty profile behind, which then appeared in every app with "needs provider" and started its own scheduler. The daemon now answers `not-found` and creates nothing.
+- Reading a profile's scheduled jobs no longer creates its `schedule/` folder.
+- Existing apps receive the error without needing an update.
+
 ## v0.17.37 — 2026-10-25 — failed tool calls stay closed
 
 - In the terminal chat, a failed tool call no longer opens itself or its group: the group head still counts `N failed`, and you open the call to read the error.

@@ -33,7 +33,12 @@ def _check_id(name: str, kind: str) -> None:
 
 def _resolve_home(profile: str) -> Path:
     _check_id(profile, "profile")
-    return home_mod.home_for(profile)
+    home = home_mod.home_for(profile)
+    if profile != "default" and not home.is_dir():
+        raise host_server.HandlerError(
+            -32004, "not-found", data={"detail": f"no profile {profile!r}"},
+        )
+    return home
 
 
 _TRANSCRIPT_DEFAULT_LIMIT = 200

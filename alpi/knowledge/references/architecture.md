@@ -87,6 +87,7 @@ Transport (see `deployments`):
 
 Contracts:
 
+- A `host.*` verb that takes a `profile` answers `-32004 not-found` for a profile with no directory and creates nothing; only `host.profile.create` makes one. Reading a profile's jobs never creates its `schedule/` folder.
 - `host.events.subscribe` streams `{event, data, at, seq}`; `host.events.history` is `seq`-based (don't cursor on wall-clock).
 - `host.events.*` is transport, not durable history. `host/events.jsonl` is a bounded reconnect replay buffer (`HISTORY_MAX = 500`) and may drop rows under load. Browseable history must query durable stores: outputs, sessions, workgroup transcripts.
 - `host.chat.send` has a replay sidecar; recover missed frames via `host.chat.events_since(after_seq)`. A local operator may launch the same lifecycle for an active paired connection with `alpi chat --once ... --connection-id <id>`; its local-only `host.chat.delegate` wrapper preserves connection ownership, `in_flight`, sidecar progress, and profile scope.

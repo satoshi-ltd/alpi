@@ -126,6 +126,8 @@ def _split(jobs: list[dict]) -> tuple[list[dict], dict]:
 
 
 def read(home: Path) -> list[dict]:
+    if not _lock_path(home).parent.is_dir():
+        return []
     with locked(home):
         return _merged_inside_lock(home)
 

@@ -1564,6 +1564,10 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   deadline and concurrent installs are refused. The client then uses the same
   start/readiness flow; failures offer a separate installation retry.
 
+- **A `host.*` verb that takes a `profile` never creates it.** `handlers._resolve_home` (and the usage verbs) answer `-32004 not-found`
+  for a name with no directory under `profiles/`; only `host.profile.create` makes one. Reading jobs (`jobs_store.read`) does not create
+  `schedule/`. A client that asks about a profile absent from this daemon receives an error and the roster never grows.
+
 - **First run is one welcome, not an error.** On a local connection that
   has not answered yet in this session, the desktop replaces the main pane
   by state (once it has answered, an outage keeps the open view under the
