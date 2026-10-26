@@ -12,7 +12,7 @@ export function ReaderSkeleton({ label, style }) {
       accessibilityRole="progressbar"
       accessibilityLabel={label}
       data-skeleton="reader"
-      style={[{ paddingHorizontal: space.s8, paddingVertical: space.s8, gap: space.s4 }, style]}
+      style={[{ paddingHorizontal: space.s7, paddingVertical: space.s8, gap: space.s4 }, style]}
     >
       {LINES.map((width, i) => <SkeletonBar key={i} width={width} height={12} delay={i * 80} />)}
     </View>

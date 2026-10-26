@@ -293,7 +293,7 @@ export function ModelSheet({
           ollama.loading ? (
             <ListSkeleton flat rows={4} label="Loading models" />
           ) : (
-            <View style={{ paddingHorizontal: space.s8, paddingVertical: space.s8, gap: space.s5 }}>
+            <View style={{ paddingHorizontal: space.s7, paddingVertical: space.s8, gap: space.s5 }}>
               <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.ink }}>
                 No models available for @{profileName}
               </Text>
@@ -346,7 +346,7 @@ export function ModelSheet({
         )}
         {/* One block per failing Ollama — daemon hands us the exact reason (timeout / refused / bad json / …) so we don't have to guess. */}
         {!noOllamaConfigured && !ollama.loading && ollamaErrors.length > 0 ? (
-          <View style={{ paddingHorizontal: space.s8, paddingTop: space.s5, gap: space.s2 }}>
+          <View style={{ paddingHorizontal: space.s7, paddingTop: space.s5, gap: space.s2 }}>
             {ollamaErrors.map((e) => (
               <Text
                 key={e.name}

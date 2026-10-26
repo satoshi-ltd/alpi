@@ -16,7 +16,7 @@ export function SelectTextSheet({ text, onClose }) {
   };
   return (
     <Sheet open={!!text} onClose={onClose} title="Select text" maxHeight="92%">
-      <ScrollView contentContainerStyle={{ paddingHorizontal: space.s8, paddingBottom: space.s8 }}>
+      <ScrollView contentContainerStyle={{ paddingHorizontal: space.s7, paddingBottom: space.s8 }}>
         {Platform.OS === 'ios' ? (
           // iOS Text only copies whole; a read-only UITextView keeps range selection.
           <TextInput value={text ?? ''} editable={false} multiline scrollEnabled={false} style={style} />

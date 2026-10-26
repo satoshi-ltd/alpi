@@ -9,7 +9,7 @@ import { useTheme } from '../../theme/ThemeContext';
 
 const STYLES = StyleSheet.create({
   card: {
-    paddingHorizontal: space.s8,
+    paddingHorizontal: space.s7,
     paddingVertical: space.s5,
     gap: space.s2,
   },

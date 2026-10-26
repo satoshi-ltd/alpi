@@ -585,6 +585,7 @@ function WorkgroupChatInner() {
           pct={budgetUsed / budgetCap}
           color={accent}
           showPercent={twoPane}
+          compactText={twoPane ? null : `· $${budgetUsed.toFixed(2)} spent`}
         />
       ) : null}
     </>

@@ -2,7 +2,7 @@ import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, renderHook, screen, act } from '@testing-library/react';
 
-const h = vi.hoisted(() => ({ layouts: {}, scrolls: [], stripLayout: null }));
+const h = vi.hoisted(() => ({ layouts: {}, scrolls: [], stripLayout: null, onScroll: null, onContent: null }));
 
 vi.mock('react-native', () => {
   const View = ({ children, accessibilityRole }) => React.createElement('div', { role: accessibilityRole }, children);
@@ -11,15 +11,18 @@ vi.mock('react-native', () => {
     if (onLayout) h.layouts[accessibilityLabel] = onLayout;
     return React.createElement('button', { type: 'button', onClick: onPress, 'aria-label': accessibilityLabel, 'aria-selected': accessibilityState?.selected, 'data-minheight': String(style?.minHeight ?? 0) }, children);
   };
-  const ScrollView = React.forwardRef(({ children, onLayout }, ref) => {
+  const ScrollView = React.forwardRef(({ children, onLayout, onScroll, onContentSizeChange }, ref) => {
     React.useImperativeHandle(ref, () => ({ scrollTo: (arg) => h.scrolls.push(arg) }));
     h.stripLayout = onLayout;
+    h.onScroll = onScroll;
+    h.onContent = onContentSizeChange;
     return React.createElement('div', {}, children);
   });
   return { View, Text, Pressable, ScrollView };
 });
 vi.mock('../../components/Eyebrow', () => ({ Eyebrow: ({ children }) => React.createElement('h2', {}, children) }));
 vi.mock('../../components/Icon', () => ({ Icon: () => null }));
+vi.mock('../../components/EdgeFade', () => ({ EdgeFade: ({ side }) => React.createElement('i', { 'data-testid': `edge-fade-${side}` }) }));
 vi.mock('../../theme/ThemeContext', async () => {
   const tokens = await import('../../theme/tokens');
   return {
@@ -88,6 +91,52 @@ describe('section chips', () => {
     expect(screen.getByLabelText('Go to Brain').getAttribute('aria-selected')).toBe('false');
     fireEvent.click(screen.getByLabelText('Go to Brain'));
     expect(onJump).toHaveBeenCalledWith('brain');
+  });
+});
+
+describe('section chips edge fades', () => {
+  const scrolled = (x, content = 900, view = 390) => act(() => h.onScroll({ nativeEvent: { contentOffset: { x }, contentSize: { width: content }, layoutMeasurement: { width: view } } }));
+
+  it('fades the right edge while more chips are offscreen and the left once some are hidden', () => {
+    render(<JumpChips current="overview" onJump={() => {}} />);
+    act(() => h.stripLayout({ nativeEvent: { layout: { width: 390 } } }));
+    act(() => h.onContent(900, 44));
+    expect(screen.queryByTestId('edge-fade-left')).toBeNull();
+    expect(screen.getByTestId('edge-fade-right')).toBeTruthy();
+    scrolled(200);
+    expect(screen.getByTestId('edge-fade-left')).toBeTruthy();
+    expect(screen.getByTestId('edge-fade-right')).toBeTruthy();
+    scrolled(510);
+    expect(screen.getByTestId('edge-fade-left')).toBeTruthy();
+    expect(screen.queryByTestId('edge-fade-right')).toBeNull();
+  });
+
+  it('recomputes the fades when the width arrives after the content, and when the view grows', () => {
+    render(<JumpChips current="overview" onJump={() => {}} />);
+    act(() => h.onContent(360, 44));
+    act(() => h.stripLayout({ nativeEvent: { layout: { width: 390 } } }));
+    expect(screen.queryByTestId('edge-fade-right')).toBeNull();
+    act(() => h.onContent(900, 44));
+    expect(screen.getByTestId('edge-fade-right')).toBeTruthy();
+    act(() => h.stripLayout({ nativeEvent: { layout: { width: 1000 } } }));
+    expect(screen.queryByTestId('edge-fade-right')).toBeNull();
+  });
+
+  it('keeps the left fade when the content size changes while the strip is scrolled', () => {
+    render(<JumpChips current="overview" onJump={() => {}} />);
+    act(() => h.stripLayout({ nativeEvent: { layout: { width: 390 } } }));
+    act(() => h.onContent(900, 44));
+    act(() => h.onScroll({ nativeEvent: { contentOffset: { x: 200 }, contentSize: { width: 900 }, layoutMeasurement: { width: 390 } } }));
+    act(() => h.onContent(950, 44));
+    expect(screen.getByTestId('edge-fade-left')).toBeTruthy();
+  });
+
+  it('shows no fade when every chip fits', () => {
+    render(<JumpChips current="overview" onJump={() => {}} />);
+    act(() => h.stripLayout({ nativeEvent: { layout: { width: 390 } } }));
+    act(() => h.onContent(360, 44));
+    expect(screen.queryByTestId('edge-fade-left')).toBeNull();
+    expect(screen.queryByTestId('edge-fade-right')).toBeNull();
   });
 });
 

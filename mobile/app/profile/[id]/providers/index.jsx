@@ -101,7 +101,7 @@ export default function ProvidersList() {
         </RowGroup>
 
         <View style={{ height: 16 }} />
-        <Text style={{ paddingHorizontal: space.s8, fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4, lineHeight: fontSizes.xs * 1.5 }}>
+        <Text style={{ paddingHorizontal: space.s7, fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4, lineHeight: fontSizes.xs * 1.5 }}>
           Cloud keys are stored encrypted on the daemon's <Text style={{ color: colors.ink2 }}>.env</Text>. Ollama URLs must be reachable from the daemon host, not from this phone.
         </Text>
       </ScrollView>

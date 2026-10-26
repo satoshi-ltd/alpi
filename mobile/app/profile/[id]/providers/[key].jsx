@@ -134,7 +134,7 @@ export default function ProviderKey() {
         onBack={goBack}
       />
       <KeyboardPane>
-        <ScrollView contentContainerStyle={{ padding: space.s8, gap: space.s8 }} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={{ paddingHorizontal: space.s7, paddingVertical: space.s8, gap: space.s8 }} keyboardShouldPersistTaps="handled">
           <Field
             label={isExisting ? 'New API key' : 'API key'}
             value={value}
@@ -258,7 +258,7 @@ function OllamaScreen({
       />
       <KeyboardPane>
         <ScrollView contentContainerStyle={{ paddingBottom: space.s10 }} keyboardShouldPersistTaps="handled">
-          <View style={{ padding: space.s8, gap: space.s8 }}>
+          <View style={{ paddingHorizontal: space.s7, paddingVertical: space.s8, gap: space.s8 }}>
             <Field
               label="Name"
               value={nameValue}
@@ -287,7 +287,7 @@ function OllamaScreen({
 
           {!isNew ? (
             <>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: space.s8, paddingBottom: space.s3 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: space.s7, paddingBottom: space.s3 }}>
                 <Eyebrow>Live models</Eyebrow>
                 {ollamaModels.loading ? (
                   <SkeletonBar width={24} height={12} />
@@ -300,7 +300,7 @@ function OllamaScreen({
               {ollamaModels.loading && myModels.length === 0 ? (
                 <ListSkeleton rows={2} label="Loading live models" />
               ) : myModels.length === 0 ? (
-                <View style={{ paddingHorizontal: space.s8, paddingVertical: space.s5, gap: space.s3 }}>
+                <View style={{ paddingHorizontal: space.s7, paddingVertical: space.s5, gap: space.s3 }}>
                   {myError ? (
                     <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.dangerText, lineHeight: fontSizes.sm * 1.5 }}>
                       {myError.detail}
@@ -327,7 +327,7 @@ function OllamaScreen({
                 </RowGroup>
               )}
 
-              <View style={{ padding: space.s8 }}>
+              <View style={{ paddingHorizontal: space.s7, paddingVertical: space.s8 }}>
                 <Button
                   title="Remove Ollama instance"
                   variant="ghost"

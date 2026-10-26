@@ -30,7 +30,7 @@ vi.mock('../theme/ThemeContext', () => ({
   }),
 }));
 
-const { Row, RowGroup, RowSeparator, SettingsBand, groupTone } = await import('./Row');
+const { Row, RowGroup, RowSeparator, SectionHeader, SettingsBand, groupTone } = await import('./Row');
 const { useGroundTone } = await import('./groupTone');
 const { UsageChart } = await import('./UsageChart');
 const { toUsageDays } = await import('../../../common/usage.mjs');
@@ -51,7 +51,7 @@ describe('RowGroup', () => {
     h.mode = mode;
     const { container } = render(<RowGroup><Row label="Model" /></RowGroup>);
     const group = styleOf(container.firstChild);
-    expect(group).toMatchObject({ backgroundColor: tone, borderRadius: 4, overflow: 'hidden', marginHorizontal: 12 });
+    expect(group).toMatchObject({ backgroundColor: tone, borderRadius: 4, overflow: 'hidden', marginHorizontal: 16 });
     expect(groupTone({ bgPane: '#151515', bgSide: '#f6f6f6' }, mode)).toBe(tone);
   });
 
@@ -80,6 +80,22 @@ describe('RowGroup', () => {
   });
 });
 
+describe('phone gutter', () => {
+  it('puts the section label and the card edge on the same 16 pt gutter, and the row text 16 inside the card', () => {
+    const { container } = render(
+      <>
+        <SectionHeader>Overview</SectionHeader>
+        <RowGroup><Row label="Model" /></RowGroup>
+      </>,
+    );
+    const [label, card] = [...container.children].map(styleOf);
+    expect(label.paddingHorizontal).toBe(16);
+    expect(card.marginHorizontal).toBe(16);
+    const row = [...container.querySelectorAll('[data-style]')].map(styleOf).find((x) => x.flexDirection === 'row');
+    expect(row.paddingHorizontal).toBe(16);
+  });
+});
+
 describe('phone rows inside a group', () => {
   it('leave the row, separator and band transparent so the group shows through', () => {
     const { container } = render(
@@ -93,8 +109,8 @@ describe('phone rows inside a group', () => {
     const row = styles.find((s) => s.flexDirection === 'row');
     expect(row.backgroundColor).toBeUndefined();
     expect(row.marginHorizontal).toBeUndefined();
-    expect(row.paddingHorizontal).toBe(20);
-    expect(styles.find((s) => s.height === 0.5)).toEqual({ height: 0.5, backgroundColor: '#ddd', marginLeft: 20 });
+    expect(row.paddingHorizontal).toBe(16);
+    expect(styles.find((s) => s.height === 0.5)).toEqual({ height: 0.5, backgroundColor: '#ddd', marginLeft: 16 });
     expect(styles.find((s) => s.paddingVertical === 16).backgroundColor).toBeUndefined();
   });
 

@@ -75,7 +75,7 @@ export function TasksSheet({ open, onClose, tasks = [], workgroupId, accent, onP
       title={hasActive ? 'Active task' : 'All resolved'}
       subtitle={`${closed}/${total} closed · #${workgroupId ?? ''}`}
     >
-      <View style={{ paddingHorizontal: space.s8, paddingTop: space.s3, paddingBottom: space.s5 }}>
+      <View style={{ paddingHorizontal: space.s7, paddingTop: space.s3, paddingBottom: space.s5 }}>
         <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3, lineHeight: fontSizes.sm * 1.45 }}>
           The hub opens one{' '}
           <Text style={{ fontFamily: fonts.mono, color: colors.ink2, backgroundColor: colors.hover }}>{' #task '}</Text>
@@ -115,7 +115,7 @@ export function TasksSheet({ open, onClose, tasks = [], workgroupId, accent, onP
                   flexDirection: 'row',
                   alignItems: 'flex-start',
                   gap: space.s6,
-                  paddingHorizontal: space.s8,
+                  paddingHorizontal: space.s7,
                   paddingVertical: space.s5,
                   backgroundColor: pressed ? colors.selected : 'transparent',
                 })}

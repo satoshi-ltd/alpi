@@ -12,7 +12,7 @@ const S = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.s5,
-    paddingHorizontal: space.s8,
+    paddingHorizontal: space.s7,
     paddingVertical: space.s6,
   },
   dotSlot: { width: 14, alignItems: 'center' },

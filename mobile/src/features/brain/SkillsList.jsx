@@ -75,7 +75,7 @@ export function SkillsList({ profile: id, selectedKey = null, onOpen }) {
                       android_ripple={{ color: colors.selected }}
                       style={({ pressed }) => ({
                         minHeight: 44,
-                        paddingHorizontal: space.s8,
+                        paddingHorizontal: space.s7,
                         paddingVertical: space.s6,
                         gap: space.s1,
                         backgroundColor: pressed || skillKey(s) === selectedKey ? colors.selected : 'transparent',

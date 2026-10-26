@@ -234,11 +234,12 @@ def settings_head_chips(selected):
         f'<span style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 4px; font-size: 13px; white-space: nowrap; '
         f'background: {"rgba(20,20,20,0.06)" if n == selected else "transparent"}; color: {INK if n == selected else INK2}; font-weight: {600 if n == selected else 400}">{n}</span>'
         for n in names)
-    return f'<div style="display: flex; flex-shrink: 0; gap: 2px; padding: 0 12px; overflow: hidden; border-bottom: 0.5px solid {LINE}; background: #ffffff">{chips}</div>'
+    fade = '<div style="position: absolute; right: 0; top: 0; bottom: 0; width: 28px; pointer-events: none; background: linear-gradient(to right, rgba(255,255,255,0), #ffffff)"></div>'
+    return f'<div style="position: relative; flex-shrink: 0; border-bottom: 0.5px solid {LINE}; background: #ffffff"><div style="display: flex; gap: 2px; padding: 0 16px; overflow: hidden">{chips}</div>{fade}</div>'
 
 
 def settings_summary():
-    return (f'<div style="margin: 12px 12px 0; padding: 12px 14px; border-radius: 4px; background: rgba(20,20,20,0.04); display: flex; flex-direction: column; gap: 8px">'
+    return (f'<div style="margin: 12px 16px 0; padding: 12px 16px; border-radius: 4px; background: rgba(20,20,20,0.04); display: flex; flex-direction: column; gap: 8px">'
             f'<span style="font-family: {MONO}; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: {WARNING_TEXT}">Needs you · 2</span>'
             f'<div style="display: flex; align-items: center; gap: 10px; min-height: 44px"><span style="width: 6px; height: 6px; border-radius: 999px; background: {DANGER}"></span><span style="flex: 1; font-size: 14px; color: {INK}">1 job failed</span><span style="font-family: {MONO}; font-size: 11px; color: {INK3}">Schedule</span>{ic("chev-r", 14, INK4)}</div>'
             f'<div style="display: flex; align-items: center; gap: 10px; min-height: 44px"><span style="width: 6px; height: 6px; border-radius: 999px; background: {DANGER}"></span><span style="flex: 1; font-size: 14px; color: {INK}">2 memory files over their limit</span><span style="font-family: {MONO}; font-size: 11px; color: {INK3}">Brain</span>{ic("chev-r", 14, INK4)}</div></div>')

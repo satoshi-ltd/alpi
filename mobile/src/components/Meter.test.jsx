@@ -100,3 +100,11 @@ describe('Meter fill', () => {
     expect(fillStyle().width).toBe('50%');
   });
 });
+
+describe('Meter compact', () => {
+  it('draws one short text and speaks the full figures when a compact text is given', () => {
+    render(<Meter label="Daily budget" value="$0.00" tail="/$1.00" pct={0} compactText="$0.00 today" />);
+    expect(screen.queryByRole('progressbar')).toBeNull();
+    expect(screen.getByText('$0.00 today').getAttribute('accessibilityLabel')).toBe('Daily budget $0.00/$1.00');
+  });
+});

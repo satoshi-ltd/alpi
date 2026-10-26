@@ -35,7 +35,7 @@ function JobRow({ job, running, startedClock, selected, onOpen }) {
       android_ripple={{ color: colors.selected }}
       style={({ pressed }) => ({
         minHeight: mobile.tap,
-        paddingHorizontal: space.s8,
+        paddingHorizontal: space.s7,
         paddingVertical: space.s5,
         gap: space.s1,
         justifyContent: 'center',
@@ -100,7 +100,7 @@ export function JobList({ profile, selectedId = null, onOpen, embedded = false }
   } else {
     body = (
       <>
-        <View style={{ paddingHorizontal: space.s8, paddingTop: space.s5 }}>
+        <View style={{ paddingHorizontal: space.s7, paddingTop: space.s5 }}>
           <Field value={query} onChangeText={setQuery} placeholder="Search jobs…" autoCapitalize="none" autoCorrect={false} />
         </View>
         {shown.length === 0 ? (

@@ -12,10 +12,21 @@ export function clampFraction(pct) {
   return Math.max(0, Math.min(1, n));
 }
 
-export function Meter({ label, value, tail, pct = 0, color, showPercent = true }) {
+export function Meter({ label, value, tail, pct = 0, color, showPercent = true, compactText = null }) {
   const { colors, fonts, fontSizes } = useTheme();
   const fraction = clampFraction(pct);
   const percent = Math.round(fraction * 100);
+  if (compactText) {
+    return (
+      <Text
+        numberOfLines={1}
+        accessibilityLabel={`${label} ${value}${tail ?? ''}`}
+        style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink2 }}
+      >
+        {compactText}
+      </Text>
+    );
+  }
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
       <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink2 }}>

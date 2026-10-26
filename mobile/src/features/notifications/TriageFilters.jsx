@@ -12,7 +12,7 @@ export function TriageFilters({ filter, counts, onFilter }) {
     <View style={{ gap: space.s3, paddingTop: space.s3, paddingBottom: space.s2 }}>
       <View
         accessibilityRole="tablist"
-        style={{ flexDirection: 'row', marginHorizontal: space.s5, padding: INSET, borderRadius: radii.xs, backgroundColor: colors.hover }}
+        style={{ flexDirection: 'row', marginHorizontal: space.s7, padding: INSET, borderRadius: radii.xs, backgroundColor: colors.hover }}
       >
         {NOTIFICATION_FILTERS.map((f) => {
           const on = filter === f.id;

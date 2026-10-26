@@ -109,8 +109,8 @@ vi.mock('../src/components/Diamond', () => ({ Diamond: () => React.createElement
 vi.mock('../src/components/Fold', () => ({ Fold: ({ fold, color, size, outlined }) => React.createElement('span', { 'data-fold': fold ?? 'diamond', 'data-color': color, 'data-size': size, 'data-outlined': String(!!outlined) }) }));
 vi.mock('../src/components/Icon', () => ({ Icon: ({ name }) => React.createElement('span', { 'data-icon': name }) }));
 vi.mock('../src/components/Meter', () => ({
-  Meter: ({ label, value, tail, pct }) =>
-    React.createElement('div', { 'data-meter': label, 'data-pct': String(pct) }, `${value}${tail ?? ''}`),
+  Meter: ({ label, value, tail, pct, compactText }) =>
+    React.createElement('div', { 'data-meter': label, 'data-pct': String(pct), 'data-compact': compactText ?? '' }, `${value}${tail ?? ''}`),
 }));
 vi.mock('../src/components/Toast', () => ({ useToast: () => vi.fn() }));
 
@@ -353,6 +353,26 @@ describe('Profile chat meters', () => {
     const ctx = document.querySelector('[data-meter="Context window"]');
     expect(ctx.getAttribute('data-pct')).toBe('0.1');
     expect(ctx.textContent).toBe('20K/200K');
+  });
+
+  it('writes context and spend as short text on the phone and keeps the bars in two panes', async () => {
+    h.ctxTokens = 20_000;
+    h.profile = { ...READY, budget_daily_usd: 2, budget_used_usd: 0.5 };
+    h.call.mockImplementation(async (method) =>
+      method === 'host.model.ctx_window' ? { ctx_window: 200_000 } : {});
+    render(<ProfileChat />);
+    await waitFor(() => expect(document.querySelector('[data-meter="Context window"]')).toBeTruthy());
+    expect(document.querySelector('[data-meter="Context window"]').getAttribute('data-compact')).toBe('· 10% ctx');
+    expect(document.querySelector('[data-meter="Daily budget"]').getAttribute('data-compact')).toBe('· $0.50 today');
+    cleanup();
+    render(
+      <PaneContext.Provider value={{ twoPane: true, side: 'detail' }}>
+        <ProfileChat />
+      </PaneContext.Provider>,
+    );
+    await waitFor(() => expect(document.querySelector('[data-meter="Context window"]')).toBeTruthy());
+    expect(document.querySelector('[data-meter="Context window"]').getAttribute('data-compact')).toBe('');
+    expect(document.querySelector('[data-meter="Daily budget"]').getAttribute('data-compact')).toBe('');
   });
 
   it('omits the context meter until the window is known', () => {

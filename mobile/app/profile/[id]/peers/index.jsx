@@ -78,7 +78,7 @@ export default function PeersList() {
                       flexDirection: 'row',
                       alignItems: 'center',
                       gap: space.s4,
-                      paddingHorizontal: space.s8,
+                      paddingHorizontal: space.s7,
                       paddingVertical: space.s6,
                     }}
                   >

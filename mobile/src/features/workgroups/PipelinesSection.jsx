@@ -13,7 +13,7 @@ const STYLES = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.s3,
-    paddingHorizontal: space.s8,
+    paddingHorizontal: space.s7,
     paddingTop: space.s5,
   },
   key: {
@@ -23,7 +23,7 @@ const STYLES = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: space.s3,
-    paddingHorizontal: space.s8,
+    paddingHorizontal: space.s7,
     paddingVertical: space.s4,
   },
   step: {
@@ -32,7 +32,7 @@ const STYLES = StyleSheet.create({
     gap: space.s2,
   },
   note: {
-    paddingHorizontal: space.s8,
+    paddingHorizontal: space.s7,
     paddingVertical: space.s4,
   },
 });
@@ -86,7 +86,7 @@ export function PipelinesSection({ workgroup, run = null, profileOf = null }) {
                 </Text>
               </View>
               {runSummary(run, chain.key) ? (
-                <Text style={{ paddingHorizontal: space.s8, paddingTop: space.s2, fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink2 }}>
+                <Text style={{ paddingHorizontal: space.s7, paddingTop: space.s2, fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink2 }}>
                   {runSummaryLine(runSummary(run, chain.key))}
                 </Text>
               ) : null}

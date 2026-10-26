@@ -24,10 +24,10 @@ const BAR_MAX_W = 20;
 const RING_W = 1.5;
 const IN_TINT = 0.24;
 
-function Stat({ label, children }) {
+function Stat({ label, children, end = false }) {
   const { fonts, fontSizes } = useTheme();
   return (
-    <View style={{ flex: 1, minWidth: 0 }}>
+    <View style={{ flex: 1, minWidth: 0, alignItems: end ? 'flex-end' : 'flex-start' }}>
       <Eyebrow style={{ fontFamily: fonts.mono, letterSpacing: fontSizes.xs * tracking.wider, marginBottom: space.s2 }}>
         {label}
       </Eyebrow>
@@ -87,45 +87,64 @@ export function UsageChart({ days = [], accent, capLine = null, total30 = null, 
     ? `30-day total ${formatUsd(total30.cost || 0)} · ${fmtTok(total30.tokIn || 0)} in / ${fmtTok(total30.tokOut || 0)} out`
     : `14-day total ${formatUsd(totals.cost)} · ${fmtTok(totals.tokIn)} in / ${fmtTok(totals.tokOut)} out`;
 
+  const todayStat = (
+    <Stat label="Today">
+      <Text
+        numberOfLines={1}
+        style={{
+          fontFamily: fonts.sans.semibold,
+          fontSize: fontSizes.display,
+          lineHeight: fontSizes.display * lineHeights.tight,
+          letterSpacing: fontSizes.display * tracking.tight,
+          color: tint,
+          fontVariant: ['tabular-nums'],
+        }}
+      >
+        {formatUsd(todayCost)}
+      </Text>
+    </Stat>
+  );
+  const inputStat = (
+    <Stat label="Input">
+      <MonoStat value={fmtTok(today.tokIn || 0)} unit="tok" />
+    </Stat>
+  );
+  const outputStat = (
+    <Stat label="Output">
+      <MonoStat value={fmtTok(today.tokOut || 0)} unit="tok" />
+    </Stat>
+  );
+  const capStat = (
+    <Stat label={capNum == null ? 'Avg / day' : narrow ? 'Cap left' : 'Cap / day'} end={narrow}>
+      <MonoStat
+        value={formatUsd(capNum != null ? capNum : avg)}
+        unit={capNum != null ? `${left}%${narrow ? '' : ' left'}` : null}
+      />
+    </Stat>
+  );
+
   return (
     <View>
       <View
         onLayout={(e) => setTilesW(e.nativeEvent.layout.width)}
         style={{
-          flexDirection: 'row',
-          alignItems: 'flex-start',
           paddingBottom: space.s6,
           borderBottomWidth: 0.5,
           borderBottomColor: colors.line2,
         }}
       >
-        <Stat label="Today">
-          <Text
-            numberOfLines={1}
-            style={{
-              fontFamily: fonts.sans.semibold,
-              fontSize: fontSizes.display,
-              lineHeight: fontSizes.display * lineHeights.tight,
-              letterSpacing: fontSizes.display * tracking.tight,
-              color: tint,
-              fontVariant: ['tabular-nums'],
-            }}
-          >
-            {formatUsd(todayCost)}
-          </Text>
-        </Stat>
-        <Stat label="Input">
-          <MonoStat value={fmtTok(today.tokIn || 0)} unit={narrow ? null : 'tok'} />
-        </Stat>
-        <Stat label="Output">
-          <MonoStat value={fmtTok(today.tokOut || 0)} unit={narrow ? null : 'tok'} />
-        </Stat>
-        <Stat label={capNum == null ? 'Avg / day' : narrow ? `Cap · ${left}% left` : 'Cap / day'}>
-          <MonoStat
-            value={formatUsd(capNum != null ? capNum : avg)}
-            unit={capNum != null && !narrow ? `${left}% left` : null}
-          />
-        </Stat>
+        <View style={{ flexDirection: 'row', alignItems: narrow ? 'flex-end' : 'flex-start' }}>
+          {todayStat}
+          {narrow ? null : inputStat}
+          {narrow ? null : outputStat}
+          {capStat}
+        </View>
+        {narrow ? (
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: space.s6 }}>
+            {inputStat}
+            {outputStat}
+          </View>
+        ) : null}
       </View>
 
       {empty ? (

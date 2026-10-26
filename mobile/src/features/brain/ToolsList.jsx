@@ -67,7 +67,7 @@ export function ToolsList({ profile: id, selectedName = null, onOpen }) {
                       onPress={() => onOpen(t)}
                       android_ripple={{ color: colors.selected }}
                       style={({ pressed }) => ({
-                        paddingHorizontal: space.s8,
+                        paddingHorizontal: space.s7,
                         paddingVertical: space.s6,
                         gap: space.s1,
                         backgroundColor: pressed || t.name === selectedName ? colors.selected : 'transparent',

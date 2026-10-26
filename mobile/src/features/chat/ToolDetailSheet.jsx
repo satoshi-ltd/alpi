@@ -65,7 +65,7 @@ export function ToolDetailSheet({ tool, status, onClose }) {
       title={tool ? toolTitle(tool, status) : ''}
       primaryAction={actions.length ? actions : undefined}
     >
-      <ScrollView contentContainerStyle={{ paddingHorizontal: space.s8, paddingBottom: space.s7, gap: space.s7 }}>
+      <ScrollView contentContainerStyle={{ paddingHorizontal: space.s7, paddingBottom: space.s7, gap: space.s7 }}>
         {args ? <Block label="Arguments">{args}</Block> : null}
         {output ? (
           <Block label="Output" tag={excerpt ? 'excerpt' : null} danger={failed}>{output}</Block>

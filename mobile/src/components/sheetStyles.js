@@ -13,7 +13,7 @@ export const sheetStyles = {
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    paddingLeft: space.s8,
+    paddingLeft: space.s7,
     paddingRight: space.s5,
     paddingTop: space.s5,
     paddingBottom: space.s6,

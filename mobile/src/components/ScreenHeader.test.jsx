@@ -90,13 +90,15 @@ describe('ScreenHeader back chevron', () => {
     expect(screen.getByText('back')).toBeTruthy();
   });
 
-  it('moves the back control to the right of a drilled screen in two-pane mode, like the desktop hero', () => {
+  it('leads a drilled screen with the same back control in two-pane mode as on the phone', () => {
     h.pathname = '/profile/doc/settings';
     const onBack = vi.fn();
     inTwoPane(<ScreenHeader title="Settings" onBack={onBack} />);
-    expect(screen.queryByText('back')).toBeNull();
-    const arrow = screen.getByText('arrow-left');
-    arrow.closest('button').click();
+    expect(screen.queryByText('arrow-left')).toBeNull();
+    const back = screen.getByText('back').closest('button');
+    const title = screen.getByText('Settings');
+    expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    back.click();
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 

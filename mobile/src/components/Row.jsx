@@ -21,7 +21,7 @@ export function RowGroup({ children, style }) {
   const tone = groupTone(colors, mode);
   return (
     <GroupToneContext.Provider value={tone}>
-      <View style={[{ marginHorizontal: space.s5, borderRadius: radii.xs, overflow: 'hidden', backgroundColor: tone }, style]}>
+      <View style={[{ marginHorizontal: space.s7, borderRadius: radii.xs, overflow: 'hidden', backgroundColor: tone }, style]}>
         {children}
       </View>
     </GroupToneContext.Provider>
@@ -58,7 +58,7 @@ export function SectionHeader({ children, kicker, first = false, onLayout }) {
     );
   }
   return (
-    <View onLayout={onLayout} style={{ paddingHorizontal: space.s8, paddingTop: space.s9, paddingBottom: space.s3 }}>
+    <View onLayout={onLayout} style={{ paddingHorizontal: space.s7, paddingTop: space.s9, paddingBottom: space.s3 }}>
       <Eyebrow>{children}{kicker ? ` · ${kicker}` : ''}</Eyebrow>
     </View>
   );
@@ -228,7 +228,7 @@ export function Row({ label, helper, value, leading, trailing, onPress, onLongPr
   );
   const helperNode = helper ? (
     <Text
-      numberOfLines={helperLines ?? 1}
+      numberOfLines={helperLines ?? 2}
       style={{
         fontFamily: fonts.monoMedium,
         fontSize: fontSizes.xs,
@@ -245,7 +245,7 @@ export function Row({ label, helper, value, leading, trailing, onPress, onLongPr
       style={{
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: space.s8,
+        paddingHorizontal: space.s7,
         paddingVertical: space.s6,
         gap: space.s5,
         opacity: disabled ? 0.45 : 1,
@@ -280,7 +280,7 @@ export function Row({ label, helper, value, leading, trailing, onPress, onLongPr
   return pressable(body, { onPress, onLongPress, disabled, colors, spoken: rowLabel(label, spokenValue ?? value, helper) });
 }
 
-export function RowSeparator({ indent = 20 }) {
+export function RowSeparator({ indent = space.s7 }) {
   const { colors } = useTheme();
   const wide = useWideSettings();
   if (wide) return null;
@@ -291,7 +291,7 @@ export function SettingsBand({ children }) {
   const wide = useWideSettings();
   if (wide) return <View>{children}</View>;
   return (
-    <View style={{ paddingHorizontal: space.s8, paddingVertical: space.s7 }}>
+    <View style={{ paddingHorizontal: space.s7, paddingVertical: space.s7 }}>
       {children}
     </View>
   );

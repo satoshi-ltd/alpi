@@ -59,7 +59,7 @@ export function ApprovalSheet() {
   return (
     <Sheet open={!!current} onClose={deny} maxHeight="78%" hideHeader dismissible={false}>
       {current ? (
-        <View style={{ paddingHorizontal: space.s8, paddingTop: space.s1, paddingBottom: space.s8, gap: space.s6 }}>
+        <View style={{ paddingHorizontal: space.s7, paddingTop: space.s1, paddingBottom: space.s8, gap: space.s6 }}>
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space.s5 }}>
             <View style={{ flex: 1, gap: space.s2 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>

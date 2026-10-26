@@ -52,7 +52,7 @@ export function ScreenHeader({ title, subtitle, meta, onBack, right, leadingGlyp
         flexDirection: 'row',
         alignItems: metaList.length ? 'flex-start' : 'center',
         gap: space.s4,
-        paddingHorizontal: twoPane ? space.s9 : space.s5,
+        paddingHorizontal: twoPane ? space.s9 : space.s7,
         paddingTop: twoPane ? space.s5 : space.s3,
         paddingBottom: space.s5,
         backgroundColor: colors.bg,
@@ -67,7 +67,7 @@ export function ScreenHeader({ title, subtitle, meta, onBack, right, leadingGlyp
           </ChromeButton>
         </View>
       ) : null}
-      {showBack && !twoPane ? (
+      {showBack ? (
         <Pressable
           onPress={onBack}
           hitSlop={space.s3}
@@ -133,11 +133,6 @@ export function ScreenHeader({ title, subtitle, meta, onBack, right, leadingGlyp
         {metaList.length ? <MetaStrip style={{ marginTop: space.s3 }}>{metaList}</MetaStrip> : null}
       </View>
       {right ? <View style={{ marginVertical: -headerRightBleed(right) }}>{right}</View> : null}
-      {showBack && twoPane ? (
-        <ChromeButton label="Back" onPress={onBack}>
-          <Icon name="arrow-left" size="md" color={colors.ink2} />
-        </ChromeButton>
-      ) : null}
     </View>
   );
 }

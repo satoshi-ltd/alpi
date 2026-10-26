@@ -63,7 +63,7 @@ export default function EmailList() {
                       onPress={() => router.push(`/profile/${id}/email/${a.id}`)}
                       android_ripple={{ color: colors.selected }}
                       style={({ pressed }) => ({
-                        paddingHorizontal: space.s8,
+                        paddingHorizontal: space.s7,
                         paddingVertical: space.s6,
                         gap: space.s1,
                         backgroundColor: pressed ? colors.selected : 'transparent',

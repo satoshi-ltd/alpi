@@ -39,7 +39,7 @@ describe('ListSkeleton', () => {
   it('gives each row the height of a real row: the 44 pt target, the row padding and one line per text', () => {
     const { container } = render(<ListSkeleton rows={1} helper="sm" />);
     const row = JSON.parse(container.querySelector('[data-row]').dataset.style);
-    expect(row).toMatchObject({ minHeight: mobile.tap, paddingHorizontal: space.s8, paddingVertical: space.s6 });
+    expect(row).toMatchObject({ minHeight: mobile.tap, paddingHorizontal: space.s7, paddingVertical: space.s6 });
     const lines = [...container.querySelectorAll('[data-line]')].map((l) => [Number(l.dataset.line), JSON.parse(l.dataset.style).height]);
     expect(lines).toEqual([[15, 15 * lineHeights.cozy], [12, 12 * lineHeights.cozy]]);
   });

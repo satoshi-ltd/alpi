@@ -1,9 +1,11 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { mobile, radii, space } from '../../theme/tokens';
 
+import { EdgeFade } from '../../components/EdgeFade';
 import { Eyebrow } from '../../components/Eyebrow';
 import { Icon } from '../../components/Icon';
+import { scrollEdges } from '../../lib/scrollEdges';
 import { useTheme } from '../../theme/ThemeContext';
 import { JUMP_SECTIONS, summaryRows } from './jumpSections';
 
@@ -17,6 +19,13 @@ export function JumpChips({ current, onJump }) {
   const strip = useRef(null);
   const boxes = useRef({});
   const viewWidth = useRef(0);
+  const [edges, setEdges] = useState({ left: false, right: false });
+  const frame = useRef({ x: 0, content: 0 });
+  const refresh = () => setEdges(scrollEdges({
+    contentOffset: { x: frame.current.x },
+    contentSize: { width: frame.current.content },
+    layoutMeasurement: { width: viewWidth.current },
+  }));
   useEffect(() => {
     const x = chipScrollX(boxes.current[current], viewWidth.current);
     if (x !== null) strip.current?.scrollTo({ x, animated: true });
@@ -27,8 +36,11 @@ export function JumpChips({ current, onJump }) {
         ref={strip}
         horizontal
         showsHorizontalScrollIndicator={false}
-        onLayout={(e) => { viewWidth.current = e.nativeEvent.layout.width; }}
-        contentContainerStyle={{ paddingHorizontal: space.s5, gap: space.s1 }}
+        scrollEventThrottle={16}
+        onScroll={(e) => { frame.current.x = e.nativeEvent.contentOffset.x; refresh(); }}
+        onContentSizeChange={(w) => { frame.current.content = w; refresh(); }}
+        onLayout={(e) => { viewWidth.current = e.nativeEvent.layout.width; refresh(); }}
+        contentContainerStyle={{ paddingHorizontal: space.s7, gap: space.s1 }}
       >
         {JUMP_SECTIONS.map((section) => {
           const on = section.id === current;
@@ -47,6 +59,8 @@ export function JumpChips({ current, onJump }) {
           );
         })}
       </ScrollView>
+      {edges.left ? <EdgeFade side="left" color={colors.bg} /> : null}
+      {edges.right ? <EdgeFade side="right" color={colors.bg} /> : null}
     </View>
   );
 }
@@ -56,7 +70,7 @@ export function AttentionSummary({ att, onJump }) {
   const rows = summaryRows(att);
   if (!rows.length) return null;
   return (
-    <View accessibilityRole="summary" style={{ marginHorizontal: space.s6, marginTop: space.s6, paddingTop: space.s5, paddingHorizontal: space.s7, borderRadius: radii.xs, backgroundColor: colors.hover }}>
+    <View accessibilityRole="summary" style={{ marginHorizontal: space.s7, marginTop: space.s6, paddingTop: space.s5, paddingHorizontal: space.s7, borderRadius: radii.xs, backgroundColor: colors.hover }}>
       <Eyebrow color={colors.warningText ?? colors.warning}>{`Needs you · ${rows.length}`}</Eyebrow>
       {rows.map((row) => (
         <Pressable

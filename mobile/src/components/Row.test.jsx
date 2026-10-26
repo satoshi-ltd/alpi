@@ -11,7 +11,7 @@ const { fontOf } = vi.hoisted(() => ({
 vi.mock('react-native', () => {
   const View = ({ children, style, ...p }) => React.createElement('div', p, children);
   const Text = ({ children, style, numberOfLines, ellipsizeMode, ...p }) =>
-    React.createElement('span', { ...p, 'data-font': fontOf(style) }, children);
+    React.createElement('span', { ...p, 'data-font': fontOf(style), 'data-lines': numberOfLines }, children);
   const Pressable = ({ children, onPress, android_ripple, style, ...p }) =>
     React.createElement('button', { type: 'button', onClick: onPress, ...p }, children);
   return { View, Text, Pressable };
@@ -56,5 +56,13 @@ describe('Row spoken label', () => {
     cleanup();
     const flagged = render(<Row label="Skills" helper="1 fails lint" value={<span>1 5</span>} spokenValue="1 skill needs you, 5" onPress={() => {}} />);
     expect(spoken(flagged.container)).toBe('Skills, 1 skill needs you, 5, 1 fails lint');
+  });
+
+  it('lets a helper wrap to two lines by default and keeps an explicit single line', () => {
+    render(<Row label="Fast model" helper="cheap model for side-tasks and delegation" value="main model" onPress={() => {}} />);
+    expect(screen.getByText('cheap model for side-tasks and delegation').getAttribute('data-lines')).toBe('2');
+    cleanup();
+    render(<Row label="Fast model" helper="cheap model" helperLines={1} value="main model" onPress={() => {}} />);
+    expect(screen.getByText('cheap model').getAttribute('data-lines')).toBe('1');
   });
 });

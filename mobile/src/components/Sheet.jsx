@@ -176,7 +176,7 @@ export function Sheet({
           ) : view.footer ? (
             <View
               style={{
-                paddingHorizontal: space.s8,
+                paddingHorizontal: space.s7,
                 paddingTop: space.s5,
                 paddingBottom: twoPane ? 8 : Math.max(8, insets.bottom),
               }}

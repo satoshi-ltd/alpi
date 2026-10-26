@@ -89,7 +89,7 @@ export default function McpList() {
                       onPress={() => setTarget(s)}
                       android_ripple={{ color: colors.selected }}
                       style={({ pressed }) => ({
-                        paddingHorizontal: space.s8,
+                        paddingHorizontal: space.s7,
                         paddingVertical: space.s6,
                         gap: space.s1,
                         backgroundColor: pressed ? colors.selected : 'transparent',
@@ -144,7 +144,7 @@ export default function McpList() {
                 flexDirection: 'row',
                 flexWrap: 'wrap',
                 gap: space.s2,
-                paddingHorizontal: space.s8,
+                paddingHorizontal: space.s7,
                 paddingBottom: space.s5,
               }}
             >
@@ -157,7 +157,7 @@ export default function McpList() {
             {`tools${Array.isArray(tools) && tools.length ? ` · ${tools.length}` : ''}`}
           </SectionHeader>
           {tools === null ? (
-            <Busy size={18} label="Handshaking with the server" style={{ paddingHorizontal: space.s8, paddingVertical: space.s4 }} />
+            <Busy size={18} label="Handshaking with the server" style={{ paddingHorizontal: space.s7, paddingVertical: space.s4 }} />
           ) : toolsError ? (
             <LoadFailed inline showDetail label="tools" error={toolsError} onRetry={() => setToolsAttempt((n) => n + 1)} />
           ) : tools.length === 0 ? (
@@ -166,7 +166,7 @@ export default function McpList() {
                 fontFamily: fonts.sans.regular,
                 color: colors.ink3,
                 fontSize: fontSizes.sm,
-                paddingHorizontal: space.s8,
+                paddingHorizontal: space.s7,
                 paddingVertical: space.s3,
               }}
             >
@@ -174,7 +174,7 @@ export default function McpList() {
             </Text>
           ) : (
             tools.map((t) => (
-              <View key={t.name} style={{ paddingHorizontal: space.s8, paddingVertical: space.s3, gap: 2 }}>
+              <View key={t.name} style={{ paddingHorizontal: space.s7, paddingVertical: space.s3, gap: 2 }}>
                 <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink }}>{t.name}</Text>
                 {t.description ? (
                   <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3, lineHeight: fontSizes.xs * 1.4 }}>

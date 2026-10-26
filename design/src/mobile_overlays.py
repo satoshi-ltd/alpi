@@ -12,7 +12,7 @@ def backdrop(w, h):
 
 def sheet_header(title, subtitle):
     return f"""<div style="display: flex; justify-content: center; padding-top: 8px"><span style="width: 36px; height: 4px; border-radius: 2px; background: {INK4}; opacity: 0.6"></span></div>
-<div style="display: flex; align-items: flex-start; gap: 12px; padding: 12px 12px 14px 20px">
+<div style="display: flex; align-items: flex-start; gap: 12px; padding: 12px 12px 14px 16px">
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-weight: 600; font-size: 18px; line-height: 1.3; letter-spacing: -0.01em; color: {INK}">{title}</span>{f'<span style="font-family: {MONO}; font-size: 12px; color: {INK3}; margin-top: 4px">{subtitle}</span>' if subtitle else ""}</div>
 <button aria-label="Close" style="width: 44px; height: 44px; border: 0; border-radius: 4px; background: transparent; display: inline-flex; align-items: center; justify-content: center; margin-top: -8px; cursor: pointer">{ic("x", 20, INK3)}</button>
 </div>"""
@@ -41,7 +41,7 @@ def sheet(w, h, title, subtitle, body, primary=None, variant="primary", dialog=F
 def picker_row(label, helper="", selected=False, accent=DOC_ACCENT, meta=""):
     dot = f'<span style="width: 7px; height: 7px; border-radius: 999px; background: {accent}"></span>' if selected else ""
     m = f'{pill(meta, tone="success")}' if meta else ""
-    return f"""<div style="display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: {SELECTED if selected else "transparent"}">
+    return f"""<div style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: {SELECTED if selected else "transparent"}">
 <span style="width: 14px; display: inline-flex; justify-content: center">{dot}</span>
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px"><span style="font-weight: 500; font-size: 14px; color: {INK}">{label}</span>{f'<span style="font-family: {MONO}; font-size: 11px; color: {INK3}">{helper}</span>' if helper else ""}</div>
 {m}
@@ -55,7 +55,7 @@ def separator(inset=20):
 def action_item(icon, label, detail="", danger=False):
     color = DANGER if danger else INK
     det = f'<span style="font-family: {MONO}; font-weight: 500; font-size: 12px; color: {INK3}">{detail}</span>' if detail else ""
-    return f"""<div style="display: flex; align-items: center; gap: 14px; padding: 14px 20px">
+    return f"""<div style="display: flex; align-items: center; gap: 14px; padding: 14px 16px">
 <span style="width: 24px; display: inline-flex; justify-content: center">{ic(icon, 20, DANGER if danger else INK2)}</span>
 <span style="flex: 1; font-size: 15px; color: {color}">{label}</span>{det}
 </div>"""
@@ -141,7 +141,7 @@ def tool_block(label, text, tag="", danger=False):
 
 
 def phone_tool_sheet():
-    body = (f'<div style="padding: 0 20px 16px; display: flex; flex-direction: column; gap: 16px">'
+    body = (f'<div style="padding: 0 16px 16px; display: flex; flex-direction: column; gap: 16px">'
             f'{tool_block("Arguments", "{" + chr(10) + "  &quot;command&quot;: &quot;npm run lint&quot;," + chr(10) + "  &quot;cwd&quot;: &quot;~/web&quot;" + chr(10) + "}")}'
             f'{tool_block("Output", "src/app.ts:14  no-unused-vars" + chr(10) + "src/app.ts:31  no-console" + chr(10) + "2 errors, 0 warnings", danger=True)}</div>')
     page_body = f"""{chat_backdrop()}
@@ -155,7 +155,7 @@ def phone_select_text():
     text = (f'Triglycerides moved most: 142 → 88 mg/dL since March, in step with the carb cut you started in June. '
             f'<span style="background: {hl}; border-radius: 2px">LDL-P eased from 1,420 to 1,180 nmol/L</span> and HDL held at 68. '
             f'Nothing here needs a change of plan; keep the draw in November and add ApoB so we can compare particle count directly.')
-    body = f'<div style="padding: 0 20px 20px; font-size: 16px; line-height: 26.4px; color: {INK}">{text}</div>'
+    body = f'<div style="padding: 0 16px 20px; font-size: 16px; line-height: 26.4px; color: {INK}">{text}</div>'
     page_body = f"""{chat_backdrop()}
 {sheet(390, 844, "Select text", "", body)}
 """

@@ -2,11 +2,18 @@ import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  delete globalThis.__tilesW;
+});
 
 vi.mock('react-native', () => {
-  const View = ({ children, style, accessibilityLabel, ...p }) =>
-    React.createElement('div', { ...p, ...(accessibilityLabel ? { 'aria-label': accessibilityLabel } : {}) }, children);
+  const View = ({ children, style, accessibilityLabel, onLayout, ...p }) => {
+    React.useEffect(() => {
+      if (onLayout) onLayout({ nativeEvent: { layout: { width: globalThis.__tilesW ?? 0 } } });
+    }, []);
+    return React.createElement('div', { ...p, ...(accessibilityLabel ? { 'aria-label': accessibilityLabel } : {}) }, children);
+  };
   const Text = ({ children, style, numberOfLines, ...p }) => React.createElement('span', p, children);
   const Pressable = ({ children, onPress, style, accessibilityLabel, ...p }) =>
     React.createElement('button', { type: 'button', onClick: onPress, 'aria-label': accessibilityLabel, ...p }, children);
@@ -97,5 +104,25 @@ describe('UsageChart', () => {
     expect(screen.getByLabelText('Selected day').textContent).toContain('1K in / 200 out');
     fireEvent.click(screen.getByLabelText('9/27 usage'));
     expect(screen.queryByLabelText('Selected day')).toBeNull();
+  });
+
+  it('puts today and the cap on one line and input and output on the next when the tiles are narrow', () => {
+    globalThis.__tilesW = 340;
+    render(<UsageChart days={DAYS} capLine={5} />);
+    expect(screen.getByText('Cap left')).toBeTruthy();
+    expect(screen.queryByText('Cap / day')).toBeNull();
+    expect(screen.getByText('Input')).toBeTruthy();
+    expect(screen.getByText('Output')).toBeTruthy();
+    const labels = [...document.querySelectorAll('span')].map((n) => n.textContent);
+    expect(labels.indexOf('Today')).toBeLessThan(labels.indexOf('Cap left'));
+    expect(labels.indexOf('Cap left')).toBeLessThan(labels.indexOf('Input'));
+  });
+
+  it('keeps the four tiles in one row when there is room', () => {
+    globalThis.__tilesW = 640;
+    render(<UsageChart days={DAYS} capLine={5} />);
+    expect(screen.getByText('Cap / day')).toBeTruthy();
+    const labels = [...document.querySelectorAll('span')].map((n) => n.textContent);
+    expect(labels.indexOf('Input')).toBeLessThan(labels.indexOf('Cap / day'));
   });
 });

@@ -10,7 +10,7 @@ export function LoadFailed({ label, error, onRetry, inline = false, showDetail =
   const detail = error ? String(error?.message ?? error) : null;
   if (inline) {
     return (
-      <View accessibilityRole="alert" style={{ flexDirection: 'row', alignItems: 'center', gap: space.s4, paddingHorizontal: space.s8, paddingVertical: space.s6 }}>
+      <View accessibilityRole="alert" style={{ flexDirection: 'row', alignItems: 'center', gap: space.s4, paddingHorizontal: space.s7, paddingVertical: space.s6 }}>
         <View style={{ flex: 1, gap: space.s1 }}>
           <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.dangerText }}>{message}</Text>
           {showDetail && detail ? (

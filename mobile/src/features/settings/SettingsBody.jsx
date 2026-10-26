@@ -258,7 +258,7 @@ export function SettingsBody({ active = true, onDismiss }) {
 
         <View
           style={{
-            paddingHorizontal: space.s8,
+            paddingHorizontal: space.s7,
             paddingTop: space.s9,
             paddingBottom: space.s3,
             flexDirection: 'row',
@@ -271,7 +271,7 @@ export function SettingsBody({ active = true, onDismiss }) {
             Alpi mobile · v{APP_VERSION}
           </Text>
         </View>
-        <View style={{ paddingHorizontal: space.s8, paddingBottom: space.s9, flexDirection: 'row', alignItems: 'center', gap: space.s4 }}>
+        <View style={{ paddingHorizontal: space.s7, paddingBottom: space.s9, flexDirection: 'row', alignItems: 'center', gap: space.s4 }}>
           <Fold fold={ALPACA_FOLD} size={36} />
           <Crease text="alpi" accent={colors.accent} size={32} />
         </View>

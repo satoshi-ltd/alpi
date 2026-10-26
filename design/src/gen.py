@@ -190,23 +190,22 @@ def _wg_mark(color, size):
 def m_screen_header(title, subtitle, accent=DOC_ACCENT, glyph=None, back=True, wide=False, right="", sidebar_toggle=False, meta=None, creased=False):
     from brand_boards import app_crease
     title_html = app_crease(title, 28, accent, "#ffffff", track="-0.018em") if creased else f'<span style="font-weight: 600; font-size: 18px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{title}</span>'
-    padx = 24 if wide else 20
+    padx = 24 if wide else 16
     padt = 12 if wide else 8
     parts = []
     if sidebar_toggle:
         parts.append(f'<button aria-label="Show sidebar" class="m-chrome" style="margin-left: -6px">{ic("panel", 20, "#454545")}</button>')
-    if back and not wide:
+    if back:
         parts.append(f'<button aria-label="Back" class="m-chrome" style="width: 28px; height: 36px; margin-left: -6px">{ic("back", 20, "#454545")}</button>')
     g = glyph if glyph is not None else profile_mark(accent, 20)
     if wide:
         sub = f'<span style="font-family: {MONO}; font-size: 11px; line-height: 1.3; letter-spacing: 0.06em; color: #6b6b6b; margin-top: 4px">{subtitle}</span>'
         title_row = f'<div style="display: flex; align-items: center; gap: 10px">{g}{title_html}{sub}</div>'
         meta_row = f'<div style="margin-top: 8px">{m_meta_strip(meta)}</div>' if meta else ""
-        back_btn = f'<button aria-label="Back" class="m-chrome">{ic("arrow-left", 16, "#454545")}</button>' if back else ""
         return f"""<div style="position: relative; display: flex; align-items: flex-start; gap: 10px; padding: {padt}px {padx}px 12px; background: #ffffff; border-bottom: 0.5px solid rgba(20,20,20,0.07)">
 {''.join(parts)}
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">{title_row}{meta_row}</div>
-{right}{back_btn}
+{right}
 </div>"""
     return f"""<div style="position: relative; display: flex; align-items: center; gap: 10px; padding: {padt}px {padx}px 12px; background: #ffffff; border-bottom: 0.5px solid rgba(20,20,20,0.07)">
 {''.join(parts)}
@@ -220,16 +219,16 @@ def m_screen_header(title, subtitle, accent=DOC_ACCENT, glyph=None, back=True, w
 
 def m_section(title, kicker="", first=False):
     k = f' · {kicker}' if kicker else ""
-    return f'<div style="padding: {0 if first else 24}px 20px 8px">{m_eyebrow(title + k)}</div>'
+    return f'<div style="padding: {0 if first else 24}px 16px 8px">{m_eyebrow(title + k)}</div>'
 
 
-def m_row(label, helper="", value="", chevron=True, control="", danger=False, sep=True, helper_lines=1):
+def m_row(label, helper="", value="", chevron=True, control="", danger=False, sep=True, helper_lines=2):
     color = DANGER if danger else "#141414"
     val = f'<span style="font-size: 14px; color: #6b6b6b; text-align: right; max-width: 55%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{value}</span>' if value else ""
     chev = ic("chev-r", 16, "#b4b4b4") if chevron and not danger else ""
     help_ = f'<span style="font-family: {MONO}; font-weight: 500; font-size: 11px; line-height: 1.3; color: #6b6b6b; {"white-space: nowrap; overflow: hidden; text-overflow: ellipsis" if helper_lines == 1 else ""}">{helper}</span>' if helper else ""
-    sepd = '<div style="height: 0.5px; background: rgba(20,20,20,0.07); margin-left: 20px"></div>' if sep else ""
-    return f"""<div style="display: flex; align-items: center; gap: 12px; padding: 14px 20px">
+    sepd = '<div style="height: 0.5px; background: rgba(20,20,20,0.07); margin-left: 16px"></div>' if sep else ""
+    return f"""<div style="display: flex; align-items: center; gap: 12px; padding: 14px 16px">
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 15px; line-height: 1.3; color: {color}">{label}</span>{help_}</div>
 {val}{control}{chev}
 </div>{sepd}"""
@@ -239,11 +238,11 @@ GROUP_TONE = "rgba(20,20,20,0.04)"
 
 
 def m_group(*rows):
-    return f'<div style="margin: 0 12px; border-radius: 4px; overflow: hidden; background: {GROUP_TONE}">{"".join(rows)}</div>'
+    return f'<div style="margin: 0 16px; border-radius: 4px; overflow: hidden; background: {GROUP_TONE}">{"".join(rows)}</div>'
 
 
 def m_band(inner):
-    return f'<div style="padding: 16px 20px">{inner}</div>'
+    return f'<div style="padding: 16px">{inner}</div>'
 
 
 def pill(text, on=False, tone="off"):
@@ -360,13 +359,18 @@ def usage_chart(accent=DOC_ACCENT, today="$0.00", tin="102K", tout="831", cap="$
     def mono(v, u):
         unit = f'<span style="font-weight: 400; font-size: 11px; color: #6b6b6b"> {u}</span>' if u else ""
         return f'<span style="font-family: {MONO}; font-weight: 500; font-size: 18px; line-height: 1; color: #141414">{v}{unit}</span>'
+    today_tile = tile("Today", f'<span style="font-weight: 600; font-size: 28px; line-height: 1; letter-spacing: -0.018em; color: {accent}">{today}</span>')
+    cap_label = ("Cap left" if cap else "Avg / day") if narrow else ("Cap / day" if cap else "Avg / day")
+    cap_unit = (left.split(" ")[0] if left else None) if narrow else left
+    cap_tile = tile(cap_label, mono(cap or "$0.00", cap_unit))
+    if narrow:
+        cap_tile = cap_tile.replace("display: flex; flex-direction: column\"", "display: flex; flex-direction: column; align-items: flex-end\"", 1)
+        stats = (f'<div style="display: flex; align-items: flex-end">{today_tile}{cap_tile}</div>'
+                 f'<div style="display: flex; align-items: flex-start; margin-top: 14px">{tile("Input", mono(tin, "tok"))}{tile("Output", mono(tout, "tok"))}</div>')
+    else:
+        stats = f'<div style="display: flex; align-items: flex-start">{today_tile}{tile("Input", mono(tin, "tok"))}{tile("Output", mono(tout, "tok"))}{cap_tile}</div>'
     return f"""<div style="display: flex; flex-direction: column">
-<div style="display: flex; align-items: flex-start; padding-bottom: 14px; border-bottom: 0.5px solid rgba(20,20,20,0.14)">
-{tile("Today", f'<span style="font-weight: 600; font-size: 28px; line-height: 1; letter-spacing: -0.018em; color: {accent}">{today}</span>')}
-{tile("Input", mono(tin, None if narrow else "tok"))}
-{tile("Output", mono(tout, None if narrow else "tok"))}
-{tile(("Cap · " + left if narrow else "Cap / day") if cap else "Avg / day", mono(cap or "$0.00", None if narrow else left))}
-</div>
+<div style="padding-bottom: 14px; border-bottom: 0.5px solid rgba(20,20,20,0.14)">{stats}</div>
 {empty_line if empty else track}
 </div>"""
 
@@ -522,8 +526,8 @@ def m_composer(name="doc"):
 
 
 def phone_chat():
-    meta = (f'<span style="font-family: {MONO}; font-size: 11px; color: #454545">deepseek-v4.1-flash</span>'
-            f'{meter("24K", "/1.0M", 0.024, DOC_ACCENT, False)}{meter("$0.00", "/$1.00", 0, DOC_ACCENT, False)}')
+    fact = lambda text: f'<span style="font-family: {MONO}; font-size: 11px; color: #454545; white-space: nowrap">{text}</span>'
+    meta = f'{fact("deepseek-v4.1-flash")}{fact("· 2% ctx")}{fact("· $0.00 today")}'
     body = f"""<div style="display: flex; flex-direction: column; height: 100%">
 {m_chat_header("doc", DOC_ACCENT, meta)}
 {m_thread(DOC_ACCENT)}

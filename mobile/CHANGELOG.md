@@ -14,6 +14,15 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.8.6 — 2026-10-26 — tidier settings, headers and usage figures
+
+- The usage figures stop colliding on a phone: today and the cap share one line, input and output sit on the next.
+- A setting's explanation wraps to two lines instead of being cut at the value.
+- The section chips fade at the edge that has more; in two panes the back button leads the title, as on the phone.
+- Titles, section labels, cards, sheets and notification rows share one 16 pt gutter; the text inside a card does not move.
+- On the phone the chat header says model, context used and spend as short text; two panes keep the bars.
+  Requires alpi 0.17.28.
+
 ## v0.8.5 — 2026-10-25 — failed tool calls stay closed
 
 - A group with a failed tool call no longer opens by itself: it still shows `N failed` and you tap it to read the error.

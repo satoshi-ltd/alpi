@@ -26,7 +26,7 @@ export function ListSkeleton({ rows = 3, label, flat = false, title = 'lg', help
           return (
             <View key={i}>
               {i > 0 ? <RowSeparator /> : null}
-              <View data-row="" style={{ minHeight: mobile.tap, flexDirection: 'row', alignItems: 'center', gap: space.s5, paddingHorizontal: space.s8, paddingVertical: space.s6 }}>
+              <View data-row="" style={{ minHeight: mobile.tap, flexDirection: 'row', alignItems: 'center', gap: space.s5, paddingHorizontal: space.s7, paddingVertical: space.s6 }}>
                 <View style={{ flex: 1, gap: space.s1 }}>
                   <Line size={fontSizes[title]} width={titleW} delay={i * 80} />
                   {helper ? <Line size={fontSizes[helper]} width={helperW} delay={i * 80 + 40} /> : null}

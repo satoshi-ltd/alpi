@@ -182,7 +182,7 @@ def phone_segmented(p, items, on=0):
                     f'font-weight: {600 if i == on else 400}; color: {p["ink"] if i == on else p["ink3"]}; background: {p["pane"] if i == on else "transparent"}; border-radius: 4px">'
                     f'{label}{mono(count, 11, p["ink"] if i == on else p["ink3"]) if count else ""}</span>'
                     for i, (label, count) in enumerate(items))
-    return f'<div style="display: flex; padding: 2px; background: {p["hover"]}; border-radius: 4px; margin: 0 12px">{cells}</div>'
+    return f'<div style="display: flex; padding: 2px; background: {p["hover"]}; border-radius: 4px; margin: 0 16px">{cells}</div>'
 
 
 def phone_row(p, r, swiped=False):
@@ -191,7 +191,7 @@ def phone_row(p, r, swiped=False):
     line1 = flex(mono("@" + r["who"], 12, colour), mono(f'· {r["conn"]}', 11, p["ink3"]), spacer(), level_pill(r["type"]), mono(r["at"], 11, p["ink3"]), gap=6)
     title = ell(row_title(r), 15, colour, weight)
     summ = clamp(row_summary(r), 12, p["ink3"])
-    inner = (f'<div style="display: flex; gap: 8px; align-items: flex-start; padding: 10px 14px 10px 10px; background: {p["pane"]}; box-shadow: inset 0 -0.5px 0 {p["line"]}; '
+    inner = (f'<div style="display: flex; gap: 8px; align-items: flex-start; padding: 10px 16px; background: {p["pane"]}; box-shadow: inset 0 -0.5px 0 {p["line"]}; '
              f'{"transform: translateX(-152px);" if swiped else ""}">{gutter}<span style="padding-top: 2px; display: inline-flex">{mark(r["shape"], 20)}</span>'
              f'{stack(line1, title, summ, gap=2, extra="flex: 1")}</div>')
     if not swiped:

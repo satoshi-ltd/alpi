@@ -661,6 +661,7 @@ function ProfileChatInner() {
                   pct={ctxUsed / ctxWindow}
                   color={accent}
                   showPercent={twoPane}
+                  compactText={twoPane ? null : `· ${Math.round(Math.min(1, Math.max(0, ctxUsed / ctxWindow)) * 100)}% ctx`}
                 />
               ) : null}
               {budgetCap > 0 ? (
@@ -671,6 +672,7 @@ function ProfileChatInner() {
                   pct={budgetUsed / budgetCap}
                   color={accent}
                   showPercent={twoPane}
+                  compactText={twoPane ? null : `· $${budgetUsed.toFixed(2)} today`}
                 />
               ) : null}
             </>

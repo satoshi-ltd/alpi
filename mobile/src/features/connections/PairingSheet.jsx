@@ -107,7 +107,7 @@ export function PairingSheet({ open, onClose, payload, onSettled }) {
           : { label: 'Done', onPress: onClose }
       }
     >
-      <View style={{ paddingHorizontal: space.s8, paddingTop: space.s5, gap: space.s3 }}>
+      <View style={{ paddingHorizontal: space.s7, paddingTop: space.s5, gap: space.s3 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
           <Pill tone={tone}>{status}</Pill>
           <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>

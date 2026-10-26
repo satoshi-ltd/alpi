@@ -75,7 +75,7 @@ export function MemoryList({ profile: id, selectedFile = null, refreshKey = 0, o
                         accessibilityState={{ selected: f.file === selectedFile }}
                         style={({ pressed }) => ({
                           minHeight: 44,
-                          paddingHorizontal: space.s8,
+                          paddingHorizontal: space.s7,
                           paddingVertical: space.s5,
                           gap: space.s2,
                           backgroundColor: pressed || f.file === selectedFile ? colors.selected : 'transparent',

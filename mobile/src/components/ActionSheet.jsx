@@ -104,7 +104,7 @@ export function ActionSheet({ open, onClose, title, subtitle, description, actio
           >
             {view.actions.map((a, i) => {
               if (a.divider) {
-                return <View key={`d-${i}`} style={{ height: 0.5, backgroundColor: colors.line, marginLeft: 56 }} />;
+                return <View key={`d-${i}`} style={{ height: 0.5, backgroundColor: colors.line, marginLeft: 52 }} />;
               }
               return (
                 <Pressable
@@ -122,7 +122,7 @@ export function ActionSheet({ open, onClose, title, subtitle, description, actio
                     flexDirection: 'row',
                     alignItems: 'center',
                     gap: space.s6,
-                    paddingHorizontal: space.s8,
+                    paddingHorizontal: space.s7,
                     paddingVertical: space.s6,
                     backgroundColor: pressed || a.selected ? colors.selected : 'transparent',
                     opacity: a.disabled ? alpha.disabled : 1,

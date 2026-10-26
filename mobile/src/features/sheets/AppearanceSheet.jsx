@@ -129,7 +129,7 @@ export function AppearanceSheet({ open, onClose, profileName, initialValue, init
         </View>
         <View
           style={{
-            paddingHorizontal: space.s8,
+            paddingHorizontal: space.s7,
             paddingTop: space.s4,
             flexDirection: 'row',
             alignItems: 'center',
@@ -158,7 +158,7 @@ export function AppearanceSheet({ open, onClose, profileName, initialValue, init
             </Text>
           </Pressable>
         </View>
-        <View style={{ paddingHorizontal: space.s8, paddingTop: space.s5, paddingBottom: space.s7, gap: space.s3 }}>
+        <View style={{ paddingHorizontal: space.s7, paddingTop: space.s5, paddingBottom: space.s7, gap: space.s3 }}>
           <Field
             label="Custom hex"
             helper="6-digit #hex — overrides the curated set"
