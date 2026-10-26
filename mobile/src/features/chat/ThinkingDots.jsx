@@ -1,12 +1,14 @@
 import { useEffect, useRef } from 'react';
 import { Animated, View } from 'react-native';
-import { space } from '../../theme/tokens';
+import { motion, space } from '../../theme/tokens';
 
+import { dotShape } from '../../components/dotShape';
+import { pulseSteps } from '../../lib/pulse';
 import { useReduceMotion } from '../../lib/reduceMotion';
 import { useTheme } from '../../theme/ThemeContext';
 
 function Dot({ delay, color, still }) {
-  const op = useRef(new Animated.Value(still ? 0.6 : 0.3)).current;
+  const op = useRef(new Animated.Value(still ? 0.6 : motion.pulseLow)).current;
   useEffect(() => {
     if (still) {
       op.setValue?.(0.6);
@@ -15,8 +17,7 @@ function Dot({ delay, color, still }) {
     const loop = Animated.loop(
       Animated.sequence([
         Animated.delay(delay),
-        Animated.timing(op, { toValue: 1, duration: 350, useNativeDriver: true }),
-        Animated.timing(op, { toValue: 0.3, duration: 600, useNativeDriver: true }),
+        ...pulseSteps(op, { from: motion.pulseLow, to: 1 }),
       ]),
     );
     loop.start();
@@ -24,7 +25,7 @@ function Dot({ delay, color, still }) {
   }, [delay, op, still]);
   return (
     <Animated.View
-      style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color, opacity: op }}
+      style={{ ...dotShape('sm'), backgroundColor: color, opacity: op }}
     />
   );
 }

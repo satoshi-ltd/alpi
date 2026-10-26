@@ -1,11 +1,11 @@
 import Activity from "./Activity.jsx";
 import Dot from "./Dot.jsx";
-import Icon from "./Icon.jsx";
+import Icon, { iconPx, iconStroke } from "./Icon.jsx";
 import iconStyles from "./Icon.module.css";
 
 export { default as Icon } from "./Icon.jsx";
 
-// Canonical API: <Icon name="copy" size="lg" />.
+// Canonical API: <Icon name="copy" size="md" />.
 // Named exports below are backward-compat wrappers; new code should use <Icon name=...>.
 
 const Search = (p) => <Icon name="search" {...p} />;
@@ -80,19 +80,20 @@ export const SkipIcon = (p) => <Icon name="skip" {...p} />;
 export const StopIcon = (p) => <Icon name="stop" {...p} />;
 export const VolumeIcon = Volume;
 export const EditIcon = (p) => <Icon name="edit" {...p} />;
-export const CaretIcon = (p) => <Icon name="caret" size={12} color="var(--ink-3)" {...p} />;
-export const BackIcon = (p) => <Icon name="arrow-left" size={16} {...p} />;
-export const AlpiIcon = (p) => <Icon name="alpi" size={12} {...p} />;
+export const CaretIcon = (p) => <Icon name="caret" size="sm" color="var(--ink-3)" {...p} />;
+export const BackIcon = (p) => <Icon name="arrow-left" size="md" {...p} />;
+export const AlpiIcon = (p) => <Icon name="alpi" size="sm" {...p} />;
 
-export function SpinnerIcon({ className = "", style, ...rest }) {
+export function SpinnerIcon({ className = "", style, size = "md", ...rest }) {
+  const px = iconPx(size);
   return (
     <svg
       viewBox="0 0 16 16"
-      width="16"
-      height="16"
+      width={px}
+      height={px}
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.5"
+      strokeWidth={iconStroke(px, 16)}
       strokeLinecap="round"
       className={`ds-icon ds-spin ${className}`.trim()}
       style={style}
@@ -112,7 +113,7 @@ export function StatusIcon({ kind, className = "", style }) {
     return (
       <Check
         className={className}
-        style={{ width: 13, height: 13, strokeWidth: 2, color: "var(--c-success)", ...style }}
+        size="sm" style={{ color: "var(--c-success)", ...style }}
       />
     );
   }
@@ -120,7 +121,7 @@ export function StatusIcon({ kind, className = "", style }) {
     return (
       <Pause
         className={className}
-        style={{ width: 11, height: 11, strokeWidth: 2, color: "var(--ink-3)", ...style }}
+        size="sm" style={{ color: "var(--ink-3)", ...style }}
       />
     );
   }

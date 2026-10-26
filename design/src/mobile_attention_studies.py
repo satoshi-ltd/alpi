@@ -1,7 +1,7 @@
 import panel_kit as pk
 import profile_panel_studies as pps
 from desktop_boards import INK, INK2, INK3, INK4, LINE, LINE2, MONO
-from gen import DANGER, DOC_ACCENT, ic, identity_glyph, m_activity_list, m_activity_row, m_conn_header, m_eyebrow, m_group, m_roster, m_row, m_screen_header, m_section, m_shell_footer, m_sidebar
+from gen import DANGER, DOC_ACCENT, mi as ic, identity_glyph, m_activity_list, m_activity_row, m_conn_header, m_eyebrow, m_group, m_roster, m_row, m_screen_header, m_section, m_shell_footer, m_sidebar
 from notif_studies import dot, ell, flex, stack, wrap
 from paper_studies import PAPER, button, text
 from wg_settings_studies import P, glyph, mono
@@ -45,12 +45,43 @@ def phone_header(title, subtitle):
     return m_screen_header(title, subtitle, glyph="")
 
 
+def section_head(value, color=INK3, right=""):
+    return (f'<div role="heading" style="display: flex; align-items: center; gap: 12px; min-height: 32px; padding: 0 16px; box-sizing: border-box; background: #ffffff">'
+            f'{m_eyebrow(value, color, 500, 0.06, 11, "flex: 1")}{right}</div>')
+
+
+def chip(label, count, on=False, danger=False):
+    n = f'<span style="font-family: {MONO}; font-size: 11px; color: {DANGER if danger else INK3}">{count}</span>'
+    return (f'<span role="radio" aria-checked="{"true" if on else "false"}" style="display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; box-sizing: border-box; border-radius: 4px; '
+            f'border: 0.5px solid {LINE2 if on else LINE}; background: {"rgba(20,20,20,0.07)" if on else "transparent"}; font-size: 12px; white-space: nowrap; font-weight: {600 if on else 400}; color: {INK if on else INK2}">{label}{n}</span>')
+
+
+def chips_row(counts, current="all"):
+    items = (("all", "All"), ("needs", "Needs you"), ("failing", "Failing"), ("running", "Running"), ("upcoming", "Upcoming"))
+    inner = "".join(chip(label, counts[k], k == current, k == "failing" and counts[k] > 0) for k, label in items)
+    return (f'<div role="radiogroup" aria-label="Filter activity" style="display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px; box-sizing: border-box; overflow: hidden; '
+            f'background: #ffffff; border-bottom: 0.5px solid {LINE}">{inner}</div>')
+
+
+def fail_head(name, color, count, since, open_):
+    jobs = "job" if count == 1 else "jobs"
+    return (f'<div role="button" aria-expanded="{"true" if open_ else "false"}" style="display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 16px; box-sizing: border-box">'
+            f'{ic("chev-d" if open_ else "chev-r", 12, INK3)}{identity_glyph(name, color, 16)}'
+            f'<span style="flex: 1; min-width: 0; font-weight: 500; font-size: 15px; color: {INK}">{name}</span>'
+            f'<span style="font-family: {MONO}; font-size: 12px; color: {INK3}; white-space: nowrap">{count} {jobs} · <span style="color: {DANGER}">{since}</span></span></div>')
+
+
+def fail_job(title, failed_ago, ok_ago=None, retry=True):
+    last_ok = f" · last ok {ok_ago}" if ok_ago else ""
+    btn = (f'<span role="button" style="display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; margin-right: 8px; padding: 0 12px; box-sizing: border-box; '
+           f'border-radius: 4px; font-weight: 500; font-size: 12px; color: {INK2}">Retry</span>') if retry else ""
+    return (f'<div style="display: flex; align-items: center"><div role="button" style="flex: 1; min-width: 0; min-height: 56px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; gap: 4px; '
+            f'padding: 8px {8 if retry else 16}px 8px 32px"><span style="font-weight: 500; font-size: 15px; line-height: 19.5px; color: {INK}">{title}</span>'
+            f'<span style="font-family: {MONO}; font-size: 12px; line-height: 15.6px; color: {INK3}"><span style="color: {DANGER}">failed {failed_ago}</span>{last_ok}</span></div>{btn}</div>')
+
+
 def day_label(value):
-    return f'<div style="padding: 14px 16px 2px">{m_eyebrow(value, INK3, 400, 0.1, 11)}</div>'
-
-
-def group_label(value, color=INK3):
-    return f'<div style="padding: 16px 16px 6px">{m_eyebrow(value, color)}</div>'
+    return f'<div style="padding: 8px 16px 4px">{m_eyebrow(value, INK3, 400, 0.1, 11)}</div>'
 
 
 def next_row(glyph_html, title, sub, when):
@@ -61,22 +92,25 @@ def next_row(glyph_html, title, sub, when):
 
 
 def activity_list():
-    needs = (group_label("Needs you · 3", WARNING_TEXT)
+    counts = {"all": 10, "needs": 2, "failing": 3, "running": 2, "upcoming": 3}
+    needs = (section_head("Needs you · 2", WARNING_TEXT)
              + m_activity_row(identity_glyph("abby", ABBY, 20), "abby · wants to run a command", "approval · 2m ago", "warning", "Review")
-             + m_activity_row(identity_glyph("doc", DOC_ACCENT, 20), "doc · Which lab should I book?", "question · 12s ago", "warning", "Review")
-             + m_activity_row(identity_glyph("clonara", CLONARA, 20), "clonara · weekly labs", "failed 3h ago", "danger", "Run again"))
-    running = (group_label("Running · 2")
+             + m_activity_row(identity_glyph("doc", DOC_ACCENT, 20), "doc · Which lab should I book?", "question · 12s ago", "warning", "Review"))
+    failing = (section_head("Failing · 3", DANGER, f'<span role="button" style="font-weight: 500; font-size: 12px; color: {INK2}">Retry all</span>')
+               + fail_head("clonara", CLONARA, 2, "3h ago", True)
+               + fail_job("weekly labs", "3h ago", "2d ago")
+               + fail_job("lab results digest", "9h ago", "1d ago")
+               + fail_head("scout", SCOUT, 1, "1h ago", False))
+    running = (section_head("Running · 2")
                + m_activity_row(identity_glyph("alpha", DOC_ACCENT, 20), "alpha · #collect", "phase 2 of 4 · daily-digest", "accent")
                + m_activity_row(identity_glyph("doc", DOC_ACCENT, 20), "doc · Daily brief", "40s · scheduled", "accent"))
-    nxt = (group_label("Next up · 4")
-           + day_label("Today")
-           + next_row(identity_glyph("abby", ABBY, 20), "abby · Invoice reminder", "in 3h", "18:00")
-           + day_label("Tomorrow")
-           + next_row(identity_glyph("doc", DOC_ACCENT, 20), "doc · Daily brief", "in 17h", "07:30")
-           + next_row(identity_glyph("clonara", CLONARA, 20), "clonara · weekly labs", "in 19h", "09:00")
-           + day_label("Mon 12 Oct")
-           + next_row(identity_glyph("scout", SCOUT, 20), "scout · Weekly listing refresh", "in 3d", "06:00"))
-    return needs + running + nxt
+    upcoming = (section_head("Upcoming · 3")
+                + day_label("Today")
+                + next_row(identity_glyph("abby", ABBY, 20), "abby · Invoice reminder", "in 3h", "18:00")
+                + day_label("Tomorrow")
+                + next_row(identity_glyph("doc", DOC_ACCENT, 20), "doc · Daily brief", "in 17h", "07:30")
+                + next_row(identity_glyph("scout", SCOUT, 20), "scout · Weekly listing refresh", "in 19h", "09:00"))
+    return chips_row(counts) + needs + failing + running + upcoming
 
 
 def job_page_head():
@@ -99,7 +133,7 @@ def job_facts(rows):
 
 
 def job_title(title, status, when):
-    return stack(text(title, 18, P["ink"], 600, "white-space: normal"), flex(status, pmono_(when), gap=8), gap=4)
+    return stack(text(title, 22, P["ink"], 600, "white-space: normal; letter-spacing: -0.018em; line-height: 1.3"), flex(status, pmono_(when), gap=8), gap=4)
 
 
 def pmono_(value):
@@ -108,7 +142,7 @@ def pmono_(value):
 
 def job_status(job, running):
     if running:
-        return flex(dot(P["ink"], 7, "box-shadow: 0 0 0 3px " + P["selected"]), mono("running", 10, P["ink2"]), gap=5)
+        return flex(dot(P["ink"], 8, "box-shadow: 0 0 0 3px " + P["selected"]), mono("running", 10, P["ink2"]), gap=5)
     return pk.phone_status({"failed": "failed", "paused": "paused"}.get(job["state"], "active"), "danger" if job["state"] == "failed" else "ink")
 
 
@@ -151,7 +185,7 @@ def job_more():
     dimmed = job_page_head() + pk.phone_body(job_title("Daily review digest", pk.phone_status("failed", "danger"), "every day at 07:30"), gap=10)
     from mobile_overlays import LINE as SHEET_LINE, action_item, sheet_header
     items = action_item("file-text", "Last output", "opens the notification") + action_item("copy", "Copy job id", "7be40d19") + action_item("trash-2", "Delete job…", danger=True)
-    sheet = (f'<div style="position: absolute; left: 0; right: 0; bottom: 0; border-radius: 4px 4px 0 0; background: {P["pane"]}; box-shadow: 0 0 0 1px #8c8c8c; overflow: hidden">'
+    sheet = (f'<div style="position: absolute; left: 0; right: 0; bottom: 0; border-radius: 4px 4px 0 0; background: {P["pane"]}; box-shadow: 0 -1px 0 0 #8c8c8c; overflow: hidden">'
              f'{sheet_header("Daily review digest", "")}<div style="height: 0.5px; background: {SHEET_LINE}"></div><div style="padding-bottom: 24px">{items}</div></div>')
     dim = f'<div style="position: absolute; inset: 0; background: color-mix(in srgb, {P["pane"]} 72%, transparent)"></div>'
     return panel_phone(f'<div style="position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column">{dimmed}<div style="flex: 1; background: {P["bg"]}"></div>{dim}{sheet}</div>', 420)

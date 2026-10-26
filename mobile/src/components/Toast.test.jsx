@@ -36,7 +36,7 @@ vi.mock('react-native', () => {
   const Pressable = ({ children, onPress, accessibilityLabel, style }) =>
     React.createElement('button', { type: 'button', onClick: onPress, 'aria-label': accessibilityLabel, 'data-tap': JSON.stringify(typeof style === 'function' ? style({ pressed: false }) : style) }, typeof children === 'function' ? children({ pressed: false }) : children);
   const Keyboard = { addListener: (name, cb) => { h.kb[name] = cb; return { remove() {} }; } };
-  return { Keyboard, Animated, AccessibilityInfo: { announceForAccessibility: (text) => h.announced.push(text) }, Easing: { inOut: (fn) => fn, ease: 'ease' }, Modal, Pressable, Text, View };
+  return { Keyboard, Animated, AccessibilityInfo: { announceForAccessibility: (text) => h.announced.push(text) }, Easing: { inOut: (fn) => fn, ease: 'ease', bezier: (...p) => `bezier(${p.join(',')})` }, Modal, Pressable, Text, View };
 });
 
 vi.mock('../lib/reduceMotion', () => ({ useReduceMotion: () => h.reduce }));
@@ -50,11 +50,12 @@ vi.mock('../theme/ThemeContext', () => ({
     colors: { selected: '#ddd', bgPane: '#fff', ink: '#000', ink2: '#333', ink3: '#666', success: '#0a0', warning: '#fa0', danger: '#f00' },
     fonts: { sans: { regular: 'Geist_400Regular', semibold: 'Geist_600SemiBold' } },
     fontSizes: { md: 14 },
-    shadow: { float: { shadowColor: '#token-shadow', shadowRadius: 24 } },
+    shadow: { toast: { shadowColor: '#token-shadow', shadowRadius: 24 } },
   }),
 }));
 
-import { ToastProvider, useToast } from './Toast';
+import { BUTTON_LINE, ToastProvider, firstLineHeight, useToast } from './Toast';
+import { mobile, space } from '../theme/tokens';
 
 function Trigger() {
   const toast = useToast();
@@ -309,5 +310,45 @@ describe('Toast anchor', () => {
     expect(style.top).toBeUndefined();
     act(() => { h.kb.keyboardDidShow({ endCoordinates: { height: 300 } }); });
     expect(JSON.parse(container.querySelector('[data-edges]').getAttribute('data-safe-style')).bottom).toBe(300);
+  });
+});
+
+describe('Toast first line', () => {
+  const lanes = (container) =>
+    [...container.querySelectorAll('[data-vstyle]')]
+      .map((el) => JSON.parse(el.getAttribute('data-vstyle') ?? '{}'))
+      .filter((style) => style && style.justifyContent === 'center' && typeof style.height === 'number');
+
+  function Plain({ title }) {
+    const toast = useToast();
+    React.useEffect(() => {
+      toast({ title });
+    }, [toast, title]);
+    return null;
+  }
+
+  function WithAction() {
+    const toast = useToast();
+    React.useEffect(() => {
+      toast({ title: 'Deleted', action: 'Undo', onAction: () => {} });
+    }, [toast]);
+    return null;
+  }
+
+  it('centres a trailing button on the first text line: the line is the button box left after its negative margins', () => {
+    expect(BUTTON_LINE).toBe(mobile.tap - 2 * space.s4);
+    expect(firstLineHeight(14, true)).toBe(24);
+  });
+
+  it('sets a plain toast first line from the cozy leading, not from a hand-set dot offset', () => {
+    expect(firstLineHeight(14, false)).toBe(18);
+  });
+
+  it('centres the dot in a lane as tall as that first line', () => {
+    const plain = render(<ToastProvider><Plain title="Profile saved" /></ToastProvider>);
+    expect(lanes(plain.container).map((l) => l.height)).toContain(18);
+    cleanup();
+    const withAction = render(<ToastProvider><WithAction /></ToastProvider>);
+    expect(lanes(withAction.container).map((l) => l.height)).toContain(24);
   });
 });

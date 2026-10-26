@@ -160,7 +160,7 @@ export default function ProviderKey() {
             <View
               style={{
                 padding: space.s5,
-                backgroundColor: colors.bgInput,
+                backgroundColor: colors.field,
                 borderRadius: radii.xs,
               }}
             >

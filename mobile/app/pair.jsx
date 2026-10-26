@@ -7,6 +7,7 @@ import { Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-na
 import { KeyboardPane } from '../src/components/KeyboardPane';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { radii, space, lineHeights } from '../src/theme/tokens';
+import { firstRun } from '../src/lib/firstRun';
 
 import { Button } from '../src/components/Button';
 import { Eyebrow } from '../src/components/Eyebrow';
@@ -167,7 +168,7 @@ export default function Pair() {
             }}
           >
             <Pressable onPress={() => setMode('paste')} hitSlop={12} accessibilityRole="button" accessibilityLabel="Back to the pairing link">
-              <Icon name="back" size="lg" color="#fff" />
+              <Icon name="back" size="md" color="#fff" />
             </Pressable>
             <View style={{ flex: 1 }}>
               <Text style={{ color: '#fff', fontFamily: fonts.sans.semibold, fontSize: fontSizes.md }}>
@@ -225,7 +226,7 @@ export default function Pair() {
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', padding: space.s7, gap: space.s5 }}>
         <Pressable onPress={goBack} hitSlop={12} accessibilityRole="button" accessibilityLabel="Back">
-          <Icon name="back" size="lg" color={colors.ink} />
+          <Icon name="back" size="md" color={colors.ink} />
         </Pressable>
         <View style={{ flex: 1 }}>
           <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.xl, color: colors.ink }}>
@@ -236,7 +237,7 @@ export default function Pair() {
       </View>
 
       <KeyboardPane>
-      <ScrollView contentContainerStyle={{ padding: space.s8, gap: space.s8 }} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={{ padding: firstRun.body, gap: firstRun.gap }} keyboardShouldPersistTaps="handled">
         <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink2, lineHeight: fontSizes.md * lineHeights.normal }}>
           Open your daemon's settings, choose{' '}
           <Text style={{ fontFamily: fonts.mono, color: colors.ink }}>Settings → Connections → New connection / Add device</Text>, then either
@@ -280,7 +281,7 @@ export default function Pair() {
         </View>
 
         {steps ? (
-          <View style={{ padding: space.s6, borderRadius: radii.xs, backgroundColor: colors.hover, gap: space.s5 }}>
+          <View style={{ padding: firstRun.card, borderRadius: radii.xs, backgroundColor: colors.hover, gap: space.s5 }}>
             <StepLadder steps={steps} />
             {failure ? (
               <View accessibilityRole="alert" style={{ gap: space.s2 }}>

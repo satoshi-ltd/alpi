@@ -2,6 +2,7 @@ import { Stack } from 'expo-router';
 import { useMemo } from 'react';
 
 import { AdminGuard } from '../../../src/components/AdminGuard';
+import { ProfileGuard } from '../../../src/components/ProfileGuard';
 import { stackAnimation } from '../../../src/lib/panes';
 import { usePane } from '../../../src/nav/PaneContext';
 
@@ -15,7 +16,9 @@ export default function ProfileSettingsLayout() {
 
   return (
     <AdminGuard>
-      <Stack screenOptions={screenOptions} />
+      <ProfileGuard>
+        <Stack screenOptions={screenOptions} />
+      </ProfileGuard>
     </AdminGuard>
   );
 }

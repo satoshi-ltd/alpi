@@ -8,7 +8,7 @@ function FailureRow({ children, onRetry }) {
   const { colors, fonts, fontSizes } = useTheme();
   return (
     <View style={{ paddingHorizontal: space.s7, flexDirection: 'row', alignItems: 'center', gap: space.s3, minHeight: mobile.tap }}>
-      <Icon name="triangle-alert" size="sm" color={colors.danger} />
+      <Icon name="triangle-alert" size="xs" color={colors.danger} />
       <Text style={{ flex: 1, fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.dangerText }}>{children}</Text>
       {onRetry ? (
         <Pressable

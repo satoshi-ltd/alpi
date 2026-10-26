@@ -1,5 +1,5 @@
 .body {
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
   line-height: var(--lh-normal);
   color: var(--ink);
 }
@@ -8,14 +8,14 @@
 .body > :last-child { margin-bottom: 0; }
 
 .body p {
-  margin: 0 0 var(--space-3);
+  margin: 0 0 var(--sp-8);
 }
 
 .body h1,
 .body h2,
 .body h3,
 .body h4 {
-  margin: var(--space-5) 0 var(--space-3);
+  margin: var(--sp-12) 0 var(--sp-8);
   font-weight: var(--fw-semibold);
   line-height: var(--lh-cozy);
 }
@@ -27,12 +27,12 @@
 
 .body ul,
 .body ol {
-  margin: 0 0 var(--space-3) var(--space-7);
+  margin: 0 0 var(--sp-8) var(--sp-16);
   padding: 0;
 }
 
 .body li {
-  margin-bottom: var(--space-1);
+  margin-bottom: var(--sp-4);
 }
 
 .body li > p {
@@ -49,14 +49,14 @@
 }
 
 .body pre {
-  margin: 0 0 var(--space-5);
-  padding: var(--space-5) var(--space-6);
+  margin: 0 0 var(--sp-12);
+  padding: var(--sp-12) var(--sp-16);
   background: var(--hover);
   border: .5px solid var(--line);
   border-radius: var(--r-xs);
   overflow: auto;
   font-family: var(--font-mono);
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
 }
 
 .body pre code {
@@ -67,8 +67,8 @@
 }
 
 .body blockquote {
-  margin: 0 0 var(--space-3);
-  padding-left: var(--space-5);
+  margin: 0 0 var(--sp-8);
+  padding-left: var(--sp-12);
   border-left: 2px solid var(--line-2);
   color: var(--ink-2);
 }

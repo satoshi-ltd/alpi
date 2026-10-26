@@ -1,81 +1,71 @@
 import Constants from 'expo-constants';
-import { badgeCount } from '../../../../common/countBadge.mjs';
+import { useState } from 'react';
 import { ICON_ROLES } from '../../../../common/iconRoles.mjs';
 import { Pressable, Text, View } from 'react-native';
 
+import { dotShape } from '../../components/dotShape';
 import { Icon } from '../../components/Icon';
 import { CHROME_H } from '../../lib/panes';
+import { THEME_ORDER, nextThemePref } from '../../lib/nextThemePref';
 import { usePane } from '../../nav/PaneContext';
 import { useTheme } from '../../theme/ThemeContext';
-import { countBadge, radii, space } from '../../theme/tokens';
+import { mobile, radii, space } from '../../theme/tokens';
 
 const HAIRLINE = 0.5;
 const ENTRY_H = space.s11;
 const ENTRY_SLOP = (CHROME_H - ENTRY_H) / 2;
+export const ENTRY_INSET_X = 0;
+export const LABEL_EM = 5.2;
+export const LABEL_ROOM = space.s1;
+
 const APP_VERSION = Constants.expoConfig?.version ?? '0.0.0';
+const VERSION_EM = 0.6;
+const VERSION_ROOM = space.s5;
+const ICON_INK_INSET = (mobile.tap - 16) / 2;
 
-export function countBadgeText(fonts, color) {
-  return {
-    fontFamily: fonts.sans.semibold,
-    fontSize: countBadge.fontSize,
-    lineHeight: countBadge.fontSize,
-    includeFontPadding: false,
-    color,
-  };
-}
+const THEME_ICON = { system: 'sun-moon', light: 'sun', dark: 'moon' };
+const THEME_LABEL = { system: 'System', light: 'Light', dark: 'Dark' };
 
-const BADGE_OUTSET = space.s3;
-const BADGE_LIFT = countBadge.size - space.s2;
+const DOT_OFFSET = space.s1;
 
-export function CountBadge({ count, ring }) {
-  const { colors, fonts } = useTheme();
-  if (!(count > 0)) return null;
+function DotAnchor({ show, color }) {
+  if (!show) return null;
   return (
     <View
-      testID="badge-anchor"
+      testID="dot-anchor"
       pointerEvents="none"
-      style={{ position: 'absolute', top: -BADGE_LIFT, right: -BADGE_OUTSET, flexDirection: 'row' }}
-    >
-      <View
-        style={{
-          minWidth: countBadge.size,
-          height: countBadge.size,
-          paddingHorizontal: space.s1,
-          flexDirection: 'row',
-          borderRadius: radii.pill,
-          borderWidth: countBadge.border,
-          borderColor: ring,
-          backgroundColor: colors.danger,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Text allowFontScaling={false} style={countBadgeText(fonts, colors.onDanger ?? '#fff')}>
-          {badgeCount(count)}
-        </Text>
-      </View>
-    </View>
+      style={{ position: 'absolute', top: -DOT_OFFSET, right: -DOT_OFFSET, backgroundColor: color, ...dotShape('md') }}
+    />
   );
 }
 
 export function ShellFooter({ unread = 0, onNotificationsPress, onSettingsPress, needsYou = 0, onActivityPress }) {
-  const { colors, fonts, fontSizes, chromeScale } = useTheme();
+  const { colors, fonts, fontSizes, chromeScale, fontScale = 1, pref, setMode } = useTheme();
+  const [width, setWidth] = useState(null);
+  const themePref = THEME_ORDER.includes(pref) ? pref : 'system';
   const { twoPane } = usePane();
-  const ring = twoPane ? colors.bgSide : colors.bg;
   const entryStyle = ({ pressed }) => ({
-    flex: 1,
+    ...(twoPane ? { width: mobile.tap } : { flex: 1 }),
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     gap: space.s1 / 2,
     minHeight: ENTRY_H,
-    paddingHorizontal: space.s3,
+    minWidth: 0,
+    paddingHorizontal: ENTRY_INSET_X,
     borderRadius: radii.xs,
     backgroundColor: pressed ? colors.selected : 'transparent',
   });
+  const entries = 2 + (onNotificationsPress ? 1 : 0) + (onActivityPress ? 1 : 0);
+  const slotWidth = width === null ? Infinity : (width - 2 * space.s5) / entries;
+  const labelWidth = LABEL_EM * fontSizes.xs * Math.min(fontScale, chromeScale ?? Infinity);
+  const versionWidth = VERSION_EM * fontSizes.xs * Math.min(fontScale, chromeScale ?? Infinity) * APP_VERSION.length;
+  const showVersion = twoPane && (width === null || width - 2 * space.s5 - entries * mobile.tap >= versionWidth + ICON_INK_INSET + VERSION_ROOM);
+  const showLabels = !twoPane && slotWidth >= labelWidth + LABEL_ROOM;
   const entryLabel = { fontFamily: fonts.sans.medium, fontSize: fontSizes.xs, color: colors.ink2 };
   return (
     <View
+      onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
       style={{
         flexDirection: 'row',
         alignItems: 'center',
@@ -87,9 +77,11 @@ export function ShellFooter({ unread = 0, onNotificationsPress, onSettingsPress,
     >
       <Pressable onPress={onSettingsPress} style={entryStyle} hitSlop={ENTRY_SLOP} accessibilityRole="button" accessibilityLabel="Settings">
         <Icon name={ICON_ROLES.settings} size="md" color={colors.ink2} />
-        <Text maxFontSizeMultiplier={chromeScale} numberOfLines={1} style={entryLabel}>
-          Settings
-        </Text>
+        {showLabels ? (
+          <Text maxFontSizeMultiplier={chromeScale} numberOfLines={1} style={entryLabel}>
+            Settings
+          </Text>
+        ) : null}
       </Pressable>
       {onNotificationsPress ? (
         <Pressable
@@ -101,11 +93,13 @@ export function ShellFooter({ unread = 0, onNotificationsPress, onSettingsPress,
         >
           <View style={{ position: 'relative' }}>
             <Icon name={ICON_ROLES.notifications} size="md" color={colors.ink2} />
-            <CountBadge count={unread} ring={ring} />
+            <DotAnchor show={unread > 0} color={colors.danger} />
           </View>
-          <Text maxFontSizeMultiplier={chromeScale} numberOfLines={1} style={entryLabel}>
-            Notifications
-          </Text>
+          {showLabels ? (
+            <Text maxFontSizeMultiplier={chromeScale} numberOfLines={1} style={entryLabel}>
+              Notifications
+            </Text>
+          ) : null}
         </Pressable>
       ) : null}
       {onActivityPress ? (
@@ -118,16 +112,41 @@ export function ShellFooter({ unread = 0, onNotificationsPress, onSettingsPress,
         >
           <View style={{ position: 'relative' }}>
             <Icon name={ICON_ROLES.activity} size="md" color={colors.ink2} />
-            <CountBadge count={needsYou} ring={ring} />
+            <DotAnchor show={needsYou > 0} color={colors.danger} />
           </View>
-          <Text maxFontSizeMultiplier={chromeScale} numberOfLines={1} style={entryLabel}>
-            Activity
-          </Text>
+          {showLabels ? (
+            <Text maxFontSizeMultiplier={chromeScale} numberOfLines={1} style={entryLabel}>
+              Activity
+            </Text>
+          ) : null}
         </Pressable>
       ) : null}
-      <Text maxFontSizeMultiplier={chromeScale} style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.xs, color: colors.ink3, marginLeft: space.s3 }}>
-        v{APP_VERSION}
-      </Text>
+      <Pressable
+        onPress={() => setMode?.(nextThemePref(themePref))}
+        style={entryStyle}
+        hitSlop={ENTRY_SLOP}
+        accessibilityRole="button"
+        accessibilityLabel={`Theme: ${THEME_LABEL[themePref]}. Switch to ${THEME_LABEL[nextThemePref(themePref)]}`}
+      >
+        <Icon name={THEME_ICON[themePref]} size="md" color={colors.ink2} />
+        {showLabels ? (
+          <Text maxFontSizeMultiplier={chromeScale} numberOfLines={1} style={entryLabel}>
+            {THEME_LABEL[themePref]}
+          </Text>
+        ) : null}
+      </Pressable>
+      {showVersion ? (
+        <View style={{ flex: 1, minWidth: 0, alignItems: 'flex-end', paddingRight: ICON_INK_INSET }}>
+          <Text
+            accessibilityRole="text"
+            maxFontSizeMultiplier={chromeScale}
+            numberOfLines={1}
+            style={{ flexShrink: 0, fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}
+          >
+            {APP_VERSION}
+          </Text>
+        </View>
+      ) : null}
     </View>
   );
 }

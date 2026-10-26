@@ -77,10 +77,10 @@ def test_design_kit_draws_what_desktop_0_7_and_mobile_0_6_shipped(tmp_path):
     assert "Pinned" in chat and 'aria-label="phase 2 of 4"' in chat and "Activity · 2 need you" in chat
     assert "Thought for 4s" in chat and "wants to run a command" in chat
     overlays = read("Desktop-Overlays.dc.html")
-    assert all(group in overlays for group in ("Needs you · 2", "Running · 2", "Scheduled", "Keyboard shortcuts", 'data-keys="⌘K"', "Sessions"))
+    assert all(group in overlays for group in ("Needs you · 2", "Failing · 3", "Running · 2", "Upcoming · 2", "Keyboard shortcuts", 'data-keys="⌘K"', "Sessions"))
     assert "Tooltip" not in overlays and "was: raw" not in overlays
     profile = read("Desktop-ProfileSettings.dc.html")
-    assert 'aria-label="Settings sections"' in profile and "Search settings" in profile and "MCP Servers" in profile
+    assert 'aria-label="Settings sections"' in profile and "Search settings" in profile and "MCP servers" in profile
     tokens = read("System-Tokens.dc.html")
     shipped = (REPO / "desktop" / "src" / "styles" / "tokens.css").read_text()
     for role in ("--text-meta", "--text-ui", "--text-chat", "--text-title", "--text-display", "--text-hero", "--dur-1", "--dur-2", "--dur-loop", "--dur-spin", "--icon-sm", "--icon-md"):
@@ -96,7 +96,7 @@ def test_design_kit_draws_what_desktop_0_7_and_mobile_0_6_shipped(tmp_path):
         html = read(name)
         assert 'data-state="needs-you"' in html and "Activity · 2 need you" in html
     activity = read("Phone-Activity.dc.html")
-    assert all(text in activity for text in ("Needs you · 3", "Next up · 4", "Run again", "Review", "Tomorrow"))
+    assert all(text in activity for text in ("Needs you · 2", "Failing · 3", "Upcoming · 3", "Retry all", "Review", "Tomorrow"))
     assert "Scheduled" not in activity
     tool = read("Phone-ToolSheet.dc.html")
     assert "Arguments" in tool and "Output" in tool and "Copy output" in tool
@@ -413,8 +413,10 @@ def test_kit_badge_uses_the_danger_fill_and_on_danger_pair_in_both_themes(tmp_pa
     css = (REPO / "desktop" / "src" / "primitives" / "BrowseModal.module.css").read_text()
     flag = _css_rule(css, ".flag")
     assert flag["background"] == "var(--c-danger)" and flag["color"] == "var(--on-danger)"
+    badge = (REPO / "mobile" / "src" / "components" / "CountBadge.jsx").read_text()
+    assert "colors.danger" in badge and "colors.onDanger" in badge and "colors.dangerText" not in badge
     pill = (REPO / "mobile" / "src" / "components" / "AttentionPill.jsx").read_text()
-    assert "colors.danger" in pill and "colors.onDanger" in pill and "colors.dangerText" not in pill
+    assert "CountBadge" in pill and "colors.dangerText" not in pill
     assert re.search(r"--c-danger:\s*" + kit.DANGER_FILL, tokens)
     assert re.search(r"--on-danger:\s*#ffffff", tokens)
     subprocess.run([sys.executable, str(REPO / "design" / "build.py"), "--out", str(tmp_path)], check=True, capture_output=True)

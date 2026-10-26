@@ -5,7 +5,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 afterEach(cleanup);
 
-const h = vi.hoisted(() => ({ window: { width: 834, height: 1194 }, insets: { bottom: 0 }, offScreen: [], mounted: null, selection: vi.fn() }));
+const h = vi.hoisted(() => ({ window: { width: 834, height: 1194 }, insets: { bottom: 0 }, offScreen: [], mounted: null, selection: vi.fn(), dims: { listeners: [], removed: 0 } }));
 
 vi.mock('../lib/haptics', () => ({ selection: h.selection }));
 
@@ -32,7 +32,7 @@ vi.mock('react-native', () => {
     visible
       ? React.createElement('div', { 'data-orientations': (supportedOrientations ?? []).join(',') }, children)
       : null;
-  return { Modal, Pressable, ScrollView, Text, View, useWindowDimensions: () => h.window };
+  return { Modal, Pressable, ScrollView, Text, View, useWindowDimensions: () => h.window, Dimensions: { addEventListener: (type, fn) => { h.dims.listeners.push({ type, fn }); return { remove: () => { h.dims.removed += 1; } }; } } };
 });
 
 vi.mock('react-native-reanimated', () => ({
@@ -64,7 +64,7 @@ vi.mock('./useSheetGesture', () => ({
 
 vi.mock('../theme/ThemeContext', () => ({
   useTheme: () => ({
-    shadow: { float: { borderWidth: 0.5, borderColor: '#ddd' } },
+    shadow: { sheet: { borderWidth: 0, borderTopWidth: 1, borderColor: '#sheet' }, dialog: { borderWidth: 0.5, borderColor: '#ddd' }, popover: { borderWidth: 0.5, borderColor: '#ddd' } },
     colors: { bgPane: '#fff', ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', line: '#ddd', danger: '#f00', accent: '#c90', dangerText: '#a00', selected: '#eee' },
     fonts: {
       sans: { regular: 'Geist_400Regular', semibold: 'Geist_600SemiBold' },
@@ -97,6 +97,8 @@ function renderInTwoPane() {
 
 const capOf = (container) => Number(container.querySelector('[data-max-height]').getAttribute('data-max-height'));
 
+const vstyles = (container) => [...container.querySelectorAll('[data-vstyle]')].map((n) => n.getAttribute('data-vstyle')).join('|');
+
 const sheetStyleOf = (container) =>
   JSON.parse([...container.querySelectorAll('[data-style]')].at(-1).getAttribute('data-style'));
 
@@ -105,6 +107,8 @@ beforeEach(() => {
   h.window = { width: 834, height: 1194 };
   h.insets = { bottom: 0 };
   h.mounted = null;
+  h.dims.listeners.length = 0;
+  h.dims.removed = 0;
 });
 
 describe('ActionSheet viewport', () => {
@@ -132,13 +136,90 @@ describe('ActionSheet viewport', () => {
   });
 });
 
+function renderAnchored(anchor, width = 852) {
+  h.window = { width, height: 884 };
+  return render(
+    <PaneContext.Provider value={{ twoPane: true, side: 'detail' }}>
+      <ActionSheet open onClose={() => {}} title="doc" actions={ACTIONS} anchor={anchor} />
+    </PaneContext.Provider>,
+  );
+}
+
+describe('ActionSheet popover on a fold', () => {
+  const anchor = { x: 796, y: 3, width: 44, height: 44 };
+
+  it('opens a 280 pt popover 6 pt under the trigger, aligned to its right edge, with no veil', () => {
+    const { container } = renderAnchored(anchor);
+    const style = sheetStyleOf(container);
+    expect(style).toMatchObject({ position: 'absolute', width: 280, top: 53, left: 560, borderRadius: radii.xs });
+    expect(JSON.parse(container.querySelector('[data-style]').getAttribute('data-style')).backgroundColor).toBe('transparent');
+  });
+
+  it('has no title row, grabber or drag handle', () => {
+    const { container } = renderAnchored(anchor);
+    expect(screen.queryByText('doc')).toBeNull();
+    expect(container.querySelector('[data-gesture]')).toBeNull();
+    expect(vstyles(container)).not.toContain('"width":36');
+  });
+
+  it('keeps the popover inside the pane edge', () => {
+    const { container } = renderAnchored({ x: 0, y: 3, width: 44, height: 44 }, 852);
+    expect(sheetStyleOf(container).left).toBe(8);
+  });
+
+  it('keeps the popover above the bottom edge', () => {
+    h.window = { width: 852, height: 884 };
+    const { container } = render(
+      <PaneContext.Provider value={{ twoPane: true, side: 'detail' }}>
+        <ActionSheet open onClose={() => {}} title="doc" actions={ACTIONS} anchor={{ x: 796, y: 860, width: 44, height: 20 }} />
+      </PaneContext.Provider>,
+    );
+    expect(sheetStyleOf(container).top).toBe(884 - 884 * 0.6 - 8);
+  });
+
+  it('closes when the window changes and stops listening afterwards', () => {
+    const onClose = vi.fn();
+    h.window = { width: 852, height: 884 };
+    const { unmount } = render(
+      <PaneContext.Provider value={{ twoPane: true, side: 'detail' }}>
+        <ActionSheet open onClose={onClose} title="doc" actions={ACTIONS} anchor={anchor} />
+      </PaneContext.Provider>,
+    );
+    expect(h.dims.listeners.map((l) => l.type)).toEqual(['change']);
+    h.dims.listeners[0].fn();
+    expect(onClose).toHaveBeenCalledTimes(1);
+    unmount();
+    expect(h.dims.removed).toBe(1);
+  });
+
+  it('does not listen for window changes on a bottom sheet', () => {
+    renderSheet();
+    expect(h.dims.listeners).toHaveLength(0);
+  });
+
+  it('falls back to the centred dialog without an anchor, still with no grabber', () => {
+    const { container } = renderAnchored(null);
+    expect(sheetStyleOf(container).alignSelf).toBe('center');
+    expect(screen.getByText('doc')).toBeTruthy();
+    expect(container.querySelector('[data-gesture]')).toBeNull();
+    expect(vstyles(container)).not.toContain('"width":36');
+  });
+
+  it('keeps the bottom sheet on the phone even when handed an anchor', () => {
+    const { container } = render(<ActionSheet open onClose={() => {}} title="doc" actions={ACTIONS} anchor={anchor} />);
+    expect(container.querySelector('[data-gesture]')).toBeTruthy();
+    expect(sheetStyleOf(container).position).toBeUndefined();
+  });
+});
+
 describe('ActionSheet wide form', () => {
   it('keeps the phone bottom-sheet form outside any pane provider', () => {
     const { container } = renderSheet();
     expect(sheetStyleOf(container)).toEqual({
       backgroundColor: '#fff',
-      borderWidth: 0.5,
-      borderColor: '#ddd',
+      borderWidth: 0,
+      borderTopWidth: 1,
+      borderColor: '#sheet',
       borderTopLeftRadius: radii.xs,
       borderTopRightRadius: radii.xs,
       overflow: 'hidden',
@@ -153,8 +234,7 @@ describe('ActionSheet wide form', () => {
       borderColor: '#ddd',
       borderTopLeftRadius: radii.xs,
       borderTopRightRadius: radii.xs,
-      borderBottomLeftRadius: radii.xs,
-      borderBottomRightRadius: radii.xs,
+      borderRadius: radii.xs,
       overflow: 'hidden',
       alignSelf: 'center',
       width: '100%',
@@ -280,13 +360,20 @@ describe('dialog title role', () => {
 });
 
 describe('ActionSheet feel', () => {
-  it('ticks a selection when it opens and stays quiet while closed', () => {
+  it('ticks a selection when a picker opens and stays quiet while closed', () => {
+    const picker = [{ id: 'a', label: 'doc', selected: true }, { id: 'b', label: 'abby' }];
     h.selection.mockClear();
-    const { rerender } = render(<ActionSheet open={false} onClose={() => {}} actions={[{ label: 'Pin' }]} />);
+    const { rerender } = render(<ActionSheet open={false} onClose={() => {}} actions={picker} />);
     expect(h.selection).not.toHaveBeenCalled();
-    rerender(<ActionSheet open onClose={() => {}} actions={[{ label: 'Pin' }]} />);
-    rerender(<ActionSheet open onClose={() => {}} actions={[{ label: 'Pin' }]} />);
+    rerender(<ActionSheet open onClose={() => {}} actions={picker} />);
+    rerender(<ActionSheet open onClose={() => {}} actions={picker} />);
     expect(h.selection).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays quiet when a menu with no pickable rows opens', () => {
+    h.selection.mockClear();
+    render(<ActionSheet open onClose={() => {}} actions={[{ label: 'Pin' }]} />);
+    expect(h.selection).not.toHaveBeenCalled();
   });
 });
 

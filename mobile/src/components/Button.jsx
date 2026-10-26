@@ -6,10 +6,10 @@ import { useTheme } from '../theme/ThemeContext';
 import { Spinner } from './Spinner';
 
 const SIZES = {
-  sm: { padX: 12, token: 'sm' },
-  md: { padX: 14, token: 'md' },
-  lg: { padX: 18, token: 'lg' },
-  hero: { padX: 22, token: 'xl' },
+  sm: { padX: space.s5, token: 'sm' },
+  md: { padX: space.s6, token: 'md' },
+  lg: { padX: space.s8, token: 'lg' },
+  hero: { padX: space.s9, token: 'xl' },
 };
 
 export function Button({
@@ -30,7 +30,7 @@ export function Button({
   const quiet = variant === 'ghost' || variant === 'danger-ghost';
   const primary = variant === 'primary';
   const danger = variant === 'danger' || variant === 'danger-ghost';
-  const bgIdle = disabled ? (quiet ? 'transparent' : colors.bgInput)
+  const bgIdle = disabled ? (quiet ? 'transparent' : colors.field)
     : quiet ? 'transparent'
       : primary ? accent ?? colors.ink
         : danger ? colors.danger : colors.selected;

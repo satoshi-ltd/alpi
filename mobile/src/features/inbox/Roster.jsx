@@ -76,7 +76,7 @@ function SectionAdd({ label, onPress }) {
         backgroundColor: pressed ? colors.selected : 'transparent',
       })}
     >
-      <Icon name="plus" size="sm" color={colors.ink3} />
+      <Icon name="plus" size="xs" color={colors.ink3} />
     </Pressable>
   );
 }

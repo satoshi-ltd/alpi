@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import Welcome, { ConnectElsewhere, FirstRunHint, firstRunHintSeen, markFirstRunHintSeen } from "./Welcome.jsx";
@@ -54,6 +56,26 @@ describe("Welcome", () => {
     expect(screen.getByText("Download failed")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(onInstall).toHaveBeenCalledOnce();
+  });
+
+  it("says an installation failure once", () => {
+    const { rerender } = render(<Welcome localState="absent" phase="install-failed" error="Could not download uv. Check your internet connection and try again." onInstall={vi.fn()} />);
+    expect(screen.queryByText("Check your internet connection, then try again.")).toBeNull();
+    rerender(<Welcome localState="absent" phase="install-failed" onInstall={vi.fn()} />);
+    expect(screen.getByText("Check your internet connection, then try again.")).toBeTruthy();
+  });
+
+  it("draws every control of the failure and setup screens at one size and aligns ghosts to the primary edge", () => {
+    const { rerender } = render(<Welcome localState="stopped" phase="failed" error="boom" onStart={vi.fn()} onConnect={vi.fn()} />);
+    const sizes = (screen) => screen.getAllByRole("button").filter((b) => b.textContent).map((b) => /_lg_|\blg\b/.test(b.className));
+    expect(sizes(screen).every(Boolean)).toBe(true);
+    const ghost = screen.getByRole("button", { name: "Connect to another computer" });
+    expect(ghost.className).toMatch(/ghostFlush/);
+    rerender(<Welcome localState="absent" onInstall={vi.fn()} onCheckAgain={vi.fn()} onConnect={vi.fn()} />);
+    expect(sizes(screen).every(Boolean)).toBe(true);
+    const css = readFileSync(join(import.meta.dirname, "Welcome.module.css"), "utf8");
+    expect(css).toMatch(/\.ghostFlush \{\s*margin-left: calc\(-1 \* var\(--sp-16\)\);/);
+    expect(css).toMatch(/\.actions \{[^}]*flex-direction: column;[^}]*align-items: flex-start/);
   });
 
   it("only offers to connect elsewhere where alpi cannot run", () => {

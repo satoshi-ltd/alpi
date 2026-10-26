@@ -25,7 +25,7 @@ vi.mock('../components/Icon', () => ({ Icon: () => null }));
 import { finishTimings, state } from '../../tests/mocks/reanimated.js';
 import { Expand } from '../components/Expand';
 import { JumpToLatest } from '../features/chat/JumpToLatest';
-import { motionMs } from '../theme/tokens';
+import { motion } from '../theme/tokens';
 import { usePresence } from './usePresence';
 
 const styleOf = (id) => JSON.parse(screen.getByTestId(id).getAttribute('data-style'));
@@ -43,10 +43,10 @@ afterEach(() => {
 
 describe('usePresence', () => {
   it('stays mounted through an in-flight exit and unmounts when it finishes', () => {
-    const { result, rerender } = renderHook(({ v }) => usePresence(v, 180), { initialProps: { v: true } });
+    const { result, rerender } = renderHook(({ v }) => usePresence(v), { initialProps: { v: true } });
     expect(state.timings).toEqual([]);
     rerender({ v: false });
-    expect(state.timings.at(-1)).toEqual({ to: 0, duration: 180 });
+    expect(state.timings.at(-1)).toEqual({ to: 0, duration: motion.exit });
     expect(result.current.mounted).toBe(true);
     expect(result.current.moving.value).toBe(true);
     act(() => finishTimings());
@@ -55,7 +55,7 @@ describe('usePresence', () => {
   });
 
   it('ignores a stale exit that lands after a reopen', () => {
-    const { result, rerender } = renderHook(({ v }) => usePresence(v, 180), { initialProps: { v: true } });
+    const { result, rerender } = renderHook(({ v }) => usePresence(v), { initialProps: { v: true } });
     rerender({ v: false });
     const staleExit = state.pending.splice(0);
     rerender({ v: true });
@@ -69,11 +69,11 @@ describe('usePresence', () => {
 
   it('snaps with no timing under reduced motion or when asked to', () => {
     h.reduce = true;
-    const a = renderHook(({ v }) => usePresence(v, 180), { initialProps: { v: true } });
+    const a = renderHook(({ v }) => usePresence(v), { initialProps: { v: true } });
     a.rerender({ v: false });
     expect(a.result.current.mounted).toBe(false);
     h.reduce = false;
-    const b = renderHook(({ v }) => usePresence(v, 180, { snap: true }), { initialProps: { v: true } });
+    const b = renderHook(({ v }) => usePresence(v, { snap: true }), { initialProps: { v: true } });
     b.rerender({ v: false });
     expect(b.result.current.mounted).toBe(false);
     expect(state.timings).toEqual([]);
@@ -89,10 +89,10 @@ describe('Expand', () => {
     expect(state.timings).toEqual([]);
   });
 
-  it('clips only while the 180 ms expansion is in flight', () => {
+  it('clips only while the enter expansion is in flight', () => {
     const { rerender } = render(<Expand open={false}><span>body</span></Expand>);
     rerender(<Expand open><span>body</span></Expand>);
-    expect(state.timings.at(-1)).toEqual({ to: 1, duration: motionMs.expand });
+    expect(state.timings.at(-1)).toEqual({ to: 1, duration: motion.enter });
     expect(styleOf('expand').overflow).toBe('hidden');
     act(() => finishTimings());
     rerender(<Expand open><span>body</span></Expand>);
@@ -107,16 +107,18 @@ describe('Expand', () => {
 });
 
 describe('JumpToLatest', () => {
-  it('fades out over 150 ms and stays tappable-free until gone', () => {
+  it('fades out over the exit duration and stays tappable-free until gone', () => {
     const { rerender } = render(<JumpToLatest visible onPress={() => {}} />);
     rerender(<JumpToLatest visible={false} onPress={() => {}} />);
-    expect(state.timings.at(-1)).toEqual({ to: 0, duration: motionMs.jump });
+    expect(state.timings.at(-1)).toEqual({ to: 0, duration: motion.exit });
     expect(screen.getByLabelText('Jump to latest')).toBeTruthy();
     act(() => finishTimings());
     expect(screen.queryByLabelText('Jump to latest')).toBeNull();
   });
 
-  it('names the durations the motion board lists', () => {
-    expect(motionMs).toEqual({ sidebar: 200, expand: 180, jump: 150 });
+  it('exits faster than it enters', () => {
+    expect(motion.enter).toBe(180);
+    expect(motion.exit).toBe(130);
+    expect(motion.exit).toBeLessThan(motion.enter);
   });
 });

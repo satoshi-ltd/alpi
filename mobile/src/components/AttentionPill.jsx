@@ -1,20 +1,11 @@
 import { Text, View } from 'react-native';
 
-import { radii, space } from '../theme/tokens';
+import { space } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeContext';
+import { CountBadge } from './CountBadge';
 
 export function AttentionPill({ count, label }) {
-  const { colors, fonts, fontSizes } = useTheme();
-  if (!count) return null;
-  return (
-    <View
-      accessible
-      accessibilityLabel={label}
-      style={{ minWidth: 20, minHeight: 20, paddingHorizontal: space.s2, borderRadius: radii.xs, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.danger }}
-    >
-      <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.xs, color: colors.onDanger }}>{count}</Text>
-    </View>
-  );
+  return <CountBadge count={count} label={label} />;
 }
 
 export function AttentionValue({ count, label, children }) {

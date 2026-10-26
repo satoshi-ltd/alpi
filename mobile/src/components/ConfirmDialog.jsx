@@ -1,22 +1,22 @@
 import { useEffect, useState } from 'react';
 import { Keyboard, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, {
-  Easing,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import { radii, space, lineHeights, tracking, typography, veil } from '../theme/tokens';
+import { motion, radii, space, lineHeights, tracking, typography, veil } from '../theme/tokens';
+import { EASE_ENTER, EASE_EXIT } from '../lib/motionEasing';
 
 import { selection, warning } from '../lib/haptics';
 import { useTheme } from '../theme/ThemeContext';
 import { Button } from './Button';
 import { useExitSnapshot } from './useExitSnapshot';
 import { useWell } from './well';
-const EASE_IN = Easing.bezier(0.2, 0.7, 0.2, 1);
-const EASE_OUT = Easing.bezier(0.8, 0, 0.8, 0.3);
-const DURATION_IN = 200;
-const DURATION_OUT = 200;
+const EASE_IN = EASE_ENTER;
+const EASE_OUT = EASE_EXIT;
+const DURATION_IN = motion.enter;
+const DURATION_OUT = motion.exit;
 const UNMOUNT_BUFFER = 40;
 export function Code({ children }) {
   const { colors, fonts, fontSizes } = useTheme();
@@ -26,7 +26,7 @@ export function Code({ children }) {
         fontFamily: fonts.monoMedium,
         fontSize: fontSizes.sm,
         color: colors.ink,
-        backgroundColor: colors.bgInput,
+        backgroundColor: colors.field,
         borderRadius: radii.xs,
         paddingHorizontal: space.s2,
       }}
@@ -131,7 +131,7 @@ export function ConfirmDialog({
                 maxHeight: '100%',
                 backgroundColor: colors.bgPane,
                 borderRadius: radii.xs,
-                ...shadow.float,
+                ...shadow.dialog,
               },
               dialogStyle,
             ]}

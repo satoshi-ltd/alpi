@@ -2,7 +2,6 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { space } from '../../src/theme/tokens';
 
 import { formatUsd } from '../../../common/format.mjs';
 import { AdminGuard } from '../../src/components/AdminGuard';
@@ -17,15 +16,13 @@ import { connectionMeta, relativeSeen } from '../../src/features/connections/for
 import { useBack } from '../../src/hooks/useBack';
 import { usePullRefresh } from '../../src/hooks/usePullRefresh';
 import { useConnectionsSummary } from '../../src/hooks/useDaemonData';
+import { settingsContentStyle } from '../../src/lib/panes';
 import { usePane } from '../../src/nav/PaneContext';
-import { SettingsSurface } from '../../src/nav/SettingsSurface';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { LoadFailed } from '../../src/components/LoadFailed';
 import { EMPTY } from '../../../common/emptyCopy.mjs';
 import { Busy } from '../../src/components/Busy';
 import { useBusyVisible } from '../../src/hooks/useBusyVisible';
-
-const WIDE_BODY_MAX_W = 968;
 
 export default function ConnectionsRoute() {
   return (
@@ -53,9 +50,7 @@ function ConnectionsScreen() {
   const host = rows.find((r) => r.id === 'host');
   const paired = rows.filter((r) => r.id !== 'host');
 
-  const contentStyle = twoPane
-    ? { paddingHorizontal: space.s9, paddingTop: space.s9, paddingBottom: space.s11, maxWidth: WIDE_BODY_MAX_W, width: '100%', alignSelf: 'center' }
-    : { paddingBottom: space.s10 };
+  const contentStyle = settingsContentStyle(twoPane);
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -71,7 +66,6 @@ function ConnectionsScreen() {
       ) : !summary.data && summary.error ? (
         <LoadFailed label="connections" error={summary.error} onRetry={() => summary.refresh?.()} />
       ) : (
-        <SettingsSurface>
         <ScrollView
           contentContainerStyle={contentStyle}
           refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />}
@@ -118,7 +112,6 @@ function ConnectionsScreen() {
             )}
           </RowGroup>
         </ScrollView>
-        </SettingsSurface>
       )}
 
       <NewConnectionSheet

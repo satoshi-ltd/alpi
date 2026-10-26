@@ -1,17 +1,16 @@
 .bar {
   position: absolute;
-  top: var(--space-5);
-  right: var(--space-10);
+  top: var(--sp-12);
+  right: var(--sp-32);
   z-index: var(--z-searchbar);
   background: var(--bg-elev);
-  border: .5px solid var(--line-2);
   border-radius: var(--r-xs);
-  box-shadow: var(--shadow-edge);
-  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-6);
+  box-shadow: var(--shadow-edge-sm);
+  padding: var(--sp-8) var(--sp-8) var(--sp-8) var(--sp-16);
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  animation: searchBarIn var(--dur-2) var(--ease) both;
+  gap: var(--sp-8);
+  animation: searchBarIn var(--dur-enter) var(--ease-enter) both;
 }
 
 .input {
@@ -26,7 +25,7 @@
 .counter {
   font-size: var(--text-meta);
   color: var(--ink-3);
-  min-width: var(--ctrl-lg);
+  min-width: var(--ctl-40);
   text-align: right;
 }
 
@@ -35,13 +34,13 @@
 }
 
 .iconbtn {
-  width: 26px;
-  height: 26px;
+  width: var(--ctl-28);
+  height: var(--ctl-28);
 }
 
 .chev {
-  width: 13px;
-  height: 13px;
+  width: var(--icon-sm);
+  height: var(--icon-sm);
 }
 
 .leadIcon {
@@ -51,6 +50,6 @@
 }
 
 @keyframes searchBarIn {
-  from { opacity: 0; transform: translateY(4px) scale(0.98); }
-  to { opacity: 1; transform: none; }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }

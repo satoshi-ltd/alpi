@@ -1,6 +1,7 @@
 .dot {
-  width: 7px;
-  height: 7px;
+  margin-inline: calc((var(--icon-md) - var(--dot-md)) / 2);
+  width: var(--dot-md);
+  height: var(--dot-md);
   border-radius: 50%;
   background: var(--c, var(--ink-3));
   flex-shrink: 0;
@@ -10,8 +11,8 @@
   flex: 1;
   min-width: 0;
   font-family: var(--font-sans);
-  font-size: var(--fs-sm);
-  line-height: 1.45;
+  font-size: var(--text-meta);
+  line-height: var(--sp-16);
   color: var(--ink-2);
 }
 .body strong {
@@ -21,5 +22,6 @@
 
 .action {
   color: var(--ink);
-  font-weight: var(--fw-medium);
+  font-size: var(--text-meta);
+  font-weight: var(--fw-semibold);
 }

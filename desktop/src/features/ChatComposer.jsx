@@ -23,7 +23,6 @@ export default function ChatComposer({
   disabled,
   daemonOffline = false,
   paused = false,
-  onResume = null,
   modelOverride,
   onModelChange,
   rewriteDraft,
@@ -218,11 +217,7 @@ export default function ChatComposer({
     }
   }
 
-  const reason = daemonOffline
-    ? "Daemon offline — sending paused"
-    : paused
-      ? "Profile paused"
-      : null;
+  const reason = daemonOffline ? "Daemon offline — sending paused" : null;
   const placeholder = paused
     ? "Paused — resume to chat"
     : activeProfile?.name
@@ -248,8 +243,6 @@ export default function ChatComposer({
       placeholder={placeholder}
       sendTitle={sendTitle}
       reason={reason}
-      reasonAction={paused && !daemonOffline && onResume ? "Resume" : null}
-      onReasonAction={onResume}
       disabledTitle="Type a message"
       mentions={mentions}
       hint={

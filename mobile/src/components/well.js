@@ -4,7 +4,7 @@ import { radii } from '../theme/tokens';
 
 export function wellStyle(colors, { focused = false, error = false } = {}) {
   return {
-    backgroundColor: focused ? mixHex(colors.bgInput, 0.9, colors.ink) : colors.bgInput,
+    backgroundColor: focused ? mixHex(colors.field, 0.9, colors.ink) : colors.field,
     borderRadius: radii.xs,
     borderWidth: 2,
     borderColor: error ? colors.dangerText : focused ? colors.focus : 'transparent',

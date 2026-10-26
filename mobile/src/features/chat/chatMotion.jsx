@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef } from 'react';
 import * as ReactNative from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
-export const ENTER_MS = 180;
+import { motion } from '../../theme/tokens';
+
+export const ENTER_MS = motion.enter;
 
 export function listDismissMode() {
   let os = null;

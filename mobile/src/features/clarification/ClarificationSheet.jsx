@@ -308,7 +308,7 @@ function SingleChoices({
       {allowOther && !otherMode ? (
         <ChoiceRow disabled={busy} onPress={() => setOtherMode(true)}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s5 }}>
-            <Icon name="edit" size={20} color={colors.ink3} />
+            <Icon name="edit" size="md" color={colors.ink3} />
             <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.lg, lineHeight: fontSizes.lg * lineHeights.normal, color: colors.ink3 }}>
               Type your own…
             </Text>

@@ -9,7 +9,7 @@ from wg_settings_studies import P, glyph, labelled, mono, phone
 def memory_row(label, name, used, limit, on, flagged):
     over = flagged and used >= limit * 0.9
     tail = word("over" if used > limit else "full", "danger") if over else ""
-    head = f'<div style="display: flex; align-items: baseline; gap: 8px">{text(label, 12, P["ink"], 500)}{mono(name, 11, P["ink3"])}<span style="flex: 1"></span>{tail}</div>'
+    head = f'<div style="display: flex; align-items: baseline; gap: 8px">{text(label, 13, P["ink"], 500)}{mono(name, 11, P["ink3"])}<span style="flex: 1"></span>{tail}</div>'
     return row(head + usage(used, limit), on, gap=8)
 
 
@@ -33,14 +33,14 @@ def entry_block(value, note):
 
 def skill_row(name, state, size, blurb, on=False, flag=""):
     word_ = word(flag, "danger") if flag else word(state, "off") if state != "active" else ""
-    head = flex(skill_mark("flag" if flag else state), mono(name, 12, P["ink"], 500, "flex: 1; overflow: hidden; text-overflow: ellipsis"), word_, size_tag(size), gap=8)
+    head = flex(skill_mark("flag" if flag else state), mono(name, 11, P["ink"], 500, "flex: 1; overflow: hidden; text-overflow: ellipsis"), word_, size_tag(size), gap=8)
     clamp = (f'<span style="margin-left: 14px; font-size: 11px; line-height: 1.3; color: {P["ink3"]}; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere">{blurb}</span>')
     return row(head + clamp, on, state != "active" and not flag, gap=4)
 
 
 def tree_row(icon, name, on=False, indent=0, meta=""):
     tail = mono(meta, 11, P["ink3"]) if meta else ""
-    return flex(glyph(icon, 14, P["ink3"]), mono(name, 12, P["ink"] if on else P["ink2"], extra="flex: 1"), tail, gap=6,
+    return flex(glyph(icon, 14, P["ink3"]), mono(name, 11, P["ink"] if on else P["ink2"], extra="flex: 1"), tail, gap=6,
                 extra=f"padding: 6px 8px 6px {8 + indent}px; border-radius: 4px; background: {P['selected'] if on else 'transparent'}")
 
 
@@ -57,7 +57,7 @@ def skill_markdown():
 
 def dir_box(tree, viewer):
     side = (f'<div style="width: 184px; flex-shrink: 0; box-sizing: border-box; padding: 8px; display: flex; flex-direction: column; gap: 2px; background: {P["side"]}; '
-            f'box-shadow: inset -0.5px 0 0 {P["line"]}">{mono("files", 11, P["ink3"], 500, "letter-spacing: 0.06em; text-transform: uppercase; padding: 6px 8px 8px")}{tree}</div>')
+            f'box-shadow: inset -0.5px 0 0 {P["line"]}">{mono("files", 11, P["ink3"], 500, "letter-spacing: 0.08em; text-transform: uppercase; padding: 8px")}{tree}</div>')
     return (f'<div style="flex: 1; min-height: 0; display: flex; border-radius: 4px; box-shadow: 0 0 0 0.5px {P["line"]}; overflow: hidden">{side}'
             f'<div style="flex: 1; min-width: 0; padding: 12px 16px; background: {P["pane"]}; overflow: hidden">{viewer}</div></div>')
 
@@ -96,11 +96,11 @@ def skills_window(flagged, side_w=SIDE_W):
 
 
 def tool_row(name, on=False):
-    return row(mono(name, 12, P["ink"]), on)
+    return row(mono(name, 11, P["ink"]), on)
 
 
 def tool_params():
-    head = "".join(mono(h, 11, P["ink3"], 500, "letter-spacing: 0.06em; text-transform: uppercase; flex: " + f) for h, f in (("Parameter", "1.2"), ("Type", "1"), ("Required", "0.8"), ("Default", "1")))
+    head = "".join(mono(h, 11, P["ink3"], 500, "letter-spacing: 0.08em; text-transform: uppercase; flex: " + f) for h, f in (("Parameter", "1.2"), ("Type", "1"), ("Required", "0.8"), ("Default", "1")))
     def cells(*v):
         return "".join(mono(c, 11, colour, wt, "flex: " + f) for c, colour, wt, f in v)
 
@@ -121,7 +121,7 @@ def tools_window():
 
 def job_row(job, on=False):
     failed = job["state"] == "failed"
-    title = f'<span style="font-size: 12px; font-weight: 600; line-height: 1.3; color: {P["ink"]}; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{job["title"]}</span>'
+    title = f'<span style="font-size: 13px; font-weight: 600; line-height: 1.3; color: {P["ink"]}; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{job["title"]}</span>'
     about = f'<span style="margin-left: 16px; font-size: 11px; line-height: 1.3; color: {P["ink3"]}; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere">{job["about"]}</span>'
     tail = mono(job["word"], 11, P["danger"] if failed else P["ink3"]) if job["word"] else ""
     head = flex(job_mark(job["state"]), f'<div style="flex: 1; min-width: 0">{title}</div>', tail, gap=8)
@@ -150,8 +150,8 @@ def schedules_window(flagged, side_w=SIDE_W, running=False):
     fields = "".join((fact("about", chosen["about"]), fact("when", f'{chosen["when"]}{cron}'), fact("next", chosen["next"]),
                       fact("last run", f'<span style="color: {P["danger"] if failed else P["ink2"]}">{"running now" if running else chosen["last"]}</span>'), fact("runs", "agent · 20 min timeout"), fact("notify", "silent — failures still alert")))
     rail = (f'<div style="width: 148px; flex-shrink: 0; box-sizing: border-box; padding: 8px; background: {P["side"]}; box-shadow: inset -0.5px 0 0 {P["line"]}">'
-            f'{mono("prompt", 11, P["ink3"], 500, "letter-spacing: 0.06em; text-transform: uppercase; padding: 6px 8px 8px")}'
-            f'<div style="padding: 6px 8px; border-radius: 4px; background: {P["selected"]}; font-family: {MONO}; font-size: 12px; color: {P["ink"]}">Prompt</div></div>')
+            f'{mono("prompt", 11, P["ink3"], 500, "letter-spacing: 0.08em; text-transform: uppercase; padding: 8px")}'
+            f'<div style="padding: 6px 8px; border-radius: 4px; background: {P["selected"]}; font-family: {MONO}; font-size: 11px; color: {P["ink"]}">Prompt</div></div>')
     box = (f'<div style="display: flex; border-radius: 4px; box-shadow: 0 0 0 0.5px {P["line"]}; overflow: hidden">{rail}'
            f'<div style="flex: 1; min-width: 0; padding: 12px 14px; background: {P["pane"]}">{reading(PROMPT)}</div></div>')
     return window("Schedules", len(jobs), {"Schedules": 1} if flagged else None, "Search jobs…", rows, meta + detail_scroll(banner, actions, f"<div>{fields}</div>", box, gap=12), 560 if flagged else 520, side_w)
@@ -188,7 +188,7 @@ def m_skill_page(flagged):
     tools = f'<div style="display: flex; flex-wrap: wrap; gap: 5px">{"".join(kw(t) for t in ("web_fetch", "browser"))}</div>'
     files = "".join(f'<div style="box-shadow: inset 0 -0.5px 0 {P["line"]}">{m_file_row(i, n, m)}</div>' for i, n, m in (("file-code", "scripts/normalize.py", "3.4kb"), ("file-text", "references/fields.md", "1.1kb")))
     box = f'<div style="border-radius: 4px; background: {P["pane"]}; overflow: hidden">{files}{m_file_row("lock", "secrets/", "2 · 0600", False)}</div>'
-    inner = phone_head("SKILLS · RESEARCH") + phone_body(banner, text(name, 19, P["ink"], 600), meta, wrap(blurb, 12.5, P["ink"], 400, 1.5), tools, box, reading("Use this skill when the hub opens #intake for a hotel.", 12), gap=10)
+    inner = phone_head("SKILLS · RESEARCH") + phone_body(banner, text(name, 22, P["ink"], 600, "letter-spacing: -0.018em; line-height: 1.3"), meta, wrap(blurb, 12.5, P["ink"], 400, 1.5), tools, box, reading("Use this skill when the hub opens #intake for a hotel.", 12), gap=10)
     return phone(inner, 560)
 
 
@@ -217,7 +217,7 @@ def m_memory_page(flagged):
     name = "AGENT.md" if flagged else "MEMORY.md"
     label, _, caption = next(f for f in MEMORY_FILES if f[1] == name)
     banner = phone_banner(*memory_banner(use[name])) if flagged else ""
-    heading = flex(text(label, 19, P["ink"], 600), mono(name, 10, P["ink3"]), gap=8, align="baseline")
+    heading = flex(text(label, 22, P["ink"], 600, "letter-spacing: -0.018em; line-height: 1.3"), mono(name, 10, P["ink3"]), gap=8, align="baseline")
     entries = [wrap(IDENTITY, 12.5, P["ink"], 400, 1.5)] if flagged else [f'<div style="display: flex; flex-direction: column; gap: 4px">{wrap(v, 12.5, P["ink"], 400, 1.5)}{mono(n, 10, P["ink3"])}</div>' for v, n in ENTRIES]
     edit = f'<span style="width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center">{glyph("pencil", 16, P["ink2"])}</span>'
     inner = phone_head("MEMORIES", edit) + phone_body(banner, stack(heading, wrap(caption, 11.5, P["ink3"], 400, 1.3), gap=2), *entries, gap=12)
@@ -297,7 +297,7 @@ def mobile_panels_view():
     )
 
 
-PANELS_DESKTOP_H = 4460
+PANELS_DESKTOP_H = 4440
 PANELS_MOBILE_H = 6300
 
 
@@ -309,7 +309,7 @@ def panels_board(title, lede, inner, h):
 
 
 def desktop_panels_board():
-    return panels_board("Profile panels · desktop", "Memories, Skills, Tools and Schedules open as one window: the profile’s object and crease name, the four panels as tabs (the count on the open one, a red count on any that needs you), a search row, a list and a reader. Prose reads in Geist, only code in mono.",
+    return panels_board("Profile panels · desktop", "Memories, Skills, Tools and Schedules open as one window: the profile’s object and name, the four panels as tabs (the count on the open one, a red count on any that needs you), a search row, a list and a reader. Prose reads in Geist, only code in mono.",
                         desktop_panels_view(), PANELS_DESKTOP_H)
 
 

@@ -106,8 +106,8 @@ def section_label(value, pad="14px 18px 6px"):
     return f'<div style="padding: {pad}; font-family: {MONO}; font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: {P["ink3"]}">{value}</div>'
 
 
-def group(inner, margin="0 12px"):
-    return f'<div style="margin: {margin}; border-radius: 4px; background: {P["pane"]}; overflow: hidden">{inner}</div>'
+def group(inner, margin="0 16px"):
+    return f'<div style="margin: {margin}; border-radius: 4px; background: var(--card); overflow: hidden">{inner}</div>'
 
 
 def seam():
@@ -187,11 +187,27 @@ def row_menu():
 
 
 def more_glyph(phone, active=False):
-    return (f'<span style="width: {44 if phone else 24}px; height: {44 if phone else 22}px; margin: {"-12px -12px -12px 0" if phone else "-3px 0"}; display: inline-flex; '
-            f'align-items: center; justify-content: center; flex-shrink: 0; border-radius: 4px; background: {P["hover"] if active else "transparent"}">{glyph("more", 14, P["ink2"])}</span>')
+    return (f'<span style="width: {44 if phone else 28}px; height: {44 if phone else 28}px; margin: {"-12px -12px -12px 0" if phone else "0"}; display: inline-flex; '
+            f'align-items: center; justify-content: center; flex-shrink: 0; border-radius: 4px; background: {P["hover"] if active else "transparent"}">{glyph("more", 16 if phone else 14, P["ink2"])}</span>')
+
+
+def d_owns(phases):
+    chip = lambda v: f'<span style="font-family: {MONO}; font-size: 11px; color: {P["ink2"]}; padding: 0 8px; border-radius: 2px; background: {P["hover"]}; line-height: 20px; white-space: nowrap">{v}</span>'
+    held = "".join(chip("#" + v) for v in phases) if phases else f'<span style="font-size: 11px; color: {P["ink3"]}">none · the hub routes every phase</span>'
+    return f'<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-left: 24px"><span style="font-family: {MONO}; font-size: 11px; color: {P["ink3"]}">owns</span>{held}</div>'
+
+
+def d_member(name, mark, bio, owns_html, tag=""):
+    head = (f'<div style="display: flex; align-items: center; gap: 8px; min-height: 28px">{mark}<span style="font-size: 15px; font-weight: 600; color: {P["ink"]}">{name}</span>'
+            f'{tag}<span style="flex: 1"></span>{more_glyph(False)}</div>')
+    note = f'<span style="padding-left: 24px; font-size: 13px; line-height: 1.5; color: {P["ink2"]}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{bio}</span>'
+    return f'<div style="position: relative; display: flex; flex-direction: column; gap: 8px; padding: 12px 0; box-shadow: inset 0 0.5px 0 {P["line"]}">{head}{note}{owns_html}</div>'
 
 
 def member_block(name, expanded=False, menu=False, phone=False):
+    if not phone:
+        hub = f'<span style="font-size: 11px; color: {P["ink3"]}">hub</span>' if name == "mira" else ""
+        return d_member(name, obj(name, 16), BIOS[name], d_owns(owned(name)), hub) + (row_menu() if menu else "")
     hub = mono("hub", 10, P["ink3"], extra="letter-spacing: 0.04em") if name == "mira" else ""
     head = flex(crease_name(name, 17 if phone else 16), hub, spacer(), more_glyph(phone, menu), gap=7)
     size = 12.5 if phone else 11.5
@@ -204,23 +220,49 @@ def member_block(name, expanded=False, menu=False, phone=False):
     owns = flex(mono("owns", 9.5, P["ink4"], extra="width: 30px"), held, gap=6, align="flex-start")
     body = stack(head, bio, owns, gap=5, extra="flex: 1")
     edge = "" if phone else f"box-shadow: inset 0 0.5px 0 {P['line']};"
-    pad = "12px 14px" if phone else "10px 14px 10px 16px"
-    return (f'<div style="position: relative; display: flex; gap: 10px; align-items: flex-start; padding: {pad}; {edge}">'
+    pad = "12px 16px" if phone else "10px 14px 10px 16px"
+    height = "min-height: 64px; box-sizing: border-box; align-items: center;" if phone else "align-items: flex-start;"
+    return (f'<div style="position: relative; display: flex; gap: 10px; {height} padding: {pad}; {edge}">'
             f'<span style="padding-top: 1px; display: inline-flex">{obj(name, 18 if phone else 16)}</span>{body}{row_menu() if menu else ""}</div>')
+
+
+def m_hairline():
+    return f'<div style="height: 0.5px; background: {P["line"]}; margin-left: 16px"></div>'
 
 
 def m_pipeline_card(key, chain, states=None):
     head = flex(mono(key, 14, P["ink"], 600), trigger_word(key), spacer(), gap=8)
     done = sum(1 for s in chain if (states or {}).get(s) in ("completed", "skipped"))
-    run = flex(mono("last run", 10.5, P["ink3"]), mono(f"running · {done} of {len(chain)}", 10.5, P["ink2"]), gap=6) if states else ""
-    return group(f'<div style="padding: 12px 14px; display: flex; flex-direction: column; gap: 9px">{head}{run}{chain_flow(chain, states, "mrip")}</div>', "0 12px 8px")
+    run = flex(mono("last run", 11, P["ink3"]), mono(f"running · {done} of {len(chain)}", 11, P["ink2"]), gap=6) if states else ""
+    return f'<div style="padding: 12px 16px; display: flex; flex-direction: column; gap: 9px">{head}{run}{chain_flow(chain, states, "mrip")}</div>'
+
+
+def m_pipelines_group(pipelines, launch, run):
+    return group(m_hairline().join(m_pipeline_card(k, c, run if k == launch else None) for k, c in pipelines))
+
+
+def m_members_group(names, invited=None, lead="", add=True):
+    blocks = ([lead] if lead else []) + [member_block(n, phone=True) for n in names] + ([invited] if invited else [])
+    if add:
+        blocks.append(f'<div style="padding: 14px 16px; font-size: 15px; line-height: 1.3; color: {P["ink"]}">+ Add member</div>')
+    return group(m_hairline().join(blocks))
 
 
 def invited_block(name, fold_name, colour, bio, phone=False):
+    if not phone:
+        tag = f'<span style="font-size: 11px; color: {P["ink3"]}">invited</span>'
+        return d_member(name, folds.fold(fold_name, colour, 16), bio, "", tag)
     head = flex(f'<span style="font-family: Bricolage Grotesque, sans-serif; font-weight: 800; font-size: {17 if phone else 16}px; color: {colour}">{name}</span>',
                 mono("invited", 10, P["ink3"]), spacer(), more_glyph(phone), gap=7)
     body = stack(head, ell(bio, 12.5 if phone else 11.5, P["ink2"]), gap=5, extra="flex: 1")
     edge = "" if phone else f"box-shadow: inset 0 0.5px 0 {P['line']};"
     mark = folds.fold(fold_name, colour, 18 if phone else 16)
-    return (f'<div style="display: flex; gap: 10px; align-items: flex-start; padding: {"12px 14px" if phone else "10px 14px 10px 16px"}; {edge}">'
+    return (f'<div style="display: flex; gap: 10px; {"min-height: 64px; box-sizing: border-box; align-items: center;" if phone else "align-items: flex-start;"} padding: {"12px 16px" if phone else "10px 14px 10px 16px"}; {edge}">'
             f'<span style="padding-top: 1px; display: inline-flex">{mark}</span>{body}</div>')
+
+
+def m_invites_group():
+    join = (f'<div style="display: flex; align-items: center; gap: 12px; padding: 14px 16px"><div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">'
+            f'<span style="font-size: 15px; line-height: 1.3; color: {P["ink"]}">Join command</span>{mono("alpi workgroup join mira wg_4f2a…9c1e", 11, P["ink3"], 500, "white-space: normal")}</div>'
+            f'<span style="font-size: 14px; color: {P["ink3"]}">Copy</span><span style="width: 16px"></span></div>')
+    return group(m_hairline().join((join, invited_block("lingo", "star", "#9b5ad9", "Language coach; invited, not yet joined.", phone=True))))

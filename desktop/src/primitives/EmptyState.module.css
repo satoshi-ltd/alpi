@@ -3,7 +3,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--space-9) var(--space-7);
+  padding: var(--sp-24) var(--sp-16);
   min-height: 0;
 }
 
@@ -11,7 +11,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-10);
+  gap: var(--sp-32);
   width: 100%;
   max-width: 720px;
 }

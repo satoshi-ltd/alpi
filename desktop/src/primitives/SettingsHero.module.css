@@ -9,7 +9,7 @@
 }
 
 .titleCol {
-  gap: var(--space-3);
+  gap: var(--sp-8);
   flex: 1;
   min-width: 0;
 }

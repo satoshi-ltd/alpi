@@ -113,7 +113,7 @@ export default function PeerPopover({
           </div>
           {onAdd && (
             <div className={styles.footer}>
-              <ActionLink onClick={onAdd}>+ Add peer</ActionLink>
+              <ActionLink onClick={onAdd}>Add peer</ActionLink>
               {triggerOnAdd && (
                 <Button variant="ghost" onClick={triggerOnAdd}>
                   Browse hub

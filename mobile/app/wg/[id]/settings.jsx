@@ -30,8 +30,8 @@ import { copyText } from '../../../src/lib/clipboard';
 import { useEndpoint } from '../../../src/lib/EndpointContext';
 import { EditBudgetSheet } from '../../../src/features/sheets/EditBudgetSheet';
 import { PipelinesSection } from '../../../src/features/workgroups/PipelinesSection';
+import { settingsContentStyle } from '../../../src/lib/panes';
 import { usePane } from '../../../src/nav/PaneContext';
-import { SettingsSurface } from '../../../src/nav/SettingsSurface';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { AdminGuard } from '../../../src/components/AdminGuard';
 import { EMPTY } from '../../../../common/emptyCopy.mjs';
@@ -41,7 +41,6 @@ import { FadeIn } from '../../../src/components/FadeIn';
 import { useSkeleton } from '../../../src/hooks/useSkeleton';
 import { useReveal } from '../../../src/hooks/useReveal';
 
-const WIDE_BODY_MAX_W = 968;
 
 function shortPubkey(pk) {
   if (!pk) return '—';
@@ -191,9 +190,7 @@ function WorkgroupSettings() {
     toast({ title: ok ? 'Join command copied' : 'Copy failed' });
   };
 
-  const contentStyle = twoPane
-    ? { paddingHorizontal: space.s9, paddingTop: space.s9, paddingBottom: space.s11, maxWidth: WIDE_BODY_MAX_W, width: '100%', alignSelf: 'center' }
-    : { paddingBottom: space.s10 };
+  const contentStyle = settingsContentStyle(twoPane);
 
   const renderMember = (m, i, { removable }) => {
     const pk = m.pubkey;
@@ -238,7 +235,6 @@ function WorkgroupSettings() {
           </>
         }
       />
-      <SettingsSurface>
       <ScrollView
         contentContainerStyle={contentStyle}
         keyboardShouldPersistTaps="handled"
@@ -357,16 +353,15 @@ function WorkgroupSettings() {
         <PipelinesSection workgroup={wg} run={run} profileOf={profileOf} />
 
         <SectionHeader kicker={`${joined.length || wg.members || 0} profiles`}>Members</SectionHeader>
-        <View style={{ gap: space.s4 }}>
-          {joined.map((m, i) => (
-            <RowGroup key={m.pubkey ?? i}>{renderMember(m, 0, { removable: true })}</RowGroup>
-          ))}
+        <RowGroup>
+          {joined.map((m, i) => renderMember(m, i, { removable: true }))}
           {isHub ? (
-            <RowGroup>
+            <>
+              {joined.length > 0 ? <RowSeparator /> : null}
               <Row label="+ Add member" onPress={() => router.push(`/wg/${id}/member`)} chevron={false} />
-            </RowGroup>
+            </>
           ) : null}
-        </View>
+        </RowGroup>
 
         {invited.length > 0 ? (
           <>
@@ -422,7 +417,6 @@ function WorkgroupSettings() {
           )}
         </RowGroup>
       </ScrollView>
-      </SettingsSurface>
 
       <ConfirmDialog
         open={confirmDelete}
@@ -473,7 +467,7 @@ function WorkgroupSettings() {
                   ? [{
                       id: 'open',
                       label: `Open ${memberTarget.label}`,
-                      icon: <Icon name="settings" size="lg" color={colors.ink2} />,
+                      icon: <Icon name="settings" size="md" color={colors.ink2} />,
                       onPress: () => {
                         const name = memberTarget.name;
                         setMemberTarget(null);
@@ -484,7 +478,7 @@ function WorkgroupSettings() {
                 {
                   id: 'copy',
                   label: memberTarget.local ? 'Copy profile id' : 'Copy public key',
-                  icon: <Icon name="copy" size="lg" color={colors.ink2} />,
+                  icon: <Icon name="copy" size="md" color={colors.ink2} />,
                   onPress: async () => {
                     const local = memberTarget.local;
                     const value = local ? memberTarget.name : memberTarget.pubkey;
@@ -498,7 +492,7 @@ function WorkgroupSettings() {
                       id: 'kick',
                       label: 'Remove from workgroup…',
                       danger: true,
-                      icon: <Icon name="x" size="lg" color={colors.danger} />,
+                      icon: <Icon name="x" size="md" color={colors.danger} />,
                       onPress: () => {
                         const m = memberTarget;
                         setMemberTarget(null);

@@ -1,15 +1,18 @@
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
-import { alpha, mobile, radii, space } from '../../theme/tokens';
+import { ScrollView, Text, View } from 'react-native';
+import { space } from '../../theme/tokens';
 
 import { ALPACA_FOLD } from '../../../../common/folds.mjs';
 import { Crease } from '../../components/Crease';
 import { Eyebrow } from '../../components/Eyebrow';
 import { Fold } from '../../components/Fold';
 import { OnOff } from '../../components/OnOff';
+import { Pill } from '../../components/Pill';
 import { Row, RowGroup, RowSeparator, SectionHeader } from '../../components/Row';
+import { Segmented } from '../../components/Segmented';
+import { Toggle } from '../../components/Toggle';
 import { useToast } from '../../components/Toast';
 import { Bold, Code, ConfirmDialog } from '../../components/ConfirmDialog';
 import {
@@ -24,44 +27,20 @@ import { describeHealth, readHealth } from '../aln/health';
 import { getPermissionStatus, requestPermission } from '../aln/notify';
 import { useIsAdmin } from '../../hooks/useActiveRole';
 import { useTheme } from '../../theme/ThemeContext';
-import {
-  DEFAULT_TEXT_SCALE,
-  MAX_TEXT_SCALE,
-  MIN_TEXT_SCALE,
-  stepTextScale,
-  textScaleLabel,
-} from '../../theme/textScale';
+import { clampTextScale, DEFAULT_TEXT_SCALE, TEXT_SCALES } from '../../theme/textScale';
 
 const APP_VERSION = Constants.expoConfig?.version ?? '0.0.0';
 
-function StatusValue({ active, label = 'on', mutedLabel = 'off', disabled = false }) {
-  return <OnOff on={!disabled && !!active} onLabel={label} offLabel={mutedLabel} />;
-}
+const THEME_OPTIONS = [
+  { value: 'system', label: 'System' },
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+];
 
-function StepButton({ glyph, label, disabled, onPress }) {
-  const { colors, fonts, fontSizes } = useTheme();
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      accessibilityRole="button"
-      accessibilityState={{ disabled: !!disabled }}
-      accessibilityLabel={label}
-      style={({ pressed }) => ({
-        width: mobile.tap,
-        height: mobile.tap,
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderRadius: radii.xs,
-        backgroundColor: pressed && !disabled ? colors.line2 : colors.selected,
-        opacity: disabled ? alpha.disabled : 1,
-      })}
-    >
-      <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.xl, color: colors.ink2 }}>
-        {glyph}
-      </Text>
-    </Pressable>
-  );
+const TEXT_SIZE_OPTIONS = TEXT_SCALES.map((step) => ({ value: step.value, label: step.label }));
+
+function DeliveryValue({ ok }) {
+  return ok ? <OnOff on /> : <Pill tone="err">blocked</Pill>;
 }
 
 export function SettingsBody({ active = true, onDismiss }) {
@@ -110,14 +89,6 @@ export function SettingsBody({ active = true, onDismiss }) {
     router.push(path);
   };
 
-  const cycleAppearance = () => {
-    const next = pref === 'system' ? 'light' : pref === 'light' ? 'dark' : 'system';
-    setMode(next);
-  };
-
-  const appearanceLabel =
-    pref === 'system' ? 'System' : pref === 'light' ? 'Light' : 'Dark';
-
   const handleSignOut = async () => {
     setConfirmSignOut(false);
     onDismiss?.();
@@ -127,25 +98,26 @@ export function SettingsBody({ active = true, onDismiss }) {
     router.replace('/onboarding');
   };
 
-  const toggleBiometric = async () => {
+  const toggleBiometric = async (next) => {
     if (!bioCaps.hasHardware) {
       toast({ title: 'Not available', message: 'This device has no biometric hardware.' });
-      return;
+      return false;
     }
     if (!bioCaps.enrolled) {
       toast({ title: 'Not enrolled', message: `Set up ${bioCaps.label} in your OS settings first.` });
-      return;
+      return false;
     }
-    if (!bioOn) {
+    if (next) {
       const ok = await authenticate(`Enable ${bioCaps.label} unlock`);
-      if (!ok) return;
+      if (!ok) return false;
       await setBiometricPref(true);
       setBioOn(true);
       toast({ title: `${bioCaps.label} on` });
-    } else {
-      await setBiometricPref(false);
-      setBioOn(false);
+      return true;
     }
+    await setBiometricPref(false);
+    setBioOn(false);
+    return true;
   };
 
   return (
@@ -164,8 +136,7 @@ export function SettingsBody({ active = true, onDismiss }) {
                   : 'not enrolled in OS settings'
                 : 'not available on this device'
             }
-            value={<StatusValue active={bioOn} label="on" disabled={!bioCaps.hasHardware} />}
-            onPress={toggleBiometric}
+            value={<Toggle on={bioOn} label={`${bioCaps.label} unlock`} disabled={!bioCaps.hasHardware} onChange={toggleBiometric} />}
             chevron={false}
           />
         </RowGroup>
@@ -188,7 +159,7 @@ export function SettingsBody({ active = true, onDismiss }) {
           <Row
             label="System permission"
             helper="instant while alpi is open · in the background the OS decides when to check"
-            value={<StatusValue active={notifPerm === 'granted'} />}
+            value={<OnOff on={notifPerm === 'granted'} />}
             onPress={onPermissionPress}
             chevron={notifPerm !== 'granted'}
           />
@@ -198,7 +169,7 @@ export function SettingsBody({ active = true, onDismiss }) {
               <Row
                 label="Delivery status"
                 helper={notifHealth.detail}
-                value={<StatusValue active={notifHealth.ok} />}
+                value={<DeliveryValue ok={notifHealth.ok} />}
                 chevron={false}
               />
             </>
@@ -217,29 +188,18 @@ export function SettingsBody({ active = true, onDismiss }) {
 
         <SectionHeader>Appearance</SectionHeader>
         <RowGroup>
-          <Row label="Theme" value={appearanceLabel} onPress={cycleAppearance} />
+          <Row label="Theme" below={<Segmented label="Theme" options={THEME_OPTIONS} value={pref} onChange={setMode} />} />
           <RowSeparator />
           <Row
             label="Text size"
-            helper="multiplies your OS text size · long-press to reset"
-            value={textScaleLabel(textScale)}
-            onLongPress={() => setTextScale?.(DEFAULT_TEXT_SCALE)}
-            chevron={false}
-            trailing={
-              <View style={{ flexDirection: 'row', gap: space.s3 }}>
-                <StepButton
-                  glyph="−"
-                  label="Smaller text"
-                  disabled={textScale <= MIN_TEXT_SCALE}
-                  onPress={() => setTextScale?.(stepTextScale(textScale, -1))}
-                />
-                <StepButton
-                  glyph="+"
-                  label="Larger text"
-                  disabled={textScale >= MAX_TEXT_SCALE}
-                  onPress={() => setTextScale?.(stepTextScale(textScale, 1))}
-                />
-              </View>
+            helper="multiplies your OS text size"
+            below={
+              <Segmented
+                label="Text size"
+                options={TEXT_SIZE_OPTIONS}
+                value={clampTextScale(textScale)}
+                onChange={(next) => setTextScale?.(next)}
+              />
             }
           />
         </RowGroup>

@@ -1511,11 +1511,8 @@ export default function App() {
                 <EmptyState
                   heading={EMPTY[emptyRosterKey].title}
                   subtitle={EMPTY[emptyRosterKey].hint}
-                >
-                  {adminOnNewProfile && (
-                    <Button variant="primary" onClick={adminOnNewProfile}>New profile</Button>
-                  )}
-                </EmptyState>
+                  action={adminOnNewProfile ? { label: "New profile", onClick: adminOnNewProfile } : null}
+                />
               )}
               {view.kind === "profile" && (
                 <ChatPane
@@ -1590,6 +1587,9 @@ export default function App() {
         open={activityOpen && activitySupported}
         onClose={onCloseActivity}
         activity={activity}
+        connectionId={hostConnections.active_id}
+        canRetry={canAdminEarly}
+        onRetry={(profile, id) => invoke("schedule_fire", { profile, id, ...(hostConnections.active_id ? { connectionId: hostConnections.active_id } : {}) })}
         accentByProfile={accentByProfile}
         foldByProfile={foldByProfile}
         onReview={onReviewActivity}

@@ -14,7 +14,7 @@
 .col {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--sp-8);
   min-width: 0;
   max-width: 76%;
   position: relative;
@@ -39,31 +39,31 @@
 .header {
   display: flex;
   align-items: baseline;
-  gap: var(--space-3);
+  gap: var(--sp-8);
 }
 
 .dot {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--space-4);
-  height: var(--space-4);
+  width: var(--sp-12);
+  height: var(--sp-12);
   color: var(--ink-3);
-  font-size: var(--fs-label);
+  font-size: var(--text-meta);
   line-height: var(--lh-tight);
   flex-shrink: 0;
   align-self: center;
 }
 
 .name {
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
   font-weight: var(--fw-semibold);
   color: var(--ink);
 }
 
 .muted {
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
   font-variant-numeric: tabular-nums slashed-zero;
 }
@@ -89,7 +89,7 @@
 }
 
 .bubble {
-  padding: var(--space-5) var(--space-7);
+  padding: var(--sp-12) var(--sp-16);
   border-radius: var(--r-xs);
   background: var(--selected);
   text-wrap: pretty;
@@ -97,12 +97,12 @@
 
 .footer {
   position: absolute;
-  top: calc(100% + var(--space-1));
+  top: calc(100% + var(--sp-4));
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--sp-8);
   opacity: 0;
-  transform: translateY(calc(-1 * var(--space-2)));
+  transform: translateY(calc(-1 * var(--sp-8)));
   pointer-events: none;
   transition:
     opacity 160ms var(--ease) var(--dur-2),
@@ -137,14 +137,14 @@
 }
 
 .md p {
-  margin: 0 0 var(--space-5);
+  margin: 0 0 var(--sp-12);
 }
 
 .md h1,
 .md h2,
 .md h3,
 .md h4 {
-  margin: var(--space-5) 0 var(--space-3);
+  margin: var(--sp-12) 0 var(--sp-8);
   font-weight: var(--fw-semibold);
   line-height: var(--lh-cozy);
 }
@@ -167,12 +167,12 @@
 
 .md ul,
 .md ol {
-  margin: 0 0 var(--space-5) var(--space-7);
+  margin: 0 0 var(--sp-12) var(--sp-16);
   padding: 0;
 }
 
 .md li {
-  margin-bottom: var(--space-2);
+  margin-bottom: var(--sp-8);
 }
 
 .md li > p {
@@ -183,7 +183,7 @@
   font-family: var(--font-mono);
   font-size: 0.9em;
   background: var(--hover);
-  padding: var(--space-1) var(--space-3);
+  padding: var(--sp-4) var(--sp-8);
   border-radius: var(--r-xs);
 }
 
@@ -193,8 +193,8 @@
   background: var(--bg-side);
   border: .5px solid var(--line);
   border-radius: var(--r-xs);
-  padding: var(--space-5);
-  margin: 0 0 var(--space-5);
+  padding: var(--sp-12);
+  margin: 0 0 var(--sp-12);
   overflow-x: auto;
   line-height: var(--lh-normal);
 }
@@ -214,28 +214,28 @@
 }
 
 .md blockquote {
-  margin: 0 0 var(--space-5);
-  padding-left: var(--space-5);
+  margin: 0 0 var(--sp-12);
+  padding-left: var(--sp-12);
   border-left: 3px solid var(--line-2);
   color: var(--ink-2);
 }
 
 .md hr {
-  margin: var(--space-7) 0;
+  margin: var(--sp-16) 0;
   border: 0;
   border-top: .5px solid var(--line);
 }
 
 .md table {
   border-collapse: collapse;
-  margin: 0 0 var(--space-5);
+  margin: 0 0 var(--sp-12);
   font-size: 0.93em;
 }
 
 .md th,
 .md td {
   border: .5px solid var(--line);
-  padding: var(--space-2) var(--space-3);
+  padding: var(--sp-8) var(--sp-8);
   text-align: left;
 }
 

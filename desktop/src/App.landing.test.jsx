@@ -31,6 +31,8 @@ import App from "./App.jsx";
 
 configure({ asyncUtilTimeout: 5000 });
 
+const inSettingsView = () => screen.queryAllByRole("button", { name: "Settings" }).some((el) => el.getAttribute("aria-current") === "page");
+
 const ALPI = { name: "default", is_default: true, model: "m/a", latest_session: { kind: "chat", id: "s-alpi", updated_at: 1 } };
 const DOC = { name: "doc", model: "m/d", latest_session: { kind: "chat", id: "s-doc", updated_at: 50 } };
 const SCOUT = { name: "scout", model: "m/s", latest_session: { kind: "chat", id: "s-scout", updated_at: 90 } };
@@ -144,10 +146,10 @@ describe("App landing", () => {
     fireEvent.click(row("crew"));
     await waitFor(() => expect(selected("crew")).toBe(true));
     openSettings();
-    await waitFor(() => expect(screen.getByText("Command…")).toBeInTheDocument());
+    await waitFor(() => expect(inSettingsView()).toBe(true));
     pressNewSession();
     await waitFor(() => expect(screen.getByText("Start a new thread")).toBeInTheDocument());
-    expect(screen.queryByText("Command…")).toBeNull();
+    expect(inSettingsView()).toBe(false);
     expect(selected("doc")).toBe(true);
   });
 
@@ -179,11 +181,11 @@ describe("App landing", () => {
     render(<App />);
     await waitFor(() => expect(selected("alpi")).toBe(true));
     openSettings();
-    await waitFor(() => expect(screen.getByText("Command…")).toBeInTheDocument());
+    await waitFor(() => expect(inSettingsView()).toBe(true));
     await switchTo("mirai");
     await waitFor(() => expect(state.active).toBe("remote"));
     await waitFor(() => expect(row("scout")).toBeTruthy());
-    expect(screen.getByText("Command…")).toBeInTheDocument();
+    expect(inSettingsView()).toBe(true);
     pressNewSession();
     await waitFor(() => expect(screen.getByText("Start a new thread")).toBeInTheDocument());
     expect(selected("scout")).toBe(true);
@@ -244,7 +246,7 @@ describe("App landing", () => {
     render(<App />);
     await waitFor(() => expect(selected("alpi")).toBe(true));
     openSettings();
-    await waitFor(() => expect(screen.getByText("Command…")).toBeInTheDocument());
+    await waitFor(() => expect(inSettingsView()).toBe(true));
     setSettingsDirty("profile:default:bio", true);
     try {
       pressNewSession();
@@ -255,7 +257,7 @@ describe("App landing", () => {
       });
       fireEvent.change(await screen.findByRole("combobox"), { target: { value: "New session" } });
       fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
-      expect(screen.getByText("Command…")).toBeInTheDocument();
+      expect(inSettingsView()).toBe(true);
       expect(screen.queryByText("Start a new thread")).toBeNull();
       expect(notify).toHaveBeenCalledTimes(3);
     } finally {
@@ -277,7 +279,7 @@ describe("App landing", () => {
     fireEvent.change(field, { target: { value: "doc" } });
     fireEvent.keyDown(field, { key: "Enter" });
     await waitFor(() => expect(selected("alpi")).toBe(true));
-    expect(screen.queryByText("Command…")).toBeNull();
+    expect(inSettingsView()).toBe(false);
     await waitFor(() => expect(screen.queryAllByText("doc").filter((el) => el.closest(".ds-sb-row"))).toHaveLength(0));
   });
 
@@ -290,7 +292,7 @@ describe("App landing", () => {
     await waitFor(() => expect(listeners.nav).toBeTruthy());
     act(() => listeners.nav({ payload: "settings" }));
     await waitFor(() => expect(selected("alpi")).toBe(true));
-    expect(screen.queryByText("Command…")).toBeNull();
+    expect(inSettingsView()).toBe(false);
   });
 
   it("shows nothing, not the empty roster state, before the roster answers", async () => {
@@ -336,12 +338,12 @@ describe("App landing", () => {
     render(<App />);
     await waitFor(() => expect(selected("alpi")).toBe(true));
     openSettings();
-    await waitFor(() => expect(screen.getByText("Command…")).toBeInTheDocument());
+    await waitFor(() => expect(inSettingsView()).toBe(true));
     await switchTo("mirai");
     await waitFor(() => expect(state.active).toBe("remote"));
     await waitFor(() => expect(row("scout")).toBeTruthy());
     openSettings();
-    await waitFor(() => expect(screen.queryByText("Command…")).toBeNull());
+    await waitFor(() => expect(inSettingsView()).toBe(false));
     await waitFor(() => expect(selected("scout")).toBe(true));
     expect(sessionOpened("default", "s-alpi")).toBe(true);
     expect(invoke.mock.calls.filter(([cmd, args]) => cmd === "session_detail" && args?.profile === "default" && args?.connectionId === "remote")).toHaveLength(0);
@@ -370,12 +372,12 @@ describe("App landing", () => {
     await waitFor(() => expect(sessionOpened("doc", "s-doc")).toBe(true));
     fireEvent.contextMenu(row("crew"));
     fireEvent.click(await screen.findByText("Open settings"));
-    await waitFor(() => expect(screen.getByText("Command…")).toBeInTheDocument());
+    await waitFor(() => expect(inSettingsView()).toBe(true));
     await switchTo("mirai");
     await waitFor(() => expect(state.active).toBe("remote"));
     await waitFor(() => expect(row("doc")).toBeTruthy());
     openSettings();
-    await waitFor(() => expect(screen.queryByText("Command…")).toBeNull());
+    await waitFor(() => expect(inSettingsView()).toBe(false));
     await waitFor(() => expect(sessionOpened("doc", "s-doc-remote")).toBe(true));
     expect(invoke.mock.calls.some(([cmd, args]) => cmd === "session_detail" && args?.id === "s-doc" && args?.connectionId === "remote")).toBe(false);
   });

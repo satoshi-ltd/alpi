@@ -1,23 +1,23 @@
 .body {
   display: flex;
   flex-direction: column;
-  gap: var(--space-9);
+  gap: var(--sp-24);
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--sp-8);
 }
 
 .helper {
   color: var(--ink-2);
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
   line-height: var(--lh-normal);
 }
 
 .error {
   color: var(--c-danger-text);
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
 }
 

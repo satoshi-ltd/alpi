@@ -140,7 +140,8 @@ const RENDERABLE = [...FOLD_IDS, WORKGROUP_FOLD, ALPACA_FOLD];
 
 export const DEFAULT_FOLD = "diamond";
 export const FOLD_SIZES = { row: 16, header: 20, hero: 72 };
-export const ALPACA_ROW_SCALE = 1.3;
+export const ALPACA_ROW_SCALE = 1.25;
+export const alpacaDrawnSize = (slot) => slot + 2 * Math.round((slot * (ALPACA_ROW_SCALE - 1)) / 2);
 export const isLegacyFold = (value) => normaliseFold(value) === DEFAULT_FOLD;
 export const isHexColour = (value) => /^#[0-9a-f]{6}$/i.test(value ?? "");
 export const FALLBACK_ACCENT = "#f0b447";

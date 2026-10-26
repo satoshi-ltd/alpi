@@ -1,6 +1,6 @@
 import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
 
-import { iconSizes, iconStroke } from '../theme/tokens';
+import { iconSizes, iconStrokeFor } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeContext';
 import { ICONS, ICON_ALIASES } from '../../../common/iconPaths.mjs';
 
@@ -8,16 +8,15 @@ const TAG = { path: Path, circle: Circle, rect: Rect, line: Line };
 // Mobile nav uses chevrons for back/forward (desktop's "back" is an arrow-left).
 const ALIASES = { ...ICON_ALIASES, back: 'chevron-left', forward: 'chevron-right' };
 
-export function Icon({ name, size = 'md', color, strokeWidth }) {
+export function Icon({ name, size = 'md', color }) {
   const { colors } = useTheme();
   const tint = color ?? colors.ink2;
   const def = ICONS[ALIASES[name] ?? name];
   if (!def) return null;
   const els = Array.isArray(def) ? def : def.els;
   const vb = (!Array.isArray(def) && def.vb) || '0 0 24 24';
-  const px = typeof size === 'number' ? size : iconSizes[size] ?? iconSizes.md;
-  const sw =
-    strokeWidth ?? (!Array.isArray(def) && def.sw != null ? def.sw : iconStroke);
+  const px = size === 'xs' ? iconSizes.xs : iconSizes.md;
+  const sw = !Array.isArray(def) && def.sw != null ? def.sw : iconStrokeFor(px);
   const filled = !Array.isArray(def) && def.fill === 'currentColor';
   return (
     <Svg

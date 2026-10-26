@@ -18,7 +18,7 @@ vi.mock('react-native', () => ({
 
 vi.mock('../../theme/ThemeContext', () => ({
   useTheme: () => ({
-    colors: { bg: '#fff', bgPane: '#fff', bgInput: '#f1f3f5', line: '#eee', line2: '#ddd', hover: '#f4f4f4', selected: '#eee', ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', accent: '#c90', warning: '#e08a3c', warningText: '#8a5a0a', success: '#3fb37a', successText: '#217a45', danger: '#c14545', dangerText: '#b73737', onDanger: '#fff' },
+    colors: { bg: '#fff', bgPane: '#fff', field: '#f1f3f5', line: '#eee', line2: '#ddd', hover: '#f4f4f4', selected: '#eee', ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', accent: '#c90', warning: '#e08a3c', warningText: '#8a5a0a', success: '#3fb37a', successText: '#217a45', danger: '#c14545', dangerText: '#b73737', onDanger: '#fff' },
     fonts: { sans: { regular: 'r', medium: 'm', semibold: 's' }, mono: 'mono', monoMedium: 'monoMedium' },
     fontSizes: { xs: 11, sm: 12, md: 14, lg: 15, xl: 18 },
     mobile: { tap: 44, inputH: 44, btnH: 48 },

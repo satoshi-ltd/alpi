@@ -372,7 +372,6 @@ export default function ChatPane({
         disabled={daemonOffline || paused}
         daemonOffline={daemonOffline}
         paused={paused}
-        onResume={onTogglePause}
         modelOverride={modelOverride}
         onModelChange={setModelOverride}
         rewriteDraft={rewriteDraft}
@@ -716,7 +715,7 @@ const Turn = memo(function Turn({
                     }
                     className={styles.userActionBtn}
                   >
-                    <EditIcon style={{ width: 12, height: 12 }} />
+                    <EditIcon size="sm" />
                   </IconBtn>
                 </Tip>
               )}
@@ -726,7 +725,7 @@ const Turn = memo(function Turn({
                   onClick={() => copyMessage("user", turn.user)}
                   className={styles.userActionBtn}
                 >
-                  {copiedKey === "user" ? <DSCheckIcon style={{ width: 12, height: 12 }} /> : <DSCopyIcon style={{ width: 12, height: 12 }} />}
+                  {copiedKey === "user" ? <DSCheckIcon size="sm" /> : <DSCopyIcon size="sm" />}
                 </IconBtn>
               </Tip>
             </TurnFooter>
@@ -765,7 +764,7 @@ const Turn = memo(function Turn({
                   onClick={() => copyMessage("assistant", turn.assistant)}
                   className={styles.agentActionBtn}
                 >
-                  {copiedKey === "assistant" ? <DSCheckIcon style={{ width: 13, height: 13 }} /> : <DSCopyIcon style={{ width: 13, height: 13 }} />}
+                  {copiedKey === "assistant" ? <DSCheckIcon size="sm" /> : <DSCopyIcon size="sm" />}
                 </IconBtn>
               </Tip>
               {onRetryMessage && turn.user && (
@@ -777,7 +776,7 @@ const Turn = memo(function Turn({
                     }
                     className={styles.agentActionBtn}
                   >
-                    <RefreshIcon style={{ width: 13, height: 13 }} />
+                    <RefreshIcon size="sm" />
                   </IconBtn>
                 </Tip>
               )}
@@ -789,11 +788,11 @@ const Turn = memo(function Turn({
                   className={styles.agentActionBtn}
                 >
                   {isLoading ? (
-                    <DSSpinnerIcon style={{ width: 13, height: 13 }} />
+                    <DSSpinnerIcon size="sm" />
                   ) : isPlaying ? (
-                    <StopIcon style={{ width: 13, height: 13 }} />
+                    <StopIcon size="sm" />
                   ) : (
-                    <VolumeIcon style={{ width: 13, height: 13 }} />
+                    <VolumeIcon size="sm" />
                   )}
                 </IconBtn>
               </Tip>
@@ -924,10 +923,12 @@ function TurnFooter({ ts, meta = null, side = "left", rest = false, children }) 
       <RelativeTime ts={ts} />
     </Mono>
   );
+  const timeNode = meta ? <Tip text={meta} side={side === "right" ? "up-r" : "up-l"}>{time}</Tip> : time;
   return (
-    <div className={styles.foot}>
-      {meta ? <Tip text={meta} side={side === "right" ? "up-r" : "up-l"}>{time}</Tip> : time}
+    <div className={styles.foot} data-side={side}>
+      {side === "right" ? timeNode : null}
       <span className={`${styles.footActions} ${rest ? styles.footActionsRest : ""}`.trim()}>{children}</span>
+      {side === "right" ? null : timeNode}
     </div>
   );
 }

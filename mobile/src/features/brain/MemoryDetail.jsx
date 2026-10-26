@@ -17,6 +17,7 @@ import { useDirtyBack } from '../../hooks/useDirtyBack';
 import { useMemoryEditor } from '../../hooks/useMemoryEditor';
 import { useTheme } from '../../theme/ThemeContext';
 import { ReaderSkeleton } from '../../components/ReaderSkeleton';
+import { detailTitleStyle } from '../../components/detailTitle';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -27,7 +28,8 @@ function entryDate(iso) {
 
 export function MemoryDetail({ profile: id, name, embedded = false, onBack, onDirtyChange, onSaved }) {
   const file = memoryFile(String(name));
-  const { colors, fonts, fontSizes } = useTheme();
+  const theme = useTheme();
+  const { colors, fonts, fontSizes } = theme;
   const confirm = useConfirm();
   const toast = useToast();
   const mem = useMemoryEditor(id, name);
@@ -70,7 +72,7 @@ export function MemoryDetail({ profile: id, name, embedded = false, onBack, onDi
   const mono = { fontFamily: fonts.mono, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * 1.55, color: colors.ink };
   const iconBtn = (icon, onPress) => (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={icon === 'edit' ? 'Edit' : icon === 'check' ? 'Save' : 'Cancel'} style={styles.iconBtn}>
-      <Icon name={icon} size="lg" color={colors.ink2} />
+      <Icon name={icon} size="md" color={colors.ink2} />
     </Pressable>
   );
 
@@ -118,7 +120,7 @@ export function MemoryDetail({ profile: id, name, embedded = false, onBack, onDi
           {flag ? <AlertBanner {...memoryBanner(flag)} /> : null}
           <View style={{ gap: space.s1 }}>
             <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: space.s3 }}>
-              <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.xl, color: colors.ink }}>{file.label}</Text>
+              <Text accessibilityRole="header" style={detailTitleStyle(theme)}>{file.label}</Text>
               <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>{String(name)}</Text>
             </View>
             <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}>{file.caption(String(id))}</Text>

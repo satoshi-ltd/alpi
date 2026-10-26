@@ -2,9 +2,9 @@
   display: inline-flex;
   align-items: center;
   height: 18px;
-  padding: 0 4px;
+  padding: 0 var(--sp-4);
   border: none;
   background: transparent;
   cursor: pointer;
-  font-size: var(--fs-md);
+  font-size: var(--text-ui);
 }

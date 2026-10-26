@@ -10,5 +10,5 @@
   width: 1px;
   height: var(--ctrl-2xs);
   background: var(--line);
-  margin: 0 var(--space-1);
+  margin: 0 var(--sp-4);
 }

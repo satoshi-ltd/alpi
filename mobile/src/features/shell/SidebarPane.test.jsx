@@ -92,7 +92,7 @@ vi.mock('react-native-safe-area-context', () => ({
 vi.mock('../../theme/ThemeContext', () => ({
   useTheme: () => ({
     colors: {
-      bg: '#fff', bgPane: '#fff', bgSide: '#f5f6f8', bgInput: '#f1f3f5',
+      bg: '#fff', bgPane: '#fff', bgSide: '#f5f6f8', field: '#f1f3f5',
       line: '#eee', line2: '#ddd', selected: '#eaeaea', hover: '#f4f4f4',
       ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', accent: '#c90', danger: '#c00',
     },
@@ -512,25 +512,32 @@ describe('SidebarPane footer', () => {
     expect(order & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('keeps the version on the trailing edge after the spacer', () => {
+  it('shows the bare version as plain text beside the icons', () => {
     render(<SidebarPane />);
-    const version = screen.getByText('v0.3.1');
-    expect(bellEntry().compareDocumentPosition(version) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText('0.3.1').closest('button')).toBeNull();
   });
 
-  it('overlays the unread count on the bell glyph instead of setting it beside it', () => {
+  it('marks unread on the bell glyph with a digitless dot', () => {
     h.unread = 7;
     render(<SidebarPane />);
     const wrap = bellEntry().querySelector('[data-pos="relative"]');
     expect(wrap.querySelector('[data-icon="bell"]')).toBeTruthy();
-    const badge = wrap.querySelector('[data-pos="absolute"]');
-    expect(badge.textContent).toBe('7');
+    expect(wrap.querySelector('[data-pos="absolute"]').textContent).toBe('');
   });
 
-  it('caps the badge at 9+', () => {
+  it('keeps the exact count in the bell label past 9', () => {
     h.unread = 150;
     render(<SidebarPane />);
-    expect(bellEntry().querySelector('[data-pos="absolute"]').textContent).toBe('9+');
+    expect(bellEntry().getAttribute('aria-label')).toBe('Notifications · 150 unread');
+    expect(bellEntry().textContent).toBe('');
+  });
+
+  it('draws every footer entry icon-only, names kept in the labels', () => {
+    h.unread = 2;
+    render(<SidebarPane />);
+    for (const entry of [settingsEntry(), bellEntry()]) expect(entry.textContent).toBe('');
+    expect(screen.queryByText('Settings')).toBeNull();
+    expect(screen.queryByText('Notifications')).toBeNull();
   });
 
   it('draws no badge at zero unread', () => {

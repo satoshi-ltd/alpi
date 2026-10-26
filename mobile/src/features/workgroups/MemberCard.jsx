@@ -12,6 +12,8 @@ const STYLES = StyleSheet.create({
     paddingHorizontal: space.s7,
     paddingVertical: space.s5,
     gap: space.s2,
+    minHeight: 64,
+    justifyContent: 'center',
   },
   head: {
     flexDirection: 'row',
@@ -61,7 +63,7 @@ export function MemberCard({ label, accent, fold, isHub, bio, owns = null, invit
         {invited ? <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}>invited</Text> : null}
         {onMore ? (
           <Pressable style={STYLES.more} onPress={onMore} accessibilityRole="button" accessibilityLabel={`More for ${label}`}>
-            <Icon name="ellipsis" size="lg" color={colors.ink2} />
+            <Icon name="ellipsis" size="md" color={colors.ink2} />
           </Pressable>
         ) : null}
       </View>
@@ -80,7 +82,7 @@ export function MemberCard({ label, accent, fold, isHub, bio, owns = null, invit
           <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>owns</Text>
           {owns.length > 0 ? (
             owns.map((slug) => (
-              <View key={slug} style={[STYLES.tag, { backgroundColor: colors.hover }]}>
+              <View key={slug} style={[STYLES.tag, { backgroundColor: colors.selected }]}>
                 <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink2 }}>#{slug}</Text>
               </View>
             ))

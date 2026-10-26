@@ -75,7 +75,7 @@ export function ApprovalSheet() {
                   wants to run a command
                 </Text>
                 <View accessible accessibilityRole="image" accessibilityLabel="needs your approval">
-                  <Icon name="triangle-alert" size="sm" color={colors.danger} />
+                  <Icon name="triangle-alert" size="xs" color={colors.danger} />
                 </View>
               </View>
               {eyebrow.tail ? (
@@ -98,7 +98,7 @@ export function ApprovalSheet() {
             <ScrollView
               style={{
                 maxHeight: 160,
-                backgroundColor: colors.bgInput,
+                backgroundColor: colors.field,
                 borderRadius: radii.xs,
                 borderWidth: 0.5,
                 borderColor: colors.line2,

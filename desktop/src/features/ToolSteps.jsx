@@ -5,7 +5,7 @@ import IconBtn from "../primitives/IconBtn.jsx";
 import Reasoning from "../primitives/Reasoning.jsx";
 import Reveal from "../primitives/Reveal.jsx";
 import Tip from "../primitives/Tip.jsx";
-import { CaretIcon, CheckIcon, CopyIcon, Icon } from "../primitives/icons.jsx";
+import { CheckIcon, CopyIcon, Icon } from "../primitives/icons.jsx";
 import { useNotify } from "../primitives/Notification.jsx";
 import { pluralize } from "../../../common/pluralize.mjs";
 import { copyText } from "../lib/clipboard.js";
@@ -53,7 +53,7 @@ function CopyButton({ text, label }) {
   return (
     <Tip text={shown} side="up-r" escape>
       <IconBtn aria-label={shown} onClick={onCopy} className={styles.copyBtn}>
-        {copied ? <CheckIcon style={{ width: 12, height: 12 }} /> : <CopyIcon style={{ width: 12, height: 12 }} />}
+        {copied ? <CheckIcon size="sm" /> : <CopyIcon size="sm" />}
       </IconBtn>
     </Tip>
   );
@@ -90,9 +90,9 @@ export const ToolStep = memo(function ToolStep({ tool, accent, open: openProp, o
       >
         <Icon name={toolIcon(tool.name)} size={14} color={iconColor} className={styles.icon} />
         <span className={styles.name}>{tool.name}</span>
+        <Icon name="chevron-right" size="sm" className={`${styles.chev} ${open ? styles.chevOpen : ""}`} />
         <span className={styles.summary}>{summary}</span>
         {statusText && <span className={`tnum ${styles.status}`}>{statusText}</span>}
-        <Icon name="chevron-right" size={12} className={`${styles.chev} ${open ? styles.chevOpen : ""}`} />
       </button>
       <Reveal open={open}>
         <div className={styles.detail}>
@@ -194,11 +194,11 @@ export const ProcessBlock = memo(function ProcessBlock({ entries, accent, fold, 
           aria-expanded={expanded}
           aria-label={expanded ? expandedLabel : `Show ${collapsedLabel.replace(/^\+/, "")}`}
         >
-          <CaretIcon size={14} className={`${styles.bucketChev} ${expanded ? styles.bucketChevOpen : ""}`} />
           <span className={styles.bucketLabel}>{expanded ? expandedLabel : collapsedLabel}</span>
+          <Icon name="chevron-right" size="sm" className={`${styles.bucketChev} ${expanded ? styles.bucketChevOpen : ""}`} />
           {failed > 0 && (
             <span className={styles.bucketFailed}>
-              <Icon name="triangle-alert" size={12} color="var(--c-danger)" />
+              <Icon name="triangle-alert" size="sm" color="var(--c-danger)" />
               {failed} failed
             </span>
           )}

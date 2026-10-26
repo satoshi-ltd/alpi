@@ -76,7 +76,7 @@ function MessageChip({ a, profile, connectionId }) {
     >
       {busy ? (
         <span className={styles.iconBox} aria-hidden>
-          <SpinnerIcon style={{ width: 16, height: 16 }} />
+          <SpinnerIcon size="md" />
         </span>
       ) : (
         <Thumb kind={kind} path={a.path} mime={a.mime} name={a.name} />

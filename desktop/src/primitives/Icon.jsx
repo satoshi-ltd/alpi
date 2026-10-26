@@ -1,8 +1,13 @@
 import { createElement } from "react";
 import { ICONS, ICON_ALIASES } from "../../../common/iconPaths.mjs";
+import { iconSizesAllowed, iconStrokeRendered } from "../../../common/tokens.mjs";
 import styles from "./Icon.module.css";
 
-const SIZES = { xs: 9, sm: 12, md: 14, lg: 18, xl: 24 };
+const [SM, MD] = iconSizesAllowed.desktop;
+const SIZES = { sm: SM, md: MD };
+
+export const iconPx = (size) => (typeof size === "number" ? (size <= SM ? SM : MD) : SIZES[size] ?? MD);
+export const iconStroke = (px, viewBox) => (iconStrokeRendered * viewBox) / px;
 
 export default function Icon({
   name,
@@ -10,7 +15,6 @@ export default function Icon({
   color = null,
   className = "",
   style = null,
-  strokeWidth = null,
   ...rest
 }) {
   const def = ICONS[ICON_ALIASES[name] ?? name];
@@ -20,24 +24,25 @@ export default function Icon({
   }
   const els = Array.isArray(def) ? def : def.els;
   const vb = (!Array.isArray(def) && def.vb) || "0 0 24 24";
-  const sw = strokeWidth != null ? strokeWidth : !Array.isArray(def) && def.sw != null ? def.sw : 2;
+  const filled = !Array.isArray(def) && def.sw === 0;
   const fill = (!Array.isArray(def) && def.fill) || "none";
-  const px = typeof size === "number" ? size : SIZES[size] || SIZES.md;
+  const px = iconPx(size);
+  const sw = iconStroke(px, Number(vb.split(" ")[2]));
   return (
     <svg
+      {...rest}
       viewBox={vb}
       width={px}
       height={px}
       fill={fill}
-      stroke={sw === 0 ? "none" : "currentColor"}
-      strokeWidth={sw || undefined}
+      stroke={filled ? "none" : "currentColor"}
+      strokeWidth={filled ? undefined : sw}
       strokeLinecap="round"
       strokeLinejoin="round"
       className={`${styles.icon} ds-icon ${className}`.trim()}
       style={{ color: color ?? undefined, ...style }}
       aria-hidden="true"
       data-icon={name}
-      {...rest}
     >
       {els.map(([tag, attrs], i) => createElement(tag, { key: i, ...attrs }))}
     </svg>

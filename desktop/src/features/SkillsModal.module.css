@@ -1,20 +1,20 @@
 .skillRow {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--sp-4);
 }
 
 .rowHead {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--sp-8);
 }
 
 .rowId {
   flex: 1;
   min-width: 0;
   font-family: var(--font-mono);
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
   font-weight: var(--fw-medium);
   color: var(--ink);
   white-space: nowrap;
@@ -23,7 +23,7 @@
 }
 
 .rowBlurb {
-  margin-left: var(--space-5);
+  margin-left: var(--sp-12);
   font-size: var(--text-meta);
   line-height: var(--lh-cozy);
   color: var(--ink-3);
@@ -59,7 +59,7 @@
 .detailInfo {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--sp-8);
   color: var(--ink-3);
   font-family: var(--font-mono);
   font-size: var(--text-meta);
@@ -72,8 +72,8 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
-  padding: var(--space-5) var(--space-9) var(--space-9);
+  gap: var(--sp-12);
+  padding: var(--sp-12) var(--sp-24) var(--sp-24);
   overflow-y: auto;
 }
 
@@ -81,13 +81,13 @@
   flex-shrink: 0;
   display: flex;
   align-items: flex-start;
-  gap: var(--space-3);
+  gap: var(--sp-8);
   background: color-mix(in srgb, var(--c-warning) 11%, transparent);
   border: 0.5px solid color-mix(in srgb, var(--c-warning) 28%, transparent);
   border-radius: var(--r-xs);
-  padding: var(--space-3) var(--space-4);
+  padding: var(--sp-8) var(--sp-12);
   color: var(--ink-2);
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
   line-height: var(--lh-cozy);
 }
 .calloutDot {
@@ -109,39 +109,39 @@
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--sp-8);
 }
 
 .fmRow {
   display: flex;
-  gap: var(--space-5);
+  gap: var(--sp-12);
   align-items: baseline;
 }
-.fmLabel { flex-shrink: 0; width: 70px; }
+.fmLabel { flex-shrink: 0; width: var(--def-col); }
 .fmValue { flex: 1; min-width: 0; }
 
-.about { color: var(--ink-2); font-size: var(--fs-sm); line-height: var(--lh-normal); }
+.about { color: var(--ink-2); font-size: var(--text-meta); line-height: var(--lh-normal); }
 
 .reqList {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2) var(--space-5);
+  gap: var(--sp-8) var(--sp-12);
 }
-.req { display: inline-flex; align-items: center; gap: var(--space-2); }
+.req { display: inline-flex; align-items: center; gap: var(--sp-8); }
 .reqName { font-family: var(--font-mono); font-size: var(--text-meta); color: var(--ink-2); }
 .reqMissing { color: var(--ink-3); }
 .reqDot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 .reqOk { background: var(--ink); }
 .reqNo { border: 1px solid var(--edge); }
 
-.kwFlow { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.kwFlow { display: flex; flex-wrap: wrap; gap: var(--sp-8); }
 .kw {
   font-family: var(--font-mono);
   font-size: var(--text-meta);
   color: var(--ink-3);
   background: var(--hover);
   border-radius: var(--r-tag);
-  padding: var(--space-1) var(--space-3);
+  padding: var(--sp-4) var(--sp-8);
 }
 
 .dirBox {
@@ -160,33 +160,33 @@
   gap: var(--space-tight);
   background: var(--bg-side);
   border-right: 0.5px solid var(--line);
-  padding: var(--space-3);
+  padding: var(--sp-8);
   overflow-y: auto;
   min-height: 0;
 }
 
-.treeRoot { padding: var(--space-2) var(--space-3) var(--space-3); }
+.treeRoot { padding: var(--sp-8) var(--sp-8) var(--sp-8); }
 
 .treeRow {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--sp-8);
   width: 100%;
-  padding: var(--space-2) var(--space-3);
+  padding: var(--sp-8) var(--sp-8);
   border: 0;
   border-radius: var(--r-xs);
   background: transparent;
   cursor: pointer;
   text-align: left;
   font-family: var(--font-mono);
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
   color: var(--ink-2);
 }
 .treeRow:hover { background: var(--hover); }
 
 .treeFileActive,
 .treeFileActive:hover { background: var(--selected); color: var(--ink); }
-.treeFileNested { padding-left: 22px; }
+.treeFileNested { padding-left: var(--sp-24); }
 
 .treeIcon { flex-shrink: 0; color: var(--ink-3); }
 .treeName {
@@ -212,7 +212,7 @@
 }
 
 .mdBox {
-  padding: var(--space-6) var(--space-7);
+  padding: var(--sp-16) var(--sp-16);
 }
 
 .mdBox :global(.alpi-md) {
@@ -223,7 +223,7 @@
 .status {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--sp-8);
   font-family: var(--font-mono);
   font-size: var(--text-meta);
   color: var(--ink-2);
@@ -243,11 +243,11 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-3);
+  gap: var(--sp-8);
   min-height: 200px;
   height: 100%;
   color: var(--ink-3);
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
 }
 
 .viewerSkeleton {
@@ -261,5 +261,5 @@
   min-height: 200px;
   height: 100%;
   color: var(--ink-3);
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
 }

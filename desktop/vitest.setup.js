@@ -1,8 +1,10 @@
 // Tauri API mocks live in tests/__mocks__/tauri.js and are imported per-test.
 // Keep this file minimal: jest-dom matchers + a safe default for invoke/listen.
 import "@testing-library/jest-dom/vitest";
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
+
+configure({ asyncUtilTimeout: 5000 });
 
 afterEach(() => {
   cleanup();

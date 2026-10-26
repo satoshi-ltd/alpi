@@ -29,9 +29,9 @@ describe("control boundaries", () => {
     expect(rule(read("pages/ChatPane.module.css"), ".emptyHash")).toMatch(/color:\s*var\(--ink-3\)/);
   });
 
-  it("sets secondary failure text at 12 px", () => {
-    expect(rule(read("primitives/LoadFailed.module.css"), ".detail")).toMatch(/font-size:\s*var\(--fs-sm\)/);
-    expect(rule(read("pages/WorkgroupsView.module.css"), ".statusNote")).toMatch(/font-size:\s*var\(--fs-sm\)/);
+  it("sets secondary failure text at the meta size", () => {
+    expect(rule(read("primitives/LoadFailed.module.css"), ".detail")).toMatch(/font-size:\s*var\(--text-meta\)/);
+    expect(rule(read("pages/WorkgroupsView.module.css"), ".statusNote")).toMatch(/font-size:\s*var\(--text-meta\)/);
   });
 
   it("rings an invalid field in danger, focused or not", () => {

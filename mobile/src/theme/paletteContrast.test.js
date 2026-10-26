@@ -34,3 +34,15 @@ describe("palette readability", () => {
     expect(contrastText("#000")).toBe("#ffffff");
   });
 });
+describe("surface ladder on the phone", () => {
+  it("keeps light cards 1.10:1 over the ground and fields 1.07:1 inside a card", () => {
+    expect(contrastRatio(palettes.light.card, palettes.light.bg)).toBeGreaterThan(1.099);
+    expect(contrastRatio(palettes.light.field, palettes.light.card)).toBeGreaterThanOrEqual(1.07);
+  });
+
+  it("lifts dark cards over the ground and fields over the cards", () => {
+    expect(contrastRatio(palettes.dark.card, palettes.dark.bg)).toBeGreaterThan(1.05);
+    expect(contrastRatio(palettes.dark.field, palettes.dark.card)).toBeGreaterThanOrEqual(1.07);
+    expect(palettes.dark.bgElev).toBe("#202020");
+  });
+});

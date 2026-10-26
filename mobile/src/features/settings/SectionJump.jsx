@@ -6,6 +6,7 @@ import { EdgeFade } from '../../components/EdgeFade';
 import { Eyebrow } from '../../components/Eyebrow';
 import { Icon } from '../../components/Icon';
 import { scrollEdges } from '../../lib/scrollEdges';
+import { dotShape } from '../../components/dotShape';
 import { useTheme } from '../../theme/ThemeContext';
 import { JUMP_SECTIONS, summaryRows } from './jumpSections';
 
@@ -80,7 +81,7 @@ export function AttentionSummary({ att, onJump }) {
           accessibilityLabel={`${row.text}, ${row.label}`}
           style={{ minHeight: mobile.tap, flexDirection: 'row', alignItems: 'center', gap: space.s4 }}
         >
-          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.danger }} />
+          <View style={{ ...dotShape('sm'), backgroundColor: colors.danger }} />
           <Text style={{ flex: 1, fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink }}>{row.text}</Text>
           <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>{row.label}</Text>
           <Icon name="chevron-right" size="xs" color={colors.ink4} />

@@ -3,17 +3,17 @@
   flex-direction: row;
   justify-content: flex-end;
   align-items: center;
-  gap: var(--space-3);
-  margin-top: var(--space-4);
+  gap: var(--sp-8);
+  margin-top: var(--sp-12);
 }
 
 /* Pushes everything else right, so a destructive action sits opposite the confirm pair. */
 .leading {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--sp-8);
   margin-right: auto;
-  margin-left: -8px;
+  margin-left: calc(var(--sp-8) * -1);
 }
 
 .leading :global(.alink),

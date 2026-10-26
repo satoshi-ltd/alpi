@@ -33,15 +33,15 @@ describe("sidebar selection and muted rows", () => {
 describe("hit areas", () => {
   const sidebar = read("features/Sidebar.module.css");
 
-  it("gives the footer icon buttons a 28 px target", () => {
-    expect(rule(sidebar, ".footer :global(.ds-tip) .footerIcon")).toMatch(/width:\s*var\(--ctrl-sm\);\s*height:\s*var\(--ctrl-sm\)/);
+  it("gives the footer icon buttons a 24 px target", () => {
+    expect(rule(sidebar, ".footer :global(.ds-tip) .footerIcon")).toMatch(/width:\s*var\(--ctl-24\);\s*height:\s*var\(--ctl-24\)/);
   });
 
   it.each([".sectionAdd", ".pinButton", ".searchClose"])("gives %s at least 24 px", (selector) => {
-    expect(rule(sidebar, selector)).toMatch(/width:\s*var\(--space-9\);\s*height:\s*var\(--space-9\)/);
+    expect(rule(sidebar, selector)).toMatch(/width:\s*var\(--sp-24\);\s*height:\s*var\(--sp-24\)/);
   });
 
   it("keeps the section plus glyph at 12 px", () => {
-    expect(rule(sidebar, ".sectionAdd :global(.ds-icon)")).toMatch(/width:\s*12px/);
+    expect(rule(sidebar, ".sectionAdd :global(.ds-icon)")).toMatch(/width:\s*var\(--icon-sm\)/);
   });
 });

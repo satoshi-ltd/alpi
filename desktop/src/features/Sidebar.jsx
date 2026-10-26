@@ -4,13 +4,10 @@ import VersionButton from "./VersionButton.jsx";
 import { ActionLink, SidebarRow, SectionLabel, ContextMenu } from "../primitives/index.js";
 import { WORKGROUP_FOLD } from "../../../common/folds.mjs";
 import { shortcutKeys } from "../lib/shortcuts.js";
+import { cycleTheme, nextTheme, useTheme } from "../lib/theme.js";
 import {
-  AutoIcon,
   Button,
   IconBtn,
-  KeyHint,
-  MoonIcon,
-  SunIcon,
   Tip,
   Fold,
   GearIcon,
@@ -24,7 +21,6 @@ import {
   XIcon,
 } from "../primitives/index.js";
 import RelativeTime from "../primitives/RelativeTime.jsx";
-import { cycleTheme, nextTheme, useTheme } from "../lib/theme.js";
 import { profileLabel } from "../lib/profile-display.js";
 import {
   useReadState,
@@ -37,7 +33,6 @@ import Skeleton from "../primitives/Skeleton.jsx";
 import { useDelayedFlag } from "../lib/useDelayedFlag.js";
 import styles from "./Sidebar.module.css";
 import { ICON_ROLES } from "../../../common/iconRoles.mjs";
-import { badgeCount } from "../../../common/countBadge.mjs";
 import { EMPTY } from "../../../common/emptyCopy.mjs";
 
 const MIN_VISIBLE_ALPIS = 3;
@@ -102,7 +97,6 @@ function Sidebar({
   onOpenWorkgroup,
   onViewAllWorkgroups,
   onOpenSettings,
-  onOpenPalette,
   onSetSettingsTarget,
   onOpenSettingsTarget,
   onTogglePin,
@@ -639,7 +633,6 @@ function Sidebar({
       <SidebarFooter
         inSettings={inSettings}
         onOpenSettings={onOpenSettings ? () => onOpenSettings() : null}
-        onOpenPalette={() => onOpenPalette?.()}
         onOpenNotifications={onOpenNotifications}
         notificationsUnread={notificationsUnread}
         onOpenActivity={onOpenActivity}
@@ -673,44 +666,57 @@ function SidebarLoadingRows() {
 function SidebarFooter({
   inSettings,
   onOpenSettings,
-  onOpenPalette,
   onOpenNotifications,
   notificationsUnread = 0,
   onOpenActivity = null,
   activityNeedsYou = 0,
 }) {
-  const showSettings = inSettings || Boolean(onOpenSettings);
   return (
-    <div className={`${styles.footer} ${inSettings ? styles.footerSettings : ""}`}>
-      {showSettings && (
-        <Button
-          variant="ghost"
-          size="sm"
-          className={inSettings ? styles.footerButton : `${styles.footerButton} ${styles.footerTight}`}
-          icon={inSettings ? <SearchIcon /> : <Icon name={ICON_ROLES.settings} />}
-          tip={inSettings ? `Command palette · ${shortcutKeys("palette")}` : `Settings · ${shortcutKeys("settings")}`}
-          tipSide="up-l"
-          onClick={inSettings ? onOpenPalette : onOpenSettings}
-        >
-          <span className={styles.rowLabel}>
-            {inSettings ? "Command…" : "Settings"}
-          </span>
-          {inSettings ? <KeyHint hint={shortcutKeys("palette")} /> : null}
-        </Button>
+    <div className={styles.footer}>
+      {(inSettings || onOpenSettings) && (
+        <Tip text={`Settings · ${shortcutKeys("settings")}`} side="up-l">
+          <IconBtn
+            size="sm"
+            className={`${styles.footerIcon} ${styles.footerButton}`}
+            aria-label="Settings"
+            aria-current={inSettings ? "page" : undefined}
+            onClick={onOpenSettings}
+          >
+            <Icon name={ICON_ROLES.settings} size="sm" />
+          </IconBtn>
+        </Tip>
       )}
-      {!inSettings && onOpenNotifications && (
+      {onOpenNotifications && (
         <NotificationsBellButton
           unread={notificationsUnread}
           onClick={onOpenNotifications}
         />
       )}
-      {!inSettings && onOpenActivity && (
+      {onOpenActivity && (
         <ActivityButton needsYou={activityNeedsYou} onClick={onOpenActivity} />
       )}
-      {!inSettings && <ThemeButton />}
-      <span className={styles.footerSpacer} aria-hidden />
+      <ThemeButton />
       <VersionButton />
     </div>
+  );
+}
+
+const THEME_LABEL = { system: "System", light: "Light", dark: "Dark" };
+const THEME_ICON = { system: "sun-moon", light: "sun", dark: "moon" };
+
+function ThemeButton() {
+  const theme = useTheme();
+  return (
+    <Tip text={`Theme: ${THEME_LABEL[theme]} · click for ${THEME_LABEL[nextTheme(theme)]}`} side="up-l">
+      <IconBtn
+        size="sm"
+        className={styles.footerIcon}
+        aria-label={`Theme: ${THEME_LABEL[theme]}`}
+        onClick={() => cycleTheme()}
+      >
+        <Icon name={THEME_ICON[theme]} size="sm" />
+      </IconBtn>
+    </Tip>
   );
 }
 
@@ -723,12 +729,8 @@ function NotificationsBellButton({ unread = 0, onClick }) {
     <Tip text={tip} side="up-l">
       <IconBtn size="sm" className={styles.footerIcon} aria-label={tip} onClick={onClick}>
         <span className={styles.bellWrap}>
-          <Icon name={ICON_ROLES.notifications} />
-          {unread > 0 ? (
-            <span className={styles.bellBadge} aria-hidden>
-              {badgeCount(unread)}
-            </span>
-          ) : null}
+          <Icon name={ICON_ROLES.notifications} size="sm" />
+          {unread > 0 ? <span className={styles.bellDot} aria-hidden /> : null}
         </span>
       </IconBtn>
     </Tip>
@@ -742,12 +744,8 @@ function ActivityButton({ needsYou = 0, onClick }) {
     <Tip text={tip} side="up-l">
       <IconBtn size="sm" className={styles.footerIcon} aria-label={tip} onClick={onClick}>
         <span className={styles.bellWrap}>
-          <Icon name={ICON_ROLES.activity} />
-          {needsYou > 0 ? (
-            <span className={styles.bellBadge} aria-hidden>
-              {badgeCount(needsYou)}
-            </span>
-          ) : null}
+          <Icon name={ICON_ROLES.activity} size="sm" />
+          {needsYou > 0 ? <span className={styles.bellDot} aria-hidden /> : null}
         </span>
       </IconBtn>
     </Tip>
@@ -767,27 +765,6 @@ export function RowStateChip({ state, color }) {
   );
 }
 
-function ThemeButton() {
-  const theme = useTheme();
-  const icon = theme === "light"
-    ? <SunIcon />
-    : theme === "dark"
-      ? <MoonIcon />
-      : <AutoIcon />;
-  return (
-    <Tip text={`Theme: ${theme} · click for ${nextTheme(theme)}`} side="up-l">
-      <IconBtn
-        size="sm"
-        className={styles.footerIcon}
-        aria-label={`Theme: ${theme}`}
-        onClick={() => cycleTheme()}
-      >
-        {icon}
-      </IconBtn>
-    </Tip>
-  );
-}
-
 export default memo(Sidebar);
 
 function Section({ label, children, right = null, containerRef = null, labelRef = null }) {
@@ -804,7 +781,7 @@ function Section({ label, children, right = null, containerRef = null, labelRef 
 function SectionAddButton({ tip, ariaLabel, onClick }) {
   return (
     <IconBtn tip={tip} tipSide="r" onClick={onClick} aria-label={ariaLabel} className={styles.sectionAdd}>
-      <PlusIcon />
+      <PlusIcon size="sm" />
     </IconBtn>
   );
 }

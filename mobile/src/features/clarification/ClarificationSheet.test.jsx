@@ -26,7 +26,7 @@ vi.mock('../../theme/ThemeContext', async () => {
   const tokens = await import('../../theme/tokens');
   return {
     useTheme: () => ({
-      colors: { ink: '#000', ink2: '#333', ink3: '#666', line: '#ddd', bgInput: '#fafafa', danger: '#f00' },
+      colors: { ink: '#000', ink2: '#333', ink3: '#666', line: '#ddd', field: '#fafafa', danger: '#f00' },
       fonts: {
         sans: { regular: 'Geist_400Regular', medium: 'Geist_500Medium', bold: 'Geist_700Bold' },
         mono: 'GeistMono_400Regular',

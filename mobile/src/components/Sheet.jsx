@@ -58,47 +58,49 @@ export function Sheet({
 
   const header = (
     <View>
-              <View style={sheetStyles.grabberWrap}>
-                <View
-                  style={[sheetStyles.grabber, { backgroundColor: colors.ink4 }]}
-                />
-              </View>
-              <View
-                style={[sheetStyles.header, view.hideHeader && { paddingBottom: 0 }]}
+      {twoPane ? null : (
+        <View style={sheetStyles.grabberWrap}>
+          <View
+            style={[sheetStyles.grabber, { backgroundColor: colors.ink4 }]}
+          />
+        </View>
+      )}
+      <View
+        style={[sheetStyles.header, twoPane && sheetStyles.dialogHeader, view.hideHeader && { paddingBottom: 0 }]}
+      >
+        <View style={{ flex: 1 }}>
+          {view.hideHeader ? null : (
+            <>
+              <Text
+                style={{
+                  fontFamily: fonts.sans.semibold,
+                  fontSize: fontSizes[typography.dialogTitle.size],
+                  lineHeight: fontSizes[typography.dialogTitle.size] * lineHeights[typography.dialogTitle.leading],
+                  letterSpacing: -0.18,
+                  color: colors.ink,
+                }}
               >
-                <View style={{ flex: 1 }}>
-                  {view.hideHeader ? null : (
-                    <>
-                      <Text
-                        style={{
-                          fontFamily: fonts.sans.semibold,
-                          fontSize: fontSizes[typography.dialogTitle.size],
-                          lineHeight: fontSizes[typography.dialogTitle.size] * lineHeights[typography.dialogTitle.leading],
-                          letterSpacing: -0.18,
-                          color: colors.ink,
-                        }}
-                      >
-                        {view.title}
-                      </Text>
-                      {view.subtitle ? (
-                        <Text
-                          style={{
-                            fontFamily: fonts.mono,
-                            fontSize: fontSizes.sm,
-                            lineHeight: fontSizes.sm * lineHeights.cozy,
-                            color: colors.ink3,
-                            marginTop: space.s1,
-                          }}
-                        >
-                          {view.subtitle}
-                        </Text>
-                      ) : null}
-                    </>
-                  )}
-                </View>
-                {view.headerRight}
-                <SheetClose onPress={onClose} />
-              </View>
+                {view.title}
+              </Text>
+              {view.subtitle ? (
+                <Text
+                  style={{
+                    fontFamily: fonts.mono,
+                    fontSize: fontSizes.sm,
+                    lineHeight: fontSizes.sm * lineHeights.cozy,
+                    color: colors.ink3,
+                    marginTop: space.s1,
+                  }}
+                >
+                  {view.subtitle}
+                </Text>
+              ) : null}
+            </>
+          )}
+        </View>
+        {view.headerRight}
+        <SheetClose onPress={onClose} />
+      </View>
     </View>
   );
 
@@ -126,13 +128,13 @@ export function Sheet({
               borderTopLeftRadius: radii.xs,
               borderTopRightRadius: radii.xs,
               overflow: 'hidden',
-              ...shadow.float,
+              ...(twoPane ? shadow.dialog : shadow.sheet),
               ...dialog,
             },
             sheetStyle,
           ]}
         >
-          {dismissible ? <GestureDetector gesture={gesture}>{header}</GestureDetector> : header}
+          {dismissible && !twoPane ? <GestureDetector gesture={gesture}>{header}</GestureDetector> : header}
           <View
             style={{
               flexShrink: 1,

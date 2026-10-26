@@ -61,6 +61,8 @@ vi.mock('../src/components/OnOff', () => ({
     React.createElement('span', { 'data-onoff': on ? onLabel : offLabel }),
 }));
 vi.mock('../src/components/Fold', () => ({ Fold: () => null }));
+vi.mock('../src/components/Toggle', () => ({ Toggle: ({ label }) => React.createElement('input', { type: 'checkbox', 'data-toggle': label, readOnly: true }) }));
+vi.mock('../src/lib/haptics', () => ({ selection: vi.fn() }));
 vi.mock('../src/components/Toast', () => ({ useToast: () => vi.fn() }));
 vi.mock('../src/components/ConfirmDialog', () => ({
   Bold: ({ children }) => React.createElement('span', {}, children),

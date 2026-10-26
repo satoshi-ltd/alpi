@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Button from "../../../primitives/Button.jsx";
+import { PlusIcon } from "../../../primitives/icons.jsx";
 import Eyebrow from "../../../primitives/Eyebrow.jsx";
 import Chip from "../../../primitives/Chip.jsx";
 import Modal from "../../../primitives/Modal.jsx";
@@ -30,7 +31,7 @@ export function McpField({ profile, connectionId, onSaved }) {
             {m.name}
           </Chip>
         ))}
-        <Button size="sm" onClick={() => setAdding(true)}>+ Add MCP</Button>
+        <Button size="sm" icon={<PlusIcon />} onClick={() => setAdding(true)}>Add MCP</Button>
       </span>
       {adding && (
         <McpAddModal
@@ -135,7 +136,7 @@ function McpDetailModal({ profile, connectionId, mcp, onClose, onRemoved }) {
           </div>
         )}
       </div>
-      <div className={styles.muted} style={{ fontSize: "var(--fs-xs)" }}>
+      <div className={styles.muted} style={{ fontSize: "var(--text-meta)" }}>
         To edit, remove and add again. Env values are never read back from disk.
       </div>
       <DialogFooter
@@ -196,7 +197,7 @@ function McpAddModal({ profile, connectionId, existingNames, onClose, onSaved })
 
   return (
     <Modal title="Add MCP server" onClose={onClose} closeOnBackdrop={!busy && ![name, command, args, envText].some((v) => v.trim())}>
-      <div className={styles.muted} style={{ marginBottom: "var(--space-2)" }}>
+      <div className={styles.muted} style={{ marginBottom: "var(--sp-8)" }}>
         Example — GitHub MCP: command <code>npx</code>, args{" "}
         <code>-y @modelcontextprotocol/server-github</code>, env{" "}
         <code>GITHUB_TOKEN=ghp_…</code>.
@@ -214,7 +215,7 @@ function McpAddModal({ profile, connectionId, existingNames, onClose, onSaved })
           autoFocus
         />
         {duplicate && (
-          <span id={nameErrorId} className={styles.error} style={{ marginTop: "var(--space-2)" }}>
+          <span id={nameErrorId} className={styles.error} style={{ marginTop: "var(--sp-8)" }}>
             @{trimmed} already exists
           </span>
         )}

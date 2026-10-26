@@ -6,7 +6,7 @@ import Chip from "../../../primitives/Chip.jsx";
 import Dropdown from "../../../primitives/Dropdown.jsx";
 import Textarea from "../../../primitives/Textarea.jsx";
 import useAutoPosition from "../../../primitives/useAutoPosition.js";
-import { Fold, IconBtn, Tip, XIcon } from "../../../primitives/index.js";
+import { Fold, IconBtn, PlusIcon, Tip, XIcon } from "../../../primitives/index.js";
 import Field from "../../../primitives/Field.jsx";
 import { useNotify } from "../../../primitives/Notification.jsx";
 import { useDismissOnOutside } from "../../../hooks/useDismissOnOutside.js";
@@ -230,8 +230,8 @@ export function PeersField({ profile, profiles, onSaved, onRefresh, onLoadingCha
         </span>
       )}
       <span ref={addAnchorRef} className={styles.popoverAnchor}>
-        <Button size="sm" onClick={() => setAddOpen((o) => !o)}>
-          + Add peer
+        <Button size="sm" icon={<PlusIcon />} onClick={() => setAddOpen((o) => !o)}>
+          Add peer
         </Button>
         {addOpen && (
           <AddPeerPopover
@@ -271,7 +271,7 @@ export function PeersField({ profile, profiles, onSaved, onRefresh, onLoadingCha
                       ).toLocaleString()}`
                 }
                 trailing={
-                  <span style={{ display: "inline-flex", gap: "var(--space-2)" }}>
+                  <span style={{ display: "inline-flex", gap: "var(--sp-8)" }}>
                     <Button
                       size="sm"
                       variant="primary"
@@ -333,7 +333,7 @@ function PeerDetailPopover({ peer, status, reason, anchorRef, onClose, onRemove 
         visibility: pos.ready ? "visible" : "hidden",
       }}
     >
-      <ConfirmSheet inset="var(--space-5)">
+      <ConfirmSheet inset="var(--sp-12)">
       <div className={styles.popoverHead}>
         <span className={styles.peerRowName}>@{peer.alias || peer.id}</span>
         {renderPeerStatusChip(status, reason)}

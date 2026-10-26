@@ -30,8 +30,8 @@ describe("one arc for every control", () => {
     for (const sheet of [chip, button]) {
       expect(sheet).not.toMatch(/@keyframes|chipSpin|btnSpin|border-right-color/);
     }
-    expect(chip).toMatch(/\.chip \.spinner\s*\{[^}]*width: var\(--space-5\);[^}]*height: var\(--space-5\);/);
-    expect(chip).toMatch(/\.chip\.sm \.spinner\s*\{[^}]*width: var\(--space-3\);[^}]*height: var\(--space-3\);/);
-    expect(button).toMatch(/\.button \.spinner\s*\{[^}]*width: var\(--space-5\);[^}]*height: var\(--space-5\);/);
+    expect(chip).toMatch(/\.chip \.spinner\s*\{[^}]*width: var\(--sp-12\);[^}]*height: var\(--sp-12\);/);
+    expect(chip).toMatch(/\.chip\.sm \.spinner\s*\{[^}]*width: var\(--sp-8\);[^}]*height: var\(--sp-8\);/);
+    expect(button).toMatch(/\.button \.spinner\s*\{[^}]*width: var\(--sp-12\);[^}]*height: var\(--sp-12\);/);
   });
 });

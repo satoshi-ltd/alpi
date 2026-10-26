@@ -1,6 +1,6 @@
 .bullet {
-  width: 7px;
-  height: 7px;
+  width: var(--dot-md);
+  height: var(--dot-md);
   border-radius: 50%;
   background: currentColor;
   display: inline-block;
@@ -10,7 +10,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--space-2);
+  gap: var(--sp-8);
   width: 100%;
   scroll-margin-top: 120px;
 }
@@ -31,7 +31,7 @@
   display: flex;
   flex-direction: row;
   align-items: baseline;
-  gap: var(--space-4);
+  gap: var(--sp-8);
   font-size: var(--text-meta);
   color: var(--ink-3);
 }

@@ -193,7 +193,7 @@ describe('composer controls', () => {
     const attach = screen.getByLabelText('Attach file');
     expect(styleOf(attach).minWidth).toBe(36);
     expect(styleOf(attach).minWidth).toBeLessThan(mobile.tap);
-    expect(attach.querySelector('[data-icon="paperclip"]').getAttribute('data-size')).toBe('lg');
+    expect(attach.querySelector('[data-icon="paperclip"]').getAttribute('data-size')).toBe('md');
   });
 
   it('spends less room between the pane gutter and the placeholder', () => {
@@ -209,7 +209,7 @@ describe('composer matches the desktop card', () => {
   it('draws the composer as a borderless 4 pt well and rules it off from the transcript, as desktop does', () => {
     const { container } = render(<Composer placeholder="Message @doc…" onPickAttachment={() => {}} />);
     const c = styleOf(card(container));
-    expect(c.backgroundColor).toBe(tokens.palettes.light.bgInput);
+    expect(c.backgroundColor).toBe(tokens.palettes.light.field);
     expect(c.borderRadius).toBe(4);
     expect(c.borderColor).toBe('transparent');
     expect(styleOf(container.firstChild).borderTopWidth).toBeGreaterThan(0);

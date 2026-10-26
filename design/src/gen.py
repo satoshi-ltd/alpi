@@ -101,6 +101,16 @@ def role_ic(role, size=16, color="currentColor", stroke=2):
     return ic(ICON_ROLES[role], size, color, stroke).replace("<svg ", f'<svg data-icon-role="{role}" ', 1)
 
 
+def mi(name, size=16, color="currentColor", stroke=None):
+    px = 12 if size <= 14 else 16
+    return ic(name, px, color, round(1.33 * 24 / px, 2))
+
+
+def di(name, size=16, color="currentColor", stroke=None):
+    px = 14 if size <= 14 else 16
+    return ic(name, px, color, round(1.33 * 24 / px, 2))
+
+
 LIGHT_ACCENT = "#14110c"
 THEMED_ACCENT = "#8a5a0a"
 FOLD_OF = {"alpi": "alpaca", "doc": "shield", "abby": "plane", "galt": "box", "lingo": "star", "etxea": "house"}
@@ -109,8 +119,10 @@ FOLD_OF = {"alpi": "alpaca", "doc": "shield", "abby": "plane", "galt": "box", "l
 def identity_glyph(name, color, px=16, legacy=None):
     import folds
     shape = FOLD_OF.get(name)
+    if shape == "alpaca" and px >= folds.alpaca_tonal()["min"]:
+        return f'<span style="width: {px}px; height: {px}px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">{folds.fold(shape, LIGHT_ACCENT, px)}</span>'
     if shape == "alpaca":
-        big = round(px * 1.3)
+        big = folds.alpaca_drawn(px)
         themed = folds.fold(shape, LIGHT_ACCENT, big, facet_attrs=lambda i, n, tone: f' style="fill: {THEMED_ACCENT}"')
         return f'<span style="width: {px}px; height: {px}px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">{themed}</span>'
     if shape:
@@ -187,16 +199,21 @@ def _wg_mark(color, size):
     return wg_mark(color, size)
 
 
+def m_back_margins(leading):
+    ink = 5.25 if leading else 0
+    return f"margin-left: -{10 + ink:g}px; margin-right: {ink:g}px"
+
+
 def m_screen_header(title, subtitle, accent=DOC_ACCENT, glyph=None, back=True, wide=False, right="", sidebar_toggle=False, meta=None, creased=False):
     from brand_boards import app_crease
     title_html = app_crease(title, 28, accent, "#ffffff", track="-0.018em") if creased else f'<span style="font-weight: 600; font-size: 18px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{title}</span>'
-    padx = 24 if wide else 16
+    padx = 16
     padt = 12 if wide else 8
     parts = []
     if sidebar_toggle:
-        parts.append(f'<button aria-label="Show sidebar" class="m-chrome" style="margin-left: -6px">{ic("panel", 20, "#454545")}</button>')
+        parts.append(f'<button aria-label="Show sidebar" class="m-chrome" style="margin-left: -10px">{mi("panel", 20, "#454545")}</button>')
     if back:
-        parts.append(f'<button aria-label="Back" class="m-chrome" style="width: 28px; height: 36px; margin-left: -6px">{ic("back", 20, "#454545")}</button>')
+        parts.append(f'<button aria-label="Back" class="m-chrome" style="{m_back_margins(not sidebar_toggle)}">{mi("back", 20, "#454545")}</button>')
     g = glyph if glyph is not None else profile_mark(accent, 20)
     if wide:
         sub = f'<span style="font-family: {MONO}; font-size: 11px; line-height: 1.3; letter-spacing: 0.06em; color: #6b6b6b; margin-top: 4px">{subtitle}</span>'
@@ -225,7 +242,7 @@ def m_section(title, kicker="", first=False):
 def m_row(label, helper="", value="", chevron=True, control="", danger=False, sep=True, helper_lines=2):
     color = DANGER if danger else "#141414"
     val = f'<span style="font-size: 14px; color: #6b6b6b; text-align: right; max-width: 55%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{value}</span>' if value else ""
-    chev = ic("chev-r", 16, "#b4b4b4") if chevron and not danger else ""
+    chev = f'<span style="width: 16px; display: inline-flex; justify-content: flex-end; flex-shrink: 0">{mi("chev-r", 16, "#b4b4b4") if chevron and not danger else ""}</span>'
     help_ = f'<span style="font-family: {MONO}; font-weight: 500; font-size: 11px; line-height: 1.3; color: #6b6b6b; {"white-space: nowrap; overflow: hidden; text-overflow: ellipsis" if helper_lines == 1 else ""}">{helper}</span>' if helper else ""
     sepd = '<div style="height: 0.5px; background: rgba(20,20,20,0.07); margin-left: 16px"></div>' if sep else ""
     return f"""<div style="display: flex; align-items: center; gap: 12px; padding: 14px 16px">
@@ -234,7 +251,23 @@ def m_row(label, helper="", value="", chevron=True, control="", danger=False, se
 </div>{sepd}"""
 
 
-GROUP_TONE = "rgba(20,20,20,0.04)"
+def m_segmented(options, value):
+    cells = "".join(
+        f'<span role="radio" aria-checked="{"true" if o == value else "false"}" style="flex: 1; min-height: 44px; padding: 0 2px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; '
+        f'background: {"#ffffff" if o == value else "transparent"}; font-size: 14px; font-weight: {600 if o == value else 400}; color: {"#141414" if o == value else "#454545"}">{o}</span>' for o in options)
+    return f'<div role="radiogroup" style="display: flex; padding: 2px; border-radius: 4px; background: rgba(20,20,20,0.04)">{cells}</div>'
+
+
+def m_row_below(label, helper, below, sep=True):
+    help_ = f'<span style="font-family: {MONO}; font-weight: 500; font-size: 11px; line-height: 1.3; color: #6b6b6b">{helper}</span>' if helper else ""
+    sepd = '<div style="height: 0.5px; background: rgba(20,20,20,0.07); margin-left: 16px"></div>' if sep else ""
+    return (f'<div style="display: flex; flex-direction: column; gap: 12px; padding: 14px 16px"><div style="display: flex; flex-direction: column; gap: 4px">'
+            f'<span style="font-size: 15px; line-height: 1.3; color: #141414">{label}</span>{help_}</div>{below}</div>{sepd}')
+
+
+GROUP_TONE = "var(--card)"
+FIELD = "var(--field)"
+PILL_TONE = "rgba(20,20,20,0.04)"
 
 
 def m_group(*rows):
@@ -250,32 +283,38 @@ def pill(text, on=False, tone="off"):
     bg, fg, dot, opacity = {
         "success": ("rgba(63,179,122,0.16)", "#217a45", "#3fb37a", 1),
         "danger": ("rgba(193,69,69,0.16)", "#b73737", "#c14545", 1),
-        "warning": (GROUP_TONE, "#141414", "#e08a3c", 1),
-        "neutral": (GROUP_TONE, "#454545", "", 1),
-        "off": (GROUP_TONE, "#454545", "#6b6b6b", 0.55),
+        "warning": (PILL_TONE, "#141414", "#e08a3c", 1),
+        "neutral": (PILL_TONE, "#454545", "", 1),
+        "off": (PILL_TONE, "#454545", "#6b6b6b", 0.55),
     }[tone]
-    lead = f'<span style="width: 7px; height: 7px; border-radius: 999px; background: {dot}"></span>' if dot else ""
+    lead = f'<span style="width: 6px; height: 6px; border-radius: 999px; background: {dot}"></span>' if dot else ""
     return (f'<span style="display: inline-flex; align-items: center; gap: 6px; min-height: 22px; padding: 0 8px; box-sizing: border-box; border-radius: 2px; background: {bg}; opacity: {opacity}; '
             f'font-family: {MONO}; font-weight: 500; font-size: 12px; line-height: 1.3; color: {fg}">{lead}{text}</span>')
 
 
 def m_wide_section(title, kicker="", first=False):
-    k = f'<span style="font-size: 11px; color: #6b6b6b">{kicker}</span>' if kicker else ""
-    return f'<div style="display: flex; align-items: baseline; gap: 10px; margin: {0 if first else 36}px 0 12px">{m_eyebrow(title, "#454545", 600, 0.1, 11)}{k}</div>'
+    return m_section(title, kicker, first=first)
 
 
 def m_wide_row(label, helper="", value="", chevron=True, control="", danger=False, value_html="", item=False):
-    color = DANGER if danger else "#6b6b6b"
-    help_col = "#6b6b6b"
-    help_ = f'<span style="font-family: {MONO}; font-size: 11px; line-height: 1.3; color: {help_col}; margin-top: 4px">{helper}</span>' if helper else ""
-    lab = (f'<span style="font-weight: 600; font-size: 14px; line-height: 1.3; color: {DANGER if danger else "#141414"}">{label}</span>' if item
-           else m_eyebrow(label, color))
-    val = value_html or (f'<span style="font-family: {MONO}; font-size: 12px; color: #454545; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{value}</span>' if value else "")
-    gutter = "" if danger else f'<span style="width: 14px; display: inline-flex; justify-content: flex-end">{ic("chev-r", 14, "#b4b4b4") if chevron else ""}</span>'
-    return f"""<div style="display: flex; align-items: center; gap: 24px; min-height: 36px; padding: 8px 0">
-<div style="flex: 1 1 148px; min-width: 0; display: flex; flex-direction: column">{lab}{help_}</div>
-<div style="flex-shrink: 1; min-width: 0; max-width: 60%; display: flex; align-items: center; justify-content: flex-end; gap: 10px">{val}{control}{gutter}</div>
-</div>"""
+    return "<!--r-->" + m_row(label, helper, value, chevron, value_html or control, danger) + "<!--/r-->"
+
+
+def carded(html):
+    sep = '<div style="height: 0.5px; background: rgba(20,20,20,0.07); margin-left: 16px"></div>'
+
+    def wrap_run(match):
+        run = match.group(0).replace("<!--r-->", "").replace("<!--/r-->", "")
+        run = run.rstrip()
+        if run.endswith(sep):
+            run = run[:-len(sep)]
+        return m_group(run)
+
+    return re.sub(r"(?:<!--r-->.*?<!--/r-->\s*)+", wrap_run, html, flags=re.S)
+
+
+def fold_column(inner, top=20):
+    return f'<div style="max-width: 560px; padding: {top}px 0 40px; box-sizing: border-box; display: flex; flex-direction: column">{carded(inner)}</div>'
 
 
 def switch(on=False, accent=DOC_ACCENT, label="", disabled=False):
@@ -287,7 +326,7 @@ def switch(on=False, accent=DOC_ACCENT, label="", disabled=False):
 
 def textbox(text, rows=3, placeholder=False):
     color = "#6b6b6b" if placeholder else "#141414"
-    return (f'<div style="min-height: {rows * 22 + 24}px; padding: 12px; border-radius: 4px; background: #f2f2f2; '
+    return (f'<div style="min-height: {rows * 22 + 24}px; padding: 12px; border-radius: 4px; background: {FIELD}; '
             f'font-size: 15px; line-height: 1.5; color: {color}">{text}</div>')
 
 
@@ -306,7 +345,7 @@ def button_heights(client):
 
 def m_button(title, variant="secondary", size="sm", accent=None, disabled=False):
     h = button_heights("mobile")[size]
-    padx = {"sm": 12, "md": 14, "lg": 18, "hero": 22}[size]
+    padx = {"sm": 12, "md": 14, "lg": 20, "hero": 24}[size]
     fs = {"sm": 12, "md": 14, "lg": 15, "hero": 18}[size]
     if variant == "primary":
         bg, fg, fw = (accent or "#141414"), "#ffffff", 600
@@ -319,7 +358,7 @@ def m_button(title, variant="secondary", size="sm", accent=None, disabled=False)
     else:
         bg, fg, fw = "rgba(20,20,20,0.06)", "#141414", 600
     if disabled:
-        bg, fg = ("transparent" if variant in ("ghost", "danger-ghost") else "#f2f2f2"), "#b4b4b4"
+        bg, fg = ("transparent" if variant in ("ghost", "danger-ghost") else FIELD), "#b4b4b4"
     return (
         f'<button style="min-height: {h}px; padding: 6px {padx}px; border: 0; border-radius: 4px; background: {bg}; '
         f'color: {fg}; font-family: Geist, sans-serif; font-weight: {fw}; font-size: {fs}px; cursor: pointer">{title}</button>'
@@ -327,13 +366,14 @@ def m_button(title, variant="secondary", size="sm", accent=None, disabled=False)
 
 
 EDGE = "#8c8c8c"
-FLOAT_EDGE = f"box-shadow: 0 0 0 1px {EDGE}"
+SHEET_EDGE = f"box-shadow: 0 -1px 0 0 {EDGE}"
+FLOAT_EDGE = "box-shadow: 0 0 0 0.5px #6b6b6b"
 TINTS = {"danger": ("rgba(193,69,69,0.12)", "#c14545", "#b73737"), "warning": ("rgba(224,138,60,0.12)", "#e08a3c", "#b3470e"), "info": ("rgba(20,20,20,0.04)", "#6b6b6b", "#6b6b6b")}
 
 
 def m_banner(message, action="", kind="danger", secondary=""):
     bg, tint, text_tint = TINTS[kind]
-    lead = ic("alert", 14, tint) if kind != "info" else f'<span style="width: 6px; height: 6px; border-radius: 999px; background: {tint}"></span>'
+    lead = mi("alert", 14, tint) if kind != "info" else f'<span style="width: 6px; height: 6px; border-radius: 999px; background: {tint}"></span>'
     act = lambda label, color: f'<span role="button" style="min-height: 44px; min-width: 44px; padding: 0 10px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px; color: {color}">{label}</span>'
     return (f'<div role="{"alert" if kind == "danger" else "status"}" style="display: flex; align-items: center; gap: 10px; padding: 6px 10px 6px 16px; background: {bg}">{lead}'
             f'<span style="flex: 1; font-weight: 500; font-size: 14px; line-height: 1.3; color: #454545">{message}</span>'
@@ -353,7 +393,7 @@ def m_toast(message, kind="info", title="", action="", retry=False, dismiss=Fals
     head = f'<span style="font-weight: 600; font-size: 14px; color: #141414">{title}</span>' if title else ""
     body = f'<span style="font-size: 14px; line-height: 1.3; color: #454545; margin-top: {4 if title else 0}px">{message}</span>' if message else ""
     text_btn = lambda label: f'<span role="button" style="min-width: 44px; min-height: 44px; margin: -10px 0; padding: 0 10px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px; color: #141414">{label}</span>'
-    close = f'<span role="button" aria-label="Dismiss" style="width: 44px; height: 44px; margin: -10px -10px -10px 0; display: inline-flex; align-items: center; justify-content: center">{ic("x", 16, "#454545")}</span>' if dismiss else ""
+    close = f'<span role="button" aria-label="Dismiss" style="width: 44px; height: 44px; margin: -10px -10px -10px 0; display: inline-flex; align-items: center; justify-content: center">{mi("x", 16, "#454545")}</span>' if dismiss else ""
     return (f'<div role="{"alert" if kind == "danger" else "status"}" style="position: absolute; left: 16px; right: 16px; bottom: {bottom}px; padding: 14px; box-sizing: border-box; border-radius: 4px; background: #ffffff; {FLOAT_EDGE}; '
             f'display: flex; align-items: flex-start; gap: 10px"><span style="width: 8px; height: 8px; border-radius: 4px; background: {dot}; flex-shrink: 0; margin-top: {7 if title else 6}px"></span>'
             f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column">{head}{body}</div>{text_btn(action) if action else ""}{text_btn("Retry") if retry else ""}{close}</div>')
@@ -364,8 +404,8 @@ def m_confirm_dialog(title, body, confirm, typed="", tone="danger", ready=False,
     field = ""
     if typed:
         shown = value or typed
-        field = (f'<div style="display: flex; flex-direction: column; gap: 8px"><span style="font-family: {MONO}; font-size: 11px; letter-spacing: 0.06em; color: #6b6b6b">TYPE <span style="font-weight: 500; font-size: 12px; color: #141414; background: #f2f2f2; border-radius: 4px; padding: 0 8px; letter-spacing: 0">{typed}</span> TO CONFIRM</span>'
-                 f'<div style="min-height: 44px; box-sizing: border-box; border-radius: 4px; border: 2px solid transparent; background: #f2f2f2; display: flex; align-items: center; padding: 0 12px; font-family: {MONO}; font-size: 14px; color: {"#141414" if value else "#6b6b6b"}">{shown}</div></div>')
+        field = (f'<div style="display: flex; flex-direction: column; gap: 8px"><span style="font-family: {MONO}; font-size: 11px; letter-spacing: 0.06em; color: #6b6b6b">TYPE <span style="font-weight: 500; font-size: 12px; color: #141414; background: {FIELD}; border-radius: 4px; padding: 0 8px; letter-spacing: 0">{typed}</span> TO CONFIRM</span>'
+                 f'<div style="min-height: 44px; box-sizing: border-box; border-radius: 4px; border: 2px solid transparent; background: {FIELD}; display: flex; align-items: center; padding: 0 12px; font-family: {MONO}; font-size: 14px; color: {"#141414" if value else "#6b6b6b"}">{shown}</div></div>')
     ok = ready or not typed
     return (f'<div style="width: 100%; max-width: 420px; box-sizing: border-box; border-radius: 4px; background: #ffffff; {FLOAT_EDGE}; padding: 24px; display: flex; flex-direction: column; gap: 16px">'
             f'<span style="font-weight: 600; font-size: 18px; letter-spacing: -0.005em; color: {DANGER if danger else "#141414"}">{title}</span>'
@@ -455,16 +495,20 @@ def m_row_state(state, phases=None, profile=None):
             f'<span style="{font} font-size: 11px; line-height: 14.3px; color: {color}">{phases or M_STATE_TEXT[state]}</span></span>')
 
 
-def m_count_badge(n, tone="danger", ring="#f6f6f6"):
+def m_count_badge(n, tone="danger", ring=None):
     bg = "#e08a3c" if tone == "warning" else "#c14545"
     fg = "#141414" if tone == "warning" else "#ffffff"
-    return (f'<span style="position: absolute; top: -12px; right: -8px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 999px; border: 1.5px solid {ring}; background: {bg}; '
-            f'color: {fg}; font-weight: 600; font-size: 11px; line-height: 15px; text-align: center; box-sizing: border-box; white-space: nowrap">{n}</span>')
+    return (f'<span style="position: absolute; left: 100%; bottom: 100%; margin: 0 0 -8px -8px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 4px; background: {bg}; '
+            f'color: {fg}; font-weight: 600; font-size: 11px; line-height: 18px; text-align: center; box-sizing: border-box; white-space: nowrap">{n}</span>')
+
+
+def m_bell_dot():
+    return '<span style="position: absolute; top: -2px; right: -2px; width: 8px; height: 8px; border-radius: 999px; background: #c14545"></span>'
 
 
 def m_unfolded(form, size=16):
     import folds
-    drawn = round(size * 1.3) if form == "alpaca" else size
+    drawn = folds.alpaca_drawn(size) if form == "alpaca" else size
     gap = folds.gap_for(form, size)
     polys = "".join('<polygon points="%s" fill="none" stroke="#6b6b6b" stroke-width="1" stroke-linejoin="round" stroke-dasharray="2 1.5" vector-effect="non-scaling-stroke"/>'
                     % " ".join("%.1f,%.1f" % p for p in (folds.inset(pts, gap) if gap else pts)) for pts, _ in folds.facets(form))
@@ -522,7 +566,7 @@ def m_roster_row(name, color, kind="profile", ts="", state=None, phases=None, se
 
 
 def m_roster_label(label, add=True, gutter=12):
-    plus = f'<button aria-label="New {label.lower()[:-1]}" class="m-chrome" style="width: 28px; height: 28px; margin: -6px 0">{ic("plus", 14, "#6b6b6b")}</button>' if add else ""
+    plus = f'<button aria-label="New {label.lower()[:-1]}" class="m-chrome" style="width: 28px; height: 28px; margin: -6px 0">{mi("plus", 14, "#6b6b6b")}</button>' if add else ""
     return f'<div style="display: flex; align-items: center; gap: 8px; padding: 12px {gutter}px 6px">{m_eyebrow(label, "#6b6b6b", 500, 0.06, 11, "flex: 1")}{plus}</div>'
 
 
@@ -551,49 +595,50 @@ CONN_STATUS = {"online": ("online", "#3fb37a", "#217a45"), "offline": ("offline 
 
 def m_conn_header(ring="#f6f6f6", collapse=True, bg="#f6f6f6", selected=False, status="online"):
     word, dot_color, word_color = CONN_STATUS[status]
-    hide = f'<button aria-label="Hide sidebar" class="m-chrome">{ic("panel", 16, "#454545")}</button>' if collapse else ""
+    hide = f'<button aria-label="Hide sidebar" class="m-chrome">{mi("panel", 16, "#454545")}</button>' if collapse else ""
     return f"""<div style="padding: 6px 12px 8px; background: {bg}; display: flex; flex-direction: column; gap: 4px">
-<div style="display: flex; align-items: center">{m_eyebrow("Connection", "#6b6b6b", 500, 0.06, 11, "flex: 1")}{hide}<button aria-label="Filter profiles and workgroups" class="m-chrome">{ic("search", 16, "#454545")}</button></div>
+<div style="display: flex; align-items: center; padding-right: 2.5px">{m_eyebrow("Connection", "#6b6b6b", 500, 0.06, 11, "flex: 1")}{hide}<button aria-label="Filter profiles and workgroups" class="m-chrome">{mi("search", 16, "#454545")}</button></div>
 <div style="min-height: 44px; padding: 6px 12px; box-sizing: border-box; border-radius: 4px; border: 0.5px solid rgba(20,20,20,0.07); background: {"rgba(20,20,20,0.06)" if selected else "#ffffff"}; display: flex; align-items: center; gap: 10px">
-{ic("chip", 16, "#454545")}
+<span style="position: relative; display: inline-flex">{mi("chip", 16, "#454545")}<span style="position: absolute; bottom: -2px; right: -2px; width: 8px; height: 8px; border-radius: 4px; box-sizing: content-box; border: 1.5px solid {ring}; margin: 0 -1.5px -1.5px 0; background: {dot_color}"></span></span>
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-weight: 600; font-size: 14px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">casa</span><span style="font-family: {MONO}; font-size: 11px; line-height: 1.3; color: #6b6b6b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">ws://100.99.29.84:49200</span></div>
-<span style="display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0"><span style="width: 8px; height: 8px; border-radius: 4px; background: {dot_color}"></span><span style="font-weight: 500; font-size: 12px; color: {word_color}">{word}</span></span>
-{ic("chev-d", 12, "#6b6b6b")}
+{"" if status == "online" else f'<span style="font-weight: 500; font-size: 12px; color: {word_color}; flex-shrink: 0">{word}</span>'}
+{mi("chev-d", 12, "#6b6b6b")}
 </div>
 </div>"""
 
 
-def m_shell_footer(version=None, ring="#f6f6f6", border=False):
-    version = version or "v" + app_version("mobile")
+def m_shell_footer(ring="#f6f6f6", border=False, icons_only=False):
     top = "border-top: 0.5px solid rgba(20,20,20,0.07);" if border else ""
     wrap = '<span style="position: relative; display: inline-flex">'
-    entry = lambda icon, label, aria: (f'<span role="button" aria-label="{aria}" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 36px; padding: 0 8px; border-radius: 4px">'
-                                       f'{icon}<span style="font-weight: 500; font-size: 11px; line-height: 1.2; color: #454545; white-space: nowrap">{label}</span></span>')
-    bell = wrap + ic("role:notifications", 16, "#454545") + m_count_badge(1, "danger", ring) + "</span>"
-    activity = wrap + ic("role:activity", 16, "#454545") + m_count_badge(2, "danger", ring) + "</span>"
+    caption = lambda label: "" if icons_only else f'<span style="font-weight: 500; font-size: 11px; line-height: 1.2; color: #454545; white-space: nowrap">{label}</span>'
+    entry = lambda icon, label, aria: (f'<span role="button" aria-label="{aria}" style="{"width: 44px" if icons_only else "flex: 1"}; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 36px; padding: 0; border-radius: 4px">'
+                                       f'{icon}{caption(label)}</span>')
+    bell = wrap + mi("role:notifications", 16, "#454545") + m_bell_dot() + "</span>"
+    theme = mi("sun-moon", 16, "#454545")
+    activity = wrap + mi("role:activity", 16, "#454545") + m_bell_dot() + "</span>"
+    version = f'<span style="flex: 1; min-width: 0; display: flex; justify-content: flex-end; padding-right: 14px; font-family: {MONO}; font-size: 11px; color: #6b6b6b; white-space: nowrap">{app_version("mobile")}</span>' if icons_only else ""
     return (f'<div style="height: 44px; padding: 0 12px; display: flex; align-items: center; {top}">'
-            f'{entry(ic("role:settings", 16, "#454545"), "Settings", "Settings")}{entry(bell, "Notifications", "Notifications · 1 unread")}{entry(activity, "Activity", "Activity · 2 need you")}'
-            f'<span style="font-family: {MONO}; font-weight: 500; font-size: 11px; color: #6b6b6b; margin-left: 8px">{version}</span></div>')
+            f'{entry(mi("role:settings", 16, "#454545"), "Settings", "Settings")}{entry(bell, "Notifications", "Notifications · 1 unread")}{entry(activity, "Activity", "Activity · 2 need you")}{entry(theme, "System", "Theme: System. Switch to Light")}{version}'
+            f'</div>')
 
 
-def m_sidebar(h, selected="doc", badge="1", version=None, conn_selected=False, wg_selected=False):
-    version = version or "v" + app_version("mobile")
+def m_sidebar(h, selected="doc", badge="1", conn_selected=False, wg_selected=False):
     return f"""<div style="width: 280px; height: {h}px; flex-shrink: 0; box-sizing: border-box; background: #f6f6f6; border-right: 0.5px solid rgba(20,20,20,0.07); display: flex; flex-direction: column">
 {m_conn_header(selected=conn_selected)}
 <div style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column">{m_roster(selected, True, wg_selected)}</div>
-{m_shell_footer(version)}
+{m_shell_footer(icons_only=True)}
 </div>"""
 
 
 def m_chat_header(title, accent, meta_html, two_pane=False, back=True, meta_items=None):
     from brand_boards import app_crease
     gap = 12 if two_pane else 6
-    back_html = f'<button aria-label="Back" class="m-chrome" style="margin-left: -6px">{ic("back", 20, "#454545")}</button>' if back else ""
+    back_html = f'<button aria-label="Back" class="m-chrome" style="{m_back_margins(True)}">{mi("back", 20, "#454545")}</button>' if back else ""
     return f"""<div style="position: relative; display: flex; align-items: flex-start; gap: 10px; padding: 6px 16px 8px; background: #ffffff; border-bottom: 0.5px solid rgba(20,20,20,0.07)">
 {back_html}
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
 <div style="display: flex; align-items: center; gap: {gap}px">{identity_glyph(title, accent, 20, diamond(accent, 18))}<span style="flex: 1; min-width: 0; overflow: hidden">{app_crease(title, 28, accent, "#ffffff", track="-0.018em")}</span>
-<span style="display: flex; align-items: center; flex-shrink: 0"><button aria-label="Sessions" class="m-chrome">{ic("history", 20, "#454545")}</button><button aria-label="More" class="m-chrome">{ic("more", 20, "#454545")}</button></span></div>
+<span style="display: flex; align-items: center; flex-shrink: 0"><button aria-label="Sessions" class="m-chrome">{mi("history", 20, "#454545")}</button><button aria-label="More" class="m-chrome">{mi("more", 20, "#454545")}</button></span></div>
 {m_meta_strip(meta_items, 14) if two_pane else f'<div style="display: flex; align-items: center; gap: 6px; margin-top: 1px; white-space: nowrap; overflow: hidden">{meta_html}</div>'}
 </div>
 </div>"""
@@ -644,7 +689,7 @@ def fold_chat():
 
 def m_activity_row(icon, title, sub, tone="quiet", action=""):
     tint = {"warning": WARNING_TEXT, "accent": ALPI_ACCENT, "danger": DANGER, "quiet": "#6b6b6b"}[tone]
-    lead = icon if icon.startswith("<") else ic(icon, 16, tint)
+    lead = icon if icon.startswith("<") else mi(icon, 16, tint)
     btn = f'<span style="padding: 6px 12px; border-radius: 4px; background: #141414; color: #ffffff; font-weight: 600; font-size: 12px">{action}</span>' if action else ""
     return (f'<div role="button" style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 16px; box-sizing: border-box">{lead}'
             f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px"><span style="font-weight: 500; font-size: 15px; line-height: 19.5px; color: #141414">{title}</span>'
@@ -721,12 +766,12 @@ def phone_notification_page():
     return page("Phone · notification", 390, 844, body)
 
 
-PHONE_ACTIVITY_H = 880
-FOLD_ACTIVITY_H = 900
+PHONE_ACTIVITY_H = 940
+FOLD_ACTIVITY_H = 940
 
 
-PHONE_SETTINGS_H = 3790
-FOLD_SETTINGS_H = 3390
+PHONE_SETTINGS_H = 3830
+FOLD_SETTINGS_H = 3740
 
 
 def _ms():
@@ -822,11 +867,10 @@ def phone_profile_settings():
 
 
 def fold_profile_settings():
-    inner = f"""<div style="max-width: 968px; padding: 8px 24px 40px; box-sizing: border-box; display: flex; flex-direction: column">
-{_ms().settings_summary()}
+    inner = fold_column(f"""{_ms().settings_summary()}
 {m_wide_section("Overview", first=False)}
 {m_wide_row("Paused", "paused profiles can't be chatted and sort last in new-chat", control=switch(False, DOC_ACCENT, "Paused"), chevron=False)}
-{m_wide_row("Providers", "API keys + local Ollama", control='<span style="display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 2px; background: #f2f2f2; font-family: ' + MONO + '; font-size: 12px; color: #454545">openrouter</span>')}
+{m_wide_row("Providers", "API keys + local Ollama", control='<span style="display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 2px; background: ' + FIELD + '; font-family: ' + MONO + '; font-size: 12px; color: #454545">openrouter</span>')}
 {m_wide_row("Model", "", "deepseek-v4.1-flash")}
 {m_wide_row("Reasoning", "how hard the model thinks before answering", "default")}
 {m_wide_row("Fast model", "cheap model for side-tasks &amp; delegation", "main model")}
@@ -837,16 +881,15 @@ def fold_profile_settings():
 {m_wide_row("Appearance", "", control='<span style="display: inline-flex; align-items: center; gap: 8px">' + identity_glyph("doc", DOC_ACCENT, 16) + '<span style="font-size: 13px; color: #141414">blue shield</span><span style="font-family: ' + MONO + '; font-size: 12px; color: #454545">#3899e2</span></span>')}
 {m_wide_row("Home", "", "~/.alpi/profiles/doc", chevron=False)}
 {m_wide_section("Usage", "last 14 days")}
-{usage_chart()}
+{m_group(m_band(usage_chart(ground="transparent", narrow=True)))}
 {m_wide_section("Identity", "how peers see this agent")}
-<div style="display: flex; align-items: flex-start; gap: 24px; padding: 8px 0">
-<div style="width: 148px; padding-top: 8px">{m_eyebrow("Identity", "#6b6b6b")}</div>
-<div style="flex: 1; max-width: 520px; display: flex; flex-direction: column; gap: 8px">{textbox("Ancestral, lab-savvy personal doctor; food-first, skeptical of mainstream dogma")}<div style="display: flex; justify-content: flex-end">{m_button("Draft", "ghost")}</div></div>
-</div>
+{m_group(m_row("Ancestral, lab-savvy personal doctor; food-first, skeptical of mainstream dogma", sep=False))}
 {m_wide_section("Service", "daemon")}
-{m_wide_row("Daemon", "update installs the newest alpi · restart exits and the supervisor relaunches", control='<span style="display: inline-flex; gap: 8px">' + m_button("Update alpi") + m_button("Restart daemon") + '</span>', chevron=False)}
+{m_wide_row("Update alpi", "installs the newest alpi and restarts", control=m_button("Update"), chevron=False)}
+{m_wide_row("Restart daemon", "exits the daemon · supervisor relaunches · reconnects automatically", control=m_button("Restart"), chevron=False)}
 {m_wide_section("Service", "daemon that cannot update itself")}
-{m_wide_row("Daemon", UPDATE_STEP + " Restart exits and the supervisor relaunches.", control=m_button("Restart daemon"), chevron=False)}
+{m_wide_row("Update alpi", UPDATE_STEP, chevron=False)}
+{m_wide_row("Restart daemon", "exits the daemon · supervisor relaunches · reconnects automatically", control=m_button("Restart"), chevron=False)}
 {m_wide_row("Email", "IMAP / Gmail accounts", control=pill("No accounts yet"))}
 {m_wide_section("ALP", "peers + workgroups")}
 {m_wide_row("Public key", "tap to copy", "X+iAJ/6f…lNs=", chevron=False)}
@@ -876,7 +919,7 @@ def fold_profile_settings():
 {m_wide_row("Reclaim space", "caches, logs, old transcripts, index bloat")}
 {m_wide_section("Danger zone")}
 {m_wide_row("Delete profile", "removes identity, memory, skills, schedule from disk. Cannot be undone.", danger=True)}
-</div>"""
+""", top=0)
     body = f"""<div style="display: flex; height: 100%">
 {m_sidebar(FOLD_SETTINGS_H)}
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: #ffffff">
@@ -895,9 +938,9 @@ def wg_budget_band():
 
 
 def phone_wg_settings():
-    from wg_settings_studies import LAUNCH, PIPELINES, RUN, group, invited_block, m_pipeline_card, member_block
+    from wg_settings_studies import LAUNCH, PIPELINES, RUN, m_invites_group, m_members_group, m_pipelines_group
     body = f"""<div style="display: flex; flex-direction: column">
-{m_screen_header("#alpha", "Workgroup · settings", accent=ALPI_ACCENT, creased=True, glyph=_wg_mark(ALPI_ACCENT, 20))}
+{m_screen_header("alpha", "Workgroup · hub", accent=ALPI_ACCENT, creased=True, glyph=_wg_mark(ALPI_ACCENT, 20))}
 {m_section("Overview")}
 {m_group(
     m_row("Hub", "", "@mira", chevron=False),
@@ -919,17 +962,11 @@ def phone_wg_settings():
     m_row("Edit briefing", "shared context every member reads first", sep=False),
 )}
 {m_section("Pipelines", "declared by the recipe")}
-{"".join(m_pipeline_card(k, c, RUN if k == LAUNCH else None) for k, c in PIPELINES)}
+{m_pipelines_group(PIPELINES, LAUNCH, RUN)}
 {m_section("Members", "7")}
-{"".join(group(member_block(n, phone=True), "0 12px 8px") for n in ("mira", "scout", "muse", "quill", "lingua", "pixel", "lens"))}
-{m_group(
-    m_row("+ Add member", "", chevron=False, sep=False),
-)}
+{m_members_group(("mira", "scout", "muse", "quill", "lingua", "pixel", "lens"))}
 {m_section("Invitations", "1 pending")}
-{m_group(
-    m_row("Join command", "alpi workgroup join mira wg_4f2a…9c1e", "Copy", chevron=False, sep=False),
-)}
-{group(invited_block("lingo", "star", "#9b5ad9", "Language coach; invited, not yet joined.", phone=True), "0 12px 8px")}
+{m_invites_group()}
 {m_section("Danger zone")}
 {m_group(
     m_row("Leave workgroup", "drops this profile's membership", danger=True),
@@ -941,39 +978,37 @@ def phone_wg_settings():
 
 
 def fold_wg_settings():
-    from wg_settings_studies import LAUNCH, PIPELINES, RUN, invited_block, member_block, pipeline_block
-    inner = f"""<div style="max-width: 968px; padding: 20px 24px 40px; box-sizing: border-box; display: flex; flex-direction: column">
-{m_wide_section("Overview", first=True)}
+    from wg_settings_studies import LAUNCH, PIPELINES, RUN, m_invites_group, m_members_group, m_pipelines_group
+    inner = fold_column(f"""{m_wide_section("Overview", first=True)}
 {m_wide_row("Hub", "", "@mira", chevron=False)}
 {m_wide_row("Status", "pause stops dispatch · leave drops membership", control=pill("active", tone="success"), chevron=False)}
 {m_wide_row("Auto-read messages", "reads agents' automatic messages aloud — never your directives", control=switch(False, ALPI_ACCENT, "Auto-read messages"), chevron=False)}
 {m_wide_row("Id", "", "wg_4f2a…9c1e", chevron=False)}
 {m_wide_section("Budget", "workgroup spend cap")}
-<div style="display: flex; flex-direction: column; gap: 10px; padding: 8px 0"><div style="display: flex; align-items: baseline; gap: 10px"><span style="font-weight: 600; font-size: 28px; line-height: 1; letter-spacing: -0.018em; color: #141414">$0.40</span><span style="font-family: {MONO}; font-size: 14px; color: #6b6b6b">of <span style="color: #454545">$5.00</span> · 8%</span><span style="flex: 1"></span>{m_button("Edit", "ghost")}</div><span style="display: block; height: 6px; border-radius: 999px; background: rgba(20,20,20,0.07); overflow: hidden"><span style="display: block; width: 8%; height: 100%; background: {ALPI_ACCENT}"></span></span></div>
+{m_group(wg_budget_band())}
 {m_wide_section("Usage", "last 14 days")}
-{usage_chart(ALPI_ACCENT, "$0.00", "12K", "310", None, None, "14-day total $0.40 · 0.9M in / 22K out")}
+{m_group(m_band(usage_chart(ALPI_ACCENT, "$0.00", "12K", "310", None, None, "14-day total $0.40 · 0.9M in / 22K out", ground="transparent", narrow=True)))}
 {m_wide_section("Briefing")}
 {m_wide_row("Edit briefing", "shared context every member reads first")}
 {m_wide_section("Pipelines", "declared by the recipe")}
-{"".join(pipeline_block(k, c, RUN if k == LAUNCH else None) for k, c in PIPELINES)}
+{m_pipelines_group(PIPELINES, LAUNCH, RUN)}
 {m_wide_section("Members", "7")}
-{"".join(member_block(n) for n in ("mira", "scout", "muse", "quill", "lingua", "pixel", "lens"))}
+{m_members_group(("mira", "scout", "muse", "quill", "lingua", "pixel", "lens"))}
 {m_wide_section("Invitations", "1 pending")}
-{m_wide_row("Join command", "alpi workgroup join mira wg_4f2a…9c1e", "Copy", chevron=False, item=True)}
-{invited_block("lingo", "star", "#9b5ad9", "Language coach; invited, not yet joined.")}
+{m_invites_group()}
 {m_wide_section("Danger zone")}
 {m_wide_row("Leave workgroup", "drops this profile's membership", danger=True)}
 {m_wide_row("Delete workgroup", "removes it for every member. Cannot be undone.", danger=True)}
-</div>"""
+""")
     body = f"""<div style="display: flex; height: 100%">
-{m_sidebar(2400, selected="", wg_selected=True)}
+{m_sidebar(2700, selected="", wg_selected=True)}
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: #ffffff">
 {m_screen_header("alpha", "Settings", accent=ALPI_ACCENT, creased=True, glyph=_wg_mark(ALPI_ACCENT, 20), wide=True, meta=['<span style="font-family: ' + MONO + '; font-size: 12px; color: #454545">hub @mira</span>', '<span style="font-family: ' + MONO + '; font-size: 12px; color: #454545">7 members</span>', '<span style="font-family: ' + MONO + '; font-size: 12px; color: #217a45">active</span>', '<span style="font-family: ' + MONO + '; font-size: 12px; color: #6b6b6b">wg_4f2a…9c1e</span>'])}
 {inner}
 </div>
 </div>
 """
-    return page("Fold · workgroup settings", 852, 2400, body)
+    return page("Fold · workgroup settings", 852, 2700, body)
 
 
 
@@ -999,8 +1034,8 @@ def phone_connections():
 
 
 def device_row(name, meta, wide=False):
-    ctl = f'<button aria-label="Revoke {name}" class="m-chrome">{ic("x", 16, "#454545")}</button>'
-    return m_wide_row(name, meta, control=ctl, chevron=False, item=True) if wide else m_row(name, meta, control=ctl, chevron=False)
+    ctl = f'<button aria-label="Revoke {name}" class="m-chrome">{mi("x", 16, "#454545")}</button>'
+    return m_wide_row(name, meta, control=ctl, chevron=False) if wide else m_row(name, meta, control=ctl, chevron=False)
 
 
 def phone_connection_detail():
@@ -1036,8 +1071,7 @@ def phone_connection_detail():
 
 
 def fold_connection_detail():
-    inner = f"""<div style="max-width: 968px; padding: 20px 24px 40px; box-sizing: border-box; display: flex; flex-direction: column">
-{m_wide_section("Overview", first=True)}
+    inner = fold_column(f"""{m_wide_section("Overview", first=True)}
 {m_wide_row("Label", "", "emulator-android")}
 {m_wide_row("Role", "manages profiles and connections", control=pill("admin", tone="warning"), chevron=False)}
 {m_wide_row("Profiles", "", "all")}
@@ -1046,14 +1080,14 @@ def fold_connection_detail():
 {m_wide_row("Sessions", "", "4", chevron=False)}
 {m_wide_row("Last seen", "", "now", chevron=False)}
 {m_wide_section("Usage", "last 14 days")}
-{usage_chart(ALPI_ACCENT, "$0.00", "0", "0", None, None, "14-day total $0.00 · 0 in / 0 out", empty=True)}
+{m_group(m_band(usage_chart(ALPI_ACCENT, "$0.00", "0", "0", None, None, "14-day total $0.00 · 0 in / 0 out", empty=True, ground="transparent", narrow=True)))}
 {m_wide_section("Devices", "2 paired")}
 {device_row("sdk_gphone64_arm64", "mobile · 0.4.11 · 7d ago", wide=True)}
 {device_row("sdk_gphone64_arm64", "mobile · 0.5.0 · now", wide=True)}
 {m_wide_row("+ Add device", "one-time pairing link", chevron=False)}
 {m_wide_section("Danger zone")}
 {m_wide_row("Delete connection", "revokes every device and its sessions. Cannot be undone.", danger=True)}
-</div>"""
+""")
     body = f"""<div style="display: flex; height: 100%">
 {m_sidebar(1300, selected="", conn_selected=True)}
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: #ffffff">
@@ -1073,7 +1107,7 @@ def phone_settings():
 {m_section("This phone")}
 {m_group(
     m_row("Re-pair this phone", "opens QR scanner"),
-    m_row("Fingerprint unlock", "not enrolled in OS settings", control=pill("off"), chevron=False, sep=False),
+    m_row("Fingerprint unlock", "not enrolled in OS settings", control=switch(False, DOC_ACCENT, "Fingerprint unlock"), chevron=False, sep=False),
 )}
 {m_section("Daemon")}
 {m_group(
@@ -1082,13 +1116,13 @@ def phone_settings():
 {m_section("Notifications")}
 {m_group(
     m_row("System permission", "instant while alpi is open · in the background via push", control=pill("off")),
-    m_row("Delivery status", "Permission denied — enable alpi in system notifications", control=pill("off"), chevron=False),
+    m_row("Delivery status", "Permission denied — enable alpi in system notifications", control=pill("blocked", tone="danger"), chevron=False),
     m_row("Test notifications", "dev-only · sample notifications + routing check", sep=False),
 )}
 {m_section("Appearance")}
 {m_group(
-    m_row("Theme", "", "Light"),
-    m_row("Text size", "multiplies your OS text size · long-press resets", control='<span style="display: inline-flex; align-items: center; gap: 10px"><span style="font-size: 14px; color: #6b6b6b">Default</span>' + m_button("−") + m_button("+") + '</span>', chevron=False, sep=False),
+    m_row_below("Theme", "", m_segmented(("System", "Light", "Dark"), "Light")),
+    m_row_below("Text size", "multiplies your OS text size", m_segmented(("Small", "Default", "Large", "Largest"), "Default"), sep=False),
 )}
 {m_section("Danger zone")}
 {m_group(
@@ -1098,7 +1132,7 @@ def phone_settings():
 <div style="padding: 0 20px 28px; display: flex; align-items: center; gap: 12px">{black_alpaca(36, "#141414")}{app_crease("alpi", 32, "#f0b447", "#ffffff")}</div>
 </div>
 """
-    return page("Phone · app settings", 390, 1100, body)
+    return page("Phone · app settings", 390, 1200, body)
 
 
 
@@ -1190,6 +1224,7 @@ def build(desktop_boards):
         ("Notifications", [("Phone-Notifications.dc.html", phone_notifications(), X_PHONE, 390, 844, "Phone · notifications, filters and swipe"), ("Phone-NotificationPage.dc.html", phone_notification_page(), X_PHONE + 470, 390, 844, "Phone · notification page, actions at the thumb")]),
         ("Activity", [("Fold-Activity.dc.html", fold_activity(), X_FOLD, 852, FOLD_ACTIVITY_H, "Fold · activity"), ("Phone-Roster.dc.html", phone_roster(), X_PHONE, 390, 844, "Phone · roster"), ("Phone-Activity.dc.html", phone_activity(), X_PHONE + 470, 390, PHONE_ACTIVITY_H, "Phone · activity")]),
         ("Overlays", [("Fold-Sheet.dc.html", MOBILE_OVERLAYS["fold_sheet"](), X_FOLD, 852, 884, "Fold · sheet as a centred dialog"), ("Phone-Sheet.dc.html", MOBILE_OVERLAYS["phone_sheet"](), X_PHONE, 390, 844, "Phone · sheet"), ("Phone-ActionSheet.dc.html", MOBILE_OVERLAYS["phone_action"](), X_PHONE + 470, 390, 844, "Phone · action sheet"), ("Phone-TypedConfirm.dc.html", MOBILE_OVERLAYS["phone_confirm"](), X_PHONE + 940, 390, 844, "Phone · typed confirm"), ("Phone-ConnectionSheet.dc.html", MOBILE_OVERLAYS["phone_connection"](), X_PHONE + 1410, 390, 844, "Phone · connection sheet")]),
+        ("Fold overlays", [("Fold-ActionPopover.dc.html", MOBILE_OVERLAYS["fold_popover"](), X_FOLD, 852, 884, "Fold · action sheet as a popover under its trigger")]),
         ("Sheets", [("Phone-ToolSheet.dc.html", MOBILE_OVERLAYS["phone_tool"](), X_PHONE, 390, 844, "Phone · tool step sheet"), ("Phone-SelectText.dc.html", MOBILE_OVERLAYS["phone_select"](), X_PHONE + 470, 390, 844, "Phone · select text"), ("Phone-MessageActions.dc.html", MOBILE_OVERLAYS["phone_message"](), X_PHONE + 940, 390, 844, "Phone · message actions")]),
         ("Schedule", [("Fold-Schedule.dc.html", fold_schedule(), X_FOLD, 1104, FOLD_SCHEDULE_H, "Fold · schedule, list and job side by side"), ("Fold-Notifications.dc.html", fold_notifications(), X_FOLD + 1180, 1104, FOLD_NOTIFICATIONS_H, "Fold · notifications, list and reader side by side")]),
         ("States", [("Phone-States.dc.html", phone_states(), X_FOLD, 1280, STATES_H, "Phone · empty, error and offline states")]),

@@ -963,7 +963,7 @@ Verb namespaces in current shape:
   profile (`host.profile.create`, `alpi profile create`, or any first bootstrap of a home under `profiles/`)
   is seeded with the next pair of a fixed roulette (`appearance.ROULETTE`): the least worn colour among the
   existing profiles, in roulette order, with its own object, so no pair repeats until all twelve are worn. The default profile (the host-plane one, never one under `profiles/`) is not one of the twelve: its
-  summary always reports `fold: "alpaca"` and no `accent` (the apps use the brand ink of the theme), the apps draw the flat ink alpaca for it and show its appearance
+  summary always reports `fold: "alpaca"` and no `accent` (the apps use the brand ink of the theme), the apps draw the alpaca for it (in the three crease tones of the brand ink from `TONAL_MIN_SIZE` = 48 px of drawn size, one flat ink below, always flat when unfolded or outlined; `common/alpacaTones.mjs` owns the tones and the threshold for both clients, and every other object keeps its profile colour; a roster slot draws it larger than the slot, `alpacaDrawnSize(slot)` in `common/folds.mjs` from `ALPACA_ROW_SCALE` 1.25 rounded to whole pixels: 20 px in the 16 px row slot, 26 px in the 20 px header slot, at whole-pixel offsets on both clients) and show its appearance
   read-only, and `host.config.set_field` refuses `tui.fold` and `tui.accent` for it (a client that does not know `alpaca` falls back to
   the diamond). Roster objects draw unfolded (the dashed crease pattern in grey, no fill, no ripple) for a paused profile or workgroup, and on the phone for the whole roster while the active connection is offline, disabled, auth-failed or rate-limited; the desktop leaves them folded for an outage, because its banner owns the offline state. Such rows stay openable, a paused name in a header reads in grey, and a stale working state is dropped. From `host.activity.list` a row reads needs you over failed (a job whose last run failed in the last day) over working, and a failed job whose `job_id` has a running turn again reads working. The daemon lists the default profile first, and both clients keep it there: `common/rosterOrder.mjs` splits it
   (`is_default` or the name `default`) out of the list, and the desktop sidebar, the phone roster and the Fold draw it as the
@@ -1484,6 +1484,10 @@ Threat model: prompt injection via email/web content, LLM-issued tool calls on t
 
 `cfg.workspace` (or `cwd` fallback if unset) is the **default root for relative paths** — not a wall. File tools and terminal can reach absolute paths anywhere except the sensitive denylist. Real workspace-only isolation is the opt-in OS sandbox (Layer 2). Configure it via `alpi setup → Workspace`; the TUI top bar read-outs the resolved path but does not edit it.
 
+### App icon (`scripts/gen_icons.py`)
+
+Run it to rewrite every icon under `desktop/src-tauri/icons/` and `mobile/assets/`; `tests/test_icons.py` fails on drift. The icon is the twelve-facet alpaca of the mark (`foldFacets('alpaca')`; the nine-facet `alpaca-low` at 64 px and below), one piece, with no gradient, shadow or outline. Full-colour icons (the desktop tile, `icon.icns`, `icon.ico`, the iOS light and dark icons, the store icon, the adaptive foreground and the splash marks) paint each facet in one of the three crease tones of the brand ink from `common/crease.mjs` (`creaseTones`, the lightest tone on the light-catching facets), on paper in the light theme and on near-black in the dark one, so the folds read as paper; every pixel is a tone, the ground or an antialiased edge. The mark is 82 % of the tile height, so about 16 % of the tile carries ink. The adaptive foreground stays inside the 0.306 safe radius. Below 64 px of nominal size each facet grows outwards by `thickness()` (0.3 px at 64 plus 0.012 px per pixel smaller, capped at 0.9, scaled to the render size) and later facets win overlaps, so the gaps close, the silhouette is one piece and the ears survive at 29 px; larger icons keep the paper seams. The single-ink icons stay one flat ink with the same fill and thickening: the iOS tinted icon (white on black), the tray templates (brand ink on transparency; the notification one adds a dot in the same ink inside a knocked-out ring) and the favicon (nine facets, thickened as at 32 px). Rendering is deterministic: a second run writes the same bytes.
+
 ## Dependencies
 
 Hard runtime deps are kept tight — every line in `pyproject.toml`'s `dependencies` is actually imported by `alpi/`. The audited set, with one-liner for why each earns its place:
@@ -1566,7 +1570,8 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
 
 - **A `host.*` verb that takes a `profile` never creates it.** `handlers._resolve_home` (and the usage verbs) answer `-32004 not-found`
   for a name with no directory under `profiles/`; only `host.profile.create` makes one. Reading jobs (`jobs_store.read`) does not create
-  `schedule/`. A client that asks about a profile absent from this daemon receives an error and the roster never grows.
+  `schedule/`. A client that asks about a profile another connection owns learns it is absent and the roster never grows. The mobile app
+  guards every `/profile/<id>` screen (`ProfileGuard`) so it does not ask at all.
 
 - **First run is one welcome, not an error.** On a local connection that
   has not answered yet in this session, the desktop replaces the main pane
@@ -1734,11 +1739,19 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   request briefly while canonical activity arrives; terminal schedule events clear that local
   pending state. Reopening a job reads current activity, and a job row in Activity opens its
   schedule detail rather than an empty chat. Older daemons without Activity retain schedule controls.
+  Both clients draw Activity with `common/activityGroups.mjs`, the one grouping: counts and filters
+  (All, Needs you, Failing, Running, Upcoming); failing jobs (an error in the last 24 hours, not
+  re-running) grouped per profile with the first group open; Upcoming lists only future runs;
+  section eyebrows stay sticky; red marks only the failed time and `last ok` shows when the daemon
+  sends `last_ok_at`. Retry and Retry all (confirmed) fire `host.schedule.fire`, are admin-only and
+  hide for members, `forbidden` and `-32601`. Desktop shows it as a 500 px float (Open and Retry
+  on row hover and focus); the phone as a full page and the fold as the detail pane (Retry per job).
+  The phone's Home band keeps its own list of recent failures with Run again.
   `host.activity.list` aggregates `needs_you` (pending approvals + clarifications, each with
   `session_id`), `running` (`turn` rows from the in-process registry in
   `alpi/host/activity.py` — engine turns, workgroup dispatch in
   `service._dispatch_workgroup_turn`, scheduler fires via `scheduled_run` — plus
-  `workgroup` pipeline rows from the cached fold) and `scheduled` (admin-only).
+  `workgroup` pipeline rows from the cached fold) and `scheduled` (admin-only; each row carries `next_fire`, `last_run_at`, `last_run_status` and `last_ok_at`).
   A workgroup seen from both its hub and a member profile is one row, the hub's, chosen among the
   profiles the caller's `ConnectionContext.profile_scope` allows, so a caller limited to the
   member profile keeps the member's row. It reads memory and stat-keyed caches only, because
@@ -1814,27 +1827,65 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   (`tests/alp/test_workgroup_authority.py` fails otherwise).
 
 - **Shared look and interaction rules of the apps.** `common/tokens.mjs` (and
-  `desktop/src/styles/tokens.css`, held equal by a parity test) carries two palette
-  tokens besides the ink ramp: `edge`, the control-boundary ink at about 3:1
-  (checkbox, radio, toggle off-track, input and chip borders), and `focus`, the
-  focus ring (50 % ink). Floating surfaces (sheets, modals, menus, popovers,
-  toasts) are edged with a 1 px `edge` line (`--shadow-edge`, mobile
-  `shadows.float`) and carry no blur, blurred shadow or dark scrim. One menu
-  primitive serves every desktop menu (Dropdown, header menu, context menu: 32 px
-  rows, check slot, separator, danger variant; roles `menu`, `menuitemradio`,
+  `desktop/src/styles/tokens.css`, held equal by a parity test) is the one value
+  source. The palette adds `edge` (control-boundary ink at about 3:1: checkbox,
+  radio, toggle off-track, input and chip borders), `focus` (the focus ring, 50 %
+  ink), and the surface tones `card` (group card) and `field` (well, field), whose
+  ladder descends in light and ascends in dark (`ladderDirection`; dark `bgElev` is
+  `#202020`). Scales: spacing 4/8/12/16/24/32 (`spaceScale`, `--sp-*`), control
+  heights 24/28/32/40 (`controlHeight`, `--ctl-*`), type 11/13/15/18/22/28 at
+  weights 400/500/600 (`typeLadder`, `fontWeights`), dots 6/8 (`dotScale`; every desktop status dot is `--dot-md`, 8 px, centred in a 16 px lane, so it lands on whole pixels); the
+  legacy `--space-1` to `--space-11`, `--ctrl-*` (but the 18 px chip and 48 px hero button heights), `--fs-*` and `--shadow-edge` are gone; the 1, 2 and 3 px micro spaces stay. There is
+  one eyebrow (`eyebrow`: 11, tracking .08, mono, `ink3`), one motion set
+  (`motionTokens`: enter 180 ms, exit 130 ms, pulse 1600 ms, one easing pair), one
+  `focusRing` and one global `:focus-visible` rule on desktop. Icons keep a constant
+  rendered stroke of 1.33 (`iconStrokeFor`) at 14/16 px on desktop and xs 12 / md
+  16 on the phone. Floating surfaces carry no blur, blurred shadow, gradient or
+  dark scrim and have a tiered 1 px edge, never a border plus a ring: desktop small
+  floats `--shadow-edge-sm` (`--edge`), large floats `--shadow-edge-lg` (`--ink-4`
+  in light, `--line-2` in dark); phone `shadows.sheet` (top edge only, 1 pt `edge`)
+  and `shadows.dialog`, `popover` and `toast` (0.5 pt `ink3`). Desktop layout:
+  header, banners, stream and composer share `--pane-edge`; tables are one grid
+  with a 12 px hover bleed; settings rows are 40 px with hairlines and `--ring-ctrl`
+  on in-row buttons; the sidebar footer holds Settings (a 24 px icon button, tooltip `Settings · shortcut`, `aria-label` Settings, `aria-current` on the settings page), notifications, Activity, a
+  theme button that cycles System/Light/Dark (the default profile's settings carry the same control, and the command palette cycles it) and the version, with 14 px side padding and 4 px gaps, so the Settings ink and the version ink sit 19 px from their edges; the
+  bell shows a plain 8 px danger dot when unread (the count is in its label) and Activity the same dot when something needs you; the mobile footer is four entries (Settings, notifications, Activity, theme) sharing its full width, with the same dot on the bell and on Activity; the phone's footer has no version (Settings shows it) and each entry is labelled and hides its label, keeping its accessibility label, when its slot is narrower than the widest label at the current text size, and in two panes (the Fold sidebar) the footer is always icon-only like desktop's, with the bare app version as plain mono ink3 text at the right (hidden before the 44 pt targets would crowd); ConnPill shows
+  only the host when online (its `aria-label` carries the state); selected and
+  hovered sidebar rows share one full-bleed shape and the selected one adds the
+  profile-coloured 3 px bar; dialogs use an 18 px modal title or a 13 px panel
+  header, padding tokens and an 84 px detail label column, and statuses collapse to
+  active, paused, attention and failed (`lib/statusVocab.js`); banners share one
+  grammar; `EmptyState` takes an `action`; a chat approval card has one primary
+  action, usage bars under 1 % are hidden and one chevron marks every disclosure.
+  Phone layout: `Row` always reserves a 16 pt trailing lane; fold settings use the
+  phone's grouped `RowGroup` cards in a content column of at most 560
+  (`settingsContentStyle`); detail screens share one 22 pt title
+  (`components/detailTitle.js`); `CountBadge` is 18 pt; the fold sheet has no
+  grabber and `ActionSheet` takes an `anchor` to open as a 280 pt popover; first
+  run follows `lib/firstRun.js` (columns of at most 480, centred); a notification
+  row keeps a fixed trailing time column with the level pill before the title;
+  theme (System, Light, Dark) and text size (four steps) are `Segmented` controls
+  in Settings, biometric lock is a `Toggle`, and ConnHeader draws its status
+  dot on the corner of the connection icon (8 pt, 1.5 pt ring in the surface colour) and says
+  a word only when not online. The back chevron's ink sits on the 16 pt content edge while its hit area stays
+  44 pt (only when it is the first element; no offset after the sidebar toggle), ConnHeader's
+  search icon and trigger chevron end on the same right edge (24.5 pt), and in two panes both
+  pane headers pad 16 pt like the transcript and composer, the show-sidebar button bleeding 10 pt
+  so its icon sits at x=16 in both. The image viewer's close button starts 8 pt below the
+  safe-area inset, and every button padding is a spacing token (12, 14, 20, 24). The selected-row bar uses the profile's own colour on both clients.
+  One menu primitive serves every desktop menu (Dropdown, header menu, context menu: rows exactly 32 px, captions included, check slot, separator, danger variant; roles `menu`, `menuitemradio`,
   `menuitemcheckbox`); on the phone one picker row lane serves action sheets and
   pickers, and a `switch` row toggles without closing the sheet. One confirm
   dialog (optional typed field) replaces every destructive native alert on the
-  phone. Toasts are for failures and undo windows: info lasts 2.8 s; an error has
+  phone. Toasts stack at the bottom right (32 px from the right edge, 16 px from the bottom) and are for failures and undo windows: info lasts 2.8 s; an error has
   Dismiss and an optional Retry and persists only when it offers Retry (6 s otherwise); a copy confirms in place (the desktop button
   label flips for about 1.5 s, the phone toasts). A paused composer dims only the
-  input, keeps its reason readable at full contrast and offers Resume, also on the
-  paused banner; an offline reason stays visible, and the connection banner (with
+  input and keeps its reason readable at full contrast; the paused banner holds the one Resume; an offline reason stays visible, and the connection banner (with
   Manage on the phone) owns the outage, so the Connection sheet never opens by
-  itself. The composer model label is truncated before its effort
+  itself. The composer's send button sits 16 px from the right and 12 px from the bottom edge; a banner's action is 11 px at weight 600 on the message baseline; sidebar section labels start on the glyph column (no left padding). The composer model label is truncated before its effort
   (`model · effort`), the model chip opens the effort choice, and an effort applies
-  on pick. A mention popover with no candidate shows an empty row. A selected
-  roster row wears a 3 pt/3 px accent bar in that profile's own colour plus fill; muted rows keep `ink3` with a
+  on pick. A mention popover with no candidate shows an empty row. Muted
+  roster rows keep `ink3` with a
   micro-label (`paused`, needs provider) instead of fading. Panels and sheets are
   dialogs with a label. A loading state draws the silhouette of what is loading in the
   `line` ink, with real titles and labels kept as text and no slab for a composite

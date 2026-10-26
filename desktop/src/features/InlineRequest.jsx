@@ -79,10 +79,10 @@ export function InlineApproval({ request, onResolved }) {
       <pre className={styles.command}>{request.command}</pre>
       {request.cwd ? <div className={styles.cwd}>cwd {request.cwd}</div> : null}
       <div className={styles.actions}>
-        <Button variant="secondary" size="sm" onClick={() => respond("deny")} disabled={busy}>Deny</Button>
+        <Button variant="ghost" size="sm" onClick={() => respond("deny")} disabled={busy}>Deny</Button>
         <Button variant="primary" size="sm" onClick={() => respond("once")} disabled={busy}>Allow once</Button>
-        <Button variant="secondary" size="sm" onClick={() => respond("session")} disabled={busy}>Allow this session</Button>
-        <Button variant="secondary" size="sm" onClick={() => respond("always")} disabled={busy}>Always allow</Button>
+        <Button variant="ghost" size="sm" onClick={() => respond("session")} disabled={busy}>Allow this session</Button>
+        <Button variant="ghost" size="sm" onClick={() => respond("always")} disabled={busy}>Always allow</Button>
       </div>
       {err ? <div className={styles.error}>{err}</div> : null}
     </div>

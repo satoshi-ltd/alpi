@@ -1,8 +1,8 @@
 .head {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-5);
-  margin-bottom: var(--space-7);
+  gap: var(--sp-12);
+  margin-bottom: var(--sp-16);
 }
 
 .headText {
@@ -10,13 +10,13 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--sp-8);
 }
 
 .who {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--sp-8);
   min-width: 0;
 }
 
@@ -64,7 +64,7 @@
   background: var(--bg-input);
   border: 0.5px solid var(--line-2);
   border-radius: var(--r-xs);
-  padding: var(--space-5) var(--space-6);
+  padding: var(--sp-12) var(--sp-16);
   margin: 0;
   overflow-x: auto;
   white-space: pre-wrap;
@@ -76,7 +76,7 @@
   font-family: var(--font-mono);
   font-size: var(--text-meta);
   color: var(--ink-3);
-  margin-top: var(--space-1);
+  margin-top: var(--sp-4);
 }
 
 .cwd .cwdPath { color: var(--ink-2); }
@@ -84,8 +84,8 @@
 .choices {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  margin-top: var(--space-7);
+  gap: var(--sp-4);
+  margin-top: var(--sp-16);
 }
 
 .row {
@@ -94,11 +94,11 @@
   background: transparent;
   border: 0;
   border-radius: var(--r-xs);
-  padding: var(--space-4) var(--space-5);
+  padding: var(--sp-12) var(--sp-12);
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--sp-4);
   transition: background var(--dur-1) var(--ease);
   font-family: var(--font-sans);
 }
@@ -115,12 +115,12 @@
 
 .rowHint {
   font-family: var(--font-sans);
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
   color: var(--ink-3);
 }
 
 .error {
-  margin-top: var(--space-3);
+  margin-top: var(--sp-8);
   font-family: var(--font-sans);
   font-size: var(--text-meta);
   color: var(--c-danger-text);

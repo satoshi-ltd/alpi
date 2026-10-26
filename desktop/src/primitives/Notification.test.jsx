@@ -391,6 +391,6 @@ describe("error toasts", () => {
     const css = readFileSync(join(import.meta.dirname, "Notification.module.css"), "utf8");
     expect(css).toMatch(/\.text \{[^}]*-webkit-line-clamp: 2;/);
     expect(css).not.toMatch(/\.toast \{[^}]*white-space: nowrap/);
-    expect(css).toMatch(/\.closeBtn \{[^}]*width: 28px;[^}]*height: 28px;/);
+    expect(css).toMatch(/\.closeBtn \{[^}]*width: var\(--ctl-28\);[^}]*height: var\(--ctl-28\);/);
   });
 });

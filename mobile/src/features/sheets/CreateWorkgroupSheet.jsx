@@ -130,7 +130,7 @@ export function CreateWorkgroupSheet({ open, onClose }) {
                 flexDirection: 'row',
                 alignItems: 'center',
                 gap: space.s4,
-                backgroundColor: pressed ? colors.selected : colors.bgInput,
+                backgroundColor: pressed ? colors.selected : colors.field,
                 borderWidth: 0.5,
                 borderColor: colors.line2,
                 borderRadius: radii.xs,
@@ -155,7 +155,7 @@ export function CreateWorkgroupSheet({ open, onClose }) {
                   Pick profile…
                 </Text>
               )}
-              <Icon name="chevron-down" size={16} color={colors.ink3} />
+              <Icon name="chevron-down" size="md" color={colors.ink3} />
             </Pressable>
           </View>
 

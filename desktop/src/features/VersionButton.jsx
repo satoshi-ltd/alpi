@@ -186,9 +186,7 @@ function VersionPanel({ state, current, onInstall, onClose }) {
     <div className={`col ${styles.panel} ${styles.panelGap4}`}>
       <div className={`row row-gap ${styles.rowGap3}`}>
         <CheckIcon
-          width={14}
-          height={14}
-          strokeWidth={2.2}
+          size="sm"
           className={styles.checkIcon}
         />
         <span className={styles.labelStrong}>You're up to date</span>

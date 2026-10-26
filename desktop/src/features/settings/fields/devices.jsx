@@ -10,7 +10,7 @@ import SelectField from "../../../primitives/SelectField.jsx";
 import Modal from "../../../primitives/Modal.jsx";
 import Skeleton from "../../../primitives/Skeleton.jsx";
 import { useSkeleton } from "../../../hooks/useSkeleton.js";
-import { CopyIcon } from "../../../primitives/icons.jsx";
+import { CopyIcon, PlusIcon } from "../../../primitives/icons.jsx";
 import { Checkbox, Fold, Radio } from "../../../primitives/index.js";
 import Tip from "../../../primitives/Tip.jsx";
 import useAutoPosition from "../../../primitives/useAutoPosition.js";
@@ -194,7 +194,7 @@ export function DevicesField({
           </span>
         )}
         {canManage ? (
-          <Button size="sm" onClick={() => setAdding(true)}>+ Add device</Button>
+          <Button size="sm" icon={<PlusIcon />} onClick={() => setAdding(true)}>Add device</Button>
         ) : (
           <span className={styles.muted}>member device — admin-only</span>
         )}

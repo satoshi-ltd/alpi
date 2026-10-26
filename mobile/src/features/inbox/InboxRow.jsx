@@ -84,7 +84,7 @@ export const InboxRow = memo(function InboxRow({ item, onPress, onLongPress, sel
       return {
         fontFamily: unread || needsYou ? fonts.sans.bold : fonts.sans.semibold,
         fontSize: fontSizes.lg,
-        lineHeight: fontSizes.lg * lineHeights.cozy,
+        lineHeight: Math.round(fontSizes.lg * lineHeights.cozy),
         color: muted ? colors.ink3 : colors.ink,
       };
     }
@@ -95,7 +95,7 @@ export const InboxRow = memo(function InboxRow({ item, onPress, onLongPress, sel
           ? fonts.sans.medium
           : fonts.sans.regular,
       fontSize: fontSizes.md,
-      lineHeight: fontSizes.md * lineHeights.cozy,
+      lineHeight: Math.round(fontSizes.md * lineHeights.cozy),
       color: muted ? colors.ink3 : unread || selected || needsYou ? colors.ink : colors.ink2,
     };
   }, [twoPane, unread, needsYou, selected, muted, fonts, fontSizes, colors]);
@@ -103,7 +103,7 @@ export const InboxRow = memo(function InboxRow({ item, onPress, onLongPress, sel
     () => ({
       fontFamily: needsProvider ? fonts.mono : fonts.sans.regular,
       fontSize: fontSizes.md,
-      lineHeight: fontSizes.md * lineHeights.cozy,
+      lineHeight: Math.round(fontSizes.md * lineHeights.cozy),
       fontStyle: needsProvider ? 'italic' : 'normal',
       color: colors.ink3,
     }),

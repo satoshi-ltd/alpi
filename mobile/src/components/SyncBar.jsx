@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Animated, View } from 'react-native';
 
 import { useReduceMotion } from '../lib/reduceMotion';
+import { motion } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeContext';
 
 export function SyncBar({ syncing }) {
@@ -17,7 +18,7 @@ export function SyncBar({ syncing }) {
     }
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(x, { toValue: 1, duration: 900, useNativeDriver: true }),
+        Animated.timing(x, { toValue: 1, duration: motion.pulse / 2, useNativeDriver: true }),
         Animated.timing(x, { toValue: -1, duration: 0, useNativeDriver: true }),
       ]),
     );

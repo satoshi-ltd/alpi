@@ -13,8 +13,8 @@ export function StepLadder({ steps }) {
         return (
           <View key={id} data-state={state} accessibilityLabel={`${label}, ${state}`} style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
             <View style={{ width: 16, alignItems: 'center' }}>
-              {state === 'done' ? <Icon name="check" size="sm" color={colors.ink} />
-                : state === 'fail' ? <Icon name="x" size="sm" color={colors.danger} />
+              {state === 'done' ? <Icon name="check" size="xs" color={colors.ink} />
+                : state === 'fail' ? <Icon name="x" size="xs" color={colors.danger} />
                   : <View style={{ width: 6, height: 6, borderRadius: radii.xs, backgroundColor: state === 'now' ? colors.ink2 : colors.ink4 }} />}
             </View>
             <Text style={{ flex: 1, fontFamily: state === 'todo' ? fonts.sans.regular : fonts.sans.medium, fontSize: fontSizes.md, color: tone }}>{label}</Text>

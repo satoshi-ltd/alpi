@@ -10,8 +10,8 @@
   position: absolute;
   right: -2px;
   bottom: -2px;
-  width: 7px;
-  height: 7px;
+  width: var(--dot-md);
+  height: var(--dot-md);
   border-radius: 50%;
   border: 1.5px solid var(--bg-elev);
 }

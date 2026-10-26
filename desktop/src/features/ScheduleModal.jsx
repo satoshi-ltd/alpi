@@ -15,6 +15,7 @@ import { jobBanner, jobGroups, jobItem, nextRunWord } from "../../../common/atte
 import { formatNextFire, lastRunShort } from "../lib/time.js";
 import styles from "./ScheduleModal.module.css";
 import { EMPTY } from "../../../common/emptyCopy.mjs";
+import { statusDot } from "../lib/statusVocab.js";
 import { toEpochSeconds, useActivity } from "../hooks/useActivity.js";
 
 const REFRESH_EVENTS = new Set(["schedule.changed", "schedule.done", "schedule.failed"]);
@@ -33,7 +34,7 @@ function JobStatus({ job, running }) {
   const state = jobState(job, running);
   return (
     <span className={styles.status} data-state={state}>
-      <span className={styles.dot} data-on={state === "active" || state === "running" ? "on" : state === "paused" ? "off" : "fail"} aria-hidden />
+      <span className={styles.dot} data-on={{ filled: "on", hollow: "off", red: "fail" }[statusDot(state)]} aria-hidden />
       {state}
     </span>
   );
@@ -237,7 +238,7 @@ export function SchedulePanel({ open = true, profile, connectionId, openJob = nu
                   aria-selected={j.id === selectedId}
                 >
                   <span className={styles.jobHead}>
-                    <span className={styles.dot} data-on={state === "active" || state === "running" ? "on" : state === "paused" ? "off" : "fail"} aria-hidden />
+                    <span className={styles.dot} data-on={{ filled: "on", hollow: "off", red: "fail" }[statusDot(state)]} aria-hidden />
                     <span className={styles.jobTitle}>{jobTitle(j)}</span>
                     {word ? <span className={`${styles.jobWhen} ${state === "failed" ? styles.failed : ""}`.trim()}>{word}</span> : null}
                   </span>

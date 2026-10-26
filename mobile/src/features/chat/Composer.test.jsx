@@ -164,14 +164,11 @@ describe('composer states', () => {
     expect(field().getAttribute('data-placeholder-color')).toBe(palettes.light.ink2);
   });
 
-  it('offers Resume only for a paused composer that has a resume action', () => {
-    const onResume = vi.fn();
-    const { rerender } = render(<Composer onSend={() => {}} disabled onResume={onResume} />);
-    fireEvent.click(screen.getByText('Resume profile'));
-    expect(onResume).toHaveBeenCalledTimes(1);
-    rerender(<Composer onSend={() => {}} disabled offline onResume={onResume} />);
+  it('shows no Resume action under a disabled composer', () => {
+    const { rerender } = render(<Composer onSend={() => {}} disabled />);
     expect(screen.queryByText('Resume profile')).toBeNull();
-    rerender(<Composer onSend={() => {}} onResume={onResume} />);
+    expect(screen.queryByText('Resume')).toBeNull();
+    rerender(<Composer onSend={() => {}} disabled offline />);
     expect(screen.queryByText('Resume profile')).toBeNull();
   });
 

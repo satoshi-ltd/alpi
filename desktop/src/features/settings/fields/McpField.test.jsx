@@ -52,7 +52,7 @@ describe("McpField — every daemon call is scoped to the connection", () => {
 
   it("mcp_add carries connectionId", async () => {
     render(<McpField profile={{ name: "work", mcps: [] }} connectionId={CONN} onSaved={() => {}} />);
-    await act(async () => { fireEvent.click(screen.getByText("+ Add MCP")); });
+    await act(async () => { fireEvent.click(screen.getByText("Add MCP")); });
     fireEvent.change(screen.getByPlaceholderText("github · notion · linear"), { target: { value: "fs" } });
     fireEvent.change(screen.getByPlaceholderText("npx · uvx · python · /path/to/server"), { target: { value: "uvx" } });
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Add" })); });

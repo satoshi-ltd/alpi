@@ -54,20 +54,20 @@ const GLYPH_STATUS = { blocked: "blocked", done: "done", closed: "skipped" };
 function StatusGlyph({ status, color }) {
   if (status === "done") {
     return (
-      <CheckIcon style={{ width: 14, height: 14, strokeWidth: 2.2, color }} />
+      <CheckIcon size="sm" style={{ color }} />
     );
   }
   if (status === "blocked") {
     return (
       <SkipIcon
-        style={{ width: 13, height: 13, strokeWidth: 2, color: "var(--c-danger)" }}
+        size="sm" style={{ color: "var(--c-danger)" }}
       />
     );
   }
   if (status === "skipped" || status === "preempted") {
     return (
       <XIcon
-        style={{ width: 13, height: 13, strokeWidth: 2, color: "var(--c-warning)" }}
+        size="sm" style={{ color: "var(--c-warning)" }}
       />
     );
   }
@@ -80,7 +80,7 @@ function PhaseTrigger({ phase }) {
     return (
       <span className={styles.phaseBody} data-phase-trigger="idle">
         <span className={styles.phaseTop}>
-          <CheckIcon style={{ width: 13, height: 13, color: "var(--ink)" }} />
+          <CheckIcon size="sm" style={{ color: "var(--ink)" }} />
           <span className={styles.phaseOwner}>{idle}</span>
           <Mono className={`tnum ${styles.phaseCount}`}>{count}</Mono>
         </span>
@@ -186,7 +186,7 @@ export default function TasksButton({
         </Button>
       </Tip>
 
-      <Popover open={open} onClose={() => setOpen(false)} width="var(--pop-lg)" align="right" navigable role="menu">
+      <Popover open={open} onClose={() => setOpen(false)} width="var(--pop-lg)" align="right" navigable role="menu" large>
         <div className={styles.head}>
           <div className={styles.headTitle}>
             <Eyebrow>{headEyebrow}</Eyebrow>

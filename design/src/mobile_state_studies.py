@@ -51,7 +51,7 @@ def roster_rows_down():
 
 def composer_states():
     body = (f'<div style="flex: 1; display: flex; flex-direction: column; justify-content: center">'
-            f'{m_composer(state="offline")}{m_composer(state="paused", resume=True)}'
+            f'{m_composer(state="offline")}{m_composer(state="paused")}'
             f'<span style="padding: 12px 20px 0; font-family: {MONO}; font-size: 11px; color: {INK3}">Offline above, a paused profile below; only the controls dim and the send button stays off in both.</span></div>')
     return frame(body, 360)
 

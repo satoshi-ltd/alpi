@@ -1,34 +1,40 @@
 import { useEffect, useMemo } from 'react';
-import { Animated, Easing, View } from 'react-native';
+import { Animated, View } from 'react-native';
 import Svg, { Polygon } from 'react-native-svg';
 
-import { ALPACA_FOLD, ALPACA_ROW_SCALE, BRAND_INK, FOLD_SIZES, foldPolygons, normaliseFold } from '../../../common/folds.mjs';
+import { ALPACA_FOLD, alpacaDrawnSize, BRAND_INK, FOLD_SIZES, foldPolygons, normaliseFold } from '../../../common/folds.mjs';
+import { alpacaTones, isTonalSize } from '../../../common/alpacaTones.mjs';
+import { pulseSteps } from '../lib/pulse';
 import { useReduceMotion } from '../lib/reduceMotion';
+import { motion } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeContext';
 
-const RIPPLE_DURATION = 1800;
-const RIPPLE_DIM = 0.35;
 
 export function Fold({ fold, color, size, pulse = false, outlined = false, unfolded = false }) {
   const { colors, mode } = useTheme();
   const px = typeof size === 'number' ? size : size === 'md' ? FOLD_SIZES.header : FOLD_SIZES.row;
   const id = normaliseFold(fold);
   const tint = id === ALPACA_FOLD ? BRAND_INK[mode === 'dark' ? 'dark' : 'light'] : typeof color === 'string' && color.startsWith('#') ? color : colors.ink3;
-  const polygons = useMemo(() => foldPolygons(id, tint, px), [id, tint, px]);
+  const alpaca = id === ALPACA_FOLD;
+  const drawn = alpaca && typeof size !== 'number' ? alpacaDrawnSize(px) : px;
+  const tonal = alpaca && !unfolded && !outlined && isTonalSize(drawn);
+  const toneMode = mode === 'dark' ? 'dark' : 'light';
+  const polygons = useMemo(() => {
+    const flat = foldPolygons(id, tint, px);
+    if (!tonal) return flat;
+    const tones = alpacaTones(toneMode);
+    return flat.map((polygon) => ({ ...polygon, fill: tones[polygon.tone] }));
+  }, [id, tint, px, tonal, toneMode]);
   const reduceMotion = useReduceMotion();
   const rippling = pulse && !reduceMotion && !unfolded;
   const cellOpacity = useMemo(() => (polygons ?? []).map(() => new Animated.Value(1)), [polygons]);
   useEffect(() => {
     if (!rippling) return;
-    const half = RIPPLE_DURATION / 2;
     const loops = cellOpacity.map((value, i) =>
       Animated.sequence([
-        Animated.delay((i / cellOpacity.length) * RIPPLE_DURATION),
+        Animated.delay((i / cellOpacity.length) * motion.pulse),
         Animated.loop(
-          Animated.sequence([
-            Animated.timing(value, { toValue: RIPPLE_DIM, duration: half, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-            Animated.timing(value, { toValue: 1, duration: half, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-          ]),
+          Animated.sequence(pulseSteps(value)),
         ),
       ]),
     );
@@ -52,7 +58,6 @@ export function Fold({ fold, color, size, pulse = false, outlined = false, unfol
       strokeLinejoin="round"
     />
   );
-  const drawn = id === ALPACA_FOLD && typeof size !== 'number' ? px * ALPACA_ROW_SCALE : px;
   if (rippling) {
     const offset = (px - drawn) / 2;
     return (

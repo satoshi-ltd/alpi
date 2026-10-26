@@ -5,17 +5,6 @@
   --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --font-crease: "Bricolage Grotesque", var(--font-sans);
 
-  --fs-label:   10px;    /* uppercase mono labels — a role, not a ladder step */
-  --fs-xxs:     9px;
-  --fs-xs:      11px;
-  --fs-sm:      12px;
-  --fs-base:    13px;
-  --fs-md:      14px;
-  --fs-lg:      15px;
-  --fs-xl:      18px;
-  --fs-xxl:     22px;
-  --fs-display: 28px;
-  --fs-hero:    56px;
 
   --text-meta:    11px;
   --text-ui:      13px;
@@ -23,6 +12,10 @@
   --text-title:   18px;
   --text-display: 28px;
   --text-hero:    56px;
+  --text-detail:  22px;
+
+  --eyebrow-size: 11px;
+  --eyebrow-tracking: .08em;
 
   --pop-xs:     220px;
   --pop-sm:     260px;
@@ -39,21 +32,20 @@
   --lh-normal:  1.5;     /* inputs, paragraphs */
   --lh-relaxed: 1.65;    /* long-form prose, message bodies */
 
-  --text-chat-size: var(--fs-lg);
+  --text-chat-size: var(--text-chat);
   --text-chat-leading: var(--lh-relaxed);
-  --text-dialog-title-size: var(--fs-xl);
+  --text-dialog-title-size: var(--text-title);
   --text-dialog-title-leading: var(--lh-cozy);
-  --text-body-size: var(--fs-md);
+  --text-body-size: var(--text-ui);
   --text-body-leading: var(--lh-normal);
-  --text-caption-size: var(--fs-sm);
+  --text-caption-size: var(--text-meta);
   --text-caption-leading: var(--lh-cozy);
-  --text-metadata-size: var(--fs-xs);
+  --text-metadata-size: var(--text-meta);
   --text-metadata-leading: var(--lh-cozy);
 
   --fw-regular:  400;    /* default body, sidebar default rows */
   --fw-medium:   500;    /* UI labels, selected rows, buttons */
   --fw-semibold: 600;    /* unread, primary CTA labels, titles */
-  --fw-bold:     700;    /* wordmarks, display headings */
 
   --alpha-faint:    0.35;   /* pulse midpoints, ambient indicators */
   --alpha-disabled: 0.45;   /* disabled buttons, dead controls */
@@ -69,17 +61,26 @@
   --space-hair:  1px;
   --space-tight: 2px;
   --space-snug:  3px;
-  --space-1:  4px;
-  --space-2:  6px;
-  --space-3:  8px;
-  --space-4:  10px;
-  --space-5:  12px;
-  --space-6:  14px;
-  --space-7:  16px;
-  --space-8:  20px;
-  --space-9:  24px;
-  --space-10: 32px;
-  --space-11: 40px;
+
+  --sp-4:  4px;
+  --sp-8:  8px;
+  --sp-12: 12px;
+  --sp-16: 16px;
+  --sp-24: 24px;
+  --sp-32: 32px;
+
+  --ctl-24: 24px;
+  --ctl-28: 28px;
+  --ctl-32: 32px;
+  --ctl-40: 40px;
+
+  --dialog-pad: 24px;
+  --dialog-foot-pad: 12px 24px;
+  --panel-head-pad: 12px 16px;
+  --panel-gutter: 8px;
+  --detail-gutter: 24px;
+  --def-col: 84px;
+  --toast-pad: 12px;
 
   --sidebar-w: 248px;
 
@@ -91,34 +92,39 @@
 
   --titlebar-h: 38px;
 
-  --dot-size: 7px;
   --glyph-size: 8px;
   --glyph-size-md: 14px;
 
   --icon-sm: 14px;
   --icon-md: 16px;
+  --icon-stroke: 1.33;
+
+  --dot-sm: 6px;
+  --dot-md: 8px;
+  --badge-size: 14px;
 
   --ctrl-2xs: 18px;
-  --ctrl-xs: 22px;
-  --ctrl-sm: 28px;
-  --ctrl-md: 32px;
-  --ctrl-lg: 40px;
   --ctrl-xl: 48px;
 
+  --focus-outline-width: 2px;
+  --focus-outline-offset: 2px;
+  --focus-outline: var(--focus-outline-width) solid color-mix(in srgb, var(--ink) 60%, transparent);
   --focus-border: var(--focus);
   --focus-ring: 0 0 0 4px color-mix(in srgb, var(--ink) 6%, transparent);
   --veil: color-mix(in srgb, var(--bg) 72%, transparent);
-  --well: var(--hover);
-  --well-focus: var(--selected);
+  --well: var(--field);
+  --well-focus: color-mix(in srgb, var(--ink) 6%, var(--field));
   --well-ring: inset 0 0 0 1px var(--focus-border);
 
-  --pane-pad-x: var(--space-10);
+  --pane-pad-x: var(--sp-32);
+  --pane-edge: max(var(--pane-pad-x), calc((100% - var(--stream-max)) / 2));
+  --row-bleed: var(--sp-12);
   --hero-pad-top: 46px;
   --hero-pad-bottom: 18px;
-  --stream-pad-top: var(--space-9);
-  --stream-pad-bottom: var(--space-7);
-  --composer-pad-top: var(--space-7);
-  --composer-pad-bottom: var(--space-9);
+  --stream-pad-top: var(--sp-24);
+  --stream-pad-bottom: var(--sp-16);
+  --composer-pad-top: var(--sp-16);
+  --composer-pad-bottom: var(--sp-24);
 
   --chip-pad: 1px 5px;
 
@@ -133,6 +139,13 @@
   --r-pill: 999px;
 
   --ease: cubic-bezier(.2, .7, .2, 1);
+  --ease-enter: cubic-bezier(.2, .7, .2, 1);
+  --ease-exit: cubic-bezier(.8, 0, .8, .3);
+  --dur-fast: 120ms;
+  --dur-enter: 180ms;
+  --dur-exit: 130ms;
+  --dur-pulse: 1600ms;
+  --pulse-low: 0.4;
   --dur-1: 120ms;
   --dur-2: 200ms;
   --dur-loop: 1.4s;
@@ -161,6 +174,9 @@
   --bg-side:   #f6f6f6;
   --bg-elev:   #ffffff;
   --bg-input:  #ffffff;
+  /* Ladder: light surfaces descend from the pane (card, field); dark ones ascend to --bg-elev. */
+  --card:      #f4f4f4;
+  --field:     #eaeaea;
   --ink:       #141414;
   --ink-2:     #454545;
   --ink-3:     #6b6b6b;
@@ -173,7 +189,9 @@
   --selected:  rgba(20, 20, 20, .06);
   --shadow:    0 0 0 .5px var(--line-2);
   --shadow-sm: 0 0 0 .5px var(--line);
-  --shadow-edge: 0 0 0 1px var(--edge);
+  --shadow-edge-sm: 0 0 0 1px var(--edge);
+  --shadow-edge-lg: 0 0 0 1px var(--ink-4);
+  --ring-ctrl: 0 0 0 1px var(--ink-4);
 
   --accent: #14110c;
   --c-success-text: #217a45;
@@ -187,8 +205,10 @@
     --bg:        #0b0b0b;
     --bg-pane:   #151515;
     --bg-side:   #0f0f0f;
-    --bg-elev:   #1b1b1b;
+    --bg-elev:   #202020;
     --bg-input:  #151515;
+    --card:      #0f0f0f;
+    --field:     #181818;
     --ink:       #ededed;
     --ink-2:     #b4b4b4;
     --ink-3:     #8a8a8a;
@@ -201,7 +221,7 @@
     --selected:  rgba(237, 237, 237, .07);
     --shadow:    0 0 0 .5px var(--line-2);
     --shadow-sm: 0 0 0 .5px var(--line);
-    --shadow-edge: 0 0 0 1px var(--edge);
+    --shadow-edge-lg: 0 0 0 1px var(--line-2);
     --accent:    #f3efe6;
     --c-success-text: #70c592;
     --c-warning-text: #f59e5b;
@@ -214,8 +234,10 @@
   --bg:        #0b0b0b;
   --bg-pane:   #151515;
   --bg-side:   #0f0f0f;
-  --bg-elev:   #1b1b1b;
+  --bg-elev:   #202020;
   --bg-input:  #151515;
+  --card:      #0f0f0f;
+  --field:     #181818;
   --ink:       #ededed;
   --ink-2:     #b4b4b4;
   --ink-3:     #8a8a8a;
@@ -228,7 +250,7 @@
   --selected:  rgba(237, 237, 237, .07);
   --shadow:    0 0 0 .5px var(--line-2);
   --shadow-sm: 0 0 0 .5px var(--line);
-  --shadow-edge: 0 0 0 1px var(--edge);
+  --shadow-edge-lg: 0 0 0 1px var(--line-2);
   --accent:    #f3efe6;
   --c-success-text: #70c592;
   --c-warning-text: #f59e5b;

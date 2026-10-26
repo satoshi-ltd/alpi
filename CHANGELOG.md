@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.17.39 — 2026-10-27 — activity shows when a failing job last worked
+
+- The activity list gives every scheduled job the time of its last success next to its last run, so the apps can say "failed 48m ago · last ok 6h ago".
+- The terminal's dark panel colour follows the shared palette again.
+
 ## v0.17.38 — 2026-10-26 — asking about a profile no longer creates it
 
 - A connected app that asked a daemon about a profile it does not have (a schedule list, usage, sessions, settings) used to leave an empty profile behind, which then appeared in every app with "needs provider" and started its own scheduler. The daemon now answers `not-found` and creates nothing.

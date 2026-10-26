@@ -8,6 +8,7 @@ import { Icon } from './Icon';
 import { errorParts, failedTitle, inlineSegments, parseNotificationBody } from '../../../common/notificationBody.mjs';
 import { useTheme } from '../theme/ThemeContext';
 import { lineHeights, radii, space } from '../theme/tokens';
+import { detailTitleStyle } from './detailTitle';
 
 function topMargin(block, prev) {
   if (!prev) return 0;
@@ -18,7 +19,7 @@ function topMargin(block, prev) {
 
 function Lead({ text, theme }) {
   return (
-    <Text selectable accessibilityRole="header" style={{ fontFamily: theme.fonts.sans.semibold, fontSize: theme.fontSizes.xxl, lineHeight: theme.fontSizes.xxl * lineHeights.cozy, color: theme.colors.ink }}>
+    <Text selectable accessibilityRole="header" style={detailTitleStyle(theme)}>
       <Inline text={text} theme={theme} />
     </Text>
   );
@@ -268,7 +269,7 @@ function Details({ blocks, theme }) {
         onPress={() => setOpen((v) => !v)}
         style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2, minHeight: 44, paddingHorizontal: space.s5 }}
       >
-        <Icon name={open ? 'chevron-down' : 'chevron-right'} size="sm" color={theme.colors.ink3} />
+        <Icon name={open ? 'chevron-down' : 'chevron-right'} size="xs" color={theme.colors.ink3} />
         <Text style={{ fontFamily: theme.fonts.mono, fontSize: theme.fontSizes.sm, color: theme.colors.ink2 }}>Details</Text>
       </Pressable>
       {open ? blocks.map((b, i) => (
@@ -284,11 +285,11 @@ function Details({ blocks, theme }) {
 
 export function ErrorCard({ title, summary = '', body, actions = null, accent = null }) {
   const theme = useTheme();
-  const { colors, fonts, fontSizes, mode } = theme;
+  const { colors, fonts, fontSizes } = theme;
   const { lead, failed } = failedTitle(title);
   const { facts, details, rest } = errorParts(parseNotificationBody(body));
   return (
-    <View style={{ gap: space.s5, padding: space.s6, borderRadius: radii.xs, backgroundColor: groupTone(colors, mode) }}>
+    <View style={{ gap: space.s5, padding: space.s6, borderRadius: radii.xs, backgroundColor: groupTone(colors) }}>
       <View accessibilityRole="header" style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
         <Icon name="triangle-alert" size="md" color={colors.danger} />
         <Text style={{ flex: 1, fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, lineHeight: fontSizes.lg * lineHeights.cozy, color: colors.ink }}>

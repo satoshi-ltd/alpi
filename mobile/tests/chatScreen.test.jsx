@@ -120,10 +120,10 @@ vi.mock('../src/features/chat/Bubble', () => ({
 }));
 vi.mock('../src/features/chat/ChatSkeleton', () => ({ ChatSkeleton: () => React.createElement('div', { 'data-skeleton': 'chat' }) }));
 vi.mock('../src/features/chat/Composer', () => ({
-  Composer: ({ disabled, placeholder, modelChip, initialText, onSend }) =>
+  Composer: ({ disabled, placeholder, modelChip, initialText, onSend, onResume }) =>
     React.createElement(
       'div',
-      { 'data-composer': placeholder, 'data-disabled': String(!!disabled), 'data-initial': initialText ?? '' },
+      { 'data-composer': placeholder, 'data-disabled': String(!!disabled), 'data-initial': initialText ?? '', 'data-resume': String(!!onResume) },
       modelChip ? React.createElement('button', { type: 'button', 'data-chip': modelChip.label, onClick: modelChip.onPress }, modelChip.label) : null,
       React.createElement('button', { type: 'button', 'data-send': '', onClick: () => onSend?.('thanks', []) }, 'send'),
     ),
@@ -295,6 +295,15 @@ describe('Profile chat header menu', () => {
     const banner = document.querySelector('[data-banner="warning"]');
     fireEvent.click(banner.querySelector('[data-banner-action="Resume"]'));
     expect(h.call).toHaveBeenCalledWith('host.config.set_field', { profile: 'doc', key: 'paused', value: 'false' });
+  });
+
+  it('keeps Resume in the banner only and leaves the paused composer disabled without one', () => {
+    h.profile = { ...READY, paused: true };
+    render(<ProfileChat />);
+    expect(document.querySelectorAll('[data-banner-action="Resume"]')).toHaveLength(1);
+    const composer = document.querySelector('[data-composer]');
+    expect(composer.getAttribute('data-disabled')).toBe('true');
+    expect(composer.getAttribute('data-resume')).toBe('false');
   });
 
   it('toggles auto-read through the voice RPC and shows its state', () => {

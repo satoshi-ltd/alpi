@@ -467,6 +467,7 @@ function ProfileChatInner() {
   const [actionTarget, setActionTarget] = useState(null);
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuAnchor, setMenuAnchor] = useState(null);
 
   const accent = profile?.accent ?? colors.ink3;
 
@@ -728,7 +729,10 @@ function ProfileChatInner() {
         title={profileLabel(profile.name)}
         meta={headerMeta}
         onBack={goBack}
-        onMore={() => setMenuOpen(true)}
+        onMore={(anchor) => {
+          setMenuAnchor(anchor ?? null);
+          setMenuOpen(true);
+        }}
         onPickSession={() => setSessionsOpen(true)}
         failedJobs={failedJobs}
         right={<SoundWave accent={accent} />}
@@ -785,7 +789,6 @@ function ProfileChatInner() {
               attachments={attachments}
               onPickAttachment={pickAttachment}
               onRemoveAttachment={(i) => setAttachments((p) => p.filter((_, j) => j !== i))}
-              onResume={togglePause}
               modelChip={chipLabel ? { label: chipLabel, model: chipParts.model, effort: chipParts.effort, onPress: () => setModelSheetOpen(true) } : null}
             />
           </PaneColumn>
@@ -793,6 +796,7 @@ function ProfileChatInner() {
       )}
       <ActionSheet
         open={menuOpen}
+        anchor={menuAnchor}
         onClose={() => setMenuOpen(false)}
         title={`@${profileLabel(profile.name)}`}
         subtitle="PROFILE"

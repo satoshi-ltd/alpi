@@ -1,24 +1,18 @@
 import { useState } from 'react';
 import { Pressable, Text, View, Platform } from 'react-native';
-import { iconSizes, lineHeights, mobile, radii, space, tracking } from '../theme/tokens';
+import { iconSizes, radii, space } from '../theme/tokens';
 
 import { Eyebrow } from './Eyebrow';
 import { GroupToneContext, groupTone } from './groupTone';
 import { Icon } from './Icon';
 import { stacksRow } from '../lib/panes';
-import { useWideSettings } from '../nav/SettingsSurface';
 import { useTheme } from '../theme/ThemeContext';
-
-const WIDE_LABEL_W = 148;
-const WIDE_SECTION_GAP = 36;
 
 export { groupTone };
 
 export function RowGroup({ children, style }) {
-  const { colors, mode } = useTheme();
-  const wide = useWideSettings();
-  if (wide) return <>{children}</>;
-  const tone = groupTone(colors, mode);
+  const { colors } = useTheme();
+  const tone = groupTone(colors);
   return (
     <GroupToneContext.Provider value={tone}>
       <View style={[{ marginHorizontal: space.s7, borderRadius: radii.xs, overflow: 'hidden', backgroundColor: tone }, style]}>
@@ -29,34 +23,6 @@ export function RowGroup({ children, style }) {
 }
 
 export function SectionHeader({ children, kicker, first = false, onLayout }) {
-  const { colors, fonts, fontSizes } = useTheme();
-  const wide = useWideSettings();
-  if (wide) {
-    return (
-      <View
-        onLayout={onLayout}
-        style={{
-          flexDirection: 'row',
-          alignItems: 'baseline',
-          gap: space.s4,
-          marginTop: first ? 0 : WIDE_SECTION_GAP,
-          marginBottom: space.s5,
-        }}
-      >
-        <Eyebrow
-          color={colors.ink2}
-          style={{ fontFamily: fonts.monoSemibold, letterSpacing: fontSizes.xs * tracking.wider }}
-        >
-          {children}
-        </Eyebrow>
-        {kicker ? (
-          <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>
-            {kicker}
-          </Text>
-        ) : null}
-      </View>
-    );
-  }
   return (
     <View onLayout={onLayout} style={{ paddingHorizontal: space.s7, paddingTop: space.s9, paddingBottom: space.s3 }}>
       <Eyebrow>{children}{kicker ? ` · ${kicker}` : ''}</Eyebrow>
@@ -84,112 +50,15 @@ function pressable(body, { onPress, onLongPress, disabled, colors, spoken }) {
   );
 }
 
-function WideRow({ label, helper, value, leading, trailing, onPress, onLongPress, danger, disabled, chevron, labelLines, helperLines, helperDanger, spokenValue, item }) {
+export function Row({ label, helper, value, leading, trailing, onPress, onLongPress, danger, disabled = false, chevron = true, labelLines = 1, helperLines, helperDanger = false, spokenValue, below }) {
   const { colors, fonts, fontSizes } = useTheme();
-  const control =
-    typeof value === 'string' ? (
-      <Text
-        numberOfLines={1}
-        ellipsizeMode="middle"
-        style={{
-          fontFamily: fonts.mono,
-          fontSize: fontSizes.sm,
-          color: colors.ink2,
-          flexShrink: 1,
-          textAlign: 'right',
-        }}
-      >
-        {value}
-      </Text>
-    ) : (
-      value
-    );
-  const body = (
-    <View
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: space.s9,
-        minHeight: mobile.tap,
-        paddingVertical: space.s3,
-      }}
-    >
-      {leading ? <View>{leading}</View> : null}
-      <View style={{ flexBasis: WIDE_LABEL_W, flexGrow: 1, flexShrink: 1, minWidth: 0 }}>
-        {item ? (
-          <Text
-            numberOfLines={Math.max(labelLines, 1)}
-            style={{
-              fontFamily: fonts.sans.semibold,
-              fontSize: fontSizes.md,
-              lineHeight: fontSizes.md * lineHeights.cozy,
-              color: danger ? colors.dangerText : disabled ? colors.ink3 : colors.ink,
-            }}
-          >
-            {label}
-          </Text>
-        ) : (
-          <Eyebrow
-            numberOfLines={Math.max(labelLines, 2)}
-            color={danger ? colors.dangerText : colors.ink3}
-            style={{ lineHeight: fontSizes.xs * lineHeights.cozy }}
-          >
-            {label}
-          </Eyebrow>
-        )}
-        {helper ? (
-          <Text
-            numberOfLines={helperLines ?? 2}
-            style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: helperDanger ? colors.dangerText : colors.ink3, marginTop: space.s1 }}
-          >
-            {helper}
-          </Text>
-        ) : null}
-      </View>
-      <View style={{ flexShrink: 1, minWidth: 0, maxWidth: '60%', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: space.s4 }}>
-        {control}
-        {trailing}
-        {danger || trailing ? null : (
-          <View style={{ width: iconSizes.sm, alignItems: 'flex-end' }}>
-            {chevron && onPress && !disabled ? <Icon name="chevron-right" size="sm" color={colors.ink4} /> : null}
-          </View>
-        )}
-      </View>
+  const [width, setWidth] = useState(0);
+  const stacked = stacksRow(width);
+  const chevronNode = (
+    <View testID="row-lane" style={{ width: iconSizes.md, alignItems: 'flex-end' }}>
+      {chevron && onPress && !disabled && !danger ? <Icon name="chevron-right" size="md" color={colors.ink4} /> : null}
     </View>
   );
-  return pressable(body, { onPress, onLongPress, disabled, colors, spoken: rowLabel(label, spokenValue ?? value, helper) });
-}
-
-export function Row({ label, helper, value, leading, trailing, onPress, onLongPress, danger, disabled = false, chevron = true, labelLines = 1, helperLines, helperDanger = false, spokenValue, item = false }) {
-  const { colors, fonts, fontSizes } = useTheme();
-  const wide = useWideSettings();
-  const [width, setWidth] = useState(0);
-  if (wide) {
-    return (
-      <WideRow
-        label={label}
-        helper={helper}
-        value={value}
-        leading={leading}
-        trailing={trailing}
-        onPress={onPress}
-        onLongPress={onLongPress}
-        danger={danger}
-        disabled={disabled}
-        chevron={chevron}
-        labelLines={labelLines}
-        helperLines={helperLines}
-        helperDanger={helperDanger}
-        spokenValue={spokenValue}
-        item={item}
-      />
-    );
-  }
-  const stacked = stacksRow(width);
-  const chevronNode =
-    chevron && onPress && !disabled && !danger ? (
-      <Icon name="chevron-right" size="md" color={colors.ink4} />
-    ) : null;
   const valueNode = value ? (
     typeof value === 'string' ? (
       <Text
@@ -238,6 +107,18 @@ export function Row({ label, helper, value, leading, trailing, onPress, onLongPr
     </Text>
   ) : null;
 
+  if (below) {
+    return (
+      <View style={{ paddingHorizontal: space.s7, paddingVertical: space.s6, gap: space.s5 }}>
+        <View style={{ gap: space.s1 }}>
+          {labelNode}
+          {helperNode}
+        </View>
+        {below}
+      </View>
+    );
+  }
+
   const body = (
     <View
       onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
@@ -262,7 +143,6 @@ export function Row({ label, helper, value, leading, trailing, onPress, onLongPr
         </View>
       ) : (
         <>
-          {/* Label container shrinks but always renders its label (min-width: 0 + flexShrink: 1 lets the value truncate before the label disappears). */}
           <View style={{ flex: 1, minWidth: 0, gap: space.s1 }}>
             {labelNode}
             {helperNode}
@@ -280,14 +160,10 @@ export function Row({ label, helper, value, leading, trailing, onPress, onLongPr
 
 export function RowSeparator({ indent = space.s7 }) {
   const { colors } = useTheme();
-  const wide = useWideSettings();
-  if (wide) return null;
   return <View style={{ height: 0.5, backgroundColor: colors.line, marginLeft: indent }} />;
 }
 
 export function SettingsBand({ children }) {
-  const wide = useWideSettings();
-  if (wide) return <View>{children}</View>;
   return (
     <View style={{ paddingHorizontal: space.s7, paddingVertical: space.s7 }}>
       {children}

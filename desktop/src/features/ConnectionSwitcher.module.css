@@ -1,5 +1,6 @@
 .label {
-  padding: var(--space-6) var(--space-4) var(--space-2) var(--space-1);
+  display: block;
+  padding: 0 var(--sp-12) var(--sp-8) calc(var(--sp-12) + 2px);
 }
 
 .root > div {
@@ -12,10 +13,10 @@
 }
 
 .payload {
-  width: calc(100% - var(--space-7));
+  width: calc(100% - var(--sp-16));
   min-height: 88px;
-  margin: 0 var(--space-3) var(--space-3);
-  padding: var(--space-3);
+  margin: 0 var(--sp-8) var(--sp-8);
+  padding: var(--sp-8);
   resize: vertical;
   border: .5px solid transparent;
   border-radius: var(--r-xs);
@@ -41,9 +42,9 @@
 
 .add {
   display: block;
-  width: calc(100% - var(--space-7));
-  height: var(--space-10);
-  margin: 0 var(--space-3) var(--space-3);
+  width: calc(100% - var(--sp-16));
+  height: var(--sp-32);
+  margin: 0 var(--sp-8) var(--sp-8);
   border: .5px solid var(--line-2);
   border-radius: var(--r-xs);
   background: var(--bg-input);
@@ -59,8 +60,8 @@
 .row {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-3) var(--space-4);
+  gap: var(--sp-8);
+  padding: var(--sp-8) var(--sp-12);
   border-radius: var(--r-xs);
 }
 
@@ -82,8 +83,8 @@
   position: absolute;
   bottom: -2px;
   right: -2px;
-  width: 7px;
-  height: 7px;
+  width: var(--dot-md);
+  height: var(--dot-md);
   border-radius: 50%;
   border: 1.5px solid var(--bg-elev);
   background: var(--ink-3);
@@ -158,7 +159,7 @@
 }
 
 .rowCaption {
-  margin-top: var(--space-1);
+  margin-top: var(--sp-4);
   color: var(--ink-3);
   font-family: var(--font-mono);
   font-size: var(--text-meta);

@@ -231,9 +231,12 @@ export default function WorkgroupsView({
           {workgroups.length === 0 && (syncing ? (
             <SkeletonRows count={3} label="Syncing workgroups" />
           ) : (
-            <EmptyState fold={WORKGROUP_FOLD} heading={EMPTY.workgroups.title} subtitle={EMPTY.workgroups.hint}>
-              {onNewWorkgroup && <Button onClick={onNewWorkgroup}>New workgroup</Button>}
-            </EmptyState>
+            <EmptyState
+              fold={WORKGROUP_FOLD}
+              heading={EMPTY.workgroups.title}
+              subtitle={EMPTY.workgroups.hint}
+              action={onNewWorkgroup ? { label: "New workgroup", onClick: onNewWorkgroup } : null}
+            />
           ))}
         </div>
       </div>

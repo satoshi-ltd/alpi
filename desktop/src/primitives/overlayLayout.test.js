@@ -17,7 +17,7 @@ describe("overlay layout", () => {
   it.each(["Modal", "BrowseModal"])("constrains %s to the viewport at increased zoom", (name) => {
     const source = css(`./${name}.module.css`);
     expect(source).toMatch(/min-width:\s*0;/);
-    expect(source).toMatch(/max-width:\s*calc\(100vw - var\(--space-10\)\)/);
-    expect(source).toMatch(/max-height:\s*calc\(100vh - var\(--space-10\)\)/);
+    expect(source).toMatch(/max-width:\s*calc\(100vw - var\(--sp-32\)\)/);
+    expect(source).toMatch(/max-height:\s*calc\(100vh - var\(--sp-32\)\)/);
   });
 });

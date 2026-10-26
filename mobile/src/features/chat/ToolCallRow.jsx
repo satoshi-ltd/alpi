@@ -4,6 +4,7 @@ import { space } from '../../theme/tokens';
 
 import { Expand } from '../../components/Expand';
 import { Icon } from '../../components/Icon';
+import { pulseSteps } from '../../lib/pulse';
 import { useReduceMotion } from '../../lib/reduceMotion';
 import { useTheme } from '../../theme/ThemeContext';
 import { pluralize } from '../../../../common/pluralize.mjs';
@@ -28,12 +29,7 @@ export function ToolCallRow({ tool, status = 'success', accent, primary = false,
   const pulse = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     if (!isRunning || reduceMotion) return undefined;
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 0.35, duration: 700, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1, duration: 700, useNativeDriver: true }),
-      ]),
-    );
+    const loop = Animated.loop(Animated.sequence(pulseSteps(pulse)));
     loop.start();
     return () => loop.stop();
   }, [isRunning, reduceMotion, pulse]);

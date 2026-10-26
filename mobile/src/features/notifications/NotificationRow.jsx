@@ -8,9 +8,14 @@ import { notificationTime } from '../../../../common/notificationTime.mjs';
 import { Fold } from '../../components/Fold';
 import { Pill } from '../../components/Pill';
 import { profileLabel } from '../../lib/profileName';
+import { tap } from '../../lib/haptics';
 import { useReduceMotion } from '../../lib/reduceMotion';
+import { dotShape } from '../../components/dotShape';
 import { useTheme } from '../../theme/ThemeContext';
-import { dotSize, lineHeights, mobile, radii, space } from '../../theme/tokens';
+import { lineHeights, mobile, space } from '../../theme/tokens';
+
+export const FOLD_SIZE = 20;
+export const FOLD_TOP = 2;
 
 const REDUCED = { reduceMotion: 'always' };
 const ACTION_W = 76;
@@ -59,6 +64,7 @@ export function NotificationRow({ row, unread, multi, dayGroup = true, selected 
   const showToggle = unread || canToggleRead;
 
   const act = (fn) => () => {
+    tap();
     swipeRef.current?.close?.();
     fn?.(row);
   };
@@ -113,31 +119,34 @@ export function NotificationRow({ row, unread, multi, dayGroup = true, selected 
           borderBottomColor: colors.line,
         })}
       >
-        <View style={{ width: dotSize, paddingTop: space.s3 }}>
-          {unread ? <View style={{ width: dotSize, height: dotSize, borderRadius: radii.pill, backgroundColor: colors.ink }} /> : null}
+        <View style={{ width: dotShape('sm').width, paddingTop: FOLD_TOP + (FOLD_SIZE - dotShape('sm').height) / 2 }}>
+          {unread ? <View style={{ ...dotShape('sm'), backgroundColor: colors.ink }} /> : null}
         </View>
-        <View style={{ paddingTop: 2 }}>
-          <Fold fold={row.fold} color={accent} size={20} />
+        <View style={{ paddingTop: FOLD_TOP }}>
+          <Fold fold={row.fold} color={accent} size={FOLD_SIZE} />
         </View>
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2, flexWrap: 'wrap' }}>
-            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: ink, flexShrink: 1 }}>
-              @{profileLabel(row.profile)}
-            </Text>
-            {multi && row.connectionName ? (
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3, flexShrink: 1 }}>
-                · {row.connectionName}
+          <View testID="notification-meta" style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
+            <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
+              <Text numberOfLines={1} style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: ink, flexShrink: 1 }}>
+                @{profileLabel(row.profile)}
               </Text>
-            ) : null}
-            <View style={{ flex: 1 }} />
-            <LevelPill row={row} />
-            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
+              {multi && row.connectionName ? (
+                <Text numberOfLines={1} style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3, flexShrink: 1 }}>
+                  · {row.connectionName}
+                </Text>
+              ) : null}
+            </View>
+            <Text numberOfLines={1} style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3, flexShrink: 0 }}>
               {notificationTime(row.created_at, { dayGroup })}
             </Text>
           </View>
-          <Text style={{ fontFamily: weight, fontSize: fontSizes.lg, color: ink }} numberOfLines={1}>
-            {headline}
-          </Text>
+          <View testID="notification-title" style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2, minHeight: 22 }}>
+            <LevelPill row={row} />
+            <Text style={{ flex: 1, minWidth: 0, fontFamily: weight, fontSize: fontSizes.lg, color: ink }} numberOfLines={1}>
+              {headline}
+            </Text>
+          </View>
           {preview ? (
             <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * lineHeights.cozy, color: colors.ink3 }} numberOfLines={2}>
               {preview}

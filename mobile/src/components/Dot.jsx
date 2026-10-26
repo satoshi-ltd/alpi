@@ -1,32 +1,26 @@
 import { useEffect, useRef } from 'react';
-import { Animated, Easing } from 'react-native';
+import { Animated } from 'react-native';
 
 import { useReduceMotion } from '../lib/reduceMotion';
-import { dotSize, pulseDuration } from '../theme/tokens';
+import { pulseSteps } from '../lib/pulse';
 import { useTheme } from '../theme/ThemeContext';
+import { dotShape } from './dotShape';
 
-export function Dot({ color, pulse = false }) {
+export function Dot({ color, size = 'sm', pulse = false }) {
   const { colors } = useTheme();
   const opacity = useRef(new Animated.Value(1)).current;
   const reduceMotion = useReduceMotion();
   const pulsing = pulse && !reduceMotion;
   useEffect(() => {
     if (!pulsing) return;
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, { toValue: 0.4, duration: pulseDuration / 2, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 1, duration: pulseDuration / 2, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ]),
-    );
+    const loop = Animated.loop(Animated.sequence(pulseSteps(opacity)));
     loop.start();
     return () => loop.stop();
   }, [pulsing, opacity]);
   return (
     <Animated.View
       style={{
-        width: dotSize,
-        height: dotSize,
-        borderRadius: dotSize / 2,
+        ...dotShape(size),
         backgroundColor: color ?? colors.ink3,
         opacity: pulsing ? opacity : 1,
       }}

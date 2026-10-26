@@ -9,9 +9,9 @@
 .trigger {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-3);
-  height: var(--ctrl-sm);
-  padding: 0 var(--space-5);
+  gap: var(--sp-8);
+  height: var(--ctl-28);
+  padding: 0 var(--sp-12);
   border-radius: var(--r-xs);
   background: transparent;
   color: var(--ink-2);
@@ -42,8 +42,8 @@
 .triggerField {
   border: .5px solid transparent;
   border-radius: var(--r-xs);
-  height: var(--ctrl-md);
-  padding: 0 var(--space-5);
+  height: var(--ctl-32);
+  padding: 0 var(--sp-12);
   background: var(--well);
 }
 
@@ -69,9 +69,9 @@
 }
 
 .triggerList {
-  gap: var(--space-4);
-  height: 44px;
-  padding: 0 var(--space-5);
+  gap: var(--sp-8);
+  height: var(--ctl-40);
+  padding: 0 var(--sp-12);
   border-radius: var(--r-xs);
   border: .5px solid var(--line);
   background: var(--bg-elev);
@@ -128,7 +128,7 @@
 .triggerTrailing {
   margin-left: auto;
   font-family: var(--font-mono);
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
   color: var(--ink-3);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -137,7 +137,7 @@
 }
 
 .wrapFull .trigger .triggerTrailing + .caret {
-  margin-left: var(--space-3);
+  margin-left: var(--sp-8);
 }
 
 .leading {
@@ -148,7 +148,7 @@
 }
 
 .triggerList .leading {
-  width: var(--space-7);
+  width: var(--sp-16);
 }
 
 .caret {
@@ -163,13 +163,16 @@
   position: absolute;
   max-height: 420px;
   background: var(--bg-elev);
-  border: .5px solid var(--line-2);
   border-radius: var(--r-xs);
-  box-shadow: var(--shadow-edge);
+  box-shadow: var(--shadow-edge-sm);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   z-index: var(--z-sticky);
+}
+
+.menuLarge {
+  box-shadow: var(--shadow-edge-lg);
 }
 
 .menuPortal {
@@ -178,18 +181,18 @@
 }
 
 .searchWrap {
-  padding: var(--space-3);
+  padding: var(--sp-8);
   border-bottom: .5px solid var(--line);
 }
 
 .search {
   width: 100%;
-  padding: var(--space-3) var(--space-5);
+  padding: var(--sp-8) var(--sp-12);
   border-radius: var(--r-xs);
   border: .5px solid transparent;
   background: var(--well);
   font: inherit;
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
   color: var(--ink);
   outline: none;
 }
@@ -204,11 +207,11 @@
 .list {
   flex: 1;
   overflow: auto;
-  padding: var(--space-2);
+  padding: var(--sp-8);
 }
 
 .emptyRow {
-  padding: var(--space-5);
+  padding: var(--sp-12);
   font-family: var(--font-sans);
   font-size: var(--text-meta);
   color: var(--ink-3);
@@ -216,7 +219,7 @@
 }
 
 .group {
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--sp-8);
 }
 
 .group:last-child {
@@ -224,7 +227,7 @@
 }
 
 .groupLabel {
-  padding: var(--space-3) var(--space-5) var(--space-2);
+  padding: var(--sp-8) var(--sp-12) var(--sp-8);
 }
 
 .rowLeading {
@@ -236,9 +239,10 @@
 .rowMain {
   flex: 1;
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
-  gap: var(--space-4);
+  gap: var(--sp-8);
+  height: var(--sp-16);
   min-width: 0;
 }
 

@@ -88,13 +88,13 @@ describe('one token per typographic role', () => {
     expect(sizeOf('alpi-casa')).toBe(fontSizes.md);
   });
 
-  it('sets an eyebrow at xs, mono medium, uppercase, on desktop .06em tracking', () => {
+  it('sets an eyebrow at xs, mono medium, uppercase, on the shared eyebrow tracking', () => {
     render(<Eyebrow>connection</Eyebrow>);
     const node = screen.getByText('connection');
     expect(Number(node.getAttribute('data-size'))).toBe(fontSizes.xs);
     expect(node.getAttribute('data-font')).toBe('mono-medium');
     expect(node.getAttribute('data-transform')).toBe('uppercase');
-    expect(Number(node.getAttribute('data-track'))).toBeCloseTo(fontSizes.xs * tracking.wide, 5);
+    expect(Number(node.getAttribute('data-track'))).toBeCloseTo(fontSizes.xs * tracking.eyebrow, 5);
   });
 
   it('routes every section header through that one eyebrow', () => {

@@ -11,6 +11,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import { Busy } from '../../components/Busy';
 import { useBusyVisible } from '../../hooks/useBusyVisible';
 import { SubtitleSkeleton } from '../../components/SubtitleSkeleton';
+import { detailTitleStyle } from '../../components/detailTitle';
 
 function formatType(schema) {
   if (!schema) return '—';
@@ -20,7 +21,8 @@ function formatType(schema) {
 }
 
 export function ToolDetail({ profile: id, name, embedded = false, onBack }) {
-  const { colors, fonts, fontSizes } = useTheme();
+  const theme = useTheme();
+  const { colors, fonts, fontSizes } = theme;
   const tools = useTools(id);
   const tool = useMemo(
     () => (tools.data?.tools ?? []).find((t) => t.name === String(name)) ?? null,
@@ -54,7 +56,7 @@ export function ToolDetail({ profile: id, name, embedded = false, onBack }) {
     <View style={{ flex: 1 }}>
       {embedded ? null : <PanelHeader profile={id} section={tool.category ? `TOOLS · ${String(tool.category).toUpperCase()}` : 'TOOLS'} onBack={onBack} />}
       <ScrollView contentContainerStyle={{ padding: space.s8, gap: space.s6, paddingBottom: space.s10 }}>
-        <Text style={{ fontFamily: fonts.monoSemibold ?? fonts.mono, fontSize: fontSizes.xl, color: colors.ink }}>{tool.name}</Text>
+        <Text accessibilityRole="header" style={detailTitleStyle(theme, fonts.monoSemibold ?? fonts.mono)}>{tool.name}</Text>
         {tool.denied ? (
           <View
             style={{
@@ -95,7 +97,7 @@ export function ToolDetail({ profile: id, name, embedded = false, onBack }) {
               style={{
                 padding: space.s5,
                 gap: space.s2,
-                backgroundColor: colors.bgInput,
+                backgroundColor: colors.field,
                 borderRadius: radii.xs,
               }}
             >

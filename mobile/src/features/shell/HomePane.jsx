@@ -42,7 +42,7 @@ export function HomePane() {
             zIndex: 1,
           })}
         >
-          <Icon name="panel-left" size="lg" color={colors.ink2} />
+          <Icon name="panel-left" size="md" color={colors.ink2} />
         </Pressable>
       ) : null}
       <EmptyState

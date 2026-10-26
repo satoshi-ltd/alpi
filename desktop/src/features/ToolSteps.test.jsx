@@ -196,41 +196,41 @@ describe("process block typography", () => {
 
   it("leads the thinking row in sans at the same 22 px height, under the profile's object", () => {
     const rule = block(reasoning, "row");
-    expect(rule).toMatch(/height: var\(--ctrl-xs\)/);
+    expect(rule).toMatch(/height: var\(--ctl-24\)/);
     expect(rule).toMatch(/font-family: var\(--font-sans\)/);
   });
 
-  it.each([[steps, "head"], [steps, "bucket"]])("every tool row is a 22 px mono 12 px line", (css, sel) => {
+  it.each([[steps, "head"], [steps, "bucket"]])("every tool row is a meta-size mono line", (css, sel) => {
     const rule = block(css, sel);
-    expect(rule).toMatch(/height: var\(--ctrl-xs\)/);
+    expect(rule).toMatch(/height: var\(--ctl-24\)/);
     expect(rule).toMatch(/font-family: var\(--font-mono\)/);
-    expect(rule).toMatch(/font-size: var\(--fs-sm\)/);
+    expect(rule).toMatch(/font-size: var\(--text-meta\)/);
   });
 
   it("labels and meta read ink-3, names ink-2, the opened thought mono ink-2", () => {
     expect(block(steps, "summary")).toMatch(/color: var\(--ink-3\)/);
     expect(block(steps, "status")).toMatch(/color: var\(--ink-3\)/);
     expect(block(steps, "name")).toMatch(/color: var\(--ink-2\)/);
-    expect(block(reasoning, "label")).toMatch(/color: color-mix\(in srgb, var\(--c, var\(--ink-3\)\) 50%, var\(--ink\)\)/);
+    expect(block(reasoning, "label")).toMatch(/color: var\(--ink-3\)/);
     const para = block(reasoning, "para");
     expect(para).toMatch(/font-family: var\(--font-mono\)/);
-    expect(para).toMatch(/font-size: var\(--fs-sm\)/);
+    expect(para).toMatch(/font-size: var\(--text-meta\)/);
     expect(para).toMatch(/color: var\(--ink-2\)/);
     expect(block(steps, "module")).toMatch(/gap: var\(--space-tight\)/);
   });
 
   it.each([[steps, "head"], [steps, "bucket"], [reasoning, "row"]])("pulls each row into the gutter by its own padding so glyphs sit flush with the answer", (css, sel) => {
     const rule = block(css, sel);
-    expect(rule).toMatch(/margin: 0 calc\(-1 \* var\(--space-4\)\)/);
-    expect(rule).toMatch(/padding: 0 var\(--space-4\)/);
-    expect(rule).toMatch(/width: calc\(100% \+ 2 \* var\(--space-4\)\)/);
+    expect(rule).toMatch(/margin: 0 calc\(-1 \* var\(--sp-12\)\)/);
+    expect(rule).toMatch(/padding: 0 var\(--sp-12\)/);
+    expect(rule).toMatch(/width: calc\(100% \+ 2 \* var\(--sp-12\)\)/);
   });
 
   it("keeps the opened bodies' indent relative to the row and lets the bucket's rows reach the gutter", () => {
-    expect(block(steps, "detail")).toMatch(/padding: var\(--space-3\) 0 var\(--space-3\) calc\(14px \+ var\(--space-4\)\)/);
-    expect(block(reasoning, "body")).toMatch(/margin: var\(--space-1\) 0 var\(--space-1\) calc\(var\(--space-6\) - var\(--space-4\)\)/);
-    expect(block(steps, "bucketReveal")).toMatch(/margin: 0 calc\(-1 \* var\(--space-4\)\)/);
-    expect(block(steps, "bucketList")).toMatch(/calc\(var\(--space-6\) \+ var\(--space-4\)\)/);
+    expect(block(steps, "detail")).toMatch(/padding: var\(--sp-8\) 0 var\(--sp-8\) calc\(var\(--icon-sm\) \+ var\(--sp-12\)\)/);
+    expect(block(reasoning, "body")).toMatch(/margin: var\(--sp-4\) 0 var\(--sp-4\) calc\(var\(--sp-16\) - var\(--sp-12\)\)/);
+    expect(block(steps, "bucketReveal")).toMatch(/margin: 0 calc\(-1 \* var\(--sp-12\)\)/);
+    expect(block(steps, "bucketList")).toMatch(/calc\(var\(--sp-16\) \+ var\(--sp-12\)\)/);
   });
 });
 

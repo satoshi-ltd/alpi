@@ -2,17 +2,17 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: var(--space-2);
+  gap: var(--sp-8);
 }
 
 .fileHead {
   display: flex;
   align-items: baseline;
-  gap: var(--space-3);
+  gap: var(--sp-8);
 }
 
 .fileLabel {
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
   font-weight: var(--fw-medium);
   color: var(--ink);
 }
@@ -32,7 +32,7 @@
 .usage {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--sp-8);
   font-family: var(--font-mono);
   font-size: var(--text-meta);
   color: var(--ink-3);
@@ -69,9 +69,9 @@
 .caption {
   display: flex;
   align-items: center;
-  gap: var(--space-5);
-  margin-bottom: var(--space-6);
-  font-size: var(--fs-sm);
+  gap: var(--sp-12);
+  margin-bottom: var(--sp-16);
+  font-size: var(--text-meta);
   color: var(--ink-3);
 }
 
@@ -81,13 +81,13 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--sp-12);
 }
 
 .entry {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--sp-8);
 }
 
 .entryNote {
@@ -103,7 +103,7 @@
 .detailInfo {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--sp-8);
   color: var(--ink-3);
   font-family: var(--font-mono);
   font-size: var(--text-meta);

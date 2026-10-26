@@ -1,13 +1,13 @@
 .jobRow {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--sp-4);
 }
 
 .jobHead {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--sp-8);
   min-width: 0;
 }
 
@@ -34,7 +34,7 @@
 .jobTitle {
   flex: 1;
   min-width: 0;
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
   font-weight: var(--fw-semibold);
   color: var(--ink);
   white-space: nowrap;
@@ -43,7 +43,7 @@
 }
 
 .jobDesc {
-  margin-left: calc(8px + var(--space-3));
+  margin-left: calc(var(--sp-8) + var(--sp-8));
   font-size: var(--text-meta);
   line-height: var(--lh-cozy);
   overflow-wrap: anywhere;
@@ -57,7 +57,7 @@
 .jobWhen {
   flex-shrink: 0;
   margin-left: auto;
-  padding-left: var(--space-3);
+  padding-left: var(--sp-8);
   font-size: var(--text-meta);
   color: var(--ink-3);
   white-space: nowrap;
@@ -79,18 +79,18 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: var(--space-3);
-  margin-bottom: var(--space-5);
+  gap: var(--sp-8);
+  margin-bottom: var(--sp-12);
 }
 
 .chip {
-  margin-left: var(--space-3);
+  margin-left: var(--sp-8);
   font-family: var(--font-mono);
   font-size: var(--text-meta);
   color: var(--ink-3);
   background: var(--hover);
   border-radius: var(--r-tag);
-  padding: var(--space-tight) var(--space-3);
+  padding: var(--space-tight) var(--sp-8);
 }
 
 .promptBox {
@@ -105,26 +105,26 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-tight);
-  padding: var(--space-3);
+  padding: var(--sp-8);
   background: var(--bg-side);
   border-right: 0.5px solid var(--line);
 }
 
-.promptLabel { padding: var(--space-2) var(--space-3) var(--space-3); }
+.promptLabel { padding: var(--sp-8) var(--sp-8) var(--sp-8); }
 
 .promptItem {
-  padding: var(--space-2) var(--space-3);
+  padding: var(--sp-8) var(--sp-8);
   border: 0;
   border-radius: var(--r-xs);
   background: var(--selected);
   color: var(--ink);
   font-family: var(--font-mono);
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
   text-align: left;
 }
 
 .promptBody {
-  padding: var(--space-5) var(--space-6);
+  padding: var(--sp-12) var(--sp-16);
   background: var(--bg-pane);
   min-width: 0;
 }
@@ -140,9 +140,9 @@
 
 .fields {
   display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: var(--space-2) var(--space-6);
-  margin: 0 0 var(--space-5);
+  grid-template-columns: var(--def-col) 1fr;
+  gap: var(--sp-8) var(--sp-12);
+  margin: 0 0 var(--sp-12);
 }
 
 .fields > div {
@@ -151,16 +151,16 @@
 
 .fields dt {
   font-family: var(--font-mono);
-  font-size: var(--text-meta);
+  font-size: var(--eyebrow-size);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--eyebrow-tracking);
   color: var(--ink-3);
 }
 
 .fields dd {
   margin: 0;
   font-family: var(--font-sans);
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
   color: var(--ink);
 }
 
@@ -170,11 +170,11 @@
 
 .promptLabel {
   font-family: var(--font-mono);
-  font-size: var(--text-meta);
+  font-size: var(--eyebrow-size);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--eyebrow-tracking);
   color: var(--ink-3);
-  margin-bottom: var(--space-2);
+  margin-bottom: var(--sp-8);
 }
 
 .emptyNote { color: var(--ink-3); }
@@ -186,7 +186,7 @@
 .status {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--sp-8);
   font-family: var(--font-mono);
   font-size: var(--text-meta);
   color: var(--ink-2);
@@ -196,9 +196,9 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: var(--space-2) var(--space-5);
-  margin-bottom: var(--space-5);
-  font-size: var(--fs-sm);
+  gap: var(--sp-8) var(--sp-12);
+  margin-bottom: var(--sp-12);
+  font-size: var(--text-meta);
   color: var(--ink-2);
 }
 

@@ -10,20 +10,19 @@
 .shell {
   background: var(--bg-elev);
   border-radius: var(--r-xs);
-  border: .5px solid var(--line-2);
-  box-shadow: var(--shadow-edge);
+  box-shadow: var(--shadow-edge-lg);
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 
 .panelHeader {
-  padding: var(--space-6) var(--space-8);
+  padding: var(--panel-head-pad);
   border-bottom: .5px solid var(--line);
 }
 
 .panelHeaderTight {
-  padding: var(--space-5) var(--space-8);
+  padding: var(--panel-head-pad);
   border-bottom: .5px solid var(--line);
 }
 
@@ -40,21 +39,21 @@
 }
 
 .headerEyebrow {
-  margin-left: 4px;
+  margin-left: var(--sp-4);
 }
 
 .connList {
-  padding: var(--space-3) var(--space-4);
+  padding: var(--sp-8) var(--sp-12);
   gap: var(--space-hair);
 }
 
 .connRow {
   width: 100%;
-  padding: var(--space-4) var(--space-5);
+  padding: var(--sp-12) var(--sp-12);
   border-radius: var(--r-xs);
   background: transparent;
   text-align: left;
-  gap: var(--space-5);
+  gap: var(--sp-12);
   border: 0;
   cursor: pointer;
 }
@@ -69,8 +68,8 @@
 }
 
 .connIcon {
-  width: var(--ctrl-sm);
-  height: var(--ctrl-sm);
+  width: var(--ctl-28);
+  height: var(--ctl-28);
   border-radius: var(--r-xs);
   background: var(--bg-input);
   display: grid;
@@ -98,7 +97,7 @@
 }
 
 .connBodyTop {
-  gap: var(--space-3);
+  gap: var(--sp-8);
 }
 
 .connName {
@@ -129,7 +128,7 @@
 
 .rowActions {
   display: inline-flex;
-  gap: var(--space-1);
+  gap: var(--sp-4);
   flex-shrink: 0;
   opacity: 0;
   pointer-events: none;
@@ -155,7 +154,7 @@
 .renameInput {
   min-width: 0;
   max-width: 240px;
-  height: 22px;
+  height: var(--ctl-24);
   box-sizing: border-box;
   border: .5px solid transparent;
   border-radius: var(--r-xs);
@@ -166,7 +165,7 @@
   font-weight: var(--fw-medium);
   line-height: 20px;
   outline: none;
-  padding: 0 6px;
+  padding: 0 var(--sp-8);
 }
 
 .renameInput:focus {
@@ -176,12 +175,12 @@
 
 .pairFoot {
   border-top: .5px solid var(--line);
-  padding: var(--space-6) var(--space-8);
+  padding: var(--sp-16) var(--sp-24);
   background: var(--bg-side);
 }
 
 .pairFootHead {
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--sp-8);
 }
 
 .pairFootHint {
@@ -196,8 +195,8 @@
 .paletteInputWrap {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  padding: 0 var(--space-7);
+  gap: var(--sp-8);
+  padding: 0 var(--sp-16);
   border-bottom: .5px solid var(--line);
 }
 
@@ -210,7 +209,7 @@
 
 .paletteInput {
   width: 100%;
-  height: 44px;
+  height: var(--ctl-40);
   border: 0;
   outline: 0;
   background: transparent;
@@ -221,26 +220,26 @@
 
 .paletteBody {
   flex: 1;
-  padding: var(--space-2) var(--space-2) var(--space-4);
+  padding: var(--panel-gutter) var(--panel-gutter) var(--sp-12);
 }
 
 .paletteEmpty {
-  padding: var(--space-11) 0;
+  padding: var(--sp-32) 0;
   color: var(--ink-3);
   font-size: var(--text-ui);
 }
 
 .paletteHeader {
-  padding: var(--space-6) var(--space-5) var(--space-2);
+  padding: var(--sp-16) var(--sp-12) var(--sp-8);
 }
 
 .paletteItem {
   width: 100%;
-  padding: 7px var(--space-5);
+  padding: var(--sp-8) var(--sp-12);
   border-radius: var(--r-xs);
   background: transparent;
   text-align: left;
-  gap: var(--space-4);
+  gap: var(--sp-8);
   align-items: center;
   border: 0;
   cursor: pointer;
@@ -301,79 +300,79 @@
 }
 
 .mdH4 {
-  margin: var(--space-8) 0 var(--space-2);
+  margin: var(--sp-24) 0 var(--sp-8);
   font-size: var(--text-ui);
   font-weight: var(--fw-semibold);
   font-family: var(--font-mono);
 }
 
 .mdH3 {
-  margin: 22px 0 var(--space-3);
+  margin: var(--sp-24) 0 var(--sp-8);
   font-size: var(--text-chat);
   font-weight: var(--fw-semibold);
   font-family: var(--font-mono);
 }
 
 .mdH2 {
-  margin: var(--space-3) 0 var(--space-6);
+  margin: var(--sp-8) 0 var(--sp-16);
   font-size: var(--text-title);
-  font-weight: var(--fw-bold);
+  font-weight: var(--fw-semibold);
   font-family: var(--font-mono);
 }
 
 .mdTable {
   width: 100%;
   border-collapse: collapse;
-  margin: var(--space-5) 0 var(--space-7);
+  margin: var(--sp-12) 0 var(--sp-16);
   font-family: var(--font-mono);
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
 }
 
 .mdTh {
   text-align: left;
-  padding: var(--space-2) var(--space-4);
+  padding: var(--sp-8) var(--sp-12);
   color: var(--ink-3);
   font-weight: var(--fw-medium);
   border-bottom: .5px solid var(--line-2);
 }
 
 .mdTd {
-  padding: var(--space-2) var(--space-4);
+  padding: var(--sp-8) var(--sp-12);
   border-bottom: .5px solid var(--line);
 }
 
 .mdPre {
-  margin: var(--space-5) 0;
-  padding: var(--space-5) var(--space-6);
+  margin: var(--sp-12) 0;
+  padding: var(--sp-12) var(--sp-16);
   border-radius: var(--r-xs);
   background: var(--hover);
   border: .5px solid var(--line);
   font-family: var(--font-mono);
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
   overflow-x: auto;
   white-space: pre;
 }
 
 .mdOl {
-  margin: var(--space-3) 0;
-  padding-left: 22px;
+  margin: var(--sp-8) 0;
+  padding-left: var(--sp-24);
   font-size: var(--text-ui);
   line-height: var(--lh-normal);
 }
 
 .mdUl {
-  margin: var(--space-3) 0;
-  padding-left: 18px;
+  margin: var(--sp-8) 0;
+  padding-left: var(--sp-16);
   font-size: var(--text-ui);
   line-height: var(--lh-normal);
 }
 
 .mdLi {
-  margin-bottom: var(--space-1);
+  margin-bottom: var(--sp-4);
 }
 
 .mdP {
-  margin: var(--space-3) 0;
+  margin: var(--sp-8) 0;
   font-size: var(--text-ui);
   line-height: var(--lh-relaxed);
   text-wrap: pretty;
@@ -393,29 +392,29 @@
 }
 
 .browseSearchWrap {
-  padding: var(--space-4) var(--space-5) var(--space-2);
+  padding: var(--sp-12) var(--sp-12) var(--sp-8);
 }
 
 .browseSearchInput {
-  height: 30px;
-  padding: 0 var(--space-4);
-  font-size: var(--fs-sm);
+  height: var(--ctl-32);
+  padding: 0 var(--sp-12);
+  font-size: var(--text-meta);
 }
 
 .browseList {
   flex: 1;
-  padding: var(--space-1) var(--space-3) var(--space-5);
+  padding: var(--sp-4) var(--sp-8) var(--sp-12);
 }
 
 .browseEmpty {
-  padding: var(--space-9) 0;
+  padding: var(--sp-24) 0;
   color: var(--ink-3);
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
 }
 
 .browseDetail {
   min-height: 0;
-  padding: var(--space-8) 26px;
+  padding: var(--sp-24) var(--sp-24);
 }
 
 .browseDetailEmpty {
@@ -424,9 +423,9 @@
 }
 
 .headerRow {
-  gap: var(--space-4);
+  gap: var(--sp-8);
 }
 
 .headerActions {
-  gap: var(--space-2);
+  gap: var(--sp-8);
 }

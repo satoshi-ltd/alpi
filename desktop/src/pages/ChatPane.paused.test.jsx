@@ -8,7 +8,7 @@ globalThis.Element.prototype.scrollTo ??= () => {};
 
 const sessionData = { turns: [{ user: "hi", assistant: "yo", at: 0 }], last_ctx_tokens: 0 };
 
-function renderPane(profile) {
+function renderPane(profile, extra = {}) {
   return render(
     <ChatPane
       view={{ kind: "profile", profile: profile.name, sessionId: "s1" }}
@@ -18,6 +18,7 @@ function renderPane(profile) {
       onSend={vi.fn()}
       onRewriteMessage={vi.fn()}
       onRetryMessage={vi.fn()}
+      {...extra}
     />,
   );
 }
@@ -38,6 +39,15 @@ describe("ChatPane — a paused profile is read-only", () => {
   it("disables the composer textarea when paused", () => {
     renderPane({ name: "a", model: "x/y", paused: true });
     expect(screen.getByPlaceholderText(/Paused/)).toBeDisabled();
+  });
+
+  it("offers Resume once, in the banner, and not in the composer when paused", () => {
+    const onTogglePauseProfile = vi.fn();
+    renderPane({ name: "a", model: "x/y", paused: true }, { onTogglePauseProfile });
+    expect(screen.getAllByRole("button", { name: "Resume" })).toHaveLength(1);
+    expect(screen.queryByText("Profile paused")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+    expect(onTogglePauseProfile).toHaveBeenCalledTimes(1);
   });
 
   it("leaves the composer editable when active", () => {

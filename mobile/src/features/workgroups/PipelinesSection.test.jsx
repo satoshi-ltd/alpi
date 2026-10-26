@@ -19,7 +19,7 @@ vi.mock('react-native', () => {
 });
 
 const { COLORS } = vi.hoisted(() => ({
-  COLORS: { ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', line2: '#eee', bgInput: '#fafafa', hover: '#f4f4f4', selected: '#eaeaea', success: '#0a0', danger: '#c00' },
+  COLORS: { ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', line2: '#eee', field: '#fafafa', hover: '#f4f4f4', selected: '#eaeaea', success: '#0a0', danger: '#c00' },
 }));
 
 vi.mock('../../theme/ThemeContext', () => ({
@@ -128,6 +128,12 @@ describe('PipelinesSection', () => {
   it('lists chains in recipe order after the launch chain, like desktop', () => {
     render(<PipelinesSection workgroup={{ ...WG, launch_pipeline: null, pipelines: { 'z-last': ['z-last'], 'a-first': ['a-first'] }, phase_map: {} }} />);
     expect(screen.getAllByText(/^#/).map((n) => n.textContent)).toEqual(['#z-last', '#a-first']);
+  });
+
+  it('puts every chain in one card separated by a hairline', () => {
+    const { container } = render(<PipelinesSection workgroup={WG} />);
+    expect(container.querySelectorAll('section')).toHaveLength(1);
+    expect(container.querySelectorAll('section hr')).toHaveLength(1);
   });
 
   it('says the chains come from the recipe and are read-only', () => {

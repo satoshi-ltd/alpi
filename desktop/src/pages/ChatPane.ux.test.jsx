@@ -38,14 +38,14 @@ function pane(props = {}) {
 }
 
 describe("ChatPane paused", () => {
-  it("offers Resume on the banner and beside the composer reason, both running the header action", () => {
+  it("offers Resume once, on the banner, running the header action", () => {
     const onTogglePauseProfile = vi.fn();
     render(pane({ activeProfile: { ...profile, paused: true }, onTogglePauseProfile }));
     const buttons = screen.getAllByRole("button", { name: "Resume" });
-    expect(buttons).toHaveLength(2);
+    expect(buttons).toHaveLength(1);
     fireEvent.click(buttons[0]);
-    fireEvent.click(buttons[1]);
-    expect(onTogglePauseProfile).toHaveBeenCalledTimes(2);
+    expect(onTogglePauseProfile).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("Profile paused")).toBeNull();
   });
 
   it("offers no Resume when the viewer cannot toggle the pause", () => {

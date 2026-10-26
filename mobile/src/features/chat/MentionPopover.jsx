@@ -26,7 +26,7 @@ export function MentionPopover({ candidates = [], token = '', onPick }) {
         backgroundColor: colors.bgElev,
         borderRadius: radii.xs,
         overflow: 'hidden',
-        ...shadow.float,
+        ...shadow.popover,
       }}
     >
       {empty ? (

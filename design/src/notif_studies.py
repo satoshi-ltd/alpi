@@ -1,4 +1,4 @@
-from gen import ic, pill
+from gen import ic, mi, pill
 from desktop_boards import INK3, chip
 from paper_studies import PAPER, button, field, line_up, object_mark, text
 
@@ -187,9 +187,9 @@ def phone_segmented(p, items, on=0):
 
 def phone_row(p, r, swiped=False):
     weight, colour = (600, p["ink"]) if r["unread"] else (400, p["ink2"])
-    gutter = f'<span style="width: 7px; padding-top: 8px; display: inline-flex; flex-shrink: 0">{dot(p["ink"] if r["unread"] else "transparent", 7)}</span>'
-    line1 = flex(mono("@" + r["who"], 12, colour), mono(f'· {r["conn"]}', 11, p["ink3"]), spacer(), level_pill(r["type"]), mono(r["at"], 11, p["ink3"]), gap=6)
-    title = ell(row_title(r), 15, colour, weight)
+    gutter = f'<span style="width: 6px; padding-top: 8px; display: inline-flex; flex-shrink: 0">{dot(p["ink"] if r["unread"] else "transparent", 6)}</span>'
+    line1 = flex(flex(mono("@" + r["who"], 12, colour), mono(f'· {r["conn"]}', 11, p["ink3"]), gap=6, extra="flex: 1; overflow: hidden"), mono(r["at"], 11, p["ink3"]), gap=8)
+    title = flex(level_pill(r["type"]), ell(row_title(r), 15, colour, weight, "flex: 1"), gap=8, extra="min-height: 22px")
     summ = clamp(row_summary(r), 12, p["ink3"])
     inner = (f'<div style="display: flex; gap: 8px; align-items: flex-start; padding: 10px 16px; background: {p["pane"]}; box-shadow: inset 0 -0.5px 0 {p["line"]}; '
              f'{"transform: translateX(-152px);" if swiped else ""}">{gutter}<span style="padding-top: 2px; display: inline-flex">{mark(r["shape"], 20)}</span>'
@@ -212,7 +212,7 @@ def phone_triage(p):
 
 
 def phone_icon_button(name, p, label):
-    return f'<span role="button" aria-label="{label}" style="width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">{ic(name, 20, p["ink2"])}</span>'
+    return f'<span role="button" aria-label="{label}" style="width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">{mi(name, 16, p["ink2"])}</span>'
 
 
 def phone_page_nav(p):
@@ -222,7 +222,7 @@ def phone_page_nav(p):
 
 def phone_reader(p):
     who = flex(mark("plane", 20), text("@abby", 14, p["ink"], 500, f"font-family: {MONO}"), mono("· casa · Today 6:31 AM", 11, p["ink3"]), gap=6)
-    body = stack(who, text("Daily mail digest", 22, p["ink"], 600, "white-space: normal"), wrap(LEAD, 18, p["ink2"], lh=1.5), digest(p, 15, fyi=True), gap=12,
+    body = stack(who, text("Daily mail digest", 22, p["ink"], 600, "white-space: normal; letter-spacing: -0.018em; line-height: 1.3"), wrap(LEAD, 18, p["ink2"], lh=1.5), digest(p, 15, fyi=True), gap=12,
                  extra="padding: 16px; flex: 1; min-height: 0; overflow: hidden")
     bar = flex(button("Reply", "primary", p, PAPER, 48), button("Open job", "secondary", p, PAPER, 48), spacer(), phone_icon_button("eye", p, "Mark unread"),
                phone_icon_button("trash-2", p, "Delete"), gap=8, extra=f"padding: 10px 12px 30px; background: {p['side']}; box-shadow: inset 0 0.5px 0 {p['line2']}")

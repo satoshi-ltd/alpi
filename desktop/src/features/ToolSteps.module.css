@@ -15,18 +15,18 @@
 .head {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
-  width: calc(100% + 2 * var(--space-4));
+  gap: var(--sp-8);
+  width: calc(100% + 2 * var(--sp-12));
   min-width: 0;
-  height: var(--ctrl-xs);
-  margin: 0 calc(-1 * var(--space-4));
-  padding: 0 var(--space-4);
+  height: var(--ctl-24);
+  margin: 0 calc(-1 * var(--sp-12));
+  padding: 0 var(--sp-12);
   border: 0;
   border-radius: var(--r-xs);
   background: none;
   color: var(--ink-3);
   font-family: var(--font-mono);
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
   line-height: var(--lh-tight);
   text-align: left;
   cursor: pointer;
@@ -34,7 +34,7 @@
 }
 .head:hover,
 .headOpen { background: var(--hover); }
-.head:focus-visible { outline: 2px solid var(--focus-border); outline-offset: -2px; }
+.head:focus-visible { outline-offset: calc(var(--focus-outline-offset) * -1); }
 
 .icon { flex: none; }
 .step_running .icon { animation: stepPulse var(--dur-loop, 1.4s) ease-in-out infinite; }
@@ -67,6 +67,7 @@
 
 .chev {
   flex: none;
+  margin-left: calc(var(--sp-4) * -1);
   color: var(--ink-3);
   transition: transform var(--dur-2, 200ms) var(--ease);
 }
@@ -75,14 +76,14 @@
 .detail {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
-  padding: var(--space-3) 0 var(--space-3) calc(14px + var(--space-4));
+  gap: var(--sp-8);
+  padding: var(--sp-8) 0 var(--sp-8) calc(var(--icon-sm) + var(--sp-12));
 }
 
 .section {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--sp-8);
   min-width: 0;
 }
 
@@ -90,17 +91,17 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-3);
+  gap: var(--sp-8);
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
 }
 
 .excerpt { color: var(--ink-3); }
 
 .copyBtn {
-  width: 22px;
-  height: 22px;
+  width: var(--ctl-24);
+  height: var(--ctl-24);
 }
 
 .code {
@@ -115,12 +116,12 @@
   margin: 0;
   max-height: 280px;
   overflow: auto;
-  padding: var(--space-4) var(--space-5);
+  padding: var(--sp-12) var(--sp-12);
   border: .5px solid var(--line);
   border-radius: var(--r-xs);
   background: var(--bg-side);
   font-family: var(--font-mono);
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
   line-height: var(--lh-relaxed);
   color: var(--ink-2);
   white-space: pre-wrap;
@@ -130,48 +131,48 @@
 
 .empty {
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
 }
 
 .bucket {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--sp-8);
   align-self: stretch;
-  width: calc(100% + 2 * var(--space-4));
-  height: var(--ctrl-xs);
-  margin: 0 calc(-1 * var(--space-4));
+  width: calc(100% + 2 * var(--sp-12));
+  height: var(--ctl-24);
+  margin: 0 calc(-1 * var(--sp-12));
   appearance: none;
   background: none;
   border: 0;
   border-radius: var(--r-xs);
-  padding: 0 var(--space-4);
+  padding: 0 var(--sp-12);
   cursor: pointer;
   font-family: var(--font-mono);
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
   line-height: var(--lh-tight);
   color: var(--ink-3);
   text-align: left;
   transition: background-color var(--dur-1) var(--ease);
 }
 .bucket:hover { background: var(--hover); color: var(--ink-2); }
-.bucket:focus-visible { outline: 2px solid var(--focus-border); outline-offset: -2px; }
+.bucket:focus-visible { outline-offset: calc(var(--focus-outline-offset) * -1); }
 
 .bucketChev {
   flex: none;
+  margin-left: calc(var(--sp-4) * -1);
   color: var(--ink-3);
-  transform: rotate(-90deg);
   transition: transform var(--dur-2, 200ms) var(--ease);
 }
-.bucketChevOpen { transform: rotate(0deg); }
+.bucketChevOpen { transform: rotate(90deg); }
 
 .bucketLabel { white-space: nowrap; }
 
 .bucketFailed {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--sp-4);
   flex-shrink: 0;
   color: var(--c-danger-text);
 }
@@ -183,14 +184,14 @@
 }
 
 .bucketReveal {
-  margin: 0 calc(-1 * var(--space-4));
+  margin: 0 calc(-1 * var(--sp-12));
 }
 
 .bucketList {
   display: flex;
   flex-direction: column;
   gap: var(--space-tight);
-  padding: var(--space-tight) var(--space-4) 0 calc(var(--space-6) + var(--space-4));
+  padding: var(--space-tight) var(--sp-12) 0 calc(var(--sp-16) + var(--sp-12));
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -7,7 +7,7 @@ export default function StepLadder({ steps }) {
       {steps.map(({ id, state, label, detail }) => (
         <li key={id} className={styles.step} data-state={state}>
           <span className={styles.mark} aria-hidden="true">
-            {state === "done" ? <Icon name="check" size={12} /> : state === "fail" ? <Icon name="x" size={12} /> : <span className={styles.dot} />}
+            {state === "done" ? <Icon name="check" size="sm" /> : state === "fail" ? <Icon name="x" size="sm" /> : <span className={styles.dot} />}
           </span>
           <span className={styles.label}>{label}</span>
           {detail ? <Mono className={styles.detail}>{detail}</Mono> : null}

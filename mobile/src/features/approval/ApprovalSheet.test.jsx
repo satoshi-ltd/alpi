@@ -31,7 +31,7 @@ vi.mock('../../theme/ThemeContext', async () => {
   const tokens = await import('../../theme/tokens');
   return {
     useTheme: () => ({
-      colors: { ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', bgPane: '#fff', bgInput: '#fafafa', line2: '#eee', hover: '#f4f4f4', danger: '#f00', warning: '#fc0' },
+      colors: { ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', bgPane: '#fff', field: '#fafafa', line2: '#eee', hover: '#f4f4f4', danger: '#f00', warning: '#fc0' },
       fonts: { sans: { regular: 'r', medium: 'm', semibold: 's', bold: 'b' }, mono: 'mono' },
       fontSizes: tokens.fontSizes,
     }),

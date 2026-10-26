@@ -1,5 +1,9 @@
 import {
   fontSizes as sharedFontSizes,
+  eyebrow as sharedEyebrow,
+  iconSizesAllowed,
+  iconStrokeFor as sharedIconStrokeFor,
+  motionTokens,
   nativeFace,
   palettes as sharedPalettes,
   radii as sharedRadii,
@@ -10,11 +14,20 @@ import {
 
 export {
   alpha,
-  dotSize,
   glyphSize,
   glyphSizeMd,
+  controlHeight,
+  dotScale,
+  eyebrow,
+  focusRing,
+  fontWeights,
+  iconSizesAllowed,
+  iconStrokeRendered,
+  ladderDirection,
   lineHeights,
+  spaceScale,
   status,
+  typeLadder,
 } from '../../../common/tokens.mjs';
 
 export const FONT_SIZE_DROPS = ['xxs', 'label'];
@@ -52,34 +65,32 @@ export const tracking = {
   snug: -0.005,
   wide: 0.06,
   wider: 0.1,
+  eyebrow: sharedEyebrow.tracking,
 };
 
-export const iconSizes = {
-  xs: 12,
-  sm: 14,
-  md: 16,
-  lg: 20,
-  xl: 24,
-  hero: 44,
-};
+export const iconSizes = { xs: iconSizesAllowed.mobile[0], md: iconSizesAllowed.mobile[1] };
 
-export const iconStroke = 2;
+export const iconStrokeFor = sharedIconStrokeFor;
 
 // fixed-size chrome: deliberately outside the user/OS text scale so digits never clip the pill
-export const countBadge = { size: 18, border: 1.5, fontSize: fontSizes.xs };
+export const countBadge = { size: 18, border: 1.5, fontSize: fontSizes.xs, radius: sharedRadii.xs };
 
 export const space = { ...sharedSpace, ...spaceExtra.mobile };
 
-export const pulseDuration = 1600;
+export const pulseDuration = motionTokens.pulse;
 
 export const radii = { ...sharedRadii };
 
 export const motion = {
   ease: 'easeInOut',
-  duration: { fast: 120, base: 180, slow: 240 },
+  duration: { fast: motionTokens.fast, base: motionTokens.enter, slow: 240 },
+  enter: motionTokens.enter,
+  exit: motionTokens.exit,
+  easeEnter: motionTokens.easeEnter,
+  easeExit: motionTokens.easeExit,
+  pulse: motionTokens.pulse,
+  pulseLow: motionTokens.pulseLow,
 };
-
-export const motionMs = { sidebar: 200, expand: 180, jump: 150 };
 
 export const mobile = {
   tap: 44,
@@ -103,6 +114,18 @@ export const PALETTE_OVERRIDES = {
     '#1f1f1f',
     'follows light.bgInput: mobile raises the input above bgElev where desktop recesses it below',
   ],
+  'light.field': [
+    '#ececec',
+    'a field inside a card on the phone reads 1.07:1 over the #f4f4f4 card; the desktop well is #eaeaea at 1.09:1',
+  ],
+  'dark.card': [
+    '#151515',
+    'every phone screen is edge-to-edge on bg, so its cards sit lighter than the ground; desktop cards sit below the pane',
+  ],
+  'dark.field': [
+    '#1f1f1f',
+    'a phone field inside a dark card steps up to #1f1f1f where the desktop well is a tint over a darker card',
+  ],
 };
 
 function withOverrides(mode) {
@@ -119,17 +142,23 @@ export const palettes = {
   dark: withOverrides('dark'),
 };
 
+const shadowsFor = (mode, shadowColor) => {
+  const p = palettes[mode];
+  const flat = { shadowColor, shadowOpacity: 0, shadowRadius: 0, elevation: 0 };
+  const dialog = { ...flat, borderWidth: 0.5, borderColor: p.ink3 };
+  return {
+    base: { ...flat, borderWidth: 0.5, borderColor: p.line2 },
+    sm: { ...flat, borderWidth: 0.5, borderColor: p.line },
+    sheet: { ...flat, borderWidth: 0, borderTopWidth: 1, borderColor: p.edge },
+    dialog,
+    popover: { ...dialog },
+    toast: { ...dialog },
+  };
+};
+
 export const shadows = {
-  light: {
-    base: { shadowColor: '#141414', shadowOpacity: 0, shadowRadius: 0, elevation: 0, borderWidth: 0.5, borderColor: palettes.light.line2 },
-    sm: { shadowColor: '#141414', shadowOpacity: 0, shadowRadius: 0, elevation: 0, borderWidth: 0.5, borderColor: palettes.light.line },
-    float: { shadowColor: '#141414', shadowOpacity: 0, shadowRadius: 0, elevation: 0, borderWidth: 1, borderColor: palettes.light.edge },
-  },
-  dark: {
-    base: { shadowColor: '#000', shadowOpacity: 0, shadowRadius: 0, elevation: 0, borderWidth: 0.5, borderColor: palettes.dark.line2 },
-    sm: { shadowColor: '#000', shadowOpacity: 0, shadowRadius: 0, elevation: 0, borderWidth: 0.5, borderColor: palettes.dark.line },
-    float: { shadowColor: '#000', shadowOpacity: 0, shadowRadius: 0, elevation: 0, borderWidth: 1, borderColor: palettes.dark.edge },
-  },
+  light: shadowsFor('light', '#141414'),
+  dark: shadowsFor('dark', '#000'),
 };
 
 export const veil = (colors) => `${colors.bg}b8`;

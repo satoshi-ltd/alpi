@@ -1,7 +1,8 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { space, tracking } from '../src/theme/tokens';
+import { tracking } from '../src/theme/tokens';
+import { firstRun, firstRunColumn } from '../src/lib/firstRun';
 
 import { ALPACA_FOLD } from '../../common/folds.mjs';
 import { pairedRoleLine } from '../../common/onboarding.mjs';
@@ -16,8 +17,9 @@ export default function PairSuccess() {
   const sharedCount = shared != null && shared !== '' ? Number(shared) : null;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg, padding: space.s9 }}>
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: space.s8 }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg, padding: firstRun.hero }}>
+      <View style={firstRunColumn}>
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: firstRun.gap }}>
         <Fold fold={ALPACA_FOLD} size={88} />
         <Text
           style={{
@@ -57,6 +59,7 @@ export default function PairSuccess() {
         }}
         fullWidth
       />
+      </View>
     </SafeAreaView>
   );
 }

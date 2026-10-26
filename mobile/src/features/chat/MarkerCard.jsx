@@ -11,12 +11,11 @@ import { BUBBLE_MAX_PANE } from '../../lib/panes';
 import { usePane } from '../../nav/PaneContext';
 import { useTheme } from '../../theme/ThemeContext';
 
-const TINTS = { task: 0.18, working: 0.14, done: 0.18, skip: 0.12 };
+const TINTS = { task: 0.1, working: 0.1, done: 0.1, skip: 0.12 };
 const LABELS = { task: 'TASK', working: 'WORKING', done: 'DONE', skip: 'SKIP' };
 
 const S = StyleSheet.create({
   wrapLeft: { alignItems: 'flex-start', paddingHorizontal: space.s7, gap: space.s1 },
-  wrapRight: { alignItems: 'flex-end', paddingHorizontal: space.s7, gap: space.s1 },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.s2 },
   card: {
     maxWidth: '90%',
@@ -41,7 +40,7 @@ function MarkerIcon({ variant, color, stale }) {
       : <Dot color={color} pulse />;
   }
   if (variant === 'done') {
-    return <Icon name="check" size="xs" strokeWidth={2.2} color={color} />;
+    return <Icon name="check" size="xs" color={color} />;
   }
   if (variant === 'skip') {
     return (
@@ -53,13 +52,12 @@ function MarkerIcon({ variant, color, stale }) {
   return <View style={[S.taskDot, { backgroundColor: color }]} />;
 }
 
-export function MarkerCard({ variant = 'task', side = 'left', hubColor, hubFold, speakerName, isFromHub, seq, cost, title, children, label, stale = false, onLongPress }) {
+export function MarkerCard({ variant = 'task', hubColor, hubFold, speakerName, isFromHub, seq, cost, title, children, label, stale = false, onLongPress }) {
   const { colors, fonts, fontSizes } = useTheme();
   const { twoPane } = usePane();
-  const pct = TINTS[variant] ?? 0.11;
+  const pct = TINTS[variant] ?? TINTS.task;
   const baseAccent = variant === 'skip' ? colors.warning : hubColor ?? colors.ink3;
   const tint = mixHex(baseAccent, pct, colors.bgPane);
-  const isRight = side === 'right';
   const hasBody = Boolean(children);
   const compact = !title && !hasBody;
   const corner = { borderRadius: radii.xs };
@@ -71,29 +69,18 @@ export function MarkerCard({ variant = 'task', side = 'left', hubColor, hubFold,
 
   const SpeakerEl = speakerName ? (
     <View style={S.row}>
-      {!isRight ? <Fold fold={hubFold} color={baseAccent} /> : null}
+      <Fold fold={hubFold} color={baseAccent} />
       <Text style={metaStyle}>{speakerName}</Text>
-      {isRight ? <Fold fold={hubFold} color={baseAccent} /> : null}
     </View>
   ) : null;
 
   return (
-    <View style={isRight ? S.wrapRight : S.wrapLeft}>
+    <View style={S.wrapLeft}>
       {speakerName || seq != null || costStr ? (
         <View style={S.row}>
-          {isRight ? (
-            <>
-              {costStr ? <Text style={metaStyle}>{costStr}</Text> : null}
-              {seq != null ? <Text style={metaStyle}>{`#${seq}`}</Text> : null}
-              {SpeakerEl}
-            </>
-          ) : (
-            <>
-              {SpeakerEl}
-              {seq != null ? <Text style={metaStyle}>{`#${seq}`}</Text> : null}
-              {costStr ? <Text style={metaStyle}>{costStr}</Text> : null}
-            </>
-          )}
+          {SpeakerEl}
+          {seq != null ? <Text style={metaStyle}>{`#${seq}`}</Text> : null}
+          {costStr ? <Text style={metaStyle}>{costStr}</Text> : null}
         </View>
       ) : null}
       <Card {...(onLongPress ? { onLongPress } : null)} style={[S.card, twoPane && S.paneCap, compact && S.cardCompact, corner, { backgroundColor: tint }]}>

@@ -126,7 +126,7 @@ _None._
 - **BRAND.D1** — Brand choices still open
   `decision · alpi · creator · normal`
   note: decided by the creator: the brand accent is ink (cream on dark, black on light); the alpaca is
-  one flat ink and only its name carries tones (T3 crease); objects are established origami models (the
+  drawn in the three crease tones of the ink from 48 px and in one flat ink below, and its name carries the T3 crease; objects are established origami models (the
   gate); object and colour are two stored values and every new profile takes the next pair of the roulette; the honeycomb
   marks a workgroup; the default profile is the alpaca. Still open, none blocking: the unit's name
   ("profile", with "fold" only the look); whether the box stays or becomes a paper hat.

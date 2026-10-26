@@ -10,11 +10,10 @@
 
 .modal {
   background: var(--bg-elev);
-  border: 0.5px solid var(--line-2);
   border-radius: var(--r-xs);
-  box-shadow: var(--shadow-edge);
-  width: min(820px, calc(100vw - var(--space-10)));
-  max-height: min(720px, calc(100vh - var(--space-10)));
+  box-shadow: var(--shadow-edge-lg);
+  width: min(820px, calc(100vw - var(--sp-32)));
+  max-height: min(720px, calc(100vh - var(--sp-32)));
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -23,8 +22,8 @@
 .header {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-5);
-  padding: var(--space-7) var(--space-8) var(--space-5);
+  gap: var(--sp-12);
+  padding: var(--panel-head-pad);
 }
 
 .headerLead {
@@ -32,13 +31,13 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--sp-8);
 }
 
 .titleRow {
   display: inline-flex;
   align-items: baseline;
-  gap: var(--space-3);
+  gap: var(--sp-8);
   flex-wrap: wrap;
 }
 
@@ -58,14 +57,14 @@
 
 .subtitle {
   margin: 0;
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
   color: var(--ink-2);
 }
 
 .headerActions {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--sp-8);
   flex-shrink: 0;
 }
 
@@ -73,14 +72,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-5);
-  padding: var(--space-3) var(--space-8) var(--space-5);
+  gap: var(--sp-12);
+  padding: var(--sp-8) var(--sp-24) var(--sp-12);
 }
 
 .filters {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--sp-8);
   flex-wrap: wrap;
 }
 
@@ -92,13 +91,13 @@
 .sort {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--sp-8);
 }
 
 .sortLabel {
   font-family: var(--font-mono);
-  font-size: var(--text-meta);
-  letter-spacing: 0.08em;
+  font-size: var(--eyebrow-size);
+  letter-spacing: var(--eyebrow-tracking);
   text-transform: uppercase;
   color: var(--ink-3);
 }
@@ -113,17 +112,17 @@
 .table {
   width: 100%;
   border-collapse: collapse;
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
 }
 
 .headRow th {
   position: sticky;
   top: 0;
   background: var(--bg-elev);
-  padding: var(--space-3) var(--space-5);
+  padding: var(--sp-8) var(--sp-12);
   font-family: var(--font-mono);
-  font-size: var(--text-meta);
-  letter-spacing: 0.06em;
+  font-size: var(--eyebrow-size);
+  letter-spacing: var(--eyebrow-tracking);
   color: var(--ink-3);
   font-weight: var(--fw-regular);
   text-align: left;
@@ -132,7 +131,7 @@
 }
 
 .row td {
-  padding: var(--space-3) var(--space-5);
+  padding: var(--sp-8) var(--sp-12);
   border-bottom: 0.5px solid var(--line);
   vertical-align: middle;
   color: var(--ink);
@@ -155,7 +154,7 @@
 }
 
 .cellCheck {
-  width: var(--space-9);
+  width: var(--sp-24);
   padding-right: 0 !important;
 }
 
@@ -172,8 +171,8 @@
   font-variant-numeric: tabular-nums;
   width: 1%;
 }
-.cellActivity { text-align: right; padding-right: var(--space-7) !important; }
-.cellTurns { text-align: right; padding-right: var(--space-7) !important; }
+.cellActivity { text-align: right; padding-right: var(--sp-16) !important; }
+.cellTurns { text-align: right; padding-right: var(--sp-16) !important; }
 .cellSize { text-align: right; }
 
 .checkbox {
@@ -210,8 +209,8 @@
 .current {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
-  margin-top: var(--space-1);
+  gap: var(--sp-8);
+  margin-top: var(--sp-4);
   font-family: var(--font-mono);
   font-size: var(--text-meta);
   color: var(--ink-2);
@@ -222,8 +221,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-5);
-  padding: var(--space-4) var(--space-8);
+  gap: var(--sp-12);
+  padding: var(--dialog-foot-pad);
   font-family: var(--font-mono);
   font-size: var(--text-meta);
   color: var(--ink-3);

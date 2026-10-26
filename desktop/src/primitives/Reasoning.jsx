@@ -62,8 +62,8 @@ export default function Reasoning({ text, seconds, streaming = false, answered =
       >
         {mark}
         {labelNode}
+        <Icon name="chevron-right" size="sm" className={`${styles.chev} ${open ? styles.chevOpen : ""}`} />
         {peekNode}
-        <Icon name="chevron-right" size={12} className={`${styles.chev} ${open ? styles.chevOpen : ""}`} />
       </button>
       <Reveal open={open}>
         <div className={styles.body} ref={bodyRef}>
@@ -72,7 +72,7 @@ export default function Reasoning({ text, seconds, streaming = false, answered =
               <div key={i} className={styles.stepMark}>
                 {item.names.map((name, j) => (
                   <span key={j} className={styles.stepName}>
-                    <Icon name={toolIcon(name)} size={11} />
+                    <Icon name={toolIcon(name)} size="sm" />
                     {name}
                   </span>
                 ))}

@@ -1,5 +1,5 @@
 import { ALPACA_FOLD, FOLD_SIZES } from "../../../common/folds.mjs";
-import { DisplayHeading, Fold, Mono } from "./index.js";
+import { Button, DisplayHeading, Fold, Mono, PlusIcon } from "./index.js";
 import styles from "./EmptyState.module.css";
 
 export default function EmptyState({
@@ -7,6 +7,7 @@ export default function EmptyState({
   accent,
   heading,
   subtitle,
+  action = null,
   children,
 }) {
   return (
@@ -16,6 +17,9 @@ export default function EmptyState({
         <DisplayHeading hero>{heading}</DisplayHeading>
         {subtitle && (
           <Mono className={`tnum ${styles.subtitle}`}>{subtitle}</Mono>
+        )}
+        {action && (
+          <Button variant="primary" icon={<PlusIcon />} onClick={action.onClick}>{action.label}</Button>
         )}
         {children}
       </div>

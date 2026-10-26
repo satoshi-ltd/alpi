@@ -1,14 +1,14 @@
 .connect {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--sp-8);
 }
 
 .linkInput { width: 100%; }
 
 .sources {
   margin: 0;
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
   color: var(--ink-3);
   line-height: var(--lh-cozy);
 }
@@ -16,9 +16,9 @@
 .failure {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--sp-4);
   color: var(--ink-2);
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
 }
 .failure strong {
   color: var(--c-danger-text);
@@ -28,5 +28,5 @@
 .actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3);
+  gap: var(--sp-8);
 }

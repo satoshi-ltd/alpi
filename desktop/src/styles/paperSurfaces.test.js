@@ -169,7 +169,7 @@ describe("paper dialogs", () => {
 
   it("sets the dialog actions on a footer band one tone down that spans the sheet", () => {
     const css = read("primitives/Modal.module.css");
-    expect(css).toMatch(/\.content \[data-dialog-footer\]\s*\{[^}]*margin:\s*var\(--space-6\) calc\(-1 \* var\(--space-9\)\) 0;[^}]*background:\s*var\(--bg-side\)/);
+    expect(css).toMatch(/\.content \[data-dialog-footer\]\s*\{[^}]*margin:\s*var\(--sp-16\) calc\(-1 \* var\(--dialog-pad\)\) 0;[^}]*background:\s*var\(--bg-side\)/);
     expect(read("primitives/DialogFooter.jsx")).toMatch(/data-dialog-footer/);
   });
 });
@@ -180,7 +180,7 @@ describe("paper selection", () => {
     expect(ds).toMatch(/\.ds-sb-row\[data-sel\], \.sb-row\[data-sel\] \{[^}]*margin: 0 calc\(-1 \* var\(--sb-bleed, 0px\)\);[^}]*border-radius: 0;/);
     expect(ds).toMatch(/\.ds-sb-row:hover, \.sb-row:hover \{ background: var\(--hover\); \}/);
     expect(ds).toMatch(/\.ds-sb-row:hover, \.sb-row:hover,\s*\.ds-sb-row\[data-sel\], \.sb-row\[data-sel\] \{[^}]*margin: 0 calc\(-1 \* var\(--sb-bleed, 0px\)\);[^}]*border-radius: 0;/);
-    expect(rule(read("features/Sidebar.module.css"), ".inner")).toMatch(/--sb-bleed:\s*var\(--space-5\)/);
+    expect(rule(read("features/Sidebar.module.css"), ".inner")).toMatch(/--sb-bleed:\s*var\(--sp-12\)/);
     const row = read("primitives/SidebarRow.jsx");
     expect(row).not.toMatch(/var\(--bg-pane\)/);
     expect(ds).toMatch(/\.ds-sb-row\[data-sel\], \.sb-row\[data-sel\],[^{]*\{\s*background: var\(--selected\);\s*box-shadow: inset 3px 0 0 var\(--row-accent, var\(--accent\)\);/);
@@ -222,7 +222,7 @@ describe("paper toasts", () => {
   it("draws a notice as a flat 4 px card with one seam", () => {
     const toast = rule(read("primitives/Notification.module.css"), ".toast");
     expect(toast).toMatch(/border-radius:\s*var\(--r-xs\)/);
-    expect(toast).toMatch(/box-shadow:\s*var\(--shadow-edge\)/);
+    expect(toast).toMatch(/box-shadow:\s*var\(--shadow-edge-sm\)/);
     expect(toast).toMatch(/border:\s*0;/);
   });
 });

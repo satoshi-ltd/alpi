@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { FOLD_IDS, WORKGROUP_FOLD, foldFacets } from "../../../common/folds.mjs";
+import { TONAL_MIN_SIZE, alpacaTones } from "../../../common/alpacaTones.mjs";
 import Fold from "./Fold.jsx";
 
 afterEach(cleanup);
@@ -58,23 +59,69 @@ describe("Fold", () => {
     expect(draw({ color: "#f36a8a", pulse: true }).querySelector(".pulse-glyph")).toBeNull();
   });
 
-  it("draws the alpaca as twelve facets in one flat ink whatever colour it is given", () => {
+  it("draws the alpaca as twelve facets in three tonal paints from 48 px up, whatever colour it is given", () => {
     for (const color of ["#f0b447", "var(--accent)", undefined]) {
       const root = draw({ fold: "alpaca", color, size: 72 });
       expect(root.querySelectorAll("polygon")).toHaveLength(12);
-      expect(new Set([...root.querySelectorAll("polygon")].map((p) => p.getAttribute("fill")))).toEqual(new Set(["var(--alp)"]));
+      expect(new Set([...root.querySelectorAll("polygon")].map((p) => p.getAttribute("fill")))).toEqual(new Set(["var(--alp-t0)", "var(--alp-t1)", "var(--alp-t2)"]));
       expect(root.querySelector(".ds-diamond")).toBeNull();
       cleanup();
     }
   });
 
+  it("carries the crease tones of each theme for the tonal alpaca, lightest facet first", () => {
+    const root = draw({ fold: "alpaca", size: TONAL_MIN_SIZE });
+    for (const [suffix, mode] of [["l", "light"], ["d", "dark"]]) {
+      alpacaTones(mode).forEach((hex, i) => expect(root.style.getPropertyValue(`--alp-${suffix}${i}`)).toBe(hex));
+    }
+  });
+
+  it("keeps the alpaca in one flat ink below 48 px, in rows and headers, and when outlined or unfolded", () => {
+    const flat = (props) => new Set([...draw(props).querySelectorAll("polygon")].map((p) => p.getAttribute("fill")));
+    expect(flat({ fold: "alpaca", size: TONAL_MIN_SIZE - 1 })).toEqual(new Set(["var(--alp)"]));
+    cleanup();
+    expect(flat({ fold: "alpaca", size: 24 })).toEqual(new Set(["var(--alp)"]));
+    cleanup();
+    expect(flat({ fold: "alpaca" })).toEqual(new Set(["var(--alp)"]));
+    cleanup();
+    expect(flat({ fold: "alpaca", size: "md" })).toEqual(new Set(["var(--alp)"]));
+    cleanup();
+    expect(flat({ fold: "alpaca", size: 72, outlined: true })).toEqual(new Set(["var(--alp)"]));
+    cleanup();
+    const unfolded = draw({ fold: "alpaca", size: 72, unfolded: true });
+    expect([...unfolded.querySelectorAll("polygon")].every((p) => p.getAttribute("fill") === "none" && p.getAttribute("stroke-dasharray") === "2 1.5")).toBe(true);
+  });
+
+  it("leaves every other object in its profile colour at any size", () => {
+    const root = draw({ fold: "crown", color: "#3899e2", size: 72 });
+    const fills = [...root.querySelectorAll("polygon")].map((p) => p.getAttribute("fill"));
+    expect(fills.some((f) => f.startsWith("var(--alp"))).toBe(false);
+    expect(fills).toContain("#3899e2");
+  });
+
+  it("centres the alpaca on whole pixels in the row and header slots", () => {
+    for (const size of [undefined, "md"]) {
+      const root = draw({ fold: "alpaca", size });
+      const slot = Number.parseFloat(root.style.width);
+      const drawn = Number(root.querySelector("svg").getAttribute("width"));
+      expect(Number.isInteger((slot - drawn) / 2)).toBe(true);
+      expect(root.querySelector("svg").getAttribute("height")).toBe(String(drawn));
+      cleanup();
+    }
+  });
+
+  it("draws every other object at its slot size in a row", () => {
+    const root = draw({ fold: "crown", color: "#3899e2" });
+    expect(root.querySelector("svg").getAttribute("width")).toBe("16");
+  });
+
   it("draws the alpaca larger than its slot in rows and headers so it weighs as much as the other objects", () => {
     const row = draw({ fold: "alpaca" });
     expect(row.style.width).toBe("16px");
-    expect(Number(row.querySelector("svg").getAttribute("width"))).toBeCloseTo(16 * 1.3);
+    expect(Number(row.querySelector("svg").getAttribute("width"))).toBe(20);
     cleanup();
     const header = draw({ fold: "alpaca", size: "md" });
-    expect(Number(header.querySelector("svg").getAttribute("width"))).toBeCloseTo(20 * 1.3);
+    expect(Number(header.querySelector("svg").getAttribute("width"))).toBe(26);
     cleanup();
     expect(draw({ fold: "alpaca", size: 72 }).querySelector("svg").getAttribute("width")).toBe("72");
     cleanup();

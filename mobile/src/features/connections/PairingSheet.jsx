@@ -122,7 +122,7 @@ export function PairingSheet({ open, onClose, payload, onSettled }) {
             color: colors.ink2,
             padding: space.s5,
             borderRadius: radii.xs,
-            backgroundColor: colors.bgInput,
+            backgroundColor: colors.field,
             borderWidth: 0.5,
             borderColor: colors.line2,
           }}

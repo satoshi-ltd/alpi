@@ -109,7 +109,7 @@ export default function SettingsNav({ scrollRef, children }) {
                 setQuery("");
               }
             }}
-            placeholder="Search settings"
+            placeholder="Search settings…"
             aria-label="Search settings"
             spellCheck={false}
             className={styles.railSearchInput}

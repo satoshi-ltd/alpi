@@ -2,16 +2,16 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--sp-8);
   min-width: 0;
 }
 
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  height: 22px;
-  padding: 0 var(--space-2);
+  gap: var(--sp-4);
+  height: var(--ctl-24);
+  padding: 0 var(--sp-8);
   border-radius: var(--r-tag);
   background: var(--hover);
   font-family: var(--font-mono);
@@ -22,7 +22,7 @@
 
 .ghost {
   display: inline-flex;
-  height: 22px;
+  height: var(--ctl-24);
 }
 
 .slug {
@@ -82,7 +82,7 @@
 .handoff {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-4);
 }
 
 .assignee {

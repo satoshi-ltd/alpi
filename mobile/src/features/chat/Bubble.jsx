@@ -63,7 +63,7 @@ function MoreButton({ onPress }) {
       accessibilityLabel="Message actions"
       style={{ minWidth: mobile.tap, minHeight: mobile.tap, alignItems: 'center', justifyContent: 'center' }}
     >
-      <Icon name="more" size="lg" color={colors.ink3} />
+      <Icon name="more" size="md" color={colors.ink3} />
     </Pressable>
   );
 }

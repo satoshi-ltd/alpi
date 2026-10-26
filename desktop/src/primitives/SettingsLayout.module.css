@@ -1,12 +1,12 @@
 .section {
-  margin-top: 36px;
-  scroll-margin-top: var(--space-9);
+  margin-top: var(--sp-32);
+  scroll-margin-top: var(--sp-24);
 }
 
 .sectionHead {
   align-items: baseline;
-  gap: var(--space-4);
-  margin-bottom: var(--space-5);
+  gap: var(--sp-8);
+  margin-bottom: var(--sp-8);
 }
 
 .sectionTitle {
@@ -20,7 +20,7 @@
 }
 
 .sectionKicker {
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
   color: var(--ink-3);
 }
 
@@ -29,8 +29,14 @@
 }
 
 .fieldRow {
-  gap: var(--space-9);
-  padding: var(--space-3) 0;
+  gap: var(--sp-24);
+  padding: var(--sp-4) 0;
+  min-height: var(--ctl-40);
+  border-bottom: .5px solid var(--line);
+}
+
+.sectionBody > .fieldRow:last-child {
+  border-bottom: 0;
 }
 
 .fieldRowCenter {
@@ -47,7 +53,7 @@
 }
 
 .fieldLabelColTop {
-  padding-top: 6px;
+  padding-top: var(--sp-8);
 }
 
 .fieldLabel {
@@ -62,9 +68,9 @@
 }
 
 .fieldHelper {
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
   color: var(--ink-3);
-  margin-top: 4px;
+  margin-top: var(--sp-4);
   line-height: var(--lh-cozy);
 }
 
@@ -72,27 +78,34 @@
   flex: 1;
   min-width: 0;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--sp-8);
   flex-wrap: wrap;
+}
+
+.fieldControl > button[data-variant="ghost"],
+.fieldControl > button[data-variant="danger-ghost"],
+.fieldControl > span > button[data-variant="ghost"],
+.fieldControl > span > button[data-variant="danger-ghost"] {
+  box-shadow: var(--ring-ctrl);
 }
 
 .memberRow {
   position: relative;
-  gap: var(--space-2);
-  padding: var(--space-5) 0;
+  gap: var(--sp-8);
+  padding: var(--sp-12) 0;
   border-top: .5px solid var(--line);
 }
 
 .memberHead {
   align-items: center;
-  gap: var(--space-2);
-  min-height: 28px;
+  gap: var(--sp-8);
+  min-height: var(--ctl-28);
 }
 
 .memberName {
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: -.01em;
+  font-size: var(--text-chat);
+  font-weight: var(--fw-semibold);
+  color: var(--ink);
 }
 
 .memberHubTag {
@@ -112,7 +125,7 @@
 .memberMenu {
   display: flex;
   flex-direction: column;
-  padding: var(--space-1);
+  padding: var(--sp-4);
   min-width: 200px;
 }
 
@@ -127,7 +140,7 @@
 .memberNote {
   all: unset;
   cursor: pointer;
-  padding-left: 22px;
+  padding-left: var(--sp-24);
   font-size: var(--text-ui);
   color: var(--ink-2);
   line-height: var(--lh-normal);
@@ -140,14 +153,9 @@
   white-space: normal;
 }
 
-.memberNote:focus-visible {
-  outline: 2px solid var(--ink-3);
-  outline-offset: 2px;
-}
-
 .memberOwns {
-  padding-left: 22px;
-  gap: var(--space-2);
+  padding-left: var(--sp-24);
+  gap: var(--sp-8);
   flex-wrap: wrap;
   align-items: center;
 }
@@ -162,7 +170,7 @@
   font-family: var(--font-mono);
   font-size: var(--text-meta);
   color: var(--ink-2);
-  padding: 0 var(--space-2);
+  padding: 0 var(--sp-8);
   border-radius: var(--r-tag);
   background: var(--hover);
 }

@@ -72,7 +72,7 @@ export default function BiometricSettings() {
             accessibilityState={{ checked: !!on }}
             android_ripple={{ color: colors.selected }}
             style={({ pressed }) => ({
-              paddingHorizontal: space.s8,
+              paddingHorizontal: space.s7,
               paddingVertical: space.s6,
               flexDirection: 'row',
               alignItems: 'center',
@@ -90,7 +90,7 @@ export default function BiometricSettings() {
             <View
               style={{
                 width: 44,
-                height: 26,
+                height: 28,
                 borderRadius: radii.pill,
                 backgroundColor: on ? colors.ink : colors.line,
                 padding: space.s1,

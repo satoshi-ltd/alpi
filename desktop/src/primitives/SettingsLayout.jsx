@@ -1,7 +1,6 @@
 import { forwardRef, useState } from "react";
 import Button from "./Button.jsx";
 import ConfirmDelete from "./ConfirmDelete.jsx";
-import Crease from "./Crease.jsx";
 import Fold from "./Fold.jsx";
 import Icon from "./Icon.jsx";
 import IconBtn from "./IconBtn.jsx";
@@ -60,7 +59,7 @@ export function MemberRow({ member, isHub, note, owns = null, onRemove, onOpen, 
       <div className={`row ${styles.memberHead}`}>
         <Fold fold={member.fold} color={member.color} />
         {member.accent ? (
-          <Crease text={member.id} accent={member.accent} className={styles.memberName} />
+          <span className={styles.memberName}>{member.id}</span>
         ) : (
           <span className={styles.memberName}>{member.id}</span>
         )}

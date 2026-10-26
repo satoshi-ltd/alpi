@@ -34,7 +34,7 @@ vi.mock('../../theme/ThemeContext', () => ({
       bg: '#fff',
       bgElev: '#ffffff',
       bgSide: '#f5f6f8',
-      bgInput: '#f4f4f4',
+      field: '#f4f4f4',
       line: '#e6e6e6',
       line2: '#dcdcdc',
       selected: '#eee',
@@ -180,6 +180,12 @@ describe('ConnHeader activity entry', () => {
     expect(screen.getByLabelText('Connection casa, 100.99.29.84, online')).toBeTruthy();
   });
 
+  it('draws no word for online, the dot says it, and still speaks it', () => {
+    render(<ConnHeader name="casa" host="h" status="online" onConnPress={() => {}} />);
+    expect(screen.queryByText('online')).toBeNull();
+    expect(screen.getByLabelText('Connection casa, h, online')).toBeTruthy();
+  });
+
   it('says the state in words, in the label too', () => {
     const { rerender } = render(<ConnHeader name="casa" host="h" status="offline" onConnPress={() => {}} />);
     expect(screen.getByText('offline · retrying…')).toBeTruthy();
@@ -194,5 +200,58 @@ describe('ConnHeader activity entry', () => {
     render(<ConnHeader name="casa" host="h" onConnPress={() => {}} />);
     const trigger = JSON.parse(screen.getByLabelText(/^Connection casa/).getAttribute('data-style'));
     expect(trigger.minHeight).toBe(44);
+  });
+});
+
+describe('ConnHeader status dot', () => {
+  const dotOf = (container) => container.querySelector('[testID="conn-status-dot"]');
+  const styleOf = (node) => JSON.parse(node.getAttribute('data-style'));
+
+  it('sits on the connection icon corner like the desktop pill, never beside the chevron', () => {
+    const { container } = render(<ConnHeader name="casa" host="h" onConnPress={() => {}} />);
+    const dot = dotOf(container);
+    expect(dot).not.toBeNull();
+    const style = styleOf(dot);
+    expect(style).toMatchObject({ position: 'absolute', bottom: -2, right: -2, width: 8, height: 8, borderRadius: 4 });
+    expect(dot.parentElement.querySelector('span').textContent).toBe('cpu');
+  });
+
+  it('takes its size from the dot scale and carries a ring in the surface colour', () => {
+    const text = readFileSync(join(import.meta.dirname, 'ConnHeader.jsx'), 'utf8');
+    expect(text).toMatch(/\.\.\.dotShape\('md'\),\s*position: 'absolute'/);
+    expect(text).not.toMatch(/width: 8,/);
+    const { container } = render(<ConnHeader name="casa" host="h" onConnPress={() => {}} />);
+    expect(styleOf(dotOf(container)).borderColor).toBe('#ffffff');
+  });
+
+  it('colours the dot by state and keeps the word only when not online', () => {
+    const { container, rerender } = render(<ConnHeader name="casa" host="h" status="online" onConnPress={() => {}} />);
+    expect(styleOf(dotOf(container)).backgroundColor).toBe('#0f0');
+    expect(screen.queryByText('online')).toBeNull();
+    rerender(<ConnHeader name="casa" host="h" status="offline" onConnPress={() => {}} />);
+    expect(styleOf(dotOf(container)).backgroundColor).toBe('#f00');
+    expect(screen.getByText('offline · retrying…')).toBeTruthy();
+  });
+});
+
+describe('ConnHeader right edge', () => {
+  it('puts the icon button ink and the trigger chevron on one edge, 24.5 pt from the screen', () => {
+    const { container } = render(<ConnHeader name="Local" host="host.sock" onToggleSearch={() => {}} onConnPress={() => {}} />);
+    const header = rootStyleOf(container);
+    const row = JSON.parse(screen.getByLabelText('Filter profiles and workgroups').parentElement.getAttribute('data-style'));
+    const trigger = JSON.parse(screen.getByLabelText(/^Connection /).getAttribute('data-style'));
+    const iconInk = header.paddingHorizontal + row.paddingRight + (CHROME_BTN - 16) / 2;
+    const chevronInk = header.paddingHorizontal + 0.5 + trigger.paddingHorizontal;
+    expect(header.paddingHorizontal).toBe(space.s5);
+    expect(trigger.paddingHorizontal).toBe(space.s5);
+    expect(iconInk).toBe(24.5);
+    expect(chevronInk).toBe(24.5);
+  });
+
+  it('moves the hide-sidebar button with the same edge and keeps the 44 pt targets', () => {
+    render(<ConnHeader name="Local" host="host.sock" onCollapse={() => {}} />);
+    const hide = screen.getByLabelText('Hide sidebar');
+    expect(JSON.parse(hide.parentElement.getAttribute('data-style')).paddingRight).toBe(2.5);
+    expect(Number(hide.getAttribute('data-hitslop'))).toBe(tapSlop(CHROME_BTN));
   });
 });

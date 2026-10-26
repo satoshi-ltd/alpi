@@ -5,6 +5,7 @@ import { safeUnlisten } from "../../../lib/tauri-listen.js";
 import { createSwrCache } from "../../../lib/swr-cache.js";
 import { useSwrValue } from "../../../hooks/useSwrValue.js";
 import Button from "../../../primitives/Button.jsx";
+import { PlusIcon } from "../../../primitives/icons.jsx";
 import Chip from "../../../primitives/Chip.jsx";
 import Dot from "../../../primitives/Dot.jsx";
 import Eyebrow from "../../../primitives/Eyebrow.jsx";
@@ -89,7 +90,7 @@ export function EmailCell({
           {a.address || a.id}
         </Chip>
       ))}
-      <Button size="sm" onClick={() => setAdding(true)}>+ Add account</Button>
+      <Button size="sm" icon={<PlusIcon />} onClick={() => setAdding(true)}>Add account</Button>
       {adding && (
         <AddAccountModal
           profile={profile}
@@ -351,7 +352,7 @@ function StatusDot({ status }) {
       : status === "off" || status === "error"
         ? "var(--c-danger)"
         : "var(--ink-3)";
-  return <Dot color={color} className={styles.emailHeaderDot} />;
+  return <Dot color={color} />;
 }
 
 function EmailEditorModal({ profile, account, connectionId = null, onClose, onSaved }) {

@@ -25,15 +25,14 @@ import { useBack } from '../../src/hooks/useBack';
 import { usePullRefresh } from '../../src/hooks/usePullRefresh';
 import { useConnectionsSummary } from '../../src/hooks/useDaemonData';
 import { useEndpoint } from '../../src/lib/EndpointContext';
+import { settingsContentStyle } from '../../src/lib/panes';
 import { usePane } from '../../src/nav/PaneContext';
-import { SettingsSurface } from '../../src/nav/SettingsSurface';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { EMPTY } from '../../../common/emptyCopy.mjs';
 import { Busy } from '../../src/components/Busy';
 import { useBusyVisible } from '../../src/hooks/useBusyVisible';
 import { SubtitleSkeleton } from '../../src/components/SubtitleSkeleton';
 
-const WIDE_BODY_MAX_W = 968;
 
 function RevokeButton({ label, onPress }) {
   const { colors } = useTheme();
@@ -110,9 +109,7 @@ function ConnectionDetail() {
     }
   };
 
-  const contentStyle = twoPane
-    ? { paddingHorizontal: space.s9, paddingTop: space.s9, paddingBottom: space.s11, maxWidth: WIDE_BODY_MAX_W, width: '100%', alignSelf: 'center' }
-    : { paddingBottom: space.s10 };
+  const contentStyle = settingsContentStyle(twoPane);
 
   if (!row || opening) {
     return (
@@ -135,7 +132,6 @@ function ConnectionDetail() {
         onBack={goBack}
       />
       <SyncBar syncing={summary.loading} />
-      <SettingsSurface>
       <ScrollView
         contentContainerStyle={contentStyle}
         refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />}
@@ -251,7 +247,6 @@ function ConnectionDetail() {
           </>
         ) : null}
       </ScrollView>
-      </SettingsSurface>
 
       <TextPrompt
         open={prompt === 'label'}
@@ -278,12 +273,12 @@ function ConnectionDetail() {
         title="Add device"
         subtitle={row.label || row.id}
         actions={[
-          { id: 'device', label: 'Pairing link', icon: <Icon name="link" size="lg" />, onPress: () => addDevice(false) },
+          { id: 'device', label: 'Pairing link', icon: <Icon name="link" size="md" />, onPress: () => addDevice(false) },
           {
             id: 'provisioner',
             label: 'Provisioning link',
             detail: 'can add and revoke sibling devices',
-            icon: <Icon name="server" size="lg" />,
+            icon: <Icon name="server" size="md" />,
             onPress: () => addDevice(true),
           },
         ]}

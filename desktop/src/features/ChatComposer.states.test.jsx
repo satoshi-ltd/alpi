@@ -37,13 +37,12 @@ beforeEach(() => {
 });
 
 describe("ChatComposer paused and offline", () => {
-  it("keeps a readable reason and a Resume action while paused, even after typing", () => {
-    const onResume = vi.fn();
-    mount({ activeProfile: { ...PROFILE, paused: true }, paused: true, onResume });
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "x" } });
-    expect(screen.getByRole("status")).toHaveTextContent("Profile paused");
-    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
-    expect(onResume).toHaveBeenCalledTimes(1);
+  it("shows no status row and no Resume while paused, even after typing", () => {
+    mount({ activeProfile: { ...PROFILE, paused: true }, paused: true });
+    expect(screen.getByPlaceholderText("Paused — resume to chat")).toBeDisabled();
+    fireEvent.change(screen.getByPlaceholderText("Paused — resume to chat"), { target: { value: "x" } });
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Resume" })).toBeNull();
   });
 
   it("says why sending is paused when the daemon is offline, with no Resume", () => {

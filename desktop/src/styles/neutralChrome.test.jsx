@@ -35,9 +35,6 @@ describe("neutral chrome", () => {
     ["primitives/Panels.module.css", ".renameInput:focus"],
     ["primitives/EditableSessionTitle.module.css", ".input:focus"],
     ["primitives/Composer.module.css", ".body:has(.input:focus)"],
-    ["features/ToolSteps.module.css", ".head:focus-visible"],
-    ["features/ToolSteps.module.css", ".bucket:focus-visible"],
-    ["primitives/Reasoning.module.css", ".row:focus-visible"],
   ])("%s %s focuses with the shared focus token", (rel, selector) => {
     const body = rule(rel, selector);
     expect(body).toMatch(/var\(--focus-border\)|var\(--well-ring\)/);
@@ -49,8 +46,8 @@ describe("neutral chrome", () => {
   });
 
   it("seams the toast and lifts the tooltip with tokens, never a literal shadow", () => {
-    expect(rule("primitives/Notification.module.css", ".toast")).toMatch(/box-shadow: var\(--shadow-edge\);/);
-    expect(rule("styles/design-system.css", ".ds-tip-body")).toMatch(/box-shadow: var\(--shadow-sm\);/);
+    expect(rule("primitives/Notification.module.css", ".toast")).toMatch(/box-shadow: var\(--shadow-edge-sm\);/);
+    expect(rule("styles/design-system.css", ".ds-tip-body")).toMatch(/box-shadow: var\(--shadow-edge-sm\);/);
   });
 
   it("paints a running step in the profile's colour, ink without one", () => {

@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { selection } from '../lib/haptics';
 import { space } from '../theme/tokens';
 
 import { useTheme } from '../theme/ThemeContext';
@@ -38,7 +39,10 @@ export function PickerRow({
     <View>
     <View style={right ? S.wrapWithRight : S.wrap}>
       <Pressable
-        onPress={onPress}
+        onPress={(event) => {
+          selection();
+          onPress?.(event);
+        }}
         accessibilityRole="button"
         accessibilityState={{ selected }}
         accessibilityLabel={typeof label === 'string' ? label : undefined}

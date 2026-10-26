@@ -5,7 +5,7 @@
 .stats {
   display: flex;
   align-items: flex-start;
-  padding-bottom: var(--space-6);
+  padding-bottom: var(--sp-16);
   border-bottom: 0.5px solid var(--line-2);
 }
 
@@ -16,11 +16,11 @@
 
 .statLabel {
   font-family: var(--font-mono);
-  font-size: var(--text-meta);
-  letter-spacing: 0.1em;
+  font-size: var(--eyebrow-size);
+  letter-spacing: var(--eyebrow-tracking);
   text-transform: uppercase;
   color: var(--ink-3);
-  margin-bottom: var(--space-2);
+  margin-bottom: var(--sp-8);
 }
 
 .today {
@@ -41,14 +41,14 @@
 }
 
 .unit {
-  margin-left: var(--space-1);
+  margin-left: var(--sp-4);
   font-size: var(--text-meta);
   font-weight: 400;
   color: var(--ink-3);
 }
 
 .chart {
-  margin-top: var(--space-8);
+  margin-top: var(--sp-24);
 }
 
 .track {
@@ -56,7 +56,7 @@
   height: 104px;
   display: flex;
   align-items: flex-end;
-  gap: var(--space-1);
+  gap: var(--sp-4);
 }
 
 .col {
@@ -103,8 +103,8 @@
 
 .labels {
   display: flex;
-  gap: var(--space-1);
-  margin-top: var(--space-3);
+  gap: var(--sp-4);
+  margin-top: var(--sp-8);
 }
 
 .dayLabel {
@@ -126,14 +126,14 @@
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: var(--space-3);
-  margin-top: var(--space-6);
+  gap: var(--sp-8);
+  margin-top: var(--sp-16);
 }
 
 .legend {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--sp-8);
   font-size: var(--text-meta);
   color: var(--ink-3);
 }
@@ -177,18 +177,17 @@
 
 .tip {
   min-width: 132px;
-  padding: var(--space-4);
+  padding: var(--sp-12);
   background: var(--bg-elev);
-  border: 0.5px solid var(--line-2);
   border-radius: var(--r-xs);
-  box-shadow: var(--shadow-edge);
+  box-shadow: var(--shadow-edge-sm);
 }
 
 .tipDay {
   font-family: var(--font-mono);
   font-size: var(--text-meta);
   color: var(--ink-3);
-  margin-bottom: var(--space-1);
+  margin-bottom: var(--sp-4);
 }
 
 .tipToday {
@@ -201,13 +200,13 @@
   font-weight: 600;
   line-height: var(--lh-tight);
   color: var(--ink);
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--sp-8);
 }
 
 .tipRow {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--sp-8);
   font-size: var(--text-meta);
   line-height: 1.4;
   color: var(--ink-2);
@@ -215,13 +214,13 @@
 
 .tipTok {
   margin-left: auto;
-  padding-left: var(--space-4);
+  padding-left: var(--sp-12);
   font-family: var(--font-mono);
   color: var(--ink);
 }
 
 .empty {
-  margin: var(--space-6) 0 0;
+  margin: var(--sp-16) 0 0;
   font-family: var(--font-mono);
   font-size: var(--text-meta);
   color: var(--ink-3);

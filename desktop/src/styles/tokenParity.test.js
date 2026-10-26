@@ -8,16 +8,14 @@ import {
   typography,
   alpha,
   fontStacks,
-  spaceExtra,
+  spaceScale,
   spaceMicro,
-  dotSize,
   fontSizes,
   glyphSize,
   glyphSizeMd,
   lineHeights,
   palettes,
   radii,
-  space,
 } from "../../../common/tokens.mjs";
 
 const CSS = readFileSync(join(import.meta.dirname, "tokens.css"), "utf8");
@@ -75,13 +73,12 @@ const cssPalettes = () => {
 
 function expectedNumbers() {
   const out = {};
-  for (const [name, value] of Object.entries(fontSizes)) out[`fs-${name}`] = value;
+  for (const name of ["xs", "lg", "xl", "xxl", "display"]) out[`text-${{ xs: "meta", lg: "chat", xl: "title", xxl: "detail", display: "display" }[name]}`] = fontSizes[name];
   for (const [name, value] of Object.entries(lineHeights)) out[`lh-${name}`] = value;
-  for (const [name, value] of Object.entries(space)) out[`space-${name.slice(1)}`] = value;
+  for (const [name, value] of Object.entries(spaceScale)) out[`sp-${name}`] = value;
   for (const [name, value] of Object.entries(spaceMicro)) out[`space-${name}`] = value;
   for (const [name, value] of Object.entries(radii)) out[`r-${name}`] = value;
   for (const [name, value] of Object.entries(alpha)) out[`alpha-${name}`] = value;
-  out["dot-size"] = dotSize;
   out["glyph-size"] = glyphSize;
   out["glyph-size-md"] = glyphSizeMd;
   return out;
@@ -91,15 +88,11 @@ describe("tokens.css against the shared token module", () => {
   it("parses the stylesheet at all, so a silent parse failure cannot fake a pass", () => {
     expect(ROOT.length).toBeGreaterThan(1000);
     expect(Object.keys(numberVars(ROOT)).length).toBeGreaterThanOrEqual(40);
-    expect(Object.keys(expectedNumbers()).length).toBeGreaterThanOrEqual(35);
+    expect(Object.keys(expectedNumbers()).length).toBeGreaterThanOrEqual(30);
   });
 
-  it("declares its two extra spacing steps with the values common records for it", () => {
-    for (const [name, value] of Object.entries(spaceExtra.desktop)) {
-      const m = new RegExp(`--space-${name.slice(1)}:\\s*([0-9.]+)px;`).exec(CSS);
-      expect(m, `--space-${name.slice(1)} is not declared`).not.toBeNull();
-      expect(Number(m[1])).toBe(value);
-    }
+  it("declares no spacing step beyond the scale and the micro nudges", () => {
+    expect(CSS).not.toMatch(/--space-\d/);
   });
 
   it("declares the shared font stacks verbatim, since CSS cannot import them", () => {
@@ -188,10 +181,11 @@ describe("accent palette", () => {
 
 
 describe("semantic typography roles", () => {
-  it("maps every role to the same size and leading as mobile", () => {
+  it("maps every role to the ladder rung nearest mobile's size and the same leading", () => {
+    const rung = { xs: "meta", sm: "meta", base: "ui", md: "ui", lg: "chat", xl: "title", xxl: "detail", display: "display" };
     for (const [role, value] of Object.entries(typography)) {
       const cssRole = role.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
-      expect(ROOT).toContain(`--text-${cssRole}-size: var(--fs-${value.size});`);
+      expect(ROOT).toContain(`--text-${cssRole}-size: var(--text-${rung[value.size]});`);
       expect(ROOT).toContain(`--text-${cssRole}-leading: var(--lh-${value.leading});`);
     }
   });

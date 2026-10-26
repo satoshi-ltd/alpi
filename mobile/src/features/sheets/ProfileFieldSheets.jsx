@@ -573,7 +573,7 @@ export function VoiceSheet({ open, onClose, profileName, accent, initialValue, o
                       borderRadius: radii.xs,
                       borderWidth: 0.5,
                       borderColor: isPlaying ? colors.ink : colors.line2,
-                      backgroundColor: pressed ? colors.selected : isPlaying ? colors.bgInput : 'transparent',
+                      backgroundColor: pressed ? colors.selected : isPlaying ? colors.field : 'transparent',
                       flexDirection: 'row',
                       alignItems: 'center',
                       gap: space.s2,

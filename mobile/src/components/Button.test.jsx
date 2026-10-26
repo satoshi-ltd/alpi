@@ -15,10 +15,11 @@ vi.mock('react-native', () => ({
 }));
 vi.mock('./Spinner', () => ({ Spinner: ({ color, size }) => <span data-testid="spinner" data-color={color} data-size={size ?? ''} /> }));
 vi.mock('../theme/ThemeContext', () => ({ useTheme: () => ({
-  colors: { ink: '#111', ink2: '#333', ink4: '#aaa', bgPane: '#fff', bgInput: '#eee', danger: '#c14545', dangerText: '#b73737', onDanger: '#ffffff', hover: '#ddd', selected: '#ccc', line2: '#bbb' },
+  colors: { ink: '#111', ink2: '#333', ink4: '#aaa', bgPane: '#fff', field: '#eee', danger: '#c14545', dangerText: '#b73737', onDanger: '#ffffff', hover: '#ddd', selected: '#ccc', line2: '#bbb' },
   fonts: { sans: { medium: 'medium', semibold: 'semibold' } }, fontSizes: { sm: 12, md: 14, lg: 15, xl: 18 },
 }) }));
 import { Button } from './Button';
+import { space } from '../theme/tokens';
 afterEach(cleanup);
 
 describe('Button accessibility', () => {
@@ -121,5 +122,16 @@ describe('Button as a paper sheet', () => {
     cleanup();
     render(<Button title="Go" accent="#f0b447" />);
     expect(JSON.parse(screen.getByRole('button').dataset.pressedStyle).backgroundColor).toBe(mixHex('#f0b447', 0.82, '#000000'));
+  });
+});
+
+describe('Button horizontal padding', () => {
+  it.each([['sm', 12], ['md', 14], ['lg', 20], ['hero', 24]])('pads %s by the %i pt space token and no narrower than before', (size, padX) => {
+    render(<Button title="Go" size={size} />);
+    const style = JSON.parse(screen.getByRole('button', { name: 'Go' }).getAttribute('data-style'));
+    expect(style.paddingHorizontal).toBe(padX);
+    expect(Object.values(space)).toContain(padX);
+    expect(padX).toBeGreaterThanOrEqual({ sm: 12, md: 14, lg: 18, hero: 22 }[size]);
+    expect(padX - { sm: 12, md: 14, lg: 18, hero: 22 }[size]).toBeLessThanOrEqual(4);
   });
 });

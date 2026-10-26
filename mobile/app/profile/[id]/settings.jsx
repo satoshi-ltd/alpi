@@ -49,8 +49,8 @@ import {
   VoiceSheet,
   WorkspaceSheet,
 } from '../../../src/features/sheets/ProfileFieldSheets';
+import { settingsContentStyle } from '../../../src/lib/panes';
 import { usePane } from '../../../src/nav/PaneContext';
-import { SettingsSurface } from '../../../src/nav/SettingsSurface';
 import { AttentionSummary, JumpChips } from '../../../src/features/settings/SectionJump';
 import { useSectionJump } from '../../../src/features/settings/useSectionJump';
 import { useTheme } from '../../../src/theme/ThemeContext';
@@ -64,7 +64,6 @@ import { useReveal } from '../../../src/hooks/useReveal';
 import { ListSkeleton } from '../../../src/components/ListSkeleton';
 
 const DEFAULT_ALP_PORT = 7423;
-const WIDE_BODY_MAX_W = 968;
 const WIDE_LABEL_W = 96;
 
 function ChipRow({ items }) {
@@ -297,9 +296,7 @@ export default function ProfileSettings() {
     }
   };
 
-  const contentStyle = twoPane
-    ? { paddingHorizontal: space.s9, paddingTop: space.s9, paddingBottom: space.s11, maxWidth: WIDE_BODY_MAX_W, width: '100%', alignSelf: 'center' }
-    : { paddingBottom: space.s10 };
+  const contentStyle = settingsContentStyle(twoPane);
 
   const budgetValue = capUsd == null ? 'not set' : (
     <Meter
@@ -340,7 +337,6 @@ export default function ProfileSettings() {
       />
       <SyncBar syncing={settingsSyncing} />
       <JumpChips current={section} onJump={jump} />
-      <SettingsSurface>
       <ScrollView
         ref={scrollRef}
         scrollEventThrottle={64}
@@ -793,7 +789,6 @@ export default function ProfileSettings() {
           />
         </RowGroup>
       </ScrollView>
-      </SettingsSurface>
 
       <ModelSheet
         open={sheet === 'model'}

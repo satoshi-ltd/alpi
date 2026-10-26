@@ -5,7 +5,7 @@
 .stats {
   display: flex;
   align-items: flex-start;
-  padding-bottom: var(--space-6);
+  padding-bottom: var(--sp-16);
   border-bottom: 0.5px solid var(--line-2);
 }
 
@@ -17,8 +17,8 @@
 .labelSlot {
   display: flex;
   align-items: center;
-  height: calc(var(--text-meta) * var(--lh-normal));
-  margin-bottom: var(--space-2);
+  height: calc(var(--eyebrow-size) * var(--lh-normal));
+  margin-bottom: var(--sp-8);
 }
 
 .leadSlot {
@@ -35,10 +35,10 @@
 
 .track {
   height: 104px;
-  margin-top: var(--space-8);
+  margin-top: var(--sp-24);
   display: flex;
   align-items: flex-end;
-  gap: var(--space-1);
+  gap: var(--sp-4);
 }
 
 .col {
@@ -56,15 +56,15 @@
 
 .labels {
   height: calc(var(--text-meta) * var(--lh-tight));
-  margin-top: var(--space-3);
+  margin-top: var(--sp-8);
 }
 
 .foot {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: var(--space-3);
-  margin-top: var(--space-6);
+  gap: var(--sp-8);
+  margin-top: var(--sp-16);
 }
 
 .footSlot {

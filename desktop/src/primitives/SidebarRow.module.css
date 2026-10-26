@@ -25,8 +25,14 @@
 
 .stateWord {
   flex-shrink: 0;
-  font-family: var(--font-mono);
+  margin-left: auto;
+  font-family: var(--font-sans);
+  font-weight: var(--fw-medium);
   font-size: var(--text-meta);
-  line-height: var(--lh-cozy);
+  line-height: var(--lh-tight);
   color: var(--ink-3);
+}
+
+.label.labelKeep {
+  flex: 0 0 auto;
 }

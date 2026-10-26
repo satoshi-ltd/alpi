@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { Animated } from 'react-native';
-import { radii } from '../theme/tokens';
+import { motion, radii } from '../theme/tokens';
 
+import { pulseSteps } from '../lib/pulse';
 import { useReduceMotion } from '../lib/reduceMotion';
 import { useTheme } from '../theme/ThemeContext';
 
-export const BREATH_LOW = 0.55;
-export const BREATH_HALF_MS = 800;
+export const BREATH_LOW = motion.pulseLow;
 export const STAGGER_MS = 90;
 
 export function SkeletonBar({ width, height = 12, delay = 0, radius = radii.xs, style }) {
@@ -20,8 +20,7 @@ export function SkeletonBar({ width, height = 12, delay = 0, radius = radii.xs, 
     }
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(op, { toValue: 1, duration: BREATH_HALF_MS, useNativeDriver: true }),
-        Animated.timing(op, { toValue: BREATH_LOW, duration: BREATH_HALF_MS, useNativeDriver: true }),
+        ...pulseSteps(op, { from: BREATH_LOW, to: 1 }),
       ]),
     );
     const t = setTimeout(() => loop.start(), delay);

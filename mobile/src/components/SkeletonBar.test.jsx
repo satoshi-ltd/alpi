@@ -41,10 +41,10 @@ describe('SkeletonBar', () => {
     expect(container.firstChild.dataset.bg).toBe('#ececec');
   });
 
-  it('breathes 0.55 to 1 and back over 1.6 s', () => {
+  it('breathes on the shared pulse, 0.4 to 1 and back over 1.6 s', () => {
     render(<SkeletonBar width={80} />);
-    expect(h.init).toEqual([0.55]);
-    expect(h.timings.map((t) => [t.toValue, t.duration, t.useNativeDriver])).toEqual([[1, 800, true], [0.55, 800, true]]);
+    expect(h.init).toEqual([0.4]);
+    expect(h.timings.map((t) => [t.toValue, t.duration, t.useNativeDriver])).toEqual([[1, 800, true], [0.4, 800, true]]);
     expect(h.timings.reduce((n, t) => n + t.duration, 0)).toBe(1600);
   });
 

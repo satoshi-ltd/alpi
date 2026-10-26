@@ -27,7 +27,7 @@ vi.mock('./SidebarPane', async () => {
 import { finishTimings, state } from '../../../tests/mocks/reanimated.js';
 import { SIDEBAR_W } from '../../lib/panes';
 import { usePane } from '../../nav/PaneContext';
-import { motionMs } from '../../theme/tokens';
+import { motion } from '../../theme/tokens';
 import { PaneShell } from './PaneShell';
 
 function Toggle() {
@@ -58,12 +58,12 @@ describe('sidebar motion', () => {
     render(shell());
     expect(space()).toBe(0);
     fireEvent.click(screen.getByText('toggle'));
-    expect(state.timings.at(-1)).toEqual({ to: 1, duration: motionMs.sidebar });
+    expect(state.timings.at(-1)).toEqual({ to: 1, duration: motion.enter });
     expect(space()).toBe(SIDEBAR_W);
     expect(screen.getByTestId('sidebar')).toBeTruthy();
     act(() => finishTimings());
     fireEvent.click(screen.getByText('toggle'));
-    expect(state.timings.at(-1)).toEqual({ to: 0, duration: motionMs.sidebar });
+    expect(state.timings.at(-1)).toEqual({ to: 0, duration: motion.exit });
     expect(space()).toBe(SIDEBAR_W);
     expect(screen.getByTestId('sidebar')).toBeTruthy();
     const layer = JSON.parse(screen.getByTestId('sidebar-layer').getAttribute('data-style'));

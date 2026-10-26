@@ -33,21 +33,21 @@ export default function HeaderMenu({
         <div className={styles.menu}>
           {onOpenSettings && (
             <button type="button" role="menuitem" className={menuRowClass()} onClick={run(onOpenSettings)}>
-              <Icon name="settings" size="lg" className={styles.icon} />
+              <Icon name="settings" size="md" className={styles.icon} />
               <span className={styles.label}>{Noun} settings</span>
               <KeyHint hint={shortcutKeys("settings")} />
             </button>
           )}
           {onTogglePause && (
             <button type="button" role="menuitem" className={menuRowClass()} onClick={run(onTogglePause)}>
-              <Icon name={paused ? "play" : "pause"} size="lg" className={styles.icon} />
+              <Icon name={paused ? "play" : "pause"} size="md" className={styles.icon} />
               <span className={styles.label}>{paused ? "Resume" : "Pause"} {noun}</span>
               <KeyHint hint={shortcutKeys("pause")} />
             </button>
           )}
           {onToggleAutoRead && (
             <button type="button" role="menuitemcheckbox" aria-checked={autoRead} className={menuRowClass()} onClick={() => onToggleAutoRead()}>
-              <Icon name="volume" size="lg" className={styles.icon} />
+              <Icon name="volume" size="md" className={styles.icon} />
               <span className={styles.label}>Auto-read replies</span>
               <Pill state={autoRead ? "on" : "off"} className={styles.statePill}>{autoRead ? "on" : "off"}</Pill>
             </button>
@@ -55,28 +55,28 @@ export default function HeaderMenu({
           {(onOpenSkills || onOpenMemory || onOpenTools || onOpenSchedule) && <MenuSeparator />}
           {onOpenSkills && (
             <button type="button" role="menuitem" className={menuRowClass()} onClick={run(onOpenSkills)}>
-              <Icon name="sparkle" size="lg" className={styles.icon} />
+              <Icon name="sparkle" size="md" className={styles.icon} />
               <span className={styles.label}>Skills</span>
               <KeyHint hint={shortcutKeys("skills")} />
             </button>
           )}
           {onOpenMemory && (
             <button type="button" role="menuitem" className={menuRowClass()} onClick={run(onOpenMemory)}>
-              <Icon name="folder" size="lg" className={styles.icon} />
+              <Icon name="folder" size="md" className={styles.icon} />
               <span className={styles.label}>Memory</span>
               <KeyHint hint={shortcutKeys("memory")} />
             </button>
           )}
           {onOpenTools && (
             <button type="button" role="menuitem" className={menuRowClass()} onClick={run(onOpenTools)}>
-              <Icon name="cpu" size="lg" className={styles.icon} />
+              <Icon name="cpu" size="md" className={styles.icon} />
               <span className={styles.label}>Tools</span>
               <KeyHint hint={shortcutKeys("tools")} />
             </button>
           )}
           {onOpenSchedule && (
             <button type="button" role="menuitem" className={menuRowClass()} onClick={run(onOpenSchedule)}>
-              <Icon name="clock" size="lg" className={styles.icon} />
+              <Icon name="clock" size="md" className={styles.icon} />
               <span className={styles.label}>Schedule</span>
               <KeyHint hint={shortcutKeys("schedule")} />
             </button>
@@ -85,7 +85,7 @@ export default function HeaderMenu({
             <>
               <MenuSeparator />
               <button type="button" role="menuitem" className={menuRowClass()} onClick={run(onRefresh)}>
-                <Icon name="refresh" size="lg" className={styles.icon} />
+                <Icon name="refresh" size="md" className={styles.icon} />
                 <span className={styles.label}>Refresh thread</span>
                 <KeyHint hint={shortcutKeys("refresh")} />
               </button>

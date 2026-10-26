@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { defaultAsAlpaca, withDefaultAlpaca, ALPACA_FOLD, ALPACA_LOW_FOLD, FOLD_IDS, WORKGROUP_FOLD, foldPolygons, normaliseFold } from "../../../common/folds.mjs";
+import { TONAL_MIN_SIZE, alpacaTones, isTonalSize, tonalAlpacaPolygons } from "../../../common/alpacaTones.mjs";
+import { contrastRatio } from "../../../common/crease.mjs";
+import { ALPACA_ROW_SCALE, FOLD_SIZES, alpacaDrawnSize, defaultAsAlpaca, withDefaultAlpaca, ALPACA_FOLD, ALPACA_LOW_FOLD, FOLD_IDS, WORKGROUP_FOLD, foldPolygons, normaliseFold } from "../../../common/folds.mjs";
 
 describe("reserved folds", () => {
   it("accepts the alpaca and the honeycomb but never offers them as profile objects", () => {
@@ -37,5 +39,50 @@ describe("the nine facet alpaca", () => {
     expect(foldPolygons(ALPACA_FOLD, "#bc860e", 20)).toHaveLength(12);
     expect(foldPolygons(ALPACA_LOW_FOLD, "#bc860e", 16)).toHaveLength(9);
     expect(normaliseFold(ALPACA_LOW_FOLD)).toBe("diamond");
+  });
+});
+
+describe("tonal alpaca", () => {
+  const GROUNDS = { light: "#ffffff", dark: "#121212" };
+
+  it("starts at 48 px", () => {
+    expect([47, 48].map(isTonalSize)).toEqual([false, true]);
+    expect(TONAL_MIN_SIZE).toBe(48);
+  });
+
+  it.each(["light", "dark"])("holds three distinct %s tones of one hue, lightest first, that each read on the ground", (mode) => {
+    const tones = alpacaTones(mode);
+    expect(new Set(tones).size).toBe(3);
+    const lightness = tones.map((hex) => contrastRatio(hex, "#000000"));
+    expect([...lightness].sort((a, b) => b - a)).toEqual(lightness);
+    for (const tone of tones) expect(contrastRatio(tone, GROUNDS[mode])).toBeGreaterThanOrEqual(3);
+    const hue = (hex) => {
+      const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+      return Math.atan2(Math.sqrt(3) * (g - b), 2 * r - g - b) * (180 / Math.PI);
+    };
+    const hues = tones.filter((hex) => hex !== "#ffffff").map(hue);
+    expect(Math.max(...hues) - Math.min(...hues)).toBeLessThan(20);
+  });
+
+  it("gives every facet of the twelve a tone from that set", () => {
+    const polygons = tonalAlpacaPolygons("light");
+    expect(polygons).toHaveLength(12);
+    expect(new Set(polygons.map((p) => p.fill))).toEqual(new Set(alpacaTones("light")));
+  });
+});
+
+describe("alpaca drawn size in rows", () => {
+  it("scales the row alpaca by 1.25 to exactly 20 and the header alpaca to 26", () => {
+    expect(ALPACA_ROW_SCALE).toBe(1.25);
+    expect(alpacaDrawnSize(FOLD_SIZES.row)).toBe(20);
+    expect(alpacaDrawnSize(FOLD_SIZES.header)).toBe(26);
+  });
+
+  it("overflows its slot by an even number of pixels so the offset is whole", () => {
+    for (const slot of [12, 14, 16, 18, 20, 22, 24, 28, 32, 40]) {
+      const drawn = alpacaDrawnSize(slot);
+      expect(Number.isInteger(drawn)).toBe(true);
+      expect((drawn - slot) % 2).toBe(0);
+    }
   });
 });

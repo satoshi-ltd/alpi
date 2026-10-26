@@ -66,3 +66,30 @@ describe('Row spoken label', () => {
     expect(screen.getByText('cheap model').getAttribute('data-lines')).toBe('1');
   });
 });
+
+describe('Row with a control below', () => {
+  it('ignores press, value, trailing, chevron and danger and renders the children under the label', () => {
+    const onPress = vi.fn();
+    const onLongPress = vi.fn();
+    const { container } = render(
+      <Row label="Theme" value="ignored" trailing={<b data-trailing="" />} onPress={onPress} onLongPress={onLongPress} chevron danger below={<i data-control="" />} />,
+    );
+    expect(container.querySelector('button')).toBeNull();
+    expect(container.querySelector('[data-trailing]')).toBeNull();
+    expect(container.querySelector('[data-testid="row-lane"]')).toBeNull();
+    expect(screen.queryByText('ignored')).toBeNull();
+    expect(container.querySelector('[data-control]').previousSibling.textContent).toBe('Theme');
+    expect(onPress).not.toHaveBeenCalled();
+    expect(onLongPress).not.toHaveBeenCalled();
+  });
+
+  it('stacks the label and helper over the control at full width, with no value, lane or button', () => {
+    const { container } = render(<Row label="Theme" helper="three modes" value="ignored" below={<i data-control="" />} />);
+    expect(screen.getByText('Theme')).toBeTruthy();
+    expect(screen.getByText('three modes')).toBeTruthy();
+    expect(screen.queryByText('ignored')).toBeNull();
+    expect(container.querySelector('button')).toBeNull();
+    const control = container.querySelector('[data-control]');
+    expect(control.previousSibling.textContent).toBe('Themethree modes');
+  });
+});

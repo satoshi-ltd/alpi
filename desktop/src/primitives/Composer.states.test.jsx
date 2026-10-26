@@ -101,6 +101,6 @@ describe("Composer mentions", () => {
   });
 
   it("draws the popover on the edge shadow", () => {
-    expect(css).toMatch(/\.mentionPopover\s*\{[^}]*box-shadow:\s*var\(--shadow-edge\)/);
+    expect(css).toMatch(/\.mentionPopover\s*\{[^}]*box-shadow:\s*var\(--shadow-edge-sm\)/);
   });
 });

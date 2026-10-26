@@ -6,18 +6,18 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-5);
-  padding: var(--space-8);
+  gap: var(--sp-12);
+  padding: var(--sp-24);
   background: rgba(0, 0, 0, 0.82);
   animation: lightboxIn var(--dur-2) var(--ease) both;
 }
 
 .actions {
   position: fixed;
-  top: var(--space-5);
-  right: var(--space-5);
+  top: var(--sp-12);
+  right: var(--sp-12);
   display: flex;
-  gap: var(--space-3);
+  gap: var(--sp-8);
 }
 .action {
   background: transparent;
@@ -30,7 +30,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--sp-8);
   max-width: 92vw;
   max-height: 90vh;
 }
@@ -45,7 +45,7 @@
 
 .caption {
   font-family: var(--font-mono);
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
   color: rgba(255, 255, 255, 0.82);
   text-align: center;
 }

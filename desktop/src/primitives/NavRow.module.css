@@ -1,10 +1,10 @@
 .row {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--sp-8);
   width: 100%;
-  height: var(--ctrl-sm);
-  padding: 0 var(--space-4);
+  height: var(--ctl-28);
+  padding: 0 var(--sp-12);
   border-radius: var(--r-xs);
   background: transparent;
   text-align: left;
@@ -27,7 +27,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--space-5);
+  width: var(--sp-12);
   flex-shrink: 0;
 }
 
@@ -44,10 +44,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--space-5);
-  height: var(--space-5);
+  width: var(--sp-12);
+  height: var(--sp-12);
   color: var(--accent);
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
   line-height: var(--lh-tight);
   flex-shrink: 0;
 }
@@ -59,7 +59,7 @@
   flex-shrink: 0;
   line-height: var(--lh-tight);
   text-align: center;
-  width: var(--space-3);
+  width: var(--sp-8);
 }
 
 .row[data-muted="1"] .name {

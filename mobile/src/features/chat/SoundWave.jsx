@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet } from 'react-native';
 import { space } from '../../theme/tokens';
 import { subscribeReadAloud, clearReadAloud } from '../../lib/readAloud';
+import { PULSE_HALF_MS } from '../../lib/pulse';
 import { useReduceMotion } from '../../lib/reduceMotion';
 
 function Bar({ accent, delay, still }) {
@@ -13,8 +14,8 @@ function Bar({ accent, delay, still }) {
     }
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(h, { toValue: 14, duration: 450, delay, useNativeDriver: false }),
-        Animated.timing(h, { toValue: 4, duration: 450, useNativeDriver: false }),
+        Animated.timing(h, { toValue: 14, duration: PULSE_HALF_MS, delay, useNativeDriver: false }),
+        Animated.timing(h, { toValue: 4, duration: PULSE_HALF_MS, useNativeDriver: false }),
       ]),
     );
     loop.start();

@@ -1,4 +1,4 @@
-from gen import DANGER, DOC_ACCENT, FLOAT_EDGE, diamond, ic, m_button, m_confirm_dialog, m_group, m_row, m_screen_header, m_section, mix, page, pill, switch
+from gen import DANGER, DOC_ACCENT, FLOAT_EDGE, SHEET_EDGE, diamond, mi as ic, m_button, m_confirm_dialog, m_group, m_row, m_screen_header, m_section, mix, page, pill, switch
 
 INK, INK2, INK3, INK4 = "#141414", "#454545", "#6b6b6b", "#b4b4b4"
 LINE, LINE2, SELECTED, INPUT = "rgba(20,20,20,0.07)", "rgba(20,20,20,0.14)", "rgba(20,20,20,0.06)", "#f2f2f2"
@@ -10,9 +10,10 @@ def backdrop(w, h):
     return f'<div style="position: absolute; inset: 0; width: {w}px; height: {h}px; background: {BACKDROP}"></div>'
 
 
-def sheet_header(title, subtitle):
-    return f"""<div style="display: flex; justify-content: center; padding-top: 8px"><span style="width: 36px; height: 4px; border-radius: 2px; background: {INK4}; opacity: 0.6"></span></div>
-<div style="display: flex; align-items: flex-start; gap: 12px; padding: 12px 12px 14px 16px">
+def sheet_header(title, subtitle, dialog=False):
+    grabber = "" if dialog else f'<div style="display: flex; justify-content: center; padding-top: 8px"><span style="width: 36px; height: 4px; border-radius: 2px; background: {INK4}; opacity: 0.6"></span></div>'
+    return f"""{grabber}
+<div style="display: flex; align-items: flex-start; gap: 12px; padding: {16 if dialog else 12}px 12px 14px 16px">
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-weight: 600; font-size: 18px; line-height: 1.3; letter-spacing: -0.01em; color: {INK}">{title}</span>{f'<span style="font-family: {MONO}; font-size: 12px; color: {INK3}; margin-top: 4px">{subtitle}</span>' if subtitle else ""}</div>
 <button aria-label="Close" style="width: 44px; height: 44px; border: 0; border-radius: 4px; background: transparent; display: inline-flex; align-items: center; justify-content: center; margin-top: -8px; cursor: pointer">{ic("x", 20, INK3)}</button>
 </div>"""
@@ -31,15 +32,15 @@ def sheet(w, h, title, subtitle, body, primary=None, variant="primary", dialog=F
     else:
         box = f'position: absolute; left: 0; right: 0; bottom: 0; border-radius: 4px 4px 0 0;'
     return f"""{backdrop(w, h)}
-<div style="{box} background: #ffffff; {FLOAT_EDGE}; overflow: hidden; display: flex; flex-direction: column">
-{sheet_header(title, subtitle)}
+<div style="{box} background: #ffffff; {FLOAT_EDGE if dialog else SHEET_EDGE}; overflow: hidden; display: flex; flex-direction: column">
+{sheet_header(title, subtitle, dialog)}
 {body}
 {bar}
 </div>"""
 
 
 def picker_row(label, helper="", selected=False, accent=DOC_ACCENT, meta=""):
-    dot = f'<span style="width: 7px; height: 7px; border-radius: 999px; background: {accent}"></span>' if selected else ""
+    dot = f'<span style="width: 6px; height: 6px; border-radius: 999px; background: {accent}"></span>' if selected else ""
     m = f'{pill(meta, tone="neutral")}' if meta else ""
     return f"""<div style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: {SELECTED if selected else "transparent"}">
 <span style="width: 14px; display: inline-flex; justify-content: center">{dot}</span>
@@ -129,6 +130,18 @@ def fold_sheet():
     return page("Fold · sheet as a centred dialog", 852, 884, page_body)
 
 
+def fold_popover():
+    from gen import fold_chat
+    items = action_item("settings", "Profile settings") + action_item("pause", "Pause profile") + action_item("volume-2", "Auto-read replies", toggle=False) + separator(52) + action_item("sparkle", "Skills") + action_item("archive", "Memory") + separator(52) + action_item("refresh-cw", "Refresh thread")
+    pop = f'<div style="position: absolute; right: 8px; top: 62px; width: 280px; padding: 4px 0; box-sizing: border-box; border-radius: 4px; background: #ffffff; overflow: hidden; {FLOAT_EDGE}">{items}</div>'
+    return _inject(fold_chat(), pop)
+
+
+def _inject(html, extra):
+    marker = "\n</div>\n</x-dc>"
+    return html.replace(marker, "\n" + extra + marker, 1)
+
+
 def chat_backdrop():
     from gen import m_chat_header, m_composer, m_thread, meter
     meta = f'<span style="font-family: {MONO}; font-size: 11px; color: {INK2}">deepseek-v4.1-flash</span>{meter("24K", "/1.0M", 0.024, DOC_ACCENT, False)}'
@@ -175,7 +188,7 @@ def phone_message_actions():
 def connection_row(name, url, status, tag="", tag_tone="neutral", server=False):
     dot = {"online": "#3fb37a", "offline": "#c14545", "disabled": "#6b6b6b"}[status]
     tile = (f'<span style="position: relative; width: 40px; height: 40px; border-radius: 4px; background: #f6f6f6; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">'
-            f'{ic("server" if server else "cpu", 20, INK2)}<span style="position: absolute; right: 2px; bottom: 2px; width: 7px; height: 7px; border-radius: 999px; background: {dot}"></span></span>')
+            f'{ic("server" if server else "cpu", 20, INK2)}<span style="position: absolute; right: 2px; bottom: 2px; width: 8px; height: 8px; border-radius: 999px; background: {dot}"></span></span>')
     return (f'<div style="display: flex; align-items: center; gap: 12px; padding: 14px 16px">{tile}'
             f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 15px; line-height: 1.3; color: {INK}">{name}</span>'
             f'<span style="font-family: {MONO}; font-weight: 500; font-size: 11px; color: {INK3}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{url}</span></div>'
@@ -198,5 +211,5 @@ def _roster_backdrop():
             f'<div style="height: 0.5px; background: {LINE}"></div><div style="flex: 1; min-height: 0; overflow: hidden">{m_roster(compact=False)}</div>{m_shell_footer(ring="#ffffff", border=True)}</div>')
 
 
-MOBILE_OVERLAYS = {"phone_connection": phone_connection_sheet, "phone_sheet": phone_sheet, "phone_action": phone_action_sheet, "phone_confirm": phone_typed_confirm, "fold_sheet": fold_sheet,
+MOBILE_OVERLAYS = {"fold_popover": fold_popover, "phone_connection": phone_connection_sheet, "phone_sheet": phone_sheet, "phone_action": phone_action_sheet, "phone_confirm": phone_typed_confirm, "fold_sheet": fold_sheet,
                    "phone_tool": phone_tool_sheet, "phone_select": phone_select_text, "phone_message": phone_message_actions}

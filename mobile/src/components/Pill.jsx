@@ -1,8 +1,9 @@
 import { mixHex } from "../../../common/color.mjs";
 import { Text, View } from 'react-native';
-import { alpha, dotSize, lineHeights, radii, space } from '../theme/tokens';
+import { alpha, lineHeights, radii, space } from '../theme/tokens';
 
 import { useTheme } from '../theme/ThemeContext';
+import { dotShape } from './dotShape';
 import { useGroundTone } from './groupTone';
 
 const TONES = {
@@ -34,7 +35,7 @@ export function Pill({ tone, children, off = false }) {
         opacity: off ? alpha.muted : 1,
       }}
     >
-      {dot ? <View style={{ width: dotSize, height: dotSize, borderRadius: dotSize / 2, backgroundColor: dot }} /> : null}
+      {dot ? <View style={{ ...dotShape('sm'), backgroundColor: dot }} /> : null}
       <Text
         style={{
           fontFamily: fonts.monoMedium,

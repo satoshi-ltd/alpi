@@ -121,8 +121,8 @@ vi.mock('../src/components/Toast', () => ({ useToast: () => vi.fn() }));
 vi.mock('../src/features/chat/Bubble', () => ({ WorkgroupMessage: () => null }));
 vi.mock('../src/features/chat/ChatSkeleton', () => ({ ChatSkeleton: () => React.createElement('div', { 'data-skeleton': 'wg' }) }));
 vi.mock('../src/features/chat/Composer', () => ({
-  Composer: ({ disabled, placeholder }) =>
-    React.createElement('div', { 'data-composer': placeholder, 'data-disabled': String(!!disabled) }),
+  Composer: ({ disabled, placeholder, onResume }) =>
+    React.createElement('div', { 'data-composer': placeholder, 'data-disabled': String(!!disabled), 'data-resume': String(!!onResume) }),
 }));
 vi.mock('../src/features/chat/MarkerCard', () => ({ MarkerCard: () => null }));
 vi.mock('../src/features/chat/MessageActionsSheet', () => ({ MessageActionsSheet: () => null }));
@@ -211,6 +211,12 @@ describe('Workgroup header menu', () => {
     openMenu();
     expect(sheet()).toBeTruthy();
     expect(h.push).not.toHaveBeenCalled();
+  });
+
+  it('titles the sheet with the bare workgroup name, a hash belongs to phases', () => {
+    render(<WorkgroupChat />);
+    openMenu();
+    expect(sheet().getAttribute('data-sheet')).toBe('alpha');
   });
 
   it('carries the workgroup actions with the workgroup noun', () => {
@@ -405,6 +411,15 @@ describe('Workgroup task-state staleness', () => {
     render(<WorkgroupChat />);
     fireEvent.click(document.querySelector('[data-banner="warning"] [data-banner-action="Resume"]'));
     expect(h.call).toHaveBeenCalledWith('host.workgroup.action', { profile: 'doc', wg_id: 'alpha', action: 'resume' });
+  });
+
+  it('keeps Resume in the banner only while the composer stays disabled', () => {
+    h.wg = { ...WG, paused: true };
+    render(<WorkgroupChat />);
+    expect(document.querySelectorAll('[data-banner-action="Resume"]')).toHaveLength(1);
+    const composer = document.querySelector('[data-composer]');
+    expect(composer.getAttribute('data-disabled')).toBe('true');
+    expect(composer.getAttribute('data-resume')).toBe('false');
   });
 
   it('orders the warning above the blocked and paused banners, as desktop orders them', () => {

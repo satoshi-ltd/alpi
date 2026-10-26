@@ -10,6 +10,7 @@ import { SkeletonReader, SkeletonRows } from "../primitives/Skeleton.jsx";
 import styles from "./SkillsModal.module.css";
 import { skillBanner, skillItem, skillWord } from "../../../common/attention.mjs";
 import { EMPTY } from "../../../common/emptyCopy.mjs";
+import { statusDot, statusKind } from "../lib/statusVocab.js";
 import { skillFileIcon } from "../../../common/fileKind.mjs";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -266,8 +267,8 @@ export function SkillsPanel({ open = true, profile, connectionId, owner = null, 
 }
 
 function StatusDot({ status }) {
-  const tone = status === "active" ? styles.dotActive
-    : status === "invalid" ? styles.dotInvalid : styles.dotInactive;
+  const dot = statusDot(status);
+  const tone = dot === "filled" ? styles.dotActive : dot === "red" ? styles.dotInvalid : styles.dotInactive;
   return <span aria-hidden className={`${styles.dot} ${tone}`} />;
 }
 
@@ -344,8 +345,9 @@ function DetailPane({ detail, selectedPath, openDirs, onToggleDir, onSelectFile,
 
 function StatusPill({ status, reason }) {
   const label = status === "active" ? "active" : status === "invalid" ? "invalid" : "inactive";
+  const kind = statusKind(status);
   return (
-    <span className={styles.status} data-status={label} title={status === "active" ? undefined : reason || undefined}>
+    <span className={styles.status} data-status={label} data-kind={kind} title={status === "active" ? undefined : reason || undefined}>
       <StatusDot status={status} />
       {label}
     </span>
@@ -502,7 +504,7 @@ function FileViewer({ file, loading }) {
   if (kind === "binary") {
     return (
       <div className={styles.viewerBinary}>
-        <Icon name={file.name ? fileIconName(file) : "file"} size="lg" />
+        <Icon name={file.name ? fileIconName(file) : "file"} size="md" />
         <span>binary · {formatBytes(file.size)}</span>
       </div>
     );

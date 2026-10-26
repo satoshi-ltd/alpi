@@ -8,9 +8,7 @@ import {
   MAX_TEXT_SCALE,
   MIN_TEXT_SCALE,
   scaleFontSizes,
-  stepTextScale,
   TEXT_SCALES,
-  textScaleLabel,
 } from './textScale';
 import { fontSizes } from './tokens';
 
@@ -52,31 +50,6 @@ describe('text scale steps', () => {
     expect(clampTextScale(1.2)).toBe(1.15);
   });
 
-  it('steps one notch at a time and stops at the ends', () => {
-    expect(stepTextScale(1, 1)).toBe(1.15);
-    expect(stepTextScale(1, -1)).toBe(0.9);
-    expect(stepTextScale(MIN_TEXT_SCALE, -1)).toBe(MIN_TEXT_SCALE);
-    expect(stepTextScale(MAX_TEXT_SCALE, 1)).toBe(MAX_TEXT_SCALE);
-  });
-
-  it('walks the whole scale in both directions without drift', () => {
-    let scale = MIN_TEXT_SCALE;
-    for (let i = 0; i < TEXT_SCALES.length + 2; i += 1) scale = stepTextScale(scale, 1);
-    expect(scale).toBe(MAX_TEXT_SCALE);
-    for (let i = 0; i < TEXT_SCALES.length + 2; i += 1) scale = stepTextScale(scale, -1);
-    expect(scale).toBe(MIN_TEXT_SCALE);
-  });
-
-  it('returns to the default on a zero direction, mirroring desktop cmd-0', () => {
-    expect(stepTextScale(MAX_TEXT_SCALE, 0)).toBe(DEFAULT_TEXT_SCALE);
-    expect(stepTextScale(MIN_TEXT_SCALE, 0)).toBe(DEFAULT_TEXT_SCALE);
-  });
-
-  it('names every step, including one reached from a stored off-grid value', () => {
-    expect(textScaleLabel(1)).toBe('Default');
-    expect(textScaleLabel(MAX_TEXT_SCALE)).toBe('Largest');
-    expect(textScaleLabel('garbage')).toBe('Default');
-  });
 });
 
 describe('scaleFontSizes', () => {

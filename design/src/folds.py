@@ -153,6 +153,30 @@ _SHAPES = _COMMON["shapes"]
 SHAPES = {name: (lambda name=name: [([tuple(p) for p in f["points"]], f["tone"]) for f in _SHAPES[name]]) for name in _SHAPES}
 
 
+@lru_cache(maxsize=None)
+def alpaca_tonal():
+    script = (
+        f"import {{alpacaTones, TONAL_MIN_SIZE}} from {json.dumps(os.path.join(COMMON, 'alpacaTones.mjs'))};"
+        "process.stdout.write(JSON.stringify({min: TONAL_MIN_SIZE, light: alpacaTones('light'), dark: alpacaTones('dark')}));"
+    )
+    return json.loads(subprocess.run(["node", "--input-type=module", "-e", script], capture_output=True, text=True, check=True).stdout)
+
+
+@lru_cache(maxsize=None)
+def alpaca_drawn(slot):
+    script = (
+        f"import {{alpacaDrawnSize}} from {json.dumps(os.path.join(COMMON, 'folds.mjs'))};"
+        f"process.stdout.write(String(alpacaDrawnSize({int(slot)})));"
+    )
+    return int(subprocess.run(["node", "--input-type=module", "-e", script], capture_output=True, text=True, check=True).stdout)
+
+
+def tonal_for(ink, size):
+    data = alpaca_tonal()
+    mode = {"#14110c": "light", "#f3efe6": "dark"}.get(ink.lower())
+    return data[mode] if mode and size >= data["min"] else None
+
+
 def alpaca_facets():
     with open(ALPACA_SVG) as f:
         svg = f.read()
@@ -205,6 +229,8 @@ def _poly(pts, fill, extra=""):
 
 def fold_body(form, accent, size=64, facet_attrs=None, fit=True):
     palette = tones(accent)
+    if form == "alpaca":
+        palette = tonal_for(accent, size) or palette
     shapes = facets(form, fit)
     gap = gap_for(form, size)
     parts = []

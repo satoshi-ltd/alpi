@@ -10,7 +10,7 @@ export function Eyebrow({ color, style, children, ...rest }) {
       fontFamily: fonts.monoMedium,
       fontSize: fontSizes.xs,
       lineHeight: fontSizes.xs * lineHeights.tight,
-      letterSpacing: fontSizes.xs * tracking.wide,
+      letterSpacing: fontSizes.xs * tracking.eyebrow,
       textTransform: 'uppercase',
       color: color ?? colors.ink3,
     },

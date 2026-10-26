@@ -12,18 +12,18 @@ const CLOSE_CLASS = {
 function MarkerIcon({ variant, stale, closeKind }) {
   if (variant === "done") {
     if (closeKind === "blocked") {
-      return <SkipIcon style={{ width: 11, height: 11, strokeWidth: 2 }} />;
+      return <SkipIcon size="sm" />;
     }
     if (closeKind === "skipped" || closeKind === "preempted") {
-      return <XIcon style={{ width: 11, height: 11, strokeWidth: 2 }} />;
+      return <XIcon size="sm" />;
     }
-    return <CheckIcon style={{ width: 11, height: 11, strokeWidth: 2.2 }} />;
+    return <CheckIcon size="sm" />;
   }
   if (variant === "working") {
     return stale ? <span className={styles.bullet} /> : <Dot pulse color="currentColor" />;
   }
   if (variant === "skip") {
-    return <SkipIcon style={{ width: 11, height: 11, strokeWidth: 2 }} />;
+    return <SkipIcon size="sm" />;
   }
   return <span className={styles.bullet} />;
 }

@@ -28,7 +28,7 @@ vi.mock('../../theme/ThemeContext', () => ({
     colors: { bgElev: '#fff', ink: '#000', ink3: '#666', line: '#eee', selected: '#ddd' },
     fonts: { mono: 'GeistMono_400Regular', sans: { regular: 'Geist_400Regular' } },
     fontSizes: { sm: 12, md: 14 },
-    shadow: { float: { borderWidth: 1, borderColor: '#token-edge' } },
+    shadow: { popover: { borderWidth: 1, borderColor: '#token-edge' } },
   }),
 }));
 

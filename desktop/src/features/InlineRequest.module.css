@@ -1,18 +1,13 @@
 .card {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--sp-8);
   width: 100%;
-  padding: var(--space-5) var(--space-6);
-  border: 1px solid color-mix(in srgb, var(--c-warning) 60%, transparent);
+  padding: var(--sp-12) var(--sp-16);
   border-radius: var(--r-xs);
-  background: color-mix(in srgb, var(--c-warning) 8%, var(--bg-pane));
+  background: var(--card);
+  box-shadow: var(--ring-ctrl);
   animation: cardIn var(--dur-2, 200ms) var(--ease) both;
-}
-
-.dangerous {
-  border-color: color-mix(in srgb, var(--c-danger) 60%, transparent);
-  background: color-mix(in srgb, var(--c-danger) 7%, var(--bg-pane));
 }
 
 @keyframes cardIn {
@@ -23,7 +18,7 @@
 .head {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--sp-8);
   min-width: 0;
 }
 
@@ -35,7 +30,7 @@
   flex: 1;
   min-width: 0;
   font-family: var(--font-sans);
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
   font-weight: var(--fw-semibold);
   color: var(--ink);
 }
@@ -43,7 +38,7 @@
 .countdown {
   flex: none;
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
 }
 
@@ -52,7 +47,7 @@
   max-height: 160px;
   overflow: auto;
   font-family: var(--font-mono);
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
   line-height: var(--lh-relaxed);
   color: var(--ink);
   white-space: pre-wrap;
@@ -61,7 +56,7 @@
 
 .cwd {
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
   overflow-wrap: anywhere;
 }
@@ -70,19 +65,19 @@
 .choices {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3);
+  gap: var(--sp-8);
 }
 
 .other {
   display: flex;
   align-items: flex-end;
-  gap: var(--space-3);
+  gap: var(--sp-8);
 }
 
 .otherInput {
   flex: 1;
   min-width: 0;
-  padding: var(--space-3) var(--space-5);
+  padding: var(--sp-8) var(--sp-12);
   border: .5px solid transparent;
   border-radius: var(--r-xs);
   background: var(--well);
@@ -100,7 +95,7 @@
 
 .error {
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--c-danger-text);
 }
 

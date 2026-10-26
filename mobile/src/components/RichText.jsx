@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { space, lineHeights, radii, typography } from '../theme/tokens';
 
-import { SheetClose } from './SheetClose';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SHEET_CLOSE_BLEED, SheetClose } from './SheetClose';
 import { Spinner } from './Spinner';
 import { segmentBlocks } from '../lib/markdownBlocks';
 import { useCachedImage } from '../hooks/useCachedImage';
@@ -56,12 +57,7 @@ function MarkdownImage({ path, alt, note, profile, theme }) {
           accessibilityLabel="Close image"
           style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', alignItems: 'center', justifyContent: 'center', padding: space.s5 }}
         >
-          <SheetClose
-            onPress={() => setOpen(false)}
-            color="rgba(255,255,255,0.82)"
-            hint="Dismisses the image — you can also tap the backdrop"
-            style={{ position: 'absolute', top: space.s11, right: space.s7 }}
-          />
+          <LightboxClose onPress={() => setOpen(false)} />
           {uri ? <Image source={{ uri }} style={{ width: '100%', height: '80%' }} resizeMode="contain" /> : null}
           {caption ? (
             <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: 'rgba(255,255,255,0.82)', marginTop: space.s4 }}>
@@ -71,6 +67,18 @@ function MarkdownImage({ path, alt, note, profile, theme }) {
         </Pressable>
       </Modal>
     </View>
+  );
+}
+
+function LightboxClose({ onPress }) {
+  const insets = useSafeAreaInsets();
+  return (
+    <SheetClose
+      onPress={onPress}
+      color="rgba(255,255,255,0.82)"
+      hint="Dismisses the image — you can also tap the backdrop"
+      style={{ position: 'absolute', top: insets.top + space.s3 + SHEET_CLOSE_BLEED, right: space.s7 }}
+    />
   );
 }
 

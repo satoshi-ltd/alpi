@@ -1,10 +1,9 @@
 import { Text, View } from 'react-native';
 
+import { dotShape } from '../../components/dotShape';
 import { lineHeights, space } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeContext';
 import { mixHex } from '../../../../common/color.mjs';
-
-const DOT = 6;
 
 export const STATE_TEXT = { 'needs-you': 'needs you', failed: 'failed', working: 'working' };
 
@@ -15,7 +14,7 @@ export function stateColor(state, colors, accent) {
 }
 
 function StateDot({ color }) {
-  return <View testID="state-dot" style={{ width: DOT, height: DOT, borderRadius: DOT / 2, backgroundColor: color }} />;
+  return <View testID="state-dot" style={{ ...dotShape('sm'), backgroundColor: color }} />;
 }
 
 export function RowState({ state, phases, color: accent }) {

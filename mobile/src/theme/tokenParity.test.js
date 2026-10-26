@@ -30,6 +30,9 @@ const EXPECTED_DIVERGENCES = {
   'light.bg': '#ffffff',
   'light.bgInput': '#f2f2f2',
   'dark.bgInput': '#1f1f1f',
+  'light.field': '#ececec',
+  'dark.card': '#151515',
+  'dark.field': '#1f1f1f',
 };
 
 function paletteMismatches() {

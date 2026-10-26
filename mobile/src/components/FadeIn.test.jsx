@@ -22,11 +22,11 @@ beforeEach(() => Object.assign(h, { reduce: false, init: [], set: [], timings: [
 afterEach(cleanup);
 
 describe('FadeIn', () => {
-  it('fades content in from 0 to 1 over 120 ms on the native driver', () => {
+  it('fades content in from 0 to 1 over the 180 ms enter on the native driver', () => {
     const { container } = render(<FadeIn>content</FadeIn>);
     expect(container.textContent).toBe('content');
     expect(h.init).toEqual([0]);
-    expect(h.timings).toEqual([{ toValue: 1, duration: 120, useNativeDriver: true }]);
+    expect(h.timings).toEqual([{ toValue: 1, duration: 180, useNativeDriver: true }]);
     expect(h.started).toBe(1);
   });
 

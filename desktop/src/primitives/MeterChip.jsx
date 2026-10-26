@@ -11,11 +11,12 @@ export default function MeterChip({
   className = "",
 }) {
   const p = Math.max(0, Math.min(1, pct));
+  const drawn = p >= 0.01;
   const chip = (
     <span className={`ds-meter ${className}`.trim()}>
       <span className="val">{value}</span>
-      <Bar pct={p} color={color} />
-      {showPercent && <span className="pct">{Math.round(p * 100)}%</span>}
+      {drawn && <Bar pct={p} color={color} />}
+      {showPercent && <span className="pct">{drawn ? `${Math.round(p * 100)}%` : "—"}</span>}
     </span>
   );
   if (!tip) return chip;

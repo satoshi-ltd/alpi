@@ -16,10 +16,12 @@ import { skillFileIcon } from '../../../../common/fileKind.mjs';
 import { useTheme } from '../../theme/ThemeContext';
 import { Busy } from '../../components/Busy';
 import { useBusyVisible } from '../../hooks/useBusyVisible';
+import { detailTitleStyle } from '../../components/detailTitle';
 
 export function SkillDetail({ profile: id, name, category, embedded = false, onBack }) {
   const router = useRouter();
-  const { colors, fonts, fontSizes } = useTheme();
+  const theme = useTheme();
+  const { colors, fonts, fontSizes } = theme;
   const { call } = useEndpoint();
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -74,7 +76,7 @@ export function SkillDetail({ profile: id, name, category, embedded = false, onB
         <ScrollView contentContainerStyle={{ padding: space.s8, gap: space.s6, paddingBottom: space.s10 }}>
           {banner ? <AlertBanner {...banner} /> : null}
           <View style={{ gap: space.s3 }}>
-            <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.xl, color: colors.ink }}>{detail.name ?? String(name)}</Text>
+            <Text accessibilityRole="header" style={detailTitleStyle(theme)}>{detail.name ?? String(name)}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s4, flexWrap: 'wrap' }}>
               <StatusWord word={status} on={status === 'active'} danger={status === 'invalid'} />
               {detail.version ? <Text style={meta}>v{detail.version}</Text> : null}
@@ -134,10 +136,10 @@ export function SkillDetail({ profile: id, name, category, embedded = false, onB
                     }) : undefined}
                     style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3, minHeight: 44, paddingHorizontal: space.s5, borderTopWidth: i ? 0.5 : 0, borderTopColor: colors.line }}
                   >
-                    <Icon name={skillFileIcon(f)} size="sm" color={colors.ink2} />
+                    <Icon name={skillFileIcon(f)} size="xs" color={colors.ink2} />
                     <Text style={{ flex: 1, fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink }} numberOfLines={1}>{f.path}</Text>
                     <Text style={meta}>{f.locked ? `${f.count} · ${f.mode ?? ''}` : f.kind === 'file' ? fileSize(f.size) : ''}</Text>
-                    {openable ? <Icon name="chevron-right" size="sm" color={colors.ink4 ?? colors.ink3} /> : null}
+                    {openable ? <Icon name="chevron-right" size="xs" color={colors.ink4 ?? colors.ink3} /> : null}
                   </Wrapper>
                 );
               })}

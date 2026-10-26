@@ -8,6 +8,7 @@ vi.mock('react-native', () => {
   const plain = ({ style, numberOfLines, accessibilityRole, accessibilityState, accessibilityLabel, ...rest }) => ({
     ...rest,
     'data-lines': numberOfLines,
+    'data-min-h': style?.minHeight,
     'aria-label': accessibilityLabel,
   });
   const View = ({ children, ...p }) => React.createElement('div', plain(p), children);
@@ -40,6 +41,11 @@ describe('MemberCard', () => {
     expect(screen.getByText('Builds the site.').getAttribute('data-lines')).toBeNull();
     fireEvent.click(screen.getByLabelText('More for @pixel'));
     expect(onMore).toHaveBeenCalled();
+  });
+
+  it('stands each member at least 64 pt tall so a card holds one rhythm', () => {
+    const { container } = render(<MemberCard label="@pixel" />);
+    expect(container.firstChild.getAttribute('data-min-h')).toBe('64');
   });
 
   it('says the hub routes every phase instead of owning one', () => {

@@ -1,16 +1,23 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, Keyboard, Modal, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { mobile, radii, space } from '../theme/tokens';
+import { lineHeights, mobile, motion, radii, space } from '../theme/tokens';
 
+import { pulseSteps } from '../lib/pulse';
 import { useReduceMotion } from '../lib/reduceMotion';
+import { dotShape } from './dotShape';
 import { Icon } from './Icon';
 import { useTheme } from '../theme/ThemeContext';
 import { plainError } from '../../../common/plainError.mjs';
 
+const enterEasing = () => Easing.bezier(...motion.easeEnter);
+const exitEasing = () => Easing.bezier(...motion.easeExit);
+
 export const TOAST_MS = { info: 2800, undo: 5000, error: 6000 };
 export const TOAST_CLEARANCE = 72;
 const OFFSCREEN = 140;
+export const BUTTON_LINE = mobile.tap - 2 * space.s4;
+export const firstLineHeight = (fontSize, hasButton) => (hasButton ? BUTTON_LINE : Math.round(fontSize * lineHeights.cozy));
 
 const ToastContext = createContext(null);
 
@@ -50,8 +57,8 @@ export function ToastProvider({ children }) {
       return;
     }
     Animated.parallel([
-      Animated.timing(slide, { toValue: OFFSCREEN, duration: 200, useNativeDriver: true }),
-      Animated.timing(fade, { toValue: 0, duration: 200, useNativeDriver: true }),
+      Animated.timing(slide, { toValue: OFFSCREEN, duration: motion.exit, easing: exitEasing(), useNativeDriver: true }),
+      Animated.timing(fade, { toValue: 0, duration: motion.exit, easing: exitEasing(), useNativeDriver: true }),
     ]).start(({ finished }) => { if (finished) setToast(null); });
   }, [slide, fade]);
 
@@ -67,8 +74,8 @@ export function ToastProvider({ children }) {
         fade.setValue(1);
       } else {
         Animated.parallel([
-          Animated.timing(slide, { toValue: 0, duration: 220, useNativeDriver: true }),
-          Animated.timing(fade, { toValue: 1, duration: 220, useNativeDriver: true }),
+          Animated.timing(slide, { toValue: 0, duration: motion.enter, easing: enterEasing(), useNativeDriver: true }),
+          Animated.timing(fade, { toValue: 1, duration: motion.enter, easing: enterEasing(), useNativeDriver: true }),
         ]).start();
       }
       const undoable = !!(next?.action && next?.onAction);
@@ -103,12 +110,7 @@ function ToastView({ toast, slide, fade, onDismiss }) {
   const reduceMotion = useReduceMotion();
   useEffect(() => {
     if (kind === 'info' || reduceMotion) return undefined;
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 0.4, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ]),
-    );
+    const loop = Animated.loop(Animated.sequence(pulseSteps(pulse)));
     loop.start();
     return () => loop.stop();
   }, [kind, pulse, reduceMotion]);
@@ -129,6 +131,7 @@ function ToastView({ toast, slide, fade, onDismiss }) {
     onDismiss();
     toast.onRetry();
   };
+  const firstLine = firstLineHeight(fontSizes.md, actionable || error);
   const textButton = (label, onPress) => (
     <Pressable
       onPress={onPress}
@@ -175,7 +178,7 @@ function ToastView({ toast, slide, fade, onDismiss }) {
               padding: space.s6,
               backgroundColor: colors.bgPane,
               borderRadius: radii.xs,
-              ...shadow.float,
+              ...shadow.toast,
               transform: [{ translateY: slide }],
               opacity: fade,
               flexDirection: 'row',
@@ -183,19 +186,12 @@ function ToastView({ toast, slide, fade, onDismiss }) {
               gap: space.s4,
             }}
           >
-            <Animated.View
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: radii.xs,
-                backgroundColor: dotColor,
-                marginTop: toast.title ? 7 : 6,
-                opacity: pulse,
-              }}
-            />
+            <View style={{ height: firstLine, justifyContent: 'center' }}>
+              <Animated.View style={{ ...dotShape('md'), backgroundColor: dotColor, opacity: pulse }} />
+            </View>
             <View style={{ flex: 1, minWidth: 0 }}>
               {toast.title ? (
-                <Text numberOfLines={1} style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, color: colors.ink }}>
+                <Text numberOfLines={1} style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, lineHeight: firstLine, color: colors.ink }}>
                   {toast.title}
                 </Text>
               ) : null}
@@ -205,8 +201,9 @@ function ToastView({ toast, slide, fade, onDismiss }) {
                   style={{
                     fontFamily: fonts.sans.regular,
                     fontSize: fontSizes.md,
+                    lineHeight: toast.title ? Math.round(fontSizes.md * lineHeights.cozy) : firstLine,
                     color: colors.ink2,
-                    marginTop: toast.title ? 4 : 0,
+                    marginTop: toast.title ? space.s1 : 0,
                   }}
                 >
                   {toast.message}

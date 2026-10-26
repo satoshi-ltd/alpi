@@ -396,6 +396,7 @@ def _scheduled(profiles: list[tuple[str, Path]]) -> list[dict[str, Any]]:
                 "next_fire": nf.isoformat() if nf else None,
                 "last_run_at": job.get("last_run_at"),
                 "last_run_status": job.get("last_run_status"),
+                "last_ok_at": job.get("last_ok_at"),
                 "_at": nf.timestamp() if nf else float("inf"),
             })
     rows.sort(key=lambda r: r["_at"])

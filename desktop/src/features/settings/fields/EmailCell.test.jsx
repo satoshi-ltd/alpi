@@ -97,7 +97,7 @@ describe("EmailCell multi-account", () => {
         onSnapshotRefresh={onSnapshotRefresh}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "+ Add account" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Add account" }).at(-1));
     fireEvent.change(await screen.findByPlaceholderText("you@domain.com"), {
       target: { value: "me@x.com" },
     });
@@ -110,7 +110,7 @@ describe("EmailCell multi-account", () => {
     fireEvent.change(screen.getByPlaceholderText("smtp.gmail.com"), {
       target: { value: "smtp.x" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Add account" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Add account" }).at(-1));
 
     await waitFor(() => {
       expect(invoke).toHaveBeenCalledWith("email_add", expect.objectContaining({
@@ -153,7 +153,7 @@ describe("EmailCell multi-account", () => {
       return null;
     });
     render(<EmailCell profile={profile} connectionId="casa" />);
-    fireEvent.click(await screen.findByRole("button", { name: "+ Add account" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add account" }));
     expect(await screen.findByText("Add email account")).toBeInTheDocument();
 
     fireEvent.change(await screen.findByPlaceholderText("you@domain.com"), {
@@ -170,7 +170,7 @@ describe("EmailCell multi-account", () => {
       target: { value: "smtp.x" },
     });
     fireEvent.change(screen.getByPlaceholderText("587"), { target: { value: "587" } });
-    fireEvent.click(screen.getByRole("button", { name: "Add account" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Add account" }).at(-1));
 
     await waitFor(() => {
       expect(invoke).toHaveBeenCalledWith("email_add", {
@@ -193,7 +193,7 @@ describe("EmailCell multi-account", () => {
       return null;
     });
     render(<EmailCell profile={profile} connectionId="casa" />);
-    fireEvent.click(await screen.findByRole("button", { name: "+ Add account" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add account" }));
     fireEvent.click(await screen.findByRole("button", { name: "Gmail" }));
 
     fireEvent.change(await screen.findByPlaceholderText("you@gmail.com"), {
@@ -401,7 +401,7 @@ describe("EmailCell multi-account", () => {
     });
 
     render(<EmailCell profile={profile} connectionId="mirai" />);
-    fireEvent.click(await screen.findByRole("button", { name: "+ Add account" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add account" }));
     fireEvent.click(await screen.findByRole("button", { name: "Gmail" }));
     fireEvent.change(await screen.findByPlaceholderText("you@gmail.com"), {
       target: { value: "new@gmail.com" },

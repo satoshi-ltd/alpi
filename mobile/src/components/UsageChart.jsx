@@ -25,10 +25,9 @@ const RING_W = 1.5;
 const IN_TINT = 0.24;
 
 function Stat({ label, children, end = false }) {
-  const { fonts, fontSizes } = useTheme();
   return (
     <View style={{ flex: 1, minWidth: 0, alignItems: end ? 'flex-end' : 'flex-start' }}>
-      <Eyebrow style={{ fontFamily: fonts.mono, letterSpacing: fontSizes.xs * tracking.wider, marginBottom: space.s2 }}>
+      <Eyebrow style={{ marginBottom: space.s2 }}>
         {label}
       </Eyebrow>
       {children}

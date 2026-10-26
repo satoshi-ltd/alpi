@@ -96,7 +96,7 @@ export function ConnectionSheet({ open, onClose }) {
                         justifyContent: 'center',
                       }}
                     >
-                      <Icon name={c.kind === 'remote' ? 'server' : 'cpu'} size={20} color={colors.ink2} />
+                      <Icon name={c.kind === 'remote' ? 'server' : 'cpu'} size="md" color={colors.ink2} />
                       <View style={{ position: 'absolute', bottom: 2, right: 2 }}>
                         <Dot color={statusColor(status, colors)} />
                       </View>
@@ -139,14 +139,14 @@ export function ConnectionSheet({ open, onClose }) {
                   ? [{
                       id: 'update',
                       label: `Update to v${updateState.get(target.id)}`,
-                      icon: <Icon name="download" size={20} color={colors.ink2} />,
+                      icon: <Icon name="download" size="md" color={colors.ink2} />,
                       onPress: () => doUpdate(target),
                     }]
                   : []),
                 {
                   id: 'rename',
                   label: 'Rename',
-                  icon: <Icon name="edit" size={20} color={colors.ink2} />,
+                  icon: <Icon name="edit" size="md" color={colors.ink2} />,
                   onPress: () => {
                     const t = target;
                     setTarget(null);
@@ -157,7 +157,7 @@ export function ConnectionSheet({ open, onClose }) {
                   id: 'forget',
                   label: 'Forget',
                   danger: true,
-                  icon: <Icon name="x" size={20} color={colors.danger} />,
+                  icon: <Icon name="x" size="md" color={colors.danger} />,
                   onPress: () => {
                     const t = target;
                     setTarget(null);

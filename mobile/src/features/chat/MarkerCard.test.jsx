@@ -51,8 +51,9 @@ vi.mock('../../components/RichText', () => ({
 
 import { BUBBLE_MAX_PANE } from '../../lib/panes';
 import { ICONS } from '../../../../common/iconPaths.mjs';
+import { mixHex } from '../../../../common/color.mjs';
 import { PaneContext } from '../../nav/PaneContext';
-import { iconSizes } from '../../theme/tokens';
+import { iconSizes, iconStrokeFor } from '../../theme/tokens';
 import { MarkerCard } from './MarkerCard';
 
 function caps(container) {
@@ -62,11 +63,11 @@ function caps(container) {
 }
 
 describe('MarkerCard typography', () => {
-  it('draws the done tick with the icon set, at desktop MarkerCard weight', () => {
+  it('draws the done tick with the icon set, at the constant icon stroke', () => {
     const { container } = render(<MarkerCard variant="done" hubColor="#0af0af" seq={12} speakerName="scout" title="shipped" />);
     const tick = container.querySelector('svg');
     expect(tick.getAttribute('width')).toBe(String(iconSizes.xs));
-    expect(tick.getAttribute('stroke-width')).toBe('2.2');
+    expect(Number(tick.getAttribute('stroke-width'))).toBeCloseTo(iconStrokeFor(iconSizes.xs), 5);
     expect(tick.querySelector('path').getAttribute('d')).toBe(ICONS.check[0][1].d);
   });
 
@@ -148,5 +149,31 @@ describe('MarkerCard long press', () => {
     rerender(<MarkerCard variant="done" speakerName="lingo" onLongPress={onLongPress}>Finished.</MarkerCard>);
     fireEvent.contextMenu(container.querySelector('[data-pressable]'));
     expect(onLongPress).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('MarkerCard calm tint and lane', () => {
+  const cardTint = (container) =>
+    [...container.querySelectorAll('div')].map((n) => JSON.parse(n.getAttribute('data-style') || '{}')).find((st) => st.backgroundColor)?.backgroundColor;
+  const lane = (container) => JSON.parse(container.firstChild.getAttribute('data-style'));
+
+  it.each(['task', 'working', 'done'])('tints %s at 0.10 of the speaker accent over the pane', (variant) => {
+    const { container } = render(<MarkerCard variant={variant} hubColor="#0af0af" title="x" />);
+    expect(cardTint(container)).toBe(mixHex('#0af0af', 0.1, '#ffffff'));
+  });
+
+  it('tints skip at 0.12 of the warning colour', () => {
+    const { container } = render(<MarkerCard variant="skip" hubColor="#0af0af" title="x" />);
+    expect(cardTint(container)).toBe(mixHex('#cc8800', 0.12, '#ffffff'));
+  });
+
+  it.each(['task', 'working', 'done', 'skip'])('puts %s on the one left lane, whoever spoke', (variant) => {
+    const { container } = render(<MarkerCard variant={variant} hubColor="#0af0af" isFromHub side="right" title="x" />);
+    expect(lane(container)).toMatchObject({ alignItems: 'flex-start', paddingHorizontal: 16 });
+  });
+
+  it('carries the state in the eyebrow word', () => {
+    render(<MarkerCard variant="done" hubColor="#0af0af" title="x" />);
+    expect(screen.getByText('DONE')).toBeTruthy();
   });
 });

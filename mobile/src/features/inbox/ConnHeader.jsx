@@ -1,9 +1,10 @@
 import { Pressable, Text, View } from 'react-native';
 import { lineHeights, mobile, radii, space } from '../../theme/tokens';
 
+import { dotShape } from '../../components/dotShape';
 import { Eyebrow } from '../../components/Eyebrow';
 import { Icon } from '../../components/Icon';
-import { CHROME_BTN, tapSlop } from '../../lib/panes';
+import { CHROME_BTN, CONN_EDGE_NUDGE, tapSlop } from '../../lib/panes';
 import { usePane } from '../../nav/PaneContext';
 import { useTheme } from '../../theme/ThemeContext';
 
@@ -27,6 +28,7 @@ export function ConnHeader({
   const { colors, fonts, fontSizes } = useTheme();
   const { twoPane } = usePane();
   const word = statusWord(status);
+  const online = word === 'online';
   const [statusColor, statusInk] =
     status === 'online' || status === 'connected'
       ? [colors.success, colors.successText ?? colors.ink2]
@@ -70,7 +72,21 @@ export function ConnHeader({
 
   const identity = (
     <>
-      <Icon name="cpu" size="md" color={colors.ink2} />
+      <View style={{ position: 'relative' }}>
+        <Icon name="cpu" size="md" color={colors.ink2} />
+        <View
+          testID="conn-status-dot"
+          style={{
+            ...dotShape('md'),
+            position: 'absolute',
+            bottom: -space.s1 / 2,
+            right: -space.s1 / 2,
+            backgroundColor: statusColor,
+            borderWidth: 1.5,
+            borderColor: twoPane ? colors.bgSide : colors.bgElev,
+          }}
+        />
+      </View>
       <View style={{ flexDirection: 'column', minWidth: 0, flex: 1 }}>
         <Text
           numberOfLines={1}
@@ -85,15 +101,14 @@ export function ConnHeader({
           {host}
         </Text>
       </View>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2, flexShrink: 0 }}>
-        <View style={{ width: 8, height: 8, borderRadius: radii.xs, backgroundColor: statusColor }} />
+      {online ? null : (
         <Text
           numberOfLines={1}
-          style={{ fontFamily: fonts.sans.medium ?? fonts.sans.semibold, fontSize: fontSizes.sm ?? fontSizes.xs, color: statusInk }}
+          style={{ fontFamily: fonts.sans.medium ?? fonts.sans.semibold, fontSize: fontSizes.sm ?? fontSizes.xs, color: statusInk, flexShrink: 0 }}
         >
           {word}
         </Text>
-      </View>
+      )}
       <Icon name="chevron-down" size="xs" color={colors.ink3} />
     </>
   );
@@ -110,7 +125,7 @@ export function ConnHeader({
         borderBottomColor: colors.line,
       }}
     >
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', paddingRight: CONN_EDGE_NUDGE }}>
         <Eyebrow style={{ flex: 1 }}>Connection</Eyebrow>
         {onCollapse ? (
           <Pressable

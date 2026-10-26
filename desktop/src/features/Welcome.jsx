@@ -87,11 +87,11 @@ export default function Welcome({ localState, phase = "idle", error = null, onSt
         <h1 className={styles.title}>{phase === "install-failed" ? "alpi couldn't be installed" : "alpi didn't start"}</h1>
         {error ? <pre className={styles.error}>{error}</pre> : null}
         {phase === "install-failed"
-          ? <p className={styles.sub}>Check your internet connection, then try again.</p>
+          ? (error ? null : <p className={styles.sub}>Check your internet connection, then try again.</p>)
           : <><p className={styles.sub}>Start it from a terminal to see what it says:</p><Command value={START_COMMAND} /></>}
         <div className={styles.actions}>
-          <Button variant="secondary" onClick={phase === "install-failed" ? onInstall : onStart}>Retry</Button>
-          <Button variant="ghost" onClick={() => setElsewhere(true)}>Connect to another computer</Button>
+          <Button variant="secondary" size="lg" onClick={phase === "install-failed" ? onInstall : onStart}>Retry</Button>
+          <Button variant="ghost" size="lg" className={styles.ghostFlush} onClick={() => setElsewhere(true)}>Connect to another computer</Button>
         </div>
         {elsewhere ? <ConnectElsewhere onConnect={onConnect} autoFocus /> : null}
       </section>
@@ -105,8 +105,8 @@ export default function Welcome({ localState, phase = "idle", error = null, onSt
         <h1 className={styles.title}>alpi is installed but not running</h1>
         <p className={styles.sub}>Start it here, or connect to an alpi that runs somewhere else.</p>
         <div className={styles.actions}>
-          <Button variant="primary" onClick={onStart}>Start alpi</Button>
-          <Button variant="ghost" onClick={() => setElsewhere(true)}>Connect to another computer</Button>
+          <Button variant="primary" size="lg" onClick={onStart}>Start alpi</Button>
+          <Button variant="ghost" size="lg" className={styles.ghostFlush} onClick={() => setElsewhere(true)}>Connect to another computer</Button>
         </div>
         {elsewhere ? <ConnectElsewhere onConnect={onConnect} autoFocus /> : null}
       </section>
@@ -129,8 +129,8 @@ export default function Welcome({ localState, phase = "idle", error = null, onSt
             <h2 className={styles.choiceTitle}>Run alpi here</h2>
             <p className={styles.choiceSub}>Install alpi and its runtime here, then choose a model in Settings. Requires an internet connection.</p>
             <div className={styles.actions}>
-              <Button variant="primary" onClick={onInstall}>Install and start alpi</Button>
-              <Button variant="ghost" onClick={onCheckAgain}>Check again</Button>
+              <Button variant="primary" size="lg" onClick={onInstall}>Install and start alpi</Button>
+              <Button variant="ghost" size="lg" className={styles.ghostFlush} onClick={onCheckAgain}>Check again</Button>
             </div>
           </div>
         )}

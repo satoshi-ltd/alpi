@@ -28,6 +28,7 @@ import { PanelHeader } from '../profile/PanelHeader';
 import { StatusWord } from '../profile/StatusWord';
 import { changeDraft, chatWithDraft } from './drafts';
 import { useRunningJob } from './useRunningJob';
+import { detailTitleStyle } from '../../components/detailTitle';
 
 function Fact({ label, children }) {
   const { colors, fonts, fontSizes } = useTheme();
@@ -70,7 +71,8 @@ export function confirmWord(job) {
 export function JobDetail({ profile, jobId, embedded = false, onBack, onGone }) {
   const router = useRouter();
   const toast = useToast();
-  const { colors, fonts, fontSizes } = useTheme();
+  const theme = useTheme();
+  const { colors, fonts, fontSizes } = theme;
   const schedule = useScheduleList(profile);
   const { att } = useAttention(profile);
   const outputs = useOutputs({ profile });
@@ -148,15 +150,15 @@ export function JobDetail({ profile, jobId, embedded = false, onBack, onGone }) 
   const next = job && !job.paused ? formatNextFire(job.next_fire) : null;
   const moreButton = job ? (
     <Pressable accessibilityRole="button" accessibilityLabel="More" onPress={() => setMore(true)} style={{ width: mobile.tap, height: mobile.tap, alignItems: 'center', justifyContent: 'center' }}>
-      <Icon name="ellipsis" size="lg" color={colors.ink2} />
+      <Icon name="ellipsis" size="md" color={colors.ink2} />
     </Pressable>
   ) : null;
 
   const actions = job ? [
-    ...(lastOutput ? [{ id: 'output', label: 'Last output', detail: 'opens the notification', icon: <Icon name="file-text" size="lg" color={colors.ink2} />, onPress: () => { setMore(false); openOutput(lastOutput.profile ?? profile, lastOutput.id); } }] : []),
-    { id: 'copy', label: 'Copy job id', detail: String(job.id), icon: <Icon name="copy" size="lg" color={colors.ink2} />, onPress: async () => { setMore(false); if (await copyText(job.id)) toast({ message: 'Copied', kind: 'success' }); } },
+    ...(lastOutput ? [{ id: 'output', label: 'Last output', detail: 'opens the notification', icon: <Icon name="file-text" size="md" color={colors.ink2} />, onPress: () => { setMore(false); openOutput(lastOutput.profile ?? profile, lastOutput.id); } }] : []),
+    { id: 'copy', label: 'Copy job id', detail: String(job.id), icon: <Icon name="copy" size="md" color={colors.ink2} />, onPress: async () => { setMore(false); if (await copyText(job.id)) toast({ message: 'Copied', kind: 'success' }); } },
     // iOS drops a modal presented while the ActionSheet is still dismissing (~220ms).
-    { id: 'delete', label: 'Delete job…', danger: true, icon: <Icon name="trash" size="lg" color={colors.danger} />, onPress: () => { setMore(false); setTimeout(() => setConfirming(true), 350); } },
+    { id: 'delete', label: 'Delete job…', danger: true, icon: <Icon name="trash" size="md" color={colors.danger} />, onPress: () => { setMore(false); setTimeout(() => setConfirming(true), 350); } },
   ] : [];
 
   return (
@@ -178,7 +180,7 @@ export function JobDetail({ profile, jobId, embedded = false, onBack, onGone }) 
           {failed ? <AlertBanner {...banner} /> : null}
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space.s3 }}>
             <View style={{ flex: 1, gap: space.s3 }}>
-              <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.xl, color: colors.ink }}>{jobTitle(job)}</Text>
+              <Text accessibilityRole="header" style={detailTitleStyle(theme)}>{jobTitle(job)}</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s4, flexWrap: 'wrap' }}>
                 <StatusWord word={status.word} on={status.on} danger={status.danger} />
                 <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>{describeWhen(job)}</Text>
@@ -216,7 +218,7 @@ export function JobDetail({ profile, jobId, embedded = false, onBack, onGone }) 
               backgroundColor: pressed ? colors.selected : 'transparent',
             })}
           >
-            <Icon name="sparkle" size="sm" color={colors.ink2} />
+            <Icon name="sparkle" size="xs" color={colors.ink2} />
             <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.ink2 }}>Ask the agent to change this</Text>
           </Pressable>
           <View style={{ gap: space.s4 }}>

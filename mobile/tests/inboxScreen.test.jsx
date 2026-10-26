@@ -242,11 +242,10 @@ describe('Inbox screen launch', () => {
 });
 
 describe('Inbox screen footer', () => {
-  it('carries Settings, notifications and the version, in that order', () => {
+  it('carries Settings then notifications and no version', () => {
     render(<Index />);
-    const version = screen.getByText('v0.3.1');
     expect(settingsEntry().compareDocumentPosition(bellEntry()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(bellEntry().compareDocumentPosition(version) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText('v0.3.1')).toBeNull();
   });
 
   it('leaves the header with the connection and the search toggle alone', () => {
@@ -271,12 +270,11 @@ describe('Inbox screen footer', () => {
     expect(document.querySelector('[data-sheet]')).toBeNull();
   });
 
-  it('gives a member Settings and the version but no bell', () => {
+  it('gives a member Settings but no bell', () => {
     h.role = 'member';
     h.unread = 2;
     render(<Index />);
     expect(settingsEntry()).toBeTruthy();
-    expect(screen.getByText('v0.3.1')).toBeTruthy();
     expect(screen.queryByLabelText('Notifications')).toBeNull();
     expect(screen.queryByLabelText('Notifications · 2 unread')).toBeNull();
   });

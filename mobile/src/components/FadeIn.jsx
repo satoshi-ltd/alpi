@@ -2,8 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Animated } from 'react-native';
 
 import { useReduceMotion } from '../lib/reduceMotion';
-
-export const FADE_MS = 120;
+import { motion } from '../theme/tokens';
 
 export function FadeIn({ children, style, animate = true }) {
   const reduceMotion = useReduceMotion();
@@ -13,7 +12,7 @@ export function FadeIn({ children, style, animate = true }) {
       op.setValue(1);
       return undefined;
     }
-    const fade = Animated.timing(op, { toValue: 1, duration: FADE_MS, useNativeDriver: true });
+    const fade = Animated.timing(op, { toValue: 1, duration: motion.enter, useNativeDriver: true });
     fade.start();
     return () => fade.stop();
   }, [op, reduceMotion, animate]);

@@ -51,6 +51,7 @@ import {
 } from "./fields/alp.jsx";
 import { EmailCell } from "./fields/services.jsx";
 import { DaemonField } from "./fields/DaemonField.jsx";
+import { ThemeField } from "./fields/ThemeField.jsx";
 import { canSelfUpdate } from "../../../../common/updateHint.mjs";
 import {
   NetworkAddressField,
@@ -401,6 +402,11 @@ export default function ProfileDetail({
               />
             )}
           </Row>
+          {profile.name === "default" && (
+            <Row label="theme" keywords="light dark system appearance mode">
+              <ThemeField />
+            </Row>
+          )}
         </Section>
 
         {(usage.loading || showUsageSkeleton || usage.days.length > 0) && (
@@ -458,7 +464,7 @@ export default function ProfileDetail({
                     }
                   }}
                 >
-                  <CopyIcon style={{ width: 12, height: 12 }} />{" "}
+                  <CopyIcon size="sm" />{" "}
                   Copy
                 </ActionLink>
               </span>
@@ -564,7 +570,7 @@ export default function ProfileDetail({
           <VoiceField profile={profile} onSaved={onSaved} />
         </Section>
 
-        <Section title="MCP Servers" tooltip="external tool servers">
+        <Section title="MCP servers" tooltip="external tool servers">
           <McpField profile={profile} connectionId={activeConnection?.id ?? null} onSaved={onSaved} />
         </Section>
 
@@ -594,7 +600,7 @@ export default function ProfileDetail({
 
         {profile.name !== "default"
           && (activeConnection?.kind === "local" || activeConnection?.role === "admin") && (
-          <Section title="Danger Zone">
+          <Section title="Danger zone">
             <Row label="delete">
               <DeleteProfileAction
                 profile={profile}

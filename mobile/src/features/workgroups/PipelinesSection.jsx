@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { lineHeights, space } from '../../theme/tokens';
 
-import { RowGroup, SectionHeader } from '../../components/Row';
+import { RowGroup, RowSeparator, SectionHeader } from '../../components/Row';
 import { PhaseChip } from './PhaseChip';
 import { isLaunchless } from '../../lib/workgroupPipelines';
 import { chainChips, orderedPipelines, pipelineTrigger, runSummary, runSummaryLine } from '../../../../common/pipelinePhases.mjs';
@@ -76,9 +76,10 @@ export function PipelinesSection({ workgroup, run = null, profileOf = null }) {
             : `${EMPTY.noPipelines.title}. ${EMPTY.noPipelines.hint}`}
         </Note>
       ) : (
-        <View style={{ gap: space.s4 }}>
-          {chains.map((chain) => (
-            <RowGroup key={chain.key}>
+        <RowGroup>
+          {chains.map((chain, i) => (
+            <View key={chain.key}>
+              {i > 0 ? <RowSeparator /> : null}
               <View style={STYLES.head}>
                 <Text style={{ fontFamily: fonts.monoSemibold, fontSize: fontSizes.md, color: colors.ink }}>{chain.key}</Text>
                 <Text style={[STYLES.key, { fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }]}>
@@ -91,9 +92,9 @@ export function PipelinesSection({ workgroup, run = null, profileOf = null }) {
                 </Text>
               ) : null}
               <Phases chips={chainChips(chain.phases, workgroup?.phase_map, run)} profileOf={profileOf} />
-            </RowGroup>
+            </View>
           ))}
-        </View>
+        </RowGroup>
       )}
       {isLaunchless(workgroup) ? (
         <Note>{EMPTY.launchPipeline.title}. {EMPTY.launchPipeline.hint}</Note>

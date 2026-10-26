@@ -15,12 +15,12 @@
 }
 
 .titlebarSpacer {
-  height: 38px;
+  height: var(--titlebar-h);
   flex-shrink: 0;
 }
 
 .inner {
-  --sb-bleed: var(--space-5);
+  --sb-bleed: var(--sp-12);
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -29,11 +29,11 @@
 }
 
 .actions {
-  padding: var(--space-2) var(--space-5) var(--space-1);
+  padding: var(--sp-8) var(--sp-12) var(--sp-4);
 }
 
 .actionSection {
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--sp-8);
 }
 
 .connectionSlot {
@@ -43,17 +43,17 @@
 .nav {
   flex: 1;
   overflow: auto;
-  padding: 0 var(--space-5) var(--space-5);
+  padding: 0 var(--sp-12) var(--sp-12);
 }
 
 .section {
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--sp-8);
 }
 
 
 .showMoreWrap {
   display: flex;
-  padding: var(--space-2) var(--space-3) 0;
+  padding: var(--sp-8) var(--sp-8) 0;
 }
 
 .rowWrap {
@@ -61,8 +61,8 @@
 }
 
 .idleDot {
-  width: var(--space-2);
-  height: var(--space-2);
+  width: var(--sp-8);
+  height: var(--sp-8);
   border-radius: 50%;
   background: var(--ink-3);
   opacity: 0.5;
@@ -70,10 +70,11 @@
 }
 
 .rowTime {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
+  font-weight: var(--fw-medium);
+  font-variant-numeric: tabular-nums slashed-zero;
   font-size: var(--text-meta);
   color: var(--ink-3);
-  font-variant-numeric: tabular-nums slashed-zero;
   flex-shrink: 0;
   transition:
     opacity 160ms var(--ease),
@@ -96,10 +97,11 @@
 
 .pinWrap {
   position: absolute;
+  display: flex;
 
-  right: var(--space-4);
+  right: var(--sp-12);
   top: 50%;
-  transform: translateY(-50%) translateX(var(--space-3));
+  transform: translateY(-50%) translateX(var(--sp-8));
   opacity: 0;
   pointer-events: none;
   transition:
@@ -121,7 +123,7 @@
 
 .kbdGroup {
   display: inline-flex;
-  gap: var(--space-1);
+  gap: var(--sp-4);
   flex-shrink: 0;
 }
 
@@ -133,9 +135,9 @@
 .searchRow {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  height: 30px;
-  padding: 0 var(--space-4);
+  gap: var(--sp-8);
+  height: var(--ctl-32);
+  padding: 0 var(--sp-12);
   border-radius: var(--r-xs);
   background: var(--well);
 }
@@ -161,51 +163,42 @@
 }
 
 .searchClose {
-  width: var(--space-9);
-  height: var(--space-9);
+  width: var(--sp-24);
+  height: var(--sp-24);
   flex-shrink: 0;
   color: var(--ink-3);
 }
 
 
 .searchEmpty {
-  padding: var(--space-2) var(--space-4);
-  font-size: var(--fs-sm);
+  padding: var(--sp-8) var(--sp-12);
+  font-size: var(--text-meta);
   color: var(--ink-3);
 }
 
-.footerButton {
-  width: auto;
-  flex: 0 0 auto;
-  justify-content: flex-start;
+.footer :global(.ds-tip) .footerButton {
   color: var(--ink);
 }
 
-.footer :global(.ds-tip) .footerTight {
-  padding: 0 var(--space-1) 0 var(--space-4);
-}
-
 .footer :global(.ds-tip) .footerIcon {
-  width: var(--ctrl-sm);
-  height: var(--ctrl-sm);
+  width: var(--ctl-24);
+  height: var(--ctl-24);
 }
 
 .sectionAdd {
-  width: var(--space-9);
-  height: var(--space-9);
+  width: var(--sp-24);
+  height: var(--sp-24);
 }
 
 .sectionAdd :global(.ds-icon) {
-  width: 12px;
-  height: 12px;
+  width: var(--icon-sm);
+  height: var(--icon-sm);
 }
 
 .pinButton {
-  width: var(--space-9);
-  height: var(--space-9);
+  width: var(--sp-24);
+  height: var(--sp-24);
 }
-
-.footerSpacer { flex: 1; }
 
 
 .rowMeta {
@@ -220,12 +213,23 @@
 }
 
 .footer {
-  padding: var(--space-4) var(--space-5);
+  padding: var(--sp-12) calc(var(--sp-12) + var(--space-tight));
   border-top: .5px solid var(--line);
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--sp-4);
   flex-shrink: 0;
+}
+
+.footer > :last-child {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+}
+
+.footer > :last-child > :global(.ds-tip) {
+  flex: 1;
+  display: flex;
 }
 
 .footer > :not(:last-child) :global(.ds-icon) {
@@ -233,31 +237,20 @@
   height: var(--icon-sm);
 }
 
-.footerSettings {
-  gap: var(--space-4);
-}
-
 .bellWrap {
   position: relative;
   display: inline-flex;
 }
 
-.bellBadge {
+.bellDot {
   position: absolute;
-  top: calc(var(--space-6) / -2 - var(--space-1) / 2);
-  right: calc(var(--space-1) * -1);
-  min-width: var(--space-6);
-  height: var(--space-6);
-  padding: 0 var(--space-1);
-  border-radius: var(--r-pill);
+  top: 0;
+  right: 0;
+  width: var(--dot-md);
+  height: var(--dot-md);
+  transform: translate(25%, -25%);
+  border-radius: 50%;
   background: var(--c-danger);
-  color: #fff;
-  font-family: var(--font-sans);
-  font-size: var(--text-meta);
-  line-height: var(--space-6);
-  font-weight: var(--fw-semibold);
-  font-variant-numeric: tabular-nums;
-  text-align: center;
   pointer-events: none;
 }
 
@@ -269,25 +262,31 @@
 .loadingRow {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  height: 30px;
-  padding: 0 var(--space-4);
+  gap: var(--sp-8);
+  height: var(--ctl-32);
+  padding: 0 var(--sp-12);
 }
 
 .stateChip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-family: var(--font-mono);
+  gap: var(--sp-4);
+  font-family: var(--font-sans);
+  font-weight: var(--fw-medium);
+  font-variant-numeric: tabular-nums slashed-zero;
   font-size: var(--text-meta);
   line-height: var(--lh-tight);
   white-space: nowrap;
   color: var(--ink-3);
 }
 
+:global(.ds-sb-row):has(.stateChip) :global(.sb-name) {
+  flex-shrink: 0;
+}
+
 .stateDot {
-  width: 6px;
-  height: 6px;
+  width: var(--dot-sm);
+  height: var(--dot-sm);
   border-radius: 50%;
   background: currentColor;
   flex-shrink: 0;
@@ -306,7 +305,9 @@
 }
 
 .phaseCount {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
+  font-weight: var(--fw-medium);
+  font-variant-numeric: tabular-nums slashed-zero;
   font-size: var(--text-meta);
   color: var(--c, var(--ink-2));
 }

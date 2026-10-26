@@ -18,16 +18,18 @@ const h = vi.hoisted(() => ({
   unpair: vi.fn(async () => {}),
   textScale: 1,
   setTextScale: vi.fn(),
+  setMode: vi.fn(),
+  health: null,
 }));
 
 vi.mock('react-native', () => {
   const View = ({ children, style, ...p }) => React.createElement('div', p, children);
   const Text = ({ children, numberOfLines, ellipsizeMode, style, ...p }) =>
     React.createElement('span', p, children);
-  const Pressable = ({ children, onPress, onLongPress, android_ripple, style, ...p }) =>
+  const Pressable = ({ children, onPress, onLongPress, android_ripple, style, accessibilityState, ...p }) =>
     React.createElement(
       'button',
-      { type: 'button', onClick: onPress, onDoubleClick: onLongPress, ...p },
+      { type: 'button', onClick: onPress, onDoubleClick: onLongPress, 'aria-checked': accessibilityState?.selected, ...p },
       children,
     );
   const ScrollView = ({ children, contentContainerStyle, ...p }) =>
@@ -42,8 +44,8 @@ vi.mock('../../theme/ThemeContext', () => ({
   useTheme: () => ({
     pref: 'system',
     mode: 'dark',
-    setMode: vi.fn(),
-    colors: { bg: '#fff', accent: '#8a5a0a', bgPane: '#fff', bgInput: '#eee', ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', line: '#eee', selected: '#eee', danger: '#c00' },
+    setMode: h.setMode,
+    colors: { bg: '#fff', accent: '#8a5a0a', bgPane: '#fff', field: '#eee', ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', line: '#eee', selected: '#eee', danger: '#c00' },
     fonts: { sans: { regular: 'r', medium: 'm', semibold: 's' }, mono: 'mono', monoMedium: 'monoMedium' },
     fontSizes: { xs: 11, sm: 12, md: 14, lg: 15, xl: 18 },
     textScale: h.textScale,
@@ -51,6 +53,14 @@ vi.mock('../../theme/ThemeContext', () => ({
   }),
 }));
 
+vi.mock('../../lib/haptics', () => ({ selection: vi.fn() }));
+vi.mock('../../components/Toggle', () => ({
+  Toggle: ({ on, disabled, label, onChange }) =>
+    React.createElement('input', { type: 'checkbox', 'data-toggle': label, checked: !!on, disabled: !!disabled, onChange: (e) => onChange?.(e.target.checked) }),
+}));
+vi.mock('../../components/Pill', () => ({
+  Pill: ({ children, tone }) => React.createElement('span', { 'data-pill': tone ?? '' }, children),
+}));
 vi.mock('../../components/OnOff', () => ({
   OnOff: ({ on, onLabel, offLabel }) =>
     React.createElement('span', { 'data-onoff': on ? onLabel : offLabel }),
@@ -73,6 +83,10 @@ vi.mock('../../lib/biometric', () => ({
 }));
 vi.mock('../../lib/EndpointContext', () => ({ useEndpoint: () => ({ unpair: h.unpair, activeRole: h.role ?? null }) }));
 vi.mock('../../lib/signOut', () => ({ signOut: h.signOut }));
+vi.mock('../aln/health', () => ({
+  readHealth: async () => h.health,
+  describeHealth: (health) => health,
+}));
 vi.mock('../aln/notify', () => ({
   getPermissionStatus: h.permission,
   requestPermission: vi.fn(async () => 'granted'),
@@ -93,6 +107,8 @@ beforeEach(() => {
   h.unpair.mockClear();
   h.textScale = 1;
   h.setTextScale.mockClear();
+  h.setMode.mockClear();
+  h.health = null;
 });
 
 describe('SettingsBody', () => {
@@ -119,9 +135,8 @@ describe('SettingsBody', () => {
   it('names the theme preference without leaking the resolved colour', async () => {
     render(<SettingsBody />);
     await waitFor(() => expect(screen.getByText('Face ID unlock')).toBeTruthy());
-    expect(screen.getByText('System')).toBeTruthy();
+    expect(radio('System').getAttribute('aria-checked')).toBe('true');
     expect(screen.queryByText(/System \(/)).toBeNull();
-    expect(screen.queryByText(/dark/i)).toBeNull();
   });
 
   it('reads device state only while it is the visible surface', () => {
@@ -155,51 +170,92 @@ describe('SettingsBody', () => {
   });
 });
 
-function stepper(label) {
-  return document.querySelector(`[accessibilityLabel="${label}"]`);
-}
+const radios = (group) => [...document.querySelector(`[accessibilityLabel="${group}"]`).querySelectorAll('[accessibilityRole="radio"]')];
+const radio = (label) => document.querySelector(`[accessibilityRole="radio"][accessibilityLabel="${label}"]`);
+
+describe('SettingsBody theme', () => {
+  it('is a three-way segment, System then Light then Dark, with no chevron row', () => {
+    render(<SettingsBody />);
+    expect(radios('Theme').map((n) => n.getAttribute('accessibilityLabel'))).toEqual(['System', 'Light', 'Dark']);
+  });
+
+  it('applies the tapped mode', () => {
+    render(<SettingsBody />);
+    fireEvent.click(radio('Dark'));
+    expect(h.setMode).toHaveBeenCalledWith('dark');
+  });
+});
 
 describe('SettingsBody text size', () => {
-  it('names the current step next to the label', () => {
+  it('is a four-step segment under its label', () => {
     h.textScale = 1.15;
     render(<SettingsBody />);
-    expect(screen.getByText('Text size')).toBeTruthy();
-    expect(screen.getByText('Large')).toBeTruthy();
+    expect(radios('Text size').map((n) => n.getAttribute('accessibilityLabel'))).toEqual(['Small', 'Default', 'Large', 'Largest']);
+    expect(radio('Large').getAttribute('aria-checked')).toBe('true');
+    expect(screen.queryByLabelText('Larger text')).toBeNull();
+    expect(document.querySelector('[accessibilityLabel="Smaller text"]')).toBeNull();
   });
 
-  it('steps up and down one notch per press', () => {
+  it('sets the tapped step', () => {
     render(<SettingsBody />);
-    fireEvent.click(stepper('Larger text'));
-    expect(h.setTextScale).toHaveBeenCalledWith(1.15);
+    fireEvent.click(radio('Largest'));
+    expect(h.setTextScale).toHaveBeenCalledWith(MAX_TEXT_SCALE);
     h.setTextScale.mockClear();
-    fireEvent.click(stepper('Smaller text'));
-    expect(h.setTextScale).toHaveBeenCalledWith(0.9);
+    fireEvent.click(radio('Small'));
+    expect(h.setTextScale).toHaveBeenCalledWith(MIN_TEXT_SCALE);
   });
 
-  it('disables the step that would run off the end of the scale', () => {
-    h.textScale = MAX_TEXT_SCALE;
-    const { rerender } = render(<SettingsBody />);
-    expect(stepper('Larger text').disabled).toBe(true);
-    expect(stepper('Smaller text').disabled).toBe(false);
-
-    h.textScale = MIN_TEXT_SCALE;
-    rerender(<SettingsBody />);
-    expect(stepper('Smaller text').disabled).toBe(true);
-    expect(stepper('Larger text').disabled).toBe(false);
-  });
-
-  it('resets to the default on a long press, mirroring desktop cmd-0', () => {
-    h.textScale = MAX_TEXT_SCALE;
+  it('keeps the helper to the OS multiplier, with no stepper hint', () => {
     render(<SettingsBody />);
-    fireEvent.doubleClick(screen.getByText('Text size').closest('button'));
-    expect(h.setTextScale).toHaveBeenCalledWith(1);
+    expect(screen.getByText('multiplies your OS text size')).toBeTruthy();
   });
 
   it('renders without a theme that knows about text size', () => {
     h.textScale = undefined;
     render(<SettingsBody />);
-    expect(screen.getByText('Default')).toBeTruthy();
-    expect(stepper('Smaller text').disabled).toBe(false);
+    expect(radio('Default').getAttribute('aria-checked')).toBe('true');
+  });
+});
+
+describe('SettingsBody biometric', () => {
+  const toggle = () => document.querySelector('[data-toggle="Face ID unlock"]');
+
+  it('is a Toggle, not a tap-the-row pill', async () => {
+    h.pref.mockResolvedValueOnce(true);
+    render(<SettingsBody />);
+    await waitFor(() => expect(toggle().checked).toBe(true));
+    expect(rowButton('Face ID unlock')).toBeNull();
+  });
+
+  it('turns on after the biometric prompt and off without one', async () => {
+    render(<SettingsBody />);
+    await waitFor(() => expect(h.caps).toHaveBeenCalled());
+    fireEvent.click(toggle());
+    await waitFor(() => expect(toggle().checked).toBe(true));
+    fireEvent.click(toggle());
+    await waitFor(() => expect(toggle().checked).toBe(false));
+  });
+
+  it('disables the switch on a device with no biometric hardware', async () => {
+    h.caps.mockResolvedValueOnce({ hasHardware: false, enrolled: false, label: 'Biometric' });
+    render(<SettingsBody />);
+    await waitFor(() => expect(document.querySelector('[data-toggle="Biometric unlock"]').disabled).toBe(true));
+  });
+});
+
+describe('SettingsBody delivery status', () => {
+  it('says blocked in the danger tone when delivery cannot work, instead of off', async () => {
+    h.health = { ok: false, detail: 'Permission denied' };
+    render(<SettingsBody />);
+    await waitFor(() => expect(screen.getByText('blocked')).toBeTruthy());
+    expect(screen.getByText('blocked').getAttribute('data-pill')).toBe('err');
+  });
+
+  it('keeps the on pill when delivery is healthy', async () => {
+    h.health = { ok: true, detail: 'Last successful check just now.' };
+    render(<SettingsBody />);
+    await waitFor(() => expect(screen.getByText('Delivery status')).toBeTruthy());
+    expect(screen.queryByText('blocked')).toBeNull();
   });
 });
 

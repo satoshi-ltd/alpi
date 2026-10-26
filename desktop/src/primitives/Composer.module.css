@@ -11,10 +11,10 @@
   background: var(--well);
   border: .5px solid transparent;
   border-radius: var(--r-xs);
-  padding: var(--space-6) var(--space-7) var(--space-4);
+  padding: calc(var(--sp-16) + .5px) calc(var(--sp-16) - .5px) calc(var(--sp-12) - .5px);
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--sp-8);
   max-width: var(--composer-max);
   margin: 0 auto;
   cursor: text;
@@ -33,15 +33,15 @@
 .reason {
   display: flex;
   align-items: center;
-  gap: var(--space-5);
-  min-height: var(--ctrl-sm);
+  gap: var(--sp-12);
+  min-height: var(--ctl-28);
   cursor: default;
 }
 
 .reasonText {
   flex: 1;
   min-width: 0;
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
   font-weight: var(--fw-medium);
   color: var(--ink-2);
 }
@@ -59,9 +59,9 @@
 .topBar {
   display: flex;
   align-items: stretch;
-  margin-top: calc(var(--space-6) * -1 - .5px);
-  margin-left: calc(var(--space-7) * -1 - .5px);
-  margin-right: calc(var(--space-7) * -1 - .5px);
+  margin-top: calc(var(--sp-16) * -1 - .5px);
+  margin-left: calc(var(--sp-16) * -1 - .5px);
+  margin-right: calc(var(--sp-16) * -1 - .5px);
   margin-bottom: 0;
   padding: 0;
 }
@@ -75,12 +75,12 @@
   background: transparent;
   resize: none;
   font: inherit;
-  font-size: var(--fs-md);
+  font-size: var(--text-ui);
   line-height: var(--lh-normal);
   color: var(--ink);
   padding: 0;
   margin: 0;
-  min-height: var(--ctrl-xs);
+  min-height: var(--ctl-24);
   overflow-y: hidden;
   display: block;
 }
@@ -96,7 +96,7 @@
 .row {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--sp-8);
 }
 
 .spacer {
@@ -106,15 +106,15 @@
 .hint {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-4);
-  font-size: var(--fs-xs);
+  gap: var(--sp-8);
+  font-size: var(--text-meta);
   color: var(--ink-3);
   white-space: nowrap;
 }
 
 .mentionPopover {
   position: absolute;
-  bottom: calc(100% + var(--space-3));
+  bottom: calc(100% + var(--sp-8));
   left: 0;
 
   width: max-content;
@@ -122,28 +122,27 @@
   max-width: 18rem;
   z-index: var(--z-chrome);
   background: var(--bg-elev);
-  border: .5px solid var(--line-2);
   border-radius: var(--r-xs);
-  box-shadow: var(--shadow-edge);
-  padding: var(--space-2);
+  box-shadow: var(--shadow-edge-sm);
+  padding: var(--sp-8);
   max-height: 15rem;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  animation: composerMentionIn var(--dur-1) var(--ease) both;
+  animation: composerMentionIn var(--dur-enter) var(--ease-enter) both;
 }
 
 @keyframes composerMentionIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: none; }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 .mentionItem {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
+  gap: var(--sp-8);
+  padding: var(--sp-8) var(--sp-12);
   border: 0;
   border-radius: var(--r-xs);
   background: transparent;
@@ -167,27 +166,27 @@
 .mentionUnverified {
   margin-left: auto;
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--eyebrow-size);
   font-weight: var(--fw-medium);
   color: var(--ink-3);
   text-transform: uppercase;
-  letter-spacing: 0.02em;
+  letter-spacing: var(--eyebrow-tracking);
 }
 
 .mentionId {
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
   font-weight: var(--fw-medium);
   color: var(--ink);
 }
 
 .mentionEmpty {
-  padding: var(--space-3) var(--space-4);
-  font-size: var(--fs-base);
+  padding: var(--sp-8) var(--sp-12);
+  font-size: var(--text-ui);
   color: var(--ink-2);
 }
 
 .mentionHint {
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
   overflow: hidden;
   text-overflow: ellipsis;

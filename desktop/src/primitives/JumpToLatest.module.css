@@ -1,10 +1,10 @@
 .btn {
   position: absolute;
-  bottom: var(--space-5);
-  right: var(--space-7);
-  transform: translateY(var(--space-3));
-  width: var(--ctrl-md);
-  height: var(--ctrl-md);
+  bottom: var(--sp-12);
+  right: var(--sp-16);
+  transform: translateY(var(--sp-8));
+  width: var(--ctl-32);
+  height: var(--ctl-32);
   border-radius: var(--r-xs);
   background: var(--bg-elev);
   border: 0;
@@ -15,7 +15,7 @@
   cursor: pointer;
   opacity: 0;
   pointer-events: none;
-  box-shadow: var(--shadow-edge);
+  box-shadow: var(--shadow-edge-sm);
   transition:
     opacity var(--dur-1) var(--ease),
     transform var(--dur-1) var(--ease),
@@ -36,5 +36,5 @@
 
 .btn:focus-visible {
   outline: none;
-  box-shadow: var(--shadow-edge), var(--well-ring);
+  box-shadow: var(--shadow-edge-sm), var(--well-ring);
 }

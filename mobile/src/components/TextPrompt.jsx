@@ -55,7 +55,7 @@ export function TextPrompt({
             width: '100%',
             maxWidth: 420,
             backgroundColor: colors.bgPane,
-            ...shadow.float,
+            ...shadow.dialog,
             borderRadius: radii.xs,
             padding: space.s9,
             gap: space.s7,

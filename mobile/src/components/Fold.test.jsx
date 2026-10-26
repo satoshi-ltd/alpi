@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render } from '@testing-library/react';
 
 import { BRAND_INK, FOLD_IDS, foldFacets, foldTones } from '../../../common/folds.mjs';
+import { TONAL_MIN_SIZE, alpacaTones } from '../../../common/alpacaTones.mjs';
 
 const h = vi.hoisted(() => ({ mode: 'light', reduce: false, delays: [], timings: [], loops: [], started: 0, stopped: 0 }));
 
@@ -95,11 +96,34 @@ describe('Fold', () => {
     expect(svg.getAttribute('height')).toBe('28');
   });
 
-  it.each(['light', 'dark'])('paints the alpaca in the brand ink of the %s theme', (mode) => {
+  it.each(['light', 'dark'])('paints the alpaca in the crease tones of the %s theme from 48 px up', (mode) => {
     h.mode = mode;
     const fills = [...draw({ fold: 'alpaca', color: '#123456', size: 72 }).querySelectorAll('polygon')].map((p) => p.getAttribute('fill'));
-    expect(new Set(fills)).toEqual(new Set(foldTones(BRAND_INK[mode])));
+    expect(new Set(fills)).toEqual(new Set(alpacaTones(mode)));
     h.mode = 'light';
+  });
+
+  it.each(['light', 'dark'])('keeps the alpaca in the %s brand ink below 48 px, in rows and headers, outlined and unfolded', (mode) => {
+    h.mode = mode;
+    const fills = (props) => new Set([...draw(props).querySelectorAll('polygon')].map((p) => p.getAttribute('fill')));
+    const ink = new Set(foldTones(BRAND_INK[mode]));
+    expect(fills({ fold: 'alpaca', size: TONAL_MIN_SIZE - 1 })).toEqual(ink);
+    cleanup();
+    expect(fills({ fold: 'alpaca', size: 24 })).toEqual(ink);
+    cleanup();
+    expect(fills({ fold: 'alpaca' })).toEqual(ink);
+    cleanup();
+    expect(fills({ fold: 'alpaca', size: 72, outlined: true }).size).toBe(1);
+    cleanup();
+    const unfolded = [...draw({ fold: 'alpaca', size: 72, unfolded: true }).querySelectorAll('polygon')];
+    expect(unfolded.every((p) => p.getAttribute('fill') === 'none' && p.getAttribute('stroke-dasharray') === '2 1.5')).toBe(true);
+    h.mode = 'light';
+  });
+
+  it('leaves every other object in its profile colour at any size', () => {
+    const fills = new Set([...draw({ fold: 'crown', color: '#3899e2', size: 72 }).querySelectorAll('polygon')].map((p) => p.getAttribute('fill')));
+    expect(fills.has('#3899e2')).toBe(true);
+    for (const tone of alpacaTones('light')) expect(fills.has(tone)).toBe(false);
   });
 
   it('paints the alpaca in the brand ink when no colour is given', () => {
@@ -108,20 +132,33 @@ describe('Fold', () => {
     expect(fills).not.toContain('#828b97');
   });
 
+  it('centres the alpaca on whole points in the row and header slots', () => {
+    for (const size of [undefined, 'md']) {
+      const slot = size === 'md' ? 20 : 16;
+      const drawn = Number(draw({ fold: 'alpaca', size }).querySelector('svg').getAttribute('width'));
+      expect(Number.isInteger((slot - drawn) / 2)).toBe(true);
+      cleanup();
+    }
+  });
+
+  it('draws every other object at its slot size in a row', () => {
+    expect(draw({ fold: 'crown', color: '#3899e2' }).querySelector('svg').getAttribute('width')).toBe('16');
+  });
+
   it('draws the alpaca larger than its slot in rows and headers, and as given at a pixel size', () => {
-    expect(Number(draw({ fold: 'alpaca' }).querySelector('svg').getAttribute('width'))).toBeCloseTo(16 * 1.3);
+    expect(Number(draw({ fold: 'alpaca' }).querySelector('svg').getAttribute('width'))).toBe(20);
     cleanup();
-    expect(Number(draw({ fold: 'alpaca', size: 'md' }).querySelector('svg').getAttribute('width'))).toBeCloseTo(20 * 1.3);
+    expect(Number(draw({ fold: 'alpaca', size: 'md' }).querySelector('svg').getAttribute('width'))).toBe(26);
     cleanup();
     expect(draw({ fold: 'alpaca', size: 72 }).querySelector('svg').getAttribute('width')).toBe('72');
     cleanup();
     expect(draw({ fold: 'shield' }).querySelector('svg').getAttribute('width')).toBe('16');
   });
 
-  it('draws the alpaca as twelve facets in one flat ink', () => {
+  it('draws the alpaca as twelve facets in three tones from 48 px up', () => {
     const root = draw({ fold: 'alpaca', color: '#f0b447', size: 72 });
     expect(root.querySelectorAll('polygon')).toHaveLength(12);
-    expect(new Set([...root.querySelectorAll('polygon')].map((p) => p.getAttribute('fill'))).size).toBe(1);
+    expect(new Set([...root.querySelectorAll('polygon')].map((p) => p.getAttribute('fill'))).size).toBe(3);
   });
 
   it('draws the diamond as its kite-base origami at a pixel size', () => {
@@ -150,9 +187,9 @@ describe('Fold', () => {
       const root = draw({ fold: 'honeycomb', color: '#3899e2', pulse: true });
       expect(root.querySelectorAll('svg')).toHaveLength(3);
       expect(root.querySelectorAll('polygon')).toHaveLength(3);
-      expect(h.delays).toEqual([0, 600, 1200]);
+      expect(h.delays.map(Math.round)).toEqual([0, 533, 1067]);
       expect(h.loops).toHaveLength(3);
-      expect(h.timings.map((t) => t.duration)).toEqual([900, 900, 900, 900, 900, 900]);
+      expect(h.timings.map((t) => t.duration)).toEqual([800, 800, 800, 800, 800, 800]);
       expect(h.started).toBe(3);
     });
 

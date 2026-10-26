@@ -16,6 +16,7 @@ vi.mock('react-native', () => ({
 vi.mock('expo-router', () => ({
   useRouter: () => ({ push: vi.fn(), back: vi.fn(), replace: vi.fn(), canGoBack: () => true }),
   usePathname: () => '/profile/doc/settings',
+  useLocalSearchParams: () => ({ id: 'doc' }),
   Stack: ({ screenOptions }) => {
     h.options.push(screenOptions);
     React.useEffect(() => {
@@ -30,6 +31,7 @@ vi.mock('../src/components/ScreenHeader', () => ({ ScreenHeader: () => null }));
 vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: ({ children }) => React.createElement('div', {}, children) }));
 vi.mock('../src/theme/ThemeContext', () => ({ useTheme: () => ({ colors: { bg: '#fff' } }) }));
 vi.mock('../src/hooks/useActiveRole', () => ({ useActiveRole: () => h.role }));
+vi.mock('../src/hooks/useDaemonData', () => ({ useProfileSummaries: () => ({ data: { profiles: [{ name: 'doc' }] }, error: null }) }));
 
 import { PaneContext } from '../src/nav/PaneContext';
 import { stackAnimation } from '../src/lib/panes';

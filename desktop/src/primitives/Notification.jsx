@@ -198,8 +198,8 @@ function Notification({ n, onDismiss }) {
       className={`${styles.toast} ${n.action ? styles.toastWithAction : ""}`}
       style={{
         animation: exiting
-          ? "ds-notif-out .18s var(--ease) both"
-          : "ds-notif-in .26s var(--ease) both",
+          ? "ds-notif-out var(--dur-exit) var(--ease-exit) both"
+          : "ds-notif-in var(--dur-enter) var(--ease-enter) both",
       }}
     >
       <span

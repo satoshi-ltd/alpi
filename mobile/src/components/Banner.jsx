@@ -45,7 +45,7 @@ export function Banner({ kind = 'info', children, action, onAction, secondaryAct
         backgroundColor: `${tint}1f`,
       }}
     >
-      {ICON_KINDS.has(kind) ? <Icon name="triangle-alert" size="sm" color={tint} /> : <Dot color={tint} />}
+      {ICON_KINDS.has(kind) ? <Icon name="triangle-alert" size="xs" color={tint} /> : <Dot color={tint} />}
       <Text
         style={{
           flex: 1,

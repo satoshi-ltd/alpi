@@ -1,22 +1,22 @@
 .row {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-7) var(--space-1);
+  gap: var(--sp-8);
+  padding: var(--sp-8) var(--sp-16) var(--sp-4);
 }
 
 .list {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
-  margin-top: var(--space-1);
+  gap: var(--sp-8);
+  margin-top: var(--sp-4);
 }
 
 .card {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
+  gap: var(--sp-8);
+  padding: var(--sp-8) var(--sp-12);
   border: .5px solid var(--line-2);
   border-radius: var(--r-xs);
   background: var(--bg-pane);
@@ -33,8 +33,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--ctrl-md);
-  height: var(--ctrl-md);
+  width: var(--ctl-32);
+  height: var(--ctl-32);
   border-radius: var(--r-xs);
   background: var(--hover);
   color: var(--ink-3);
@@ -46,14 +46,14 @@
 }
 
 .more {
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
-  padding: var(--space-1) var(--space-2);
+  padding: var(--sp-4) var(--sp-8);
 }
 
 .thumb {
-  width: var(--ctrl-md);
-  height: var(--ctrl-md);
+  width: var(--ctl-32);
+  height: var(--ctl-32);
   border-radius: var(--r-xs);
   object-fit: cover;
   flex-shrink: 0;
@@ -67,7 +67,7 @@
 }
 
 .name {
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
   color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -76,7 +76,7 @@
 
 .size {
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
 }
 

@@ -123,7 +123,7 @@ export function AttachmentCards({ items, onRemove, variant = 'composer', profile
             </View>
             {!message && onRemove ? (
               <Pressable onPress={() => onRemove(i)} hitSlop={REMOVE_SLOP} accessibilityRole="button" accessibilityLabel={`Remove ${a.name}`}>
-                <Icon name="x" size="sm" color={colors.ink3} />
+                <Icon name="x" size="xs" color={colors.ink3} />
               </Pressable>
             ) : null}
           </CardComp>

@@ -5,11 +5,11 @@ import { Crease } from './Crease';
 import { Icon } from './Icon';
 import { MetaStrip, metaItems } from './MetaStrip';
 import { useShowBack } from '../hooks/useShowBack';
-import { CHROME_BTN, tapSlop } from '../lib/panes';
+import { backMargins, CHROME_BTN, PANE_PAD_X, TOGGLE_BLEED, tapSlop } from '../lib/panes';
 import { usePane } from '../nav/PaneContext';
 import { useTheme } from '../theme/ThemeContext';
 
-const CREASE_MIN_SIZE = 28;
+const CREASE_MIN_SIZE = 28;;
 
 function ChromeButton({ label, onPress, children }) {
   const { colors } = useTheme();
@@ -52,7 +52,7 @@ export function ScreenHeader({ title, subtitle, meta, onBack, right, leadingGlyp
         flexDirection: 'row',
         alignItems: metaList.length ? 'flex-start' : 'center',
         gap: space.s4,
-        paddingHorizontal: twoPane ? space.s9 : space.s7,
+        paddingHorizontal: PANE_PAD_X,
         paddingTop: twoPane ? space.s5 : space.s3,
         paddingBottom: space.s5,
         backgroundColor: colors.bg,
@@ -61,21 +61,21 @@ export function ScreenHeader({ title, subtitle, meta, onBack, right, leadingGlyp
       }}
     >
       {showSidebarToggle ? (
-        <View style={{ marginLeft: -space.s2 }}>
+        <View style={{ marginLeft: -TOGGLE_BLEED }}>
           <ChromeButton label="Show sidebar" onPress={toggleSidebar}>
-            <Icon name="panel-left" size="lg" color={colors.ink2} />
+            <Icon name="panel-left" size="md" color={colors.ink2} />
           </ChromeButton>
         </View>
       ) : null}
       {showBack ? (
         <Pressable
           onPress={onBack}
-          hitSlop={space.s3}
+          hitSlop={tapSlop(CHROME_BTN)}
           accessibilityRole="button"
           accessibilityLabel="Back"
-          style={{ width: 28, height: 36, alignItems: 'center', justifyContent: 'center', marginLeft: -space.s2 }}
+          style={{ width: CHROME_BTN, height: CHROME_BTN, alignItems: 'center', justifyContent: 'center', ...backMargins(!showSidebarToggle) }}
         >
-          <Icon name="back" size="lg" color={colors.ink2} />
+          <Icon name="back" size="md" color={colors.ink2} />
         </Pressable>
       ) : null}
       <View style={{ flex: 1, minWidth: 0, flexDirection: 'column' }}>
@@ -104,7 +104,7 @@ export function ScreenHeader({ title, subtitle, meta, onBack, right, leadingGlyp
                 fontFamily: fonts.mono,
                 fontSize: fontSizes.xs,
                 lineHeight: fontSizes.xs * lineHeights.cozy,
-                letterSpacing: fontSizes.xs * tracking.wide,
+                letterSpacing: fontSizes.xs * tracking.eyebrow,
                 color: colors.ink3,
                 marginTop: space.s1,
               }}

@@ -12,7 +12,9 @@ const CONSUMED_KEYS = [
   'bgInput',
   'bgPane',
   'bgSide',
+  'card',
   'danger',
+  'field',
   'hover',
   'ink',
   'ink2',
@@ -101,19 +103,39 @@ describe('neutral greys on the phone', () => {
 
 describe('paper surfaces on the phone', () => {
   it.each(['light', 'dark'])('makes every %s elevation a hairline seam with no blur', (mode) => {
-    for (const [name, level] of Object.entries(shadows[mode])) {
+    for (const level of Object.values(shadows[mode])) {
       expect(level.shadowOpacity).toBe(0);
       expect(level.shadowRadius).toBe(0);
       expect(level.elevation).toBe(0);
-      if (name === 'float') continue;
-      expect(level.borderWidth).toBe(0.5);
-      expect([palettes[mode].line, palettes[mode].line2]).toContain(level.borderColor);
+      expect(level).not.toHaveProperty('shadowOffset');
     }
   });
 
-  it.each(['light', 'dark'])('edges every %s floating surface with a 1 pt line at the control-boundary ink', (mode) => {
-    expect(shadows[mode].float.borderWidth).toBe(1);
-    expect(shadows[mode].float.borderColor).toBe(palettes[mode].edge);
+  it.each(['light', 'dark'])('keeps base and sm on the %s hairline lines', (mode) => {
+    for (const name of ['base', 'sm']) {
+      expect(shadows[mode][name].borderWidth).toBe(0.5);
+      expect([palettes[mode].line, palettes[mode].line2]).toContain(shadows[mode][name].borderColor);
+    }
+  });
+
+  it.each(['light', 'dark'])('draws a %s sheet with a 1 pt top edge in the edge ink and no other side', (mode) => {
+    const { sheet } = shadows[mode];
+    expect(sheet.borderTopWidth).toBe(1);
+    expect(sheet.borderWidth).toBe(0);
+    expect(sheet.borderColor).toBe(palettes[mode].edge);
+  });
+
+  it.each(['light', 'dark'])('rings %s dialogs, popovers and toasts with 0.5 pt ink3', (mode) => {
+    for (const name of ['dialog', 'popover', 'toast']) {
+      expect(shadows[mode][name].borderWidth, name).toBe(0.5);
+      expect(shadows[mode][name].borderColor, name).toBe(palettes[mode].ink3);
+      expect(shadows[mode][name]).not.toHaveProperty('borderTopWidth');
+    }
+  });
+
+  it.each(['light', 'dark'])('meets 3:1 for the %s ring and sheet edge over the elevated surface', (mode) => {
+    expect(contrast(palettes[mode].ink3, palettes[mode].bgElev)).toBeGreaterThanOrEqual(3);
+    expect(contrast(palettes[mode].edge, palettes[mode].bgElev)).toBeGreaterThanOrEqual(3);
   });
 });
 
@@ -131,8 +153,22 @@ describe('paper dialogs on the phone', () => {
     for (const file of ['Sheet.jsx', 'ActionSheet.jsx', 'TextPrompt.jsx', 'ConfirmDialog.jsx']) {
       const source = readFileSync(join(import.meta.dirname, '../components', file), 'utf8');
       expect(source, file).not.toMatch(/rgba\(0,0,0,0\.45\)/);
-      expect(source, file).toMatch(/backgroundColor: veil\(colors\)/);
-      expect(source, file).toMatch(/\.\.\.shadow\.float/);
+      expect(source, file).toMatch(/backgroundColor: (popover \? 'transparent' : )?veil\(colors\)/);
+      expect(source, file).not.toMatch(/shadow\.float/);
     }
+  });
+
+  it('grades every floating surface to its own shadow level', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const read = (rel) => readFileSync(join(import.meta.dirname, '..', rel), 'utf8');
+    expect(read('components/Sheet.jsx')).toMatch(/twoPane \? shadow\.dialog : shadow\.sheet/);
+    expect(read('components/ActionSheet.jsx')).toMatch(/twoPane \? shadow\.dialog : shadow\.sheet/);
+    expect(read('components/ConfirmDialog.jsx')).toMatch(/\.\.\.shadow\.dialog/);
+    expect(read('components/TextPrompt.jsx')).toMatch(/\.\.\.shadow\.dialog/);
+    expect(read('components/Toast.jsx')).toMatch(/\.\.\.shadow\.toast/);
+    expect(read('features/chat/MentionPopover.jsx')).toMatch(/\.\.\.shadow\.popover/);
+    expect(read('features/chat/JumpToLatest.jsx')).toMatch(/\.\.\.shadow\.popover/);
+    expect(shadows.light).not.toHaveProperty('float');
   });
 });

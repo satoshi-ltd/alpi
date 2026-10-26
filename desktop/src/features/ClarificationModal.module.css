@@ -1,8 +1,8 @@
 .head {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-5);
-  margin-bottom: var(--space-7);
+  gap: var(--sp-12);
+  margin-bottom: var(--sp-16);
 }
 
 .headText {
@@ -10,7 +10,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--sp-8);
 }
 
 .question {
@@ -24,7 +24,7 @@
 .choices {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--sp-4);
 }
 
 .row {
@@ -33,11 +33,11 @@
   background: transparent;
   border: 0;
   border-radius: var(--r-xs);
-  padding: var(--space-4) var(--space-5);
+  padding: var(--sp-12) var(--sp-12);
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: var(--space-5);
+  gap: var(--sp-12);
   transition: background var(--dur-1) var(--ease);
   font-family: var(--font-sans);
 }
@@ -65,8 +65,8 @@
 }
 
 .rowIcon {
-  width: 22px;
-  height: 22px;
+  width: var(--ctl-24);
+  height: var(--ctl-24);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -75,16 +75,16 @@
 }
 
 .radio {
-  width: 22px;
-  height: 22px;
+  width: var(--ctl-24);
+  height: var(--ctl-24);
   border-radius: 50%;
   border: 1.5px solid var(--ink-3);
   flex-shrink: 0;
 }
 
 .checkbox {
-  width: 22px;
-  height: 22px;
+  width: var(--ctl-24);
+  height: var(--ctl-24);
   border-radius: var(--r-xs);
   border: 1.5px solid var(--ink-3);
   flex-shrink: 0;
@@ -104,9 +104,9 @@
 .otherBlock {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  margin-top: var(--space-2);
-  padding: var(--space-5) var(--space-6);
+  gap: var(--sp-8);
+  margin-top: var(--sp-8);
+  padding: var(--sp-12) var(--sp-16);
   border: .5px solid transparent;
   border-radius: var(--r-xs);
   background: var(--well);
@@ -128,11 +128,11 @@
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--sp-8);
 }
 
 .error {
-  margin-top: var(--space-3);
+  margin-top: var(--sp-8);
   font-family: var(--font-sans);
   font-size: var(--text-meta);
   color: var(--c-danger-text);

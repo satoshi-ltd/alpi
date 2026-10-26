@@ -101,7 +101,6 @@ const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, acc
     return (
       <MarkerCard
         variant="task"
-        side={isFromHub ? 'right' : 'left'}
         hubColor={speakerAccent}
         hubFold={speakerFold}
         speakerName={speakerName}
@@ -120,7 +119,6 @@ const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, acc
         variant={c.variant}
         label={isStaleWorking ? 'WORK' : undefined}
         stale={isStaleWorking}
-        side={isFromHub ? 'right' : 'left'}
         hubColor={speakerAccent}
         hubFold={speakerFold}
         speakerName={speakerName}
@@ -287,7 +285,7 @@ function TasksHeaderButton({ tasks, accent, phase, profileOf, onPress }) {
         gap: space.s2,
         paddingHorizontal: space.s4,
         minHeight: 44,
-        backgroundColor: pressed ? colors.selected : colors.bgInput,
+        backgroundColor: pressed ? colors.selected : colors.field,
         borderRadius: radii.xs,
       })}
     >
@@ -313,7 +311,7 @@ export default function WorkgroupChat() {
   if (isForeignConnection(activeId, connectionId)) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ChatHeader kind="workgroup" accent={colors.ink3} title={`#${id}`} meta="other connection" onBack={goBack} />
+        <ChatHeader kind="workgroup" accent={colors.ink3} title={id} meta="other connection" onBack={goBack} />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.s10 }}>
           <Text style={{ fontFamily: fonts.sans.regular, color: colors.ink3, textAlign: 'center' }}>
             This notification came from a connection that isn't active. Switch to it to open this workgroup.
@@ -480,6 +478,7 @@ function WorkgroupChatInner() {
   const paused = wg?.paused;
   const [tasksOpen, setTasksOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuAnchor, setMenuAnchor] = useState(null);
   const listApiRef = useRef(null);
 
   const accentFor = useCallback(
@@ -536,7 +535,7 @@ function WorkgroupChatInner() {
   if (!endpoint) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ChatHeader kind="workgroup" accent={colors.ink3} title={`#${id}`} meta="not paired" onBack={goBack} />
+        <ChatHeader kind="workgroup" accent={colors.ink3} title={id} meta="not paired" onBack={goBack} />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ fontFamily: fonts.sans.regular, color: colors.ink3 }}>Pair this phone to a daemon first.</Text>
         </View>
@@ -547,7 +546,7 @@ function WorkgroupChatInner() {
   if (opening || holding) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ChatHeader kind="workgroup" accent={colors.ink3} title={`#${id}`} meta={<SubtitleSkeleton />} onBack={goBack} />
+        <ChatHeader kind="workgroup" accent={colors.ink3} title={id} meta={<SubtitleSkeleton />} onBack={goBack} />
         <Busy fill visible={holding} label={`Opening #${id}`} />
       </SafeAreaView>
     );
@@ -556,7 +555,7 @@ function WorkgroupChatInner() {
   if (!wg) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ChatHeader kind="workgroup" accent={colors.ink3} title={`#${id}`} meta="workgroup · not found" onBack={goBack} />
+        <ChatHeader kind="workgroup" accent={colors.ink3} title={id} meta="workgroup · not found" onBack={goBack} />
       </SafeAreaView>
     );
   }
@@ -633,7 +632,10 @@ function WorkgroupChatInner() {
         title={wg.name || wg.id}
         meta={meta}
         onBack={goBack}
-        onMore={() => setMenuOpen(true)}
+        onMore={(anchor) => {
+          setMenuAnchor(anchor ?? null);
+          setMenuOpen(true);
+        }}
         right={(
           <View style={WG_STYLES.headerRight}>
             <SoundWave accent={accent} />
@@ -706,8 +708,6 @@ function WorkgroupChatInner() {
             offline={daemonDown}
             onSend={sendMessage}
             mentionSource={mentionSource}
-            onResume={togglePause}
-            resumeLabel="Resume workgroup"
             seedText={composerSeed?.text}
             seedKey={composerSeed?.key}
           />
@@ -715,8 +715,9 @@ function WorkgroupChatInner() {
       </KeyboardPane>
       <ActionSheet
         open={menuOpen}
+        anchor={menuAnchor}
         onClose={() => setMenuOpen(false)}
-        title={`#${wg.name || wg.id}`}
+        title={wg.name || wg.id}
         subtitle="WORKGROUP"
         actions={menuActions}
       />

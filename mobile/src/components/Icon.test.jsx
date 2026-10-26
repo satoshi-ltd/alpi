@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render } from '@testing-library/react';
 
 import { ICONS } from '../../../common/iconPaths.mjs';
-import { iconSizes, iconStroke } from '../theme/tokens';
+import { iconSizes, iconStrokeFor } from '../theme/tokens';
 
 afterEach(cleanup);
 
@@ -24,44 +24,63 @@ describe('Icon defaults', () => {
     expect(svg.getAttribute('height')).toBe(String(iconSizes.md));
   });
 
-  it('strokes at the one weight the whole set shares', () => {
-    for (const name of ['search', 'gear', 'plus', 'chevron-down', 'trash']) {
-      expect(draw({ name }).getAttribute('stroke-width')).toBe(String(iconStroke));
-      cleanup();
-    }
-  });
-
-  it('draws on desktop lucide 24×24 grid', () => {
+  it('draws on desktop lucide 24x24 grid', () => {
     expect(draw({ name: 'search' }).getAttribute('viewBox')).toBe('0 0 24 24');
   });
 });
 
 describe('Icon size scale', () => {
+  it('offers only xs 12 and md 16', () => {
+    expect(iconSizes).toEqual({ xs: 12, md: 16 });
+  });
+
+  it.each([[16], ['sm'], ['lg'], ['xl'], ['jumbo']])('draws an unknown size %s at the md step', (size) => {
+    expect(draw({ name: 'check', size }).getAttribute('width')).toBe(String(iconSizes.md));
+  });
+
   it.each(Object.entries(iconSizes))('resolves the %s step to %i', (step, px) => {
     expect(draw({ name: 'check', size: step }).getAttribute('width')).toBe(String(px));
   });
 
-  it('mirrors desktop step for step, with hero as the only mobile-only tier', () => {
-    expect(Object.keys(iconSizes)).toEqual(['xs', 'sm', 'md', 'lg', 'xl', 'hero']);
+  it.each(['sm', 'lg', 'xl', 'hero', 20, 33, 'jumbo'])('folds %s onto md', (size) => {
+    expect(draw({ name: 'check', size }).getAttribute('width')).toBe(String(iconSizes.md));
   });
+});
 
-  it('keeps every step one notch above its desktop twin', () => {
-    const desktop = { xs: 9, sm: 12, md: 14, lg: 18, xl: 24 };
-    for (const [step, px] of Object.entries(desktop)) {
-      expect(iconSizes[step], step).toBeGreaterThanOrEqual(px);
+describe('Icon stroke', () => {
+  it.each(Object.values(iconSizes))('renders a constant 1.33 pt stroke at %i pt', (px) => {
+    const step = px === iconSizes.xs ? 'xs' : 'md';
+    for (const name of ['search', 'gear', 'plus', 'chevron-down']) {
+      const sw = Number(draw({ name, size: step }).getAttribute('stroke-width'));
+      expect(sw).toBeCloseTo(iconStrokeFor(px), 5);
+      expect((sw * px) / 24).toBeCloseTo(1.33, 5);
+      cleanup();
     }
   });
 
-  it('sizes the lg step for the 44pt tap target the way desktop sizes md for its 28px button', () => {
-    expect(iconSizes.lg / 44).toBeCloseTo(14 / 28, 1);
+  it('ignores a stroke override', () => {
+    const svg = draw({ name: 'check', size: 'md', strokeWidth: 3 });
+    expect(Number(svg.getAttribute('stroke-width'))).toBeCloseTo(iconStrokeFor(16), 5);
   });
 
-  it('still takes a raw number so a one-off can opt out', () => {
-    expect(draw({ name: 'check', size: 33 }).getAttribute('width')).toBe('33');
-  });
-
-  it('falls back to md when handed a step that is not in the scale', () => {
-    expect(draw({ name: 'check', size: 'jumbo' }).getAttribute('width')).toBe(String(iconSizes.md));
+  it('allows no size other than xs and md in any source', async () => {
+    const { readdirSync, readFileSync, statSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const root = join(import.meta.dirname, '../..');
+    const hits = [];
+    const walk = (dir) => {
+      for (const name of readdirSync(dir)) {
+        const path = join(dir, name);
+        if (statSync(path).isDirectory()) walk(path);
+        else if (/\.jsx$/.test(name) && !/\.test\./.test(name)) {
+          const text = readFileSync(path, 'utf8');
+          for (const m of text.matchAll(/<Icon\b[^>]*?\bsize=(\S+)/gs)) if (!/^"(xs|md)"$/.test(m[1])) hits.push(`${path}:${m[1]}`);
+        }
+      }
+    };
+    walk(join(root, 'src'));
+    walk(join(root, 'app'));
+    expect(hits).toEqual([]);
   });
 });
 

@@ -35,7 +35,7 @@ export default function ExportMenu({ message, accent, className = "" }) {
     <span className={styles.anchor}>
       <Tip text="Download" side="up">
         <IconBtn aria-label="Download" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)} className={className}>
-          <DownloadIcon style={{ width: 13, height: 13 }} />
+          <DownloadIcon size="sm" />
         </IconBtn>
       </Tip>
       <Popover open={open} onClose={() => setOpen(false)} side="top" navigable role="menu">

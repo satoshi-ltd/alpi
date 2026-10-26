@@ -14,7 +14,7 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock('react-native', () => {
-  const View = ({ children, style, ...p }) => React.createElement('div', p, children);
+  const View = ({ children, style, ...p }) => React.createElement('div', { ...p, 'data-vstyle': JSON.stringify(style) }, children);
   const Text = ({ children, style, ...p }) => React.createElement('span', { ...p, 'data-text-style': JSON.stringify(style) }, children);
   const Pressable = ({ children, onPress, hitSlop, style, accessibilityLabel, accessibilityHint, ...p }) =>
     React.createElement(
@@ -103,6 +103,8 @@ function renderInTwoPane() {
   );
 }
 
+const vstyles = (container) => [...container.querySelectorAll('[data-vstyle]')].map((n) => n.getAttribute('data-vstyle')).join('|');
+
 const sheetStyleOf = (container) =>
   JSON.parse([...container.querySelectorAll('[data-style]')].at(-1).getAttribute('data-style'));
 
@@ -155,14 +157,26 @@ describe('Sheet wide form', () => {
       backgroundColor: '#fff',
       borderTopLeftRadius: radii.xs,
       borderTopRightRadius: radii.xs,
-      borderBottomLeftRadius: radii.xs,
-      borderBottomRightRadius: radii.xs,
+      borderRadius: radii.xs,
       overflow: 'hidden',
       alignSelf: 'center',
       width: '100%',
       maxWidth: 560,
     });
     expect(backdropStyleOf(container).justifyContent).toBe('center');
+  });
+
+  it('drops the grabber and the drag handle on the dialog and starts its header 16 pt down', () => {
+    const { container } = renderInTwoPane();
+    expect(vstyles(container)).not.toContain('"width":36');
+    expect(container.querySelector('[data-gesture]')).toBeNull();
+    expect(vstyles(container)).toContain('"paddingTop":16');
+  });
+
+  it('keeps the grabber and the drag handle on the phone sheet', () => {
+    const { container } = renderSheet();
+    expect(vstyles(container)).toContain('"width":36');
+    expect(container.querySelector('[data-gesture]')).toBeTruthy();
   });
 
   it('floats the dialog clear of the home indicator without stacking the inset twice', () => {

@@ -109,7 +109,7 @@ export default function Dropdown({
         id={menuId}
         role="menu"
         onKeyDown={(event) => navigateMenu(event, menuRef.current)}
-        className={`anim-pop ${styles.menu} ${portaled ? styles.menuPortal : ""}`}
+        className={`anim-pop ${styles.menu} ${searchable ? styles.menuLarge : ""} ${portaled ? styles.menuPortal : ""}`}
         style={
           portaled
             ? {

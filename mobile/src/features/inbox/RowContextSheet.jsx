@@ -7,6 +7,7 @@ import { useToast } from '../../components/Toast';
 import { useCanAdminEarly } from '../../hooks/useActiveRole';
 import { seedCache } from '../../hooks/useDaemonData';
 import { useEndpoint } from '../../lib/EndpointContext';
+import { tap } from '../../lib/haptics';
 import { useTheme } from '../../theme/ThemeContext';
 import { profileLabel } from '../../lib/profileName';
 import { isDefaultProfile } from '../../../../common/rosterOrder.mjs';
@@ -52,8 +53,11 @@ export function RowContextSheet({ target, onClose, onPin, onOpenSettings }) {
               {
                 id: 'pin',
                 label: target.pinned ? 'Unpin' : 'Pin',
-                icon: <Icon name="pin" size={20} color={colors.ink2} />,
-                onPress: () => onPin?.(target),
+                icon: <Icon name="pin" size="md" color={colors.ink2} />,
+                onPress: () => {
+                  tap();
+                  onPin?.(target);
+                },
               },
               ...(canAdmin ? [{ id: 'sep-actions', divider: true }] : []),
             ]
@@ -64,7 +68,7 @@ export function RowContextSheet({ target, onClose, onPin, onOpenSettings }) {
                 id: 'pause',
                 label: target.paused ? 'Resume profile' : 'Pause profile',
                 icon: (
-                  <Icon name={target.paused ? 'power' : 'pause'} size={20} color={colors.ink2} />
+                  <Icon name={target.paused ? 'power' : 'pause'} size="md" color={colors.ink2} />
                 ),
                 onPress: () => togglePause(target),
               },
@@ -75,7 +79,7 @@ export function RowContextSheet({ target, onClose, onPin, onOpenSettings }) {
               {
                 id: 'settings',
                 label: 'Open settings',
-                icon: <Icon name="gear" size={20} color={colors.ink2} />,
+                icon: <Icon name="gear" size="md" color={colors.ink2} />,
                 onPress: () => onOpenSettings(target),
               },
             ]
@@ -87,7 +91,7 @@ export function RowContextSheet({ target, onClose, onPin, onOpenSettings }) {
                 id: 'delete',
                 label: target.kind === 'workgroup' ? 'Delete workgroup…' : 'Delete profile…',
                 danger: true,
-                icon: <Icon name="trash" size={20} color={colors.danger} />,
+                icon: <Icon name="trash" size="md" color={colors.danger} />,
                 onPress: () => router.push(settingsPath(target, 'delete')),
               },
             ]

@@ -86,7 +86,7 @@ def test_snapshot_shape(monkeypatch, tmp_path: Path) -> None:
     assert isinstance(turn["started_at"], float)
     assert snap["scheduled"] == [{
         "profile": "default", "job_id": "brief", "title": "daily brief",
-        "next_fire": "2099-01-01T08:00:00+00:00", "last_run_at": None, "last_run_status": None,
+        "next_fire": "2099-01-01T08:00:00+00:00", "last_run_at": None, "last_run_status": None, "last_ok_at": None,
     }]
 
 
@@ -138,6 +138,21 @@ def test_scope_filter_drops_out_of_scope_profiles() -> None:
         "needs_you": [{"profile": "a"}], "running": [], "scheduled": [{"profile": "a"}],
     }
     assert "host.activity.list" in host_server._SCOPE_FREE_METHODS
+
+
+def test_scheduled_rows_carry_the_last_success_beside_the_last_run(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "default"
+    (home / "schedule").mkdir(parents=True)
+    jobs = [{"id": "weekly", "kind": "once", "run_at": "2099-01-01T00:00:00+00:00",
+             "last_run_at": "2026-10-26T10:00:00+00:00", "last_run_status": "error",
+             "last_ok_at": "2026-10-25T10:00:00+00:00"}]
+    (home / "schedule" / "jobs.json").write_text(json.dumps(jobs))
+    monkeypatch.setattr(activity, "_profile_homes", lambda: [("default", home)])
+
+    [row] = activity.snapshot()["scheduled"]
+
+    assert row["last_ok_at"] == "2026-10-25T10:00:00+00:00"
+    assert row["last_run_status"] == "error"
 
 
 def test_scheduled_sorts_soonest_first_caps_and_keeps_failures(monkeypatch, tmp_path: Path) -> None:

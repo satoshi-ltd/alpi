@@ -17,7 +17,7 @@
 .row {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--sp-8);
 }
 
 @keyframes skBreathe {
@@ -50,27 +50,27 @@
 .skPara {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: var(--sp-8);
 }
 
 .rows {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--sp-4);
   list-style: none;
 }
 
 .listRow {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-3) var(--space-4);
+  gap: var(--sp-8);
+  padding: var(--sp-8) var(--sp-12);
 }
 
 .listText {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--sp-8);
   flex: 1;
   min-width: 0;
 }
@@ -92,8 +92,8 @@
 .reader {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
-  padding: var(--space-6) var(--space-7);
+  gap: var(--sp-12);
+  padding: var(--sp-16) var(--sp-16);
 }
 
 @media (prefers-reduced-motion: reduce) {

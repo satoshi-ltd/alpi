@@ -14,6 +14,16 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.9.0 — 2026-10-27 — a new icon, an Activity that triages, one scale
+
+- Activity (the phone page and the fold's detail pane) opens on chips with counts and groups failing jobs per profile under sticky headers, with `last ok` when the daemon sends it, a Retry per job and a confirmed Retry all for admins; Upcoming lists only future runs.
+- The app icon and the large alpaca wear three paper tones with a bigger mark, and the tinted icon and favicon match.
+- The footer is four entries sharing the full width, with a plain dot on the bell and on Activity instead of a count and no version on the phone (Settings > About shows it); an entry hides its label, keeping its accessibility label, when it would not fit, and the Fold sidebar footer is icon-only like desktop's, with the version as plain text; the connection status dot sits on the connection icon's corner.
+- Headers and rows line up: the roster alpaca is exactly 20 pt on whole points, conversation rows round their line heights, the back chevron's ink sits on the 16 pt edge, the connection header's search icon and trigger chevron share one right edge, both two-pane headers pad 16 pt with the show-sidebar icon at the same x, the image viewer's close button clears the status bar, and a paused profile asks you to resume in one place, the banner, not again in the composer.
+- Every settings row reserves one trailing lane, the fold shows the same grouped cards as the phone, the app settings gain a 3-way theme control, a 4-step text size and a biometric unlock switch, sheets, dialogs, popovers and toasts get thinner edges, and a profile screen the connection does not list closes instead of asking the daemon about it.
+  Requires alpi 0.17.28; `last ok` needs 0.17.39, and older daemons simply omit it.
+
+
 ## v0.8.7 — 2026-10-26 — one dialog, one empty state, errors that wait for you
 
 - The model chip opens the effort picker straight away and an effort applies on tap; the chip never cuts the effort.

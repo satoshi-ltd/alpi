@@ -16,14 +16,23 @@
 
 .alpaca {
   --alp: var(--alp-l);
+  --alp-t0: var(--alp-l0);
+  --alp-t1: var(--alp-l1);
+  --alp-t2: var(--alp-l2);
 }
 
 @media (prefers-color-scheme: dark) {
   :global(:root:not([data-mode="light"])) .alpaca {
     --alp: var(--alp-d);
+    --alp-t0: var(--alp-d0);
+    --alp-t1: var(--alp-d1);
+    --alp-t2: var(--alp-d2);
   }
 }
 
 :global([data-mode="dark"]) .alpaca {
   --alp: var(--alp-d);
+  --alp-t0: var(--alp-d0);
+  --alp-t1: var(--alp-d1);
+  --alp-t2: var(--alp-d2);
 }

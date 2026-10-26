@@ -4,24 +4,23 @@
 
 .popover {
   position: absolute;
-  top: calc(100% + var(--space-2));
+  top: calc(100% + var(--sp-8));
   left: 0;
   width: var(--pop-md);
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--sp-8);
   background: var(--bg-elev);
-  border: .5px solid var(--line-2);
   border-radius: var(--r-xs);
-  box-shadow: var(--shadow-edge);
+  box-shadow: var(--shadow-edge-sm);
   z-index: var(--z-sticky);
-  padding: var(--space-6);
+  padding: var(--sp-16);
 }
 
 .objects {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
-  gap: var(--space-2);
+  gap: var(--sp-8);
   justify-items: center;
 }
 
@@ -34,7 +33,7 @@
 .colours {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
-  gap: var(--space-2);
+  gap: var(--sp-8);
   justify-items: center;
 }
 
@@ -46,8 +45,8 @@
 
 .chip {
   display: block;
-  width: 28px;
-  height: 28px;
+  width: var(--ctl-28);
+  height: var(--ctl-28);
   border-radius: var(--r-xs);
   box-shadow: inset 0 0 0 .5px rgba(0, 0, 0, 0.18);
 }
@@ -58,9 +57,9 @@
 }
 
 .hexInput {
-  padding: var(--space-3) var(--space-4);
-  height: var(--ctrl-md);
-  font-size: var(--fs-sm);
+  padding: var(--sp-8) var(--sp-12);
+  height: var(--ctl-32);
+  font-size: var(--text-meta);
 }
 
 .hexError {
@@ -72,18 +71,18 @@
 .preview {
   display: flex;
   align-items: center;
-  gap: var(--space-5);
+  gap: var(--sp-12);
 }
 
 .previewText {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-tight);
   min-width: 0;
 }
 
 .previewName {
-  font-size: var(--fs-md);
+  font-size: var(--text-ui);
   font-weight: var(--fw-semibold);
   color: var(--ink);
 }

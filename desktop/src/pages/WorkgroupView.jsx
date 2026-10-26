@@ -710,7 +710,7 @@ function renderWgFooter({
           onClick={() => onCopy(plainText)}
           className={styles.footerBtn}
         >
-          {copied ? <CheckIcon style={{ width: 13, height: 13 }} /> : <CopyIcon style={{ width: 13, height: 13 }} />}
+          {copied ? <CheckIcon size="sm" /> : <CopyIcon size="sm" />}
         </IconBtn>
       </Tip>
       <Tip text={tipText} side="up">
@@ -726,11 +726,11 @@ function renderWgFooter({
           className={styles.footerBtn}
         >
           {isLoading ? (
-            <SpinnerIcon style={{ width: 13, height: 13 }} />
+            <SpinnerIcon size="sm" />
           ) : isPlaying ? (
-            <StopIcon style={{ width: 13, height: 13 }} />
+            <StopIcon size="sm" />
           ) : (
-            <VolumeIcon style={{ width: 13, height: 13 }} />
+            <VolumeIcon size="sm" />
           )}
         </IconBtn>
       </Tip>

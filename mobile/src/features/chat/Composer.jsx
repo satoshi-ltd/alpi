@@ -5,7 +5,6 @@ import Animated, { useAnimatedKeyboard, useAnimatedStyle } from 'react-native-re
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { lineHeights, radii, space, typography } from '../../theme/tokens';
 
-import { Button } from '../../components/Button';
 import { Icon } from '../../components/Icon';
 import { COMPOSER_PAD_Y, PANE_PAD_X, tapSlop } from '../../lib/panes';
 import { useTheme } from '../../theme/ThemeContext';
@@ -99,8 +98,6 @@ export function Composer({
   onStop,
   offline = false,
   modelChip = null,
-  onResume = null,
-  resumeLabel = 'Resume profile',
 }) {
   const { colors, fonts , fontSizes} = useTheme();
   const insets = useSafeAreaInsets();
@@ -248,7 +245,7 @@ export function Composer({
                   opacity: disabled ? DIMMED : pressed ? 0.5 : 1,
                 })}
               >
-                <Icon name="paperclip" size="lg" color={colors.ink3} />
+                <Icon name="paperclip" size="md" color={colors.ink3} />
               </Pressable>
             ) : null}
             <Pressable
@@ -269,17 +266,12 @@ export function Composer({
             >
               <Icon
                 name={stoppable ? 'square' : 'send'}
-                size="sm"
+                size="md"
                 color={!stoppable && !canSend ? colors.ink3 : contrastText(actionBg)}
               />
             </Pressable>
           </View>
         </View>
-        {disabled && !offline && onResume ? (
-          <View style={{ alignItems: 'flex-end', paddingTop: space.s3 }}>
-            <Button title={resumeLabel} variant="secondary" onPress={onResume} />
-          </View>
-        ) : null}
       </Animated.View>
     </View>
   );

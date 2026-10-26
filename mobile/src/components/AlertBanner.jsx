@@ -20,7 +20,7 @@ export function AlertBanner({ lead, detail, action, onAction }) {
         borderColor: colors.line,
       }}
     >
-      <Icon name="triangle-alert" size="sm" color={colors.danger} />
+      <Icon name="triangle-alert" size="xs" color={colors.danger} />
       <View style={{ flex: 1, minWidth: 0, gap: space.s1 }}>
         <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, color: colors.ink }}>{lead}</Text>
         {detail ? <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}>{detail}</Text> : null}

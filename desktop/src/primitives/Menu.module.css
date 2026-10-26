@@ -1,16 +1,17 @@
 .row {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--sp-8);
   width: 100%;
-  min-height: 32px;
-  padding: 6px 10px;
+  min-height: var(--ctl-32);
+  padding: var(--sp-8) var(--sp-12);
   border: 0;
   border-radius: var(--r-xs);
   background: transparent;
   color: var(--ink);
   font: inherit;
   font-size: var(--text-ui);
+  line-height: var(--sp-16);
   text-align: left;
   cursor: pointer;
   transition: background var(--dur-1) var(--ease);
@@ -21,8 +22,16 @@
   background: var(--hover);
 }
 
+.row:focus-visible {
+  outline-offset: calc(var(--focus-outline-offset) * -1);
+}
+
+.row:not(:disabled):active {
+  background: var(--selected);
+}
+
 .row:disabled {
-  opacity: var(--alpha-muted);
+  opacity: var(--alpha-disabled);
   cursor: not-allowed;
 }
 
@@ -37,6 +46,7 @@
 }
 
 .danger:not(:disabled):hover,
+.danger:not(:disabled):active,
 .danger:focus-visible {
   background: color-mix(in srgb, var(--c-danger) 10%, transparent);
 }
@@ -45,17 +55,17 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
+  width: var(--icon-md);
   flex-shrink: 0;
   color: var(--ink);
 }
 
 .sep {
   height: 1px;
-  margin: var(--space-1) 10px;
+  margin: var(--sp-4) var(--sp-12);
   background: var(--line);
 }
 
 .sepInset {
-  margin-left: 34px;
+  margin-left: calc(var(--sp-12) + var(--icon-md) + var(--sp-8));
 }

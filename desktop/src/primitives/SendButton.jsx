@@ -36,8 +36,8 @@ export default function SendButton({
       disabled={isStop ? stopping : !enabled}
       aria-label={isStop ? (stopping ? "Stopping" : "Stop") : "Send"}
       style={{
-        width: "var(--ctrl-md)",
-        height: "var(--ctrl-md)",
+        width: "var(--ctl-32)",
+        height: "var(--ctl-32)",
         borderRadius: "var(--r-xs)",
         border: 0,
         background: bg,
@@ -52,12 +52,12 @@ export default function SendButton({
     >
       {isStop ? (
         stopping ? (
-          <SpinnerIcon style={{ width: 14, height: 14 }} />
+          <SpinnerIcon size="sm" />
         ) : (
-          <StopIcon style={{ width: 12, height: 12 }} />
+          <StopIcon size="sm" />
         )
       ) : (
-        <SendIcon style={{ width: 14, height: 14, strokeWidth: 2 }} />
+        <SendIcon size="sm" />
       )}
     </button>
   );

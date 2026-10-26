@@ -97,8 +97,10 @@ describe('useSheetGesture easing', () => {
     expect(backdrop.map((c) => c.easing)).toEqual([EASE_OUT]);
   });
 
-  it('gives the exit the same duration as the entrance', () => {
-    expect(DURATION_OUT).toBe(DURATION_IN);
+  it('gives the exit 130 ms against the 180 ms entrance', () => {
+    expect(DURATION_IN).toBe(180);
+    expect(DURATION_OUT).toBe(130);
+    expect(DURATION_OUT).toBeLessThan(DURATION_IN);
     renderHook(() => useSheetGesture(false, () => {}, 1294));
     expect(h.calls.every((c) => c.duration === DURATION_OUT)).toBe(true);
   });

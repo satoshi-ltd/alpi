@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 afterEach(cleanup);
 
@@ -80,7 +80,7 @@ vi.mock('../../components/Crease', () => ({ Crease: ({ text, accent, size }) => 
 vi.mock('../../components/Icon', () => ({ Icon: ({ name }) => React.createElement('span', {}, name) }));
 
 import { PaneContext } from '../../nav/PaneContext';
-import { CHROME_BTN, PANE_PAD_X, tapSlop } from '../../lib/panes';
+import { BACK_BLEED, BACK_INK_INSET, CHROME_BTN, PANE_PAD_X, TOGGLE_BLEED, tapSlop } from '../../lib/panes';
 import { mobile, space } from '../../theme/tokens';
 import { ChatHeader, headerMenuActions } from './ChatHeader';
 
@@ -305,6 +305,22 @@ describe('ChatHeader failed jobs', () => {
     cleanup();
     render(<ChatHeader kind="profile" title="doc" onMore={() => {}} failedJobs={1} />);
     expect(screen.getByLabelText('More, 1 job failed')).toBeTruthy();
+  });
+
+  it('hands the menu the trigger rect so a fold can anchor its popover there', () => {
+    HTMLElement.prototype.measureInWindow = (cb) => cb(796, 3, 44, 44);
+    const onMore = vi.fn();
+    render(<ChatHeader kind="profile" title="doc" onMore={onMore} />);
+    fireEvent.click(screen.getByLabelText('More'));
+    delete HTMLElement.prototype.measureInWindow;
+    expect(onMore).toHaveBeenCalledWith({ x: 796, y: 3, width: 44, height: 44 });
+  });
+
+  it('still opens the menu, without a rect, where the trigger cannot be measured', () => {
+    const onMore = vi.fn();
+    render(<ChatHeader kind="profile" title="doc" onMore={onMore} />);
+    fireEvent.click(screen.getByLabelText('More'));
+    expect(onMore).toHaveBeenCalledWith(null);
   });
 
   it('draws neither the dot nor the count while no job failed', () => {
@@ -546,5 +562,30 @@ describe('headerMenuActions', () => {
     const actions = headerMenuActions(ALL);
     for (const a of actions.filter((x) => !x.divider)) (a.onPress ?? (() => a.onValueChange(true)))();
     for (const fn of Object.values(ALL)) expect(fn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ChatHeader back control geometry', () => {
+  it('pulls the glyph box flush to the header padding, level with the screen header back control', () => {
+    render(<ChatHeader kind="workgroup" title="#alpha" onBack={() => {}} />);
+    const style = styleOf(screen.getByText('back').closest('button'));
+    expect(style.width).toBe(CHROME_BTN);
+    expect(style.marginLeft).toBe(-(BACK_BLEED + BACK_INK_INSET));
+    expect(style.marginRight).toBe(BACK_INK_INSET);
+  });
+});
+
+describe('ChatHeader two-pane show-sidebar button', () => {
+  it('pads 16 and bleeds the button 10 so the icon starts at x = 16, level with the screen header', () => {
+    const { container } = render(
+      <PaneContext.Provider value={{ twoPane: true, sidebarOpen: false, toggleSidebar() {}, side: 'detail' }}>
+        <ChatHeader kind="workgroup" title="#alpha" />
+      </PaneContext.Provider>,
+    );
+    const wrap = screen.getByLabelText('Show sidebar').parentElement;
+    const margin = styleOf(wrap).marginLeft;
+    expect(headerStyle(container).paddingHorizontal).toBe(PANE_PAD_X);
+    expect(margin).toBe(-TOGGLE_BLEED);
+    expect(headerStyle(container).paddingHorizontal + margin + (CHROME_BTN - 16) / 2).toBe(16);
   });
 });

@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Easing, cancelAnimation, useSharedValue, withTiming } from 'react-native-reanimated';
+import { cancelAnimation, useSharedValue, withTiming } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
+import { EASE_ENTER, EASE_EXIT } from './motionEasing';
 import { useReduceMotion } from './reduceMotion';
+import { motion } from '../theme/tokens';
 
-export const PRESENCE_EASE = Easing.bezier(0.2, 0, 0, 1);
-
-export function usePresence(visible, duration, { snap = false } = {}) {
+export function usePresence(visible, { snap = false } = {}) {
   const reduceMotion = useReduceMotion();
   const [mounted, setMounted] = useState(visible);
   const progress = useSharedValue(visible ? 1 : 0);
@@ -37,11 +37,11 @@ export function usePresence(visible, duration, { snap = false } = {}) {
       return;
     }
     moving.value = true;
-    progress.value = withTiming(target, { duration, easing: PRESENCE_EASE }, (finished) => {
+    progress.value = withTiming(target, { duration: visible ? motion.enter : motion.exit, easing: visible ? EASE_ENTER : EASE_EXIT }, (finished) => {
       if (!finished) return;
       moving.value = false;
       if (!visible) scheduleOnRN(settle, g);
     });
-  }, [visible, reduceMotion, duration, progress, moving, settle]);
+  }, [visible, reduceMotion, progress, moving, settle]);
   return { mounted: mounted || visible, progress, moving, reduceMotion };
 }

@@ -1,4 +1,4 @@
-import hashlib
+import colorsys
 import importlib.util
 import json
 import struct
@@ -29,13 +29,22 @@ SIZES = {
     "mobile/assets/splash-icon-light.png": (1024, 6),
     "mobile/assets/splash-icon-dark.png": (1024, 6),
 }
-UNTOUCHED_SHA256 = {
-    "desktop/src-tauri/icons/tray-template.png": "de7eeed708de3c3f53369f3fe9dfc55a16ebd789d5b8023331c33b1e51b24334",
-    "desktop/src-tauri/icons/tray-template-notification.png": "ab5de37b8f28e781197dc2fc1f671c359582c315dc8bac6cb579309ff02cac0b",
-    "mobile/assets/ios-tinted.png": "0cc40dc3f2250b5708c5d1d3db4756f7dab079013ef73c8f7f335e6963db2711",
-}
 PAPER = (0xFF, 0xFF, 0xFF)
 INK = (0x0C, 0x0B, 0x09)
+SINGLE_INK = {
+    "desktop/src-tauri/icons/tray-template.png": (64, 6),
+    "desktop/src-tauri/icons/tray-template-notification.png": (64, 6),
+    "mobile/assets/ios-tinted.png": (1024, 6),
+    "mobile/assets/favicon.png": (96, 6),
+}
+FULL_COLOUR = {
+    "mobile/assets/ios-light.png": ("light", PAPER),
+    "mobile/assets/ios-dark.png": ("dark", INK),
+    "mobile/assets/icon.png": ("light", PAPER),
+    "desktop/src-tauri/icons/icon.png": ("light", PAPER),
+}
+SMALL_SIZES = (180, 60, 40, 29)
+MIN_FILL = 0.15
 
 
 def decode(path):
@@ -74,12 +83,66 @@ def colours(image):
     seen = {}
     for row in rows:
         for x in range(0, len(row), channels):
-            seen[row[x:x + channels]] = seen.get(row[x:x + channels], 0) + 1
+            key = tuple(row[x:x + channels])
+            seen[key] = seen.get(key, 0) + 1
     return seen
 
 
-def tones(accent=None):
-    return gen.load_mark(accent or gen.LIGHT_ACCENT)[1]
+def tones(accent=None, ground=PAPER):
+    return gen.crease_tones(accent or gen.LIGHT_ACCENT, gen.hex_of(ground))
+
+
+def pixels(img):
+    n, px = img.size, img.pixel
+    stride = n * px + 1
+    return [[tuple(img.raw[y * stride + 1 + x * px:y * stride + 1 + (x + 1) * px]) for x in range(n)] for y in range(n)]
+
+
+def ink_mask(img, ground):
+    return [[(len(p) == 3 or p[3] != 0) and sum(abs(p[k] - ground[k]) for k in range(3)) > 60 for p in row] for row in pixels(img)]
+
+
+def fill_of(mask):
+    return sum(map(sum, mask)) / (len(mask) * len(mask))
+
+
+def flood(mask, start_cells, want):
+    n = len(mask)
+    seen = {c for c in start_cells if mask[c[1]][c[0]] == want}
+    stack = list(seen)
+    while stack:
+        x, y = stack.pop()
+        for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if 0 <= nx < n and 0 <= ny < n and mask[ny][nx] == want and (nx, ny) not in seen:
+                seen.add((nx, ny))
+                stack.append((nx, ny))
+    return seen
+
+
+def components(mask):
+    cells = {(x, y) for y, row in enumerate(mask) for x, v in enumerate(row) if v}
+    count = 0
+    while cells:
+        count += 1
+        cells -= flood(mask, [next(iter(cells))], True)
+    return count
+
+
+def enclosed_gaps(mask):
+    n = len(mask)
+    border = [(x, y) for x in range(n) for y in range(n) if x in (0, n - 1) or y in (0, n - 1)]
+    outside = flood(mask, border, False)
+    return n * n - sum(map(sum, mask)) - len(outside)
+
+
+def ear_ink(mask):
+    rows = [y for y, row in enumerate(mask) if any(row)]
+    band = int((rows[-1] - rows[0] + 1) * 0.14) + 1
+    return sum(sum(mask[y]) for y in range(rows[0], rows[0] + band))
+
+
+def full_render(size):
+    return gen.render(size, gen.PAPER, "full", gen.LIGHT_ACCENT, mark_height=gen.FULL_MARK, rgb=True)
 
 
 @pytest.mark.parametrize("rel", sorted(SIZES))
@@ -89,13 +152,96 @@ def test_every_icon_keeps_its_pixel_size_and_colour_type(rel):
     assert (width, height, got) == (size, size, ctype)
 
 
-@pytest.mark.parametrize("rel", ["mobile/assets/ios-light.png", "mobile/assets/ios-dark.png", "mobile/assets/icon.png", "desktop/src-tauri/icons/icon.png"])
-def test_opaque_and_tile_icons_draw_the_alpaca_in_one_flat_ink(rel):
-    seen = colours(decode(rel))
-    ink = tones(gen.DARK_ACCENT if "dark" in rel else gen.LIGHT_ACCENT)
-    assert len(set(ink)) == 1
-    assert any(near(c[:3], ink[0], 2) and n > 500 for c, n in seen.items()), rel
-    assert len({c[:3] for c, n in seen.items() if n > 5000 and (len(c) == 3 or c[3] == 255)}) == 2
+@pytest.mark.parametrize("rel", sorted(FULL_COLOUR))
+def test_full_colour_icons_draw_the_alpaca_in_three_discrete_tones_of_one_hue(rel):
+    mode, ground = FULL_COLOUR[rel]
+    seen = {c[:3]: n for c, n in colours(decode(rel)).items() if len(c) == 3 or c[3] == 255}
+    total = sum(seen.values())
+    palette = set(tones(gen.BRAND_INK[mode], ground))
+    dominant = {c for c, n in seen.items() if n > total * 0.002}
+    assert dominant == palette | {ground}, rel
+    assert len(palette) >= 3
+    edge = sum(n for c, n in seen.items() if c not in dominant)
+    assert edge < total * 0.04, rel
+    chroma = [max(t) - min(t) for t in palette if max(t) - min(t) > 8]
+    hues = [colorsys.rgb_to_hsv(*(v / 255 for v in t))[0] * 360 for t in palette if max(t) - min(t) > 8]
+    assert chroma and max(hues) - min(hues) < 20
+
+
+@pytest.mark.parametrize("rel", sorted(FULL_COLOUR))
+def test_the_large_icons_carry_the_mark_on_about_a_sixth_of_the_tile(rel):
+    mode, ground = FULL_COLOUR[rel]
+    width, _, _, channels, raw = decode(rel)
+    opaque = inked = 0
+    for row in raw:
+        for x in range(width):
+            p = row[x * channels:(x + 1) * channels]
+            if channels == 4 and p[3] == 0:
+                continue
+            opaque += 1
+            inked += sum(abs(p[k] - ground[k]) for k in range(3)) > 60
+    assert 0.15 <= inked / opaque <= 0.22, (rel, inked / opaque)
+
+
+@pytest.mark.parametrize("size", SMALL_SIZES)
+def test_small_renders_keep_the_fill_close_the_gaps_and_keep_the_ears(size):
+    mask = ink_mask(full_render(size), gen.PAPER)
+    assert fill_of(mask) >= MIN_FILL
+    if size <= gen.LOW_MAX:
+        assert components(mask) == 1
+        assert enclosed_gaps(mask) == 0
+    assert ear_ink(mask) >= {180: 150, 60: 35, 40: 18, 29: 12}[size]
+
+
+def test_thickening_only_applies_below_64_px_and_grows_as_the_icon_shrinks():
+    assert gen.thickness(65) == 0 == gen.thickness(1024)
+    assert 0 < gen.thickness(64) < gen.thickness(40) < gen.thickness(29) <= gen.THICK_MAX
+    assert gen.thickness(16) <= gen.THICK_MAX
+
+
+def test_the_thickened_silhouette_is_wider_than_the_drawn_one():
+    span = lambda polys: max(x for _, poly in polys for x, _ in poly) - min(x for _, poly in polys for x, _ in poly)
+    drawn = gen.mark_polygons(29, gen.FULL_MARK, nominal=1024, low=True)
+    assert span(gen.mark_polygons(29, gen.FULL_MARK)) > span(drawn) + 1
+
+
+@pytest.mark.parametrize("rel", sorted(r for r in SINGLE_INK if "tray" in r))
+def test_tray_templates_are_one_flat_ink_on_transparency(rel):
+    image = decode(rel)
+    seen = colours(image)
+    assert {c[:3] for c in seen if c[3] > 0} == {rgb for rgb in [tuple(gen.rgb_of(gen.LIGHT_ACCENT))]}
+    alphas = {c[3] for c in seen}
+    assert 0 in alphas and 255 in alphas
+    opaque = sum(n for c, n in seen.items() if c[3] > 128) / (64 * 64)
+    assert opaque >= 0.2
+
+
+def test_the_notification_tray_template_adds_a_dot_in_the_same_ink():
+    plain = colours(decode("desktop/src-tauri/icons/tray-template.png"))
+    badge = colours(decode("desktop/src-tauri/icons/tray-template-notification.png"))
+    count = lambda seen: sum(n for c, n in seen.items() if c[3] == 255)
+    assert count(badge) > count(plain)
+
+
+def test_the_tinted_icon_is_white_on_black_with_no_other_hue():
+    seen = colours(decode("mobile/assets/ios-tinted.png"))
+    assert all(c[0] == c[1] == c[2] and c[3] == 255 for c in seen)
+    big = {c[:3] for c, n in seen.items() if n > 0.002 * 1024 * 1024}
+    assert big == {(0, 0, 0), (255, 255, 255)}
+
+
+def test_the_favicon_is_one_flat_ink_on_transparency():
+    seen = colours(decode("mobile/assets/favicon.png"))
+    assert {c[:3] for c in seen if c[3] > 0} == {gen.rgb_of(gen.FAVICON_ACCENT)}
+    assert 0 in {c[3] for c in seen}
+
+
+def test_every_single_ink_icon_is_generated():
+    assert set(SINGLE_INK) == set(gen.SINGLE_INK)
+    files = gen.generate()
+    assert set(SINGLE_INK) <= set(files)
+    for rel, (size, ctype) in SINGLE_INK.items():
+        assert decode(rel)[:3] == (size, size, ctype)
 
 
 def test_light_ios_icons_sit_on_paper_and_dark_on_near_black():
@@ -137,20 +283,14 @@ def test_floating_marks_are_transparent_and_inside_the_adaptive_safe_zone(rel):
     assert opaque
     assert max(((x - width / 2) ** 2 + (y - height / 2) ** 2) ** 0.5 for x, y in opaque) <= radius
     seen = colours(image)
-    assert any(c[3] == 255 and near(c[:3], tones()[0], 2) and n > 500 for c, n in seen.items())
+    assert {c[:3] for c, n in seen.items() if c[3] == 255 and n > 500} == set(tones())
 
 
 def test_favicon_is_a_transparent_flat_mark():
     image = decode("mobile/assets/favicon.png")
     assert pixel(image, 0, 0)[3] == 0
     seen = colours(image)
-    assert any(c[3] == 255 and near(c[:3], tones(gen.FAVICON_ACCENT)[0], 2) for c in seen)
-
-
-def test_single_ink_icons_are_untouched():
-    for rel, digest in UNTOUCHED_SHA256.items():
-        assert hashlib.sha256((REPO / rel).read_bytes()).hexdigest() == digest, rel
-    assert set(UNTOUCHED_SHA256) == set(gen.UNTOUCHED)
+    assert any(c[3] == 255 and c[:3] == gen.rgb_of(gen.FAVICON_ACCENT) for c in seen)
 
 
 def png_size(data):
@@ -185,8 +325,9 @@ def test_ico_container_parses_with_png_entries():
 
 
 def test_generation_is_deterministic():
-    first = gen.render(96, gen.PAPER, "none", gen.FAVICON_ACCENT, mark_height=gen.FAVICON_MARK).png()
-    assert first == gen.render(96, gen.PAPER, "none", gen.FAVICON_ACCENT, mark_height=gen.FAVICON_MARK).png()
+    first = gen.generate()
+    again = gen.generate()
+    assert first.keys() == again.keys() and all(first[k] == again[k] for k in first)
 
 
 def test_committed_icons_match_the_generator():
@@ -233,14 +374,14 @@ def test_the_icons_use_the_brand_ink_of_each_theme_and_every_tone_holds_on_its_g
     assert f'light: "{gen.LIGHT_ACCENT}"' in folds and f'dark: "{gen.DARK_ACCENT}"' in folds
     for tone in tones(gen.LIGHT_ACCENT):
         assert contrast(tone, PAPER) >= 3, tone
-    for tone in tones(gen.DARK_ACCENT):
+    for tone in tones(gen.DARK_ACCENT, INK):
         assert contrast(tone, INK) >= 3, tone
 
 
 def test_the_dark_splash_wears_the_dark_accent_and_the_light_splash_the_light_one():
-    for rel, accent in (("mobile/assets/splash-icon-light.png", gen.LIGHT_ACCENT), ("mobile/assets/splash-icon-dark.png", gen.DARK_ACCENT)):
+    for rel, accent, ground in (("mobile/assets/splash-icon-light.png", gen.LIGHT_ACCENT, PAPER), ("mobile/assets/splash-icon-dark.png", gen.DARK_ACCENT, INK)):
         seen = colours(decode(rel))
-        assert any(c[3] == 255 and near(c[:3], tones(accent)[1], 2) and n > 500 for c, n in seen.items()), rel
+        assert any(c[3] == 255 and near(c[:3], tones(accent, ground)[1], 2) and n > 500 for c, n in seen.items()), rel
 
 
 def test_icons_up_to_64_px_use_the_nine_facet_alpaca_and_larger_ones_the_twelve():

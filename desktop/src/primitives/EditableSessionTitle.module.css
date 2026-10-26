@@ -1,7 +1,7 @@
 .title {
   display: block;
   min-width: 0;
-  height: 20px;
+  height: var(--ctl-24);
   line-height: 20px;
   cursor: text;
 }
@@ -9,7 +9,7 @@
 .input {
   min-width: 0;
   width: 100%;
-  height: 20px;
+  height: var(--ctl-24);
   box-sizing: border-box;
   border: .5px solid transparent;
   border-radius: var(--r-xs);
@@ -18,7 +18,7 @@
   font: inherit;
   line-height: 18px;
   outline: none;
-  padding: 0 6px;
+  padding: 0 var(--sp-8);
 }
 
 .input:focus {

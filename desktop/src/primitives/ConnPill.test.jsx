@@ -4,16 +4,22 @@ import { render, screen } from "@testing-library/react";
 import ConnPill from "./ConnPill.jsx";
 
 describe("ConnPill", () => {
-  it("says online in words beside the host when online", () => {
+  it("shows only the host when online, because the dot already says online", () => {
     render(
       <ConnPill kind="remote" name="office" host="1.2.3.4:7423" status="online" />,
     );
-    expect(screen.getByText("online · 1.2.3.4:7423")).toBeInTheDocument();
+    expect(screen.getByText("1.2.3.4:7423")).toBeInTheDocument();
+    expect(screen.queryByText(/online/)).toBeNull();
   });
 
-  it("says just online when there is no host", () => {
+  it("still names the state for assistive technology", () => {
     render(<ConnPill kind="local" name="this device" status="online" />);
-    expect(screen.getByText("online")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "this device, online" })).toBeInTheDocument();
+  });
+
+  it("includes the visible host in the accessible name", () => {
+    render(<ConnPill kind="remote" name="office" host="1.2.3.4:7423" status="online" />);
+    expect(screen.getByRole("button", { name: "office, online, 1.2.3.4:7423" })).toBeInTheDocument();
   });
 
   it("does not pulse the dot while offline", () => {

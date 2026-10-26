@@ -8,7 +8,6 @@ const SLATE = /11, ?17, ?23|230, ?237, ?243|#0b1117|#3d4955|#626e7d|#b1bac4|#eef
 const ROUND = new Set([
   "features/NotificationsModal.module.css .unreadDot",
   "features/ScheduleModal.module.css .dot",
-  "features/Sidebar.module.css .bellBadge",
   "features/settings/Settings.module.css .budgetBar",
   "features/settings/Settings.module.css .budgetBarFill",
   "primitives/WaveBars.module.css .bars span",
@@ -120,7 +119,7 @@ describe("paper direction scanner", () => {
     expect(inlineViolations("a.jsx", 'style={{ borderRadius: "var(--r-lg)" }}')).toHaveLength(1);
     expect(inlineViolations("a.jsx", 'const ink = "#0b1117";')).toHaveLength(1);
     expect(inlineViolations("a.jsx", "style={{ borderRadius: 999 }}")).toHaveLength(1);
-    expect(inlineViolations("a.jsx", 'style={{ borderRadius: "calc(var(--ctrl-md) / 3)" }}')).toHaveLength(1);
+    expect(inlineViolations("a.jsx", 'style={{ borderRadius: "calc(var(--ctl-32) / 3)" }}')).toHaveLength(1);
     expect(inlineViolations("a.jsx", "style={{ borderRadius: size / 2 }}")).toHaveLength(1);
     expect(paperViolations("a.css", ".a { filter: drop-shadow(0 2px 4px black); }").join()).toContain("filter blur");
     expect(paperViolations("a.css", ":root { --shadow-lg: 0 8px 24px black; }").join()).toContain("blurred shadow token");

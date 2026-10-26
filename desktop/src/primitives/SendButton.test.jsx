@@ -7,8 +7,8 @@ describe("SendButton", () => {
   it.each([["send"], ["stop"]])("%s sits on the md control height beside the composer's icon buttons with the 4 px sheet corner", (variant) => {
     render(<SendButton variant={variant} canSend />);
     const btn = screen.getByRole("button");
-    expect(btn.style.width).toBe("var(--ctrl-md)");
-    expect(btn.style.height).toBe("var(--ctrl-md)");
+    expect(btn.style.width).toBe("var(--ctl-32)");
+    expect(btn.style.height).toBe("var(--ctl-32)");
     expect(btn.style.borderRadius).toBe("var(--r-xs)");
   });
 });

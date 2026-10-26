@@ -98,7 +98,10 @@ def paper_box(inner, h=168, extra=""):
 
 
 def black_alpaca(size, color="rgb(20, 20, 20)"):
-    polys = "".join('<polygon points="%s" fill="%s"/>' % (" ".join("%.1f,%.1f" % p for p in pts), color) for pts, _ in folds.alpaca_facets())
+    channels = [int(v) for v in re.findall(r"\d+", color)] if color.startswith("rgb") else [int(color[i:i + 2], 16) for i in (1, 3, 5)]
+    data = folds.alpaca_tonal()
+    tonal = data["dark" if sum(channels) / 3 > 128 else "light"] if size >= data["min"] else None
+    polys = "".join('<polygon points="%s" fill="%s"/>' % (" ".join("%.1f,%.1f" % p for p in pts), tonal[tone] if tonal else color) for pts, tone in folds.alpaca_facets())
     return f'<svg viewBox="0 0 100 100" width="{size}" height="{size}" role="img" aria-label="alpi mark" style="flex-shrink: 0; display: block">{polys}</svg>'
 
 
@@ -171,7 +174,7 @@ def mark():
         f'<div style="width: {w}px; height: 330px; border-radius: 12px; background: {bg}; border: 0.5px solid {LINE2}; display: flex; align-items: center; justify-content: center">{inner}</div>',
         strong(cap_, 13), mono(sub, 11, INK3), gap=8)
     options = flex(
-        big(alpaca(LIGHT_ACCENT, 260), "Ink on paper", "ships · 12 facets · one flat ink · the folds are the seams", bg="#fefefe"),
+        big(alpaca(LIGHT_ACCENT, 260), "Ink on paper", "ships · 12 facets · three crease tones, the folds are the seams", bg="#fefefe"),
         big(alpaca("#f3efe6", 260), "Cream on night", "ships · the same drawing on near-black", bg=NIGHT),
         big(folds.flat(PAL["amber"], 170), "The sheet", "the unfolded mark · empty and offline", bg=PANE),
         gap=18, align="flex-start")
@@ -186,19 +189,19 @@ def mark():
         gap=18, align="flex-start")
 
     tiles = flex(
-        stack(tile(alpaca(LIGHT_ACCENT, 70), "#ffffff", 120, 28), mono("app icon · light", 11, INK3), gap=8),
-        stack(tile(alpaca("#f3efe6", 70), NIGHT, 120, 28, border=False), mono("app icon · dark", 11, INK3), gap=8),
+        stack(tile(alpaca(LIGHT_ACCENT, 98), "#ffffff", 120, 28), mono("app icon · light · tonal facets", 11, INK3), gap=8),
+        stack(tile(alpaca("#f3efe6", 98), NIGHT, 120, 28, border=False), mono("app icon · dark · tonal facets", 11, INK3), gap=8),
         stack(tile(black_small(56, PAPER_INK), "#ffffff", 120, 28), mono("menu bar · single ink", 11, INK3), gap=8),
         stack(tile(pair("shield", 78), "#ffffff", 120, 28), mono("per-profile tile", 11, INK3), gap=8),
         stack(tile(pair("crown", 78), "#ffffff", 120, 28), mono("per-profile tile", 11, INK3), gap=8),
         stack(tile(pair("rocket", 78), NIGHT, 120, 28, border=False), mono("per-profile · dark", 11, INK3), gap=8),
         gap=18, align="flex-start")
 
-    sizes = flex(*[stack(f'<div style="height: 110px; display: flex; align-items: flex-end">{alpaca_small(LIGHT_ACCENT, z) if z <= 32 else alpaca(LIGHT_ACCENT, z)}</div>', mono(f"{z}" + (" · nine facets" if z <= 32 else ""), 11, INK3), gap=6) for z in (16, 24, 32, 48, 96)], gap=26, align="flex-end")
-    note = panel(body("<b>Where each mark ships.</b> The alpaca is the brand and it is always one ink: the app icons, the splash, the site and the README; the iOS tinted icon and the tray templates are the same drawing recoloured by the system. The wordmark is cut like the alpaca: T3 Crease, three greys with a slit between them, in ink on paper or in cream on night. It is Bricolage Grotesque, shipped as a font in the apps and the site. At 32 px and below the alpaca is drawn with nine facets instead of twelve, the same drawing the menu bar uses in one ink; profiles wear a small object instead of the alpaca.", 12.5), 20, bg=SIDE)
+    sizes = flex(*[stack(f'<div style="height: 110px; display: flex; align-items: flex-end">{alpaca_small(LIGHT_ACCENT, z) if z <= 32 else alpaca(LIGHT_ACCENT, z)}</div>', mono(f"{z}" + (" · nine facets, one ink" if z <= 32 else " · tonal" if z >= 48 else ""), 11, INK3), gap=6) for z in (16, 24, 32, 48, 96)], gap=26, align="flex-end")
+    note = panel(body("<b>Where each mark ships.</b> The alpaca is the brand. From 48 px up it is drawn in three crease tones of the brand ink, so the folds read as paper: the app icons, the splash, the empty states and the onboarding. Below 48 px it is one flat ink: the roster glyphs, the site favicon, the menu bar. The iOS tinted icon and the tray templates stay one ink on transparency, and every icon below 64 px is drawn a little heavier so the facets touch and the ears survive. The wordmark is cut like the alpaca: T3 Crease, three greys with a slit between them, in ink on paper or in cream on night. It is Bricolage Grotesque, shipped as a font in the apps and the site. At 32 px and below the alpaca is drawn with nine facets instead of twelve, the same drawing the menu bar uses in one ink; profiles wear a small object instead of the alpaca.", 12.5), 20, bg=SIDE)
 
     return board("mark", 2180, head("Brand · logo", "The alpaca stays, in the same cut as its name.",
-                                  "The origami alpaca is drawn in one flat ink, black on paper and cream on night; its folds are the paper seams between twelve facets. It is the one mark that is not a profile. Only the name carries tones: T3 crease, three greys cut by a slit, like a sheet cut from paper."),
+                                  "The origami alpaca is drawn from its twelve facets in the three crease tones of the brand ink, black on paper and cream on night; its folds are the paper seams between them. It is the one mark that is not a profile. The name carries the same tones: T3 crease, three greys cut by a slit, like a sheet cut from paper."),
                  options, section_title("It builds from a sheet", "01"), build_frames(150, 190, LIGHT_ACCENT), section_title("Lockups", "02"), lockups,
                  section_title("Tiles and icons", "03"), tiles, section_title("Where it stops reading", "04"), spec("The alpaca at 16, 24, 32, 48 and 96 px", sizes, pad=18), note, gap=24)
 
@@ -264,7 +267,7 @@ def side_label(text):
 
 
 def sidebar(title, tag, glyph_for, wg_glyph, width=248):
-    rows = [side_label("Pinned"), side_row(folds.fold("alpaca", LIGHT_ACCENT, 16), "alpi", meta="2d"), side_label("Profiles")]
+    rows = [side_label("Pinned"), side_row(f'<span style="width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">{folds.fold("alpaca", LIGHT_ACCENT, folds.alpaca_drawn(16))}</span>', "alpi", meta="2d"), side_label("Profiles")]
     rows += [side_row(glyph_for(s), n, selected=n == "lens", meta="2w" if n == "scout" else "") for n, s in SAMPLE]
     rows += [side_label("Workgroups")]
     rows += [side_row(wg_glyph(h), n, meta="19h") for n, h in GROUPS]

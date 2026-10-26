@@ -70,7 +70,7 @@ vi.mock('../../components/Icon', () => ({ Icon: ({ name }) => React.createElemen
 vi.mock('../../theme/ThemeContext', () => ({
   useTheme: () => ({
     colors: {
-      bgPane: '#ffffff', bgInput: '#f1f3f5', line2: '#dddddd', hover: '#f4f4f4', selected: '#eaeaea',
+      bgPane: '#ffffff', field: '#f1f3f5', line2: '#dddddd', hover: '#f4f4f4', selected: '#eaeaea',
       ink: '#0b1117', ink2: '#3d4955', ink3: '#7c8896', ink4: '#b1bac4',
     },
     fonts: { sans: { regular: 'r', medium: 'm', semibold: 's' }, mono: 'mono' },

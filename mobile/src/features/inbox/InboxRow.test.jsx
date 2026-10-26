@@ -109,8 +109,8 @@ vi.mock('../../components/ActionSheet', () => ({
 
 import { mobile, radii, space } from '../../theme/tokens';
 import { PaneContext } from '../../nav/PaneContext';
-import { FALLBACK_ACCENT } from '../../../../common/folds.mjs';
-import { InboxRow } from './InboxRow';
+import { ALPACA_ROW_SCALE, FALLBACK_ACCENT, FOLD_SIZES } from '../../../../common/folds.mjs';
+import { GLYPH_SLOT, InboxRow } from './InboxRow';
 import { RowContextSheet } from './RowContextSheet';
 
 const WORKGROUP = {
@@ -574,5 +574,47 @@ describe('InboxRow press contract', () => {
     const { container } = sidebarRow({ item: WORKGROUP, onPress });
     fireEvent.click(pressable(container));
     expect(onPress).toHaveBeenCalledWith(WORKGROUP);
+  });
+});
+
+describe('InboxRow alpaca on whole pixels', () => {
+  const ALPACA = { ...PROFILE, fold: 'alpaca' };
+  const drawn = FOLD_SIZES.row * ALPACA_ROW_SCALE;
+
+  function geometry(container) {
+    const row = styleOf(pressable(container));
+    const slot = styleOf(container.querySelector('[data-glyph]').parentElement);
+    const lines = [...container.querySelectorAll('span[data-style]')].map(styleOf).filter((s) => s.lineHeight);
+    const padding = (row.paddingVertical ?? 0) * 2;
+    const body = lines.reduce((sum, s) => sum + s.lineHeight, 0) + (lines.length - 1) * space.s1;
+    const height = Math.max(row.minHeight, padding + body);
+    return { slot, height, lines };
+  }
+
+  it('draws the alpaca at 20 pt in a 16 pt glyph', () => {
+    expect(ALPACA_ROW_SCALE).toBe(1.25);
+    expect(drawn).toBe(20);
+  });
+
+  it('centres it on whole x in the glyph column of both rows', () => {
+    for (const container of [renderRow({ item: ALPACA }).container, sidebarRow({ item: ALPACA }).container]) {
+      const { slot } = geometry(container);
+      expect(slot.width).toBe(GLYPH_SLOT);
+      expect(Number.isInteger((slot.width - FOLD_SIZES.row) / 2 - (drawn - FOLD_SIZES.row) / 2)).toBe(true);
+    }
+  });
+
+  it('centres it on whole y: the phone row and the sidebar row have whole heights', () => {
+    for (const container of [renderRow({ item: ALPACA }).container, sidebarRow({ item: ALPACA }).container]) {
+      const { height, lines } = geometry(container);
+      for (const line of lines) expect(Number.isInteger(line.lineHeight)).toBe(true);
+      expect(Number.isInteger(height)).toBe(true);
+      expect(Number.isInteger((height - FOLD_SIZES.row) / 2 - (drawn - FOLD_SIZES.row) / 2)).toBe(true);
+    }
+  });
+
+  it('keeps the sidebar row at the 44 pt tap height', () => {
+    const { height } = geometry(sidebarRow({ item: ALPACA }).container);
+    expect(height).toBe(mobile.tap);
   });
 });

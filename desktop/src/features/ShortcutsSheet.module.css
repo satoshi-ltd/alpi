@@ -1,8 +1,8 @@
 .head {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-5) var(--space-4) var(--space-8);
+  gap: var(--sp-8);
+  padding: var(--panel-head-pad);
   border-bottom: .5px solid var(--line);
 }
 
@@ -17,13 +17,13 @@
 .body {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-2) var(--space-9);
-  padding: var(--space-3) var(--space-8) var(--space-8);
+  gap: var(--sp-8) var(--sp-24);
+  padding: var(--sp-8) var(--sp-24) var(--sp-24);
 }
 
 .groupLabel {
   margin: 0;
-  padding: var(--space-6) 0 var(--space-2);
+  padding: var(--sp-16) 0 var(--sp-8);
 }
 
 .list {
@@ -34,8 +34,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-4);
-  min-height: var(--ctrl-sm);
+  gap: var(--sp-8);
+  min-height: var(--ctl-28);
   border-bottom: .5px solid var(--line);
 }
 

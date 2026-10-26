@@ -128,7 +128,7 @@ export default function SessionsButton({
           <ChevDownIcon className={styles.chev} />
         </Button>
       </Tip>
-      <Popover open={open} onClose={() => setOpen(false)} width="var(--pop-lg)" align="right" navigable role="menu">
+      <Popover open={open} onClose={() => setOpen(false)} width="var(--pop-lg)" align="right" navigable role="menu" large>
         <button
           type="button"
           role="menuitem"

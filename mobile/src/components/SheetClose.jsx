@@ -1,6 +1,8 @@
 import { Pressable } from 'react-native';
 import { mobile, radii, space } from '../theme/tokens';
 
+export const SHEET_CLOSE_BLEED = space.s4;
+
 import { Icon } from './Icon';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -16,8 +18,8 @@ export function SheetClose({ onPress, color, hint = 'Dismisses this sheet — yo
       style={({ pressed }) => ({
         width: mobile.tap,
         height: mobile.tap,
-        marginTop: -space.s2,
-        marginRight: -space.s3,
+        marginTop: -SHEET_CLOSE_BLEED,
+        marginRight: -SHEET_CLOSE_BLEED,
         borderRadius: radii.xs,
         alignItems: 'center',
         justifyContent: 'center',
@@ -25,7 +27,7 @@ export function SheetClose({ onPress, color, hint = 'Dismisses this sheet — yo
         ...style,
       })}
     >
-      <Icon name="x" size="lg" color={color ?? colors.ink3} />
+      <Icon name="x" size="md" color={color ?? colors.ink3} />
     </Pressable>
   );
 }

@@ -1,4 +1,4 @@
-import { mobile, space } from '../theme/tokens';
+import { iconSizes, mobile, space } from '../theme/tokens';
 
 export const SIDEBAR_W = 280;
 export const MIN_W = 600;
@@ -8,6 +8,7 @@ export const SIDEBAR_OPEN_MIN_W = 800;
 export const MASTER_DETAIL_MIN_W = 760;
 export const LIST_COLUMN_W = 300;
 export const ROW_STACK_MAX_W = 360;
+export const SETTINGS_COLUMN_MAX_W = 560;
 
 export const CONTENT_MAX_W = 720;
 // Desktop --pane-pad-x: header, transcript rows and composer share it; Bubble rows carry this same token, so the capped column adds none.
@@ -16,6 +17,14 @@ export const BUBBLE_MAX_PANE = '76%';
 
 export const CHROME_H = mobile.tap;
 export const CHROME_BTN = space.s11;
+export const BACK_BLEED = (CHROME_BTN - iconSizes.md) / 2;
+export const BACK_INK_INSET = 5.25;
+export const TOGGLE_BLEED = BACK_BLEED;
+export const CONN_EDGE_NUDGE = 0.5 + space.s5 - BACK_BLEED;
+export function backMargins(leading = true) {
+  const ink = leading ? BACK_INK_INSET : 0;
+  return { marginLeft: -(BACK_BLEED + ink), marginRight: ink };
+}
 export const COMPOSER_PAD_Y = space.s3;
 export const COMPOSER_CTRL = mobile.tap;
 export const tapSlop = (size) => (mobile.tap - size) / 2;
@@ -34,6 +43,11 @@ export function nextTwoPane(prev, width, height) {
 export function sidebarOpenByDefault(width, height = 0) {
   if (width >= SIDEBAR_OPEN_MIN_W) return true;
   return height > 0 && width >= MIN_W && width > height;
+}
+
+export function settingsContentStyle(twoPane) {
+  if (!twoPane) return { paddingBottom: space.s10 };
+  return { paddingTop: space.s9, paddingBottom: space.s11, maxWidth: SETTINGS_COLUMN_MAX_W, width: '100%', alignSelf: 'flex-start' };
 }
 
 export function stacksRow(width) {

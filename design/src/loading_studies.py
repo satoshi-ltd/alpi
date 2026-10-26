@@ -110,6 +110,15 @@ BREATH = (f"<style>@keyframes skBreath{{0%, 100%{{opacity: 1}}50%{{opacity: 0.55
           f"@media (prefers-reduced-motion: reduce){{.sk-bone, .pl-ghost, .pl-bar{{animation: none}}}}</style>")
 
 
+BREATH_M = (f"<style>@keyframes skBreathM{{0%, 100%{{opacity: 1}}50%{{opacity: 0.4}}}}"
+            f".sk-bone-m{{animation: skBreathM {BREATH_S}s ease-in-out infinite}}"
+            f"@media (prefers-reduced-motion: reduce){{.sk-bone-m{{animation: none}}}}</style>")
+
+
+def mbone(w, h, r=2, index=0):
+    return bone(w, h, r, index, "sk-bone-m")
+
+
 def bone(w, h, r=2, index=0, cls="sk-bone"):
     return (f'<span class="{cls}" style="display: block; width: {w}; height: {h}px; border-radius: {r}px; background: {SK}; flex-shrink: 0; '
             f'animation-delay: {index * STAGGER_MS}ms"></span>')
@@ -120,30 +129,30 @@ def silhouette(narrow):
 
     def tile(i, label_w, value_w, big=False, end=False):
         return (f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; align-items: {"flex-end" if end else "flex-start"}">'
-                f'{slot(11, bone(f"{label_w}px", 8, 2, i))}{slot(28 if big else 18, bone(f"{value_w}px", 22 if big else 14, 2, i))}</div>')
+                f'{slot(11, mbone(f"{label_w}px", 8, 2, i))}{slot(28 if big else 18, mbone(f"{value_w}px", 22 if big else 14, 2, i))}</div>')
     if narrow:
         stats = (f'<div style="display: flex; align-items: flex-end">{tile(0, 34, 84, True)}{tile(1, 52, 58, end=True)}</div>'
                  f'<div style="display: flex; align-items: flex-start; margin-top: 14px">{tile(2, 38, 52)}{tile(3, 44, 40)}</div>')
     else:
         stats = f'<div style="display: flex; align-items: flex-start">{tile(0, 34, 96, True)}{tile(1, 38, 56)}{tile(2, 44, 44)}{tile(3, 52, 60)}</div>'
     bars = "".join(f'<div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end">'
-                   f'<span class="sk-bone" style="display: block; width: 100%; max-width: 20px; height: {round(104 * shape)}px; border-radius: 3px; background: {SK}; animation-delay: {i * STAGGER_MS}ms"></span></div>'
+                   f'<span class="sk-bone-m" style="display: block; width: 100%; max-width: 20px; height: {round(104 * shape)}px; border-radius: 3px; background: {SK}; animation-delay: {i * STAGGER_MS}ms"></span></div>'
                    for i, shape in enumerate(BAR_SHAPES))
-    days = "".join(f'<div style="flex: 1; height: 11px; display: flex; align-items: center; justify-content: center">{bone("8px", 6, 2, i)}</div>' for i in range(len(BAR_SHAPES)))
-    legend = f'<div style="height: 14px; margin-top: 14px; display: flex; justify-content: space-between; align-items: center">{bone("96px", 8, 2, 0)}{bone("150px", 8, 2, 1)}</div>'
-    return (f'{BREATH}<div><div style="padding-bottom: 14px; border-bottom: 0.5px solid rgba(20,20,20,0.14)">{stats}</div>'
+    days = "".join(f'<div style="flex: 1; height: 11px; display: flex; align-items: center; justify-content: center">{mbone("8px", 6, 2, i)}</div>' for i in range(len(BAR_SHAPES)))
+    legend = f'<div style="height: 14px; margin-top: 14px; display: flex; justify-content: space-between; align-items: center">{mbone("96px", 8, 2, 0)}{mbone("150px", 8, 2, 1)}</div>'
+    return (f'{BREATH_M}<div><div style="padding-bottom: 14px; border-bottom: 0.5px solid rgba(20,20,20,0.14)">{stats}</div>'
             f'<div style="margin-top: 20px"><div style="height: 104px; display: flex; align-items: flex-end; gap: 4px">{bars}</div>'
             f'<div style="display: flex; gap: 4px; margin-top: 8px">{days}</div></div>{legend}</div>')
 
 
 def desktop_silhouette():
     tiles = ((34, 96, 28, True), (38, 56, 18, False), (44, 44, 18, False), (52, 60, 18, False))
-    tile = lambda i, lw, vw, vh, lead: (f'<div style="flex: 1; min-width: 0"><div style="display: flex; align-items: center; height: 16.5px; margin-bottom: 6px">{bone(f"{lw}px", 8, 2, i)}</div>'
+    tile = lambda i, lw, vw, vh, lead: (f'<div style="flex: 1; min-width: 0"><div style="display: flex; align-items: center; height: 16.5px; margin-bottom: 8px">{bone(f"{lw}px", 8, 2, i)}</div>'
                                         f'<div style="display: flex; align-items: center; height: {vh}px">{bone(f"{vw}px", vh, 2, i + 0.5)}</div></div>')
-    stats = f'<div style="display: flex; align-items: flex-start; padding-bottom: 14px; border-bottom: 0.5px solid rgba(20,20,20,0.14)">{"".join(tile(i, *t) for i, t in enumerate(tiles))}</div>'
+    stats = f'<div style="display: flex; align-items: flex-start; padding-bottom: 16px; border-bottom: 0.5px solid rgba(20,20,20,0.14)">{"".join(tile(i, *t) for i, t in enumerate(tiles))}</div>'
     bars = "".join(f'<div style="flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center"><span class="sk-bone" style="display: block; width: 100%; max-width: 20px; height: {h}%; border-radius: 3px; background: {SK}; animation-delay: {i * STAGGER_MS}ms"></span></div>' for i, h in enumerate(DAY_BARS))
-    track = f'<div style="height: 104px; margin-top: 20px; display: flex; align-items: flex-end; gap: 4px">{bars}</div>'
-    foot = (f'<div style="height: 11px; margin-top: 8px"></div><div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 14px">'
+    track = f'<div style="height: 104px; margin-top: 24px; display: flex; align-items: flex-end; gap: 4px">{bars}</div>'
+    foot = (f'<div style="height: 11px; margin-top: 8px"></div><div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 16px">'
             f'<div style="display: flex; align-items: center; height: 16.5px">{bone("96px", 8, 2, 0)}</div><div style="display: flex; align-items: center; height: 16.5px">{bone("150px", 8, 2, 1)}</div></div>')
     return f'{BREATH}<div>{stats}{track}{foot}</div>'
 
@@ -155,35 +164,35 @@ def field_bone(index=0):
 def desktop_rows():
     widths = (("46%", "72%"), ("58%", "64%"), ("40%", "78%"))
     rows = "".join(flex(bone("14px", 14, 2, i),
-                        stack(bone(a, 11, 2, i), bone(b, 8, 2, i + 1), gap=6, extra="flex: 1"), gap=10, extra="padding: 8px 10px")
+                        stack(bone(a, 11, 2, i), bone(b, 8, 2, i + 1), gap=8, extra="flex: 1"), gap=8, extra="padding: 8px 12px")
                    for i, (a, b) in enumerate(widths))
     return f'<div style="width: 240px; padding: 8px; display: flex; flex-direction: column; gap: 4px; border-radius: 4px; background: {P["side"]}; box-shadow: 0 0 0 1px {P["line2"]}">{BREATH}{rows}</div>'
 
 
 def mobile_rows():
     shapes = ((120, 200), (90, 230), (140, 170))
-    line = lambda h, box, w, i: f'<div style="height: {box}px; display: flex; align-items: center">{bone(f"{w}px", h, 4, i)}</div>'
+    line = lambda h, box, w, i: f'<div style="height: {box}px; display: flex; align-items: center">{mbone(f"{w}px", h, 4, i)}</div>'
     rows = "".join(f'<div style="min-height: 44px; padding: 14px 16px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px">'
                    f'{line(15, 19.5, a, i * 2)}{line(11, 14.3, b, i * 2 + 1)}</div>'
                    + (f'<div style="height: 0.5px; background: {P["line"]}; margin-left: 16px"></div>' if i < len(shapes) - 1 else "")
                    for i, (a, b) in enumerate(shapes))
-    return f'<div style="width: 358px; border-radius: 4px; background: rgba(20,20,20,0.04); overflow: hidden">{BREATH}{rows}</div>'
+    return f'<div style="width: 358px; border-radius: 4px; background: var(--card); overflow: hidden">{BREATH_M}{rows}</div>'
 
 
 def mobile_settings_rows():
-    rows = "".join(f'<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">{bone(f"{w}px", 10, 4, i)}{bone("64px", 14, 2, i)}</div>' for i, w in enumerate((180, 220, 160, 200, 150)))
-    return f'<div style="width: 390px; box-sizing: border-box; padding: 24px 20px; display: flex; flex-direction: column; gap: 20px; border-radius: 4px; background: {P["pane"]}; box-shadow: 0 0 0 1px {P["line2"]}">{BREATH}{rows}</div>'
+    rows = "".join(f'<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">{mbone(f"{w}px", 10, 4, i)}{mbone("64px", 14, 2, i)}</div>' for i, w in enumerate((180, 220, 160, 200, 150)))
+    return f'<div style="width: 390px; box-sizing: border-box; padding: 24px 20px; display: flex; flex-direction: column; gap: 20px; border-radius: 4px; background: {P["pane"]}; box-shadow: 0 0 0 1px {P["line2"]}">{BREATH_M}{rows}</div>'
 
 
 def usage_card(narrow, mobile=False):
     inner = silhouette(narrow) if mobile else desktop_silhouette()
-    return (f'<div style="width: {(326 if narrow else 520) if mobile else 500}px; padding: {"16px" if mobile else "16px"}; box-sizing: border-box; border-radius: 4px; background: {P["pane"]}; '
-            f'box-shadow: 0 0 0 1px {P["line2"]}">{inner}</div>')
+    return (f'<div style="width: {(326 if narrow else 520) if mobile else 500}px; padding: {"16px" if mobile else "16px"}; box-sizing: border-box; border-radius: 4px; background: {"var(--card)" if mobile else P["pane"]}; '
+            f'{"" if mobile else "box-shadow: 0 0 0 1px " + P["line2"]}">{inner}</div>')
 
 
 def desktop_button():
-    return (f'<span style="height: 28px; padding: 0 12px; border-radius: 4px; background: {P["ink"]}; display: inline-flex; align-items: center; gap: 6px; '
-            f'font-size: 12px; font-weight: 500; color: {P["pane"]}">{desktop_spinner(12, P["pane"], 2, 0.6, "dspin1")}Save</span>')
+    return (f'<span style="height: 28px; padding: 0 12px; border-radius: 4px; background: {P["ink"]}; display: inline-flex; align-items: center; gap: 8px; '
+            f'font-size: 11px; font-weight: 500; color: {P["pane"]}">{desktop_spinner(12, P["pane"], 2, 0.6, "dspin1")}Save</span>')
 
 
 def desktop_stopping():
@@ -204,6 +213,7 @@ def busy_page(label, size, key, gap):
     return stack(alpaca(size, key), text(label, 12, P["ink2"]), gap=gap, extra="align-items: center")
 
 
+MOBILE_BONES_NOTE = f"bones in the 7 % line ink, flat, breathing opacity 0.4 ↔ 1 over {BREATH_S} s, {STAGGER_MS} ms apart; static under reduced motion"
 BONES_NOTE = f"bones in the 7 % line ink, flat, breathing opacity 0.55 ↔ 1 over {BREATH_S} s, {STAGGER_MS} ms apart; static under reduced motion"
 
 
@@ -219,7 +229,7 @@ def waiting(mobile=False):
             gap=14, align="flex-start", extra="flex-wrap: wrap",
         )
         rows = stack(mobile_rows(), mono("ListSkeleton · rows of two lines", 10.5, P["ink2"]),
-                     wrap(f"{BONES_NOTE}; bones show after 150 ms, stay at least 400 ms, then the content fades in; the title bone is a 15 px bar in a 19.5 px line box, the helper 11 px in 14.3", 11, P["ink3"], lh=1.4), gap=6, extra="width: 358px")
+                     wrap(f"{MOBILE_BONES_NOTE}; bones show after 150 ms, stay at least 400 ms, then the content fades in; the title bone is a 15 px bar in a 19.5 px line box, the helper 11 px in 14.3", 11, P["ink3"], lh=1.4), gap=6, extra="width: 358px")
         settings = stack(mobile_settings_rows(), mono("SettingsSkeleton · phone", 10.5, P["ink2"]),
                          wrap("one 10 px helper bone and a 64 × 14 value bone per row, 20 pt apart, no group card", 11, P["ink3"], lh=1.4), gap=6, extra="width: 390px")
         usage = stack(usage_card(True, True), mono("UsageSkeleton · phone, under 520 pt of tiles", 10.5, P["ink2"]),

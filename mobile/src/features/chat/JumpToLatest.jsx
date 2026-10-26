@@ -3,7 +3,7 @@ import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 
 import { Icon } from '../../components/Icon';
 import { usePresence } from '../../lib/usePresence';
-import { mobile, motionMs, radii, space } from '../../theme/tokens';
+import { mobile, radii, space } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeContext';
 
 // Inverted lists scroll away from the newest message towards the past; past this offset the tail is out of sight.
@@ -12,7 +12,7 @@ const JUMP_RISE = space.s3;
 
 export function JumpToLatest({ visible, onPress }) {
   const { colors, fonts, fontSizes, shadow, chromeScale } = useTheme();
-  const { mounted, progress } = usePresence(visible, motionMs.jump);
+  const { mounted, progress } = usePresence(visible);
   const fade = useAnimatedStyle(() => ({
     opacity: progress.value,
     transform: [{ translateY: JUMP_RISE * (1 - progress.value) }],
@@ -36,10 +36,10 @@ export function JumpToLatest({ visible, onPress }) {
           height: mobile.tap,
           borderRadius: radii.xs,
           backgroundColor: pressed ? colors.selected : colors.bgPane,
-          ...shadow.float,
+          ...shadow.popover,
         })}
       >
-        <Icon name="chev-down" size="sm" color={colors.ink2} />
+        <Icon name="chev-down" size="xs" color={colors.ink2} />
         <Text maxFontSizeMultiplier={chromeScale} style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.sm, color: colors.ink2 }}>Latest</Text>
       </Pressable>
     </Animated.View>

@@ -14,7 +14,7 @@
   padding: var(--stream-pad-top) var(--pane-pad-x) var(--stream-pad-bottom);
   display: flex;
   flex-direction: column;
-  gap: var(--space-9);
+  gap: var(--sp-24);
   min-height: 0;
 }
 
@@ -31,13 +31,13 @@
 }
 
 .error {
-  padding: var(--space-5);
+  padding: var(--sp-12);
   border-radius: var(--r-xs);
   background: color-mix(in srgb, var(--c-danger) 10%, transparent);
   border: .5px solid color-mix(in srgb, var(--c-danger) 24%, transparent);
   color: var(--c-danger-text);
   font-family: var(--font-sans);
-  font-size: var(--fs-sm);
+  font-size: var(--text-meta);
   -webkit-user-select: text;
   user-select: text;
 }
@@ -46,9 +46,9 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--pane-pad-x);
-  font-size: var(--fs-sm);
+  gap: var(--sp-8);
+  padding: var(--sp-8) var(--pane-pad-x);
+  font-size: var(--text-meta);
   border-bottom: .5px solid var(--line);
   -webkit-user-select: none;
   user-select: none;
@@ -61,7 +61,7 @@
 .phaseDetail {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--sp-8);
   min-width: 240px;
   max-width: 320px;
   text-align: left;
@@ -71,13 +71,13 @@
 .phaseDetailHead {
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  gap: var(--sp-8);
 }
 
 .phaseWho {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-8);
 }
 
 .phaseWhoName {
@@ -106,7 +106,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-7);
+  gap: var(--sp-16);
   color: var(--ink-3);
 }
 
@@ -130,7 +130,7 @@
 .timeline {
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--sp-12);
   width: 100%;
 }
 
@@ -138,7 +138,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: var(--space-2);
+  gap: var(--sp-8);
   scroll-margin-top: 120px;
 }
 
@@ -146,12 +146,12 @@
 .markerEyebrow {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--sp-8);
   font-family: var(--font-mono);
-  font-size: var(--text-meta);
+  font-size: var(--eyebrow-size);
   font-weight: var(--fw-semibold);
-  letter-spacing: .10em;
-  margin-bottom: var(--space-2);
+  letter-spacing: var(--eyebrow-tracking);
+  margin-bottom: var(--sp-8);
 }
 
 .markerTitle {
@@ -161,7 +161,7 @@
   letter-spacing: -0.005em;
   color: var(--ink);
   line-height: var(--lh-cozy);
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--sp-8);
 }
 
 .markerBody {
@@ -174,12 +174,12 @@
 .workingDots {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--sp-4);
 }
 
 .workingDots > span {
-  width: var(--space-2);
-  height: var(--space-2);
+  width: var(--sp-8);
+  height: var(--sp-8);
   border-radius: 50%;
   background: currentColor;
   animation: workingDot var(--dur-loop) ease-in-out infinite;
@@ -196,25 +196,25 @@
 .working {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--sp-8);
 }
 
 .workingLabel {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--sp-8);
   font-family: var(--font-mono);
-  font-size: var(--text-meta);
+  font-size: var(--eyebrow-size);
   font-weight: var(--fw-semibold);
-  letter-spacing: .10em;
+  letter-spacing: var(--eyebrow-tracking);
   text-transform: uppercase;
   color: var(--ink-2);
 }
 
 .workingPulse {
   display: inline-block;
-  width: 7px;
-  height: 7px;
+  width: var(--dot-md);
+  height: var(--dot-md);
   border-radius: 50%;
   background: currentColor;
   animation: legacyPulse var(--dur-loop) ease-in-out infinite;
@@ -240,14 +240,14 @@
 .skip {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--sp-8);
 }
 
 .skipLabel {
   font-family: var(--font-mono);
-  font-size: var(--text-meta);
+  font-size: var(--eyebrow-size);
   font-weight: var(--fw-semibold);
-  letter-spacing: .10em;
+  letter-spacing: var(--eyebrow-tracking);
   text-transform: uppercase;
   color: var(--c-warning-text);
 }
@@ -261,14 +261,14 @@
 .done {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--sp-8);
 }
 
 .doneLabel {
   font-family: var(--font-mono);
-  font-size: var(--text-meta);
+  font-size: var(--eyebrow-size);
   font-weight: var(--fw-semibold);
-  letter-spacing: .10em;
+  letter-spacing: var(--eyebrow-tracking);
   text-transform: uppercase;
   color: var(--ink-2);
 }
@@ -282,7 +282,7 @@
 .metaGroup {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--sp-4);
 }
 
 .speakerName {
@@ -305,12 +305,12 @@
 }
 
 .footerBtn {
-  width: 26px;
-  height: 26px;
+  width: var(--ctl-28);
+  height: var(--ctl-28);
 }
 
 .footerTime {
-  margin-left: var(--space-3);
+  margin-left: var(--sp-8);
   align-self: center;
   color: var(--ink-3);
   font-size: var(--text-meta);

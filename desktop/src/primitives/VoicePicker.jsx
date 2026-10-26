@@ -34,7 +34,7 @@ export default function VoicePicker({
                 style={sel && accent ? { "--c": accent } : undefined}
               >
                 <span className={styles.check}>
-                  {sel && <CheckIcon style={{ width: 13, height: 13, strokeWidth: 2.4 }} />}
+                  {sel && <CheckIcon size="sm" />}
                 </span>
                 <span className={styles.body}>
                   <span className={styles.name}>{v.name}</span>

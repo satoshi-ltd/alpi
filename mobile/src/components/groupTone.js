@@ -4,8 +4,8 @@ import { useTheme } from '../theme/ThemeContext';
 
 export const GroupToneContext = createContext(null);
 
-export function groupTone(colors, mode) {
-  return mode === 'dark' ? colors.bgPane : colors.bgSide;
+export function groupTone(colors) {
+  return colors.card;
 }
 
 export function useGroundTone() {

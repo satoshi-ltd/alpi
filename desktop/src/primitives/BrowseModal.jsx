@@ -2,7 +2,6 @@ import { OverlayScope, useOverlay } from "../hooks/useOverlay.js";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { IconBtn, Mono, RefreshBar, SearchIcon, Tip, XIcon } from "./index.js";
-import Crease from "./Crease.jsx";
 import Fold from "./Fold.jsx";
 import { badgeCount } from "../../../common/countBadge.mjs";
 import styles from "./BrowseModal.module.css";
@@ -112,7 +111,7 @@ export function BrowseBody({
           <>
             <span className={styles.owner}>
               <Fold fold={owner.fold} color={owner.accent} size={18} />
-              {owner.accent ? <Crease text={owner.name} accent={owner.accent} size={17} /> : <span className={styles.ownerName}>{owner.name}</span>}
+              <span className={styles.ownerName}>{owner.name}</span>
             </span>
             {sections ? (
               <span className={styles.sections} role="tablist" aria-label={`${owner.name} panels`}>

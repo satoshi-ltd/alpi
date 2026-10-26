@@ -24,7 +24,7 @@ vi.mock('react-native', () => {
 vi.mock('../theme/ThemeContext', () => ({
   useTheme: () => ({
     shadow: { base: {} },
-    colors: { bgPane: '#fff', ink: '#000', ink3: '#333', ink4: '#444', bgInput: '#eee', line2: '#ddd' },
+    colors: { bgPane: '#fff', ink: '#000', ink3: '#333', ink4: '#444', field: '#eee', line2: '#ddd' },
     fonts: { mono: 'mono', sans: { semibold: 'sans-semibold' } },
     fontSizes: { xs: 11, md: 15, lg: 18 },
   }),

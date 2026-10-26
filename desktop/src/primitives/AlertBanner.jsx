@@ -10,7 +10,7 @@ export default function AlertBanner({ lead, detail, action = null, onAction = nu
         <span className={styles.lead}>{lead}</span>
         {detail ? <span className={styles.detail}>{detail}</span> : null}
       </span>
-      {action ? <Button size="sm" variant="secondary" onClick={onAction} disabled={disabled}>{action}</Button> : null}
+      {action ? <Button size="sm" variant="ghost" onClick={onAction} disabled={disabled}>{action}</Button> : null}
     </div>
   );
 }

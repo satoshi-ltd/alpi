@@ -4,13 +4,13 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--sp-8);
 }
 
 .step {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--sp-8);
   font-size: var(--text-ui);
   color: var(--ink);
 }

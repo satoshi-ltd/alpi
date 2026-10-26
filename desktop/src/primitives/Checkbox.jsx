@@ -8,7 +8,7 @@ export default function Checkbox({ on = false, ariaLabel }) {
       aria-checked={on}
       aria-label={ariaLabel}
     >
-      {on && <Icon name="check" size={12} strokeWidth={3} />}
+      {on && <Icon name="check" size="sm" />}
     </span>
   );
 }

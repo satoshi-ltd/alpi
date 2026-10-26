@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 const h = vi.hoisted(() => ({
+  insets: { top: 59, bottom: 34, left: 0, right: 0 },
   fontOf: (style) => [style].flat(Infinity).filter(Boolean).reduce((f, s) => s.fontFamily ?? f, null),
   uri: null,
 }));
@@ -16,10 +17,16 @@ vi.mock('react-native', () => {
   const View = ({ children, style, ...p }) => React.createElement('div', p, children);
   const Text = ({ children, style, ...p }) =>
     React.createElement('span', { ...p, 'data-font': h.fontOf(style) }, children);
-  const Pressable = ({ children, onPress, accessibilityLabel, accessibilityHint, ...p }) =>
+  const Pressable = ({ children, onPress, accessibilityLabel, accessibilityHint, style, ...p }) =>
     React.createElement(
       'button',
-      { type: 'button', onClick: onPress, 'aria-label': accessibilityLabel, 'data-hint': accessibilityHint },
+      {
+        type: 'button',
+        onClick: onPress,
+        'aria-label': accessibilityLabel,
+        'data-hint': accessibilityHint,
+        'data-style': JSON.stringify([typeof style === 'function' ? style({ pressed: false }) : style].flat(Infinity).filter(Boolean).reduce((a, x) => ({ ...a, ...x }), {})),
+      },
       children,
     );
   const Image = (p) => React.createElement('img', { alt: p.accessibilityLabel });
@@ -37,6 +44,7 @@ vi.mock('react-native', () => {
   };
 });
 
+vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => h.insets }));
 vi.mock('./Chart', () => ({
   Chart: ({ spec, accent }) => React.createElement('figure', { 'data-chart': spec.type, 'data-accent': accent ?? '' }, spec.title),
 }));
@@ -123,5 +131,25 @@ describe('RichText — chart blocks', () => {
     const { container } = render(<RichText>{'```chart\n{bad}\n```'}</RichText>);
     expect(container.querySelector('figure')).toBeNull();
     expect(container.textContent).toContain('{bad}');
+  });
+});
+
+describe('RichText image lightbox close', () => {
+  const openLightbox = () => {
+    h.uri = 'file:///cache/room.png';
+    const view = render(<RichText>{'![a room](/tmp/room.png "generated")'}</RichText>);
+    fireEvent.click(screen.getByLabelText('a room'));
+    return view;
+  };
+
+  it.each([59, 47, 0])('starts the 44 pt box 8 pt under a %i pt top inset and keeps the right edge at 6 pt', (top) => {
+    h.insets = { top, bottom: 0, left: 0, right: 0 };
+    openLightbox();
+    const close = screen.getByRole('button', { name: 'Close' });
+    const style = JSON.parse(close.getAttribute('data-style'));
+    expect(style.position).toBe('absolute');
+    expect(style.height).toBe(44);
+    expect(style.top + style.marginTop).toBe(top + 8);
+    expect(style.right + style.marginRight).toBe(6);
   });
 });

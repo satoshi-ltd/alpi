@@ -29,9 +29,10 @@ import { shareMarkdown, sharePdf } from '../../lib/messageExport';
 import { clip, openChatTarget, replyDraft } from '../../lib/outputsFormat';
 import { profileLabel } from '../../lib/profileName';
 import { useTheme } from '../../theme/ThemeContext';
-import { lineHeights, mobile, radii, space } from '../../theme/tokens';
+import { mobile, radii, space } from '../../theme/tokens';
 import { ReaderSkeleton } from '../../components/ReaderSkeleton';
 import { DURATION_OUT, UNMOUNT_BUFFER } from '../../components/useSheetGesture';
+import { detailTitleStyle } from '../../components/detailTitle';
 
 const EXPORT_HANDOFF_MS = DURATION_OUT + UNMOUNT_BUFFER;
 
@@ -52,14 +53,15 @@ function IconButton({ name, label, onPress }) {
         backgroundColor: pressed ? colors.selected : 'transparent',
       })}
     >
-      <Icon name={name} size="lg" color={colors.ink2} />
+      <Icon name={name} size="md" color={colors.ink2} />
     </Pressable>
   );
 }
 
 
 export function NotificationPage({ profile, id, connectionId, embedded = false, onStep, onClose }) {
-  const { colors, fonts, fontSizes } = useTheme();
+  const theme = useTheme();
+  const { colors, fonts, fontSizes } = theme;
   const router = useRouter();
   const routeBack = useBack();
   const goBack = embedded ? (onClose ?? (() => {})) : routeBack;
@@ -265,7 +267,7 @@ export function NotificationPage({ profile, id, connectionId, embedded = false, 
             ) : (
               <>
                 {title ? (
-                  <Text selectable accessibilityRole="header" style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.xxl, lineHeight: fontSizes.xxl * lineHeights.cozy, color: colors.ink }}>
+                  <Text selectable accessibilityRole="header" style={detailTitleStyle(theme)}>
                     {title}
                   </Text>
                 ) : null}

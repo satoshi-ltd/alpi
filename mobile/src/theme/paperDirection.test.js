@@ -7,17 +7,15 @@ const SLATE = /11, ?17, ?23|230, ?237, ?243|#0b1117|#3d4955|#626e7d|#b1bac4|#eef
 
 const ROUND = {
   'src/components/Meter.jsx': [2, 'meter track and fill'],
-  'src/features/shell/ShellFooter.jsx': [1, 'unread count badge'],
   'src/features/inbox/Pip.jsx': [1, 'working pip on the avatar corner'],
   'src/features/sheets/TasksSheet.jsx': [1, 'skipped status ring'],
   'src/features/chat/MarkerCard.jsx': [1, 'skipped status ring'],
   'src/features/clarification/ClarificationSheet.jsx': [2, 'radio ring and knob'],
-  'src/features/notifications/NotificationRow.jsx': [1, 'unread dot in the notification row gutter'],
   'app/biometric.jsx': [2, 'switch track and thumb'],
   'app/wg/[id]/settings.jsx': [1, 'budget bar'],
 };
 
-const HALF_OK = new Set(['DOT', 'dotSize']);
+const HALF_OK = new Set(['DOT', 'px']);
 
 const walk = (dir) =>
   readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -46,7 +44,7 @@ const paperViolations = (file, source, round = ROUND) => {
 describe('paper direction scanner', () => {
   it('passes a sheet, a tag, a seam and an allowed dot', () => {
     const source = "const s = { borderRadius: radii.xs, chip: { borderRadius: radii.tag }, seam: { shadowRadius: 0 }, dot: { borderRadius: radii.pill } };";
-    expect(paperViolations('src/features/notifications/NotificationRow.jsx', source)).toEqual([]);
+    expect(paperViolations('src/features/inbox/Pip.jsx', source)).toEqual([]);
   });
 
   it.each([

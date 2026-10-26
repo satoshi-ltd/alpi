@@ -59,7 +59,7 @@ export function MessageActionsSheet({ target, onClose, onRetry, onEdit }) {
 
   const actions = buildMessageActions(target, { onCopy, onSelectText: selectText, onDownload, onExportPdf, onEdit, onRetry }).map((a) => ({
     ...a,
-    icon: <Icon name={ICONS[a.id] || 'forward'} size={20} color={colors.ink2} />,
+    icon: <Icon name={ICONS[a.id] || 'forward'} size="md" color={colors.ink2} />,
   }));
 
   return (

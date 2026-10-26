@@ -11,6 +11,16 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.9.0 — 2026-10-27 — a new icon, an Activity that triages, one grid
+
+- Activity opens on counts and filters (All, Needs you, Failing, Running, Upcoming): failing jobs group per profile with the first group open, red marks only the failed time, `last ok` shows when the daemon sends it, and Open and Retry appear on the row; admins get Retry all, with a confirmation.
+- The app icon and the large alpaca wear three paper tones with a bigger mark, and the dock, tray and small icons are drawn heavier so they stay legible.
+- The sidebar footer is one tight row with symmetric insets: Settings as an icon, a bell with a plain dot when unread (the count stays in its label), Activity with a plain dot, a theme button cycling System, Light and Dark, and the version; the selected and hovered row share one shape, the connection pill shows only the host when online, and the default profile's settings carry the same System, Light and Dark control.
+- Floating surfaces lose the double outline, cards, fields and the dark elevated surface sit on a visible tone ladder, and banners, empty states, dialogs, first run, tool steps and the approval card share one grammar with one focus ring and one motion curve.
+- Spacing, control heights, type sizes and icons follow one scale each, status dots (all 8 px), toasts, the send button, banner actions, menu rows (exactly 32 px), section labels, the empty state and the roster alpaca (exactly 20 px) land on whole pixels, settings rows, tables, the chat header and the stream share one left edge, and a paused profile asks you to resume in one place, the banner, not again in the composer.
+  Requires alpi 0.17.28; `last ok` needs 0.17.39, and older daemons simply omit it.
+
+
 ## v0.8.21 — 2026-10-26 — clearer surfaces, one menu, errors that wait for you
 
 - Floating surfaces (modals, menus, popovers, toasts) get a clear 1 px edge, and loading states draw the shape of what is coming instead of a grey slab.

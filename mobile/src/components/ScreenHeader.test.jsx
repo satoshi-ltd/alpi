@@ -13,10 +13,14 @@ vi.mock('expo-router', () => ({
 
 vi.mock('react-native', () => {
   const View = ({ children, style, accessibilityRole, accessibilityLabel, accessible, ...p }) =>
-    React.createElement('div', { ...(accessibilityRole === 'header' ? { role: 'heading' } : {}), ...(accessibilityLabel ? { 'aria-label': accessibilityLabel } : {}), ...p }, children);
+    React.createElement('div', { ...(accessibilityRole === 'header' ? { role: 'heading' } : {}), ...(accessibilityLabel ? { 'aria-label': accessibilityLabel } : {}), 'data-style': JSON.stringify(style), ...p }, children);
   const Text = ({ children, style, numberOfLines, ...p }) => React.createElement('span', p, children);
   const Pressable = ({ children, onPress, hitSlop, style, ...p }) =>
-    React.createElement('button', { type: 'button', onClick: onPress, ...p }, children);
+    React.createElement(
+      'button',
+      { type: 'button', onClick: onPress, 'data-hitslop': hitSlop === undefined ? undefined : String(hitSlop), 'data-style': JSON.stringify(typeof style === 'function' ? style({ pressed: false }) : style), ...p },
+      children,
+    );
   const StyleSheet = { create: (x) => x, absoluteFillObject: {} };
   return { View, Text, Pressable, StyleSheet };
 });
@@ -33,7 +37,8 @@ vi.mock('./Icon', () => ({ Icon: ({ name }) => React.createElement('span', {}, n
 
 import { PaneContext } from '../nav/PaneContext';
 import { Button } from './Button';
-import { CHROME_BTN } from '../lib/panes';
+import { BACK_BLEED, BACK_INK_INSET, CHROME_BTN, PANE_PAD_X, TOGGLE_BLEED } from '../lib/panes';
+import { iconSizes } from '../theme/tokens';
 import { ScreenHeader, headerRightBleed } from './ScreenHeader';
 
 function inTwoPane(node) {
@@ -147,5 +152,59 @@ describe('ScreenHeader seam', () => {
     const { container } = inTwoPane(<ScreenHeader title="doc" accent="#abc123" />);
     const stripe = [...container.querySelectorAll('div')].find((el) => (el.getAttribute('style') || '').includes('#abc123') && (el.getAttribute('style') || '').includes('absolute'));
     expect(stripe).toBeUndefined();
+  });
+});
+
+describe('ScreenHeader back control geometry', () => {
+  const back = () => screen.getByText('back').closest('button');
+
+  it('is the 36 pt chrome button with a slop that lifts the target to 44 pt on both axes', () => {
+    render(<ScreenHeader title="Outputs" onBack={() => {}} />);
+    const style = JSON.parse(back().getAttribute('data-style'));
+    const slop = Number(back().getAttribute('data-hitslop'));
+    expect(style.width).toBe(CHROME_BTN);
+    expect(style.height).toBe(CHROME_BTN);
+    expect(style.width + 2 * slop).toBeGreaterThanOrEqual(44);
+    expect(style.height + 2 * slop).toBeGreaterThanOrEqual(44);
+  });
+
+  it('pulls the glyph box flush to the header padding, the same bleed the chat header uses', () => {
+    render(<ScreenHeader title="Outputs" onBack={() => {}} />);
+    const style = JSON.parse(back().getAttribute('data-style'));
+    expect(BACK_BLEED).toBe((CHROME_BTN - iconSizes.md) / 2);
+    expect(style.marginLeft).toBe(-(BACK_BLEED + BACK_INK_INSET));
+  });
+
+  it('puts the chevron ink on the 16 pt edge: bleed plus the 5.25 pt of glyph padding, the title keeping its x', () => {
+    render(<ScreenHeader title="Outputs" onBack={() => {}} />);
+    const style = JSON.parse(back().getAttribute('data-style'));
+    expect(BACK_INK_INSET).toBe(5.25);
+    expect(style.marginLeft).toBe(-15.25);
+    expect(style.marginRight).toBe(5.25);
+    expect(style.marginLeft + style.marginRight).toBe(-BACK_BLEED);
+    expect(style.width).toBe(CHROME_BTN);
+  });
+});
+
+describe('ScreenHeader two-pane show-sidebar button', () => {
+  const inClosedSidebar = (node) =>
+    render(<PaneContext.Provider value={{ twoPane: true, sidebarOpen: false, toggleSidebar() {}, side: 'detail' }}>{node}</PaneContext.Provider>);
+
+  it('pads 16 and bleeds the button 10 so the icon starts at x = 16, the same rule as the chat header', () => {
+    const { container } = inClosedSidebar(<ScreenHeader title="Settings" />);
+    const root = JSON.parse(container.firstChild.getAttribute('data-style'));
+    const wrap = screen.getByText('panel-left').closest('button').parentElement;
+    const margin = JSON.parse(wrap.getAttribute('data-style')).marginLeft;
+    expect(root.paddingHorizontal).toBe(PANE_PAD_X);
+    expect(margin).toBe(-TOGGLE_BLEED);
+    expect(root.paddingHorizontal + margin + (CHROME_BTN - iconSizes.md) / 2).toBe(16);
+  });
+
+  it('keeps the chevron ink off the toggle: only a leading back control takes the ink shift', () => {
+    h.pathname = '/outputs/abc';
+    inClosedSidebar(<ScreenHeader title="Outputs" onBack={() => {}} />);
+    const style = JSON.parse(screen.getByText('back').closest('button').getAttribute('data-style'));
+    expect(style.marginLeft).toBe(-BACK_BLEED);
+    expect(style.marginRight).toBe(0);
   });
 });

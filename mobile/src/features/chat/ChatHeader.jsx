@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { radii, space, lineHeights } from '../../theme/tokens';
 
@@ -7,8 +8,9 @@ import { Fold } from '../../components/Fold';
 import { Icon } from '../../components/Icon';
 import { MetaStrip } from '../../components/MetaStrip';
 import { useShowBack } from '../../hooks/useShowBack';
-import { CHROME_BTN, PANE_PAD_X, tapSlop } from '../../lib/panes';
+import { backMargins, CHROME_BTN, PANE_PAD_X, TOGGLE_BLEED, tapSlop } from '../../lib/panes';
 import { usePane } from '../../nav/PaneContext';
+import { dotShape } from '../../components/dotShape';
 import { useTheme } from '../../theme/ThemeContext';
 
 const CREASE_MIN_SIZE = 28;
@@ -28,7 +30,7 @@ export function headerMenuActions({
   failedJobs = 0,
 } = {}) {
   const Noun = noun.charAt(0).toUpperCase() + noun.slice(1);
-  const glyph = (name) => <Icon name={name} size="lg" />;
+  const glyph = (name) => <Icon name={name} size="md" />;
   const head = [];
   if (onOpenSettings) {
     head.push({ id: 'settings', label: `${Noun} settings`, icon: glyph('settings'), onPress: onOpenSettings });
@@ -72,11 +74,23 @@ export function headerMenuActions({
   return groups.flatMap((g, i) => (i === 0 ? g : [{ divider: true }, ...g]));
 }
 
-function HeaderButton({ label, onPress, children }) {
+function HeaderButton({ label, onPress, anchored = false, children }) {
   const { colors } = useTheme();
+  const ref = useRef(null);
+  const press = anchored
+    ? () => {
+        const node = ref.current;
+        if (typeof node?.measureInWindow === 'function') {
+          node.measureInWindow((x, y, width, height) => onPress({ x, y, width, height }));
+        } else {
+          onPress(null);
+        }
+      }
+    : onPress;
   return (
     <Pressable
-      onPress={onPress}
+      ref={ref}
+      onPress={press}
       hitSlop={tapSlop(CHROME_BTN)}
       accessibilityRole="button"
       accessibilityLabel={label}
@@ -98,7 +112,7 @@ function SessionsTrigger({ onPress }) {
   const { colors } = useTheme();
   return (
     <HeaderButton label="Sessions" onPress={onPress}>
-      <Icon name="history" size="lg" color={colors.ink2} />
+      <Icon name="history" size="md" color={colors.ink2} />
     </HeaderButton>
   );
 }
@@ -126,9 +140,11 @@ export function ChatHeader({ kind, accent, fold, creased = false, paused = false
       }}
     >
       {showSidebarToggle ? (
-        <HeaderButton label="Show sidebar" onPress={toggleSidebar}>
-          <Icon name="panel-left" size="lg" color={colors.ink2} />
-        </HeaderButton>
+        <View style={{ marginLeft: -TOGGLE_BLEED }}>
+          <HeaderButton label="Show sidebar" onPress={toggleSidebar}>
+            <Icon name="panel-left" size="md" color={colors.ink2} />
+          </HeaderButton>
+        </View>
       ) : null}
       {showBack ? (
         <Pressable
@@ -141,10 +157,10 @@ export function ChatHeader({ kind, accent, fold, creased = false, paused = false
             height: CHROME_BTN,
             alignItems: 'center',
             justifyContent: 'center',
-            marginLeft: -space.s2,
+            ...backMargins(!showSidebarToggle),
           }}
         >
-          <Icon name="back" size="lg" color={colors.ink2} />
+          <Icon name="back" size="md" color={colors.ink2} />
         </Pressable>
       ) : null}
       <View style={{ flex: 1, minWidth: 0, flexDirection: 'column' }}>
@@ -170,12 +186,12 @@ export function ChatHeader({ kind, accent, fold, creased = false, paused = false
             {right}
             {onPickSession ? <SessionsTrigger onPress={onPickSession} /> : null}
             {onMore ? (
-              <HeaderButton label={failedJobs > 0 ? `More, ${failedJobs} ${failedJobs === 1 ? 'job' : 'jobs'} failed` : 'More'} onPress={onMore}>
-                <Icon name="more" size="lg" color={colors.ink2} />
+              <HeaderButton anchored label={failedJobs > 0 ? `More, ${failedJobs} ${failedJobs === 1 ? 'job' : 'jobs'} failed` : 'More'} onPress={onMore}>
+                <Icon name="more" size="md" color={colors.ink2} />
                 {failedJobs > 0 ? (
                   <View
                     testID="failed-jobs-dot"
-                    style={{ position: 'absolute', top: space.s3, right: space.s3, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.danger, borderWidth: 1.5, borderColor: colors.bg }}
+                    style={{ position: 'absolute', top: space.s2, right: space.s2, ...dotShape('md'), backgroundColor: colors.danger }}
                   />
                 ) : null}
               </HeaderButton>

@@ -4,7 +4,7 @@ import subprocess
 
 from brand_boards import black_alpaca
 from desktop_boards import MONO
-from gen import COMMON, ic, page
+from gen import COMMON, ic, mi, page
 from notif_studies import VIEW, dot, ell, flex, mark, mono, spacer, stack, wrap
 from paper_studies import PAPER, button, field, line_up, note, text
 
@@ -117,15 +117,20 @@ def hint_card(p):
                 extra=f"margin: 10px 12px; padding: 8px 10px; border-radius: 4px; background: {p['hover']}")
 
 
+def stacked(p, primary, primary_label, ghost_label, kind="primary"):
+    ghost = f'<span style="margin-left: -12px; display: inline-flex">{button(ghost_label, "ghost", p, PAPER, 30)}</span>'
+    return f'<div style="display: flex; flex-direction: column; align-items: flex-start; gap: 6px">{button(primary_label, kind, p, PAPER, 30)}{ghost}</div>'
+
+
 def d_running(p=VIEW):
     main = hint_card(p) + chat_head(p) + f'<div style="flex: 1; display: flex; align-items: center; justify-content: center">{say("A session starts with your first message.", p, 10)}</div>' + composer(p)
     return window(p, sidebar(p, "online", ROSTER), main)
 
 
 def d_stopped(p=VIEW):
-    actions = line_up(button("Start alpi", "primary", p, PAPER, 26), button("Connect to another computer", "ghost", p, PAPER, 26), gap=6, wrap=False)
+    actions = stacked(p, None, "Start alpi", "Connect to another computer")
     main = welcome(p, "alpi is installed but not running", "Start it here, or connect to an alpi that runs somewhere else.", actions)
-    return window(p, sidebar(p, "offline"), main, h=170)
+    return window(p, sidebar(p, "offline"), main, h=200)
 
 
 def d_starting(p=VIEW):
@@ -141,21 +146,20 @@ def d_installing(p=VIEW):
 
 def d_install_failed(p=VIEW):
     inner = wrap("Could not download uv. Check your internet connection and try again.", 9.5, p["danger"])
-    inner += wrap("Check your internet connection, then try again.", 9.5, p["ink3"])
-    inner += line_up(button("Retry", "secondary", p, PAPER, 24), button("Connect to another computer", "ghost", p, PAPER, 24), gap=6, wrap=False)
-    return window(p, sidebar(p, "offline"), welcome(p, "alpi couldn't be installed", "", inner), h=210)
+    inner += stacked(p, None, "Retry", "Connect to another computer", "secondary")
+    return window(p, sidebar(p, "offline"), welcome(p, "alpi couldn't be installed", "", inner), h=230)
 
 
 def d_failed(p=VIEW):
-    error = (f'<pre style="margin: 0; padding: 6px 8px; border-radius: 4px; background: color-mix(in srgb, {p["danger"]} 8%, transparent); font-family: {MONO}; '
+    error = (f'<pre style="margin: 0; padding: 6px 8px; border-radius: 4px; background: {p["hover"]}; font-family: {MONO}; '
              f'font-size: 8.5px; line-height: 1.45; color: {p["danger"]}; white-space: pre-wrap">alpi did not answer within 45 seconds\n~/.alpi/logs/service.log:\nERROR config.yaml: line 12 · bad indentation</pre>')
     inner = (error + wrap("Start it from a terminal to see what it says:", 9.5, p["ink3"]) + command(p, COPY["start"])
-             + line_up(button("Retry", "secondary", p, PAPER, 24), button("Connect to another computer", "ghost", p, PAPER, 24), gap=6, wrap=False))
-    return window(p, sidebar(p, "offline"), welcome(p, "alpi didn't start", "", inner), h=266)
+             + stacked(p, None, "Retry", "Connect to another computer", "secondary"))
+    return window(p, sidebar(p, "offline"), welcome(p, "alpi didn't start", "", inner), h=300)
 
 
 def choice(p, title, sub, inner):
-    return (f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 7px; padding: 10px; border-radius: 4px; background: {p["side"]}; box-shadow: 0 0 0 1px {p["line"]}">'
+    return (f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 4px; background: var(--card); box-shadow: 0 0 0 0.5px {p["line"]}">'
             f'{text(title, 11, p["ink"], 600)}{wrap(sub, 9, p["ink3"], lh=1.4)}{inner}</div>')
 
 
@@ -169,7 +173,7 @@ def connect_form(p, link="", ladder_states=None, failure=None, action="Connect")
 
 def d_absent(p=VIEW, form=None, h=300):
     here = choice(p, "Run alpi here", "Install alpi and its runtime here, then choose a model in Settings. Requires an internet connection.",
-                  f'<div style="margin-top: auto">{button("Install and start alpi", "primary", p, PAPER, 24)} {button("Check again", "ghost", p, PAPER, 24)}</div>')
+                  f'<div style="margin-top: auto">{stacked(p, None, "Install and start alpi", "Check again")}</div>')
     away = choice(p, "Connect to alpi elsewhere", "Paste the link made on the computer that runs it.", form or connect_form(p))
     main = welcome(p, "Set up alpi", "No alpi on this computer yet. Both paths end in the same window.", f'<div style="flex: 1; display: flex; gap: 8px; min-height: 0">{here}{away}</div>')
     return window(p, sidebar(p, "offline"), main, h=h)
@@ -195,7 +199,7 @@ DESKTOP_ONBOARDING = (
     ("Installation failed", "Installation errors keep Retry on the installation step; a start failure retries only the start.", d_install_failed),
     ("Connecting elsewhere", "The link is read, the host reached and the device signed in, each step named. A failure names its cause and next step; a used or expired link is cleared, any other keeps it. The connection switcher's foot uses the same form.", d_unreachable),
 )
-DESKTOP_ONBOARDING_H = 3100
+DESKTOP_ONBOARDING_H = 3190
 
 
 def desktop_onboarding():
@@ -227,19 +231,19 @@ def mono_run(value):
 def welcome_screen():
     from gen import m_button, m_eyebrow
     sources = "".join(f'<span style="font-size: 12px; line-height: 1.65; color: {INK2}">{line}</span>' for line in COPY["sources"])
-    card = (f'<div style="display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 4px; background: {HOVER}">'
+    card = (f'<div style="display: flex; flex-direction: column; gap: 6px; padding: 14px; border-radius: 4px; background: {HOVER}">'
             f'<span style="font-weight: 600; font-size: 14px; color: {INK}">Where do I get a link?</span>{sources}</div>')
     top = (f'<div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; text-align: center">{black_alpaca(88, INK)}'
            f'<span style="font-weight: 600; font-size: 28px; letter-spacing: -0.018em; color: {INK}">Pair with your alpi</span>'
            f'<span style="max-width: 320px; font-size: 15px; line-height: 1.65; color: {INK2}">alpi runs on a computer or a server. Pair this phone once and its profiles come with you.</span></div>')
-    bottom = f'<div style="display: flex; flex-direction: column; gap: 10px">{card}{full(m_button("Scan QR", "primary", "hero"))}{full(m_button("Paste link", "ghost", "lg"))}</div>'
+    bottom = f'<div style="display: flex; flex-direction: column; gap: 24px">{card}<div style="display: flex; flex-direction: column; gap: 10px">{full(m_button("Scan QR", "primary", "hero"))}{full(m_button("Paste link", "ghost", "lg"))}</div></div>'
     return f'<div style="height: 100%; box-sizing: border-box; display: flex; flex-direction: column; padding: 24px">{top}{bottom}</div>'
 
 
 def ladder_rows(states):
     rows = ""
     for state, label in zip(states, (READ, REACH, SIGN)):
-        glyph = {"done": ic("check", 14, INK), "fail": ic("x", 14, "#c14545"),
+        glyph = {"done": mi("check", 14, INK), "fail": mi("x", 14, "#c14545"),
                  "now": f'<span style="width: 6px; height: 6px; border-radius: 4px; background: {INK2}"></span>',
                  "todo": f'<span style="width: 6px; height: 6px; border-radius: 4px; background: {INK4}"></span>'}[state]
         colour = DANGER_INK if state == "fail" else INK3 if state == "todo" else INK
@@ -250,12 +254,12 @@ def ladder_rows(states):
 
 def pair_screen(link, states, failure=None, action="Pair"):
     from gen import m_button, m_eyebrow
-    head = (f'<div style="display: flex; align-items: center; gap: 12px; padding: 16px">{ic("back", 20, INK)}<div style="flex: 1; display: flex; flex-direction: column">'
+    head = (f'<div style="display: flex; align-items: center; gap: 12px; padding: 16px">{mi("back", 16, INK)}<div style="flex: 1; display: flex; flex-direction: column">'
             f'<span style="font-weight: 600; font-size: 18px; color: {INK}">Pair this phone</span>{m_eyebrow("Connect to your daemon", INK3, 500, 0.06, 11, "margin-top: 4px")}</div></div>')
     intro = (f'<span style="font-size: 14px; line-height: 1.5; color: {INK2}">Open your daemon’s settings, choose {mono_run("Settings → Connections → New connection / Add device")}, '
              f'then either scan the QR or paste the {mono_run("alpi://")} link below.</span>')
     shown = link or "alpi://device?url=wss://…&amp;name=…&amp;pairing_token=…"
-    well = (f'<div style="min-height: 64px; box-sizing: border-box; padding: 12px; border-radius: 4px; border: 2px solid transparent; background: #f2f2f2; font-family: {MONO}; '
+    well = (f'<div style="min-height: 64px; box-sizing: border-box; padding: 12px; border-radius: 4px; border: 2px solid transparent; background: var(--field); font-family: {MONO}; '
             f'font-size: 12px; line-height: 1.3; color: {INK if link else INK4}; word-break: break-all">{shown}</div>')
     paste = (f'<div style="display: flex; flex-direction: column; gap: 8px">{m_eyebrow("or paste link", INK3)}{well}'
              f'<span style="align-self: flex-end; font-weight: 500; font-size: 14px; color: {INK2}">Paste from clipboard</span></div>')
@@ -264,14 +268,14 @@ def pair_screen(link, states, failure=None, action="Pair"):
         told = (f'<div style="display: flex; flex-direction: column; gap: 6px"><span style="font-weight: 600; font-size: 15px; color: {INK}">{failure["title"]}</span>'
                 f'<span style="font-size: 14px; line-height: 1.5; color: {INK2}">{failure["hint"]}</span></div>')
     box = f'<div style="display: flex; flex-direction: column; gap: 12px; padding: 14px; border-radius: 4px; background: {HOVER}">{ladder_rows(states)}{told}</div>'
-    body = (f'<div style="display: flex; flex-direction: column; gap: 20px; padding: 20px">{intro}{full(m_button("Scan QR", "primary", "lg"))}{paste}{box}'
+    body = (f'<div style="display: flex; flex-direction: column; gap: 24px; padding: 16px">{intro}{full(m_button("Scan QR", "primary", "lg"))}{paste}{box}'
             f'{full(m_button(action, "primary", "lg"))}</div>')
     return f'<div style="display: flex; flex-direction: column; height: 100%">{head}{body}</div>'
 
 
 def paired_screen():
     from gen import m_button
-    top = (f'<div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; text-align: center">{black_alpaca(88, INK)}'
+    top = (f'<div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; text-align: center">{black_alpaca(88, INK)}'
            f'<span style="font-weight: 600; font-size: 28px; letter-spacing: -0.018em; color: {INK}">Paired with casa</span>'
            f'<span style="font-family: {MONO}; font-size: 12px; color: {INK3}">{COPY["admin"]}</span>'
            f'<span style="max-width: 320px; font-size: 15px; line-height: 1.65; color: {INK2}">Your daemon is reachable and your profiles are available.</span></div>')

@@ -26,6 +26,7 @@ export default function ConnPill({
   const isProbing = status === "probing";
   const isRateLimited = status === RATE_LIMITED;
   const statusColor = STATUS_COLORS[status] || STATUS_COLORS.unknown;
+  const stateWord = isDisabled ? "disabled" : isRateLimited ? "rate limited" : isOffline ? "offline" : isProbing ? "connecting" : "online";
   return (
     <Tip
       text={
@@ -42,7 +43,7 @@ export default function ConnPill({
       side="l"
       block
     >
-      <button type="button" className="ds-conn-pill" onClick={onClick}>
+      <button type="button" className="ds-conn-pill" onClick={onClick} aria-label={host ? `${name}, ${stateWord}, ${host}` : `${name}, ${stateWord}`}>
         <span className={styles.iconWrap}>
           {kind === "local" ? <CpuIcon /> : <ServerIcon />}
           <Dot
@@ -70,7 +71,7 @@ export default function ConnPill({
                 ? "offline"
                 : isProbing
                   ? "connecting…"
-                  : host ? `online · ${host}` : "online"}
+                  : host || ""}
           </span>
         </span>
         <ChevDownIcon className={styles.chev} />

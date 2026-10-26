@@ -1,20 +1,20 @@
 import { useEffect, useState } from 'react';
 import { Gesture } from 'react-native-gesture-handler';
 import Animated, {
-  Easing,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
 
+import { EASE_ENTER, EASE_EXIT } from '../lib/motionEasing';
 import { useReduceMotion } from '../lib/reduceMotion';
+import { motion } from '../theme/tokens';
 
-export const EASE_IN = Easing.bezier(0.2, 0.7, 0.2, 1);
-// Time-reverse of EASE_IN. Reusing EASE_IN for the exit covered 70% of a viewport-tall travel in the first 16ms, so the sheet was gone in one frame.
-export const EASE_OUT = Easing.bezier(0.8, 0, 0.8, 0.3);
-export const DURATION_IN = 220;
-export const DURATION_OUT = 220;
+export const EASE_IN = EASE_ENTER;
+export const EASE_OUT = EASE_EXIT;
+export const DURATION_IN = motion.enter;
+export const DURATION_OUT = motion.exit;
 export const UNMOUNT_BUFFER = 40;
 const DISMISS_PX = 80;
 const DISMISS_VELOCITY = 800;

@@ -62,7 +62,7 @@ export default function ConnectElsewhere({ onConnect, autoFocus = false }) {
         </div>
       ) : null}
       <div className={styles.actions}>
-        <Button type="submit" variant="primary" disabled={busy || !link.trim()}>
+        <Button type="submit" variant="primary" size="lg" disabled={busy || !link.trim()}>
           {failure ? failure.action : "Connect"}
         </Button>
       </div>

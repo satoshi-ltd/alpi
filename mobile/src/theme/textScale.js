@@ -31,18 +31,6 @@ export function clampTextScale(value) {
   );
 }
 
-export function stepTextScale(current, direction) {
-  if (!direction) return DEFAULT_TEXT_SCALE;
-  const index = VALUES.indexOf(clampTextScale(current));
-  const next = index + (direction > 0 ? 1 : -1);
-  return VALUES[Math.min(VALUES.length - 1, Math.max(0, next))];
-}
-
-export function textScaleLabel(value) {
-  const scale = clampTextScale(value);
-  return TEXT_SCALES.find((step) => step.value === scale).label;
-}
-
 export function scaleFontSizes(value) {
   const scale = clampTextScale(value);
   const scaled = {};

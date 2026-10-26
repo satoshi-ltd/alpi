@@ -73,7 +73,7 @@ export default function ModelPicker({
             <span className={styles.modelPickerLabelModel}>{label}</span>
             {effortTag && <span className={styles.modelPickerLabelEffort}>{` · ${effortTag}`}</span>}
           </span>
-          <I.ChevDown style={{ width: 12, height: 12 }} />
+          <I.ChevDown size="sm" />
         </Button>
       </Tip>
       {open && (
@@ -115,7 +115,7 @@ export default function ModelPicker({
                       >
                         {sel && (
                           <I.Check
-                            style={{ width: 13, height: 13, strokeWidth: 2.4 }}
+                            size="sm"
                           />
                         )}
                       </span>

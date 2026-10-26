@@ -2,12 +2,11 @@ import { View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 
 import { usePresence } from '../lib/usePresence';
-import { motionMs } from '../theme/tokens';
 
 const UNCLAMPED = 100000;
 
-export function Expand({ open, children, contentStyle, duration = motionMs.expand }) {
-  const { mounted, progress, moving } = usePresence(open, duration);
+export function Expand({ open, children, contentStyle }) {
+  const { mounted, progress, moving } = usePresence(open);
   const height = useSharedValue(0);
   const style = useAnimatedStyle(() => (moving.value
     ? { maxHeight: height.value * progress.value, opacity: progress.value, overflow: 'hidden' }

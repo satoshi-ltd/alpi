@@ -264,9 +264,9 @@ describe('InboxRow selection', () => {
     expect(screen.getByRole('button').getAttribute('data-bg')).toBe('transparent');
   });
 
-  it('slides the roster open and shut over 200 ms instead of snapping', async () => {
+  it('slides the roster open over 180 ms and shut over 130 ms instead of snapping', async () => {
     const { state } = await import('../../../tests/mocks/reanimated.js');
-    const { motionMs } = await import('../../theme/tokens');
+    const { motion } = await import('../../theme/tokens');
     h.window = { width: 690, height: 829 };
     render(
       <PaneShell>
@@ -276,9 +276,9 @@ describe('InboxRow selection', () => {
     state.timings.length = 0;
     fireEvent.click(probe());
     expect(screen.getByTestId('sidebar')).toBeTruthy();
-    expect(state.timings.at(-1)).toEqual({ to: 1, duration: motionMs.sidebar });
+    expect(state.timings.at(-1)).toEqual({ to: 1, duration: motion.enter });
     fireEvent.click(probe());
-    expect(state.timings.at(-1)).toEqual({ to: 0, duration: motionMs.sidebar });
+    expect(state.timings.at(-1)).toEqual({ to: 0, duration: motion.exit });
     expect(screen.queryByTestId('sidebar')).toBeNull();
   });
 });

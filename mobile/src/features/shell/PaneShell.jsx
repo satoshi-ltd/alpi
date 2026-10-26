@@ -8,7 +8,6 @@ import { SIDEBAR_W } from '../../lib/panes';
 import { usePresence } from '../../lib/usePresence';
 import { PaneContext } from '../../nav/PaneContext';
 import { useTheme } from '../../theme/ThemeContext';
-import { motionMs } from '../../theme/tokens';
 import { SidebarPane } from './SidebarPane';
 
 export function PaneShell({ children }) {
@@ -32,7 +31,7 @@ export function PaneShell({ children }) {
     lastTwoPane.current = twoPane;
   }, [twoPane]);
   const shown = twoPane && open;
-  const { mounted, progress } = usePresence(shown, motionMs.sidebar, { snap });
+  const { mounted, progress } = usePresence(shown, { snap });
   const slide = useAnimatedStyle(() => ({ transform: [{ translateX: SIDEBAR_W * (progress.value - 1) }] }));
 
   return (

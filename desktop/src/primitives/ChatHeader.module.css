@@ -1,9 +1,9 @@
 .topRow {
-  align-items: flex-end;
+  align-items: flex-start;
 }
 
 .titleCol {
-  gap: var(--space-3);
+  gap: var(--sp-8);
   flex: 1;
   min-width: 0;
 }
@@ -11,4 +11,6 @@
 .actions {
   gap: var(--space-tight);
   flex-shrink: 0;
+  height: var(--ctl-32);
+  margin-top: calc((var(--text-display) - var(--ctl-32)) / 2);
 }

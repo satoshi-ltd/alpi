@@ -35,6 +35,8 @@ import {
   CHROME_BTN,
   tapSlop,
   ACTIVITY_PATH,
+  SETTINGS_COLUMN_MAX_W,
+  settingsContentStyle,
 } from "./panes.js";
 import { space } from "../theme/tokens.js";
 
@@ -453,5 +455,18 @@ describe('master-detail threshold', () => {
     expect(isMasterDetail(1039, true, true)).toBe(false);
     expect(isMasterDetail(390, false, true)).toBe(false);
     expect(isMasterDetail(900, false, false)).toBe(false);
+  });
+});
+
+describe("settingsContentStyle", () => {
+  it("caps the fold settings column at 560 pt, left aligned, with no extra gutter", () => {
+    const style = settingsContentStyle(true);
+    expect(SETTINGS_COLUMN_MAX_W).toBe(560);
+    expect(style).toMatchObject({ maxWidth: 560, width: "100%", alignSelf: "flex-start" });
+    expect(style.paddingHorizontal).toBeUndefined();
+  });
+
+  it("leaves the phone column uncapped", () => {
+    expect(settingsContentStyle(false)).toEqual({ paddingBottom: space.s10 });
   });
 });

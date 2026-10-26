@@ -16,6 +16,7 @@ export default function Popover({
   style,
   navigable = false,
   role,
+  large = false,
 }) {
   const ref = useRef(null);
   const isTop = useOverlay({ open, onClose, ref });
@@ -60,9 +61,8 @@ export default function Popover({
           width,
           maxWidth: "min(var(--pop-lg), calc(100vw - 16px))",
           background: "var(--bg-elev)",
-          border: ".5px solid var(--line-2)",
           borderRadius: "var(--r-xs)",
-          boxShadow: "var(--shadow-edge)",
+          boxShadow: large ? "var(--shadow-edge-lg)" : "var(--shadow-edge-sm)",
           zIndex: 50,
           overflow: "hidden",
           ...style,

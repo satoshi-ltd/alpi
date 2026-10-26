@@ -2,12 +2,12 @@
   position: relative;
   display: inline-flex;
 }
-.menu { padding: var(--space-2); }
+.menu { padding: var(--sp-8); }
 .item {
   justify-content: flex-start;
-  gap: var(--space-4);
+  gap: var(--sp-8);
   height: auto;
-  padding: 10px 14px;
+  padding: var(--sp-12) var(--sp-16);
   text-align: left;
   color: var(--ink);
   font-weight: var(--fw-regular);

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
-import { sheetStyles } from './sheetStyles';
-import { Modal, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
+import { POPOVER_W, popoverPosition, sheetStyles } from './sheetStyles';
+import { Dimensions, Modal, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,6 +8,7 @@ import { alpha, radii, space, lineHeights, typography, veil } from '../theme/tok
 
 import { selection } from '../lib/haptics';
 import { usePane } from '../nav/PaneContext';
+import { dotShape } from './dotShape';
 import { useTheme } from '../theme/ThemeContext';
 import { PICKER_GAP, PickerLead, PICKER_TEXT_EDGE } from './PickerLead';
 import { SheetClose } from './SheetClose';
@@ -18,20 +19,71 @@ import { useSheetGesture } from './useSheetGesture';
 
 
 // Action list caps at 60vh, scrolls internally above the cap.
-export function ActionSheet({ open, onClose, title, subtitle, description, actions = [] }) {
+export function ActionSheet({ open, onClose, title, subtitle, description, actions = [], anchor = null }) {
   const { colors, fonts, fontSizes, shadow } = useTheme();
   const insets = useSafeAreaInsets();
-  const { height } = useWindowDimensions();
+  const { height, width } = useWindowDimensions();
   const { twoPane } = usePane();
   const { gesture, sheetStyle, backdropStyle, mounted } = useSheetGesture(open, onClose, height + 100);
   const maxListHeight = height * 0.6;
   const dialog = twoPane ? sheetStyles.dialog : null;
+  const popover = twoPane && anchor ? popoverPosition(anchor, width, height, maxListHeight, insets.bottom) : null;
   const view = useExitSnapshot(open, { title, subtitle, description, actions });
   const pickable = view.actions.some((a) => 'selected' in a);
 
   useEffect(() => {
-    if (open) selection();
+    if (open && pickable) selection();
   }, [open]);
+
+  const anchored = !!popover && open;
+  useEffect(() => {
+    if (!anchored) return undefined;
+    const subscription = Dimensions.addEventListener('change', () => onClose?.());
+    return () => subscription.remove();
+  }, [anchored, onClose]);
+
+  const header = (
+    <View>
+      {twoPane ? null : (
+        <View style={sheetStyles.grabberWrap}>
+          <View
+            style={[sheetStyles.grabber, { backgroundColor: colors.ink4 }]}
+          />
+        </View>
+      )}
+      <View
+        style={[sheetStyles.header, twoPane && sheetStyles.dialogHeader]}
+      >
+        <View style={{ flex: 1, gap: space.s2 }}>
+          {view.title ? (
+            <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes[typography.dialogTitle.size], lineHeight: fontSizes[typography.dialogTitle.size] * lineHeights[typography.dialogTitle.leading], color: colors.ink }}>
+              {view.title}
+            </Text>
+          ) : null}
+          {view.subtitle ? (
+            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes[typography.caption.size], color: colors.ink3 }}>
+              {view.subtitle}
+            </Text>
+          ) : null}
+          {view.description ? (
+            <Text
+              style={{
+                fontFamily: fonts.sans.regular,
+                fontSize: fontSizes[typography.body.size],
+                lineHeight: fontSizes[typography.body.size] * lineHeights[typography.body.leading],
+                color: colors.ink2,
+                marginTop: space.s1,
+              }}
+            >
+              {view.description}
+            </Text>
+          ) : null}
+        </View>
+        <SheetClose onPress={onClose} />
+      </View>
+      <View style={{ height: 0.5, backgroundColor: colors.line }} />
+    </View>
+  );
 
   return (
     <Modal
@@ -43,62 +95,34 @@ export function ActionSheet({ open, onClose, title, subtitle, description, actio
     >
       <Animated.View
         pointerEvents={open ? 'auto' : 'none'}
-        style={[{ flex: 1, backgroundColor: veil(colors), justifyContent: twoPane ? 'center' : 'flex-end' }, backdropStyle]}
+        style={[{ flex: 1, backgroundColor: popover ? 'transparent' : veil(colors), justifyContent: twoPane ? 'center' : 'flex-end' }, backdropStyle]}
       >
         <Pressable style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} onPress={onClose} accessible={false} />
         <Animated.View
           style={[
-            {
-              backgroundColor: colors.bgPane,
-              ...shadow.float,
-              borderTopLeftRadius: radii.xs,
-              borderTopRightRadius: radii.xs,
-              overflow: 'hidden',
-              ...dialog,
-            },
-            sheetStyle,
+            popover
+              ? {
+                  position: 'absolute',
+                  ...popover,
+                  width: POPOVER_W,
+                  backgroundColor: colors.bgPane,
+                  ...shadow.popover,
+                  borderRadius: radii.xs,
+                  overflow: 'hidden',
+                  paddingVertical: space.s1,
+                }
+              : {
+                  backgroundColor: colors.bgPane,
+                  ...(twoPane ? shadow.dialog : shadow.sheet),
+                  borderTopLeftRadius: radii.xs,
+                  borderTopRightRadius: radii.xs,
+                  overflow: 'hidden',
+                  ...dialog,
+                },
+            popover ? null : sheetStyle,
           ]}
         >
-          <GestureDetector gesture={gesture}>
-            <View>
-              <View style={sheetStyles.grabberWrap}>
-                <View
-                  style={[sheetStyles.grabber, { backgroundColor: colors.ink4 }]}
-                />
-              </View>
-              <View
-                style={sheetStyles.header}
-              >
-                <View style={{ flex: 1, gap: space.s2 }}>
-                  {view.title ? (
-                    <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes[typography.dialogTitle.size], lineHeight: fontSizes[typography.dialogTitle.size] * lineHeights[typography.dialogTitle.leading], color: colors.ink }}>
-                      {view.title}
-                    </Text>
-                  ) : null}
-                  {view.subtitle ? (
-                    <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes[typography.caption.size], color: colors.ink3 }}>
-                      {view.subtitle}
-                    </Text>
-                  ) : null}
-                  {view.description ? (
-                    <Text
-                      style={{
-                        fontFamily: fonts.sans.regular,
-                        fontSize: fontSizes[typography.body.size],
-                        lineHeight: fontSizes[typography.body.size] * lineHeights[typography.body.leading],
-                        color: colors.ink2,
-                        marginTop: space.s1,
-                      }}
-                    >
-                      {view.description}
-                    </Text>
-                  ) : null}
-                </View>
-                <SheetClose onPress={onClose} />
-              </View>
-              <View style={{ height: 0.5, backgroundColor: colors.line }} />
-            </View>
-          </GestureDetector>
+          {popover ? null : twoPane ? header : <GestureDetector gesture={gesture}>{header}</GestureDetector>}
           <ScrollView
             style={{ maxHeight: maxListHeight }}
             contentContainerStyle={{ paddingBottom: space.s1 }}
@@ -142,7 +166,7 @@ export function ActionSheet({ open, onClose, title, subtitle, description, actio
                       {a.badge ? (
                         <View
                           testID="action-badge"
-                          style={{ position: 'absolute', top: -2, right: 0, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.danger, borderWidth: 1.5, borderColor: colors.bgPane }}
+                          style={{ position: 'absolute', top: -2, right: 0, ...dotShape('md'), backgroundColor: colors.danger }}
                         />
                       ) : null}
                     </View>

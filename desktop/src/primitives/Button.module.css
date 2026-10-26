@@ -2,8 +2,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-2);
-  height: var(--ctrl-md);
+  gap: var(--sp-8);
+  height: var(--ctl-32);
   padding: 0;
   border: 0;
   border-radius: var(--r-xs);
@@ -25,14 +25,9 @@
   cursor: not-allowed;
 }
 
-.button:focus-visible,
 .button[aria-expanded="true"] {
-  outline: 2px solid color-mix(in srgb, var(--ink) 45%, transparent);
-  outline-offset: 2px;
-}
-
-.button.iconOnly:focus-visible {
-  outline-offset: 1px;
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-outline-offset);
 }
 
 .icon {
@@ -43,11 +38,11 @@
 }
 
 .withLabel {
-  padding: 0 var(--space-5);
+  padding: 0 var(--sp-12);
 }
 
 .iconOnly {
-  width: var(--ctrl-md);
+  width: var(--ctl-32);
 }
 
 .ghost:not(:disabled):hover {
@@ -86,17 +81,17 @@
 }
 
 .sm {
-  height: var(--ctrl-sm);
-  font-size: var(--fs-sm);
+  height: var(--ctl-28);
+  font-size: var(--text-meta);
 }
 
 .sm.withLabel {
-  padding: 0 var(--space-4);
+  padding: 0 var(--sp-12);
 }
 
 .button .spinner {
-  width: var(--space-5);
-  height: var(--space-5);
+  width: var(--sp-12);
+  height: var(--sp-12);
   stroke-width: 2;
   opacity: 0.6;
 }
@@ -106,20 +101,20 @@
 }
 
 .sm.iconOnly {
-  width: var(--ctrl-sm);
+  width: var(--ctl-28);
 }
 
 .lg {
-  height: var(--ctrl-lg);
+  height: var(--ctl-40);
   font-size: var(--text-ui);
 }
 
 .lg.withLabel {
-  padding: 0 var(--space-6);
+  padding: 0 var(--sp-16);
 }
 
 .lg.iconOnly {
-  width: var(--ctrl-lg);
+  width: var(--ctl-40);
 }
 
 .hero {
@@ -128,7 +123,7 @@
 }
 
 .hero.withLabel {
-  padding: 0 var(--space-8);
+  padding: 0 var(--sp-24);
 }
 
 .hero.iconOnly {

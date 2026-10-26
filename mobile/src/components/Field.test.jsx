@@ -13,7 +13,7 @@ vi.mock('react-native', () => {
 vi.mock('./Eyebrow', () => ({ Eyebrow: ({ children }) => React.createElement('label', null, children) }));
 vi.mock('../theme/ThemeContext', () => ({
   useTheme: () => ({
-    colors: { bgInput: '#eee', bgPane: '#fff', line2: '#ddd', ink: '#000', ink2: '#222', ink3: '#666', dangerText: '#b73737' },
+    colors: { field: '#eee', bgPane: '#fff', line2: '#ddd', ink: '#000', ink2: '#222', ink3: '#666', dangerText: '#b73737' },
     fonts: { mono: 'mono', sans: { regular: 'sans' } },
     fontSizes: { xs: 11, sm: 12, lg: 16 },
     mobile: { inputH: 44 },

@@ -55,7 +55,7 @@ export default function SidebarRow({
         </span>
       )}
       <span
-        className={`sb-name${stateMod} ${styles.label}`.trim()}
+        className={`sb-name${stateMod} ${styles.label} ${STATE_WORD[state] ? styles.labelKeep : ""}`.trim()}
         style={tintedColor ? { color: "inherit" } : undefined}
       >
         {id}

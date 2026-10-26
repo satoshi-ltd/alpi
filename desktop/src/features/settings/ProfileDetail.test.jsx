@@ -119,6 +119,18 @@ describe("ProfileDetail", () => {
     expect(bar.outerHTML).not.toContain("#10b981");
   });
 
+  it("offers the theme control on the default profile only", () => {
+    const view = render(
+      <ProfileDetail profile={{ name: "default" }} profiles={[]} activeConnection={{ id: "local", kind: "local" }} />,
+    );
+    expect(screen.getByText("theme")).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Theme" })).toBeInTheDocument();
+    view.rerender(
+      <ProfileDetail profile={{ name: "pulse" }} profiles={[]} activeConnection={{ id: "local", kind: "local" }} />,
+    );
+    expect(screen.queryByRole("group", { name: "Theme" })).toBeNull();
+  });
+
   it("keeps daemon and client access in one Service section", () => {
     const view = render(
       <ProfileDetail

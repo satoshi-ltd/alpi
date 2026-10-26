@@ -34,6 +34,58 @@ export const lineHeights = {
   relaxed: 1.65,
 };
 
+export const typeLadder = {
+  meta: 11,
+  ui: 13,
+  chat: 15,
+  title: 18,
+  detail: 22,
+  display: 28,
+};
+
+export const fontWeights = {
+  regular: 400,
+  medium: 500,
+  semibold: 600,
+};
+
+export const eyebrow = { size: 11, tracking: 0.08, family: "mono", ink: "ink3" };
+
+export const spaceScale = {
+  4: 4,
+  8: 8,
+  12: 12,
+  16: 16,
+  24: 24,
+  32: 32,
+};
+
+export const controlHeight = {
+  24: 24,
+  28: 28,
+  32: 32,
+  40: 40,
+};
+
+export const motionTokens = {
+  fast: 120,
+  enter: 180,
+  exit: 130,
+  pulse: 1600,
+  pulseLow: 0.4,
+  easeEnter: [0.2, 0.7, 0.2, 1],
+  easeExit: [0.8, 0, 0.8, 0.3],
+};
+
+export const focusRing = { width: 2, offset: 2, alpha: 0.6 };
+
+export const iconStrokeRendered = 1.33;
+export const iconViewBox = 24;
+export const iconStrokeFor = (size) => (iconStrokeRendered * iconViewBox) / size;
+export const iconSizesAllowed = { desktop: [14, 16], mobile: [12, 16] };
+
+export const dotScale = { sm: 6, md: 8 };
+
 export const space = {
   s1: 4,
   s2: 6,
@@ -80,7 +132,6 @@ export const alpha = {
   soft: 0.7,
 };
 
-export const dotSize = 7;
 export const glyphSize = 8;
 export const glyphSizeMd = 14;
 
@@ -96,6 +147,8 @@ const light = {
   bgSide: "#f6f6f6",
   bgElev: "#ffffff",
   bgInput: "#ffffff",
+  card: "#f4f4f4",
+  field: "#eaeaea",
   ink: "#141414",
   ink2: "#454545",
   ink3: "#6b6b6b",
@@ -117,8 +170,10 @@ const dark = {
   bg: "#0b0b0b",
   bgPane: "#151515",
   bgSide: "#0f0f0f",
-  bgElev: "#1b1b1b",
+  bgElev: "#202020",
   bgInput: "#151515",
+  card: "#0f0f0f",
+  field: "#181818",
   ink: "#ededed",
   ink2: "#b4b4b4",
   ink3: "#8a8a8a",
@@ -135,6 +190,8 @@ const dark = {
   dangerText: "#f08080",
   onDanger: "#ffffff",
 };
+
+export const ladderDirection = { light: "descends", dark: "ascends" };
 
 export const palettes = {
   light: { ...light, ...status },

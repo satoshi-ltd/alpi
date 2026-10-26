@@ -57,7 +57,7 @@ vi.mock('../../theme/ThemeContext', async () => {
       colors: {
         ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999',
         success: '#0a0', warning: '#c80', danger: '#c00', dangerText: '#a00',
-        line2: '#eee', bgInput: '#fafafa', hover: '#f4f4f4', selected: '#eaeaea',
+        line2: '#eee', field: '#fafafa', hover: '#f4f4f4', selected: '#eaeaea',
       },
       fonts: { sans: { regular: 'Geist_400Regular' }, mono: 'm', monoMedium: 'mm', monoSemibold: 'ms' },
       fontSizes: tokens.fontSizes,

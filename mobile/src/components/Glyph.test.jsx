@@ -100,7 +100,7 @@ describe('Glyph profile fold', () => {
 
   it('ripples a working workgroup and stills a paused one', () => {
     render(<Glyph kind="workgroup" color="#3899e2" working />);
-    expect(h.delays).toEqual([0, 600, 1200]);
+    expect(h.delays.map(Math.round)).toEqual([0, 533, 1067]);
     cleanup();
     h.delays.length = 0;
     render(<Glyph kind="workgroup" color="#3899e2" working paused />);

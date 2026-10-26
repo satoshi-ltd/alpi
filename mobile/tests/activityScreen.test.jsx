@@ -11,6 +11,10 @@ const h = vi.hoisted(() => ({
   activity: null,
   call: null,
   toast: null,
+  role: 'admin',
+  endpointId: 'c1',
+  confirm: null,
+  flat: (style) => [style].flat(Infinity).filter(Boolean).reduce((acc, x) => ({ ...acc, ...x }), {}),
 }));
 
 vi.mock('../src/components/EmptyState', async () => {
@@ -18,11 +22,24 @@ vi.mock('../src/components/EmptyState', async () => {
   return { EmptyState: ({ title, detail, action }) => R.createElement('div', null, R.createElement('span', null, title), R.createElement('span', null, detail), action ? R.createElement('button', { onClick: action.onPress }, action.label) : null) };
 });
 vi.mock('react-native', () => {
-  const View = ({ children, accessibilityRole }) => React.createElement('div', { role: accessibilityRole }, children);
-  const Text = ({ children }) => React.createElement('span', {}, children);
-  const Pressable = ({ children, onPress, accessibilityLabel, disabled }) =>
-    React.createElement('button', { type: 'button', onClick: onPress, 'aria-label': accessibilityLabel, disabled }, children);
-  const ScrollView = ({ children }) => React.createElement('div', {}, children);
+  const View = ({ children, accessibilityRole, accessibilityLabel }) => React.createElement('div', { role: accessibilityRole, 'aria-label': accessibilityLabel }, children);
+  const Text = ({ children, style }) => React.createElement('span', { 'data-style': JSON.stringify(h.flat(style)) }, children);
+  const Pressable = ({ children, onPress, accessibilityLabel, accessibilityRole, accessibilityState, accessibilityHint, disabled, style, hitSlop }) =>
+    React.createElement('button', {
+      type: 'button',
+      onClick: disabled ? undefined : onPress,
+      'aria-label': accessibilityLabel,
+      'aria-expanded': accessibilityState?.expanded,
+      'aria-selected': accessibilityState?.selected,
+      'aria-busy': accessibilityState?.busy,
+      'data-role': accessibilityRole,
+      'data-hint': accessibilityHint,
+      'data-hit': hitSlop ? JSON.stringify(hitSlop) : undefined,
+      'data-style': JSON.stringify(h.flat(typeof style === 'function' ? style({ pressed: false }) : style)),
+      disabled,
+    }, typeof children === 'function' ? children({ pressed: false }) : children);
+  const ScrollView = ({ children, stickyHeaderIndices, horizontal }) =>
+    React.createElement('div', { 'data-sticky': stickyHeaderIndices ? JSON.stringify(stickyHeaderIndices) : undefined, 'data-horizontal': horizontal ? 'y' : undefined }, children);
   return { View, Text, Pressable, ScrollView, RefreshControl: () => null };
 });
 
@@ -37,7 +54,10 @@ vi.mock('../src/hooks/useDaemonData', () => ({ useProfileSummaries: () => ({ dat
 vi.mock('../src/components/Fold', () => ({ Fold: ({ fold, pulse }) => React.createElement('i', { 'data-fold': fold ?? 'none', 'data-pulse': String(!!pulse) }) }));
 vi.mock('../src/components/Icon', () => ({ Icon: ({ name }) => React.createElement('i', { 'data-icon': name }) }));
 vi.mock('../src/components/Eyebrow', () => ({ Eyebrow: ({ children }) => React.createElement('h2', {}, children) }));
-vi.mock('../src/lib/EndpointContext', () => ({ useEndpoint: () => ({ call: h.call }) }));
+vi.mock('../src/lib/EndpointContext', () => ({ useEndpoint: () => ({ call: h.call, endpoint: { id: h.endpointId } }) }));
+vi.mock('../src/hooks/useActiveRole', () => ({ useActiveRole: () => h.role }));
+vi.mock('../src/components/ConfirmProvider', () => ({ useConfirm: () => h.confirm }));
+vi.mock('../src/components/Expand', () => ({ Expand: ({ open, children }) => (open ? React.createElement('div', { 'data-expand': 'open' }, children) : null) }));
 vi.mock('../src/components/LoadFailed', () => ({ LoadFailed: ({ label, onRetry }) => React.createElement('div', { role: 'alert' }, React.createElement('span', {}, `Couldn't load ${label}`), React.createElement('button', { type: 'button', onClick: onRetry }, 'Retry')) }));
 vi.mock('../src/components/Toast', () => ({ useToast: () => h.toast }));
 vi.mock('../src/hooks/useBack', () => ({ useBack: () => vi.fn() }));
@@ -52,14 +72,16 @@ vi.mock('../src/theme/ThemeContext', async () => {
   const tokens = await import('../src/theme/tokens');
   return {
     useTheme: () => ({
-      colors: { bg: '#fff', bgPane: '#fff', ink: '#000', ink2: '#333', ink3: '#666', accent: '#a70', warning: '#e08a3c', warningText: '#8a5a0a', danger: '#c14545', dangerText: '#b73737', selected: '#eee' },
-      fonts: { sans: { regular: 'r', medium: 'm', semibold: 's' }, mono: 'mono' },
+      colors: { bg: '#fff', bgPane: '#fff', ink: '#000', ink2: '#333', ink3: '#666', accent: '#a70', warning: '#e08a3c', warningText: '#8a5a0a', danger: '#c14545', dangerText: '#b73737', selected: '#eee', line: '#ddd', line2: '#ccc', ink4: '#999', hover: '#f4f4f4' },
+      fonts: { sans: { regular: 'r', medium: 'm', semibold: 's' }, mono: 'mono', monoMedium: 'mm' },
+      chromeScale: 1.3,
       fontSizes: tokens.fontSizes,
     }),
   };
 });
 
 import ActivityScreen from '../app/activity';
+import { ACTIVITY_FILTERS } from '../src/features/shell/activityFeed';
 import { activitySections, ago, until } from '../src/features/shell/ActivityList';
 
 const NOW = (() => {
@@ -97,17 +119,143 @@ beforeEach(() => {
   h.activity = state(FULL);
   h.call = vi.fn(async () => ({ ok: true }));
   h.toast = vi.fn();
+  h.role = 'admin';
+  h.endpointId = 'c1';
+  h.confirm = vi.fn(async () => true);
 });
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
 });
 
+const at = (s) => new Date((NOW + s) * 1000).toISOString();
+const FLEET = {
+  ...FULL,
+  scheduled: [
+    ...FULL.scheduled,
+    { profile: 'doc', job_id: 'j3', title: 'doc · digest', next_fire: at(3600), last_run_at: NOW - 600, last_run_status: 'error', last_ok_at: NOW - 7200 },
+    { profile: 'builder', job_id: 'b1', title: 'nightly sync', next_fire: at(9000), last_run_at: NOW - 90, last_run_status: 'error' },
+    { profile: 'builder', job_id: 'b2', title: 'old failure', next_fire: null, last_run_at: NOW - 3 * 86400, last_run_status: 'error' },
+    { profile: 'doc', job_id: 'soon', title: 'soon', next_fire: at(600), last_run_status: 'ok' },
+    { profile: 'doc', job_id: 'late', title: 'overdue', next_fire: at(-60), last_run_status: 'ok' },
+  ],
+};
+
+const heads = () => [...document.querySelectorAll('h2')].map((n) => n.textContent);
+const chips = () => [...document.querySelectorAll('[data-role="radio"]')];
+const chip = (name) => screen.getByLabelText(new RegExp(`^${name}, \\d+$`));
+const style = (node) => JSON.parse(node.getAttribute('data-style'));
+
 describe('activity screen', () => {
-  it('leads with what needs the user, then what runs, then what is scheduled', () => {
+  it('leads with what needs the user, then failures, what runs and what is upcoming', () => {
     render(<ActivityScreen />);
-    const heads = [...document.querySelectorAll('h2')].map((n) => n.textContent);
-    expect(heads).toEqual(['Needs you · 3', 'Running · 2', 'Next up · 2', 'Today', 'No fixed time']);
+    expect(heads()).toEqual(['Needs you · 2', 'Failing · 1', 'Running · 2', 'Upcoming · 1', 'Today']);
+  });
+
+  it('shows the shared grouping: failures leave Needs you and past runs leave Upcoming', () => {
+    h.activity = state(FLEET);
+    render(<ActivityScreen />);
+    expect(heads()).toEqual(['Needs you · 2', 'Failing · 3', 'Running · 2', 'Upcoming · 2', 'Today']);
+    expect(screen.queryByLabelText(/overdue/)).toBeNull();
+    expect(screen.queryByLabelText(/old failure/)).toBeNull();
+    expect(screen.queryByLabelText(/Run again/)).toBeNull();
+  });
+
+  it('puts a count on every filter, speaks it, and paints Failing in danger only when it is above zero', () => {
+    h.activity = state(FLEET);
+    render(<ActivityScreen />);
+    expect(chips().map((n) => n.getAttribute('aria-label'))).toEqual(['All, 9', 'Needs you, 2', 'Failing, 3', 'Running, 2', 'Upcoming, 2']);
+    expect(ACTIVITY_FILTERS).toHaveLength(5);
+    const count = (name) => [...chip(name).querySelectorAll('span')].at(-1);
+    expect(style(count('Failing')).color).toBe('#b73737');
+    expect(style(count('Running')).color).toBe('#666');
+    expect(chip('All').getAttribute('aria-selected')).toBe('true');
+    cleanup();
+    h.activity = state({ needsYou: [], running: FULL.running, scheduled: [] });
+    render(<ActivityScreen />);
+    expect(style([...chip('Failing').querySelectorAll('span')].at(-1)).color).toBe('#666');
+  });
+
+  it('filters to one section and says so when that section is empty', () => {
+    render(<ActivityScreen />);
+    fireEvent.click(chip('Running'));
+    expect(heads()).toEqual(['Running · 2']);
+    expect(chip('Running').getAttribute('aria-selected')).toBe('true');
+    expect(chip('All').getAttribute('aria-selected')).toBe('false');
+    cleanup();
+    h.activity = state({ needsYou: [], running: [], scheduled: [FULL.scheduled[0]] });
+    render(<ActivityScreen />);
+    fireEvent.click(chip('Failing'));
+    expect(screen.getByText('No failing jobs')).toBeTruthy();
+    fireEvent.click(chip('Needs you'));
+    expect(screen.getByText('Nothing needs you')).toBeTruthy();
+    fireEvent.click(chip('Running'));
+    expect(screen.getByText('Nothing running')).toBeTruthy();
+    fireEvent.click(chip('Upcoming'));
+    expect(heads()).toEqual(['Upcoming · 1', 'Today']);
+  });
+
+  it('keeps the chips fixed above a scroller that pins every section header', () => {
+    h.activity = state(FLEET);
+    render(<ActivityScreen />);
+    const scroller = document.querySelector('[data-sticky]');
+    expect(document.querySelector('[data-horizontal="y"]')).not.toBeNull();
+    expect(scroller.contains(chip('All'))).toBe(false);
+    const kids = [...scroller.children];
+    const pinned = JSON.parse(scroller.getAttribute('data-sticky'));
+    expect(pinned).toHaveLength(4);
+    expect(pinned.map((i) => kids[i].textContent.split(' · ')[0])).toEqual(['Needs you', 'Failing', 'Running', 'Upcoming']);
+    expect(kids[pinned[0]].getAttribute('role')).toBe('header');
+  });
+
+  it('says the calm state when nothing needs the user, and keeps Running and Upcoming', () => {
+    h.activity = state({ needsYou: [], running: FULL.running, scheduled: [FULL.scheduled[0]] });
+    render(<ActivityScreen />);
+    expect(screen.getByText('Nothing needs you now')).toBeTruthy();
+    expect(heads()).toEqual(['Running · 2', 'Upcoming · 1', 'Today']);
+  });
+
+  it('groups failures per profile, the latest first and expanded, the rest one collapsed line', () => {
+    h.activity = state(FLEET);
+    render(<ActivityScreen />);
+    const groups = [...document.querySelectorAll('button[aria-expanded]')];
+    expect(groups.map((g) => g.getAttribute('aria-label'))).toEqual([
+      'builder, 1 failing job, latest 2m ago, expanded',
+      'doc, 2 failing jobs, latest 10m ago, collapsed',
+    ]);
+    expect(screen.queryByLabelText(/^nightly sync, failed/)).not.toBeNull();
+    expect(screen.queryByLabelText(/^digest, failed/)).toBeNull();
+    fireEvent.click(groups[1]);
+    expect(screen.getByLabelText('doc, 2 failing jobs, latest 10m ago, expanded').getAttribute('aria-expanded')).toBe('true');
+    expect(screen.queryByLabelText(/^digest, failed/)).not.toBeNull();
+    expect(screen.queryByLabelText(/^weekly labs, failed/)).not.toBeNull();
+    fireEvent.click(screen.getByLabelText(/^builder, 1 failing job/));
+    expect(screen.queryByLabelText(/^nightly sync, failed/)).toBeNull();
+  });
+
+  it('drops the profile prefix from a job title, puts failed in red alone and last ok only when sent', () => {
+    h.activity = state(FLEET);
+    render(<ActivityScreen />);
+    fireEvent.click(screen.getByLabelText(/^doc, 2 failing jobs/));
+    const digest = screen.getByLabelText('digest, failed 10m ago, last ok 2h ago');
+    const meta = digest.querySelectorAll('span')[1];
+    expect(meta.textContent).toBe('failed 10m ago · last ok 2h ago');
+    expect(style(meta.querySelector('span')).color).toBe('#b73737');
+    expect(style(meta).color).toBe('#666');
+    expect(screen.getByLabelText('weekly labs, failed 1h ago')).toBeTruthy();
+    expect(screen.getByLabelText('nightly sync, failed 2m ago').getAttribute('data-hint')).toBe('Opens the job');
+  });
+
+  it('opens a failing job on its schedule page, replacing the detail pane on two panes', () => {
+    h.activity = state(FLEET);
+    render(<ActivityScreen />);
+    fireEvent.click(screen.getByLabelText(/^nightly sync, failed/));
+    expect(h.push).toHaveBeenCalledWith('/profile/builder/schedule/b1');
+    h.twoPane = true;
+    cleanup();
+    render(<ActivityScreen />);
+    fireEvent.click(screen.getByLabelText(/^nightly sync, failed/));
+    expect(h.replace).toHaveBeenCalledWith('/profile/builder/schedule/b1');
   });
 
   it('leads each row with the profile object, the workgroup with its honeycomb rippling while it runs', () => {
@@ -134,17 +282,17 @@ describe('activity screen', () => {
     expect(h.push).toHaveBeenLastCalledWith('/wg/launch-crew');
   });
 
-  it('replaces the detail pane instead of stacking on two panes', () => {
-    h.twoPane = true;
+  it('opens an upcoming job on its page', () => {
     render(<ActivityScreen />);
-    fireEvent.click(screen.getByLabelText(/^doc · weekly labs, failed 1h ago$/));
-    expect(h.replace).toHaveBeenCalledWith('/profile/doc/schedule/j2');
+    fireEvent.click(screen.getByLabelText(/^doc · daily brief, in 2h/));
+    expect(h.push).toHaveBeenCalledWith('/profile/doc/schedule/j1');
   });
 
-  it('says nothing is running once the list is empty', () => {
+  it('says nothing is running once the list is empty, and hides the filters', () => {
     h.activity = state({ needsYou: [], running: [], scheduled: [] });
     render(<ActivityScreen />);
     expect(screen.getByText('Nothing running')).toBeTruthy();
+    expect(chips()).toHaveLength(0);
   });
 
   it('says the daemon is too old instead of pretending nothing runs', () => {
@@ -168,6 +316,109 @@ describe('activity screen', () => {
     render(<ActivityScreen />);
     expect(screen.queryByText('Nothing running')).toBeNull();
     expect(screen.queryByText('Activity needs a newer daemon')).toBeNull();
+  });
+});
+
+describe('retrying failed jobs', () => {
+  const forbidden = () => Object.assign(new Error('forbidden'), { code: -32601 });
+
+  it('offers Retry to admins only, as a 44 pt target beside the row', () => {
+    h.activity = state(FLEET);
+    render(<ActivityScreen />);
+    const retry = screen.getByLabelText('Retry nightly sync');
+    expect(style(retry)).toMatchObject({ minHeight: 44, minWidth: 44 });
+    expect(screen.getByLabelText('Retry all 3 failing jobs')).toBeTruthy();
+    cleanup();
+    h.role = 'member';
+    render(<ActivityScreen />);
+    expect(screen.queryByLabelText(/^Retry /)).toBeNull();
+    expect(screen.queryByLabelText(/^Retry all/)).toBeNull();
+    cleanup();
+    h.role = null;
+    render(<ActivityScreen />);
+    expect(screen.queryByLabelText(/^Retry /)).toBeNull();
+    h.role = 'admin';
+  });
+
+  it('fires the job from Retry without opening it, then refreshes', async () => {
+    h.activity = state(FLEET);
+    render(<ActivityScreen />);
+    fireEvent.click(screen.getByLabelText('Retry nightly sync'));
+    expect(h.call).toHaveBeenCalledWith('host.schedule.fire', { profile: 'builder', id: 'b1' });
+    expect(h.push).not.toHaveBeenCalled();
+    await waitFor(() => expect(h.refresh).toHaveBeenCalled());
+    expect(h.toast).toHaveBeenCalledWith(expect.objectContaining({ kind: 'success' }));
+  });
+
+  it('tells the user when Retry fails and keeps the button', async () => {
+    h.activity = state(FLEET);
+    h.call = vi.fn(async () => { throw new Error('daemon unreachable'); });
+    render(<ActivityScreen />);
+    fireEvent.click(screen.getByLabelText('Retry nightly sync'));
+    await waitFor(() => expect(h.toast).toHaveBeenCalledWith(expect.objectContaining({ kind: 'danger', message: 'daemon unreachable' })));
+    await waitFor(() => expect(screen.getByLabelText('Retry nightly sync').disabled).toBe(false));
+  });
+
+  it('starts one run for a double tap and frees the button once it settles', async () => {
+    h.activity = state(FLEET);
+    let release;
+    h.call = vi.fn(() => new Promise((resolve) => { release = resolve; }));
+    render(<ActivityScreen />);
+    const btn = screen.getByLabelText('Retry nightly sync');
+    fireEvent.click(btn);
+    fireEvent.click(btn);
+    expect(h.call).toHaveBeenCalledTimes(1);
+    expect(btn.getAttribute('aria-busy')).toBe('true');
+    await act(async () => { release({ ok: true }); });
+    await waitFor(() => expect(screen.getByLabelText('Retry nightly sync').disabled).toBe(false));
+  });
+
+  it('hides Retry for good after forbidden, until the connection changes', async () => {
+    h.activity = state(FLEET);
+    h.call = vi.fn(async () => { throw forbidden(); });
+    const { rerender } = render(<ActivityScreen />);
+    fireEvent.click(screen.getByLabelText('Retry nightly sync'));
+    await waitFor(() => expect(screen.queryByLabelText(/^Retry /)).toBeNull());
+    expect(screen.queryByLabelText(/^Retry all/)).toBeNull();
+    expect(h.toast).not.toHaveBeenCalled();
+    rerender(<ActivityScreen />);
+    expect(screen.queryByLabelText(/^Retry /)).toBeNull();
+    h.endpointId = 'c2';
+    rerender(<ActivityScreen />);
+    await waitFor(() => expect(screen.queryByLabelText('Retry nightly sync')).not.toBeNull());
+    h.endpointId = 'c1';
+  });
+
+  it('asks before Retry all and starts nothing when the user cancels', async () => {
+    h.activity = state(FLEET);
+    h.confirm = vi.fn(async () => false);
+    render(<ActivityScreen />);
+    fireEvent.click(screen.getByLabelText('Retry all 3 failing jobs'));
+    await waitFor(() => expect(h.confirm).toHaveBeenCalled());
+    expect(h.confirm.mock.calls[0][0]).toMatchObject({ title: 'Retry 3 jobs?', confirmLabel: 'Retry all', typed: false });
+    expect(h.confirm.mock.calls[0][0].body).toMatch(/one agent run per job.*costs money/);
+    expect(h.call).not.toHaveBeenCalled();
+  });
+
+  it('fires every failing job in order once confirmed, then reports the count', async () => {
+    h.activity = state(FLEET);
+    h.confirm = vi.fn(async () => true);
+    render(<ActivityScreen />);
+    fireEvent.click(screen.getByLabelText('Retry all 3 failing jobs'));
+    await waitFor(() => expect(h.toast).toHaveBeenCalledWith({ message: 'Retrying 3 jobs', kind: 'success' }));
+    expect(h.call.mock.calls.map(([, p]) => `${p.profile}/${p.id}`)).toEqual(['builder/b1', 'doc/j3', 'doc/j2']);
+    expect(h.refresh).toHaveBeenCalled();
+  });
+
+  it('stops Retry all at the first forbidden and hides Retry', async () => {
+    h.activity = state(FLEET);
+    h.confirm = vi.fn(async () => true);
+    h.call = vi.fn(async () => { throw forbidden(); });
+    render(<ActivityScreen />);
+    fireEvent.click(screen.getByLabelText('Retry all 3 failing jobs'));
+    await waitFor(() => expect(screen.queryByLabelText(/^Retry all/)).toBeNull());
+    expect(h.call).toHaveBeenCalledTimes(1);
+    expect(h.toast).not.toHaveBeenCalled();
   });
 });
 
@@ -230,35 +481,6 @@ describe('activity rows', () => {
     const rerun = { kind: 'turn', profile: 'doc', title: 'weekly labs', started_at: NOW - 5, source: 'schedule', job_id: 'j2' };
     const [needs] = activitySections({ ...FULL, needsYou: [], running: [rerun] }, NOW);
     expect(needs.key).toBe('running');
-  });
-
-  it('runs a failed job again from its own 44 pt target without opening it', async () => {
-    render(<ActivityScreen />);
-    fireEvent.click(screen.getByLabelText('Run again doc · weekly labs'));
-    expect(h.call).toHaveBeenCalledWith('host.schedule.fire', { profile: 'doc', id: 'j2' });
-    expect(h.push).not.toHaveBeenCalled();
-    await waitFor(() => expect(h.refresh).toHaveBeenCalled());
-  });
-
-  it('tells the user when Run again fails', async () => {
-    h.call = vi.fn(async () => { throw new Error('daemon unreachable'); });
-    render(<ActivityScreen />);
-    fireEvent.click(screen.getByLabelText('Run again doc · weekly labs'));
-    await waitFor(() => expect(h.toast).toHaveBeenCalledWith(expect.objectContaining({ kind: 'danger', message: 'daemon unreachable' })));
-  });
-
-  it('starts one run for a double tap on Run again, and allows the next tap once it settles', async () => {
-    let release;
-    h.call = vi.fn(() => new Promise((resolve) => { release = resolve; }));
-    render(<ActivityScreen />);
-    const chip = screen.getByLabelText('Run again doc · weekly labs');
-    fireEvent.click(chip);
-    fireEvent.click(chip);
-    expect(h.call).toHaveBeenCalledTimes(1);
-    await act(async () => { release({ ok: true }); });
-    await waitFor(() => expect(h.refresh).toHaveBeenCalled());
-    fireEvent.click(chip);
-    expect(h.call).toHaveBeenCalledTimes(2);
   });
 
   it('formats elapsed and remaining time on one scale', () => {

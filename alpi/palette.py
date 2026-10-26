@@ -11,7 +11,7 @@ STATUS = {
 DARK = {
     "bg": "#0b0b0b",
     "bgPane": "#151515",
-    "bgElev": "#1b1b1b",
+    "bgElev": "#202020",
     "ink": "#ededed",
     "ink2": "#b4b4b4",
     "ink3": "#8a8a8a",

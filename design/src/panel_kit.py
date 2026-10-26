@@ -22,20 +22,20 @@ def count_pill(value):
 
 def flag_badge(value):
     return (f'<span data-part="flag" style="display: inline-block; min-width: 14px; height: 14px; padding: 0 4px; box-sizing: border-box; border-radius: 4px; background: {DANGER_FILL}; '
-            f'font-family: {MONO}; font-size: 9px; line-height: 14px; text-align: center; color: {ON_DANGER}">{value}</span>')
+            f'font-family: {MONO}; font-size: 11px; line-height: 14px; text-align: center; color: {ON_DANGER}">{value}</span>')
 
 
 def tab(label, on=False, count=None, flag=0):
     pill = count_pill(count) if on and count is not None else ""
     badge = flag_badge(flag) if flag else ""
-    return (f'<span style="display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; box-sizing: border-box; border-radius: 4px; '
+    return (f'<span style="display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; box-sizing: border-box; border-radius: 4px; '
             f'background: {P["selected"] if on else "transparent"}; font-size: 13px; font-weight: {500 if on else 400}; color: {P["ink"] if on else P["ink2"]}; white-space: nowrap">{label}{pill}{badge}</span>')
 
 
 def head(on, count, flags=None):
     flags = flags or {}
     tabs = "".join(tab(label, label == on, count, flags.get(label, 0)) for label in TABS)
-    owner = f'<span style="display: inline-flex; align-items: center; gap: 8px; margin-right: 12px">{obj(OWNER, 18)}{crease_name(OWNER, 17)}</span>'
+    owner = f'<span style="display: inline-flex; align-items: center; gap: 8px; margin-right: 12px">{obj(OWNER, 18)}<span style="font-size: 18px; font-weight: 600; line-height: 1.3; color: {P["ink"]}">{OWNER}</span></span>'
     return (f'<div style="display: flex; align-items: center; gap: 8px; padding: 12px 16px; flex-shrink: 0; box-shadow: inset 0 -0.5px 0 {P["line"]}">{owner}'
             f'<span style="display: inline-flex; align-items: center; gap: 4px">{tabs}</span>{spacer()}{icon_cell("x")}</div>')
 
@@ -46,7 +46,7 @@ def search_row(label):
 
 
 def group_header(value, first=False):
-    return (f'<div style="padding: {6 if first else 10}px 10px 6px; font-family: {MONO}; font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; '
+    return (f'<div style="padding: {8 if first else 12}px 12px 8px; font-family: {MONO}; font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; '
             f'line-height: 1.1; color: {P["ink3"]}; white-space: nowrap">{value}</div>')
 
 
@@ -71,7 +71,7 @@ def window(on, count, flags, search, rows, main, h, side_w=SIDE_W):
     side = (f'<div style="width: {side_w}px; flex-shrink: 0; display: flex; flex-direction: column; background: {P["side"]}; box-shadow: inset -0.5px 0 0 {P["line"]}; overflow: hidden">'
             f'{search_row(search)}{rows}</div>')
     detail = f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden">{main}</div>'
-    return (f'<div style="height: {h}px; border-radius: 4px; overflow: hidden; background: {P["elev"]}; box-shadow: 0 0 0 0.5px {P["line2"]}; display: flex; flex-direction: column">'
+    return (f'<div style="height: {h}px; border-radius: 4px; overflow: hidden; background: var(--bg-elev, #ffffff); box-shadow: var(--shadow-edge-lg, 0 0 0 1px #b4b4b4); display: flex; flex-direction: column">'
             f'{head(on, count, flags)}<div style="flex: 1; min-height: 0; display: flex">{side}{detail}</div></div>')
 
 
@@ -98,7 +98,7 @@ def skill_mark(state):
         return dot(DANGER_FILL, 6)
     if state == "active":
         return dot(P["ink"], 6)
-    return ring(DANGER_FILL if state == "invalid" else "#8c8c8c")
+    return ring(DANGER_FILL)
 
 
 def job_mark(state):
@@ -110,7 +110,7 @@ def job_mark(state):
 
 
 def size_tag(value):
-    return (f'<span style="flex-shrink: 0; font-family: {MONO}; font-size: 11px; color: {P["ink3"]}; background: {P["hover"]}; border-radius: 2px; padding: 0 6px">{value}</span>')
+    return (f'<span style="flex-shrink: 0; font-family: {MONO}; font-size: 11px; color: {P["ink3"]}; background: {P["hover"]}; border-radius: 2px; padding: 0 8px">{value}</span>')
 
 
 def kw(value):
@@ -121,16 +121,16 @@ def chips(values):
     return f'<div style="display: flex; flex-wrap: wrap; gap: 6px; min-width: 0">{"".join(kw(v) for v in values)}</div>'
 
 
-def fact(label, content, label_w=70):
-    return (f'<div style="display: flex; align-items: baseline; gap: 12px; padding: 3px 0">{mono(label, 11, P["ink3"], 500, f"width: {label_w}px; letter-spacing: 0.06em; text-transform: uppercase")}'
-            f'<span style="flex: 1; min-width: 0; font-size: 12px; line-height: 1.5; color: {P["ink2"]}; display: flex; align-items: center; flex-wrap: wrap; gap: 8px">{content}</span></div>')
+def fact(label, content, label_w=84):
+    return (f'<div style="display: flex; align-items: baseline; gap: 12px; padding: 4px 0">{mono(label, 11, P["ink3"], 500, f"width: {label_w}px; letter-spacing: 0.08em; text-transform: uppercase")}'
+            f'<span style="flex: 1; min-width: 0; font-size: 11px; line-height: 1.5; color: {P["ink2"]}; display: flex; align-items: center; flex-wrap: wrap; gap: 8px">{content}</span></div>')
 
 
 def alert_banner(lead, detail, action=""):
-    btn = button(action, "secondary", P, PAPER, 28) if action else ""
-    return (f'<div role="alert" style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; flex-shrink: 0; border-radius: 4px; background: {P["hover"]}; '
-            f'box-shadow: 0 0 0 0.5px {P["line"]}"><span style="margin-top: 4px; display: inline-flex">{glyph("alert", 14, P["danger"])}</span>'
-            f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">{wrap(lead, 12, P["ink"], 600, 1.3)}{wrap(detail, 11, P["ink3"], 400, 1.3)}</div>{btn}</div>')
+    btn = button(action, "ghost", P, PAPER, 28) if action else ""
+    return (f'<div role="alert" style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; flex-shrink: 0; border-radius: 4px; background: color-mix(in srgb, #c14545 10%, #ffffff); '
+            f'box-shadow: 0 0 0 1px #b4b4b4"><span style="display: inline-flex">{glyph("alert", 16, P["danger"])}</span>'
+            f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">{wrap(lead, 11, P["ink"], 600, 1.3)}{wrap(detail, 11, P["ink3"], 400, 1.3)}</div>{btn}</div>')
 
 
 def meter(used, limit, over=False, w=None):
@@ -240,7 +240,7 @@ def phone_fact(label, content, w=60):
 
 
 def phone_status(label, tone="ink"):
-    dot_ = {"ink": dot(P["ink"], 7), "off": ring(P["ink4"], 7), "danger": ring(DANGER_FILL, 7)}[tone]
+    dot_ = {"ink": dot(P["ink"], 6), "off": ring(P["ink4"], 6), "danger": ring(DANGER_FILL, 6)}[tone]
     colour = P["danger"] if tone == "danger" else P["ink2"]
     return flex(dot_, mono(label, 10, colour), gap=5)
 

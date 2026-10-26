@@ -52,7 +52,7 @@ export function AddProviderField({ profile, onSaved }) {
             visibility: pos.ready ? "visible" : "hidden",
           }}
         >
-          <ConfirmSheet inset="var(--space-5)">
+          <ConfirmSheet inset="var(--sp-12)">
             <ProviderEditor
               profile={profile}
               onClose={() => setOpen(false)}
@@ -177,7 +177,7 @@ function ProviderEditor({ profile, onClose, onSaved }) {
           autoFocusFirstField
         />
         {showOllamaEndpoints && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-8)" }}>
             {ollamas.map((o) => {
               const count = ollamaCounts[o.name];
               const err = ollamaErrors[o.name];

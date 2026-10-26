@@ -1,13 +1,13 @@
 .single {
-  margin: var(--space-3) 0;
+  margin: var(--sp-8) 0;
   max-width: 480px;
 }
 
 .grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-2);
-  margin: var(--space-3) 0;
+  gap: var(--sp-8);
+  margin: var(--sp-8) 0;
   max-width: 560px;
 }
 
@@ -45,8 +45,8 @@
   align-items: center;
   justify-content: center;
   min-height: 120px;
-  padding: var(--space-3);
-  font-size: .8rem;
+  padding: var(--sp-8);
+  font-size: var(--text-meta);
   color: var(--ink);
   opacity: .55;
   word-break: break-all;

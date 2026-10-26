@@ -29,7 +29,6 @@ vi.mock('../theme/ThemeContext', () => ({
 }));
 
 import { PaneContext } from '../nav/PaneContext';
-import { SettingsSurface } from '../nav/SettingsSurface';
 import { Row, RowSeparator, SectionHeader } from './Row';
 
 beforeEach(() => {
@@ -54,122 +53,39 @@ describe('Row on a narrow cover screen', () => {
   });
 });
 
-describe('Row inside wide settings', () => {
-  function wide(node) {
-    return render(
-      <PaneContext.Provider value={{ twoPane: true, side: 'detail', sidebarOpen: true, toggleSidebar: () => {} }}>
-        <SettingsSurface>{node}</SettingsSurface>
-      </PaneContext.Provider>,
-    );
-  }
-
-  it('stands every wide row at least one 44 pt touch target tall and speaks it as one button', () => {
-    wide(<Row label="Workspace" helper="where files land" value="~/git/casa/doc" onPress={() => {}} />);
-    const button = screen.getByLabelText('Workspace, ~/git/casa/doc, where files land');
-    expect(button.getAttribute('accessibilityRole')).toBe('button');
-    expect(Number(button.querySelector('[data-minh]:not([data-minh=""])').getAttribute('data-minh'))).toBe(44);
-  });
-
-  it('renders the desktop field grid: label column, helper under it, mono value', () => {
-    wide(<Row label="Workspace" helper="where files land" value="~/git/casa/doc" onPress={() => {}} />);
-    const value = screen.getByText('~/git/casa/doc');
-    expect(value.getAttribute('data-ellipsis')).toBe('middle');
-    expect(screen.getByText('Workspace')).toBeTruthy();
-    expect(screen.getByText('where files land')).toBeTruthy();
-  });
-
-  it('drops the row separators and gives section headers a kicker', () => {
-    const { container } = wide(
-      <>
-        <SectionHeader kicker="last 14 days">Usage</SectionHeader>
-        <RowSeparator />
-      </>,
-    );
-    expect(screen.getByText('Usage')).toBeTruthy();
-    expect(screen.getByText('last 14 days')).toBeTruthy();
-    expect(container.querySelectorAll('div').length).toBeLessThan(4);
-  });
-
-  it('keeps the phone rows outside a settings surface even on a tablet', () => {
+describe('Row on a fold pane', () => {
+  const inFold = (node) =>
     render(
       <PaneContext.Provider value={{ twoPane: true, side: 'detail', sidebarOpen: true, toggleSidebar: () => {} }}>
-        <Row label="Peers" value="3" onPress={() => {}} />
+        {node}
       </PaneContext.Provider>,
     );
-    expect(screen.getByText('3').getAttribute('data-align')).toBe('right');
+
+  it('draws the phone row: value right aligned beside the label, no uppercase label column', () => {
+    inFold(<Row label="Workspace" helper="where files land" value="~/git/casa/doc" onPress={() => {}} />);
+    expect(screen.getByText('~/git/casa/doc').getAttribute('data-align')).toBe('right');
+    expect(screen.getByText('Workspace').getAttribute('data-transform')).toBe('');
+  });
+
+  it('keeps the section header on the phone eyebrow with the kicker joined', () => {
+    inFold(<SectionHeader kicker="last 14 days">Usage</SectionHeader>);
+    expect(screen.getByText('Usage · last 14 days')).toBeTruthy();
+  });
+
+  it('keeps the separator hairline', () => {
+    const { container } = inFold(<RowSeparator />);
+    expect(container.querySelectorAll('div').length).toBe(1);
   });
 });
-
-describe('Row as an entity on a wide settings surface', () => {
-  function wide(node) {
-    return render(
-      <PaneContext.Provider value={{ twoPane: true, side: 'detail', sidebarOpen: true, toggleSidebar() {} }}>
-        <SettingsSurface>{node}</SettingsSurface>
-      </PaneContext.Provider>,
-    );
-  }
-
-  it('keeps an entity name in its own case, like the desktop table, instead of the field eyebrow', () => {
-    wide(<Row label="emulator-android" helper="admin · 2 devices" item onPress={() => {}} />);
-    expect(screen.getByText('emulator-android').getAttribute('data-transform')).toBe('');
-  });
-
-  it('still sets a field label as an eyebrow', () => {
-    wide(<Row label="Public key" value="abc" />);
-    expect(screen.getByText('Public key').getAttribute('data-transform')).toBe('uppercase');
-  });
-});
-
-describe('Row chevron gutter on a wide settings surface', () => {
-  function wide(node) {
-    return render(
-      <PaneContext.Provider value={{ twoPane: true, side: 'detail', sidebarOpen: true, toggleSidebar() {} }}>
-        <SettingsSurface>{node}</SettingsSurface>
-      </PaneContext.Provider>,
-    );
-  }
-
-  it('reserves the gutter on a plain value row so it shares the right edge with chevron rows', () => {
-    wide(<Row label="Port" value="7423" chevron={false} />);
-    const value = screen.getByText('7423');
-    expect(value.nextSibling).not.toBeNull();
-    expect(value.nextSibling.tagName).toBe('DIV');
-  });
-
-  it('gives a row whose trailing control is the action no gutter, so the control sits on that same edge', () => {
-    wide(<Row label="Pixel" helper="mobile" item trailing={<button type="button">revoke</button>} chevron={false} />);
-    expect(screen.getByText('revoke').nextSibling).toBeNull();
-  });
-});
-
 
 describe('Row text ink', () => {
-  const inWide = (node) =>
-    render(
-      <PaneContext.Provider value={{ twoPane: true, side: 'detail', sidebarOpen: true, toggleSidebar: () => {} }}>
-        <SettingsSurface>{node}</SettingsSurface>
-      </PaneContext.Provider>,
-    );
-
-  it('draws the wide helper and the wide section kicker in the secondary ink', () => {
-    inWide(
-      <>
-        <SectionHeader kicker="last 14 days">Usage</SectionHeader>
-        <Row label="Workspace" helper="where files land" value="~/git" onPress={() => {}} />
-      </>,
-    );
+  it('draws the helper in the secondary ink', () => {
+    render(<Row label="Workspace" helper="where files land" value="~/git" onPress={() => {}} />);
     expect(screen.getByText('where files land').getAttribute('data-color')).toBe('#666');
-    expect(screen.getByText('last 14 days').getAttribute('data-color')).toBe('#666');
   });
 
   it('marks a disabled row with the secondary ink instead of fading the whole row', () => {
     const { container } = render(<Row label="Terminal" helper="off" disabled />);
-    expect(screen.getByText('Terminal').getAttribute('data-color')).toBe('#666');
-    expect(container.querySelector('[data-opacity]:not([data-opacity=""])')).toBeNull();
-  });
-
-  it('marks a disabled wide row the same way', () => {
-    const { container } = inWide(<Row label="Terminal" item disabled />);
     expect(screen.getByText('Terminal').getAttribute('data-color')).toBe('#666');
     expect(container.querySelector('[data-opacity]:not([data-opacity=""])')).toBeNull();
   });
