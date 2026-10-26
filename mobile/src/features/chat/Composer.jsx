@@ -5,8 +5,9 @@ import Animated, { useAnimatedKeyboard, useAnimatedStyle } from 'react-native-re
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { lineHeights, radii, space, typography } from '../../theme/tokens';
 
+import { Button } from '../../components/Button';
 import { Icon } from '../../components/Icon';
-import { CHROME_BTN, COMPOSER_CTRL, COMPOSER_PAD_Y, PANE_PAD_X, tapSlop } from '../../lib/panes';
+import { COMPOSER_PAD_Y, PANE_PAD_X, tapSlop } from '../../lib/panes';
 import { useTheme } from '../../theme/ThemeContext';
 import { AttachmentCards } from './AttachmentCards';
 import { sendHaptic } from './chatHaptics';
@@ -16,35 +17,63 @@ import { validateTaskShape } from './parseMarkers';
 import { wellStyle } from '../../components/well';
 
 const HAIRLINE = 0.5;
-const SEND_D = 30;
-const CHIP_H = 32;
+const CTRL_H = 36;
+const DIMMED = 0.45;
 
-function ModelChip({ label, onPress, disabled }) {
-  const { colors, fonts, fontSizes } = useTheme();
+function ComposerChip({ onPress, disabled, accessibilityLabel, grow = false, children }) {
+  const { colors } = useTheme();
   return (
     <Pressable
       onPress={disabled ? undefined : onPress}
-      hitSlop={tapSlop(CHIP_H)}
+      hitSlop={tapSlop(CTRL_H)}
       accessibilityRole="button"
-      accessibilityLabel={`Model and effort: ${label}`}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ disabled: !!disabled }}
       style={({ pressed }) => ({
-        flexShrink: 1,
+        flexShrink: grow ? 1 : 0,
         minWidth: 0,
         flexDirection: 'row',
         alignItems: 'center',
         gap: space.s2,
-        height: CHIP_H,
+        minHeight: CTRL_H,
         paddingHorizontal: space.s5,
-        borderRadius: radii.tag,
+        borderRadius: radii.xs,
         backgroundColor: pressed ? colors.line2 : colors.selected,
+        opacity: disabled ? DIMMED : 1,
       })}
     >
-      <Icon name="sparkle" size="xs" color={colors.ink3} />
-      <Text numberOfLines={1} style={{ flexShrink: 1, fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink2 }}>
-        {label}
-      </Text>
-      <Icon name="chevron-down" size="xs" color={colors.ink3} />
+      {children}
     </Pressable>
+  );
+}
+
+function ModelChip({ label, model, effort, onPress, disabled }) {
+  const { colors, fonts, fontSizes } = useTheme();
+  const text = { fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink2 };
+  const split = model != null;
+  return (
+    <ComposerChip grow onPress={onPress} disabled={disabled} accessibilityLabel={`Model and effort: ${label}`}>
+      <Icon name="sparkle" size="xs" color={colors.ink3} />
+      {split ? (
+        <>
+          <Text numberOfLines={1} style={{ ...text, flexShrink: 1 }}>{model}</Text>
+          {effort ? <Text numberOfLines={1} style={{ ...text, flexShrink: 0 }}>{` · ${effort}`}</Text> : null}
+        </>
+      ) : (
+        <Text numberOfLines={1} style={{ ...text, flexShrink: 1 }}>{label}</Text>
+      )}
+      <Icon name="chevron-down" size="xs" color={colors.ink3} />
+    </ComposerChip>
+  );
+}
+
+function MentionChip({ onPress, disabled }) {
+  const { colors, fonts, fontSizes } = useTheme();
+  return (
+    <ComposerChip onPress={onPress} disabled={disabled} accessibilityLabel="Mention a peer">
+      <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.md, color: colors.ink3 }}>@</Text>
+      <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink2 }}>mention</Text>
+    </ComposerChip>
   );
 }
 
@@ -70,6 +99,8 @@ export function Composer({
   onStop,
   offline = false,
   modelChip = null,
+  onResume = null,
+  resumeLabel = 'Resume profile',
 }) {
   const { colors, fonts , fontSizes} = useTheme();
   const insets = useSafeAreaInsets();
@@ -96,7 +127,7 @@ export function Composer({
   const mentionMatch = mentionSource && text.length > 0
     ? /(^|\s)@([a-zA-Z0-9_-]*)$/.exec(text)
     : null;
-  const candidates = mentionMatch ? mentionSource(mentionMatch[2]).slice(0, 4) : [];
+  const candidates = mentionMatch ? mentionSource(mentionMatch[2]) : [];
 
   const completeMention = (id) => {
     const before = text.slice(0, mentionMatch.index + mentionMatch[1].length);
@@ -126,7 +157,7 @@ export function Composer({
         borderTopColor: colors.line,
       }}
     >
-      {candidates.length ? <MentionPopover candidates={candidates} onPick={(c) => completeMention(c.id)} /> : null}
+      {mentionMatch ? <MentionPopover candidates={candidates} token={mentionMatch[2]} onPick={(c) => completeMention(c.id)} /> : null}
       {hasText && !taskShape.ok ? (
         <View
           style={{
@@ -157,7 +188,6 @@ export function Composer({
             paddingHorizontal: PANE_PAD_X,
             paddingTop: COMPOSER_PAD_Y,
             paddingBottom: Math.max(COMPOSER_PAD_Y, insets.bottom),
-            opacity: disabled ? 0.55 : 1,
           },
           rideKeyboard,
         ]}
@@ -165,6 +195,7 @@ export function Composer({
         <View
           style={{
             ...wellStyle(colors, { focused }),
+            ...(disabled ? { borderColor: colors.edge } : null),
             paddingTop: space.s6,
             paddingHorizontal: space.s7,
             paddingBottom: space.s4,
@@ -176,7 +207,7 @@ export function Composer({
             onChangeText={setText}
             editable={!disabled}
             placeholder={composerPlaceholder({ offline, disabled, placeholder })}
-            placeholderTextColor={colors.ink3}
+            placeholderTextColor={disabled ? colors.ink2 : colors.ink3}
             multiline
             autoCapitalize="sentences"
             autoCorrect
@@ -195,31 +226,26 @@ export function Composer({
           />
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
             {mentionSource ? (
-              <Pressable
-                onPress={disabled ? undefined : () => setText((cur) => (cur.endsWith('@') ? cur : `${cur}${cur && !cur.endsWith(' ') ? ' ' : ''}@`))}
-                hitSlop={{ top: 13, bottom: 13, left: space.s3, right: space.s3 }}
-                accessibilityRole="button"
-                accessibilityLabel="Mention a peer"
-                style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: space.s1, opacity: pressed ? 0.5 : 1 })}
-              >
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3 }}>@</Text>
-                <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}>mention</Text>
-              </Pressable>
+              <MentionChip
+                disabled={disabled}
+                onPress={() => setText((cur) => (cur.endsWith('@') ? cur : `${cur}${cur && !cur.endsWith(' ') ? ' ' : ''}@`))}
+              />
             ) : null}
-            {modelChip ? <ModelChip label={modelChip.label} onPress={modelChip.onPress} disabled={disabled} /> : null}
+            {modelChip ? <ModelChip label={modelChip.label} model={modelChip.model} effort={modelChip.effort} onPress={modelChip.onPress} disabled={disabled} /> : null}
             <View style={{ flex: 1 }} />
             {onPickAttachment ? (
               <Pressable
                 onPress={disabled ? undefined : onPickAttachment}
-                hitSlop={{ left: tapSlop(CHROME_BTN), right: tapSlop(CHROME_BTN), top: tapSlop(SEND_D), bottom: tapSlop(SEND_D) }}
+                hitSlop={tapSlop(CTRL_H)}
                 accessibilityRole="button"
                 accessibilityLabel="Attach file"
+                accessibilityState={{ disabled }}
                 style={({ pressed }) => ({
-                  width: CHROME_BTN,
-                  height: SEND_D,
+                  minWidth: CTRL_H,
+                  minHeight: CTRL_H,
                   alignItems: 'center',
                   justifyContent: 'center',
-                  opacity: pressed ? 0.5 : 1,
+                  opacity: disabled ? DIMMED : pressed ? 0.5 : 1,
                 })}
               >
                 <Icon name="paperclip" size="lg" color={colors.ink3} />
@@ -228,13 +254,13 @@ export function Composer({
             <Pressable
               onPress={stoppable ? stop : submit}
               disabled={!stoppable && !canSend}
-              hitSlop={tapSlop(SEND_D)}
+              hitSlop={tapSlop(CTRL_H)}
               style={({ pressed }) => ({
-                width: SEND_D,
-                height: SEND_D,
+                minWidth: CTRL_H,
+                minHeight: CTRL_H,
                 borderRadius: radii.xs,
                 backgroundColor: !stoppable && !canSend ? colors.line : actionBg,
-                opacity: pressed ? 0.85 : 1,
+                opacity: disabled ? DIMMED : pressed ? 0.85 : 1,
                 alignItems: 'center',
                 justifyContent: 'center',
               })}
@@ -249,6 +275,11 @@ export function Composer({
             </Pressable>
           </View>
         </View>
+        {disabled && !offline && onResume ? (
+          <View style={{ alignItems: 'flex-end', paddingTop: space.s3 }}>
+            <Button title={resumeLabel} variant="secondary" onPress={onResume} />
+          </View>
+        ) : null}
       </Animated.View>
     </View>
   );

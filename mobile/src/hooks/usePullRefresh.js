@@ -19,7 +19,7 @@ export function usePullRefresh(refresh) {
     try {
       await refresh?.();
     } catch (e) {
-      toast({ title: 'Refresh failed', message: String(e?.message ?? e), duration: 2600 });
+      toast({ title: 'Refresh failed', message: String(e?.message ?? e) });
     } finally {
       if (alive.current) setRefreshing(false);
     }

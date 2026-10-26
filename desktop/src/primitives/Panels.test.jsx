@@ -232,3 +232,12 @@ describe("ConnectionPanel locked", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 });
+
+describe("panel dialogs", () => {
+  it("names the connection panel as a modal dialog with a heading", () => {
+    const { getByRole } = render(<ConnectionPanel open onClose={() => {}} connections={[]} />);
+    const dialog = getByRole("dialog", { name: "Connection" });
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(getByRole("heading", { level: 2, name: "Connection" })).toBeInTheDocument();
+  });
+});

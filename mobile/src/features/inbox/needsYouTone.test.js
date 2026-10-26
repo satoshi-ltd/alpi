@@ -1,9 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { palettes } from '../../theme/tokens';
 import { activitySections, activityTint } from '../shell/ActivityList';
 import { stateColor } from './RowState';
 import { mixHex } from '../../../../common/color.mjs';
+vi.mock('../../components/EmptyState', async () => {
+  const R = await import('react');
+  return { EmptyState: ({ title, detail, action }) => R.createElement('div', null, R.createElement('span', null, title), R.createElement('span', null, detail), action ? R.createElement('button', { onClick: action.onPress }, action.label) : null) };
+});
 
 const norm = (hex) => String(hex).toLowerCase();
 

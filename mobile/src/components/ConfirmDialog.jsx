@@ -6,22 +6,18 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import { radii, space, lineHeights, typography, veil } from '../theme/tokens';
+import { radii, space, lineHeights, tracking, typography, veil } from '../theme/tokens';
 
 import { selection, warning } from '../lib/haptics';
 import { useTheme } from '../theme/ThemeContext';
 import { Button } from './Button';
 import { useExitSnapshot } from './useExitSnapshot';
 import { useWell } from './well';
-
-// EASE_OUT is the time-reverse of EASE_IN, not EASE_IN replayed backwards — that front-loads the exit and the dialog is gone in one frame.
 const EASE_IN = Easing.bezier(0.2, 0.7, 0.2, 1);
 const EASE_OUT = Easing.bezier(0.8, 0, 0.8, 0.3);
 const DURATION_IN = 200;
 const DURATION_OUT = 200;
 const UNMOUNT_BUFFER = 40;
-
-// Inline code chip — use inside `body` for paths/handles. Renders as a tinted mono span that flows with surrounding text.
 export function Code({ children }) {
   const { colors, fonts, fontSizes } = useTheme();
   return (
@@ -47,7 +43,7 @@ export function Bold({ children }) {
   );
 }
 
-export function TypedConfirm({
+export function ConfirmDialog({
   open,
   onClose,
   title,
@@ -57,13 +53,17 @@ export function TypedConfirm({
   onConfirm,
   tone = 'danger',
   typed = true,
+  cancelLabel = 'Cancel',
+  alternateLabel = null,
+  onAlternate,
 }) {
   const { colors, fonts, fontSizes, shadow } = useTheme();
   const [well, focus] = useWell(colors);
   const [value, setValue] = useState('');
   const [kbHeight, setKbHeight] = useState(0);
   const danger = tone === 'danger';
-  const ready = typed ? value.trim() === String(expected ?? '').trim() : true;
+  const typedField = typed && expected != null;
+  const ready = typedField ? value.trim() === String(expected ?? '').trim() : true;
   const confirm = () => {
     if (!ready) return;
     setValue('');
@@ -77,9 +77,7 @@ export function TypedConfirm({
     const hideSub = Keyboard.addListener('keyboardDidHide', () => setKbHeight(0));
     return () => { showSub.remove(); hideSub.remove(); };
   }, []);
-  const view = useExitSnapshot(open, { title, body, expected, confirmLabel });
-
-  // mounted lags `open` by DURATION_OUT so the exit animation can play before <Modal> unmounts.
+  const view = useExitSnapshot(open, { title, body, expected, confirmLabel, cancelLabel, alternateLabel });
   const [mounted, setMounted] = useState(open);
   const opacity = useSharedValue(0);
   const scale = useSharedValue(0.96);
@@ -99,7 +97,6 @@ export function TypedConfirm({
   }, [open, opacity, scale]);
 
   const backdropStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
-  // Scale is bound to the dialog itself so the backdrop fades independently — matches how iOS native alerts feel (backdrop dims linearly, alert pops in).
   const dialogStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
     transform: [{ scale: scale.value }],
@@ -134,7 +131,7 @@ export function TypedConfirm({
                 maxHeight: '100%',
                 backgroundColor: colors.bgPane,
                 borderRadius: radii.xs,
-                ...shadow.base,
+                ...shadow.float,
               },
               dialogStyle,
             ]}
@@ -153,7 +150,7 @@ export function TypedConfirm({
                 fontFamily: fonts.sans.semibold,
                 fontSize: fontSizes[typography.dialogTitle.size],
                 color: danger ? colors.dangerText : colors.ink,
-                letterSpacing: -0.01 * fontSizes[typography.dialogTitle.size],
+                letterSpacing: fontSizes[typography.dialogTitle.size] * tracking.snug,
               }}
             >
               {view.title}
@@ -168,7 +165,7 @@ export function TypedConfirm({
             >
               {view.body}
             </Text>
-            {typed ? <View style={{ gap: space.s3 }}>
+            {typedField ? <View style={{ gap: space.s3 }}>
               <Text
                 style={{
                   fontFamily: fonts.mono,
@@ -183,7 +180,7 @@ export function TypedConfirm({
                 value={value}
                 onChangeText={setValue}
                 placeholder={String(view.expected ?? '')}
-                placeholderTextColor={colors.ink4}
+                placeholderTextColor={colors.ink3}
                 autoFocus
                 accessibilityLabel={`Type ${view.expected} to confirm`}
                 returnKeyType="done"
@@ -210,7 +207,8 @@ export function TypedConfirm({
                 disabled={!ready}
                 fullWidth
               />
-              <Button title="Cancel" variant="ghost" onPress={onClose} fullWidth />
+              {view.alternateLabel ? <Button title={view.alternateLabel} variant="secondary" onPress={onAlternate} fullWidth /> : null}
+              <Button title={cancelLabel} variant="ghost" onPress={onClose} fullWidth />
             </View>
               </Pressable>
             </ScrollView>

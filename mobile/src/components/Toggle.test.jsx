@@ -5,7 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 afterEach(cleanup);
 
 vi.mock('react-native', () => ({
-  Switch: ({ value, onValueChange, disabled, accessibilityLabel, trackColor }) =>
+  Switch: ({ value, onValueChange, disabled, accessibilityLabel, trackColor, ios_backgroundColor }) =>
     React.createElement('button', {
       type: 'button',
       role: 'switch',
@@ -13,6 +13,8 @@ vi.mock('react-native', () => ({
       'aria-label': accessibilityLabel,
       disabled,
       'data-track-on': trackColor?.true,
+      'data-track-off': trackColor?.false,
+      'data-ios-off': ios_backgroundColor,
       onClick: () => onValueChange?.(!value),
     }),
 }));
@@ -20,12 +22,19 @@ vi.mock('react-native', () => ({
 vi.mock('../lib/haptics', () => ({ selection: vi.fn(), warning: vi.fn(), tap: vi.fn(), success: vi.fn() }));
 
 vi.mock('../theme/ThemeContext', () => ({
-  useTheme: () => ({ colors: { line2: '#ddd', accent: '#c90', bgPane: '#fff' } }),
+  useTheme: () => ({ colors: { line2: '#ddd', edge: '#8c8c8c', accent: '#c90', bgPane: '#fff' } }),
 }));
 
 import { Toggle } from './Toggle';
 
 describe('Toggle', () => {
+  it('draws the off track in the control-boundary tone, not the hairline one', () => {
+    render(<Toggle on={false} label="Paused" onChange={() => {}} />);
+    const sw = screen.getByLabelText('Paused');
+    expect(sw.getAttribute('data-track-off')).toBe('#8c8c8c');
+    expect(sw.getAttribute('data-ios-off')).toBe('#8c8c8c');
+  });
+
   it('reports the next value and shows it at once, before the prop catches up', () => {
     const onChange = vi.fn();
     render(<Toggle on={false} label="Paused" onChange={onChange} />);

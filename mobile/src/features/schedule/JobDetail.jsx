@@ -11,7 +11,7 @@ import { Icon } from '../../components/Icon';
 import { LoadFailed } from '../../components/LoadFailed';
 import { RichText } from '../../components/RichText';
 import { useToast } from '../../components/Toast';
-import { Bold, TypedConfirm } from '../../components/TypedConfirm';
+import { Bold, ConfirmDialog } from '../../components/ConfirmDialog';
 import { useAttention } from '../../hooks/useAttention';
 import { useBusyVisible } from '../../hooks/useBusyVisible';
 import { useScheduleList } from '../../hooks/useDaemonData';
@@ -101,7 +101,6 @@ export function JobDetail({ profile, jobId, embedded = false, onBack, onGone }) 
       toast({
         message: `${jobTitle(jobRef.current)} finished`,
         kind: 'success',
-        duration: 6000,
         ...(outputId ? { action: 'View', onAction: () => openOutput(profile, outputId) } : {}),
       });
     }
@@ -118,7 +117,7 @@ export function JobDetail({ profile, jobId, embedded = false, onBack, onGone }) 
       schedule.refresh();
     } catch (e) {
       run.finished();
-      toast({ message: String(e?.message ?? e), kind: 'danger', duration: 4000 });
+      toast({ message: String(e?.message ?? e), kind: 'danger' });
     } finally {
       acting.current = false;
       setBusy(false);
@@ -132,7 +131,7 @@ export function JobDetail({ profile, jobId, embedded = false, onBack, onGone }) 
       schedule.refresh();
       onGone?.();
     } catch (e) {
-      toast({ message: String(e?.message ?? e), kind: 'danger', duration: 4000 });
+      toast({ message: String(e?.message ?? e), kind: 'danger' });
     }
   };
 
@@ -155,7 +154,7 @@ export function JobDetail({ profile, jobId, embedded = false, onBack, onGone }) 
 
   const actions = job ? [
     ...(lastOutput ? [{ id: 'output', label: 'Last output', detail: 'opens the notification', icon: <Icon name="file-text" size="lg" color={colors.ink2} />, onPress: () => { setMore(false); openOutput(lastOutput.profile ?? profile, lastOutput.id); } }] : []),
-    { id: 'copy', label: 'Copy job id', detail: String(job.id), icon: <Icon name="copy" size="lg" color={colors.ink2} />, onPress: async () => { setMore(false); if (await copyText(job.id)) toast({ message: 'Copied', kind: 'success', duration: 1500 }); } },
+    { id: 'copy', label: 'Copy job id', detail: String(job.id), icon: <Icon name="copy" size="lg" color={colors.ink2} />, onPress: async () => { setMore(false); if (await copyText(job.id)) toast({ message: 'Copied', kind: 'success' }); } },
     // iOS drops a modal presented while the ActionSheet is still dismissing (~220ms).
     { id: 'delete', label: 'Delete job…', danger: true, icon: <Icon name="trash" size="lg" color={colors.danger} />, onPress: () => { setMore(false); setTimeout(() => setConfirming(true), 350); } },
   ] : [];
@@ -250,7 +249,7 @@ export function JobDetail({ profile, jobId, embedded = false, onBack, onGone }) 
       )}
       <ActionSheet open={more} onClose={() => setMore(false)} title={job ? jobTitle(job) : ''} actions={actions} />
       {job ? (
-        <TypedConfirm
+        <ConfirmDialog
           open={confirming}
           onClose={() => setConfirming(false)}
           title={`Delete “${jobTitle(job)}”`}

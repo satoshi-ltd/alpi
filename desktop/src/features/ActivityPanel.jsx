@@ -73,10 +73,10 @@ export default function ActivityPanel({
 
   return (
     <Scrim onClose={onClose} top={80}>
-      <PanelShell width={460} maxHeight="70vh">
+      <PanelShell width={460} maxHeight="70vh" label="Activity">
         <div className={styles.head}>
           <Icon name={ICON_ROLES.activity} />
-          <span className={styles.headTitle}>Activity</span>
+          <h2 className={styles.headTitle}>Activity</h2>
           <span className={styles.headKeys} aria-hidden>
             <Kbd>⌘</Kbd>
             <Kbd>J</Kbd>

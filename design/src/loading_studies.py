@@ -35,7 +35,11 @@ TOKENS = _read("desktop", "src", "styles", "tokens.css")
 DUR_LOOP = float(re.search(r"--dur-loop:\s*([\d.]+)s", TOKENS).group(1))
 DUR_SPIN = float(re.search(r"--dur-spin:\s*([\d.]+)s", TOKENS).group(1))
 SPINNER_TURN_MS = round(BUSY["wave"] * 1000 / 2)
-PULSE_MS = int(re.search(r"duration:\s*(\d+)", _read("mobile", "src", "components", "SkeletonBar.jsx")).group(1))
+BREATH_S = 1.6
+STAGGER_MS = 90
+SK = "rgba(20,20,20,0.07)"
+BAR_SHAPES = tuple(float(n) for n in re.search(r"BAR_SHAPES = \[([\d., ]+)\]", _read("mobile", "src", "components", "UsageSkeleton.jsx")).group(1).split(","))
+DAY_BARS = tuple(int(n) for n in re.search(r"DAY_BARS = \[([\d, ]+)\]", _read("desktop", "src", "primitives", "UsageSkeleton.jsx")).group(1).split(","))
 DESKTOP_CIRCLE = re.search(r'<circle cx="8" cy="8" r="(\d+)" strokeDasharray="([\d ]+)"', _read("desktop", "src", "primitives", "icons.jsx")).groups()
 MOBILE_ARC = re.search(r'<Path d="([^"]+)"', _read("mobile", "src", "components", "Spinner.jsx")).group(1)
 
@@ -101,37 +105,80 @@ def frames():
     return f'<div style="display: flex; gap: 6px; padding: 10px 12px; border-radius: 4px; background: {P["pane"]}; box-shadow: 0 0 0 1px {P["line2"]}">{cells}</div>'
 
 
-def desktop_line(width, height=11, delay=0.0):
-    return (f'<span class="sk-line" style="display: block; width: {width}; height: {height}px; border-radius: 2px; animation-delay: {delay:.2f}s"></span>')
+BREATH = (f"<style>@keyframes skBreath{{0%, 100%{{opacity: 1}}50%{{opacity: 0.55}}}}"
+          f".sk-bone, .pl-ghost, .pl-bar{{animation: skBreath {BREATH_S}s ease-in-out infinite}}"
+          f"@media (prefers-reduced-motion: reduce){{.sk-bone, .pl-ghost, .pl-bar{{animation: none}}}}</style>")
 
 
-DESKTOP_SHIMMER = (f"<style>@keyframes skShimmer{{0%{{background-position: -180% 0}}100%{{background-position: 180% 0}}}}"
-                   f".sk-line{{background: linear-gradient(100deg, {P['hover']} 30%, color-mix(in srgb, {P['ink']} 9%, {P['pane']}) 50%, {P['hover']} 70%); "
-                   f"background-size: 220% 100%; animation: skShimmer {DUR_LOOP}s ease-in-out infinite}}"
-                   f"@media (prefers-reduced-motion: reduce){{.sk-line{{animation: none; background: {P['hover']}}}}}</style>")
-MOBILE_PULSE = (f"<style>@keyframes skPulse{{0%, 100%{{opacity: 0.4}}50%{{opacity: 0.8}}}}"
-                f".sk-bar{{background: {P['hover']}; animation: skPulse {PULSE_MS * 2 / 1000}s ease-in-out infinite}}"
-                f"@media (prefers-reduced-motion: reduce){{.sk-bar{{animation: none; opacity: 0.6}}}}</style>")
+def bone(w, h, r=2, index=0, cls="sk-bone"):
+    return (f'<span class="{cls}" style="display: block; width: {w}; height: {h}px; border-radius: {r}px; background: {SK}; flex-shrink: 0; '
+            f'animation-delay: {index * STAGGER_MS}ms"></span>')
+
+
+def silhouette(narrow):
+    slot = lambda h, inner: f'<div style="height: {h}px; display: flex; align-items: center">{inner}</div>'
+
+    def tile(i, label_w, value_w, big=False, end=False):
+        return (f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; align-items: {"flex-end" if end else "flex-start"}">'
+                f'{slot(11, bone(f"{label_w}px", 8, 2, i))}{slot(28 if big else 18, bone(f"{value_w}px", 22 if big else 14, 2, i))}</div>')
+    if narrow:
+        stats = (f'<div style="display: flex; align-items: flex-end">{tile(0, 34, 84, True)}{tile(1, 52, 58, end=True)}</div>'
+                 f'<div style="display: flex; align-items: flex-start; margin-top: 14px">{tile(2, 38, 52)}{tile(3, 44, 40)}</div>')
+    else:
+        stats = f'<div style="display: flex; align-items: flex-start">{tile(0, 34, 96, True)}{tile(1, 38, 56)}{tile(2, 44, 44)}{tile(3, 52, 60)}</div>'
+    bars = "".join(f'<div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end">'
+                   f'<span class="sk-bone" style="display: block; width: 100%; max-width: 20px; height: {round(104 * shape)}px; border-radius: 3px; background: {SK}; animation-delay: {i * STAGGER_MS}ms"></span></div>'
+                   for i, shape in enumerate(BAR_SHAPES))
+    days = "".join(f'<div style="flex: 1; height: 11px; display: flex; align-items: center; justify-content: center">{bone("8px", 6, 2, i)}</div>' for i in range(len(BAR_SHAPES)))
+    legend = f'<div style="height: 14px; margin-top: 14px; display: flex; justify-content: space-between; align-items: center">{bone("96px", 8, 2, 0)}{bone("150px", 8, 2, 1)}</div>'
+    return (f'{BREATH}<div><div style="padding-bottom: 14px; border-bottom: 0.5px solid rgba(20,20,20,0.14)">{stats}</div>'
+            f'<div style="margin-top: 20px"><div style="height: 104px; display: flex; align-items: flex-end; gap: 4px">{bars}</div>'
+            f'<div style="display: flex; gap: 4px; margin-top: 8px">{days}</div></div>{legend}</div>')
+
+
+def desktop_silhouette():
+    tiles = ((34, 96, 28, True), (38, 56, 18, False), (44, 44, 18, False), (52, 60, 18, False))
+    tile = lambda i, lw, vw, vh, lead: (f'<div style="flex: 1; min-width: 0"><div style="display: flex; align-items: center; height: 16.5px; margin-bottom: 6px">{bone(f"{lw}px", 8, 2, i)}</div>'
+                                        f'<div style="display: flex; align-items: center; height: {vh}px">{bone(f"{vw}px", vh, 2, i + 0.5)}</div></div>')
+    stats = f'<div style="display: flex; align-items: flex-start; padding-bottom: 14px; border-bottom: 0.5px solid rgba(20,20,20,0.14)">{"".join(tile(i, *t) for i, t in enumerate(tiles))}</div>'
+    bars = "".join(f'<div style="flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center"><span class="sk-bone" style="display: block; width: 100%; max-width: 20px; height: {h}%; border-radius: 3px; background: {SK}; animation-delay: {i * STAGGER_MS}ms"></span></div>' for i, h in enumerate(DAY_BARS))
+    track = f'<div style="height: 104px; margin-top: 20px; display: flex; align-items: flex-end; gap: 4px">{bars}</div>'
+    foot = (f'<div style="height: 11px; margin-top: 8px"></div><div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 14px">'
+            f'<div style="display: flex; align-items: center; height: 16.5px">{bone("96px", 8, 2, 0)}</div><div style="display: flex; align-items: center; height: 16.5px">{bone("150px", 8, 2, 1)}</div></div>')
+    return f'{BREATH}<div>{stats}{track}{foot}</div>'
+
+
+def field_bone(index=0):
+    return bone("112px", 22, 2, index)
 
 
 def desktop_rows():
     widths = (("46%", "72%"), ("58%", "64%"), ("40%", "78%"))
-    rows = "".join(flex(f'<span class="sk-line" style="display: block; width: 14px; height: 14px; border-radius: 2px; flex-shrink: 0; animation-delay: {i * 0.12:.2f}s"></span>',
-                        stack(desktop_line(a, 11, i * 0.12), desktop_line(b, 8, i * 0.12 + 0.06), gap=6, extra="flex: 1"), gap=10, extra="padding: 8px 10px")
+    rows = "".join(flex(bone("14px", 14, 2, i),
+                        stack(bone(a, 11, 2, i), bone(b, 8, 2, i + 1), gap=6, extra="flex: 1"), gap=10, extra="padding: 8px 10px")
                    for i, (a, b) in enumerate(widths))
-    return f'<div style="width: 240px; padding: 8px; display: flex; flex-direction: column; gap: 4px; border-radius: 4px; background: {P["side"]}; box-shadow: 0 0 0 1px {P["line2"]}">{DESKTOP_SHIMMER}{rows}</div>'
-
-
-def mobile_bar(width, height, delay):
-    return f'<span class="sk-bar" style="display: block; width: {width * 0.72:.0f}px; height: {height}px; border-radius: 4px; animation-delay: {delay}ms"></span>'
+    return f'<div style="width: 240px; padding: 8px; display: flex; flex-direction: column; gap: 4px; border-radius: 4px; background: {P["side"]}; box-shadow: 0 0 0 1px {P["line2"]}">{BREATH}{rows}</div>'
 
 
 def mobile_rows():
     shapes = ((120, 200), (90, 230), (140, 170))
-    rows = "".join(f'<div style="min-height: 44px; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; {"" if i == 0 else "box-shadow: inset 0 0.5px 0 " + P["line"]}">'
-                   f'{mobile_bar(a, 12, i * 80)}{mobile_bar(b, 9, i * 80 + 40)}</div>' for i, (a, b) in enumerate(shapes))
-    return (f'<div style="width: 240px; padding: 12px; box-sizing: border-box; border-radius: 4px; background: {P["bg"]}; box-shadow: 0 0 0 1px {P["line2"]}">{MOBILE_PULSE}'
-            f'<div style="border-radius: 4px; background: {P["pane"]}; overflow: hidden">{rows}</div></div>')
+    line = lambda h, box, w, i: f'<div style="height: {box}px; display: flex; align-items: center">{bone(f"{w}px", h, 4, i)}</div>'
+    rows = "".join(f'<div style="min-height: 44px; padding: 14px 16px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px">'
+                   f'{line(15, 19.5, a, i * 2)}{line(11, 14.3, b, i * 2 + 1)}</div>'
+                   + (f'<div style="height: 0.5px; background: {P["line"]}; margin-left: 16px"></div>' if i < len(shapes) - 1 else "")
+                   for i, (a, b) in enumerate(shapes))
+    return f'<div style="width: 358px; border-radius: 4px; background: rgba(20,20,20,0.04); overflow: hidden">{BREATH}{rows}</div>'
+
+
+def mobile_settings_rows():
+    rows = "".join(f'<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">{bone(f"{w}px", 10, 4, i)}{bone("64px", 14, 2, i)}</div>' for i, w in enumerate((180, 220, 160, 200, 150)))
+    return f'<div style="width: 390px; box-sizing: border-box; padding: 24px 20px; display: flex; flex-direction: column; gap: 20px; border-radius: 4px; background: {P["pane"]}; box-shadow: 0 0 0 1px {P["line2"]}">{BREATH}{rows}</div>'
+
+
+def usage_card(narrow, mobile=False):
+    inner = silhouette(narrow) if mobile else desktop_silhouette()
+    return (f'<div style="width: {(326 if narrow else 520) if mobile else 500}px; padding: {"16px" if mobile else "16px"}; box-sizing: border-box; border-radius: 4px; background: {P["pane"]}; '
+            f'box-shadow: 0 0 0 1px {P["line2"]}">{inner}</div>')
 
 
 def desktop_button():
@@ -157,6 +204,9 @@ def busy_page(label, size, key, gap):
     return stack(alpaca(size, key), text(label, 12, P["ink2"]), gap=gap, extra="align-items: center")
 
 
+BONES_NOTE = f"bones in the 7 % line ink, flat, breathing opacity 0.55 ↔ 1 over {BREATH_S} s, {STAGGER_MS} ms apart; static under reduced motion"
+
+
 def waiting(mobile=False):
     timing = f"after {BUSY['delay']} ms, at least {BUSY['min']} ms on screen, {BUSY['wave']} s wave, opacity only"
     if mobile:
@@ -168,9 +218,16 @@ def waiting(mobile=False):
             specimen(flex(alpaca(BUSY["mark"]), text("Reaching the daemon", 12, P["ink2"]), gap=6), "reduce motion", "the alpaca stands still and the words carry the wait"),
             gap=14, align="flex-start", extra="flex-wrap: wrap",
         )
-        rows = stack(mobile_rows(), mono("ListSkeleton · ReaderSkeleton · SkeletonBar", 10.5, P["ink2"]),
-                     wrap(f"no mark: SkeletonBar rows inside the RowGroup card they will fill, opacity 0.4 ↔ 0.8 every {PULSE_MS} ms, 80 ms apart; 0.6 and still under reduce motion", 11, P["ink3"], lh=1.4),
-                     gap=6, extra="width: 240px")
+        rows = stack(mobile_rows(), mono("ListSkeleton · rows of two lines", 10.5, P["ink2"]),
+                     wrap(f"{BONES_NOTE}; bones show after 150 ms, stay at least 400 ms, then the content fades in; the title bone is a 15 px bar in a 19.5 px line box, the helper 11 px in 14.3", 11, P["ink3"], lh=1.4), gap=6, extra="width: 358px")
+        settings = stack(mobile_settings_rows(), mono("SettingsSkeleton · phone", 10.5, P["ink2"]),
+                         wrap("one 10 px helper bone and a 64 × 14 value bone per row, 20 pt apart, no group card", 11, P["ink3"], lh=1.4), gap=6, extra="width: 390px")
+        usage = stack(usage_card(True, True), mono("UsageSkeleton · phone, under 520 pt of tiles", 10.5, P["ink2"]),
+                      wrap("same silhouette as the loaded card: label and value slots on the chart's own line boxes, Today and Cap on one row, Input and Output below, fourteen bars and a 14 px day-label row, a two-bone legend; titles stay text", 11, P["ink3"], lh=1.4),
+                      gap=6, extra="width: 326px")
+        usage_wide = stack(usage_card(False, True), mono("UsageSkeleton · fold and tablet", 10.5, P["ink2"]),
+                           wrap("four tiles in one row from 520 pt of tiles; the bones are the line ink, breathing 90 ms apart", 11, P["ink3"], lh=1.4),
+                           gap=6, extra="width: 520px")
     else:
         marks = flex(
             specimen(busy_inline("Fetching latest settings", "wd2"), "primitives/Busy · 18 + words", f"a section that waits says for what, in ink-2; {timing}"),
@@ -180,9 +237,12 @@ def waiting(mobile=False):
             gap=14, align="flex-start", extra="flex-wrap: wrap",
         )
         rows = stack(desktop_rows(), mono("SkeletonRows · SkeletonReader", 10.5, P["ink2"]),
-                     wrap(f"a 14 px mark and two lines per row, skShimmer every {DUR_LOOP} s with an ink 9 % highlight; flat hover under reduced motion", 11, P["ink3"], lh=1.4),
-                     gap=6, extra="width: 240px")
+                     wrap(f"a 14 px mark and two lines per row; {BONES_NOTE}", 11, P["ink3"], lh=1.4), gap=6, extra="width: 240px")
+        usage = stack(usage_card(False), mono("Usage silhouette · field value", 10.5, P["ink2"]),
+                      flex(text("Workgroups", 12, P["ink2"]), field_bone(5), gap=16, extra="margin-top: 2px"),
+                      wrap("four tiles each with a label slot and a value slot, a hairline, fourteen day bars (20 px wide at most), a two-bone legend, then the chart fades in; a field value loads as a 112 × 22 pill; bones breathe 90 ms apart; titles and labels stay text", 11, P["ink3"], lh=1.4),
+                      gap=6, extra="width: 500px")
     places = flex(stack(frames(), mono("the wave, frame by frame", 10.5, P["ink2"]),
                         wrap("each facet dims to 0.28 and back over 1.6 s, its delay from the tail to the head", 11, P["ink3"], lh=1.4), gap=6, extra="width: 340px"),
-                  rows, gap=22, align="flex-start", extra="flex-wrap: wrap")
+                  rows, *([settings] if mobile else []), usage, *([usage_wide] if mobile else []), gap=22, align="flex-start", extra="flex-wrap: wrap")
     return stack(marks, places, wrap("Colour says who; the wait is always the brand ink. A profile's object never animates to mean waiting: its sweep is a phase at work.", 11.5, P["ink3"]), gap=16)

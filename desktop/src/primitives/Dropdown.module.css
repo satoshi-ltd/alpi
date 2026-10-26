@@ -165,7 +165,7 @@
   background: var(--bg-elev);
   border: .5px solid var(--line-2);
   border-radius: var(--r-xs);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-edge);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -227,33 +227,6 @@
   padding: var(--space-3) var(--space-5) var(--space-2);
 }
 
-.row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  width: 100%;
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--r-xs);
-  text-align: left;
-  font: inherit;
-  color: var(--ink);
-  transition: background var(--dur-1) var(--ease);
-}
-
-.row:not(:disabled):hover,
-.row:focus-visible {
-  background: var(--hover);
-}
-
-.row:disabled {
-  opacity: var(--alpha-muted);
-  cursor: not-allowed;
-}
-
-.rowActive {
-  background: var(--selected);
-}
-
 .rowLeading {
   display: inline-flex;
   align-items: center;
@@ -263,20 +236,23 @@
 .rowMain {
   flex: 1;
   display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
   min-width: 0;
 }
 
 .rowName {
   font-size: var(--text-ui);
-  color: var(--ink);
+  color: inherit;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .rowCaption {
+  flex-shrink: 0;
+  max-width: 50%;
   font-family: var(--font-mono);
   font-size: var(--text-meta);
   color: var(--ink-3);

@@ -5,19 +5,23 @@ import { radii } from '../theme/tokens';
 import { useReduceMotion } from '../lib/reduceMotion';
 import { useTheme } from '../theme/ThemeContext';
 
-export function SkeletonBar({ width, height = 12, delay = 0, style }) {
+export const BREATH_LOW = 0.55;
+export const BREATH_HALF_MS = 800;
+export const STAGGER_MS = 90;
+
+export function SkeletonBar({ width, height = 12, delay = 0, radius = radii.xs, style }) {
   const { colors } = useTheme();
   const reduceMotion = useReduceMotion();
-  const op = useRef(new Animated.Value(0.4)).current;
+  const op = useRef(new Animated.Value(reduceMotion ? 1 : BREATH_LOW)).current;
   useEffect(() => {
     if (reduceMotion) {
-      op.setValue(0.6);
+      op.setValue(1);
       return undefined;
     }
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(op, { toValue: 0.8, duration: 700, useNativeDriver: true }),
-        Animated.timing(op, { toValue: 0.4, duration: 700, useNativeDriver: true }),
+        Animated.timing(op, { toValue: 1, duration: BREATH_HALF_MS, useNativeDriver: true }),
+        Animated.timing(op, { toValue: BREATH_LOW, duration: BREATH_HALF_MS, useNativeDriver: true }),
       ]),
     );
     const t = setTimeout(() => loop.start(), delay);
@@ -29,8 +33,8 @@ export function SkeletonBar({ width, height = 12, delay = 0, style }) {
         {
           width,
           height,
-          borderRadius: radii.xs,
-          backgroundColor: colors.hover,
+          borderRadius: radius,
+          backgroundColor: colors.line,
           opacity: op,
         },
         style,

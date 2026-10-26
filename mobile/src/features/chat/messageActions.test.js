@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 
-import { buildMessageActions, retryTextFor } from './messageActions.js';
+import { agentTurnTarget, buildMessageActions, retryTextFor, showsMoreButton, workgroupTarget } from './messageActions.js';
 
 describe('buildMessageActions', () => {
   it('returns empty when no target', () => {
@@ -126,3 +126,36 @@ describe('Select text', () => {
   });
 });
 
+
+describe('agentTurnTarget', () => {
+  it('carries the answer, its export context and the question to ask again', () => {
+    const turn = { user: 'q', assistant: 'a', ended_at: 20, at: 10 };
+    expect(agentTurnTarget(turn, { profileName: 'doc', accent: '#fff', turnIndex: 3, exportBody: 'a!' })).toEqual({
+      kind: 'agent', text: 'a', exportBody: 'a!', retryText: 'q', turnIndex: 3, exportProfile: 'doc', exportAt: 20, exportAccent: '#fff',
+    });
+  });
+});
+
+describe('showsMoreButton', () => {
+  it('shows only on the last settled turn that has an answer', () => {
+    expect(showsMoreButton({ last: true, turn: { assistant: 'a' } })).toBe(true);
+    expect(showsMoreButton({ last: false, turn: { assistant: 'a' } })).toBe(false);
+    expect(showsMoreButton({ last: true, turn: { assistant: 'a', pending: true } })).toBe(false);
+    expect(showsMoreButton({ last: true, turn: { assistant: '' } })).toBe(false);
+  });
+});
+
+describe('workgroupTarget', () => {
+  it('lets your own posts copy, select, edit and retry', () => {
+    const target = workgroupTarget({ isOwn: true, body: 'ship it', speakerName: 'me' });
+    expect(target).toEqual({ kind: 'user', text: 'ship it' });
+    const ids = buildMessageActions(target, { onCopy: () => {}, onSelectText: () => {}, onEdit: () => {}, onRetry: () => {} }).map((a) => a.id);
+    expect(ids).toEqual(['copy', 'select', 'edit', 'retry']);
+  });
+
+  it('keeps the export context on a peer post and prefers the marker text', () => {
+    expect(workgroupTarget({ isOwn: false, body: 'raw', text: 'clean', speakerName: 'scout', speakerAccent: '#0af', at: 9 })).toEqual({
+      kind: 'agent', text: 'clean', exportProfile: 'scout', exportAt: 9, exportAccent: '#0af',
+    });
+  });
+});

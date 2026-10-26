@@ -7,19 +7,6 @@
   padding: var(--space-2);
 }
 
-.item {
-  justify-content: flex-start;
-  gap: var(--space-4);
-  height: auto;
-  padding: 10px 14px;
-  text-align: left;
-  color: var(--ink);
-  font-weight: var(--fw-regular);
-}
-.item:hover {
-  background: var(--hover);
-}
-
 .icon {
   flex: none;
   color: var(--ink-3);
@@ -31,10 +18,4 @@
 
 .statePill {
   font-size: var(--text-meta);
-}
-
-.sep {
-  height: 0.5px;
-  background: var(--line);
-  margin: var(--space-2) var(--space-3);
 }

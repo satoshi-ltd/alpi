@@ -36,17 +36,17 @@ export default function EditIdentity() {
   const save = async () => {
     try {
       await saveIdentity(call, id, text);
-      toast({ title: 'Identity saved', duration: 1400 });
+      toast({ title: 'Identity saved' });
       goBack();
     } catch (e) {
-      toast({ title: 'Save failed', message: String(e), duration: 2400 });
+      toast({ title: 'Save failed', message: String(e) });
     }
   };
 
   const draft = async () => {
     if (drafting) return;
     if (!canDraftIdentity(profile)) {
-      toast({ title: 'Set a model first', message: 'Drafting needs an LLM wired up', duration: 2400 });
+      toast({ title: 'Set a model first', message: 'Drafting needs an LLM wired up' });
       return;
     }
     setDrafting(true);
@@ -54,9 +54,9 @@ export default function EditIdentity() {
       const bio = await draftIdentity(call, id);
       if (bio) {
         setText(bio);
-        toast({ title: 'Drafted from AGENT.md', duration: 1600 });
+        toast({ title: 'Drafted from AGENT.md' });
       } else {
-        toast({ title: 'Draft empty', message: 'AGENT.md may be missing or terse', duration: 2400 });
+        toast({ title: 'Draft empty', message: 'AGENT.md may be missing or terse' });
       }
     } catch (e) {
       toast({ title: 'Draft failed', message: String(e) });

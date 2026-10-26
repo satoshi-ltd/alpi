@@ -9,6 +9,7 @@ import Chip from "../../../primitives/Chip.jsx";
 import Dot from "../../../primitives/Dot.jsx";
 import Eyebrow from "../../../primitives/Eyebrow.jsx";
 import Modal from "../../../primitives/Modal.jsx";
+import { useSkeleton } from "../../../hooks/useSkeleton.js";
 import Skeleton, { SkeletonReader } from "../../../primitives/Skeleton.jsx";
 import { useNotify } from "../../../primitives/Notification.jsx";
 import Field from "../../../primitives/Field.jsx";
@@ -56,6 +57,7 @@ export function EmailCell({
   );
   const accounts = data ?? null;
   const failed = !data && !!error;
+  const showSkeleton = useSkeleton(accounts === null && !failed);
   const [editing, setEditing] = useState(null);
   const [adding, setAdding] = useState(false);
 
@@ -79,10 +81,10 @@ export function EmailCell({
 
   return (
     <span className={styles.chipRow}>
-      {accounts === null && !failed && <Skeleton width="9em" height="var(--ctrl-xs)" radius="var(--r-tag)" label="Loading email accounts" />}
-      {failed && <LoadFailed inline label="email accounts" onRetry={refresh} />}
-      {accounts?.length === 0 && <span className={styles.muted}>{emptyLine("email")}</span>}
-      {accounts?.map((a) => (
+      {showSkeleton && <Skeleton width="112px" height="22px" radius="var(--r-tag)" delay={0} label="Loading email accounts" />}
+      {!showSkeleton && failed && <LoadFailed inline label="email accounts" onRetry={refresh} />}
+      {!showSkeleton && accounts?.length === 0 && <span className={styles.muted}>{emptyLine("email")}</span>}
+      {!showSkeleton && accounts?.map((a) => (
         <Chip key={a.id} onClick={() => setEditing(a)}>
           {a.address || a.id}
         </Chip>

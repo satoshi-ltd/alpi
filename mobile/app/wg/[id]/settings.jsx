@@ -19,7 +19,7 @@ import { ScreenHeader } from '../../../src/components/ScreenHeader';
 import { SettingsSkeleton } from '../../../src/components/SettingsSkeleton';
 import { UsageChart } from '../../../src/components/UsageChart';
 import { useToast } from '../../../src/components/Toast';
-import { Bold, Code, TypedConfirm } from '../../../src/components/TypedConfirm';
+import { Bold, Code, ConfirmDialog } from '../../../src/components/ConfirmDialog';
 import { useBack } from '../../../src/hooks/useBack';
 import { usePullRefresh } from '../../../src/hooks/usePullRefresh';
 import { useProfileSummaries, useWorkgroupMembers, useWorkgroupTasks, useWorkgroupUsage } from '../../../src/hooks/useDaemonData';
@@ -37,6 +37,9 @@ import { AdminGuard } from '../../../src/components/AdminGuard';
 import { EMPTY } from '../../../../common/emptyCopy.mjs';
 import { SubtitleSkeleton } from '../../../src/components/SubtitleSkeleton';
 import { UsageSkeleton } from '../../../src/components/UsageSkeleton';
+import { FadeIn } from '../../../src/components/FadeIn';
+import { useSkeleton } from '../../../src/hooks/useSkeleton';
+import { useReveal } from '../../../src/hooks/useReveal';
 
 const WIDE_BODY_MAX_W = 968;
 
@@ -97,6 +100,10 @@ function WorkgroupSettings() {
 
   useEffect(() => { if (intent === 'delete' && wg?.is_hub) setConfirmDelete(true); }, [intent, wg?.is_hub]);
 
+  const usagePending = usage.loading && !usage.data;
+  const usageBones = useSkeleton(usagePending);
+  const usageRevealed = useReveal(usageBones);
+
   if (loading && !wg) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -140,7 +147,7 @@ function WorkgroupSettings() {
   const performAction = async (action) => {
     try {
       await call('host.workgroup.action', { profile: wg.profile, wg_id: wg.id, action });
-      toast({ title: action === 'pause' ? 'Paused' : action === 'resume' ? 'Resumed' : 'Left', duration: 1500 });
+      toast({ title: action === 'pause' ? 'Paused' : action === 'resume' ? 'Resumed' : 'Left' });
       refresh();
       if (action === 'leave') router.replace('/');
     } catch (e) {
@@ -181,7 +188,7 @@ function WorkgroupSettings() {
 
   const copyJoin = async () => {
     const ok = await copyText(joinCommand(wg.hub_id, wg.id));
-    toast({ title: ok ? 'Join command copied' : 'Copy failed', duration: 1400 });
+    toast({ title: ok ? 'Join command copied' : 'Copy failed' });
   };
 
   const contentStyle = twoPane
@@ -326,13 +333,13 @@ function WorkgroupSettings() {
 
         <SectionHeader kicker="last 14 days">Usage</SectionHeader>
         <RowGroup>
-          {usageDays.length === 0 && usage.loading ? (
+          {usageBones ? (
             <SettingsBand><UsageSkeleton /></SettingsBand>
-          ) : usageDays.length === 0 ? (
+          ) : usagePending ? null : usageDays.length === 0 ? (
             <Row label={EMPTY.workgroupUsage.title} helper={EMPTY.workgroupUsage.hint} chevron={false} />
           ) : (
             <SettingsBand>
-              <UsageChart days={usageDays} accent={accent} />
+              <FadeIn animate={usageRevealed}><UsageChart days={usageDays} accent={accent} /></FadeIn>
             </SettingsBand>
           )}
         </RowGroup>
@@ -417,7 +424,7 @@ function WorkgroupSettings() {
       </ScrollView>
       </SettingsSurface>
 
-      <TypedConfirm
+      <ConfirmDialog
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
         title={`Delete workgroup #${wg.id}`}
@@ -436,7 +443,7 @@ function WorkgroupSettings() {
         }}
       />
 
-      <TypedConfirm
+      <ConfirmDialog
         open={confirmLeave}
         onClose={() => setConfirmLeave(false)}
         title={`Leave #${wg.id}`}
@@ -483,7 +490,7 @@ function WorkgroupSettings() {
                     const value = local ? memberTarget.name : memberTarget.pubkey;
                     setMemberTarget(null);
                     const ok = await copyText(value);
-                    toast({ title: ok ? (local ? 'Profile id copied' : 'Public key copied') : 'Copy failed', duration: 1400 });
+                    toast({ title: ok ? (local ? 'Profile id copied' : 'Public key copied') : 'Copy failed' });
                   },
                 },
                 ...(memberTarget.canRemove
@@ -503,7 +510,7 @@ function WorkgroupSettings() {
             : []
         }
       />
-      <TypedConfirm
+      <ConfirmDialog
         open={!!confirmKick}
         onClose={() => setConfirmKick(null)}
         title="Kick member"

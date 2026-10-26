@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { radii, space } from '../../theme/tokens';
 
+import { useConfirm } from '../../components/ConfirmProvider';
 import { Field } from '../../components/Field';
 import { PickerRow } from '../../components/PickerRow';
 import { Pill } from '../../components/Pill';
@@ -44,10 +45,10 @@ export function BudgetSheet({ open, onClose, profileName, initialValue, onSave }
     setSaving(true);
     try {
       await onSave?.(value.trim());
-      toast({ title: value.trim() ? 'Budget saved' : 'Budget cap removed', duration: 1400 });
+      toast({ title: value.trim() ? 'Budget saved' : 'Budget cap removed' });
       onClose?.();
     } catch (e) {
-      toast({ title: 'Save failed', message: String(e), duration: 2400 });
+      toast({ title: 'Save failed', message: String(e) });
     } finally {
       setSaving(false);
     }
@@ -74,19 +75,26 @@ const REASONING_OPTIONS = [
   { value: 'high', label: 'High', helper: 'slower, more thorough' },
 ];
 
-export function ReasoningEffortSheet({ open, onClose, initialValue, onSave }) {
+export function ReasoningEffortSheet({ open, onClose, initialValue, onSave, modelRow = null }) {
   const toast = useToast();
   const [value, setValue] = useState(initialValue ?? '');
   const [saving, setSaving] = useState(false);
   useEffect(() => { if (open) setValue(initialValue ?? ''); }, [open, initialValue]);
-  const save = async () => {
+  const pick = async (next) => {
+    if (saving) return;
+    if (next === (initialValue ?? '')) {
+      onClose?.();
+      return;
+    }
+    setValue(next);
     setSaving(true);
     try {
-      await onSave?.(value);
-      toast({ title: 'Reasoning saved', duration: 1400 });
+      await onSave?.(next);
+      toast({ title: 'Reasoning saved' });
       onClose?.();
     } catch (e) {
-      toast({ title: 'Save failed', message: String(e), duration: 2400 });
+      setValue(initialValue ?? '');
+      toast({ title: 'Save failed', message: String(e) });
     } finally {
       setSaving(false);
     }
@@ -97,7 +105,6 @@ export function ReasoningEffortSheet({ open, onClose, initialValue, onSave }) {
       onClose={onClose}
       title="Reasoning effort"
       subtitle="how hard the model thinks before answering"
-      primaryAction={{ label: 'Save', onPress: save, loading: saving }}
     >
       <View style={{ paddingVertical: space.s5 }}>
         {REASONING_OPTIONS.map((opt, i) => (
@@ -107,10 +114,16 @@ export function ReasoningEffortSheet({ open, onClose, initialValue, onSave }) {
               label={opt.label}
               helper={opt.helper}
               selected={value === opt.value}
-              onPress={() => setValue(opt.value)}
+              onPress={() => pick(opt.value)}
             />
           </View>
         ))}
+        {modelRow ? (
+          <View>
+            <RowSeparator />
+            <PickerRow label="Change model…" helper={modelRow.label} onPress={modelRow.onPress} />
+          </View>
+        ) : null}
       </View>
     </Sheet>
   );
@@ -136,10 +149,10 @@ export function WorkspaceSheet({ open, onClose, profileName, initialValue, onSav
     setSaving(true);
     try {
       await onSave?.(value);
-      toast({ title: 'Workspace saved', duration: 1400 });
+      toast({ title: 'Workspace saved' });
       onClose?.();
     } catch (e) {
-      toast({ title: 'Save failed', message: String(e), duration: 2400 });
+      toast({ title: 'Save failed', message: String(e) });
     } finally {
       setSaving(false);
     }
@@ -383,6 +396,7 @@ function countLabel(n) {
 export function CleanupSheet({ open, onClose, profileName, call, onCleaned }) {
   const { colors, fonts, fontSizes } = useTheme();
   const toast = useToast();
+  const confirm = useConfirm();
   const [plan, setPlan] = useState(null);
   const [busyKey, setBusyKey] = useState(null);
 
@@ -409,15 +423,14 @@ export function CleanupSheet({ open, onClose, profileName, call, onCleaned }) {
         toast({
           title: `${cat.label} failed`,
           message: failed[0].errors?.[0] ?? 'cleanup failed',
-          duration: 2600,
         });
       } else {
-        toast({ title: `${cat.label}: freed ${formatCleanupBytes(freed)} · ${countLabel(removed)}`, duration: 1800 });
+        toast({ title: `${cat.label}: freed ${formatCleanupBytes(freed)} · ${countLabel(removed)}` });
       }
       await fetchPlan();
       if (removed > 0) onCleaned?.();
     } catch (e) {
-      toast({ title: 'Cleanup failed', message: String(e), duration: 2400 });
+      toast({ title: 'Cleanup failed', message: String(e) });
     } finally {
       setBusyKey(null);
     }
@@ -429,14 +442,11 @@ export function CleanupSheet({ open, onClose, profileName, call, onCleaned }) {
       doClean(cat);
       return;
     }
-    Alert.alert(
-      `Delete ${cat.label.toLowerCase()}?`,
-      `${cat.desc}. This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => doClean(cat) },
-      ],
-    );
+    confirm({
+      title: `Delete ${cat.label.toLowerCase()}?`,
+      body: `${cat.desc}. This cannot be undone.`,
+      confirmLabel: 'Delete',
+    }).then((ok) => { if (ok) doClean(cat); });
   };
 
   const reclaimable = plan === 'error' ? [] : (plan ?? []).filter((c) => c.size > 0 || c.count > 0);
@@ -528,7 +538,7 @@ export function VoiceSheet({ open, onClose, profileName, accent, initialValue, o
 
   const onPreview = (voiceId) => {
     playVoicePreview({ call, voiceId }).catch(() => {
-      toast({ title: 'Preview failed', duration: 1600 });
+      toast({ title: 'Preview failed' });
     });
   };
 

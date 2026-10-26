@@ -3,10 +3,13 @@ import { useMemo, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { mobile, space } from '../../theme/tokens';
 
-import { Button } from '../../components/Button';
 import { Dot } from '../../components/Dot';
 import { Field } from '../../components/Field';
 import { ListSkeleton } from '../../components/ListSkeleton';
+import { FadeIn } from '../../components/FadeIn';
+import { useSkeleton } from '../../hooks/useSkeleton';
+import { useReveal } from '../../hooks/useReveal';
+import { EmptyState } from '../../components/EmptyState';
 import { LoadFailed } from '../../components/LoadFailed';
 import { Row, RowGroup, RowSeparator, SectionHeader } from '../../components/Row';
 import { toEpochSeconds, useActivity } from '../../hooks/useActivity';
@@ -83,19 +86,19 @@ export function JobList({ profile, selectedId = null, onOpen, embedded = false }
   const shown = jobs.filter((job) => jobMatches(job, query, describeWhen(job)));
   const groups = jobGroups(shown);
 
+  const pending = schedule.loading && jobs.length === 0 && !loadError;
+  const bones = useSkeleton(pending);
+  const revealed = useReveal(bones);
   let body;
-  if (schedule.loading && jobs.length === 0 && !loadError) {
+  if (bones) {
     body = <ListSkeleton rows={3} title="md" helper="sm" label="Loading schedules" style={{ marginTop: space.s5 }} />;
+  } else if (pending) {
+    body = null;
   } else if (loadError && jobs.length === 0) {
     body = <LoadFailed label="schedule" error={loadError} onRetry={() => schedule.refresh?.()} />;
   } else if (jobs.length === 0) {
     body = (
-      <View style={{ gap: space.s6, padding: space.s8 }}>
-        <RowGroup>
-          <Row label={EMPTY.schedule.title} helper={EMPTY.schedule.hint} chevron={false} />
-        </RowGroup>
-        <Button title="New schedule" variant="primary" fullWidth onPress={() => router.push(chatWithDraft(profile, NEW_SCHEDULE_DRAFT))} />
-      </View>
+      <EmptyState title={EMPTY.schedule.title} detail={EMPTY.schedule.hint} action={{ label: 'New schedule', onPress: () => router.push(chatWithDraft(profile, NEW_SCHEDULE_DRAFT)) }} />
     );
   } else {
     body = (
@@ -139,7 +142,7 @@ export function JobList({ profile, selectedId = null, onOpen, embedded = false }
       keyboardShouldPersistTaps="handled"
       refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />}
     >
-      {body}
+      {bones || pending ? body : <FadeIn animate={revealed}>{body}</FadeIn>}
     </ScrollView>
   );
 }

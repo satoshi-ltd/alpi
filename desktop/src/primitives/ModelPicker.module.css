@@ -27,8 +27,21 @@
 .modelPickerIconOverride { color: var(--c, var(--accent)); }
 
 .modelPickerLabel {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 160px;
   font-family: var(--font-mono);
   font-size: var(--fs-sm);
+}
+.modelPickerLabelModel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.modelPickerLabelEffort {
+  flex: none;
+  white-space: pre;
 }
 .modelPickerPop {
   position: absolute;
@@ -36,7 +49,7 @@
   background: var(--bg-elev);
   border: .5px solid var(--line-2);
   border-radius: var(--r-xs);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-edge);
   z-index: var(--z-modal);
   overflow: hidden;
 }
@@ -56,7 +69,8 @@
 .modelPickerEyebrow { padding: var(--space-4) var(--space-4) var(--space-1); }
 
 .modelPickerOption {
-  padding: var(--space-3) var(--space-4);
+  min-height: 32px;
+  padding: 6px 10px;
   border-radius: var(--r-xs);
   gap: var(--space-4);
   text-align: left;
@@ -72,7 +86,7 @@
 .modelPickerOptionSelected:hover { background: var(--selected); }
 
 .modelPickerCheckSlot {
-  width: var(--space-6);
+  width: 16px;
   display: inline-flex;
   justify-content: center;
   color: transparent;
@@ -126,4 +140,31 @@
   background: var(--hover);
   padding: var(--chip-pad);
   border-radius: var(--r-xs);
+}
+
+.modelPickerEffort {
+  padding: var(--space-2) var(--space-2) var(--space-3);
+  border-top: .5px solid var(--line);
+}
+.modelPickerSegments {
+  display: flex;
+  gap: var(--space-1);
+  padding: 0 var(--space-3);
+}
+.modelPickerSegment {
+  flex: 1;
+  min-height: var(--ctrl-sm);
+  border: 0;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.modelPickerSegment:hover { background: var(--hover); }
+.modelPickerSegmentOn,
+.modelPickerSegmentOn:hover {
+  background: var(--selected);
+  font-weight: var(--fw-semibold);
 }

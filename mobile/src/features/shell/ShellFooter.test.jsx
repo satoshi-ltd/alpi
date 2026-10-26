@@ -17,7 +17,7 @@ vi.mock('react-native', () => {
       { ...p, 'data-style': JSON.stringify(h.flat(style)), ...(h.flat(style).position ? { 'data-pos': h.flat(style).position } : {}) },
       children,
     );
-  const Text = ({ children, style, ...p }) => React.createElement('span', p, children);
+  const Text = ({ children, style, ...p }) => React.createElement('span', { ...p, 'data-style': JSON.stringify(h.flat(style)) }, children);
   const Pressable = ({ children, style, onPress, accessibilityLabel, ...p }) =>
     React.createElement(
       'button',
@@ -33,7 +33,7 @@ vi.mock('../../components/Icon', () => ({ Icon: ({ name, color }) => React.creat
 
 vi.mock('../../theme/ThemeContext', () => ({
   useTheme: () => ({
-    colors: { ink2: '#333', ink4: '#999', line: '#eee', selected: '#eaeaea', danger: '#c00', warning: '#e08a3c', warningText: '#8a5a0a' },
+    colors: { ink2: '#333', ink3: '#666', ink4: '#999', line: '#eee', selected: '#eaeaea', danger: '#c00', warning: '#e08a3c', warningText: '#8a5a0a' },
     fonts: { sans: { medium: 'm', semibold: 's' }, monoMedium: 'monoMedium' },
     fontSizes: { xs: 11, sm: 12 },
     chromeScale: 1.3,
@@ -46,7 +46,7 @@ import { CHROME_H } from '../../lib/panes';
 import { mobile } from '../../theme/tokens';
 import { PaneContext } from '../../nav/PaneContext';
 import { ICON_ROLES } from '../../../../common/iconRoles.mjs';
-import { ShellFooter, nextThemePref } from './ShellFooter';
+import { ShellFooter } from './ShellFooter';
 
 const settings = () => screen.getByLabelText('Settings');
 const bell = (unread = 0) => screen.getByLabelText(unread > 0 ? `Notifications · ${unread} unread` : 'Notifications');
@@ -227,26 +227,24 @@ describe('ShellFooter icon roles', () => {
   });
 });
 
-describe('ShellFooter theme toggle', () => {
-  it('cycles light → dark → system from the footer on two panes, like the desktop', () => {
-    h.pref = 'light';
-    h.setMode = vi.fn();
+describe('ShellFooter labels', () => {
+  it('names every entry in words under its glyph', () => {
+    render(<ShellFooter unread={1} needsYou={1} onNotificationsPress={() => {}} onSettingsPress={() => {}} onActivityPress={() => {}} />);
+    for (const word of ['Settings', 'Notifications', 'Activity']) expect(screen.getByText(word)).toBeTruthy();
+  });
+
+  it('draws the version in the readable secondary ink', () => {
+    render(<ShellFooter onSettingsPress={() => {}} />);
+    expect(JSON.parse(screen.getByText('v0.3.1').getAttribute('data-style')).color).toBe('#666');
+  });
+
+  it('carries no theme cycler on either layout; Settings owns the theme row', () => {
+    h.pref = 'dark';
     render(
       <PaneContext.Provider value={{ twoPane: true, side: 'list', sidebarOpen: true, toggleSidebar() {} }}>
         <ShellFooter onSettingsPress={() => {}} />
       </PaneContext.Provider>,
     );
-    const toggle = screen.getByLabelText('Theme: Light');
-    expect(toggle.querySelector('[data-icon]').getAttribute('data-icon')).toBe('sun');
-    fireEvent.click(toggle);
-    expect(h.setMode).toHaveBeenCalledWith('dark');
-    expect(nextThemePref('dark')).toBe('system');
-    expect(nextThemePref('system')).toBe('light');
-  });
-
-  it('keeps the phone footer without it — the theme lives in Settings there', () => {
-    h.pref = 'dark';
-    render(<ShellFooter onSettingsPress={() => {}} />);
     expect(screen.queryByLabelText(/^Theme:/)).toBeNull();
   });
 });

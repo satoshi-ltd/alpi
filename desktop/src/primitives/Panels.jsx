@@ -37,9 +37,9 @@ export function Scrim({ onClose, children, align = "flex-start", top = 96, dismi
   );
 }
 
-export function PanelShell({ children, width = 880, maxHeight = "70vh" }) {
+export function PanelShell({ children, width = 880, maxHeight = "70vh", label }) {
   return (
-    <div className={`anim-pop ${styles.shell}`} style={{ width, maxHeight }}>
+    <div role="dialog" aria-modal="true" aria-label={label} className={`anim-pop ${styles.shell}`} style={{ width, maxHeight }}>
       {children}
     </div>
   );
@@ -83,11 +83,11 @@ export function ConnectionPanel({
   if (!open) return null;
   return (
     <Scrim onClose={onClose} top={80} dismissable={!locked}>
-      <PanelShell width={560} maxHeight="auto">
+      <PanelShell width={560} maxHeight="auto" label="Connection">
         <div className={`row between ${styles.panelHeader}`}>
           <div className={`row row-gap ${styles.headerRow}`}>
             <I.Globe />
-            <span className={styles.panelTitle}>Connection</span>
+            <h2 className={styles.panelTitle}>Connection</h2>
             <span className={`eyebrow ${styles.headerEyebrow}`}>
               {locked ? "No host yet. Add a connection to continue." : "where alpi runs"}
             </span>
@@ -323,7 +323,7 @@ export function Palette({ open, onClose, groups = [], placeholder = "Search prof
   const listId = `${baseId}-list`;
   return (
     <Scrim onClose={onClose} top={120}>
-      <PanelShell width={560} maxHeight="60vh">
+      <PanelShell width={560} maxHeight="60vh" label="Command palette">
         <div className={styles.paletteInputWrap}>
           <I.Search className={styles.paletteSearchIcon} />
           <input

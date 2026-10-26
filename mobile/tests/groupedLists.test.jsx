@@ -24,6 +24,8 @@ vi.mock('expo-router', () => ({
   useRouter: () => ({ push: vi.fn(), back: vi.fn(), replace: vi.fn() }),
 }));
 vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: ({ children }) => React.createElement('div', {}, children) }));
+vi.mock('../src/components/FadeIn', () => ({ FadeIn: ({ children }) => children }));
+vi.mock('../src/hooks/useSkeleton', () => ({ useSkeleton: (loading) => loading }));
 vi.mock('../src/theme/ThemeContext', () => ({
   useTheme: () => ({
     colors: { bg: '#fff', ink: '#000', ink3: '#666', warning: '#c60', selected: '#eee' },
@@ -43,7 +45,7 @@ vi.mock('../src/components/Row', () => ({
 vi.mock('../src/components/Sheet', () => ({ Sheet: () => null }));
 vi.mock('../src/components/ScreenHeader', () => ({ ScreenHeader: ({ title }) => React.createElement('h1', {}, title) }));
 vi.mock('../src/components/Toast', () => ({ useToast: () => vi.fn() }));
-vi.mock('../src/components/TypedConfirm', () => ({ Bold: ({ children }) => children, Code: ({ children }) => children, TypedConfirm: () => null }));
+vi.mock('../src/components/ConfirmDialog', () => ({ Bold: ({ children }) => children, Code: ({ children }) => children, ConfirmDialog: () => null }));
 vi.mock('../src/hooks/usePullRefresh', () => ({ usePullRefresh: () => ({ refreshing: false, onRefresh: () => {} }) }));
 vi.mock('../src/hooks/useBack', () => ({ useBack: () => () => {} }));
 vi.mock('../src/hooks/useDaemonData', () => ({ useTools: () => h.tools }));

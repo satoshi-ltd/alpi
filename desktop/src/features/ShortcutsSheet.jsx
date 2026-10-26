@@ -16,9 +16,9 @@ export default function ShortcutsSheet({ open, onClose }) {
   if (!open) return null;
   return (
     <Scrim onClose={onClose} top={80}>
-      <PanelShell width={620} maxHeight="76vh">
+      <PanelShell width={620} maxHeight="76vh" label="Keyboard shortcuts">
         <div className={styles.head}>
-          <span className={styles.title}>Keyboard shortcuts</span>
+          <h2 className={styles.title}>Keyboard shortcuts</h2>
           <KeyHint hint="⌘/" />
           <IconBtn tip="Close" tipSide="l" onClick={onClose}>
             <Icon name="x" />

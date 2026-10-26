@@ -74,11 +74,11 @@ export function NewConnectionSheet({ open, onClose, onCreated }) {
         profiles: role === 'admin' ? [] : scope,
         session_scope: role === 'member' && perDevice ? 'device' : 'connection',
       });
-      toast({ title: 'Connection created', message: label.trim(), duration: 1600 });
+      toast({ title: 'Connection created', message: label.trim() });
       onClose?.();
       onCreated?.(payload);
     } catch (e) {
-      toast({ title: 'Create failed', message: String(e?.data?.detail ?? e), duration: 3200 });
+      toast({ title: 'Create failed', message: String(e?.data?.detail ?? e) });
     } finally {
       setBusy(false);
     }

@@ -231,7 +231,7 @@ export function CreateWorkgroupSheet({ open, onClose }) {
         open={hubPickerOpen}
         onClose={() => setHubPickerOpen(false)}
         title="Pick hub profile"
-        subtitle="WORKGROUP HUB"
+        subtitle="workgroup hub"
         actions={eligibleHubs.map((p) => ({
           id: p.name,
           icon: <Fold fold={p.fold} color={p.accent ?? FALLBACK_ACCENT} size="md" />,

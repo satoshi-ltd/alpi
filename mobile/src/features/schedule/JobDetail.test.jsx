@@ -35,9 +35,9 @@ vi.mock('../../components/Icon', () => ({ Icon: () => null }));
 vi.mock('../../components/LoadFailed', () => ({ LoadFailed: () => React.createElement('div', {}, 'load failed') }));
 vi.mock('../../components/RichText', () => ({ RichText: ({ children }) => React.createElement('span', {}, children) }));
 vi.mock('../../components/Toast', () => ({ useToast: () => h.toast }));
-vi.mock('../../components/TypedConfirm', () => ({
+vi.mock('../../components/ConfirmDialog', () => ({
   Bold: ({ children }) => React.createElement('b', {}, children),
-  TypedConfirm: ({ open, expected, onConfirm, confirmLabel }) => (open ? React.createElement('button', { type: 'button', 'data-expected': expected, onClick: onConfirm }, confirmLabel) : null),
+  ConfirmDialog: ({ open, expected, onConfirm, confirmLabel }) => (open ? React.createElement('button', { type: 'button', 'data-expected': expected, onClick: onConfirm }, confirmLabel) : null),
 }));
 vi.mock('../../hooks/useAttention', () => ({ useAttention: () => ({ att: null, refresh: vi.fn() }) }));
 vi.mock('../../hooks/useBusyVisible', () => ({ useBusyVisible: () => false }));

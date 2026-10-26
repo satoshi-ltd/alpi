@@ -31,15 +31,14 @@ this file is the whole contract of the kit.
 ## Proposals
 
 The Proposals page holds purely visual ideas, only while they are proposals; it shows an empty state when there are none.
-Each idea is one board in `design/src/proposals.py`, an entry of `PROPOSALS` with these fields:
+Each idea is one board, an entry of `PROPOSALS` in `design/src/proposals.py`, with these fields:
 
 - `id` — stable, never reused; the ROADMAP task takes the same ID.
-- `client` — `desktop`, `mobile` or `site`.
-- `area` — the screen or field it touches.
+- `client` — `desktop`, `mobile`, `site`, or `mobile · desktop` for a feature both clients share.
+- `area` — the feature, screen or field it touches. A board is one functionality, shown on every client that has it.
 - `title` — what the board proposes.
 - `why` — the evidence and the recommendation.
-- `now` — a function drawing what exists, with the kit's own classes.
-- `proposed` — a function drawing the proposal, with the kit's own classes.
+- `mobile` and `desktop` — each a pair `(now, proposed)` of functions drawing what exists and the proposal with the kit's own classes; `proposed` is `None` when that client already does it right, and the board says so.
 - `accept` — what proves it done.
 - `h` — the board height in pixels.
 

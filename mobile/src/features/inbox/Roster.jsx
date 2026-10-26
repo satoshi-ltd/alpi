@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { Pressable, RefreshControl, SectionList, Text, TextInput, View } from 'react-native';
 import { mobile, radii, space } from '../../theme/tokens';
 
+import { EmptyState } from '../../components/EmptyState';
 import { Eyebrow } from '../../components/Eyebrow';
 import { Icon } from '../../components/Icon';
 import { rosterIsEmpty, rosterSections } from '../../lib/roster';
@@ -11,11 +12,11 @@ import { SEPARATOR_INSET } from './InboxRow';
 import { InboxSkeleton } from './InboxSkeleton';
 import { memberEmptyCopy } from '../../../../common/onboarding.mjs';
 import { EMPTY } from '../../../../common/emptyCopy.mjs';
+import { plainError } from '../../../../common/plainError.mjs';
 import { useWell } from '../../components/well';
 import { Busy } from '../../components/Busy';
 
 const HAIRLINE = 0.5;
-const EMPTY_MIN_H = 240;
 const CONTENT_PAD_BOTTOM = space.s9;
 
 function rosterKey(item) {
@@ -48,7 +49,7 @@ function SearchField({ query, onQueryChange, gutter }) {
         autoCorrect={false}
         accessibilityLabel="Filter list"
         placeholder="Filter profiles & workgroups"
-        placeholderTextColor={colors.ink4}
+        placeholderTextColor={colors.ink3}
         style={{ flex: 1, fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink }}
       />
     </View>
@@ -80,8 +81,7 @@ function SectionAdd({ label, onPress }) {
   );
 }
 
-function EmptyState({ paired, query, device, canCreate = false, daemonDown = false, error = null, onRetry }) {
-  const { colors, fonts, fontSizes } = useTheme();
+function RosterEmpty({ paired, query, device, canCreate = false, daemonDown = false, error = null, onRetry }) {
   const needle = String(query ?? '').trim();
   const [title, body] = !paired
     ? ['Not paired', `Pair this ${device} to a daemon and its profiles show up here.`]
@@ -90,37 +90,12 @@ function EmptyState({ paired, query, device, canCreate = false, daemonDown = fal
       : daemonDown
         ? ['Daemon unreachable', 'Profiles and workgroups show up again once the connection is back.']
         : error
-          ? ['Couldn\'t load the roster', String(error?.message ?? error)]
+          ? ['Couldn\'t load the roster', plainError(error?.message ?? error)]
           : canCreate
             ? [EMPTY.roster.title, EMPTY.roster.hint]
             : (({ title: t, hint: h }) => [t, h])(memberEmptyCopy(device ? `this ${device}` : null));
   const retry = paired && !needle && (daemonDown || error) && onRetry;
-  return (
-    <View
-      style={{
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: space.s8,
-        gap: space.s3,
-        minHeight: EMPTY_MIN_H,
-      }}
-    >
-      <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.ink2, textAlign: 'center' }}>
-        {title}
-      </Text>
-      {body ? (
-        <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink3, textAlign: 'center' }}>
-          {body}
-        </Text>
-      ) : null}
-      {retry ? (
-        <Pressable onPress={onRetry} accessibilityRole="button" accessibilityLabel="Retry" hitSlop={8} style={{ paddingVertical: space.s4 }}>
-          <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.ink2 }}>Retry</Text>
-        </Pressable>
-      ) : null}
-    </View>
-  );
+  return <EmptyState title={title} detail={body} action={retry ? { label: 'Retry', onPress: onRetry } : null} />;
 }
 
 export function Roster({
@@ -144,7 +119,7 @@ export function Roster({
   const keepEmpty = useMemo(() => Object.keys(addActions ?? {}), [addActions]);
   const sections = useMemo(() => rosterSections(items, query, { keepEmpty }), [items, query, keepEmpty]);
   const empty = rosterIsEmpty(sections);
-  const placeholder = loading ? <InboxSkeleton label="Loading profiles and workgroups" /> : <EmptyState paired={paired} query={query} device={device} canCreate={addActions != null} daemonDown={daemonDown} error={error} onRetry={onRefresh} />;
+  const placeholder = loading ? <InboxSkeleton label="Loading profiles and workgroups" /> : <RosterEmpty paired={paired} query={query} device={device} canCreate={addActions != null} daemonDown={daemonDown} error={error} onRetry={onRefresh} />;
 
   const renderSectionHeader = useCallback(
     ({ section }) => {

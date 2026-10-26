@@ -13,7 +13,7 @@ vi.mock('./Row', () => ({
   RowGroup: ({ children }) => React.createElement('section', { 'data-card': '' }, children),
   RowSeparator: () => React.createElement('hr'),
 }));
-vi.mock('./SkeletonBar', () => ({ SkeletonBar: ({ width }) => React.createElement('i', { 'data-bar': width }) }));
+vi.mock('./SkeletonBar', () => ({ STAGGER_MS: 90, SkeletonBar: ({ width }) => React.createElement('i', { 'data-bar': width }) }));
 
 const { ListSkeleton } = await import('./ListSkeleton');
 const { ReaderSkeleton } = await import('./ReaderSkeleton');

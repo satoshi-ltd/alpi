@@ -84,7 +84,7 @@ export function CreateProfileSheet({ open, onClose }) {
         openrouterModel,
       });
       await summaries.refresh?.()?.catch(() => {});
-      toast({ title: 'Profile created', message: `@${trimmed}`, duration: 1800 });
+      toast({ title: 'Profile created', message: `@${trimmed}` });
       onClose?.();
       router[openVerb({ twoPane, pathname })](`/profile/${trimmed}/settings`);
     } catch (e) {
@@ -99,7 +99,7 @@ export function CreateProfileSheet({ open, onClose }) {
       open={open}
       onClose={onClose}
       title="New profile"
-      subtitle="NAME · PROVIDER"
+      subtitle="name · provider"
       primaryAction={{ label: 'Create', onPress: create, disabled: !ready, loading: busy }}
     >
       <ScrollView

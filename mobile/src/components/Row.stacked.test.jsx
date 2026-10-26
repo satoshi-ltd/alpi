@@ -11,10 +11,10 @@ vi.mock('react-native', () => {
     React.useEffect(() => {
       onLayout?.({ nativeEvent: { layout: { width: h.width } } });
     }, [onLayout]);
-    return React.createElement('div', { ...p, 'data-dir': style?.flexDirection ?? '', 'data-minh': style?.minHeight ?? '' }, children);
+    return React.createElement('div', { ...p, 'data-dir': style?.flexDirection ?? '', 'data-minh': style?.minHeight ?? '', 'data-opacity': style?.opacity ?? '' }, children);
   };
   const Text = ({ children, style, numberOfLines, ellipsizeMode, ...p }) =>
-    React.createElement('span', { ...p, 'data-ellipsis': ellipsizeMode ?? '', 'data-align': style?.textAlign ?? '', 'data-transform': style?.textTransform ?? '' }, children);
+    React.createElement('span', { ...p, 'data-ellipsis': ellipsizeMode ?? '', 'data-align': style?.textAlign ?? '', 'data-transform': style?.textTransform ?? '', 'data-color': style?.color ?? '' }, children);
   const Pressable = ({ children, onPress, android_ripple, style, accessibilityLabel, ...p }) =>
     React.createElement('button', { type: 'button', onClick: onPress, 'aria-label': accessibilityLabel, ...p }, children);
   return { View, Text, Pressable };
@@ -139,5 +139,38 @@ describe('Row chevron gutter on a wide settings surface', () => {
   it('gives a row whose trailing control is the action no gutter, so the control sits on that same edge', () => {
     wide(<Row label="Pixel" helper="mobile" item trailing={<button type="button">revoke</button>} chevron={false} />);
     expect(screen.getByText('revoke').nextSibling).toBeNull();
+  });
+});
+
+
+describe('Row text ink', () => {
+  const inWide = (node) =>
+    render(
+      <PaneContext.Provider value={{ twoPane: true, side: 'detail', sidebarOpen: true, toggleSidebar: () => {} }}>
+        <SettingsSurface>{node}</SettingsSurface>
+      </PaneContext.Provider>,
+    );
+
+  it('draws the wide helper and the wide section kicker in the secondary ink', () => {
+    inWide(
+      <>
+        <SectionHeader kicker="last 14 days">Usage</SectionHeader>
+        <Row label="Workspace" helper="where files land" value="~/git" onPress={() => {}} />
+      </>,
+    );
+    expect(screen.getByText('where files land').getAttribute('data-color')).toBe('#666');
+    expect(screen.getByText('last 14 days').getAttribute('data-color')).toBe('#666');
+  });
+
+  it('marks a disabled row with the secondary ink instead of fading the whole row', () => {
+    const { container } = render(<Row label="Terminal" helper="off" disabled />);
+    expect(screen.getByText('Terminal').getAttribute('data-color')).toBe('#666');
+    expect(container.querySelector('[data-opacity]:not([data-opacity=""])')).toBeNull();
+  });
+
+  it('marks a disabled wide row the same way', () => {
+    const { container } = inWide(<Row label="Terminal" item disabled />);
+    expect(screen.getByText('Terminal').getAttribute('data-color')).toBe('#666');
+    expect(container.querySelector('[data-opacity]:not([data-opacity=""])')).toBeNull();
   });
 });

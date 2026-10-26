@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Fold, SendButton } from "./index.js";
+import { useEffect, useId, useRef, useState } from "react";
+import { Button, Fold, SendButton } from "./index.js";
 import styles from "./Composer.module.css";
 import { isComposing } from "../lib/composition.js";
 
@@ -16,16 +16,28 @@ export default function Composer({
   disabledTitle = "Type a message",
   leftActions = null,
   hint = null,
-  mentions = [],
+  mentions,
   accent = null,
   topBar = null,
   minHeight = null,
+  reason = null,
+  reasonAction = null,
+  onReasonAction = null,
 }) {
   const textareaRef = useRef(null);
+  const popoverRef = useRef(null);
+  const popoverId = useId();
   const composingRef = useRef(false);
   const [settled, setSettled] = useState(0);
   const [mentionState, setMentionState] = useState(null);
   const isMentionOpen = mentionState != null && mentionState.items.length > 0;
+  const isPopoverShown = mentionState != null;
+  const activeOptionId = isMentionOpen ? `${popoverId}-${mentionState.selected}` : undefined;
+
+  useEffect(() => {
+    if (!isMentionOpen) return;
+    popoverRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView?.({ block: "nearest" });
+  }, [isMentionOpen, mentionState?.selected]);
 
   useEffect(() => {
     composingRef.current = false;
@@ -45,13 +57,14 @@ export default function Composer({
   function recomputeMentionContext() {
     const ta = textareaRef.current;
     if (composingRef.current) return;
-    if (!ta || mentions.length === 0) {
-      if (mentionState) setMentionState(null);
-      return;
-    }
+    if (!ta) return;
     const caret = ta.selectionStart ?? value.length;
     const ctx = getMentionContext(value, caret);
     if (!ctx) {
+      if (mentionState) setMentionState(null);
+      return;
+    }
+    if (!mentions) {
       if (mentionState) setMentionState(null);
       return;
     }
@@ -63,10 +76,6 @@ export default function Composer({
             (m.hint || "").toLowerCase().includes(q),
         )
       : mentions;
-    if (items.length === 0) {
-      if (mentionState) setMentionState(null);
-      return;
-    }
     setMentionState((prev) => ({
       startIndex: ctx.startIndex,
       query: ctx.query,
@@ -161,8 +170,13 @@ export default function Composer({
         onMouseDown={focusOnBlankClick}
       >
         {topBar && <div className={styles.topBar}>{topBar}</div>}
-        {isMentionOpen && (
-          <div className={styles.mentionPopover} role="listbox">
+        {isPopoverShown && (
+          <div ref={popoverRef} id={popoverId} className={styles.mentionPopover} role="listbox">
+            {mentionState.items.length === 0 && (
+              <div className={styles.mentionEmpty} role="presentation">
+                {mentions?.length === 0 ? "No peers yet. Add one in Connections." : `No peer matches @${mentionState.query}`}
+              </div>
+            )}
             {mentionState.items.map((item, i) => {
               const unverified =
                 item.status && item.status !== "on" && item.status !== "?";
@@ -170,6 +184,7 @@ export default function Composer({
                 <button
                   type="button"
                   key={item.id}
+                  id={`${popoverId}-${i}`}
                   role="option"
                   aria-selected={i === mentionState.selected}
                   disabled={unverified}
@@ -194,6 +209,9 @@ export default function Composer({
                     color={item.accent && !unverified ? item.accent : undefined}
                   />
                   <span className={styles.mentionId}>{item.id}</span>
+                  {item.hint && item.hint !== item.id && (
+                    <span className={styles.mentionHint}>{item.hint}</span>
+                  )}
                   {unverified && (
                     <span className={styles.mentionUnverified}>
                       pending
@@ -227,7 +245,19 @@ export default function Composer({
           }}
           rows={1}
           disabled={disabled}
+          aria-controls={isPopoverShown ? popoverId : undefined}
+          aria-activedescendant={activeOptionId}
         />
+        {reason && (
+          <div className={styles.reason} role="status">
+            <span className={styles.reasonText}>{reason}</span>
+            {reasonAction && onReasonAction && (
+              <Button variant="secondary" size="sm" onClick={onReasonAction}>
+                {reasonAction}
+              </Button>
+            )}
+          </div>
+        )}
         <div className={styles.row}>
           {hint && <span className={styles.hint}>{hint}</span>}
           <span className={styles.spacer} />

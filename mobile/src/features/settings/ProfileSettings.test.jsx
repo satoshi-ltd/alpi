@@ -101,10 +101,10 @@ vi.mock('./IdentityEditor', () => ({
 }));
 
 
-vi.mock('../../components/TypedConfirm', () => ({
+vi.mock('../../components/ConfirmDialog', () => ({
   Bold: ({ children }) => <strong>{children}</strong>,
   Code: ({ children }) => <code>{children}</code>,
-  TypedConfirm: ({ open, title, expected }) =>
+  ConfirmDialog: ({ open, title, expected }) =>
     open ? <div data-confirm={title} data-expected={String(expected)} /> : null,
 }));
 

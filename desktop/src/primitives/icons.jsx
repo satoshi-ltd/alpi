@@ -151,7 +151,7 @@ export function StatusIcon({ kind, className = "", style }) {
         width: 7,
         height: 7,
         borderRadius: "50%",
-        border: "1.5px solid var(--ink-4)",
+        border: "1.5px solid var(--edge)",
         display: "inline-block",
         ...style,
       }}

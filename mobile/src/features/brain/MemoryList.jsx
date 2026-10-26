@@ -13,6 +13,9 @@ import { usePullRefresh } from '../../hooks/usePullRefresh';
 import { useTheme } from '../../theme/ThemeContext';
 import { LoadFailed } from '../../components/LoadFailed';
 import { ListSkeleton } from '../../components/ListSkeleton';
+import { useSkeleton } from '../../hooks/useSkeleton';
+import { useReveal } from '../../hooks/useReveal';
+import { FadeIn } from '../../components/FadeIn';
 
 function Meter({ used, limit, over }) {
   const { colors, fonts, fontSizes } = useTheme();
@@ -36,6 +39,9 @@ export function MemoryList({ profile: id, selectedFile = null, refreshKey = 0, o
   const mem = useProfileMemory(id);
   const { att } = useAttention(id);
   const needs = MEMORY_FILES.filter((f) => memoryItem(att, f.file));
+  const pending = mem.loading && !mem.data;
+  const bones = useSkeleton(pending);
+  const revealed = useReveal(bones);
   const refresh = mem.refresh;
   const settled = useRef(false);
   const firstKey = useRef(refreshKey);
@@ -49,9 +55,9 @@ export function MemoryList({ profile: id, selectedFile = null, refreshKey = 0, o
 
   return (
     <ScrollView refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />} contentContainerStyle={{ paddingBottom: space.s9 }}>
-      {mem.loading && !mem.data ? (
+      {bones ? (
         <ListSkeleton rows={4} helper="sm" label="Loading memories" style={{ marginTop: space.s5 }} />
-      ) : mem.error && !mem.data ? (
+      ) : pending ? null : <FadeIn animate={revealed}>{mem.error && !mem.data ? (
         <LoadFailed inline label="memories" error={mem.error} onRetry={() => mem.refresh?.()} />
       ) : (
         <>
@@ -101,7 +107,7 @@ export function MemoryList({ profile: id, selectedFile = null, refreshKey = 0, o
             </View>
           ))}
         </>
-      )}
+      )}</FadeIn>}
     </ScrollView>
   );
 }

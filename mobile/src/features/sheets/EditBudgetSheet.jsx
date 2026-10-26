@@ -29,11 +29,11 @@ export function EditBudgetSheet({ open, onClose, workgroup, onSaved }) {
         wg_id: workgroup.id,
         budget_usd: Number(value),
       });
-      toast({ title: 'Cap saved', duration: 1400 });
+      toast({ title: 'Cap saved' });
       onSaved?.();
       onClose?.();
     } catch (e) {
-      toast({ title: 'Save failed', message: String(e), duration: 2400 });
+      toast({ title: 'Save failed', message: String(e) });
     } finally {
       setSaving(false);
     }

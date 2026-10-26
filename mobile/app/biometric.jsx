@@ -25,11 +25,11 @@ export default function BiometricSettings() {
 
   const toggle = async () => {
     if (!caps.hasHardware) {
-      toast({ title: 'Not available', message: 'This device has no biometric hardware.', duration: 2200 });
+      toast({ title: 'Not available', message: 'This device has no biometric hardware.' });
       return;
     }
     if (!caps.enrolled) {
-      toast({ title: 'Not enrolled', message: `Set up ${caps.label} in your OS settings.`, duration: 2400 });
+      toast({ title: 'Not enrolled', message: `Set up ${caps.label} in your OS settings.` });
       return;
     }
     if (!on) {
@@ -37,7 +37,7 @@ export default function BiometricSettings() {
       if (!ok) return;
       await setBiometricPref(true);
       setOn(true);
-      toast({ title: `${caps.label} on`, message: 'You will be prompted on cold start.', duration: 2200 });
+      toast({ title: `${caps.label} on`, message: 'You will be prompted on cold start.' });
     } else {
       await setBiometricPref(false);
       setOn(false);

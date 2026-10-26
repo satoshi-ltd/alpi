@@ -26,6 +26,7 @@ import { JumpToLatest, JUMP_THRESHOLD } from '../../src/features/chat/JumpToLate
 import { LoadFailed } from '../../src/components/LoadFailed';
 import { MarkerCard } from '../../src/features/chat/MarkerCard';
 import { MessageActionsSheet } from '../../src/features/chat/MessageActionsSheet';
+import { workgroupTarget } from '../../src/features/chat/messageActions';
 import { wgPostSeconds } from '../../src/lib/messageExport';
 import { EnterOnce, listDismissMode, ownConfirmation, useSeenIds } from '../../src/features/chat/chatMotion';
 import { useReduceMotion } from '../../src/lib/reduceMotion';
@@ -94,9 +95,7 @@ const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, acc
   const isOwn = ownPubkey != null && m.from_pubkey === ownPubkey;
   const c = classifyMessage(m.body);
   const isStaleWorking = c.variant === 'working' && workingStale.has(m.seq);
-  const makeTarget = () => (
-    isOwn ? { kind: 'user', text: m.body } : { kind: 'agent', text: m.body, exportProfile: speakerName, exportAt: wgPostSeconds(m.at), exportAccent: speakerAccent }
-  );
+  const makeTarget = (text) => workgroupTarget({ isOwn, body: m.body, text, speakerName, speakerAccent, at: wgPostSeconds(m.at) });
 
   if (c.variant === 'task') {
     return (
@@ -109,7 +108,7 @@ const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, acc
         isFromHub={isFromHub}
         seq={m.seq}
         cost={m.cost}
-        onLongPress={isOwn ? undefined : () => setActionTarget({ ...makeTarget(), text: c.task?.content || m.body })}
+        onLongPress={() => setActionTarget(makeTarget(c.task?.content || m.body))}
       >
         {c.task?.content || ''}
       </MarkerCard>
@@ -128,7 +127,7 @@ const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, acc
         isFromHub={isFromHub}
         seq={m.seq}
         cost={m.cost}
-        onLongPress={isOwn ? undefined : () => setActionTarget({ ...makeTarget(), text: c.text })}
+        onLongPress={() => setActionTarget(makeTarget(c.text))}
       >
         {c.text}
       </MarkerCard>
@@ -591,17 +590,19 @@ function WorkgroupChatInner() {
     </>
   );
 
+  const togglePause = canAdmin && wg.is_hub
+    ? () =>
+        call('host.workgroup.action', { profile: wg.profile, wg_id: wg.id, action: paused ? 'resume' : 'pause' })
+          .then(() => wgs.refresh().catch(() => {}))
+          .catch((e) => toast({ title: paused ? 'resume failed' : 'pause failed', message: String(e) }))
+    : null;
+
   const menuActions = headerMenuActions({
     noun: 'workgroup',
     paused: !!paused,
     autoRead,
     onOpenSettings: canAdmin ? () => router.push(`/wg/${wg.id}/settings`) : null,
-    onTogglePause: canAdmin && wg.is_hub
-      ? () =>
-          call('host.workgroup.action', { profile: wg.profile, wg_id: wg.id, action: paused ? 'resume' : 'pause' })
-            .then(() => wgs.refresh().catch(() => {}))
-            .catch((e) => toast({ title: paused ? 'resume failed' : 'pause failed', message: String(e) }))
-      : null,
+    onTogglePause: togglePause,
     onToggleAutoRead: canAdmin
       ? () =>
           call('host.workgroup.update', { profile: wg.profile, wg_id: wg.id, auto_read: !autoRead })
@@ -659,13 +660,10 @@ function WorkgroupChatInner() {
         </View>
       ) : null}
       {paused ? (
-        <View style={[WG_STYLES.banner, { backgroundColor: `${colors.warning}22` }]}>
-          <Dot color={colors.warning} pulse />
-          <Text numberOfLines={2} style={[WG_STYLES.bannerText, { fontFamily: fonts.sans.medium, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * 1.4, color: colors.ink2 }]}>
-            <Text style={{ fontFamily: fonts.sans.semibold ?? fonts.sans.medium, color: colors.ink }}>This workgroup is paused.</Text>
-            {' '}New messages won't fire. Resume from the header.
-          </Text>
-        </View>
+        <Banner kind="warning" action={togglePause ? 'Resume' : null} onAction={togglePause}>
+          <Text style={{ fontFamily: fonts.sans.semibold ?? fonts.sans.medium, color: colors.ink }}>This workgroup is paused.</Text>
+          {' '}New messages won't fire.
+        </Banner>
       ) : null}
       <PipelineStrip
         run={pipelineRun}
@@ -708,6 +706,8 @@ function WorkgroupChatInner() {
             offline={daemonDown}
             onSend={sendMessage}
             mentionSource={mentionSource}
+            onResume={togglePause}
+            resumeLabel="Resume workgroup"
             seedText={composerSeed?.text}
             seedKey={composerSeed?.key}
           />

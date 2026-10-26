@@ -90,10 +90,10 @@ vi.mock('../src/components/Sheet', () => ({
           primaryAction ? React.createElement('button', { type: 'button', onClick: primaryAction.onPress, disabled: primaryAction.disabled }, primaryAction.label) : null)
       : null,
 }));
-vi.mock('../src/components/TypedConfirm', () => ({
+vi.mock('../src/components/ConfirmDialog', () => ({
   Bold: ({ children }) => React.createElement('b', {}, children),
   Code: ({ children }) => React.createElement('code', {}, children),
-  TypedConfirm: ({ open, title, onConfirm }) =>
+  ConfirmDialog: ({ open, title, onConfirm }) =>
     open ? React.createElement('button', { type: 'button', 'data-confirm': title, onClick: onConfirm }, 'confirm') : null,
 }));
 vi.mock('../src/hooks/useBack', () => ({ useBack: () => vi.fn() }));

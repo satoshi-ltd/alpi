@@ -60,8 +60,7 @@ describe('the touch shift off desktop body size', () => {
   });
 });
 
-// Owned by the modal pass — drop this list once TypedConfirm reads tracking
-const LITERAL_TRACKING_LEFT = ['src/components/TypedConfirm.jsx'];
+const LITERAL_TRACKING_LEFT = [];
 
 describe('eyebrows', () => {
   it('leaves no hand-rolled eyebrow — every uppercase label goes through the primitive', () => {

@@ -70,3 +70,42 @@ describe("Sidebar profile folds", () => {
     expect(polygons.every((p) => p.getAttribute("fill-opacity") === "0.22")).toBe(true);
   });
 });
+
+describe("Sidebar roster state", () => {
+  const roster = [
+    { name: "doc", model: "a/b", accent: "#3899e2" },
+    { name: "napper", model: "a/b", accent: "#3899e2", paused: true },
+    { name: "fresh", accent: "#3899e2" },
+  ];
+
+  it("keeps the glyphs folded for a plain disconnect and unfolds only the paused profile", () => {
+    render(<Sidebar {...BASE} profiles={roster} daemonOffline />);
+    expect(glyph("doc").dataset.unfolded).toBeUndefined();
+    expect(glyph("napper").dataset.unfolded).toBeDefined();
+  });
+
+  it("says paused and needs provider in words instead of fading the row", () => {
+    render(<Sidebar {...BASE} profiles={roster} />);
+    expect(screen.getByText("napper").closest("button")).toHaveTextContent("paused");
+    expect(screen.getByText("fresh").closest("button")).toHaveTextContent("needs provider");
+    expect(screen.getByText("doc").closest("button")).not.toHaveTextContent("paused");
+    expect(screen.getByText("napper").closest("button").style.opacity).toBe("");
+  });
+
+  it("draws the selected row's accent bar in that profile's colour", () => {
+    render(
+      <Sidebar
+        {...BASE}
+        view={{ kind: "profile", profile: "doc" }}
+        profiles={[
+          { name: "doc", model: "a/b", accent: "#3899e2", fold: "shield" },
+          { name: "abby", model: "a/b", accent: "#e8708a" },
+        ]}
+      />,
+    );
+    const selected = screen.getByText("doc").closest("button");
+    expect(selected.hasAttribute("data-sel")).toBe(true);
+    expect(selected.style.getPropertyValue("--row-accent")).toBe("#3899e2");
+    expect(screen.getByText("abby").closest("button").style.getPropertyValue("--row-accent")).toBe("");
+  });
+});

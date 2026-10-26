@@ -33,6 +33,7 @@ import { setImageRoots } from "../lib/imageRoots.js";
 import { Banner, JumpToLatest, LoadFailed, MessageBubble, ProfileChatHeader } from "../primitives/index.js";
 import { ProfileMessage } from "../primitives/index.js";
 import {
+  CheckIcon as DSCheckIcon,
   CopyIcon as DSCopyIcon,
   EditIcon,
   Fold,
@@ -58,7 +59,7 @@ import {
 } from "../lib/producedAttachments.js";
 import { rewriteCut } from "../lib/rewriteCut.js";
 import { dropInflightStub, isLastTurnInFlight } from "../lib/transcriptTurns.js";
-import { copyText } from "../lib/clipboard.js";
+import { useCopyFeedback } from "../hooks/useCopyFeedback.js";
 import { pickEffectiveModel } from "../lib/effectiveModel.js";
 
 export default function ChatPane({
@@ -73,6 +74,7 @@ export default function ChatPane({
   onSend,
   onCancel,
   onConfigureProfile,
+  onProfileSaved,
   onTogglePauseProfile,
   onRewriteMessage,
   onRetryMessage,
@@ -322,8 +324,8 @@ export default function ChatPane({
         />
       )}
       {paused && (
-        <Banner kind="warning">
-          <strong>This profile is paused.</strong> You can read the history; resume from the header to chat.
+        <Banner kind="warning" action={onTogglePause ? "Resume" : undefined} onAction={onTogglePause ?? undefined}>
+          <strong>This profile is paused.</strong> You can read the history; resume to chat.
         </Banner>
       )}
       <div className={styles.body}>
@@ -363,12 +365,14 @@ export default function ChatPane({
         connectionId={connectionId}
         availableModels={activeModels}
         onConfigureProfile={onConfigureProfile}
+        onProfileSaved={onProfileSaved}
         onSend={onSend}
         onCancel={cancellableTurn ? handleCancel : null}
         stopping={stopping}
         disabled={daemonOffline || paused}
         daemonOffline={daemonOffline}
         paused={paused}
+        onResume={onTogglePause}
         modelOverride={modelOverride}
         onModelChange={setModelOverride}
         rewriteDraft={rewriteDraft}
@@ -572,6 +576,7 @@ const Transcript = memo(function Transcript({
               sessionId={sessionId}
               lastTurnInFlight={lastTurnInFlight && !tailTurn}
               freshKeys={fresh.freshKeys}
+              restLast={!streamingTurn}
             />
             {streamingTurn ? (
               <PendingTurn
@@ -607,6 +612,7 @@ const HistoryTurns = memo(function HistoryTurns({
   sessionId,
   lastTurnInFlight,
   freshKeys,
+  restLast = false,
 }) {
   return (
     <>
@@ -628,6 +634,7 @@ const HistoryTurns = memo(function HistoryTurns({
           onRewriteMessage={onRewriteMessage}
           onRetryMessage={onRetryMessage}
           inFlight={lastTurnInFlight && i === turns.length - 1}
+          actionsAtRest={restLast && i === turns.length - 1}
         />
       ))}
     </>
@@ -650,6 +657,7 @@ const Turn = memo(function Turn({
   onRetryMessage,
   inFlight = false,
   fresh = false,
+  actionsAtRest = false,
 }) {
   const notify = useNotify();
   const allTools = turn.tools ?? [];
@@ -691,17 +699,14 @@ const Turn = memo(function Turn({
       text: turn.assistant,
     });
   };
-  const copyMessage = async (text) => {
-    if (await copyText(text)) notify({ message: "Message copied", variant: "success" });
-    else notify({ message: "Copy failed", variant: "error" });
-  };
+  const [copiedKey, copyMessage] = useCopyFeedback(() => notify({ message: "Copy failed", variant: "error" }));
   return (
     <div className={`${styles.turn} ${fresh ? styles.turnEnter : ""}`} data-enter={fresh ? "" : undefined}>
       {turn.user && (
         <ProfileMessage
           role="user"
           footer={
-            <TurnFooter ts={turn.at} side="right">
+            <TurnFooter ts={turn.at} side="right" rest={actionsAtRest}>
               {onRewriteMessage && (
                 <Tip text="Edit message" side="up">
                   <IconBtn
@@ -715,13 +720,13 @@ const Turn = memo(function Turn({
                   </IconBtn>
                 </Tip>
               )}
-              <Tip text="Copy" side="up">
+              <Tip text={copiedKey === "user" ? "Copied" : "Copy"} side="up">
                 <IconBtn
-                  aria-label="Copy message"
-                  onClick={() => copyMessage(turn.user)}
+                  aria-label={copiedKey === "user" ? "Copied" : "Copy message"}
+                  onClick={() => copyMessage("user", turn.user)}
                   className={styles.userActionBtn}
                 >
-                  <DSCopyIcon style={{ width: 12, height: 12 }} />
+                  {copiedKey === "user" ? <DSCheckIcon style={{ width: 12, height: 12 }} /> : <DSCopyIcon style={{ width: 12, height: 12 }} />}
                 </IconBtn>
               </Tip>
             </TurnFooter>
@@ -753,14 +758,14 @@ const Turn = memo(function Turn({
         <ProfileMessage
           role="assistant"
           footer={
-            <TurnFooter ts={turn.ended_at || turn.at} meta={turnMeta(turn, baseModel)} side="left">
-              <Tip text="Copy response" side="up">
+            <TurnFooter ts={turn.ended_at || turn.at} meta={turnMeta(turn, baseModel)} side="left" rest={actionsAtRest}>
+              <Tip text={copiedKey === "assistant" ? "Copied" : "Copy response"} side="up">
                 <IconBtn
-                  aria-label="Copy response"
-                  onClick={() => copyMessage(turn.assistant)}
+                  aria-label={copiedKey === "assistant" ? "Copied" : "Copy response"}
+                  onClick={() => copyMessage("assistant", turn.assistant)}
                   className={styles.agentActionBtn}
                 >
-                  <DSCopyIcon style={{ width: 13, height: 13 }} />
+                  {copiedKey === "assistant" ? <DSCheckIcon style={{ width: 13, height: 13 }} /> : <DSCopyIcon style={{ width: 13, height: 13 }} />}
                 </IconBtn>
               </Tip>
               {onRetryMessage && turn.user && (
@@ -913,7 +918,7 @@ function InlineRequests({ inline }) {
   );
 }
 
-function TurnFooter({ ts, meta = null, side = "left", children }) {
+function TurnFooter({ ts, meta = null, side = "left", rest = false, children }) {
   const time = (
     <Mono className={`tnum ${styles.footTime}`}>
       <RelativeTime ts={ts} />
@@ -922,7 +927,7 @@ function TurnFooter({ ts, meta = null, side = "left", children }) {
   return (
     <div className={styles.foot}>
       {meta ? <Tip text={meta} side={side === "right" ? "up-r" : "up-l"}>{time}</Tip> : time}
-      <span className={styles.footActions}>{children}</span>
+      <span className={`${styles.footActions} ${rest ? styles.footActionsRest : ""}`.trim()}>{children}</span>
     </div>
   );
 }

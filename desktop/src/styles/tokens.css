@@ -105,7 +105,7 @@
   --ctrl-lg: 40px;
   --ctrl-xl: 48px;
 
-  --focus-border: color-mix(in srgb, var(--ink) 30%, transparent);
+  --focus-border: var(--focus);
   --focus-ring: 0 0 0 4px color-mix(in srgb, var(--ink) 6%, transparent);
   --veil: color-mix(in srgb, var(--bg) 72%, transparent);
   --well: var(--hover);
@@ -136,6 +136,7 @@
   --dur-1: 120ms;
   --dur-2: 200ms;
   --dur-loop: 1.4s;
+  --dur-skeleton: 1.6s;
   --dur-spin: 0.9s;
   --dur-3: 260ms;
   --dur-4: 360ms;
@@ -164,12 +165,15 @@
   --ink-2:     #454545;
   --ink-3:     #6b6b6b;
   --ink-4:     #b4b4b4;
+  --edge:      #8c8c8c;
+  --focus:     rgba(20, 20, 20, .5);
   --line:      rgba(20, 20, 20, .07);
   --line-2:    rgba(20, 20, 20, .14);
   --hover:     rgba(20, 20, 20, .04);
   --selected:  rgba(20, 20, 20, .06);
   --shadow:    0 0 0 .5px var(--line-2);
   --shadow-sm: 0 0 0 .5px var(--line);
+  --shadow-edge: 0 0 0 1px var(--edge);
 
   --accent: #14110c;
   --c-success-text: #217a45;
@@ -189,12 +193,15 @@
     --ink-2:     #b4b4b4;
     --ink-3:     #8a8a8a;
     --ink-4:     #4a4a4a;
+    --edge:      #6a6a6a;
+    --focus:     rgba(237, 237, 237, .5);
     --line:      rgba(237, 237, 237, .08);
     --line-2:    rgba(237, 237, 237, .16);
     --hover:     rgba(237, 237, 237, .04);
     --selected:  rgba(237, 237, 237, .07);
     --shadow:    0 0 0 .5px var(--line-2);
     --shadow-sm: 0 0 0 .5px var(--line);
+    --shadow-edge: 0 0 0 1px var(--edge);
     --accent:    #f3efe6;
     --c-success-text: #70c592;
     --c-warning-text: #f59e5b;
@@ -213,12 +220,15 @@
   --ink-2:     #b4b4b4;
   --ink-3:     #8a8a8a;
   --ink-4:     #4a4a4a;
+  --edge:      #6a6a6a;
+  --focus:     rgba(237, 237, 237, .5);
   --line:      rgba(237, 237, 237, .08);
   --line-2:    rgba(237, 237, 237, .16);
   --hover:     rgba(237, 237, 237, .04);
   --selected:  rgba(237, 237, 237, .07);
   --shadow:    0 0 0 .5px var(--line-2);
   --shadow-sm: 0 0 0 .5px var(--line);
+  --shadow-edge: 0 0 0 1px var(--edge);
   --accent:    #f3efe6;
   --c-success-text: #70c592;
   --c-warning-text: #f59e5b;

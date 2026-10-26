@@ -6,6 +6,7 @@ import ModelPicker from "./ModelPicker.jsx";
 import Composer from "../primitives/Composer.jsx";
 import { IconBtn, Kbd, Mono } from "../primitives/index.js";
 import { useNotify } from "../primitives/Notification.jsx";
+import { FIELD_KEYS } from "./settings/util.js";
 import { attachmentMimeFor } from "../lib/fileKind.js";
 import { clearDraft, getDraft, setDraft } from "../lib/drafts.js";
 // Shares ChatPane's stylesheet on purpose — the composer renders inside the pane and reuses its class vocabulary.
@@ -22,6 +23,7 @@ export default function ChatComposer({
   disabled,
   daemonOffline = false,
   paused = false,
+  onResume = null,
   modelOverride,
   onModelChange,
   rewriteDraft,
@@ -30,6 +32,7 @@ export default function ChatComposer({
   onPendingAttachmentApplied,
   minHeight = null,
   connectionId = null,
+  onProfileSaved = null,
 }) {
   const notify = useNotify();
   const draftKey = activeProfile
@@ -48,6 +51,26 @@ export default function ChatComposer({
     setText(next);
     setDraft(draftKeyRef.current, next);
   }, []);
+  const savedEffort = activeProfile?.model_reasoning_effort ?? "";
+  const [effort, setEffort] = useState(savedEffort);
+  useEffect(() => {
+    setEffort(savedEffort);
+  }, [activeProfile?.name, savedEffort]);
+  const changeEffort = useCallback((value) => {
+    const previous = effort;
+    setEffort(value);
+    invoke("set_config_field", {
+      profile: activeProfile.name,
+      key: FIELD_KEYS.reasoningEffort,
+      value,
+      connectionId: connectionId ?? null,
+    }).then(() => {
+      onProfileSaved?.();
+    }).catch((e) => {
+      setEffort(previous);
+      notify({ message: `reasoning effort: ${String(e)}`, variant: "error" });
+    });
+  }, [effort, activeProfile?.name, connectionId, notify, onProfileSaved]);
   const [baseMentions, setBaseMentions] = useState([]);
   const [attachments, setAttachments] = useState([]);
 
@@ -195,13 +218,16 @@ export default function ChatComposer({
     }
   }
 
-  const placeholder = daemonOffline
-    ? "daemon offline — sending paused"
+  const reason = daemonOffline
+    ? "Daemon offline — sending paused"
     : paused
-      ? "Paused — resume to chat"
-      : activeProfile?.name
-        ? `Message ${activeProfile.name}…`
-        : "Send a message…";
+      ? "Profile paused"
+      : null;
+  const placeholder = paused
+    ? "Paused — resume to chat"
+    : activeProfile?.name
+      ? `Message ${activeProfile.name}…`
+      : "Send a message…";
   const sendTitle = daemonOffline
     ? "Daemon offline"
     : paused
@@ -221,6 +247,9 @@ export default function ChatComposer({
       accent={activeProfile?.accent ?? null}
       placeholder={placeholder}
       sendTitle={sendTitle}
+      reason={reason}
+      reasonAction={paused && !daemonOffline && onResume ? "Resume" : null}
+      onReasonAction={onResume}
       disabledTitle="Type a message"
       mentions={mentions}
       hint={
@@ -269,6 +298,9 @@ export default function ChatComposer({
               onChange={onModelChange}
               onSetDefault={onConfigureProfile ? () => onConfigureProfile(activeProfile) : null}
               accent={activeProfile.accent ?? null}
+              effort={effort}
+              effortSupported={(id) => !!activeProfile.model_reasoning_supported && (!activeProfile.model || id === activeProfile.model)}
+              onEffortChange={changeEffort}
             />
           )}
         </>

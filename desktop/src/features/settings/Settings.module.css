@@ -507,7 +507,7 @@
   background: var(--bg-elev);
   border: .5px solid var(--line-2);
   border-radius: var(--r-xs);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-edge);
   min-width: 240px;
   animation: popoverIn var(--dur-1) var(--ease) both;
 }

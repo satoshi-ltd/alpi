@@ -25,7 +25,7 @@
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  border: 1.5px solid var(--ink-4);
+  border: 1.5px solid var(--edge);
   display: inline-block;
 }
 

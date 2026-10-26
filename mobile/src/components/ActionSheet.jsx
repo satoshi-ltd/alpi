@@ -9,7 +9,9 @@ import { alpha, radii, space, lineHeights, typography, veil } from '../theme/tok
 import { selection } from '../lib/haptics';
 import { usePane } from '../nav/PaneContext';
 import { useTheme } from '../theme/ThemeContext';
+import { PICKER_GAP, PickerLead, PICKER_TEXT_EDGE } from './PickerLead';
 import { SheetClose } from './SheetClose';
+import { Toggle } from './Toggle';
 import { useExitSnapshot } from './useExitSnapshot';
 import { useSheetGesture } from './useSheetGesture';
 
@@ -48,7 +50,7 @@ export function ActionSheet({ open, onClose, title, subtitle, description, actio
           style={[
             {
               backgroundColor: colors.bgPane,
-              ...shadow.base,
+              ...shadow.float,
               borderTopLeftRadius: radii.xs,
               borderTopRightRadius: radii.xs,
               overflow: 'hidden',
@@ -104,35 +106,36 @@ export function ActionSheet({ open, onClose, title, subtitle, description, actio
           >
             {view.actions.map((a, i) => {
               if (a.divider) {
-                return <View key={`d-${i}`} style={{ height: 0.5, backgroundColor: colors.line, marginLeft: 52 }} />;
+                return <View key={`d-${i}`} style={{ height: 0.5, backgroundColor: colors.line, marginLeft: pickable ? PICKER_TEXT_EDGE : 52 }} />;
               }
+              const isSwitch = a.kind === 'switch';
               return (
                 <Pressable
                   key={a.id ?? i}
-                  accessibilityRole="button"
+                  accessibilityRole={isSwitch ? 'switch' : 'button'}
                   disabled={!!a.disabled}
                   onPress={() => {
                     if (a.disabled) return;
+                    if (isSwitch) {
+                      a.onValueChange?.(!a.value);
+                      return;
+                    }
                     onClose?.();
                     a.onPress?.();
                   }}
                   android_ripple={{ color: colors.selected }}
-                  accessibilityState={{ disabled: !!a.disabled, selected: !!a.selected }}
+                  accessibilityState={isSwitch ? { disabled: !!a.disabled, checked: !!a.value } : { disabled: !!a.disabled, selected: !!a.selected }}
                   style={({ pressed }) => ({
                     flexDirection: 'row',
                     alignItems: 'center',
-                    gap: space.s6,
+                    gap: PICKER_GAP,
                     paddingHorizontal: space.s7,
                     paddingVertical: space.s6,
                     backgroundColor: pressed || a.selected ? colors.selected : 'transparent',
                     opacity: a.disabled ? alpha.disabled : 1,
                   })}
                 >
-                  {pickable ? (
-                    <View style={{ width: 14, alignItems: 'center' }}>
-                      {a.selected ? <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: colors.accent }} /> : null}
-                    </View>
-                  ) : null}
+                  {pickable ? <PickerLead selected={!!a.selected} /> : null}
                   {a.icon ? (
                     <View style={{ width: 24 }}>
                       {a.icon}
@@ -158,6 +161,11 @@ export function ActionSheet({ open, onClose, title, subtitle, description, actio
                     <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.sm, color: a.detailDanger ? colors.dangerText : colors.ink3 }}>
                       {a.detail}
                     </Text>
+                  ) : null}
+                  {isSwitch ? (
+                    <View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants">
+                      <Toggle on={!!a.value} label={a.label} disabled={!!a.disabled} />
+                    </View>
                   ) : null}
                 </Pressable>
               );

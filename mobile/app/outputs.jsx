@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, RefreshControl, Text, View } from 'react-native';
+import { FlatList, RefreshControl, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { EMPTY } from '../../common/emptyCopy.mjs';
@@ -14,6 +14,7 @@ import {
 } from '../../common/notificationTriage.mjs';
 import { Button } from '../src/components/Button';
 import { MasterDetail } from '../src/components/MasterDetail';
+import { EmptyState } from '../src/components/EmptyState';
 import { NothingSelected } from '../src/components/NothingSelected';
 import { Eyebrow } from '../src/components/Eyebrow';
 import { ScreenHeader } from '../src/components/ScreenHeader';
@@ -38,7 +39,7 @@ function keepWhere(set, keep) {
 }
 
 export default function OutputsScreen() {
-  const { colors, fonts, fontSizes } = useTheme();
+  const { colors } = useTheme();
   const router = useRouter();
   const goBack = useBack();
   const { endpoint, connections, roleState, setActive, activeId } = useEndpoint();
@@ -264,14 +265,7 @@ export default function OutputsScreen() {
         showSkeleton ? (
           <ListSkeleton flat rows={5} label="Loading outputs" />
         ) : showEmpty || filtered ? (
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.s10, gap: space.s3 }}>
-            <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.ink2 }}>
-              {emptyCopy.title}
-            </Text>
-            <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink3, textAlign: 'center' }}>
-              {emptyCopy.detail}
-            </Text>
-          </View>
+          <EmptyState title={emptyCopy.title} detail={emptyCopy.detail} />
         ) : null
       }
     />

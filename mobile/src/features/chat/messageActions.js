@@ -23,3 +23,27 @@ export function retryTextFor(target) {
   if (target.kind === 'agent') return target.retryText ?? null;
   return target.text ?? null;
 }
+
+export function agentTurnTarget(turn, { profileName, accent, turnIndex, exportBody }) {
+  return {
+    kind: 'agent',
+    text: turn.assistant,
+    exportBody,
+    retryText: turn.user,
+    turnIndex,
+    exportProfile: profileName,
+    exportAt: turn.ended_at || turn.at,
+    exportAccent: accent,
+  };
+}
+
+export function showsMoreButton({ last, turn }) {
+  return !!last && !turn.pending && !!turn.assistant;
+}
+
+export function workgroupTarget({ isOwn, body, text, speakerName, speakerAccent, at }) {
+  const shown = text ?? body;
+  return isOwn
+    ? { kind: 'user', text: shown }
+    : { kind: 'agent', text: shown, exportProfile: speakerName, exportAt: at, exportAccent: speakerAccent };
+}

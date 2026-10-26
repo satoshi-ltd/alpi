@@ -1,8 +1,13 @@
 import { modelLabel } from '../../lib/modelLabel';
 
-export function modelChipLabel(model, effort) {
+export function modelChipParts(model, effort) {
   const name = modelLabel(model);
-  if (!name) return '';
-  const e = String(effort ?? '').trim();
-  return e ? `${name} · ${e}` : name;
+  if (!name) return null;
+  return { model: name, effort: String(effort ?? '').trim() };
+}
+
+export function modelChipLabel(model, effort) {
+  const parts = modelChipParts(model, effort);
+  if (!parts) return '';
+  return parts.effort ? `${parts.model} · ${parts.effort}` : parts.model;
 }

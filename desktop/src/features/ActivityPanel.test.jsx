@@ -32,6 +32,14 @@ function mount(overrides = {}) {
   return props;
 }
 
+describe("ActivityPanel dialog", () => {
+  it("is a labelled modal dialog with a heading", () => {
+    mount();
+    expect(screen.getByRole("dialog", { name: "Activity" })).toHaveAttribute("aria-modal", "true");
+    expect(screen.getByRole("heading", { level: 2, name: "Activity" })).toBeInTheDocument();
+  });
+});
+
 describe("ActivityPanel", () => {
   it("opens each running job by its own id instead of opening an empty chat", () => {
     const onOpenJob = vi.fn();

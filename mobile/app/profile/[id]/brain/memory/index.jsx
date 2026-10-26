@@ -1,9 +1,9 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
-import { Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MEMORY_FILES } from '../../../../../../common/memoryEntries.mjs';
+import { useConfirm } from '../../../../../src/components/ConfirmProvider';
 import { MasterDetail } from '../../../../../src/components/MasterDetail';
 import { MemoryDetail } from '../../../../../src/features/brain/MemoryDetail';
 import { MemoryList } from '../../../../../src/features/brain/MemoryList';
@@ -16,6 +16,7 @@ export default function MemoryRoute() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const goBack = useBack();
+  const confirm = useConfirm();
   const { colors } = useTheme();
   const wide = useMasterDetail();
   const [picked, setPicked] = useState(null);
@@ -31,10 +32,12 @@ export default function MemoryRoute() {
       setPicked(file);
       return;
     }
-    Alert.alert('Discard changes?', 'You have unsaved edits.', [
-      { text: 'Keep editing', style: 'cancel' },
-      { text: 'Discard', style: 'destructive', onPress: () => setPicked(file) },
-    ]);
+    confirm({
+      title: 'Discard changes?',
+      body: 'You have unsaved edits.',
+      confirmLabel: 'Discard',
+      cancelLabel: 'Keep editing',
+    }).then((discard) => { if (discard) setPicked(file); });
   };
   const open = (file) => router.push({ pathname: `/profile/${id}/brain/memory/[name]`, params: { name: file } });
 

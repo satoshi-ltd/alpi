@@ -16,6 +16,10 @@ const h = vi.hoisted(() => ({
   endpoint: { id: 'c1', name: 'casa', url: 'ws://casa:49200' },
 }));
 
+vi.mock('../src/components/EmptyState', async () => {
+  const R = await import('react');
+  return { EmptyState: ({ title, detail, action }) => R.createElement('div', null, R.createElement('span', null, title), R.createElement('span', null, detail), action ? R.createElement('button', { onClick: action.onPress }, action.label) : null) };
+});
 vi.mock('expo-router', () => ({
   useRouter: () => ({ push: h.push, replace: h.replace }),
   usePathname: () => h.pathname,

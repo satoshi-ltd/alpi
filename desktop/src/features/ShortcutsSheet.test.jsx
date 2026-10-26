@@ -19,4 +19,10 @@ describe("ShortcutsSheet", () => {
     const { container } = render(<ShortcutsSheet open={false} onClose={vi.fn()} />);
     expect(container.innerHTML).toBe("");
   });
+
+  it("is a labelled modal dialog with a heading", () => {
+    render(<ShortcutsSheet open onClose={vi.fn()} />);
+    expect(screen.getByRole("dialog", { name: "Keyboard shortcuts" })).toHaveAttribute("aria-modal", "true");
+    expect(screen.getByRole("heading", { level: 2, name: "Keyboard shortcuts" })).toBeInTheDocument();
+  });
 });

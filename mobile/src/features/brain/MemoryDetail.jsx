@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../theme/tokens';
 
@@ -7,7 +7,9 @@ import { AlertBanner } from '../../components/AlertBanner';
 import { useAttention } from '../../hooks/useAttention';
 import { memoryBanner, memoryItem } from '../../../../common/attention.mjs';
 import { Icon } from '../../components/Icon';
+import { useConfirm } from '../../components/ConfirmProvider';
 import { KeyboardPane } from '../../components/KeyboardPane';
+import { useToast } from '../../components/Toast';
 import { RichText } from '../../components/RichText';
 import { PanelHeader } from '../profile/PanelHeader';
 import { entryNote, memoryEntries, memoryFile } from '../../../../common/memoryEntries.mjs';
@@ -26,6 +28,8 @@ function entryDate(iso) {
 export function MemoryDetail({ profile: id, name, embedded = false, onBack, onDirtyChange, onSaved }) {
   const file = memoryFile(String(name));
   const { colors, fonts, fontSizes } = useTheme();
+  const confirm = useConfirm();
+  const toast = useToast();
   const mem = useMemoryEditor(id, name);
   const { att } = useAttention(id);
   const flag = memoryItem(att, String(name));
@@ -42,20 +46,23 @@ export function MemoryDetail({ profile: id, name, embedded = false, onBack, onDi
       return;
     }
     if (res.conflict) {
-      Alert.alert('Changed elsewhere', 'This file changed since you opened it.', [
-        { text: 'Keep editing', style: 'cancel' },
-        { text: 'Reload (discard)', style: 'destructive', onPress: () => mem.reload() },
-        {
-          text: 'Overwrite',
-          onPress: async () => {
-            const r = await mem.save({ force: true });
-            if (r.ok) onSaved?.();
-            else if (r.message) Alert.alert('Could not save', r.message);
-          },
-        },
-      ]);
+      const answer = await confirm({
+        title: 'Changed elsewhere',
+        body: 'This file changed since you opened it. Overwrite it with your edits, or reload it and discard them?',
+        confirmLabel: 'Overwrite',
+        alternateLabel: 'Reload (discard)',
+        cancelLabel: 'Keep editing',
+      });
+      if (answer === 'alternate') {
+        mem.reload();
+        return;
+      }
+      if (!answer) return;
+      const r = await mem.save({ force: true });
+      if (r.ok) onSaved?.();
+      else if (r.message) toast({ title: 'Could not save', message: r.message, kind: 'danger' });
     } else if (res.message) {
-      Alert.alert('Could not save', res.message);
+      toast({ title: 'Could not save', message: res.message, kind: 'danger' });
     }
   }
 

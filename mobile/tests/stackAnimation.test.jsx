@@ -60,6 +60,7 @@ vi.mock('../src/theme/ThemeContext', () => ({
   ThemeProvider: ({ children }) => React.createElement('div', {}, children),
   useTheme: () => ({ mode: 'light', colors: { bg: '#fff', bgPane: '#fff', line: '#eee', ink2: '#333' } }),
 }));
+vi.mock('../src/components/ConfirmProvider', () => ({ ConfirmProvider: ({ children }) => React.createElement('div', {}, children) }));
 vi.mock('../src/components/Toast', () => ({
   ToastProvider: ({ children }) => React.createElement('div', {}, children),
   useToast: () => vi.fn(),

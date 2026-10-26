@@ -13,12 +13,12 @@ describe("SkParagraph", () => {
     const ls = lines(container);
     expect(ls).toHaveLength(3);
     expect(ls.map((l) => l.style.width)).toEqual(["88%", "100%", "62%"]);
-    expect(ls.map((l) => l.style.animationDelay)).toEqual(["0s", "0.12s", "0.24s"]);
+    expect(ls.map((l) => l.style.animationDelay)).toEqual(["0s", "0.09s", "0.18s"]);
   });
 
   it("keeps high indices clean (no float noise) in the delay", () => {
     const { container } = render(<SkParagraph widths={["1%", "1%", "1%", "1%"]} />);
-    expect(lines(container)[3].style.animationDelay).toBe("0.36s");
+    expect(lines(container)[3].style.animationDelay).toBe("0.27s");
   });
 });
 

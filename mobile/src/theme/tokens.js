@@ -123,10 +123,12 @@ export const shadows = {
   light: {
     base: { shadowColor: '#141414', shadowOpacity: 0, shadowRadius: 0, elevation: 0, borderWidth: 0.5, borderColor: palettes.light.line2 },
     sm: { shadowColor: '#141414', shadowOpacity: 0, shadowRadius: 0, elevation: 0, borderWidth: 0.5, borderColor: palettes.light.line },
+    float: { shadowColor: '#141414', shadowOpacity: 0, shadowRadius: 0, elevation: 0, borderWidth: 1, borderColor: palettes.light.edge },
   },
   dark: {
     base: { shadowColor: '#000', shadowOpacity: 0, shadowRadius: 0, elevation: 0, borderWidth: 0.5, borderColor: palettes.dark.line2 },
     sm: { shadowColor: '#000', shadowOpacity: 0, shadowRadius: 0, elevation: 0, borderWidth: 0.5, borderColor: palettes.dark.line },
+    float: { shadowColor: '#000', shadowOpacity: 0, shadowRadius: 0, elevation: 0, borderWidth: 1, borderColor: palettes.dark.edge },
   },
 };
 

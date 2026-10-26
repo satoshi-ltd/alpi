@@ -2,6 +2,8 @@ import { WORKGROUP_FOLD } from "../../../common/folds.mjs";
 import { Fold, MuteIcon } from "./index.js";
 import styles from "./SidebarRow.module.css";
 
+const STATE_WORD = { paused: "paused", "needs-provider": "needs provider" };
+
 export default function SidebarRow({
   kind = "profile",
   id,
@@ -22,9 +24,7 @@ export default function SidebarRow({
   const tinted = sel && colorWash && color;
   const background = tinted
     ? `color-mix(in srgb, ${color} ${kind === "workgroup" ? "14%" : "18%"}, var(--bg-side))`
-    : sel
-      ? "var(--bg-pane)"
-      : null;
+    : null;
   const tintedColor = tinted
     ? kind === "profile"
       ? `color-mix(in srgb, ${color} 90%, var(--ink))`
@@ -37,13 +37,14 @@ export default function SidebarRow({
       className="ds-sb-row"
       data-sel={sel || undefined}
       data-state={state || undefined}
+      data-muted={muted && !isNeedsProvider ? "" : undefined}
       aria-label={ariaLabel || undefined}
       onClick={onClick}
       onContextMenu={onContextMenu}
       style={{
         ...(background ? { background } : {}),
         ...(tintedColor ? { color: tintedColor } : {}),
-        ...(muted && !isNeedsProvider ? { opacity: "var(--alpha-muted)" } : {}),
+        ...(sel && color ? { "--row-accent": color } : {}),
       }}
     >
       {leading !== undefined ? (
@@ -59,6 +60,7 @@ export default function SidebarRow({
       >
         {id}
       </span>
+      {STATE_WORD[state] && <span className={styles.stateWord}>{STATE_WORD[state]}</span>}
       {muted && !isNeedsProvider && <MuteIcon className={styles.mute} />}
       {trailing !== undefined && trailing !== null && (
         <span className="sb-row-trailing">{trailing}</span>

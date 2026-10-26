@@ -4,6 +4,9 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+vi.mock("../lib/clipboard.js", () => ({ copyText: vi.fn(async () => true) }));
+
+import { copyText } from "../lib/clipboard.js";
 import { ProcessBlock, ToolStep } from "./ToolSteps.jsx";
 import { processTimeline } from "../lib/reasoningTimeline.js";
 
@@ -16,6 +19,25 @@ afterEach(() => {
 });
 
 describe("ToolStep", () => {
+  it("flips the copy button to Copied in place for 1.5 s and raises no toast", async () => {
+    vi.useFakeTimers();
+    const notify = vi.fn();
+    window.notify = notify;
+    render(<ToolStep open tool={{ name: "read_file", args: { path: "/a" }, ok: true, duration_s: 0.2, result: "done" }} />);
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Copy result"));
+    });
+    expect(copyText).toHaveBeenCalledWith("done");
+    expect(screen.getByLabelText("Copied")).toBeTruthy();
+    expect(screen.queryByLabelText("Copy result")).toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(1600);
+    });
+    expect(screen.getByLabelText("Copy result")).toBeTruthy();
+    expect(notify).not.toHaveBeenCalled();
+    delete window.notify;
+  });
+
   it("opens to the full arguments and the stored result, labelled as an excerpt when capped", () => {
     const result = `${"x".repeat(399)}…`;
     render(<ToolStep tool={{ name: "read_file", args: { path: "/var/log/deploy.log", limit: 200 }, ok: true, duration_s: 0.24, result }} />);

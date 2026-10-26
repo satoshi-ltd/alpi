@@ -23,7 +23,6 @@ vi.mock('react-native', () => {
     Text,
     Pressable,
     Image: (props) => React.createElement('img', props),
-    Alert: { alert: h.alert },
   };
 });
 vi.mock('expo-file-system/legacy', () => ({
@@ -35,6 +34,7 @@ vi.mock('expo-sharing', () => ({
   isAvailableAsync: h.isAvailableAsync,
   shareAsync: h.shareAsync,
 }));
+vi.mock('../../components/Toast', () => ({ useToast: () => h.alert }));
 vi.mock('../../components/Spinner', () => ({ Spinner: () => <span data-testid="spinner" /> }));
 vi.mock('../../components/Icon', () => ({ Icon: ({ name }) => <i>{name}</i> }));
 vi.mock('../../lib/EndpointContext', () => ({ useEndpoint: () => ({ call: h.call, endpoint: { id: 'c1' } }) }));
@@ -95,13 +95,15 @@ describe('AttachmentCards document share flow', () => {
     expect(screen.getByTestId('spinner')).toBeTruthy();
   });
 
-  it('a failed fetch surfaces the alert instead of sharing', async () => {
+  it('a failed fetch surfaces an error toast with Retry instead of sharing', async () => {
     h.call.mockRejectedValue(new Error('request timed out after 60000ms'));
     render(<AttachmentCards items={[PDF]} variant="message" profile="agora" />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Open report.pdf' }));
 
     await waitFor(() => expect(h.alert).toHaveBeenCalled());
+    expect(h.alert.mock.calls[0][0]).toMatchObject({ title: 'Could not open file', kind: 'danger' });
+    expect(typeof h.alert.mock.calls[0][0].onRetry).toBe('function');
     expect(h.shareAsync).not.toHaveBeenCalled();
   });
 });

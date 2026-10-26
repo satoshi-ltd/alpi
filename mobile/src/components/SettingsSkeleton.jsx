@@ -1,21 +1,17 @@
 import { View } from 'react-native';
 
-import { SkeletonBar } from './SkeletonBar';
-import { space } from '../theme/tokens';
+import { SkeletonBar, STAGGER_MS } from './SkeletonBar';
+import { radii, space } from '../theme/tokens';
 
-const ROWS = [[120, 180], [90, 220], [140, 160], [70, 200], [110, 150]];
+const ROWS = [180, 220, 160, 200, 150];
 
 export function SettingsSkeleton({ wide = false }) {
   return (
     <View accessible accessibilityRole="progressbar" accessibilityLabel="Loading settings" style={{ paddingHorizontal: wide ? space.s9 : space.s8, paddingTop: space.s9, gap: space.s8 }}>
-      <SkeletonBar width={72} height={10} />
-      {ROWS.map(([label, helper], i) => (
-        <View key={label} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.s5 }}>
-          <View style={{ gap: space.s2 }}>
-            <SkeletonBar width={label} height={14} delay={i * 80} />
-            <SkeletonBar width={helper} height={10} delay={i * 80 + 40} />
-          </View>
-          <SkeletonBar width={56} height={12} delay={i * 80} />
+      {ROWS.map((helper, i) => (
+        <View key={helper} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.s5 }}>
+          <SkeletonBar width={helper} height={10} delay={i * STAGGER_MS} />
+          <SkeletonBar width={64} height={14} radius={radii.tag} delay={i * STAGGER_MS} />
         </View>
       ))}
     </View>

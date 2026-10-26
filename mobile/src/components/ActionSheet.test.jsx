@@ -10,7 +10,7 @@ const h = vi.hoisted(() => ({ window: { width: 834, height: 1194 }, insets: { bo
 vi.mock('../lib/haptics', () => ({ selection: h.selection }));
 
 vi.mock('react-native', () => {
-  const View = ({ children, style, ...p }) => React.createElement('div', p, children);
+  const View = ({ children, style, ...p }) => React.createElement('div', { ...p, 'data-vstyle': JSON.stringify(style) }, children);
   const Text = ({ children, style, ...p }) => React.createElement('span', { ...p, 'data-text-style': JSON.stringify(style) }, children);
   const Pressable = ({ children, onPress, android_ripple, style, accessibilityLabel, accessibilityHint, accessibilityState, accessibilityRole, disabled, hitSlop, ...p }) =>
     React.createElement(
@@ -51,6 +51,8 @@ vi.mock('react-native-reanimated', () => ({
 vi.mock('react-native-gesture-handler', () => ({
   GestureDetector: ({ children }) => React.createElement('div', { 'data-gesture': 'pan' }, children),
 }));
+vi.mock('./Dot', () => ({ Dot: ({ color }) => React.createElement('i', { 'data-dot': color }) }));
+vi.mock('./Toggle', () => ({ Toggle: ({ on, label }) => React.createElement('i', { 'data-switch': String(on), 'data-switch-label': label }) }));
 vi.mock('./Icon', () => ({ Icon: ({ name }) => React.createElement('span', { 'data-icon': name }) }));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => h.insets }));
 vi.mock('./useSheetGesture', () => ({
@@ -62,8 +64,8 @@ vi.mock('./useSheetGesture', () => ({
 
 vi.mock('../theme/ThemeContext', () => ({
   useTheme: () => ({
-    shadow: { base: { borderWidth: 0.5, borderColor: '#ddd' } },
-    colors: { bgPane: '#fff', ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', line: '#ddd', danger: '#f00', dangerText: '#a00', selected: '#eee' },
+    shadow: { float: { borderWidth: 0.5, borderColor: '#ddd' } },
+    colors: { bgPane: '#fff', ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', line: '#ddd', danger: '#f00', accent: '#c90', dangerText: '#a00', selected: '#eee' },
     fonts: {
       sans: { regular: 'Geist_400Regular', semibold: 'Geist_600SemiBold' },
       mono: 'GeistMono_400Regular',
@@ -288,6 +290,51 @@ describe('ActionSheet feel', () => {
   });
 });
 
+
+describe('ActionSheet picker lane', () => {
+  it('draws the choice in the accent', () => {
+    render(<ActionSheet open onClose={() => {}} actions={[{ id: 'a', label: 'doc', selected: true }, { id: 'b', label: 'abby' }]} />);
+    expect([...document.querySelectorAll('[data-dot]')].map((d) => d.getAttribute('data-dot'))).toEqual(['#c90']);
+  });
+
+  const lefts = () => [...document.querySelectorAll('[data-vstyle]')].map((d) => JSON.parse(d.getAttribute('data-vstyle') ?? 'null')).filter((st) => st && st.marginLeft !== undefined).map((st) => st.marginLeft);
+
+  it('starts the divider at the text edge of a picker', () => {
+    render(<ActionSheet open onClose={() => {}} actions={[{ id: 'a', label: 'doc', selected: true }, { divider: true }, { id: 'b', label: 'abby' }]} />);
+    expect(lefts()).toEqual([42]);
+  });
+
+  it('keeps the icon lane for a menu', () => {
+    render(<ActionSheet open onClose={() => {}} actions={[{ id: 'a', label: 'doc' }, { divider: true }]} />);
+    expect(lefts()).toEqual([52]);
+  });
+
+  it('uses a 12 gap between the dot slot and the text', () => {
+    render(<ActionSheet open onClose={() => {}} actions={[{ id: 'a', label: 'doc', selected: true }]} />);
+    const tap = JSON.parse(screen.getByRole('button', { name: 'doc' }).getAttribute('data-tap'));
+    expect([tap.gap, tap.paddingHorizontal]).toEqual([12, 16]);
+  });
+});
+
+describe('ActionSheet switch rows', () => {
+  it('flips a switch row without closing the sheet', () => {
+    const onClose = vi.fn();
+    const onValueChange = vi.fn();
+    render(<ActionSheet open onClose={onClose} actions={[{ id: 'ar', label: 'Auto-read replies', kind: 'switch', value: false, onValueChange }]} />);
+    const row = screen.getByRole('button', { name: 'Auto-read replies' });
+    expect(document.querySelector('[data-switch]').getAttribute('data-switch')).toBe('false');
+    fireEvent.click(row);
+    expect(onValueChange).toHaveBeenCalledWith(true);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('still closes for navigation rows', () => {
+    const onClose = vi.fn();
+    render(<ActionSheet open onClose={onClose} actions={[{ id: 'go', label: 'Skills', onPress: () => {} }]} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Skills' }));
+    expect(onClose).toHaveBeenCalled();
+  });
+});
 
 describe('ActionSheet item hints', () => {
   const LEFT = [{ id: 'schedule', label: 'Schedule', icon: React.createElement('i', { 'data-icon': 'clock' }), detail: '1 failed', detailDanger: true, badge: true }, { id: 'tools', label: 'Tools', detail: 'view' }];

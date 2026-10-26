@@ -59,10 +59,10 @@ vi.mock('../../components/Fold', () => ({
   Fold: ({ fold, color, size }) => React.createElement('span', { 'data-fold': fold, 'data-color': color ?? '', 'data-size': size }),
 }));
 vi.mock('../../components/Toast', () => ({ useToast: () => vi.fn() }));
-vi.mock('../../components/TypedConfirm', () => ({
+vi.mock('../../components/ConfirmDialog', () => ({
   Bold: ({ children }) => React.createElement('span', {}, children),
   Code: ({ children }) => React.createElement('span', {}, children),
-  TypedConfirm: ({ open, onConfirm }) =>
+  ConfirmDialog: ({ open, onConfirm }) =>
     open ? React.createElement('button', { type: 'button', 'data-confirm': 'sign-out', onClick: onConfirm }) : null,
 }));
 vi.mock('../../lib/biometric', () => ({

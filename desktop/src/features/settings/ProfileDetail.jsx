@@ -4,7 +4,9 @@ import Button from "../../primitives/Button.jsx";
 import ActionLink from "../../primitives/ActionLink.jsx";
 import Chip from "../../primitives/Chip.jsx";
 import Textarea from "../../primitives/Textarea.jsx";
-import Skeleton from "../../primitives/Skeleton.jsx";
+import { Reveal } from "../../primitives/Skeleton.jsx";
+import UsageSkeleton from "../../primitives/UsageSkeleton.jsx";
+import { useSkeletonPhase } from "../../hooks/useSkeleton.js";
 import { useNotify } from "../../primitives/Notification.jsx";
 import { useProfileDetail } from "../../hooks/useProfileDetail.js";
 import { useProfileSnapshot } from "../../hooks/useProfileSnapshot.js";
@@ -113,10 +115,17 @@ export default function ProfileDetail({
   );
   const refreshDetail = detailPre !== undefined ? snap.refresh : refresh;
   const profile = useMemo(
-    () => ({ ...profileSummary, ...(detail || {}) }),
+    () => ({
+      ...profileSummary,
+      ...(detail || {}),
+      ...(profileSummary?.model_reasoning_effort !== undefined
+        ? { model_reasoning_effort: profileSummary.model_reasoning_effort }
+        : {}),
+    }),
     [profileSummary, detail],
   );
   const usage = useUsageDaily(name, connId, usagePre, snapPending);
+  const { show: showUsageSkeleton, revealed: usageRevealed } = useSkeletonPhase(usage.loading && usage.days.length === 0);
 
   const snapRefresh = snap.refresh;
   const lastRefreshTickRef = useRef(refreshTick);
@@ -394,18 +403,20 @@ export default function ProfileDetail({
           </Row>
         </Section>
 
-        {(usage.loading || usage.days.length > 0) && (
+        {(usage.loading || showUsageSkeleton || usage.days.length > 0) && (
           <Section title="Usage" kicker="last 14 days">
-            {usage.days.length > 0 ? (
-              <Usage
-                days={usage.days}
-                accent={profile.accent || "var(--accent)"}
-                capLine={capUsd}
-                total30={usage.total30}
-              />
-            ) : (
-              <Skeleton width="100%" height="104px" label="Loading usage" />
-            )}
+            {showUsageSkeleton ? (
+              <UsageSkeleton />
+            ) : usage.days.length > 0 ? (
+              <Reveal animate={usageRevealed}>
+                <Usage
+                  days={usage.days}
+                  accent={profile.accent || "var(--accent)"}
+                  capLine={capUsd}
+                  total30={usage.total30}
+                />
+              </Reveal>
+            ) : null}
           </Section>
         )}
 

@@ -5,6 +5,7 @@ import { useSwrValue } from "../../../hooks/useSwrValue.js";
 import Button from "../../../primitives/Button.jsx";
 import Chip from "../../../primitives/Chip.jsx";
 import Skeleton from "../../../primitives/Skeleton.jsx";
+import { useSkeleton } from "../../../hooks/useSkeleton.js";
 import { Row } from "../primitives.jsx";
 import { ConfirmDelete, LoadFailed } from "../../../primitives/index.js";
 import { useNotify } from "../../../primitives/Notification.jsx";
@@ -140,8 +141,11 @@ export function StorageField({ profile, activeConnection, prefetched, onLoadingC
   const safeSize = cleanable.reduce((n, g) => n + g.safeSize, 0);
   const safeCount = cleanable.reduce((n, g) => n + g.safeCount, 0);
 
-  if (usageOverride == null && usage == null && !error) {
-    return <Row label="storage"><Skeleton width="14em" label="Loading storage" /></Row>;
+  const storagePending = usageOverride == null && usage == null && !error;
+  const showStorageSkeleton = useSkeleton(storagePending);
+
+  if (storagePending) {
+    return <Row label="storage">{showStorageSkeleton ? <Skeleton width="112px" height="22px" radius="var(--r-tag)" delay={0} label="Loading storage" /> : null}</Row>;
   }
   if (usageOverride == null && usage == null && error) {
     return <Row label="storage"><LoadFailed inline label="storage" onRetry={refreshUsage} /></Row>;

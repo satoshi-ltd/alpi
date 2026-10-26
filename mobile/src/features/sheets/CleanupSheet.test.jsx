@@ -15,7 +15,6 @@ vi.mock('react-native', () => {
     ScrollView: View,
     TextInput: (props) => React.createElement('input', props),
     useColorScheme: () => 'light',
-    Alert: { alert: vi.fn() },
   };
 });
 vi.mock('../../components/Sheet', () => ({
@@ -35,6 +34,8 @@ vi.mock('../../components/Row', () => ({ RowSeparator: () => <hr />, SectionHead
 vi.mock('../../components/Field', () => ({ Field: () => null }));
 const toast = vi.hoisted(() => vi.fn());
 vi.mock('../../components/Toast', () => ({ useToast: () => toast }));
+const confirm = vi.hoisted(() => vi.fn());
+vi.mock('../../components/ConfirmProvider', () => ({ useConfirm: () => confirm }));
 vi.mock('../../hooks/useDaemonData', () => ({ useOllamaModels: () => ({ data: null, loading: false }) }));
 vi.mock('../../lib/EndpointContext', () => ({ useEndpoint: () => ({ call: vi.fn() }) }));
 vi.mock('../../lib/curatedModels', () => ({ noteFor: () => null }));
@@ -105,7 +106,7 @@ describe('CleanupSheet', () => {
       expect(call).toHaveBeenCalledWith('host.cleanup.apply', { profile: 'agora', keys: ['tombstones'] }),
     );
     await waitFor(() =>
-      expect(toast).toHaveBeenCalledWith({ title: 'Workgroup tombstones: freed 0 B · 5 items', duration: 1800 }),
+      expect(toast).toHaveBeenCalledWith({ title: 'Workgroup tombstones: freed 0 B · 5 items' }),
     );
   });
 
@@ -119,9 +120,9 @@ describe('CleanupSheet', () => {
     );
   });
 
-  it('destructive categories go through a native confirm before applying', async () => {
-    const { Alert } = await import('react-native');
-    Alert.alert.mockClear();
+  it('destructive categories go through the confirm dialog before applying', async () => {
+    confirm.mockReset();
+    confirm.mockResolvedValue(true);
     const call = vi.fn(async (verb) => {
       if (verb === 'host.cleanup.plan') return { categories: PLAN };
       return { results: [{ key: 'sessions', ok: true, freed_bytes: 512 }] };
@@ -133,12 +134,23 @@ describe('CleanupSheet', () => {
     await waitFor(() => expect(scope.getByText('Old sessions')).toBeTruthy());
     fireEvent.click(scope.getByText('Old sessions'));
     expect(call.mock.calls.filter(([v]) => v === 'host.cleanup.apply')).toHaveLength(0);
-    expect(Alert.alert).toHaveBeenCalled();
-    const buttons = Alert.alert.mock.calls[0][2];
-    buttons.find((b) => b.style === 'destructive').onPress();
+    expect(confirm).toHaveBeenCalledWith(expect.objectContaining({ confirmLabel: 'Delete' }));
     await waitFor(() =>
       expect(call).toHaveBeenCalledWith('host.cleanup.apply', { profile: 'agora', keys: ['sessions'] }),
     );
+  });
+
+  it('cancelling the confirm applies nothing', async () => {
+    confirm.mockReset();
+    confirm.mockResolvedValue(false);
+    const call = vi.fn(async (verb) => (verb === 'host.cleanup.plan' ? { categories: PLAN } : { results: [] }));
+    const { container } = render(<CleanupSheet open onClose={() => {}} profileName="agora" call={call} />);
+    const scope = within(container);
+    await waitFor(() => expect(scope.getByText('Old sessions')).toBeTruthy());
+    fireEvent.click(scope.getByText('Old sessions'));
+    await waitFor(() => expect(confirm).toHaveBeenCalled());
+    await Promise.resolve();
+    expect(call.mock.calls.filter(([v]) => v === 'host.cleanup.apply')).toHaveLength(0);
   });
 
   it('a pure failure never fires onCleaned; a partial one refreshes anyway', async () => {

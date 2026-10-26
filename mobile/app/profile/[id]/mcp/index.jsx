@@ -11,7 +11,7 @@ import { LoadFailed } from '../../../../src/components/LoadFailed';
 import { Sheet } from '../../../../src/components/Sheet';
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useToast } from '../../../../src/components/Toast';
-import { Bold, Code, TypedConfirm } from '../../../../src/components/TypedConfirm';
+import { Bold, Code, ConfirmDialog } from '../../../../src/components/ConfirmDialog';
 import { useBack } from '../../../../src/hooks/useBack';
 import { useProfile } from '../../../../src/hooks/useSubject';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
@@ -186,7 +186,7 @@ export default function McpList() {
           )}
         </ScrollView>
       </Sheet>
-      <TypedConfirm
+      <ConfirmDialog
         open={!!confirmRemove}
         onClose={() => setConfirmRemove(null)}
         title={`Remove MCP ${confirmRemove ?? ''}`}

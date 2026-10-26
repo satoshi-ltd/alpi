@@ -42,7 +42,7 @@
   font-family: var(--font-mono);
   font-size: var(--fs-hero);
   font-weight: var(--fw-medium);
-  color: var(--ink-4);
+  color: var(--ink-3);
   line-height: var(--lh-tight);
 }
 
@@ -294,6 +294,8 @@
 :global(.msg-row):focus-within .footActions {
   opacity: 1;
 }
+
+.footActionsRest { opacity: 1; }
 
 .meta {
   display: flex;

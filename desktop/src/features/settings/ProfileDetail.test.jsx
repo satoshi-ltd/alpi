@@ -32,7 +32,7 @@ vi.mock("./fields/agent.jsx", () => ({
   AddProviderField: () => null,
   McpField: () => null,
   ModelField: () => null,
-  ReasoningEffortField: () => null,
+  ReasoningEffortField: ({ value }) => <span data-testid="effort-value">{value}</span>,
   TierField: () => null,
   VisionModelField: () => <span>vision field</span>,
   VoiceField: () => null,
@@ -395,5 +395,20 @@ describe("ProfileDetail appearance", () => {
     fireEvent.click(screen.getByRole("button", { name: "Reset to diamond" }));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("set_config_field", { profile: "doc", key: "tui.fold", value: "diamond", connectionId: "local" }));
     invoke.mockReset();
+  });
+
+  it("starts the effort draft from the freshly reloaded summary, not a stale detail", () => {
+    stableDetail.model_reasoning_effort = "low";
+    stableDetail.model_reasoning_supported = true;
+    render(
+      <ProfileDetail
+        profile={{ name: "doc", model: "a/x", model_reasoning_effort: "high" }}
+        profiles={[]}
+        activeConnection={{ id: "local", kind: "local" }}
+      />,
+    );
+    expect(screen.getByTestId("effort-value")).toHaveTextContent("high");
+    delete stableDetail.model_reasoning_effort;
+    delete stableDetail.model_reasoning_supported;
   });
 });

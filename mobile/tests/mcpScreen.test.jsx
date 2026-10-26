@@ -59,10 +59,10 @@ vi.mock('../src/components/Sheet', () => ({
 }));
 vi.mock('../src/components/ScreenHeader', () => ({ ScreenHeader: ({ title }) => React.createElement('h1', {}, title) }));
 vi.mock('../src/components/Toast', () => ({ useToast: () => vi.fn() }));
-vi.mock('../src/components/TypedConfirm', () => ({
+vi.mock('../src/components/ConfirmDialog', () => ({
   Bold: ({ children }) => React.createElement('b', {}, children),
   Code: ({ children }) => React.createElement('code', {}, children),
-  TypedConfirm: () => null,
+  ConfirmDialog: () => null,
 }));
 vi.mock('../src/hooks/useSubject', () => ({
   useProfile: () => ({
@@ -91,7 +91,7 @@ describe('MCP server sheet typography', () => {
     h.call.mockRejectedValue(new Error('spawn failed'));
     openServer();
     await waitFor(() => expect(screen.getByText(/spawn failed/)).toBeTruthy());
-    expect(screen.getByText(/spawn failed/).getAttribute('data-font')).toBe('GeistMono_400Regular');
+    expect(screen.getByText(/spawn failed/).getAttribute('data-font')).toBe('Geist_400Regular');
   });
 
   it('renders the empty-tools notice in a theme font', async () => {

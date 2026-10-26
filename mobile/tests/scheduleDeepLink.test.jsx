@@ -38,6 +38,8 @@ vi.mock('react-native', () => {
 });
 vi.mock('expo-router', () => ({ useLocalSearchParams: () => h.params, useRouter: () => ({ push: h.push, replace: h.replace }) }));
 vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: ({ children }) => React.createElement('div', {}, children) }));
+vi.mock('../src/components/FadeIn', () => ({ FadeIn: ({ children }) => children }));
+vi.mock('../src/hooks/useSkeleton', () => ({ useSkeleton: (loading) => loading }));
 vi.mock('../src/theme/ThemeContext', () => ({
   useTheme: () => ({
     colors: { bg: '#fff', ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', danger: '#f00', dangerText: '#a00', hover: '#eee', selected: '#ddd', line: '#eee', bg: '#fff' },
@@ -70,9 +72,9 @@ vi.mock('../src/hooks/usePullRefresh', () => ({ usePullRefresh: () => ({}) }));
 vi.mock('../src/hooks/useEvents', () => ({ useEventEffect: () => {} }));
 vi.mock('../src/hooks/useMasterDetail', () => ({ useMasterDetail: () => h.wide }));
 vi.mock('../src/lib/EndpointContext', () => ({ useEndpoint: () => ({ call: h.call }) }));
-vi.mock('../src/components/TypedConfirm', () => ({
+vi.mock('../src/components/ConfirmDialog', () => ({
   Bold: ({ children }) => React.createElement('b', {}, children),
-  TypedConfirm: ({ open, expected, onConfirm, confirmLabel }) => (open ? React.createElement('button', { type: 'button', 'data-expected': expected, onClick: onConfirm }, confirmLabel) : null),
+  ConfirmDialog: ({ open, expected, onConfirm, confirmLabel }) => (open ? React.createElement('button', { type: 'button', 'data-expected': expected, onClick: onConfirm }, confirmLabel) : null),
 }));
 vi.mock('../src/components/Field', () => ({ Field: () => React.createElement('input', { 'aria-label': 'search' }) }));
 vi.mock('../src/components/ListSkeleton', () => ({ ListSkeleton: () => null }));

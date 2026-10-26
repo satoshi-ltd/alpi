@@ -31,6 +31,16 @@ describe("BudgetEdit", () => {
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
+  it("links the invalid field to its message", () => {
+    const input = openEditor({ onSave: vi.fn() });
+    expect(input).not.toHaveAttribute("aria-describedby");
+    fireEvent.change(input, { target: { value: "-3" } });
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    const message = screen.getByText(/Enter a positive number/);
+    expect(message.id).toBeTruthy();
+    expect(input.getAttribute("aria-describedby")).toBe(message.id);
+  });
+
   it("stays open when the save fails", async () => {
     const onSave = vi.fn(async () => { throw new Error("nope"); });
     fireEvent.change(openEditor({ onSave }), { target: { value: "4" } });

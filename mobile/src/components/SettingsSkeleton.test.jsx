@@ -24,9 +24,9 @@ vi.mock('../theme/ThemeContext', () => ({ useTheme: () => ({ colors: { hover: '#
 import { SettingsSkeleton } from './SettingsSkeleton';
 
 describe('SettingsSkeleton', () => {
-  it('draws a section eyebrow and five label · helper · value rows', () => {
+  it('draws a helper bone and a value bone per row, with no bone for the known title or labels', () => {
     render(<SettingsSkeleton />);
     expect(screen.getByRole('progressbar', { name: 'Loading settings' }).dataset.accessible).toBe('true');
-    expect(document.querySelectorAll('[data-bar]').length).toBe(1 + 5 * 3);
+    expect(document.querySelectorAll('[data-bar]').length).toBe(5 * 2);
   });
 });

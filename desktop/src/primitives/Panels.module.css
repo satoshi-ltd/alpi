@@ -11,7 +11,7 @@
   background: var(--bg-elev);
   border-radius: var(--r-xs);
   border: .5px solid var(--line-2);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-edge);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -28,6 +28,7 @@
 }
 
 .panelTitle {
+  margin: 0;
   font-size: var(--text-ui);
   font-weight: var(--fw-semibold);
 }

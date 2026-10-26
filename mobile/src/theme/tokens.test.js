@@ -101,13 +101,19 @@ describe('neutral greys on the phone', () => {
 
 describe('paper surfaces on the phone', () => {
   it.each(['light', 'dark'])('makes every %s elevation a hairline seam with no blur', (mode) => {
-    for (const level of Object.values(shadows[mode])) {
+    for (const [name, level] of Object.entries(shadows[mode])) {
       expect(level.shadowOpacity).toBe(0);
       expect(level.shadowRadius).toBe(0);
       expect(level.elevation).toBe(0);
+      if (name === 'float') continue;
       expect(level.borderWidth).toBe(0.5);
       expect([palettes[mode].line, palettes[mode].line2]).toContain(level.borderColor);
     }
+  });
+
+  it.each(['light', 'dark'])('edges every %s floating surface with a 1 pt line at the control-boundary ink', (mode) => {
+    expect(shadows[mode].float.borderWidth).toBe(1);
+    expect(shadows[mode].float.borderColor).toBe(palettes[mode].edge);
   });
 });
 
@@ -122,11 +128,11 @@ describe('paper dialogs on the phone', () => {
   it('leaves no dark scrim behind a sheet, a prompt or a confirm', async () => {
     const { readFileSync } = await import('node:fs');
     const { join } = await import('node:path');
-    for (const file of ['Sheet.jsx', 'ActionSheet.jsx', 'TextPrompt.jsx', 'TypedConfirm.jsx']) {
+    for (const file of ['Sheet.jsx', 'ActionSheet.jsx', 'TextPrompt.jsx', 'ConfirmDialog.jsx']) {
       const source = readFileSync(join(import.meta.dirname, '../components', file), 'utf8');
       expect(source, file).not.toMatch(/rgba\(0,0,0,0\.45\)/);
       expect(source, file).toMatch(/backgroundColor: veil\(colors\)/);
-      expect(source, file).toMatch(/\.\.\.shadow\.base/);
+      expect(source, file).toMatch(/\.\.\.shadow\.float/);
     }
   });
 });

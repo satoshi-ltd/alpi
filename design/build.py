@@ -43,6 +43,8 @@ THEMED = (
     ("#454545", "var(--ink-2)"),
     ("#6b6b6b", "var(--ink-3)"),
     ("#b4b4b4", "var(--ink-4)"),
+    ("#8c8c8c", "var(--edge)"),
+    ("rgba(20,20,20,0.5)", "var(--focus)"),
     ("#8a5a0a", "var(--accent)"),
     ("#b73737", "var(--c-danger-text)"),
     ("#c14545", "var(--c-danger)"),

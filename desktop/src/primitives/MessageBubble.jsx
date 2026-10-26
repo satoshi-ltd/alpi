@@ -7,6 +7,7 @@ export default function MessageBubble({
   meta,
   footer,
   maxWidth = "var(--bubble-max)",
+  actionsAtRest = false,
 }) {
   const isRight = side === "right";
   const background = tint
@@ -23,7 +24,7 @@ export default function MessageBubble({
         {children}
       </div>
       {footer && (
-        <div className={`msg-actions ${styles.footer} ${isRight ? styles.footerRight : ""}`.trim()}>
+        <div data-rest={actionsAtRest || undefined} className={`msg-actions ${styles.footer} ${isRight ? styles.footerRight : ""}`.trim()}>
           {footer}
         </div>
       )}

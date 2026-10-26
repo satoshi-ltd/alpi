@@ -98,15 +98,15 @@ vi.mock('../src/components/ActionSheet', () => ({
               ? React.createElement('hr', { key: `d-${i}` })
               : React.createElement(
                   'button',
-                  { key: a.id, type: 'button', 'data-action': a.id, 'data-detail': a.detail, onClick: a.onPress },
+                  { key: a.id, type: 'button', 'data-action': a.id, 'data-detail': a.detail, 'data-value': a.kind === 'switch' ? String(a.value) : undefined, onClick: a.onPress ?? (() => a.onValueChange?.(!a.value)) },
                   a.label,
                 )),
         )
       : null,
 }));
 vi.mock('../src/components/Banner', () => ({
-  Banner: ({ kind, children, action }) =>
-    React.createElement('div', { 'data-banner': kind, 'data-banner-action': action }, children),
+  Banner: ({ kind, children, action, onAction }) =>
+    React.createElement('div', { 'data-banner': kind }, children, action ? React.createElement('button', { type: 'button', 'data-banner-action': action, onClick: onAction }) : null),
 }));
 vi.mock('../src/components/Diamond', () => ({ Diamond: () => React.createElement('span', { 'data-diamond': 'true' }) }));
 vi.mock('../src/components/Fold', () => ({ Fold: ({ fold, color, size, outlined }) => React.createElement('span', { 'data-fold': fold ?? 'diamond', 'data-color': color, 'data-size': size, 'data-outlined': String(!!outlined) }) }));
@@ -234,7 +234,7 @@ describe('Workgroup header menu', () => {
   it('offers Resume once paused, matching the banner copy', () => {
     h.wg = { ...WG, paused: true };
     render(<WorkgroupChat />);
-    expect(screen.getByText(/Resume from the header\./)).toBeTruthy();
+    expect(screen.getByText(/New messages won't fire\./)).toBeTruthy();
     openMenu();
     expect(action('pause').textContent).toBe('Resume workgroup');
     fireEvent.click(action('pause'));
@@ -268,7 +268,7 @@ describe('Workgroup header menu', () => {
     h.wg = { ...WG, auto_read: true };
     render(<WorkgroupChat />);
     openMenu();
-    expect(action('auto-read').getAttribute('data-detail')).toBe('on');
+    expect(action('auto-read').getAttribute('data-value')).toBe('true');
     fireEvent.click(action('auto-read'));
     expect(h.call).toHaveBeenCalledWith('host.workgroup.update', {
       profile: 'doc',
@@ -400,6 +400,13 @@ describe('Workgroup task-state staleness', () => {
     expect(screen.getByText(/red gate/)).toBeTruthy();
   });
 
+  it('resumes from the paused banner with the same call as the menu', () => {
+    h.wg = { ...WG, paused: true };
+    render(<WorkgroupChat />);
+    fireEvent.click(document.querySelector('[data-banner="warning"] [data-banner-action="Resume"]'));
+    expect(h.call).toHaveBeenCalledWith('host.workgroup.action', { profile: 'doc', wg_id: 'alpha', action: 'resume' });
+  });
+
   it('orders the warning above the blocked and paused banners, as desktop orders them', () => {
     h.tasksError = new Error('timeout');
     h.tasks = { blocked: { slug: 'qa', reason: 'blocked qa · red gate' }, pipeline_run: null };
@@ -407,7 +414,7 @@ describe('Workgroup task-state staleness', () => {
     render(<WorkgroupChat />);
     const stale = screen.getByText(/Workgroup state unavailable\./);
     const blocked = screen.getByText(/red gate/);
-    const paused = screen.getByText(/Resume from the header\./);
+    const paused = screen.getByText(/New messages won't fire\./);
     expect(stale.compareDocumentPosition(blocked) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(blocked.compareDocumentPosition(paused) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });

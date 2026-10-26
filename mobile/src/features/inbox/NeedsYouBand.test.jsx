@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 const h = vi.hoisted(() => ({ height: 800, fontScale: 1 }));
 
+vi.mock('../../components/EmptyState', () => ({ EmptyState: ({ title, detail, action }) => (globalThis.React ?? require('react')).createElement('div', null, title, ' ', detail, action ? (globalThis.React ?? require('react')).createElement('button', { onClick: action.onPress }, action.label) : null) }));
 vi.mock('react-native', () => {
   const View = ({ children, accessibilityRole }) => React.createElement('div', { role: accessibilityRole }, children);
   const Text = ({ children }) => React.createElement('span', {}, children);

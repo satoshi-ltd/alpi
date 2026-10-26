@@ -10,7 +10,7 @@ import { Pill } from '../../../../src/components/Pill';
 import { Row, RowGroup, RowSeparator, SectionHeader } from '../../../../src/components/Row';
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useToast } from '../../../../src/components/Toast';
-import { Bold, Code, TypedConfirm } from '../../../../src/components/TypedConfirm';
+import { Bold, Code, ConfirmDialog } from '../../../../src/components/ConfirmDialog';
 import { useBack } from '../../../../src/hooks/useBack';
 import { useProfileSummaries } from '../../../../src/hooks/useDaemonData';
 import { useProfile } from '../../../../src/hooks/useSubject';
@@ -102,7 +102,7 @@ export default function PeerDetail() {
           />
         </RowGroup>
       </ScrollView>
-      <TypedConfirm
+      <ConfirmDialog
         open={confirmRevoke}
         onClose={() => setConfirmRevoke(false)}
         title={`Revoke @${pid}`}

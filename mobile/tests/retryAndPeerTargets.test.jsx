@@ -20,7 +20,7 @@ vi.mock('react-native', () => {
 });
 vi.mock('../src/components/Icon', () => ({ Icon: () => null }));
 vi.mock('../src/components/Banner', () => ({ Banner: () => null }));
-vi.mock('../src/components/Button', () => ({ Button: () => null }));
+vi.mock('../src/components/Button', () => ({ Button: ({ title, variant, size, onPress }) => React.createElement('button', { type: 'button', 'data-variant': variant, 'data-size': size, onClick: onPress }, title) }));
 vi.mock('../src/theme/ThemeContext', async () => {
   const tokens = await import('../src/theme/tokens');
   return {
@@ -33,6 +33,7 @@ vi.mock('../src/theme/ThemeContext', async () => {
   };
 });
 
+import { buttonHeights } from '../../common/button.mjs';
 import { LoadFailed } from '../src/components/LoadFailed';
 import { FailedSend, FailedVoice } from '../src/features/chat/ErrorStates';
 import { PendingPeerActions } from '../src/features/peers/PendingPeerActions';
@@ -61,11 +62,14 @@ describe('retry and pending-peer controls', () => {
     expect(width).toBeGreaterThanOrEqual(mobile.tap);
   });
 
-  it('gives the inline Retry of a failed load the touch floor', () => {
-    render(<LoadFailed inline label="the schedule" error="daemon unreachable" onRetry={() => {}} />);
-    const { height, width } = reach(screen.getByLabelText('Retry'));
-    expect(height).toBeGreaterThanOrEqual(mobile.tap);
-    expect(width).toBeGreaterThanOrEqual(mobile.tap);
+  it('draws the inline Retry as the shared secondary button, whose height is the touch floor', () => {
+    const onRetry = vi.fn();
+    render(<LoadFailed inline label="the schedule" error="daemon unreachable" onRetry={onRetry} />);
+    const retry = screen.getByText('Retry');
+    expect([retry.getAttribute('data-variant'), retry.getAttribute('data-size')]).toEqual(['secondary', 'sm']);
+    expect(buttonHeights.sm.mobile).toBeGreaterThanOrEqual(mobile.tap);
+    retry.click();
+    expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
   it('gives Accept and Discard of a pending peer the touch floor and keeps their calls', () => {

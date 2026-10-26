@@ -259,7 +259,7 @@ describe("PairDeviceModal", () => {
     });
     const modal = screen.getByText("Pair a new device").parentElement.parentElement;
     fireEvent.click(trigger);
-    const option = await screen.findByRole("button", { name: /Restrict to/i });
+    const option = await screen.findByRole("menuitemradio", { name: /Restrict to/i });
     const menu = option.parentElement.parentElement;
 
     expect(modal).not.toContainElement(option);

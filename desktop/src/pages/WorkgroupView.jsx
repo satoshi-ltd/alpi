@@ -5,7 +5,8 @@ import { useScrollProgress } from "../lib/useScrollProgress.js";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { safeUnlisten } from "../lib/tauri-listen.js";
-import { copyText } from "../lib/clipboard.js";
+import { useNotify } from "../primitives/Notification.jsx";
+import { useCopyFeedback } from "../hooks/useCopyFeedback.js";
 import { formatCostLine } from "../lib/format.js";
 import { shortPubkey } from "../lib/pubkey.js";
 import Composer from "../primitives/Composer.jsx";
@@ -45,6 +46,7 @@ import { ChatLoadSkeleton } from "./ChatSkeletons.jsx";
 import { JumpToLatest, MarkerCard, MessageBubble } from "../primitives/index.js";
 import {
   Banner,
+  CheckIcon,
   CopyIcon,
   Fold,
   IconBtn,
@@ -600,7 +602,7 @@ export default function WorkgroupView({
             )}
             {messages.length > 0 && (
               <div className={styles.timeline}>
-                {messages.map((m) => {
+                {messages.map((m, index) => {
                   const speaker = speakerFromIndex(speakerIndex, m);
                   const cost = m.cost;
                   const ttsKey = `wg:${workgroup.id}:${m.seq}`;
@@ -624,6 +626,7 @@ export default function WorkgroupView({
                       voice={voiceMap[m.from_pubkey] || voiceForPubkey(m.from_pubkey)}
                       profile={workgroup.profile}
                       connectionName={connectionName}
+                      last={index === messages.length - 1}
                     />
                   );
                 })}
@@ -688,7 +691,7 @@ export default function WorkgroupView({
 }
 
 function renderWgFooter({
-  plainText, exportMessage, exportAccent, at, styles, ttsKey, profile, voice, ttsKind, online,
+  plainText, exportMessage, exportAccent, at, styles, ttsKey, profile, voice, ttsKind, online, copied, onCopy,
 }) {
   const isLoading = ttsKind === "loading";
   const isPlaying = ttsKind === "playing";
@@ -701,13 +704,13 @@ function renderWgFooter({
   const stampTs = at ? Date.parse(at) / 1000 : 0;
   return (
     <>
-      <Tip text="Copy" side="up">
+      <Tip text={copied ? "Copied" : "Copy"} side="up">
         <IconBtn
-          aria-label="Copy message"
-          onClick={() => copyText(plainText)}
+          aria-label={copied ? "Copied" : "Copy message"}
+          onClick={() => onCopy(plainText)}
           className={styles.footerBtn}
         >
-          <CopyIcon style={{ width: 13, height: 13 }} />
+          {copied ? <CheckIcon style={{ width: 13, height: 13 }} /> : <CopyIcon style={{ width: 13, height: 13 }} />}
         </IconBtn>
       </Tip>
       <Tip text={tipText} side="up">
@@ -826,7 +829,9 @@ const WgMessage = memo(function WgMessage({
   voice,
   profile,
   connectionName,
+  last = false,
 }) {
+  const notify = useNotify();
   const speaker = { name: speakerName, accent: speakerAccent, fold: speakerFold, bio: speakerBio };
   const cls = classifyMessage(body);
   const task = cls.variant === "task" ? cls.task : null;
@@ -841,7 +846,10 @@ const WgMessage = memo(function WgMessage({
   const speakableText = task
     ? task.content
     : (working?.content || skip?.content || done?.content || body);
+  const [copiedKey, copy] = useCopyFeedback(() => notify({ message: "Copy failed", variant: "error" }));
   const footer = renderWgFooter({
+    copied: copiedKey === "post",
+    onCopy: (text) => copy("post", text),
     plainText: speakableText,
     exportMessage: { profile: speakerName, server: connectionName, at: at ? Date.parse(at) / 1000 : 0, body: speakableText },
     exportAccent: speakerAccent,
@@ -863,6 +871,7 @@ const WgMessage = memo(function WgMessage({
         hubColor={speaker.accent}
         meta={meta}
         footer={footer}
+        actionsAtRest={last}
       >
         {task.content ? (
           <Markdown as="div" className="alpi-md" source={task.content} />
@@ -885,6 +894,7 @@ const WgMessage = memo(function WgMessage({
         hubColor={speaker.accent}
         meta={meta}
         footer={footer}
+        actionsAtRest={last}
       >
         {content ? (
           <Markdown as="div" className="alpi-md" source={content} accent={speaker.accent} />
@@ -899,6 +909,7 @@ const WgMessage = memo(function WgMessage({
       tint={speaker.accent}
       meta={meta}
       footer={footer}
+      actionsAtRest={last}
     >
       <Markdown as="div" className="alpi-md" source={body} accent={speaker.accent} />
     </MessageBubble>

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { NotificationProvider, useNotify } from "./Notification.jsx";
@@ -267,5 +269,128 @@ describe("a pinned toast is never lost while its owner waits on it", () => {
       notifyRef(undo({ ...hold, message: "Deleted 3 notifications" }));
     });
     expect(seen).toEqual(["pause", "pause"]);
+  });
+});
+
+describe("error toasts", () => {
+  it("renders the live region even with no toast", () => {
+    const { container } = render(<NotificationProvider />);
+    expect(container.ownerDocument.querySelector('[aria-live="polite"]')).not.toBeNull();
+  });
+
+  it("announces an error as an alert, keeps it until dismissed and offers a 28 px close", () => {
+    vi.useFakeTimers();
+    mount();
+    act(() => {
+      notifyRef({ message: "Could not forget the connection", variant: "error", action: "Retry", onAction: () => {} });
+      notifyRef({ message: "Saved" });
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent("Could not forget the connection");
+    act(() => {
+      vi.advanceTimersByTime(60000);
+    });
+    expect(screen.queryByText("Saved")).toBeNull();
+    expect(screen.getByText("Could not forget the connection")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(screen.queryByText("Could not forget the connection")).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it("expires an error without an action after its own duration, else 6 s", () => {
+    vi.useFakeTimers();
+    mount();
+    act(() => {
+      notifyRef({ message: "Quick failure", variant: "error", duration: 1000 });
+      notifyRef({ message: "Slow failure", variant: "error" });
+    });
+    expect(screen.queryAllByRole("button", { name: "Dismiss" })).toHaveLength(0);
+    act(() => {
+      vi.advanceTimersByTime(1300);
+    });
+    expect(screen.queryByText("Quick failure")).toBeNull();
+    expect(screen.getByText("Slow failure")).toBeTruthy();
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(screen.queryByText("Slow failure")).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it("an explicit persistent still wins", () => {
+    vi.useFakeTimers();
+    mount();
+    act(() => {
+      notifyRef({ message: "Sticky info", persistent: true });
+    });
+    act(() => {
+      vi.advanceTimersByTime(60000);
+    });
+    expect(screen.getByText("Sticky info")).toBeTruthy();
+    vi.useRealTimers();
+  });
+
+  it("evicts non-persistent toasts before a persistent error", () => {
+    mount();
+    act(() => {
+      notifyRef({ message: "Sticky error", variant: "error", action: "Retry", onAction: () => {} });
+      for (const n of [1, 2, 3]) notifyRef({ message: `Info ${n}` });
+    });
+    expect(screen.getByText("Sticky error")).toBeTruthy();
+    expect(screen.queryByText("Info 1")).toBeNull();
+    expect(screen.getByText("Info 2")).toBeTruthy();
+    expect(screen.getByText("Info 3")).toBeTruthy();
+  });
+
+  it("lets an info toast expire after 2.8 s without a close control", () => {
+    vi.useFakeTimers();
+    mount();
+    act(() => {
+      notifyRef({ message: "Copied elsewhere" });
+    });
+    expect(screen.queryByRole("button", { name: "Dismiss" })).toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(3100);
+    });
+    expect(screen.queryByText("Copied elsewhere")).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it("carries a Retry action beside the close control", () => {
+    const retry = vi.fn();
+    mount();
+    act(() => {
+      notifyRef({ message: "Upload failed", variant: "error", action: "Retry", onAction: retry });
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(retry).toHaveBeenCalled();
+  });
+
+  it("holds the window while a toast has keyboard focus and resumes on blur", () => {
+    const seen = [];
+    mount();
+    act(() => {
+      notifyRef({
+        message: "Deleted",
+        action: "Undo",
+        onAction: () => {},
+        onPause: () => seen.push("pause"),
+        onResume: () => seen.push("resume"),
+      });
+    });
+    const undo = screen.getByRole("button", { name: "Undo" });
+    fireEvent.focus(undo);
+    expect(seen).toEqual(["pause"]);
+    fireEvent.blur(undo);
+    expect(seen).toEqual(["pause", "resume"]);
+  });
+
+  it("wraps long text to two lines instead of one ellipsised line", () => {
+    const css = readFileSync(join(import.meta.dirname, "Notification.module.css"), "utf8");
+    expect(css).toMatch(/\.text \{[^}]*-webkit-line-clamp: 2;/);
+    expect(css).not.toMatch(/\.toast \{[^}]*white-space: nowrap/);
+    expect(css).toMatch(/\.closeBtn \{[^}]*width: 28px;[^}]*height: 28px;/);
   });
 });

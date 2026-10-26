@@ -4,7 +4,6 @@ import { Switch } from 'react-native';
 import { selection } from '../lib/haptics';
 import { useTheme } from '../theme/ThemeContext';
 
-// The thumb follows the finger at once; onChange returning false, or rejecting, snaps it back.
 export function Toggle({ on, onChange, disabled = false, label, color }) {
   const { colors } = useTheme();
   const [shown, setShown] = useState(!!on);
@@ -31,9 +30,9 @@ export function Toggle({ on, onChange, disabled = false, label, color }) {
       onValueChange={disabled ? undefined : flip}
       disabled={disabled}
       accessibilityLabel={label}
-      trackColor={{ false: colors.line2, true: color ?? colors.accent }}
+      trackColor={{ false: colors.edge, true: color ?? colors.accent }}
       thumbColor={colors.bgPane}
-      ios_backgroundColor={colors.line2}
+      ios_backgroundColor={colors.edge}
     />
   );
 }

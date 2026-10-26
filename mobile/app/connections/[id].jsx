@@ -16,7 +16,7 @@ import { ScreenHeader } from '../../src/components/ScreenHeader';
 import { SyncBar } from '../../src/components/SyncBar';
 import { TextPrompt } from '../../src/components/TextPrompt';
 import { useToast } from '../../src/components/Toast';
-import { Bold, Code, TypedConfirm } from '../../src/components/TypedConfirm';
+import { Bold, Code, ConfirmDialog } from '../../src/components/ConfirmDialog';
 import { UsageChart } from '../../src/components/UsageChart';
 import { PairingSheet } from '../../src/features/connections/PairingSheet';
 import { ProfilesScopeSheet } from '../../src/features/connections/ProfilesScopeSheet';
@@ -92,10 +92,10 @@ function ConnectionDetail() {
     try {
       const result = await call(method, { connection_id: id, ...params });
       await summary.refresh().catch(() => {});
-      toast({ title, duration: 1600 });
+      toast({ title });
       return result;
     } catch (e) {
-      toast({ title: `${title} failed`, message: String(e?.data?.detail ?? e), duration: 3200 });
+      toast({ title: `${title} failed`, message: String(e?.data?.detail ?? e) });
       return null;
     }
   };
@@ -106,7 +106,7 @@ function ConnectionDetail() {
       const payload = await call('host.connections.add_device', { connection_id: id, provisioner });
       setPairing(payload);
     } catch (e) {
-      toast({ title: 'Add device failed', message: String(e?.data?.detail ?? e), duration: 3200 });
+      toast({ title: 'Add device failed', message: String(e?.data?.detail ?? e) });
     }
   };
 
@@ -295,7 +295,7 @@ function ConnectionDetail() {
         onSettled={() => summary.refresh()}
       />
 
-      <TypedConfirm
+      <ConfirmDialog
         open={confirm === 'role'}
         onClose={() => setConfirm(null)}
         title={row.role === 'admin' ? 'Demote to member' : 'Promote to admin'}
@@ -317,7 +317,7 @@ function ConnectionDetail() {
           act('host.connections.update', { role: row.role === 'admin' ? 'member' : 'admin' }, 'Role changed');
         }}
       />
-      <TypedConfirm
+      <ConfirmDialog
         open={confirm === 'scope'}
         onClose={() => setConfirm(null)}
         title={perDevice ? 'Share sessions across devices' : 'Keep sessions private per device'}
@@ -336,7 +336,7 @@ function ConnectionDetail() {
           act('host.connections.update', { session_scope: perDevice ? 'connection' : 'device' }, 'Session scope changed');
         }}
       />
-      <TypedConfirm
+      <ConfirmDialog
         open={confirm === 'disable'}
         onClose={() => setConfirm(null)}
         title="Disable this connection"
@@ -353,7 +353,7 @@ function ConnectionDetail() {
           act('host.connections.set_status', { status: 'disabled' }, 'Connection disabled');
         }}
       />
-      <TypedConfirm
+      <ConfirmDialog
         open={!!confirm?.revoke}
         onClose={() => setConfirm(null)}
         title={`Revoke ${deviceTitle(confirm?.revoke)}`}
@@ -371,7 +371,7 @@ function ConnectionDetail() {
           if (target) act('host.connections.revoke_device', { device_id: target.id }, 'Device revoked');
         }}
       />
-      <TypedConfirm
+      <ConfirmDialog
         open={confirm === 'delete'}
         onClose={() => setConfirm(null)}
         title={`Delete ${row.label || row.id}`}

@@ -24,9 +24,26 @@
     opacity var(--dur-1) var(--ease);
 }
 
-.body[data-disabled="true"] {
+.body[data-disabled="true"] .input,
+.body[data-disabled="true"] .row {
   opacity: 0.6;
   pointer-events: none;
+}
+
+.reason {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  min-height: var(--ctrl-sm);
+  cursor: default;
+}
+
+.reasonText {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-base);
+  font-weight: var(--fw-medium);
+  color: var(--ink-2);
 }
 
 .body:has(.input:focus) {
@@ -107,7 +124,7 @@
   background: var(--bg-elev);
   border: .5px solid var(--line-2);
   border-radius: var(--r-xs);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-edge);
   padding: var(--space-2);
   max-height: 15rem;
   overflow-y: auto;
@@ -161,4 +178,18 @@
   font-size: var(--fs-base);
   font-weight: var(--fw-medium);
   color: var(--ink);
+}
+
+.mentionEmpty {
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--fs-base);
+  color: var(--ink-2);
+}
+
+.mentionHint {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

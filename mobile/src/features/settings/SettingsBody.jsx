@@ -11,7 +11,7 @@ import { Fold } from '../../components/Fold';
 import { OnOff } from '../../components/OnOff';
 import { Row, RowGroup, RowSeparator, SectionHeader } from '../../components/Row';
 import { useToast } from '../../components/Toast';
-import { Bold, Code, TypedConfirm } from '../../components/TypedConfirm';
+import { Bold, Code, ConfirmDialog } from '../../components/ConfirmDialog';
 import {
   authenticate,
   biometricCapabilities,
@@ -98,7 +98,6 @@ export function SettingsBody({ active = true, onDismiss }) {
       toast?.({
         title: 'Already granted',
         message: 'Revoke in iOS / Android system settings.',
-        duration: 2400,
       });
       return;
     }
@@ -124,17 +123,17 @@ export function SettingsBody({ active = true, onDismiss }) {
     onDismiss?.();
     await signOut();
     try { await unpair?.(); } catch {}
-    toast({ title: 'Signed out', message: 'All local data cleared', duration: 1800 });
+    toast({ title: 'Signed out', message: 'All local data cleared' });
     router.replace('/onboarding');
   };
 
   const toggleBiometric = async () => {
     if (!bioCaps.hasHardware) {
-      toast({ title: 'Not available', message: 'This device has no biometric hardware.', duration: 2400 });
+      toast({ title: 'Not available', message: 'This device has no biometric hardware.' });
       return;
     }
     if (!bioCaps.enrolled) {
-      toast({ title: 'Not enrolled', message: `Set up ${bioCaps.label} in your OS settings first.`, duration: 2400 });
+      toast({ title: 'Not enrolled', message: `Set up ${bioCaps.label} in your OS settings first.` });
       return;
     }
     if (!bioOn) {
@@ -142,7 +141,7 @@ export function SettingsBody({ active = true, onDismiss }) {
       if (!ok) return;
       await setBiometricPref(true);
       setBioOn(true);
-      toast({ title: `${bioCaps.label} on`, duration: 1800 });
+      toast({ title: `${bioCaps.label} on` });
     } else {
       await setBiometricPref(false);
       setBioOn(false);
@@ -277,7 +276,7 @@ export function SettingsBody({ active = true, onDismiss }) {
         </View>
       </ScrollView>
 
-      <TypedConfirm
+      <ConfirmDialog
         open={confirmSignOut}
         onClose={() => setConfirmSignOut(false)}
         title="Sign out of this phone?"

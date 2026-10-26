@@ -4,11 +4,6 @@ import { describe, expect, it } from "vitest";
 
 const SRC = join(import.meta.dirname, "..");
 
-const DECORATIVE_GLYPHS = {
-  "pages/ChatPane.module.css": [".emptyHash"],
-  "styles/design-system.css": [".ds-chat-header .title-row .ds-hash, .hash"],
-};
-
 function walk(dir, hit, out = []) {
   for (const name of readdirSync(dir)) {
     const p = join(dir, name);
@@ -55,25 +50,15 @@ describe("readable text never uses --ink-4", () => {
     expect(ink4TextSelectors(sample)).toEqual([".b .c", ".d"]);
   });
 
-  it("keeps --ink-4 for decorative glyphs only", () => {
+  it("keeps --ink-4 out of text colours", () => {
     const offenders = [];
     for (const path of FILES) {
       const rel = relative(SRC, path);
-      const allowed = DECORATIVE_GLYPHS[rel] ?? [];
       for (const selector of ink4TextSelectors(readFileSync(path, "utf8"))) {
-        if (!allowed.includes(selector)) offenders.push(`${rel} → ${selector}`);
+        offenders.push(`${rel} → ${selector}`);
       }
     }
     expect(offenders).toEqual([]);
-  });
-
-  it("names only allow-listed glyphs that still exist", () => {
-    const stale = [];
-    for (const [rel, selectors] of Object.entries(DECORATIVE_GLYPHS)) {
-      const found = ink4TextSelectors(readFileSync(join(SRC, rel), "utf8"));
-      for (const s of selectors) if (!found.includes(s)) stale.push(`${rel} → ${s}`);
-    }
-    expect(stale).toEqual([]);
   });
 
   it("finds inline text colours in scripts but not borders or backgrounds", () => {

@@ -12,6 +12,7 @@ vi.mock('react-native', () => ({
   Keyboard: { addListener: () => ({ remove: () => {} }) },
   StyleSheet: { create: (s) => s },
 }));
+vi.mock('../../components/Button', () => ({ Button: () => null }));
 vi.mock('../../components/Fold', () => ({
   Fold: ({ fold, color, size }) => React.createElement('span', { 'data-mark': color, 'data-fold': String(fold), 'data-size': String(size) }),
 }));

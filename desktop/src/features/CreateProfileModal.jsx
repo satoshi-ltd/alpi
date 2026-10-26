@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { DialogFooter, Eyebrow, Field, Modal } from "../primitives/index.js";
 import { useNotify } from "../primitives/Notification.jsx";
@@ -31,6 +31,7 @@ export default function CreateProfileModal({
 
   const trimmed = name.trim();
   const reserved = RESERVED_PROFILE_NAMES.includes(trimmed);
+  const errorId = useId();
   const formatValid = isValidProfileName(trimmed);
   const duplicate = existingNames.includes(trimmed);
   const providerOk = isProviderValueValid(providerValue);
@@ -66,6 +67,15 @@ export default function CreateProfileModal({
 
   const dirty = trimmed !== "" || JSON.stringify(providerValue) !== JSON.stringify(defaultProviderValue());
 
+  const nameError =
+    trimmed !== "" && !formatValid
+      ? "a–z, 0–9, '.', '_', '-'; must start with a letter or digit"
+      : reserved
+        ? `'${trimmed}' is reserved`
+        : duplicate
+          ? `@${trimmed} already exists`
+          : null;
+
   if (!open) return null;
 
   return (
@@ -80,19 +90,13 @@ export default function CreateProfileModal({
               if (!isComposing(e) && e.key === "Enter" && canSubmit) submit();
             }}
             placeholder="work · personal · home-server"
+            aria-invalid={nameError ? true : undefined}
+            aria-describedby={nameError ? errorId : undefined}
             spellCheck={false}
             autoFocus
           />
-          {trimmed !== "" && !formatValid && (
-            <span className={styles.error}>
-              a–z, 0–9, '.', '_', '-'; must start with a letter or digit
-            </span>
-          )}
-          {reserved && (
-            <span className={styles.error}>'{trimmed}' is reserved</span>
-          )}
-          {duplicate && (
-            <span className={styles.error}>@{trimmed} already exists</span>
+          {nameError && (
+            <span id={errorId} className={styles.error}>{nameError}</span>
           )}
           <span className={styles.helper}>
             Configure workspace, accent, peers, etc. after.

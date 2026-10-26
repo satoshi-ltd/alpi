@@ -53,13 +53,13 @@ describe("motion vocabulary", () => {
     expect(block).toMatch(/transition-duration:\s*0\.01ms\s*!important/);
   });
 
-  it("runs every looping animation on the loop or spin token", () => {
+  it("runs every looping animation on the loop, spin or skeleton token", () => {
     const offenders = [];
     for (const { rel, css } of FILES) {
       for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
         const body = m[2];
         if (!/infinite/.test(body)) continue;
-        if (!/var\(--dur-(loop|spin)[,)]/.test(body)) offenders.push(`${rel} → ${m[1].trim()}`);
+        if (!/var\(--dur-(loop|spin|skeleton)[,)]/.test(body)) offenders.push(`${rel} → ${m[1].trim()}`);
       }
     }
     expect(FILES.length).toBeGreaterThan(50);

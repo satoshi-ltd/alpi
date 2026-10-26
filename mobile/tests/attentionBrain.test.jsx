@@ -27,7 +27,6 @@ vi.mock('react-native', () => {
     ScrollView: ({ children }) => R.createElement('div', {}, children),
     RefreshControl: () => null,
     TextInput: () => React.createElement('textarea', { 'data-editor': 'true' }),
-    Alert: { alert: (...args) => h.alert(...args) },
     StyleSheet: { create: (s) => s },
     useWindowDimensions: () => ({ width: 390, height: 844 }),
   };
@@ -38,6 +37,8 @@ vi.mock('expo-router', () => ({
   useFocusEffect: () => {},
 }));
 vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: ({ children }) => React.createElement('div', {}, children) }));
+vi.mock('../src/components/FadeIn', () => ({ FadeIn: ({ children }) => children }));
+vi.mock('../src/hooks/useSkeleton', () => ({ useSkeleton: (loading) => loading }));
 vi.mock('../src/theme/ThemeContext', () => ({
   useTheme: () => ({
     colors: { bg: '#fff', ink: '#000', ink2: '#222', ink3: '#666', ink4: '#999', danger: '#f00', dangerText: '#a00', hover: '#eee', selected: '#ddd', line: '#eee' },
@@ -51,6 +52,7 @@ vi.mock('../src/components/Row', () => ({
   RowSeparator: () => null,
   SectionHeader: ({ children }) => React.createElement('h2', {}, children),
 }));
+vi.mock('../src/components/ConfirmProvider', () => ({ useConfirm: () => (...args) => h.alert(...args) }));
 vi.mock('../src/components/Dot', () => ({ Dot: ({ color }) => React.createElement('i', { 'data-dot': color }) }));
 vi.mock('../src/components/Icon', () => ({ Icon: () => null }));
 vi.mock('../src/components/RichText', () => ({ RichText: ({ children }) => React.createElement('p', {}, children) }));
@@ -220,7 +222,8 @@ describe('memory page beside the list', () => {
     globalThis.__wide = true;
     h.params = { id: 'abby' };
     h.att = null;
-    h.alert.mockClear();
+    h.alert.mockReset();
+    h.alert.mockResolvedValue(false);
     h.editorArgs.length = 0;
     h.editor = { loading: false, raw: 'x', draft: 'x', setDraft: () => {}, editing: false, canEdit: true, dirty: false, startEdit: () => {}, loadError: null };
   });
@@ -247,15 +250,15 @@ describe('memory page beside the list', () => {
     fireEvent.click(rowFor('USER.md'));
     expect(h.alert).toHaveBeenCalledTimes(1);
     expect(h.editorArgs.at(-1)).toBe('AGENT.md');
-    const buttons = h.alert.mock.calls[0][2];
-    expect(buttons.map((b) => b.text)).toEqual(['Keep editing', 'Discard']);
+    expect(h.alert.mock.calls[0][0]).toMatchObject({ confirmLabel: 'Discard', cancelLabel: 'Keep editing' });
   });
 
-  it('switches once the edit is discarded', () => {
+  it('switches once the edit is discarded', async () => {
+    h.alert.mockResolvedValue(true);
     h.editor = { ...h.editor, editing: true, dirty: true };
     render(<MemoryList />);
     fireEvent.click(rowFor('USER.md'));
-    act(() => { h.alert.mock.calls[0][2][1].onPress(); });
+    await act(async () => { await Promise.resolve(); });
     expect(h.editorArgs.at(-1)).toBe('USER.md');
   });
 

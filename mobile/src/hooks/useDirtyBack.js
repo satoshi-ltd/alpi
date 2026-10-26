@@ -1,9 +1,11 @@
 import { useNavigation } from 'expo-router';
 import { useCallback, useEffect, useRef } from 'react';
-import { Alert } from 'react-native';
+
+import { useConfirm } from '../components/ConfirmProvider';
 
 export function useDirtyBack(isDirty, onConfirmLeave) {
   const navigation = useNavigation();
+  const confirm = useConfirm();
   const dirtyRef = useRef(isDirty);
   dirtyRef.current = isDirty;
   const discardingRef = useRef(false);
@@ -20,26 +22,20 @@ export function useDirtyBack(isDirty, onConfirmLeave) {
       e.preventDefault();
       if (promptingRef.current) return;
       promptingRef.current = true;
-      Alert.alert(
-        'Discard changes?',
-        'You have unsaved edits.',
-        [
-          { text: 'Keep editing', style: 'cancel', onPress: () => { promptingRef.current = false; } },
-          {
-            text: 'Discard',
-            style: 'destructive',
-            onPress: () => {
-              promptingRef.current = false;
-              discardingRef.current = true;
-              navigation.dispatch(e.data.action);
-            },
-          },
-        ],
-        { cancelable: true, onDismiss: () => { promptingRef.current = false; } },
-      );
+      confirm({
+        title: 'Discard changes?',
+        body: 'You have unsaved edits.',
+        confirmLabel: 'Discard',
+        cancelLabel: 'Keep editing',
+      }).then((discard) => {
+        promptingRef.current = false;
+        if (!discard) return;
+        discardingRef.current = true;
+        navigation.dispatch(e.data.action);
+      });
     });
     return sub;
-  }, [navigation]);
+  }, [navigation, confirm]);
 
   return useCallback(() => {
     onConfirmLeave();

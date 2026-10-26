@@ -181,7 +181,7 @@
   background: var(--bg-elev);
   border: 0.5px solid var(--line-2);
   border-radius: var(--r-xs);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-edge);
 }
 
 .tipDay {

@@ -8,6 +8,7 @@ import { useCanAdminEarly } from '../../hooks/useActiveRole';
 import { seedCache } from '../../hooks/useDaemonData';
 import { useEndpoint } from '../../lib/EndpointContext';
 import { useTheme } from '../../theme/ThemeContext';
+import { profileLabel } from '../../lib/profileName';
 import { isDefaultProfile } from '../../../../common/rosterOrder.mjs';
 
 export function RowContextSheet({ target, onClose, onPin, onOpenSettings }) {
@@ -19,10 +20,10 @@ export function RowContextSheet({ target, onClose, onPin, onOpenSettings }) {
   const open = !!target;
   const title = target
     ? (target.kind === 'profile'
-        ? `@${target.id}`
+        ? `@${profileLabel(target.id)}`
         : `#${target.name || target.label || target.id}`)
     : '';
-  const subtitle = target ? (target.kind === 'profile' ? 'PROFILE' : 'WORKGROUP') : '';
+  const subtitle = target ? (target.kind === 'profile' ? 'profile' : 'workgroup') : '';
 
   const togglePause = async (row) => {
     try {
@@ -31,7 +32,7 @@ export function RowContextSheet({ target, onClose, onPin, onOpenSettings }) {
         key: 'paused',
         value: row.paused ? 'false' : 'true',
       });
-      toast({ title: row.paused ? 'Resumed' : 'Paused', message: `@${row.id}` });
+      toast({ title: row.paused ? 'Resumed' : 'Paused', message: `@${profileLabel(row.id)}` });
       const fresh = await call('host.profile.summaries', {});
       seedCache(endpoint?.id, 'host.profile.summaries', {}, fresh);
     } catch (e) {

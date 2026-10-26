@@ -12,8 +12,8 @@ const nav = {
 };
 vi.mock("expo-router", () => ({ useNavigation: () => nav }));
 
-const alertMock = vi.fn();
-vi.mock("react-native", () => ({ Alert: { alert: (...a) => alertMock(...a) } }));
+const confirmMock = vi.fn();
+vi.mock("../components/ConfirmProvider", () => ({ useConfirm: () => confirmMock }));
 
 import { useDirtyBack } from "./useDirtyBack";
 
@@ -23,16 +23,16 @@ function fireBeforeRemove() {
   return e;
 }
 
-function buttons() {
-  return alertMock.mock.calls.at(-1)[2];
-}
+let answer;
+const answerWith = async (value) => { await act(async () => { answer(value); }); };
 
 beforeEach(() => {
   listener = null;
   nav.setOptions.mockClear();
   nav.dispatch.mockClear();
   nav.addListener.mockClear();
-  alertMock.mockClear();
+  confirmMock.mockReset();
+  confirmMock.mockImplementation(() => new Promise((resolve) => { answer = resolve; }));
 });
 
 describe("useDirtyBack", () => {
@@ -40,34 +40,36 @@ describe("useDirtyBack", () => {
     renderHook(() => useDirtyBack(false, () => {}));
     const e = fireBeforeRemove();
     expect(e.preventDefault).not.toHaveBeenCalled();
-    expect(alertMock).not.toHaveBeenCalled();
+    expect(confirmMock).not.toHaveBeenCalled();
   });
 
   it("intercepts the native back gesture and prompts when dirty", () => {
     renderHook(() => useDirtyBack(true, () => {}));
     const e = fireBeforeRemove();
     expect(e.preventDefault).toHaveBeenCalled();
-    expect(alertMock).toHaveBeenCalledTimes(1);
+    expect(confirmMock).toHaveBeenCalledTimes(1);
+    expect(confirmMock.mock.calls[0][0]).toMatchObject({ confirmLabel: "Discard", cancelLabel: "Keep editing" });
   });
 
-  it("dispatches the original action on Discard and lets the re-fired event pass", () => {
+  it("dispatches the original action on Discard and lets the re-fired event pass", async () => {
     renderHook(() => useDirtyBack(true, () => {}));
     const first = fireBeforeRemove();
     expect(first.preventDefault).toHaveBeenCalled();
-    act(() => { buttons().find((b) => b.text === "Discard").onPress(); });
+    await answerWith(true);
     expect(nav.dispatch).toHaveBeenCalledWith({ type: "GO_BACK" });
 
     const second = fireBeforeRemove();
     expect(second.preventDefault).not.toHaveBeenCalled();
   });
 
-  it("keeps the prompt dismissable so a later back can prompt again", () => {
+  it("keeps the prompt dismissable so a later back can prompt again", async () => {
     renderHook(() => useDirtyBack(true, () => {}));
     fireBeforeRemove();
-    act(() => { buttons().find((b) => b.text === "Keep editing").onPress(); });
+    await answerWith(false);
+    expect(nav.dispatch).not.toHaveBeenCalled();
     const again = fireBeforeRemove();
     expect(again.preventDefault).toHaveBeenCalled();
-    expect(alertMock).toHaveBeenCalledTimes(2);
+    expect(confirmMock).toHaveBeenCalledTimes(2);
   });
 
   it("disables the swipe gesture only while dirty", () => {

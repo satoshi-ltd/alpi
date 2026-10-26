@@ -36,7 +36,7 @@ export function JumpToLatest({ visible, onPress }) {
           height: mobile.tap,
           borderRadius: radii.xs,
           backgroundColor: pressed ? colors.selected : colors.bgPane,
-          ...shadow.base,
+          ...shadow.float,
         })}
       >
         <Icon name="chev-down" size="sm" color={colors.ink2} />

@@ -24,7 +24,6 @@ import { useEndpoint } from '../../lib/EndpointContext';
 import { endpointHost } from '../../lib/endpoint';
 import { ACTIVITY_PATH, OUTPUTS_PATH, SETTINGS_PATH, SIDEBAR_W, openVerb, sidebarSelection } from '../../lib/panes';
 import { usePins } from '../../lib/pins';
-import { useFireOnce } from '../../lib/useFireOnce';
 import { NEW_PROFILE, NEW_WORKGROUP, useCreateGate } from './useCreateGate';
 import { PaneContext } from '../../nav/PaneContext';
 import { useTheme } from '../../theme/ThemeContext';
@@ -66,7 +65,6 @@ export function SidebarPane({ onCollapse }) {
   const daemonStatus = endpoint ? probeState.get(endpoint.id) ?? 'unknown' : 'offline';
 
   const activeFailed = !!endpoint && isDaemonDown(daemonStatus);
-  useFireOnce(activeFailed, () => setSheet('conn'));
 
   const enriched = useMemo(() => {
     const seen = new Set();
@@ -201,7 +199,7 @@ export function SidebarPane({ onCollapse }) {
           onConnPress={() => setSheet('conn')}
           onCollapse={onCollapse}
         />
-        <DaemonBanner status={daemonStatus} paired={!!endpoint} onRetry={onRefresh} />
+        <DaemonBanner status={daemonStatus} paired={!!endpoint} onRetry={onRefresh} onManage={() => setSheet('conn')} />
         <Roster
           items={enriched}
           query={query}

@@ -14,6 +14,10 @@ const h = vi.hoisted(() => ({
   refresh: vi.fn(async () => {}),
 }));
 
+vi.mock('../src/components/EmptyState', async () => {
+  const R = await import('react');
+  return { EmptyState: ({ title, detail, action }) => R.createElement('div', null, R.createElement('span', null, title), R.createElement('span', null, detail), action ? R.createElement('button', { onClick: action.onPress }, action.label) : null) };
+});
 vi.mock('expo-router', () => ({
   useRouter: () => ({ push: h.push, replace: h.replace }),
   usePathname: () => h.pathname,
@@ -72,7 +76,6 @@ vi.mock('../src/lib/pins', () => ({
     toggleWorkgroup: () => {},
   }),
 }));
-vi.mock('../src/lib/useFireOnce', () => ({ useFireOnce: () => {} }));
 
 import { PaneContext } from '../src/nav/PaneContext';
 import { SidebarPane } from '../src/features/shell/SidebarPane';

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('react-native', () => ({ Alert: {}, Pressable: () => null, ScrollView: () => null, Text: () => null, View: () => null }));
+vi.mock('../../components/ConfirmProvider', () => ({ useConfirm: () => async () => false }));
 vi.mock('../../components/Field', () => ({ Field: () => null }));
 vi.mock('../../components/PickerRow', () => ({ PickerRow: () => null }));
 vi.mock('../../components/Pill', () => ({ Pill: () => null }));

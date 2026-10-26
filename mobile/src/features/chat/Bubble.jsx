@@ -3,9 +3,10 @@ import { formatCostLine } from "../../../../common/format.mjs";
 import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
-import { radii, space, typography } from '../../theme/tokens';
+import { mobile, radii, space, typography } from '../../theme/tokens';
 
 import { Fold } from '../../components/Fold';
+import { Icon } from '../../components/Icon';
 import { RichText } from '../../components/RichText';
 import { BUBBLE_MAX_PANE } from '../../lib/panes';
 import { usePane } from '../../nav/PaneContext';
@@ -35,12 +36,35 @@ function useLongPressPulse(onLongPress) {
   return { onLongPress: handle, pulse: reduceMotion ? null : pulse };
 }
 
+export const MESSAGE_ACTIONS_NAME = 'message-actions';
+const ACCESSIBILITY_ACTIONS = [{ name: MESSAGE_ACTIONS_NAME, label: 'Message actions' }];
+
 function MessagePress({ onLongPress, style, children }) {
   const press = useLongPressPulse(onLongPress);
   return (
-    <AnimatedPressable onLongPress={press.onLongPress} delayLongPress={LONG_PRESS_MS} style={[style, press.pulse]}>
+    <AnimatedPressable
+      onLongPress={press.onLongPress}
+      delayLongPress={LONG_PRESS_MS}
+      accessibilityActions={onLongPress ? ACCESSIBILITY_ACTIONS : undefined}
+      onAccessibilityAction={onLongPress ? (e) => { if (e.nativeEvent.actionName === MESSAGE_ACTIONS_NAME) onLongPress(e); } : undefined}
+      style={[style, press.pulse]}
+    >
       {children}
     </AnimatedPressable>
+  );
+}
+
+function MoreButton({ onPress }) {
+  const { colors } = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel="Message actions"
+      style={{ minWidth: mobile.tap, minHeight: mobile.tap, alignItems: 'center', justifyContent: 'center' }}
+    >
+      <Icon name="more" size="lg" color={colors.ink3} />
+    </Pressable>
   );
 }
 
@@ -70,6 +94,7 @@ const S = StyleSheet.create({
     paddingHorizontal: space.s7,
     paddingVertical: space.s6,
   },
+  stampRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   speakerRow: { flexDirection: 'row', alignItems: 'center', gap: space.s2 },
   wgRowLeft: { alignItems: 'flex-start', paddingHorizontal: space.s7, gap: space.s1 },
   wgRowRight: { alignItems: 'flex-end', paddingHorizontal: space.s7, gap: space.s1 },
@@ -108,7 +133,7 @@ export function ProfileUserMessage({ text, ts, attachments, onLongPress, profile
   );
 }
 
-export function ProfileAssistantMessage({ text, ts, attachments, onLongPress, profile, accent = null }) {
+export function ProfileAssistantMessage({ text, ts, attachments, onLongPress, onMore, profile, accent = null }) {
   const { colors, fontSizes } = useTheme();
   const body = stripProducedImageMarkdown(text, attachments);
   return (
@@ -121,7 +146,14 @@ export function ProfileAssistantMessage({ text, ts, attachments, onLongPress, pr
       {attachments?.length ? (
         <AttachmentCards items={attachments} variant="message" profile={profile} />
       ) : null}
-      <Stamp ts={ts} />
+      {onMore ? (
+        <View style={S.stampRow}>
+          <Stamp ts={ts} />
+          <MoreButton onPress={onMore} />
+        </View>
+      ) : (
+        <Stamp ts={ts} />
+      )}
     </MessagePress>
   );
 }

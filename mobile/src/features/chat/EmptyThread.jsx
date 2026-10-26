@@ -1,54 +1,19 @@
-import { StyleSheet, Text, View } from 'react-native';
-
 import { FOLD_SIZES } from '../../../../common/folds.mjs';
+import { EmptyState } from '../../components/EmptyState';
 import { Fold } from '../../components/Fold';
 import { CONTENT_MAX_W } from '../../lib/panes';
-import { lineHeights, space, tracking } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeContext';
 
-const STYLES = StyleSheet.create({
-  root: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.s10 },
-  column: { alignSelf: 'center', width: '100%', maxWidth: CONTENT_MAX_W, alignItems: 'center', gap: space.s7 },
-  heading: { textAlign: 'center' },
-  detail: { textAlign: 'center' },
-});
-
 export function EmptyThread({ heading, detail, accent, fold }) {
-  const { colors, fonts, fontSizes } = useTheme();
+  const { colors } = useTheme();
   return (
-    <View style={STYLES.root}>
-      <View style={STYLES.column}>
-        <Fold fold={fold} color={accent ?? colors.ink3} size={FOLD_SIZES.hero} />
-        <Text
-          style={[
-            STYLES.heading,
-            {
-              fontFamily: fonts.sans.semibold,
-              fontSize: fontSizes.xxl,
-              lineHeight: fontSizes.xxl * lineHeights.cozy,
-              letterSpacing: fontSizes.xxl * tracking.tight,
-              color: colors.ink,
-            },
-          ]}
-        >
-          {heading}
-        </Text>
-        {detail ? (
-          <Text
-            style={[
-              STYLES.detail,
-              {
-                fontFamily: fonts.mono,
-                fontSize: fontSizes.xs,
-                lineHeight: fontSizes.xs * lineHeights.cozy,
-                color: colors.ink3,
-              },
-            ]}
-          >
-            {detail}
-          </Text>
-        ) : null}
-      </View>
-    </View>
+    <EmptyState
+      hero
+      monoDetail
+      maxWidth={CONTENT_MAX_W}
+      mark={<Fold fold={fold} color={accent ?? colors.ink3} size={FOLD_SIZES.hero} />}
+      title={heading}
+      detail={detail}
+    />
   );
 }

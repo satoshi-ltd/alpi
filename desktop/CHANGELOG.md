@@ -11,6 +11,16 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.8.21 — 2026-10-26 — clearer surfaces, one menu, errors that wait for you
+
+- Floating surfaces (modals, menus, popovers, toasts) get a clear 1 px edge, and loading states draw the shape of what is coming instead of a grey slab.
+- Every menu shares one set of rows with a check on the current choice; dropdowns, the header menu and context menus read the same and announce their roles.
+- Error toasts wrap to two lines, can be dismissed and offer Retry, and an error you can retry stays until you dismiss it; copying confirms on the button itself.
+- The composer shows the effort next to a capped model name and picks it in the same popover; a paused profile says why and offers Resume; offline is said once, by the banner.
+- Workgroup message actions appear on keyboard focus, the selected row has an accent bar, unchecked boxes and invalid fields are easier to see, and the palette and panels announce themselves as dialogs.
+  Requires alpi 0.17.28.
+
+
 ## v0.8.20 — 2026-10-25 — failed tool calls stay closed
 
 - A tool call that fails no longer opens itself or its group: the group still shows `N failed` and you open the call to read the error.

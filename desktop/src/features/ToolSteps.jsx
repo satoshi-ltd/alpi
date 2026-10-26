@@ -1,11 +1,11 @@
-import { memo, useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 
 import CodeView from "../primitives/CodeView.jsx";
 import IconBtn from "../primitives/IconBtn.jsx";
 import Reasoning from "../primitives/Reasoning.jsx";
 import Reveal from "../primitives/Reveal.jsx";
 import Tip from "../primitives/Tip.jsx";
-import { CaretIcon, CopyIcon, Icon } from "../primitives/icons.jsx";
+import { CaretIcon, CheckIcon, CopyIcon, Icon } from "../primitives/icons.jsx";
 import { useNotify } from "../primitives/Notification.jsx";
 import { pluralize } from "../../../common/pluralize.mjs";
 import { copyText } from "../lib/clipboard.js";
@@ -34,17 +34,26 @@ function useNow(active) {
   return now;
 }
 
+const COPIED_MS = 1500;
+
 function CopyButton({ text, label }) {
   const notify = useNotify();
+  const [copied, setCopied] = useState(false);
+  const timer = useRef(null);
+  useEffect(() => () => clearTimeout(timer.current), []);
   const onCopy = async (e) => {
     e.stopPropagation();
-    if (await copyText(text)) notify({ message: "Copied", variant: "success" });
-    else notify({ message: "Copy failed", variant: "error" });
+    if (await copyText(text)) {
+      setCopied(true);
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => setCopied(false), COPIED_MS);
+    } else notify({ message: "Copy failed", variant: "error" });
   };
+  const shown = copied ? "Copied" : label;
   return (
-    <Tip text={label} side="up-r" escape>
-      <IconBtn aria-label={label} onClick={onCopy} className={styles.copyBtn}>
-        <CopyIcon style={{ width: 12, height: 12 }} />
+    <Tip text={shown} side="up-r" escape>
+      <IconBtn aria-label={shown} onClick={onCopy} className={styles.copyBtn}>
+        {copied ? <CheckIcon style={{ width: 12, height: 12 }} /> : <CopyIcon style={{ width: 12, height: 12 }} />}
       </IconBtn>
     </Tip>
   );

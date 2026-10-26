@@ -8,6 +8,7 @@ import { radii, space, typography } from '../../src/theme/tokens';
 import { ActionSheet } from '../../src/components/ActionSheet';
 import { FOLD_SIZES } from '../../../common/folds.mjs';
 import { Button } from '../../src/components/Button';
+import { Banner } from '../../src/components/Banner';
 import { DaemonBanner, isDaemonDown } from '../../src/components/DaemonBanner';
 import { Meter } from '../../src/components/Meter';
 import { useToast } from '../../src/components/Toast';
@@ -23,10 +24,10 @@ import { Composer } from '../../src/features/chat/Composer';
 import { stripProducedImageMarkdown } from '../../../common/producedAttachments.mjs';
 import { MessageActionsSheet } from '../../src/features/chat/MessageActionsSheet';
 import { ModelEffortSheets } from '../../src/features/chat/ModelEffortSheets';
-import { modelChipLabel } from '../../src/features/chat/modelChip';
+import { modelChipLabel, modelChipParts } from '../../src/features/chat/modelChip';
 import { EnterOnce, listDismissMode, useSeenIds } from '../../src/features/chat/chatMotion';
 import { useReduceMotion } from '../../src/lib/reduceMotion';
-import { retryTextFor } from '../../src/features/chat/messageActions';
+import { agentTurnTarget, retryTextFor, showsMoreButton } from '../../src/features/chat/messageActions';
 import { visibleWindow } from '../../src/lib/chatWindow';
 import { compactProducedTool } from '../../../common/producedAttachments.mjs';
 import { modelLabel } from '../../src/lib/modelLabel';
@@ -86,7 +87,7 @@ function PaneColumn({ children }) {
   return <View style={twoPane ? TURN_STYLES.contentColumn : undefined}>{children}</View>;
 }
 
-const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profileModel, accent, fold, colors, fonts, fontSizes, onActionTarget, inFlight = false }) {
+const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profileModel, accent, fold, colors, fonts, fontSizes, onActionTarget, inFlight = false, last = false }) {
   const ts = turn.at ? relativeTime(turn.at * 1000) : '';
   const answeredTs = turn.ended_at ? relativeTime(turn.ended_at * 1000) : ts;
   const parts = turnParts(turn);
@@ -97,6 +98,12 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profil
   const routedModel = routedModelFor(turn, profileModel);
   const active = turn.pending && !showAssistant;
   const reasoningLive = reasoningStreams(turn, parts.reasoning, showAssistant);
+  const openAgentActions = () => onActionTarget(agentTurnTarget(turn, {
+    profileName,
+    accent,
+    turnIndex,
+    exportBody: stripProducedImageMarkdown(turn.assistant, turn.output_attachments),
+  }));
   return (
     <View style={TURN_STYLES.block}>
       {turn.user ? (
@@ -138,16 +145,8 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profil
           attachments={turn.output_attachments}
           profile={profileName}
           accent={accent}
-          onLongPress={() => onActionTarget({
-            kind: 'agent',
-            text: turn.assistant,
-            exportBody: stripProducedImageMarkdown(turn.assistant, turn.output_attachments),
-            retryText: turn.user,
-            turnIndex,
-            exportProfile: profileName,
-            exportAt: turn.ended_at || turn.at,
-            exportAccent: accent,
-          })}
+          onLongPress={openAgentActions}
+          onMore={showsMoreButton({ last, turn }) ? openAgentActions : undefined}
         />
       ) : null}
       {showAssistant && routedModel ? (
@@ -259,6 +258,7 @@ function ChatList({ turns, pendingTurn, hydrating, profileName, model, accent, f
           fontSizes={fontSizes}
           onActionTarget={onActionTarget}
           inFlight={lastTurnInFlight && item.turnIndex === lastTurnIndex}
+          last={item.turnIndex === lastTurnIndex}
         />
       </EnterOnce>
     ),
@@ -681,6 +681,13 @@ function ProfileChatInner() {
   const turns = sessionData?.turns ?? [];
   const paused = !!profile.paused;
   const chipLabel = canAdmin ? modelChipLabel(profile.model, detail?.model_reasoning_effort) : '';
+  const chipParts = canAdmin ? modelChipParts(profile.model, detail?.model_reasoning_effort) : null;
+  const togglePause = canAdmin
+    ? () =>
+        call('host.config.set_field', { profile: id, key: 'paused', value: paused ? 'false' : 'true' })
+          .then(() => summaries.refresh().catch(() => {}))
+          .catch((e) => toast({ title: paused ? 'Resume failed' : 'Pause failed', message: String(e) }))
+    : null;
   const saveProfileField = (key, value) =>
     call('host.config.set_field', { profile: id, key, value }).then(() => {
       summaries.refresh();
@@ -692,12 +699,7 @@ function ProfileChatInner() {
     paused,
     autoRead: voiceCfg.autoRead,
     onOpenSettings: canAdmin ? () => router.push(`/profile/${profile.name}/settings`) : null,
-    onTogglePause: canAdmin
-      ? () =>
-          call('host.config.set_field', { profile: id, key: 'paused', value: paused ? 'false' : 'true' })
-            .then(() => summaries.refresh().catch(() => {}))
-            .catch((e) => toast({ title: paused ? 'Resume failed' : 'Pause failed', message: String(e) }))
-      : null,
+    onTogglePause: togglePause,
     onToggleAutoRead: canAdmin
       ? () =>
           call('host.voice.set_auto_read', { profile: id, enabled: !voiceCfg.autoRead })
@@ -733,12 +735,10 @@ function ProfileChatInner() {
       />
       <DaemonBanner status={daemonStatus} paired={!!endpoint} onRetry={() => session.refresh()} />
       {paused ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3, paddingHorizontal: space.s7, paddingVertical: space.s4, backgroundColor: `${colors.warning}22` }}>
-          <Text numberOfLines={2} style={{ flex: 1, fontFamily: fonts.sans.medium, fontSize: fontSizes.sm, color: colors.ink2 }}>
-            <Text style={{ fontFamily: fonts.sans.semibold ?? fonts.sans.medium, color: colors.ink }}>This profile is paused.</Text>
-            {' '}You can read the history; resume from ··· to chat.
-          </Text>
-        </View>
+        <Banner kind="warning" action={togglePause ? 'Resume' : null} onAction={togglePause}>
+          <Text style={{ fontFamily: fonts.sans.semibold ?? fonts.sans.medium, color: colors.ink }}>This profile is paused.</Text>
+          {' '}You can read the history.
+        </Banner>
       ) : null}
       {blocked ? (
         <NeedsSetup
@@ -785,7 +785,8 @@ function ProfileChatInner() {
               attachments={attachments}
               onPickAttachment={pickAttachment}
               onRemoveAttachment={(i) => setAttachments((p) => p.filter((_, j) => j !== i))}
-              modelChip={chipLabel ? { label: chipLabel, onPress: () => setModelSheetOpen(true) } : null}
+              onResume={togglePause}
+              modelChip={chipLabel ? { label: chipLabel, model: chipParts.model, effort: chipParts.effort, onPress: () => setModelSheetOpen(true) } : null}
             />
           </PaneColumn>
         </KeyboardPane>

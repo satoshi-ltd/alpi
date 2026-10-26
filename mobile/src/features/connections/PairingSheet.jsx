@@ -81,14 +81,14 @@ export function PairingSheet({ open, onClose, payload, onSettled }) {
 
   const copy = async () => {
     const ok = await copyText(link);
-    toast({ title: ok ? 'Pairing link copied' : 'Copy failed', duration: 1400 });
+    toast({ title: ok ? 'Pairing link copied' : 'Copy failed' });
   };
 
   const share = async () => {
     try {
       await Share.share({ message: link });
     } catch {
-      toast({ title: 'Share failed', duration: 1400 });
+      toast({ title: 'Share failed' });
     }
   };
 

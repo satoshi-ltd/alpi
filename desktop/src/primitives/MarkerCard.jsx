@@ -40,6 +40,7 @@ export default function MarkerCard({
   footer,
   label,
   stale = false,
+  actionsAtRest = false,
 }) {
   const isRight = side === "right";
   const hasBody = Boolean(children);
@@ -68,7 +69,7 @@ export default function MarkerCard({
         {hasBody && <div className="body">{children}</div>}
       </div>
       {footer && (
-        <div className={`msg-actions ${styles.footer} ${isRight ? styles.footerRight : ""}`.trim()}>
+        <div data-rest={actionsAtRest || undefined} className={`msg-actions ${styles.footer} ${isRight ? styles.footerRight : ""}`.trim()}>
           {footer}
         </div>
       )}

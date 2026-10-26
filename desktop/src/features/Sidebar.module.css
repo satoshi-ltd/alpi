@@ -161,8 +161,8 @@
 }
 
 .searchClose {
-  width: var(--ctrl-2xs);
-  height: var(--ctrl-2xs);
+  width: var(--space-9);
+  height: var(--space-9);
   flex-shrink: 0;
   color: var(--ink-3);
 }
@@ -186,12 +186,13 @@
 }
 
 .footer :global(.ds-tip) .footerIcon {
-  width: var(--ctrl-xs);
+  width: var(--ctrl-sm);
+  height: var(--ctrl-sm);
 }
 
 .sectionAdd {
-  width: var(--ctrl-2xs);
-  height: var(--ctrl-2xs);
+  width: var(--space-9);
+  height: var(--space-9);
 }
 
 .sectionAdd :global(.ds-icon) {
@@ -200,8 +201,8 @@
 }
 
 .pinButton {
-  width: var(--ctrl-xs);
-  height: var(--ctrl-xs);
+  width: var(--space-9);
+  height: var(--space-9);
 }
 
 .footerSpacer { flex: 1; }

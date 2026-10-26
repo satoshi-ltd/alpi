@@ -13,7 +13,7 @@ import { Pill } from '../../../../src/components/Pill';
 import { Row, RowGroup, RowSeparator, SectionHeader } from '../../../../src/components/Row';
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useToast } from '../../../../src/components/Toast';
-import { Bold, Code, TypedConfirm } from '../../../../src/components/TypedConfirm';
+import { Bold, Code, ConfirmDialog } from '../../../../src/components/ConfirmDialog';
 import { useBack } from '../../../../src/hooks/useBack';
 import { useOllamaModels } from '../../../../src/hooks/useDaemonData';
 import { useProfile } from '../../../../src/hooks/useSubject';
@@ -108,7 +108,7 @@ export default function ProviderKey() {
       // Daemon reads `key` (the env var name is passed as the `key` value).
       await call('host.providers.set_key', { profile: id, key: info.env, value: trimmed });
       await refresh().catch(() => {});
-      toast({ title: isExisting ? 'Updated' : 'Saved', message: info.env, duration: 1500 });
+      toast({ title: isExisting ? 'Updated' : 'Saved', message: info.env });
       goBack();
     } catch (e) {
       toast({ title: 'Save failed', message: String(e) });
@@ -183,7 +183,7 @@ export default function ProviderKey() {
           ) : null}
         </ScrollView>
       </KeyboardPane>
-      <TypedConfirm
+      <ConfirmDialog
         open={confirmRemove}
         onClose={() => setConfirmRemove(false)}
         title={`Remove ${info.env}`}
@@ -242,7 +242,7 @@ function OllamaScreen({
     if (!canSave) return;
     try {
       await call('host.providers.add_ollama', { profile: id, name: nameValue.trim(), url: urlValue.trim() });
-      toast({ title: 'Saved', message: nameValue.trim(), duration: 1500 });
+      toast({ title: 'Saved', message: nameValue.trim() });
       onSaved();
     } catch (e) {
       toast({ title: 'Save failed', message: String(e) });
@@ -340,7 +340,7 @@ function OllamaScreen({
           ) : null}
         </ScrollView>
       </KeyboardPane>
-      <TypedConfirm
+      <ConfirmDialog
         open={confirmRemove}
         onClose={() => setConfirmRemove(false)}
         title={`Remove ollama/${existingName ?? ''}`}

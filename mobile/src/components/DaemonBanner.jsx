@@ -30,11 +30,17 @@ export function isDaemonDown(status) {
   return DOWN.has(status);
 }
 
-export function DaemonBanner({ status, paired = true, onRetry }) {
+export function DaemonBanner({ status, paired = true, onRetry, onManage }) {
   const entry = paired && DOWN.has(status) ? DAEMON_STATUS_BANNERS[status] : null;
   if (!entry) return null;
   return (
-    <Banner kind={entry.kind} action={entry.action && onRetry ? entry.action : null} onAction={onRetry}>
+    <Banner
+      kind={entry.kind}
+      action={entry.action && onRetry ? entry.action : null}
+      onAction={onRetry}
+      secondaryAction={onManage ? 'Manage' : null}
+      onSecondaryAction={onManage}
+    >
       {entry.message}
     </Banner>
   );

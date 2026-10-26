@@ -49,10 +49,10 @@ function EditBriefing() {
         wg_id: id,
         briefing: text,
       });
-      toast({ title: 'Briefing saved', duration: 1400 });
+      toast({ title: 'Briefing saved' });
       goBack();
     } catch (e) {
-      toast({ title: 'Save failed', message: String(e), duration: 2400 });
+      toast({ title: 'Save failed', message: String(e) });
     }
   };
 

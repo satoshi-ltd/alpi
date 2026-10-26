@@ -29,10 +29,10 @@ export function useActivityActions(refresh) {
     inflight.current.add(key);
     try {
       await call('host.schedule.fire', { profile, id: jobId });
-      toast({ message: 'Running it again', kind: 'success', duration: 2000 });
+      toast({ message: 'Running it again', kind: 'success' });
       refresh?.();
     } catch (e) {
-      toast({ message: String(e?.message ?? e), kind: 'danger', duration: 4000 });
+      toast({ message: String(e?.message ?? e), kind: 'danger' });
     } finally {
       inflight.current.delete(key);
     }

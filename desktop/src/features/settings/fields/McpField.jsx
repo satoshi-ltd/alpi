@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Button from "../../../primitives/Button.jsx";
 import Eyebrow from "../../../primitives/Eyebrow.jsx";
@@ -119,7 +119,7 @@ function McpDetailModal({ profile, connectionId, mcp, onClose, onRemoved }) {
         {tools === null ? (
           <span className={styles.muted}>handshaking with server…</span>
         ) : toolsError ? (
-          <span className={styles.error}>{toolsError}</span>
+          <span role="alert" className={styles.error}>{toolsError}</span>
         ) : tools.length === 0 ? (
           <span className={styles.muted}>{EMPTY.mcpTools.title}</span>
         ) : (
@@ -155,6 +155,7 @@ function McpDetailModal({ profile, connectionId, mcp, onClose, onRemoved }) {
 }
 
 function McpAddModal({ profile, connectionId, existingNames, onClose, onSaved }) {
+  const nameErrorId = useId();
   const notify = useNotify();
   const [name, setName] = useState("");
   const [command, setCommand] = useState("");
@@ -207,11 +208,13 @@ function McpAddModal({ profile, connectionId, existingNames, onClose, onSaved })
           value={name}
           onChange={(e) => setName(e.target.value.toLowerCase())}
           placeholder="github · notion · linear"
+          aria-invalid={duplicate ? true : undefined}
+          aria-describedby={duplicate ? nameErrorId : undefined}
           spellCheck={false}
           autoFocus
         />
         {duplicate && (
-          <span className={styles.error} style={{ marginTop: "var(--space-2)" }}>
+          <span id={nameErrorId} className={styles.error} style={{ marginTop: "var(--space-2)" }}>
             @{trimmed} already exists
           </span>
         )}

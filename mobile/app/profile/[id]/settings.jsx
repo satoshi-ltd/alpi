@@ -28,7 +28,7 @@ import { modelLabel } from '../../../src/lib/modelLabel';
 import { profileLabel } from '../../../src/lib/profileName';
 import { copyText } from '../../../src/lib/clipboard';
 import { useToast } from '../../../src/components/Toast';
-import { Bold, Code, TypedConfirm } from '../../../src/components/TypedConfirm';
+import { Bold, Code, ConfirmDialog } from '../../../src/components/ConfirmDialog';
 import { updateOutcome } from '../../../src/features/settings/daemonUpdate';
 import { canSelfUpdate, updateHint } from '../../../../common/updateHint.mjs';
 import { IdentityEditor } from '../../../src/features/settings/IdentityEditor';
@@ -58,6 +58,9 @@ import { voiceLabel } from '../../../src/lib/voices';
 import { EMPTY } from '../../../../common/emptyCopy.mjs';
 import { SubtitleSkeleton } from '../../../src/components/SubtitleSkeleton';
 import { UsageSkeleton } from '../../../src/components/UsageSkeleton';
+import { FadeIn } from '../../../src/components/FadeIn';
+import { useSkeleton } from '../../../src/hooks/useSkeleton';
+import { useReveal } from '../../../src/hooks/useReveal';
 import { ListSkeleton } from '../../../src/components/ListSkeleton';
 
 const DEFAULT_ALP_PORT = 7423;
@@ -167,9 +170,9 @@ export default function ProfileSettings() {
     setRestartBusy(true);
     try {
       await call('host.daemon.restart', {});
-      toast({ title: 'Daemon restarting…', duration: 2400 });
+      toast({ title: 'Daemon restarting…' });
     } catch (e) {
-      toast({ title: 'Restart failed', message: String(e), duration: 4000 });
+      toast({ title: 'Restart failed', message: String(e) });
     } finally {
       setRestartBusy(false);
     }
@@ -180,13 +183,17 @@ export default function ProfileSettings() {
     setUpdateBusy(true);
     try {
       const result = await call('host.daemon.update', {});
-      toast({ ...updateOutcome(result), duration: 4000 });
+      toast({ ...updateOutcome(result) });
     } catch (e) {
-      toast({ title: 'Update failed', message: String(e), duration: 4000 });
+      toast({ title: 'Update failed', message: String(e) });
     } finally {
       setUpdateBusy(false);
     }
   };
+
+  const usagePending = snap.loading && !snap.data?.usage;
+  const usageBones = useSkeleton(usagePending);
+  const usageRevealed = useReveal(usageBones);
 
   if (loading && !profile) {
     return (
@@ -234,7 +241,7 @@ export default function ProfileSettings() {
   const saveField = (key, value) =>
     call('host.config.set_field', { profile: id, key, value }).then(() => refreshSettings());
   const failing = (title) => (e) => {
-    toast({ title, message: String(e), duration: 3200 });
+    toast({ title, message: String(e) });
     throw e;
   };
   const saveOrUnsetField = (key, value) =>
@@ -276,7 +283,7 @@ export default function ProfileSettings() {
   const copyPubkey = async () => {
     if (!profile.pubkey_b64) return;
     const ok = await copyText(profile.pubkey_b64);
-    toast({ title: ok ? 'Public key copied' : 'Copy failed', duration: 1400 });
+    toast({ title: ok ? 'Public key copied' : 'Copy failed' });
   };
 
   const deleteProfile = async () => {
@@ -471,18 +478,20 @@ export default function ProfileSettings() {
 
         <SectionHeader kicker="last 14 days" {...anchor('usage')}>Usage</SectionHeader>
         <RowGroup>
-          {usageDays.length === 0 && snap.loading ? (
+          {usageBones ? (
             <SettingsBand><UsageSkeleton /></SettingsBand>
-          ) : usageDays.length === 0 ? (
+          ) : usagePending ? null : usageDays.length === 0 ? (
             <Row label={EMPTY.usage.title} helper={EMPTY.usage.hint} chevron={false} />
           ) : (
             <SettingsBand>
-              <UsageChart
-                days={usageDays}
-                accent={accent}
-                capLine={capUsd != null ? Number(capUsd) : null}
-                total30={usageSection?.total30 ?? null}
-              />
+              <FadeIn animate={usageRevealed}>
+                <UsageChart
+                  days={usageDays}
+                  accent={accent}
+                  capLine={capUsd != null ? Number(capUsd) : null}
+                  total30={usageSection?.total30 ?? null}
+                />
+              </FadeIn>
             </SettingsBand>
           )}
         </RowGroup>
@@ -916,16 +925,16 @@ export default function ProfileSettings() {
         onSubmit={(value) => {
           const n = Number(String(value ?? '').trim());
           if (String(value ?? '').trim() && (!Number.isInteger(n) || n < 1)) {
-            toast({ title: 'Enter a whole number of pipelines', duration: 2000 });
+            toast({ title: 'Enter a whole number of pipelines' });
             return;
           }
           saveOrUnsetField('alp.max_active_workgroups', value)
-            .then(() => toast({ title: 'Concurrency saved', duration: 1400 }))
-            .catch((e) => toast({ title: 'Save failed', message: String(e), duration: 2400 }));
+            .then(() => toast({ title: 'Concurrency saved' }))
+            .catch((e) => toast({ title: 'Save failed', message: String(e) }));
         }}
       />
 
-      <TypedConfirm
+      <ConfirmDialog
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
         title={`Delete profile @${profile.name}`}
@@ -943,7 +952,7 @@ export default function ProfileSettings() {
         }}
       />
 
-      <TypedConfirm
+      <ConfirmDialog
         open={confirmRestart}
         onClose={() => setConfirmRestart(false)}
         title="Restart the daemon"
@@ -954,7 +963,7 @@ export default function ProfileSettings() {
         onConfirm={handleRestart}
       />
 
-      <TypedConfirm
+      <ConfirmDialog
         open={confirmUpdate}
         onClose={() => setConfirmUpdate(false)}
         title="Update the daemon"

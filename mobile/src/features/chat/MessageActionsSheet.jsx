@@ -52,7 +52,9 @@ export function MessageActionsSheet({ target, onClose, onRetry, onEdit }) {
   const onExportPdf = exportWith(sharePdf, 'Export failed');
 
   const onCopy = async (t) => {
-    if (t?.text) await Clipboard.setStringAsync(t.text);
+    if (!t?.text) return;
+    await Clipboard.setStringAsync(t.text);
+    toast({ title: 'Copied', kind: 'success' });
   };
 
   const actions = buildMessageActions(target, { onCopy, onSelectText: selectText, onDownload, onExportPdf, onEdit, onRetry }).map((a) => ({

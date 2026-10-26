@@ -107,13 +107,16 @@ vi.mock('../../theme/ThemeContext', () => ({
 }));
 
 vi.mock('../../components/Banner', () => ({
-  Banner: ({ kind, children, action, onAction }) =>
+  Banner: ({ kind, children, action, onAction, secondaryAction, onSecondaryAction }) =>
     React.createElement(
       'div',
       { 'data-banner': kind },
       children,
       action
         ? React.createElement('button', { type: 'button', 'data-banner-action': action, onClick: onAction })
+        : null,
+      secondaryAction
+        ? React.createElement('button', { type: 'button', 'data-banner-action': secondaryAction, onClick: onSecondaryAction })
         : null,
     ),
 }));
@@ -148,7 +151,7 @@ vi.mock('../inbox/Pip', () => ({
 vi.mock('../inbox/RowContextSheet', () => ({
   RowContextSheet: ({ target }) => (target ? React.createElement('div', { 'data-ctx': target.id }) : null),
 }));
-vi.mock('../sheets/ConnectionSheet', () => ({ ConnectionSheet: () => null }));
+vi.mock('../sheets/ConnectionSheet', () => ({ ConnectionSheet: ({ open }) => (open ? React.createElement('div', { 'data-conn-sheet': 'open' }) : null) }));
 vi.mock('../sheets/CreateProfileSheet', () => ({
   CreateProfileSheet: ({ open }) => (open ? React.createElement('div', { 'data-create': 'profile' }) : null),
 }));
@@ -298,7 +301,7 @@ describe('SidebarPane selection', () => {
   it('lights the row that sidebarSelection(pathname) points at', () => {
     h.pathname = '/chat/agora';
     render(<SidebarPane />);
-    expect(row('agora').getAttribute('data-bg')).toBe('#fff');
+    expect(row('agora').getAttribute('data-bg')).toMatch(/12$/);
     expect(row('doc').getAttribute('data-bg')).toBe('transparent');
     expect(row('alpha').getAttribute('data-bg')).toBe('transparent');
   });
@@ -307,14 +310,14 @@ describe('SidebarPane selection', () => {
     h.pathname = '/wg/alpha';
     h.items = [...ITEMS, { kind: 'profile', id: 'alpha', name: 'alpha', label: 'alpha', preview: 'p', ts: '3m' }];
     render(<SidebarPane />);
-    expect(itemRow('workgroup:doc/alpha').getAttribute('data-bg')).toBe('#fff');
+    expect(itemRow('workgroup:doc/alpha').getAttribute('data-bg')).toMatch(/12$/);
     expect(itemRow('profile:alpha').getAttribute('data-bg')).toBe('transparent');
   });
 
   it('keeps the row lit while a drilled screen of that subject is open', () => {
     h.pathname = '/profile/doc/settings';
     render(<SidebarPane />);
-    expect(row('doc').getAttribute('data-bg')).toBe('#fff');
+    expect(row('doc').getAttribute('data-bg')).toMatch(/12$/);
   });
 
   it('lights nothing on a list-only path', () => {
@@ -644,6 +647,14 @@ describe('Sidebar daemon health', () => {
     h.refresh.mockClear();
     fireEvent.click(document.querySelector('[data-banner-action="Retry"]'));
     expect(h.refresh).toHaveBeenCalled();
+  });
+
+  it('never opens the connection sheet by itself, and Manage opens it on request', () => {
+    h.status = 'offline';
+    render(<SidebarPane />);
+    expect(document.querySelector('[data-conn-sheet]')).toBeNull();
+    fireEvent.click(document.querySelector('[data-banner-action="Manage"]'));
+    expect(document.querySelector('[data-conn-sheet]')).not.toBeNull();
   });
 
   it('stays silent on a healthy daemon and while unpaired', () => {

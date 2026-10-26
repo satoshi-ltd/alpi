@@ -965,7 +965,7 @@ Verb namespaces in current shape:
   existing profiles, in roulette order, with its own object, so no pair repeats until all twelve are worn. The default profile (the host-plane one, never one under `profiles/`) is not one of the twelve: its
   summary always reports `fold: "alpaca"` and no `accent` (the apps use the brand ink of the theme), the apps draw the flat ink alpaca for it and show its appearance
   read-only, and `host.config.set_field` refuses `tui.fold` and `tui.accent` for it (a client that does not know `alpaca` falls back to
-  the diamond). Roster objects draw unfolded (the dashed crease pattern in grey, no fill, no ripple) for a paused profile or workgroup and, for the whole roster, while the active connection is offline, disabled, auth-failed or rate-limited; such rows stay openable, a paused name in a header reads in grey, and a stale working state is dropped. From `host.activity.list` a row reads needs you over failed (a job whose last run failed in the last day) over working, and a failed job whose `job_id` has a running turn again reads working. The daemon lists the default profile first, and both clients keep it there: `common/rosterOrder.mjs` splits it
+  the diamond). Roster objects draw unfolded (the dashed crease pattern in grey, no fill, no ripple) for a paused profile or workgroup, and on the phone for the whole roster while the active connection is offline, disabled, auth-failed or rate-limited; the desktop leaves them folded for an outage, because its banner owns the offline state. Such rows stay openable, a paused name in a header reads in grey, and a stale working state is dropped. From `host.activity.list` a row reads needs you over failed (a job whose last run failed in the last day) over working, and a failed job whose `job_id` has a running turn again reads working. The daemon lists the default profile first, and both clients keep it there: `common/rosterOrder.mjs` splits it
   (`is_default` or the name `default`) out of the list, and the desktop sidebar, the phone roster and the Fold draw it as the
   unlabelled first row above Pinned, dimmed when paused or without a provider, never pinnable (a stored `default` pin is
   ignored), never behind *Show N more*, kept under a filter only when it matches like any other row (the desktop checks its
@@ -1143,7 +1143,9 @@ Verb namespaces in current shape:
   restarts that one window, and on desktop hovering the toast pauses
   it, so `host.outputs.delete` is sent only for the rows the window
   outlived. Desktop shows at most three toasts; a fourth retires the
-  oldest.
+  oldest. Errors carry a Dismiss button, an optional Retry and the alert role: one that
+  offers Retry persists until dismissed and any other lasts 6 s (or its own duration),
+  on both clients; a persistent toast is evicted last when the stack is full.
 
 **Contract.** ``host.events.*`` is transport, not durable history.
 The replay window (``HISTORY_MAX = 500``) is sized for reconnect
@@ -1806,6 +1808,37 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   fenced turn starts, and `authority.current` falls back to it, so a CLI they run stamps its posts too. A child with an unreadable value is fenced as `peer`, and the daemon clears
   an inherited value when a turn is not fenced. A new dispatch site passes `authority=`
   (`tests/alp/test_workgroup_authority.py` fails otherwise).
+
+- **Shared look and interaction rules of the apps.** `common/tokens.mjs` (and
+  `desktop/src/styles/tokens.css`, held equal by a parity test) carries two palette
+  tokens besides the ink ramp: `edge`, the control-boundary ink at about 3:1
+  (checkbox, radio, toggle off-track, input and chip borders), and `focus`, the
+  focus ring (50 % ink). Floating surfaces (sheets, modals, menus, popovers,
+  toasts) are edged with a 1 px `edge` line (`--shadow-edge`, mobile
+  `shadows.float`) and carry no blur, blurred shadow or dark scrim. One menu
+  primitive serves every desktop menu (Dropdown, header menu, context menu: 32 px
+  rows, check slot, separator, danger variant; roles `menu`, `menuitemradio`,
+  `menuitemcheckbox`); on the phone one picker row lane serves action sheets and
+  pickers, and a `switch` row toggles without closing the sheet. One confirm
+  dialog (optional typed field) replaces every destructive native alert on the
+  phone. Toasts are for failures and undo windows: info lasts 2.8 s; an error has
+  Dismiss and an optional Retry and persists only when it offers Retry (6 s otherwise); a copy confirms in place (the desktop button
+  label flips for about 1.5 s, the phone toasts). A paused composer dims only the
+  input, keeps its reason readable at full contrast and offers Resume, also on the
+  paused banner; an offline reason stays visible, and the connection banner (with
+  Manage on the phone) owns the outage, so the Connection sheet never opens by
+  itself. The composer model label is truncated before its effort
+  (`model · effort`), the model chip opens the effort choice, and an effort applies
+  on pick. A mention popover with no candidate shows an empty row. A selected
+  roster row wears a 3 pt/3 px accent bar in that profile's own colour plus fill; muted rows keep `ink3` with a
+  micro-label (`paused`, needs provider) instead of fading. Panels and sheets are
+  dialogs with a label. A loading state draws the silhouette of what is loading in the
+  `line` ink, with real titles and labels kept as text and no slab for a composite
+  widget (the usage widget loads as its four tiles and fourteen day bars): flat bones
+  with no gradient or shimmer share one breathing animation (opacity 0.55 to 1 over
+  1.6 s, 90 ms stagger per row; static under reduced motion), appear after 150 ms,
+  stay at least 400 ms once shown (the whole-list and reader skeletons keep only the
+  150 ms delay), and give way to the content with a 120 ms fade when bones were shown.
 
 ## Non-obvious things to know
 

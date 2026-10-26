@@ -11,6 +11,9 @@ import { usePullRefresh } from '../../hooks/usePullRefresh';
 import { useTheme } from '../../theme/ThemeContext';
 import { LoadFailed } from '../../components/LoadFailed';
 import { EMPTY } from '../../../../common/emptyCopy.mjs';
+import { useSkeleton } from '../../hooks/useSkeleton';
+import { useReveal } from '../../hooks/useReveal';
+import { FadeIn } from '../../components/FadeIn';
 import { ListSkeleton } from '../../components/ListSkeleton';
 
 export function skillKey(s) {
@@ -50,13 +53,16 @@ export function SkillsList({ profile: id, selectedKey = null, onOpen }) {
   const skills = useSkills(id);
   const { att } = useAttention(id);
   const { rows, needs, groups, categoryOrder } = groupSkills(skills.data?.skills, att);
+  const pending = skills.loading && rows.length === 0;
+  const bones = useSkeleton(pending);
+  const revealed = useReveal(bones);
 
   return (
     <>
       <ScrollView refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />} contentContainerStyle={{ paddingBottom: space.s9 }}>
-        {skills.loading && rows.length === 0 ? (
+        {bones ? (
           <ListSkeleton rows={4} helper="sm" label="Loading skills" style={{ marginTop: space.s5 }} />
-        ) : skills.error && rows.length === 0 ? (
+        ) : pending ? null : <FadeIn animate={revealed}>{skills.error && rows.length === 0 ? (
           <LoadFailed inline label="skills" error={skills.error} onRetry={() => skills.refresh?.()} />
         ) : rows.length === 0 ? (
           <RowGroup style={{ marginTop: space.s5 }}>
@@ -108,7 +114,7 @@ export function SkillsList({ profile: id, selectedKey = null, onOpen }) {
               </RowGroup>
             </View>
           ))
-        )}
+        )}</FadeIn>}
       </ScrollView>
     </>
   );

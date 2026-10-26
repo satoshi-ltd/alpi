@@ -44,7 +44,7 @@ export function ToolDetailSheet({ tool, status, onClose }) {
 
   const copy = async (text, what) => {
     const ok = await copyText(text);
-    toast({ title: ok ? `${what} copied` : 'Copy failed', duration: 1400 });
+    toast({ title: ok ? `${what} copied` : 'Copy failed' });
   };
 
   const actions = [];

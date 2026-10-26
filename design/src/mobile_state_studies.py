@@ -1,5 +1,6 @@
-from desktop_boards import INK, INK2, INK3, INK4, LINE2, MONO
-from gen import DANGER, m_conn_header, m_group, m_row, m_screen_header, page
+from conversation_boards import m_composer
+from desktop_boards import INK3, LINE2, MONO
+from gen import m_banner, m_conn_header, m_empty_state, m_roster, m_screen_header, m_toast, page
 
 TITLES = {
     "activity": "Activity · nothing running",
@@ -7,8 +8,10 @@ TITLES = {
     "schedule_empty": "Schedule · no jobs, New schedule",
     "schedule_error": "Schedule · could not load, Retry",
     "roster": "Roster · daemon unreachable",
+    "roster_rows": "Roster · rows kept, glyphs unfolded",
     "composer": "Composer · offline and paused",
     "undo": "Notifications · deleted, Undo",
+    "error": "Toast · error, Retry and Dismiss",
 }
 
 
@@ -20,61 +23,52 @@ def caption(key):
     return f'<span style="font-family: {MONO}; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: {INK3}">{TITLES[key]}</span>'
 
 
-def centered(title, hint, retry=False):
-    again = f'<span style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; font-weight: 500; font-size: 14px; color: {INK2}">Retry</span>' if retry else ""
-    return (f'<div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 24px; text-align: center">'
-            f'<span style="font-weight: 600; font-size: 15px; color: {INK2}">{title}</span><span style="font-size: 14px; line-height: 1.4; color: {INK3}">{hint}</span>{again}</div>')
-
-
 def activity_empty():
-    return frame(m_screen_header("Activity", "ACROSS PROFILES", glyph="") + centered("Nothing running", "Running turns, workgroup phases, schedules and anything waiting on you show up here."))
+    return frame(m_screen_header("Activity", "ACROSS PROFILES", glyph="") + m_empty_state("Nothing running", "Running turns, workgroup phases, schedules and anything waiting on you show up here."))
 
 
 def notifications_empty():
-    return frame(m_screen_header("Notifications", "INBOX ZERO", glyph="") + centered("No notifications yet", "Notifications land here when an agent notifies you or a scheduled job fails."))
+    return frame(m_screen_header("Notifications", "INBOX ZERO", glyph="") + m_empty_state("No notifications yet", "Notifications land here when an agent notifies you or a scheduled job fails."))
 
 
 def schedule_empty():
-    action = (f'<div style="display: flex; margin: 14px 16px 0; align-items: center; justify-content: center; min-height: 44px; border-radius: 4px; background: #141414; color: #ffffff; font-weight: 600; font-size: 14px">New schedule</div>')
-    body = f'<div style="padding-top: 16px">{m_group(m_row("No scheduled jobs", "Ask the agent to set one up.", chevron=False, sep=False))}{action}</div>'
-    return frame(m_screen_header("scout", "SCHEDULES · 0", glyph="") + body)
+    return frame(m_screen_header("scout", "SCHEDULES · 0", glyph="") + m_empty_state("No scheduled jobs", "Ask the agent to set one up.", "New schedule"))
 
 
 def schedule_error():
-    card = (f'<div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 24px; text-align: center">'
-            f'<span style="font-weight: 600; font-size: 17px; color: {INK}">Couldn’t load schedule</span>'
-            f'<span style="font-family: {MONO}; font-size: 12px; color: {INK3}">Cannot reach the daemon.</span>'
-            f'<span style="display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 20px; border-radius: 4px; background: rgba(20,20,20,0.06); font-weight: 600; font-size: 14px; color: {INK}">Retry</span></div>')
-    return frame(m_screen_header("scout", "SCHEDULES", glyph="") + card)
+    return frame(m_screen_header("scout", "SCHEDULES", glyph="") + m_empty_state("Couldn’t load schedule", "Cannot reach the daemon.", "Retry"))
 
 
 def roster_down():
-    return frame(m_conn_header(ring="#ffffff", collapse=False, bg="#ffffff") + centered("Daemon unreachable", "Profiles and workgroups show up again once the connection is back.", True))
+    banner = m_banner("Daemon unreachable. Reconnecting…", "Retry", "danger", secondary="Manage")
+    return frame(m_conn_header(ring="#ffffff", collapse=False, bg="#ffffff", status="offline") + banner + m_empty_state("Daemon unreachable", "Profiles and workgroups show up again once the connection is back.", "Retry"), 360)
 
 
-def composer_box(text):
-    return (f'<div style="margin: 0 16px; min-height: 56px; border-radius: 4px; background: rgba(20,20,20,0.04); box-shadow: inset 0 0 0 0.5px {LINE2}; display: flex; align-items: center; padding: 0 16px; font-size: 16px; color: {INK4}">{text}</div>')
+def roster_rows_down():
+    banner = m_banner("Daemon unreachable. Reconnecting…", "Retry", "danger", secondary="Manage")
+    return frame(m_conn_header(ring="#ffffff", collapse=False, bg="#ffffff", status="offline") + banner + f'<div style="flex: 1; min-height: 0; overflow: hidden">{m_roster(compact=False, offline=True)}</div>', 560)
 
 
 def composer_states():
-    body = (f'<div style="flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 14px">'
-            f'{composer_box("Daemon unreachable — sending paused")}{composer_box("Paused — resume to chat")}'
-            f'<span style="padding: 0 20px; font-family: {MONO}; font-size: 11px; color: {INK3}">Offline above, a paused profile below; the send button stays off in both.</span></div>')
-    return frame(body)
+    body = (f'<div style="flex: 1; display: flex; flex-direction: column; justify-content: center">'
+            f'{m_composer(state="offline")}{m_composer(state="paused", resume=True)}'
+            f'<span style="padding: 12px 20px 0; font-family: {MONO}; font-size: 11px; color: {INK3}">Offline above, a paused profile below; only the controls dim and the send button stays off in both.</span></div>')
+    return frame(body, 360)
 
 
 def undo_toast():
-    toast = (f'<div style="margin: 0 16px; display: flex; align-items: flex-start; gap: 10px; padding: 14px; box-sizing: border-box; border-radius: 4px; background: #ffffff; border: 0.5px solid {LINE2}">'
-             f'<span style="width: 8px; height: 8px; border-radius: 4px; background: {INK3}; flex-shrink: 0; margin-top: 6px"></span>'
-             f'<span style="flex: 1; min-width: 0; font-size: 14px; line-height: 20px; color: {INK2}">Deleted 3 notifications</span>'
-             f'<span style="min-width: 44px; min-height: 44px; margin: -10px -8px -10px 0; padding: 0 10px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; color: {INK}">Undo</span></div>')
-    return frame(f'<div style="flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 14px">{toast}'
-                 f'<span style="padding: 0 20px; font-family: {MONO}; font-size: 11px; color: {INK3}">One toast for the batch; Undo restores every pending row for 5 s.</span></div>')
+    return frame(f'<div style="position: relative; flex: 1"><span style="position: absolute; left: 20px; right: 20px; top: 16px; font-family: {MONO}; font-size: 11px; color: {INK3}">One toast for the batch, anchored above the bottom edge; Undo restores every pending row for 5 s.</span>'
+                 f'{m_toast("Deleted 3 notifications", action="Undo", bottom=40)}</div>')
+
+
+def error_toast():
+    return frame(f'<div style="position: relative; flex: 1"><span style="position: absolute; left: 20px; right: 20px; top: 16px; font-family: {MONO}; font-size: 11px; color: {INK3}">An error lasts 6 s; with Retry it stays until dismissed. The message wraps to two lines and Dismiss is a 44 pt target.</span>'
+                 f'{m_toast("Couldn’t save: the daemon refused the request for this device.", kind="danger", retry=True, dismiss=True, bottom=40)}</div>', 300)
 
 
 STATES = (("activity", activity_empty), ("notifications", notifications_empty), ("schedule_empty", schedule_empty), ("schedule_error", schedule_error),
-          ("roster", roster_down), ("composer", composer_states), ("undo", undo_toast))
-STATES_H = 1141
+          ("roster", roster_down), ("roster_rows", roster_rows_down), ("composer", composer_states), ("undo", undo_toast), ("error", error_toast))
+STATES_H = 1460
 
 
 def phone_states():

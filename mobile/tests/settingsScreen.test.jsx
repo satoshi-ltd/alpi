@@ -62,10 +62,10 @@ vi.mock('../src/components/OnOff', () => ({
 }));
 vi.mock('../src/components/Fold', () => ({ Fold: () => null }));
 vi.mock('../src/components/Toast', () => ({ useToast: () => vi.fn() }));
-vi.mock('../src/components/TypedConfirm', () => ({
+vi.mock('../src/components/ConfirmDialog', () => ({
   Bold: ({ children }) => React.createElement('span', {}, children),
   Code: ({ children }) => React.createElement('span', {}, children),
-  TypedConfirm: ({ open, onConfirm }) =>
+  ConfirmDialog: ({ open, onConfirm }) =>
     open ? React.createElement('button', { type: 'button', 'data-confirm': 'sign-out', onClick: onConfirm }) : null,
 }));
 

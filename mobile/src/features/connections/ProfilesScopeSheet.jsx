@@ -31,11 +31,11 @@ export function ProfilesScopeSheet({ open, onClose, connection, onSaved }) {
     setBusy(true);
     try {
       await call('host.connections.update', { connection_id: connection.id, profiles: scope });
-      toast({ title: 'Profiles saved', duration: 1400 });
+      toast({ title: 'Profiles saved' });
       onSaved?.();
       onClose?.();
     } catch (e) {
-      toast({ title: 'Save failed', message: String(e?.data?.detail ?? e), duration: 3200 });
+      toast({ title: 'Save failed', message: String(e?.data?.detail ?? e) });
     } finally {
       setBusy(false);
     }

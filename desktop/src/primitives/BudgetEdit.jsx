@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import Popover from "./Popover.jsx";
 import DialogFooter from "./DialogFooter.jsx";
 import { Field, Selectish, Eyebrow } from "./index.js";
@@ -17,6 +17,7 @@ export default function BudgetEdit({ value, label = "Daily USD cap", triggerLabe
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
+  const errorId = useId();
   useEffect(() => {
     if (open) setDraft(current != null ? String(current) : "");
   }, [current, open]);
@@ -52,10 +53,11 @@ export default function BudgetEdit({ value, label = "Daily USD cap", triggerLabe
               onKeyDown={(e) => { if (!isComposing(e) && e.key === "Enter") save(); }}
               placeholder="empty = unlimited"
               aria-invalid={!valid}
+              aria-describedby={valid ? undefined : errorId}
               spellCheck={false}
               autoFocus
             />
-            {!valid && <span className={styles.error}>Enter a positive number, or leave it empty for no cap</span>}
+            {!valid && <span id={errorId} className={styles.error}>Enter a positive number, or leave it empty for no cap</span>}
           </div>
           <DialogFooter
             onCancel={() => setOpen(false)}

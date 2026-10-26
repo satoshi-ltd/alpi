@@ -105,9 +105,9 @@ describe('row with copy but no timestamp', () => {
     expect(preview.fontStyle).toBe('normal');
   });
 
-  it('mutes a paused row but still shows its copy', () => {
+  it('mutes a paused row with opaque secondary ink, never with whole-row opacity', () => {
     renderRow({ ...READY_EMPTY, paused: true, preview: 'paused · resume to chat' });
-    expect(styleOf(row()).opacity).toBe(0.55);
+    expect(styleOf(row()).opacity).toBeUndefined();
     expect(screen.getByText('paused · resume to chat')).toBeTruthy();
   });
 

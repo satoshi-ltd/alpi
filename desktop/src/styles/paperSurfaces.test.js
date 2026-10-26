@@ -178,10 +178,12 @@ describe("paper selection", () => {
   it("draws the selected sidebar row as the pane's own sheet, square and edge to edge", () => {
     const ds = read("styles/design-system.css");
     expect(ds).toMatch(/\.ds-sb-row\[data-sel\], \.sb-row\[data-sel\] \{[^}]*margin: 0 calc\(-1 \* var\(--sb-bleed, 0px\)\);[^}]*border-radius: 0;/);
+    expect(ds).toMatch(/\.ds-sb-row:hover, \.sb-row:hover \{ background: var\(--hover\); \}/);
+    expect(ds).toMatch(/\.ds-sb-row:hover, \.sb-row:hover,\s*\.ds-sb-row\[data-sel\], \.sb-row\[data-sel\] \{[^}]*margin: 0 calc\(-1 \* var\(--sb-bleed, 0px\)\);[^}]*border-radius: 0;/);
     expect(rule(read("features/Sidebar.module.css"), ".inner")).toMatch(/--sb-bleed:\s*var\(--space-5\)/);
-    expect(ds).toMatch(/\.ds-sb-row:hover, \.sb-row:hover \{ background: color-mix\(in srgb, var\(--bg-pane\) 50%, transparent\); \}/);
     const row = read("primitives/SidebarRow.jsx");
-    expect(row).toMatch(/\? "var\(--bg-pane\)"/);
+    expect(row).not.toMatch(/var\(--bg-pane\)/);
+    expect(ds).toMatch(/\.ds-sb-row\[data-sel\], \.sb-row\[data-sel\],[^{]*\{\s*background: var\(--selected\);\s*box-shadow: inset 3px 0 0 var\(--row-accent, var\(--accent\)\);/);
     expect(row).toMatch(/data-sel=\{sel \|\| undefined\}/);
   });
 
@@ -220,7 +222,7 @@ describe("paper toasts", () => {
   it("draws a notice as a flat 4 px card with one seam", () => {
     const toast = rule(read("primitives/Notification.module.css"), ".toast");
     expect(toast).toMatch(/border-radius:\s*var\(--r-xs\)/);
-    expect(toast).toMatch(/box-shadow:\s*var\(--shadow\)/);
+    expect(toast).toMatch(/box-shadow:\s*var\(--shadow-edge\)/);
     expect(toast).toMatch(/border:\s*0;/);
   });
 });

@@ -62,7 +62,7 @@ export default function Popover({
           background: "var(--bg-elev)",
           border: ".5px solid var(--line-2)",
           borderRadius: "var(--r-xs)",
-          boxShadow: "var(--shadow)",
+          boxShadow: "var(--shadow-edge)",
           zIndex: 50,
           overflow: "hidden",
           ...style,

@@ -11,7 +11,7 @@ vi.mock('react-native', () => {
   const Text = ({ children, style, ...p }) => React.createElement('span', p, children);
   const Pressable = ({ children, onPress, style, accessibilityLabel, ...p }) =>
     React.createElement('div', { onClick: onPress, 'aria-label': accessibilityLabel }, children);
-  const TextInput = ({ style, ...p }) => React.createElement('input', {});
+  const TextInput = ({ style, placeholderTextColor }) => React.createElement('input', { 'data-placeholder-color': placeholderTextColor });
   const Modal = ({ children, visible, supportedOrientations }) =>
     visible
       ? React.createElement('div', { 'data-orientations': (supportedOrientations ?? []).join(',') }, children)
@@ -43,16 +43,16 @@ vi.mock('../theme/ThemeContext', () => ({
     colors: { bgPane: '#fff', bgInput: '#fafafa', ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', line2: '#eee', danger: '#f00' },
     fonts: { sans: { regular: 'Geist_400Regular', semibold: 'Geist_600SemiBold' }, mono: 'GeistMono_400Regular', monoMedium: 'GeistMono_500Medium' },
     fontSizes: { xs: 11, sm: 12, md: 14, xl: 18 },
-    shadow: { base: { shadowColor: '#token-shadow', shadowRadius: 24 } },
+    shadow: { float: { shadowColor: '#token-shadow', shadowRadius: 24 } },
   }),
 }));
 
-import { TypedConfirm } from './TypedConfirm';
+import { ConfirmDialog } from './ConfirmDialog';
 
-describe('TypedConfirm rotation', () => {
+describe('ConfirmDialog rotation', () => {
   it('lets the device rotate while the dialog is open', () => {
     const { container } = render(
-      <TypedConfirm open onClose={() => {}} title="Delete profile" body="This is permanent." expected="roma" />,
+      <ConfirmDialog open onClose={() => {}} title="Delete profile" body="This is permanent." expected="roma" />,
     );
     expect(container.querySelector('[data-orientations]').getAttribute('data-orientations')).toBe(
       'portrait,landscape-left,landscape-right',
@@ -60,9 +60,9 @@ describe('TypedConfirm rotation', () => {
   });
 });
 
-describe('TypedConfirm on a short screen', () => {
+describe('ConfirmDialog on a short screen', () => {
   it('scrolls its body and keeps taps working under the keyboard, so the buttons never clip', () => {
-    const { container } = render(<TypedConfirm open onClose={() => {}} title="Delete profile" body="Permanent." expected="roma" />);
+    const { container } = render(<ConfirmDialog open onClose={() => {}} title="Delete profile" body="Permanent." expected="roma" />);
     const scroll = container.querySelector('[data-scroll="true"]');
     expect(scroll).toBeTruthy();
     expect(scroll.getAttribute('data-persist')).toBe('handled');
@@ -71,36 +71,36 @@ describe('TypedConfirm on a short screen', () => {
   });
 });
 
-describe('TypedConfirm elevation', () => {
+describe('ConfirmDialog elevation', () => {
   it('casts the theme shadow, not a literal one', () => {
-    const { container } = render(<TypedConfirm open onClose={() => {}} title="Delete profile" body="Permanent." expected="roma" />);
+    const { container } = render(<ConfirmDialog open onClose={() => {}} title="Delete profile" body="Permanent." expected="roma" />);
     expect(container.querySelector('[data-shadow="#token-shadow"]')).toBeTruthy();
     expect(container.querySelector('[data-shadow="#000"]')).toBeNull();
   });
 });
 
-describe('TypedConfirm dismissal contract', () => {
+describe('ConfirmDialog dismissal contract', () => {
   it('keeps a worded Cancel — here the two buttons are real alternatives, not a dismissal', () => {
-    render(<TypedConfirm open onClose={() => {}} title="Delete profile" body="Permanent." expected="roma" />);
+    render(<ConfirmDialog open onClose={() => {}} title="Delete profile" body="Permanent." expected="roma" />);
     expect(screen.getByText('Cancel')).toBeTruthy();
     expect(screen.getByText('Delete')).toBeTruthy();
   });
 
   it('is the one surface with no icon close — Cancel already carries the choice', () => {
-    render(<TypedConfirm open onClose={() => {}} title="Delete profile" body="Permanent." expected="roma" />);
+    render(<ConfirmDialog open onClose={() => {}} title="Delete profile" body="Permanent." expected="roma" />);
     expect(screen.queryByLabelText('Close')).toBeNull();
   });
 });
 
-describe('TypedConfirm exit', () => {
+describe('ConfirmDialog exit', () => {
   it('fades out on the time-reverse of its entrance curve', () => {
     h.calls.length = 0;
     const { rerender } = render(
-      <TypedConfirm open onClose={() => {}} title="Delete profile" body="Permanent." expected="roma" />,
+      <ConfirmDialog open onClose={() => {}} title="Delete profile" body="Permanent." expected="roma" />,
     );
     const entering = h.calls.map((c) => c.easing);
     h.calls.length = 0;
-    rerender(<TypedConfirm open={false} onClose={() => {}} title="Delete profile" body="Permanent." expected="roma" />);
+    rerender(<ConfirmDialog open={false} onClose={() => {}} title="Delete profile" body="Permanent." expected="roma" />);
     const leaving = h.calls.map((c) => c.easing);
 
     expect(entering).toContain('bezier(0.2,0.7,0.2,1)');
@@ -110,9 +110,9 @@ describe('TypedConfirm exit', () => {
 
   it('holds the copy it was showing while it animates out', () => {
     const { rerender } = render(
-      <TypedConfirm open onClose={() => {}} title="Forget casa" body="Removes the token." expected="casa" confirmLabel="Forget daemon" />,
+      <ConfirmDialog open onClose={() => {}} title="Forget casa" body="Removes the token." expected="casa" confirmLabel="Forget daemon" />,
     );
-    rerender(<TypedConfirm open={false} onClose={() => {}} title="Forget " body={null} expected="" confirmLabel="Forget daemon" />);
+    rerender(<ConfirmDialog open={false} onClose={() => {}} title="Forget " body={null} expected="" confirmLabel="Forget daemon" />);
 
     expect(screen.getByText('Forget casa')).toBeTruthy();
     expect(screen.getByText('Removes the token.')).toBeTruthy();
@@ -121,18 +121,43 @@ describe('TypedConfirm exit', () => {
 
   it('stops taking taps the moment it starts leaving', () => {
     const { container, rerender } = render(
-      <TypedConfirm open onClose={() => {}} title="Delete profile" body="Permanent." expected="roma" />,
+      <ConfirmDialog open onClose={() => {}} title="Delete profile" body="Permanent." expected="roma" />,
     );
     expect([...container.querySelectorAll('[data-pe]')].map((n) => n.getAttribute('data-pe'))).toContain('auto');
-    rerender(<TypedConfirm open={false} onClose={() => {}} title="Delete profile" body="Permanent." expected="roma" />);
+    rerender(<ConfirmDialog open={false} onClose={() => {}} title="Delete profile" body="Permanent." expected="roma" />);
     expect([...container.querySelectorAll('[data-pe]')].map((n) => n.getAttribute('data-pe'))).toContain('none');
   });
 
   it('offers a plain neutral confirm for reversible actions: no typing, no red', () => {
-    render(<TypedConfirm open onClose={() => {}} title="Promote to admin" body="ok" confirmLabel="Promote" tone="neutral" typed={false} onConfirm={() => {}} />);
+    render(<ConfirmDialog open onClose={() => {}} title="Promote to admin" body="ok" confirmLabel="Promote" tone="neutral" typed={false} onConfirm={() => {}} />);
     expect(screen.queryByText(/TO CONFIRM/)).toBeNull();
     const btn = screen.getByText('Promote');
     expect(btn.disabled).toBe(false);
     expect(btn.getAttribute('data-variant')).toBe('primary');
+  });
+});
+
+
+describe('ConfirmDialog contract', () => {
+  it('asks for a typed word only when one is expected, in the readable placeholder ink', () => {
+    const { container, rerender } = render(<ConfirmDialog open onClose={() => {}} title="Delete" body="Gone." expected="roma" />);
+    expect(container.querySelector('input').getAttribute('data-placeholder-color')).toBe('#666');
+    expect(screen.getByText(/TO CONFIRM/)).toBeTruthy();
+    rerender(<ConfirmDialog open onClose={() => {}} title="Discard changes?" body="Unsaved edits." confirmLabel="Discard" />);
+    expect(container.querySelector('input')).toBeNull();
+    expect(screen.queryByText(/TO CONFIRM/)).toBeNull();
+  });
+
+  it('gives the primary the danger variant and a worded cancel', () => {
+    render(<ConfirmDialog open onClose={() => {}} title="Discard changes?" body="Unsaved." confirmLabel="Discard" cancelLabel="Keep editing" />);
+    expect(screen.getByText('Discard').getAttribute('data-variant')).toBe('danger');
+    expect(screen.getByText('Keep editing')).toBeTruthy();
+  });
+
+  it('shows a secondary third action only when one is given', () => {
+    const { rerender } = render(<ConfirmDialog open onClose={() => {}} title="Changed elsewhere" body="x" typed={false} confirmLabel="Overwrite" alternateLabel="Reload (discard)" />);
+    expect(screen.getByText('Reload (discard)').getAttribute('data-variant')).toBe('secondary');
+    rerender(<ConfirmDialog open onClose={() => {}} title="Changed elsewhere" body="x" typed={false} confirmLabel="Overwrite" />);
+    expect(screen.queryByText('Reload (discard)')).toBeNull();
   });
 });

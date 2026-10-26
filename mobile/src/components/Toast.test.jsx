@@ -5,11 +5,11 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 afterEach(cleanup);
 
 const starts = vi.hoisted(() => []);
-const h = vi.hoisted(() => ({ announced: [], loops: 0, reduce: false, close: null, sets: [] }));
+const h = vi.hoisted(() => ({ announced: [], loops: 0, reduce: false, close: null, sets: [], kb: {}, views: [] }));
 
 vi.mock('react-native', () => {
-  const View = ({ children, style, pointerEvents, ...p }) =>
-    React.createElement('div', style?.shadowColor ? { 'data-shadow': style.shadowColor, 'data-radius': style.borderRadius } : {}, children);
+  const View = ({ children, style, pointerEvents, accessibilityRole, ...p }) =>
+    React.createElement('div', { ...(style?.shadowColor ? { 'data-shadow': style.shadowColor, 'data-radius': style.borderRadius } : {}), ...(accessibilityRole ? { role: accessibilityRole } : {}), 'data-vstyle': JSON.stringify(style) }, children);
   const Text = ({ children, style, ...p }) => React.createElement('span', {}, children);
   const Modal = ({ children, visible, supportedOrientations, onRequestClose }) => {
     h.close = onRequestClose;
@@ -33,22 +33,24 @@ vi.mock('react-native', () => {
     loop: () => { h.loops += 1; return { start: () => {}, stop: () => {} }; },
     View,
   };
-  const Pressable = ({ children, onPress, accessibilityLabel }) =>
-    React.createElement('button', { type: 'button', onClick: onPress, 'aria-label': accessibilityLabel }, typeof children === 'function' ? children({ pressed: false }) : children);
-  return { Animated, AccessibilityInfo: { announceForAccessibility: (text) => h.announced.push(text) }, Easing: { inOut: (fn) => fn, ease: 'ease' }, Modal, Pressable, Text, View };
+  const Pressable = ({ children, onPress, accessibilityLabel, style }) =>
+    React.createElement('button', { type: 'button', onClick: onPress, 'aria-label': accessibilityLabel, 'data-tap': JSON.stringify(typeof style === 'function' ? style({ pressed: false }) : style) }, typeof children === 'function' ? children({ pressed: false }) : children);
+  const Keyboard = { addListener: (name, cb) => { h.kb[name] = cb; return { remove() {} }; } };
+  return { Keyboard, Animated, AccessibilityInfo: { announceForAccessibility: (text) => h.announced.push(text) }, Easing: { inOut: (fn) => fn, ease: 'ease' }, Modal, Pressable, Text, View };
 });
 
 vi.mock('../lib/reduceMotion', () => ({ useReduceMotion: () => h.reduce }));
 vi.mock('react-native-safe-area-context', () => ({
-  SafeAreaView: ({ children }) => React.createElement('div', {}, children),
+  SafeAreaView: ({ children, edges, style }) => React.createElement('div', { 'data-edges': (edges ?? []).join(','), 'data-safe-style': JSON.stringify(style) }, children),
 }));
+vi.mock('./Icon', () => ({ Icon: ({ name }) => React.createElement('i', { 'data-icon': name }) }));
 
 vi.mock('../theme/ThemeContext', () => ({
   useTheme: () => ({
     colors: { selected: '#ddd', bgPane: '#fff', ink: '#000', ink2: '#333', ink3: '#666', success: '#0a0', warning: '#fa0', danger: '#f00' },
     fonts: { sans: { regular: 'Geist_400Regular', semibold: 'Geist_600SemiBold' } },
     fontSizes: { md: 14 },
-    shadow: { base: { shadowColor: '#token-shadow', shadowRadius: 24 } },
+    shadow: { float: { shadowColor: '#token-shadow', shadowRadius: 24 } },
   }),
 }));
 
@@ -134,8 +136,8 @@ describe('Toast replaced while hiding', () => {
       return null;
     }
     render(<ToastProvider><Grab /></ToastProvider>);
-    act(() => toast({ title: 'Deleted first', duration: 1000 }));
-    act(() => { vi.advanceTimersByTime(1100); });
+    act(() => toast({ title: 'Deleted first' }));
+    act(() => { vi.advanceTimersByTime(2900); });
     const hiding = starts.at(-1);
     act(() => toast({ title: 'Deleted second' }));
     act(() => hiding({ finished: false }));
@@ -210,3 +212,102 @@ function Trigger2() {
   React.useEffect(() => { toast({ message: 'Deleted', kind: 'danger' }); }, [toast]);
   return null;
 }
+
+
+describe('Toast levels', () => {
+  const hides = () => starts.filter(Boolean);
+  const grab = () => {
+    let fn;
+    const Grab = () => { fn = useToast(); return null; };
+    render(<ToastProvider><Grab /></ToastProvider>);
+    return (payload) => act(() => fn(payload));
+  };
+
+  it('clears an information toast after 2.8 s whatever duration the caller passes', () => {
+    vi.useFakeTimers();
+    starts.length = 0;
+    const show = grab();
+    show({ title: 'Saved', duration: 9000 });
+    act(() => { vi.advanceTimersByTime(2700); });
+    expect(hides()).toHaveLength(0);
+    act(() => { vi.advanceTimersByTime(200); });
+    expect(hides()).toHaveLength(1);
+    vi.useRealTimers();
+  });
+
+  it('keeps an undo toast for its own window', () => {
+    vi.useFakeTimers();
+    starts.length = 0;
+    const show = grab();
+    show({ message: 'Deleted', action: 'Undo', onAction: () => {}, duration: 6000 });
+    act(() => { vi.advanceTimersByTime(5900); });
+    expect(hides()).toHaveLength(0);
+    act(() => { vi.advanceTimersByTime(200); });
+    expect(hides()).toHaveLength(1);
+    vi.useRealTimers();
+  });
+
+  it('gives an error with nothing to retry a longer life than information, and a 44 pt close control', () => {
+    vi.useFakeTimers();
+    starts.length = 0;
+    const show = grab();
+    show({ title: 'Save failed', message: 'offline', kind: 'danger' });
+    act(() => { vi.advanceTimersByTime(5900); });
+    expect(hides()).toHaveLength(0);
+    const close = screen.getByLabelText('Dismiss');
+    const tap = JSON.parse(close.getAttribute('data-tap'));
+    expect([tap.width, tap.height]).toEqual([44, 44]);
+    act(() => { vi.advanceTimersByTime(200); });
+    expect(hides()).toHaveLength(1);
+    vi.useRealTimers();
+  });
+
+  it('keeps an error that offers Retry until it is dismissed', () => {
+    vi.useFakeTimers();
+    starts.length = 0;
+    const show = grab();
+    show({ title: 'Save failed', message: 'offline', kind: 'danger', onRetry: () => {} });
+    act(() => { vi.advanceTimersByTime(60000); });
+    expect(hides()).toHaveLength(0);
+    fireEvent.click(screen.getByLabelText('Dismiss'));
+    expect(hides()).toHaveLength(1);
+    vi.useRealTimers();
+  });
+
+  it('offers Retry only when the caller gives one, and runs it once', () => {
+    const show = grab();
+    show({ title: 'Save failed', kind: 'danger' });
+    expect(screen.queryByLabelText('Retry')).toBeNull();
+    const onRetry = vi.fn();
+    show({ title: 'Save failed', kind: 'danger', onRetry });
+    fireEvent.click(screen.getByLabelText('Retry'));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('announces an error as an alert and an information toast as nothing urgent', () => {
+    const show = grab();
+    show({ title: 'Save failed', kind: 'danger' });
+    expect(screen.getByRole('alert')).toBeTruthy();
+    show({ title: 'Saved' });
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('wraps the message to two lines', () => {
+    const show = grab();
+    show({ title: 'Save failed', message: 'a long reason', kind: 'danger' });
+    expect(screen.getByText('a long reason')).toBeTruthy();
+  });
+});
+
+describe('Toast anchor', () => {
+  it('sits above the bottom edge, safe-area aware, and rides above the keyboard', () => {
+    const { container } = render(<ToastProvider><Trigger /></ToastProvider>);
+    const safe = container.querySelector('[data-edges]');
+    expect(safe.getAttribute('data-edges')).toBe('bottom');
+    const style = JSON.parse(safe.getAttribute('data-safe-style'));
+    expect(style.bottom).toBe(0);
+    expect(style.top).toBeUndefined();
+    act(() => { h.kb.keyboardDidShow({ endCoordinates: { height: 300 } }); });
+    expect(JSON.parse(container.querySelector('[data-edges]').getAttribute('data-safe-style')).bottom).toBe(300);
+  });
+});

@@ -1,11 +1,19 @@
 import { Pressable, Text, View } from 'react-native';
-import { lineHeights, radii, space } from '../../theme/tokens';
+import { lineHeights, mobile, radii, space } from '../../theme/tokens';
 
 import { Eyebrow } from '../../components/Eyebrow';
 import { Icon } from '../../components/Icon';
 import { CHROME_BTN, tapSlop } from '../../lib/panes';
 import { usePane } from '../../nav/PaneContext';
 import { useTheme } from '../../theme/ThemeContext';
+
+export function statusWord(status) {
+  if (status === 'online' || status === 'connected') return 'online';
+  if (status === 'offline') return 'offline · retrying…';
+  if (status === 'auth-failed') return 'sign-in failed';
+  if (status === 'disabled') return 'disabled';
+  return 'connecting…';
+}
 
 export function ConnHeader({
   name = 'Local',
@@ -18,14 +26,15 @@ export function ConnHeader({
 }) {
   const { colors, fonts, fontSizes } = useTheme();
   const { twoPane } = usePane();
-  const statusColor =
+  const word = statusWord(status);
+  const [statusColor, statusInk] =
     status === 'online' || status === 'connected'
-      ? colors.success
+      ? [colors.success, colors.successText ?? colors.ink2]
       : status === 'offline' || status === 'auth-failed'
-        ? colors.danger
+        ? [colors.danger, colors.dangerText ?? colors.ink2]
         : status === 'disabled'
-          ? colors.ink3
-        : colors.warning;
+          ? [colors.ink3, colors.ink3]
+          : [colors.warning, colors.warningText ?? colors.ink2];
 
   const searchToggle = onToggleSearch ? (
     <Pressable
@@ -50,6 +59,7 @@ export function ConnHeader({
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.s4,
+    minHeight: mobile.tap,
     paddingHorizontal: space.s5,
     paddingVertical: space.s2,
     borderWidth: 0.5,
@@ -60,22 +70,7 @@ export function ConnHeader({
 
   const identity = (
     <>
-      <View style={{ position: 'relative' }}>
-        <Icon name="cpu" size="md" color={colors.ink2} />
-        <View
-          style={{
-            position: 'absolute',
-            right: -2,
-            bottom: -2,
-            width: 8,
-            height: 8,
-            borderRadius: radii.xs,
-            backgroundColor: statusColor,
-            borderWidth: 2,
-            borderColor: colors.bgElev,
-          }}
-        />
-      </View>
+      <Icon name="cpu" size="md" color={colors.ink2} />
       <View style={{ flexDirection: 'column', minWidth: 0, flex: 1 }}>
         <Text
           numberOfLines={1}
@@ -88,6 +83,15 @@ export function ConnHeader({
           style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, lineHeight: fontSizes.xs * lineHeights.cozy, color: colors.ink3 }}
         >
           {host}
+        </Text>
+      </View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2, flexShrink: 0 }}>
+        <View style={{ width: 8, height: 8, borderRadius: radii.xs, backgroundColor: statusColor }} />
+        <Text
+          numberOfLines={1}
+          style={{ fontFamily: fonts.sans.medium ?? fonts.sans.semibold, fontSize: fontSizes.sm ?? fontSizes.xs, color: statusInk }}
+        >
+          {word}
         </Text>
       </View>
       <Icon name="chevron-down" size="xs" color={colors.ink3} />
@@ -132,7 +136,7 @@ export function ConnHeader({
         onPress={onConnPress}
         style={trigger}
         accessibilityRole="button"
-        accessibilityLabel={`Connection ${name}, ${host}`}
+        accessibilityLabel={`Connection ${name}, ${host}, ${word}`}
       >
         {identity}
       </Pressable>

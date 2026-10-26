@@ -68,11 +68,11 @@ export function Field({
         {rightSlot}
       </View>
       {error ? (
-        <Text accessibilityRole="alert" style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.dangerText }}>
+        <Text accessibilityRole="alert" style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.dangerText }}>
           {error}
         </Text>
       ) : helper ? (
-        <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
+        <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}>
           {helper}
         </Text>
       ) : null}

@@ -1,8 +1,9 @@
 from gen import DANGER, DOC_ACCENT, diamond, ic, identity_glyph, page, profile_mark
-from desktop_boards import (ALPI_ACCENT, AMBER, HOVER, INK, INK2, INK3, INK4, LINE, LINE2, MONO, PANE, SELECTED, SIDE, button, d_sidebar, wg_mark, eyebrow, field_input,
+from desktop_boards import (ALPI_ACCENT, AMBER, EDGE, RING, HOVER, INK, INK2, INK3, INK4, LINE, LINE2, MONO, PANE, SELECTED, SIDE, button, d_sidebar, wg_mark, eyebrow, field_input,
                             iconbtn, kbd, key_hint, palette, palette_row, selectish, small_diamond)
 
-SHADOW = "0 0 0 0.5px rgba(20,20,20,0.14)"
+SHADOW = RING
+VEIL = "color-mix(in srgb, #f0f0f0 72%, transparent)"
 
 
 def panel(title, inner, w, h, bg=SIDE):
@@ -32,7 +33,7 @@ def ds_field(value, w=200):
 
 def checkbox(on=False):
     return (f'<span style="width: 16px; height: 16px; border-radius: 4px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; '
-            f'border: 1.5px solid {INK if on else INK4}; background: {INK if on else "transparent"}">{ic("check", 12, PANE) if on else ""}</span>')
+            f'border: 1.5px solid {INK if on else EDGE}; background: {INK if on else "transparent"}">{ic("check", 12, PANE) if on else ""}</span>')
 
 
 def label_row(label, control):
@@ -45,7 +46,7 @@ def dialog_footer(primary, secondary="Cancel", variant="primary"):
 
 
 def modal(title, body, footer, w=520, x=40, y=28):
-    return (f'<div style="position: absolute; inset: 0; background: color-mix(in srgb, #f0f0f0 72%, transparent)"></div>'
+    return (f'<div style="position: absolute; inset: 0; background: {VEIL}"></div>'
             f'<div style="position: absolute; left: {x}px; top: {y}px; width: {w}px; box-sizing: border-box; border-radius: 4px; padding: 24px; overflow: hidden; background: {PANE}; '
             f'border: 0.5px solid {LINE2}; box-shadow: {SHADOW}; display: flex; flex-direction: column; gap: 8px">'
             f'<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px"><span style="font-size: 18px; font-weight: 600; letter-spacing: -0.005em; color: {INK}">{title}</span></div>'
@@ -66,9 +67,11 @@ def edit_connection_panel():
 
 
 def dropdown_row(label, caption="", active=False):
-    cap = f'<span style="font-family: {MONO}; font-size: 11px; color: {INK3}; margin-top: 4px">{caption}</span>' if caption else ""
-    return (f'<div style="display: flex; flex-direction: column; padding: 8px 10px; border-radius: 4px; background: {SELECTED if active else "transparent"}">'
-            f'<span style="font-size: 13px; color: {INK}">{label}</span>{cap}</div>')
+    cap = f'<span style="font-family: {MONO}; font-size: 11px; color: {INK3}; white-space: nowrap">{caption}</span>' if caption else ""
+    mark = ic("check", 14, INK) if active else ""
+    return (f'<div role="menuitemradio" aria-checked="{"true" if active else "false"}" style="display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 6px 10px; box-sizing: border-box; border-radius: 4px; background: {SELECTED if active else "transparent"}">'
+            f'<span style="width: 16px; display: inline-flex; justify-content: center; flex-shrink: 0">{mark}</span>'
+            f'<span style="flex: 1; font-size: 13px; font-weight: {500 if active else 400}; color: {INK}">{label}</span>{cap}</div>')
 
 
 def dropdown_panel():
@@ -84,12 +87,12 @@ def dropdown_panel():
 
 
 def menu_item(icon, label, danger=False, hint=""):
-    return (f'<div style="display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 4px; font-size: 13px; color: {DANGER if danger else INK}">'
+    return (f'<div role="menuitem" style="display: flex; align-items: center; gap: 10px; min-height: 32px; padding: 6px 10px; box-sizing: border-box; border-radius: 4px; font-size: 13px; color: {DANGER if danger else INK}">'
             f'{ic(icon, 14, DANGER if danger else INK3)}<span style="flex: 1">{label}</span>{key_hint(hint) if hint else ""}</div>')
 
 
 def menu_sep():
-    return f'<div style="height: 1px; background: {LINE}; margin: 4px 6px"></div>'
+    return f'<div style="height: 1px; background: {LINE}; margin: 4px 10px"></div>'
 
 
 def context_menu_panel():
@@ -107,6 +110,40 @@ def profile_menu_panel():
     return panel("Context menu · a profile row: New session ⌘N on top", inner, 600, 520)
 
 
+def sidebar_hover_panel():
+    inner = f'<div style="display: flex; height: 100%">{d_sidebar(300, selected="alpi", hover="doc")}<div style="flex: 1; background: {PANE}"></div></div>'
+    return panel("Sidebar row · hover: bleed, square, fill, no bar", inner, 330, 300)
+
+
+def toast_box(message, tone, action="", persistent=False, w=380):
+    act = (f'<span aria-hidden="true" style="width: 1px; height: 14px; margin: 0 2px; background: {LINE2}; flex-shrink: 0"></span>'
+           f'<button style="flex-shrink: 0; padding: 4px 10px; border: 0; border-radius: 4px; background: transparent; color: {INK}; font-family: Geist, sans-serif; font-size: 12px; font-weight: 500; white-space: nowrap">{action}</button>') if action else ""
+    close = iconbtn("x", "Dismiss", 28, 14) if persistent else ""
+    pad = "6px 8px 6px 14px" if action else "8px 16px 8px 14px"
+    return (f'<div role="{"alert" if persistent and tone == "#c14545" else "status"}" style="width: max-content; max-width: {w}px; box-sizing: border-box; display: flex; align-items: center; gap: 10px; padding: {pad}; border-radius: 4px; background: {PANE}; box-shadow: {SHADOW}">'
+            f'<span style="width: 8px; height: 8px; flex-shrink: 0; border-radius: 999px; background: {tone}"></span>'
+            f'<span style="min-width: 0; font-size: 13px; line-height: 1.4; color: {INK2}; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere">{message}</span>{act}{close}</div>')
+
+
+def toast_panel():
+    stack = (f'<div style="position: absolute; right: 20px; bottom: 20px; display: flex; flex-direction: column; align-items: flex-end; gap: 10px">'
+             f'{toast_box("Could not forget the connection: the daemon refused the request for this device", "#c14545", "Retry", True)}'
+             f'{toast_box("Reasoning effort saved", "#3fb37a")}</div>')
+    return panel("Toast · errors persist with a 28 px Dismiss and optional Retry, text wraps to two lines; information fades", stack, 456, 300)
+
+
+def model_picker_panel():
+    from conversation_boards import d_composer
+    seg = "".join(f'<span role="radio" style="flex: 1; min-height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; font-size: 12px; background: {SELECTED if o == "Medium" else "transparent"}; color: {INK}; font-weight: {600 if o == "Medium" else 400}">{o}</span>'
+                  for o in ("Default", "Low", "Medium", "High"))
+    option = lambda name, ctx, on=False: dropdown_row(name, ctx, on).replace("font-size: 13px", f"font-family: {MONO}; font-size: 12px", 1)
+    pop = (f'<div style="position: absolute; left: 100px; bottom: 112px; width: 340px; border-radius: 4px; background: {PANE}; border: 0.5px solid {LINE2}; box-shadow: {SHADOW}; overflow: hidden">'
+           f'<div role="listbox" style="padding: 6px">{option("deepseek-v4.1-flash", "128K ctx", True)}{option("deepseek-v4.1-pro", "128K ctx")}</div>'
+           f'<div style="padding: 6px 6px 8px; border-top: 0.5px solid {LINE}"><div style="padding: 10px 10px 4px">{eyebrow("Reasoning effort · saved for this profile")}</div><div style="display: flex; gap: 4px; padding: 0 8px">{seg}</div></div></div>')
+    composer = f'<div style="position: absolute; left: 12px; right: 12px; bottom: 12px">{d_composer(name="doc", hint=False, model_name="deepseek-v4.1-flash", effort="medium")}</div>'
+    return panel("ModelPicker popover · listbox on the menu rows, effort row when reasoning is supported", composer + pop, 456, 300, bg=PANE)
+
+
 def confirm_panel():
     body = (f'<span style="font-size: 13px; line-height: 1.5; color: {INK2}">Permanently removes <span style="font-family: {MONO}">~/.alpi/profiles/doc/</span> — identity, memory, skills, schedule and chat history. This cannot be undone.</span>'
             f'<div style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px"><span style="font-family: {MONO}; font-size: 11px; letter-spacing: 0.06em; color: {INK3}">TYPE <b style="color: {INK}">doc</b> TO CONFIRM</span>{ds_field("d", 352)}</div>')
@@ -121,7 +158,7 @@ def ask_panel():
 
 
 def scrim_frame(title, shell, w, h, top=28):
-    inner = (f'<div style="position: absolute; inset: 0; background: {SIDE}"></div><div style="position: absolute; inset: 0; background: rgba(20,20,20,0.20)"></div>'
+    inner = (f'<div style="position: absolute; inset: 0; background: {SIDE}"></div><div style="position: absolute; inset: 0; background: {VEIL}"></div>'
              f'<div style="position: absolute; left: 0; right: 0; top: {top}px; display: flex; justify-content: center">{shell}</div>')
     return panel(title, inner, w, h)
 
@@ -212,8 +249,9 @@ def desktop_overlays():
             f'<div style="display: flex; gap: 16px">{scrim_frame("Activity ⌘J · needs you, running, scheduled", activity_panel_shell(), 520, 700)}{scrim_frame("Keyboard shortcuts ⌘/", shortcuts_shell(), 680, 700)}</div>'
             f'<div style="display: flex; gap: 16px">{edit_connection_panel()}{dropdown_panel()}</div>'
             f'<div style="display: flex; gap: 16px">{profile_menu_panel()}{context_menu_panel()}</div>'
-            f'<div style="display: flex; gap: 14px">{confirm_panel()}{ask_panel()}</div></div>')
+            f'<div style="display: flex; gap: 14px">{confirm_panel()}{ask_panel()}{sidebar_hover_panel()}</div>'
+            f'<div style="display: flex; gap: 14px">{model_picker_panel()}{toast_panel()}</div></div>')
     return page("Desktop · overlays", 1280, OVERLAYS_H, body)
 
 
-OVERLAYS_H = 2660
+OVERLAYS_H = 3040

@@ -256,7 +256,7 @@ const ITEM = { kind: 'profile', id: 'doc', name: 'doc', label: 'doc', preview: '
 describe('InboxRow selection', () => {
   it('draws the selected row on the pane\'s own sheet', () => {
     render(<InboxRow item={ITEM} selected />);
-    expect(screen.getByRole('button').getAttribute('data-bg')).toBe('#fff');
+    expect(screen.getByRole('button').getAttribute('data-bg')).toMatch(/12$/);
   });
 
   it('leaves the row transparent when the prop is omitted', () => {

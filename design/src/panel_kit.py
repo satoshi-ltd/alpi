@@ -98,14 +98,14 @@ def skill_mark(state):
         return dot(DANGER_FILL, 6)
     if state == "active":
         return dot(P["ink"], 6)
-    return ring(DANGER_FILL if state == "invalid" else P["ink4"])
+    return ring(DANGER_FILL if state == "invalid" else "#8c8c8c")
 
 
 def job_mark(state):
     if state == "failed":
         return dot(DANGER_FILL, 8)
     if state == "paused":
-        return ring(P["ink4"], 8, 1.5)
+        return ring("#8c8c8c", 8, 1.5)
     return dot(P["ink"], 8)
 
 

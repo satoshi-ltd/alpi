@@ -8,6 +8,9 @@ import { usePullRefresh } from '../../hooks/usePullRefresh';
 import { useTheme } from '../../theme/ThemeContext';
 import { LoadFailed } from '../../components/LoadFailed';
 import { EMPTY } from '../../../../common/emptyCopy.mjs';
+import { useSkeleton } from '../../hooks/useSkeleton';
+import { useReveal } from '../../hooks/useReveal';
+import { FadeIn } from '../../components/FadeIn';
 import { ListSkeleton } from '../../components/ListSkeleton';
 
 // Same category order as desktop ToolsPanel.
@@ -43,13 +46,16 @@ export function ToolsList({ profile: id, selectedName = null, onOpen }) {
   const pull = usePullRefresh(() => tools.refresh?.());
   const tools = useTools(id);
   const { rows, groups, cats } = groupTools(tools.data?.tools);
+  const pending = tools.loading && rows.length === 0;
+  const bones = useSkeleton(pending);
+  const revealed = useReveal(bones);
 
   return (
     <>
       <ScrollView refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />} contentContainerStyle={{ paddingBottom: space.s9 }}>
-        {tools.loading && rows.length === 0 ? (
+        {bones ? (
           <ListSkeleton rows={4} helper="sm" label="Loading tools" style={{ marginTop: space.s5 }} />
-        ) : tools.error && rows.length === 0 ? (
+        ) : pending ? null : <FadeIn animate={revealed}>{tools.error && rows.length === 0 ? (
           <LoadFailed inline label="tools" error={tools.error} onRetry={() => tools.refresh?.()} />
         ) : rows.length === 0 ? (
           <RowGroup style={{ marginTop: space.s5 }}>
@@ -107,7 +113,7 @@ export function ToolsList({ profile: id, selectedName = null, onOpen }) {
               </RowGroup>
             </View>
           ))
-        )}
+        )}</FadeIn>}
       </ScrollView>
     </>
   );

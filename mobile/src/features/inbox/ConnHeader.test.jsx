@@ -42,7 +42,7 @@ vi.mock('../../theme/ThemeContext', () => ({
       warning: '#ff0',
       danger: '#f00',
     },
-    fonts: { sans: { semibold: 'Geist_600SemiBold' }, mono: 'GeistMono_400Regular' },
+    fonts: { sans: { semibold: 'Geist_600SemiBold', medium: 'Geist_500Medium' }, mono: 'GeistMono_400Regular' },
     fontSizes: { xxs: 9, xs: 11, base: 13 },
     mobile: { tap: 44 },
   }),
@@ -138,7 +138,7 @@ describe('ConnHeader in the sidebar', () => {
     expect(style.height + tapSlop(CHROME_BTN) * 2).toBe(44);
     const rows = [...container.querySelectorAll('[data-style]')]
       .map((n) => JSON.parse(n.getAttribute('data-style') || '{}'));
-    expect(rows.every((st) => st.minHeight === undefined)).toBe(true);
+    expect(rows.every((st) => st.minHeight === undefined || st.minHeight === 44)).toBe(true);
   });
 
   it('opens the eyebrow row on the trimmed top padding the chat header uses', () => {
@@ -177,6 +177,22 @@ describe('ConnHeader activity entry', () => {
 
   it('names the connection trigger for a screen reader', () => {
     render(<ConnHeader name="casa" host="100.99.29.84" onConnPress={() => {}} />);
-    expect(screen.getByLabelText('Connection casa, 100.99.29.84')).toBeTruthy();
+    expect(screen.getByLabelText('Connection casa, 100.99.29.84, online')).toBeTruthy();
+  });
+
+  it('says the state in words, in the label too', () => {
+    const { rerender } = render(<ConnHeader name="casa" host="h" status="offline" onConnPress={() => {}} />);
+    expect(screen.getByText('offline · retrying…')).toBeTruthy();
+    expect(screen.getByLabelText('Connection casa, h, offline · retrying…')).toBeTruthy();
+    rerender(<ConnHeader name="casa" host="h" status="disabled" onConnPress={() => {}} />);
+    expect(screen.getByText('disabled')).toBeTruthy();
+    rerender(<ConnHeader name="casa" host="h" status="unknown" onConnPress={() => {}} />);
+    expect(screen.getByText('connecting…')).toBeTruthy();
+  });
+
+  it('keeps the switcher at the 44 pt touch floor', () => {
+    render(<ConnHeader name="casa" host="h" onConnPress={() => {}} />);
+    const trigger = JSON.parse(screen.getByLabelText(/^Connection casa/).getAttribute('data-style'));
+    expect(trigger.minHeight).toBe(44);
   });
 });

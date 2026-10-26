@@ -18,12 +18,12 @@
   background: var(--bg-elev);
   border: 0;
   border-radius: var(--r-xs);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-edge);
   font-size: var(--text-ui);
   color: var(--ink-2);
   pointer-events: auto;
-  white-space: nowrap;
-  max-width: 100%;
+  width: max-content;
+  max-width: min(380px, 100%);
 }
 
 .toastWithAction {
@@ -42,8 +42,11 @@
 }
 
 .text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 
 .divider {
@@ -63,6 +66,30 @@
   border: 0;
   cursor: pointer;
   transition: background var(--dur-1) var(--ease);
+}
+
+.closeBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+
+.closeBtn:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.actionBtn {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .actionBtn:hover {

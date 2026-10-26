@@ -30,4 +30,12 @@ describe('Field', () => {
     const box = [...container.querySelectorAll('[data-style]')].find((n) => n.getAttribute('data-style').includes('borderColor'));
     expect(JSON.parse(box.getAttribute('data-style')).borderColor).toBe('#b73737');
   });
+
+  it('draws the error and the helper at 12 pt in the regular sans face', () => {
+    const { rerender } = render(<Field value="" onChangeText={() => {}} helper="a number" />);
+    const styleOf = (text) => JSON.parse(screen.getByText(text).getAttribute('data-style'));
+    expect(styleOf('a number')).toMatchObject({ fontFamily: 'sans', fontSize: 12, color: '#666' });
+    rerender(<Field value="" onChangeText={() => {}} error="Enter a number" />);
+    expect(styleOf('Enter a number')).toMatchObject({ fontFamily: 'sans', fontSize: 12, color: '#b73737' });
+  });
 });

@@ -12,6 +12,9 @@ export default function ModelPicker({
   accent,
   mode = "override",
   variant = "ghost",
+  effort = "",
+  effortSupported = false,
+  onEffortChange,
 }) {
   const [ollamaModels, setOllamaModels] = useState([]);
   const [ollamaLoaded, setOllamaLoaded] = useState(false);
@@ -74,6 +77,9 @@ export default function ModelPicker({
       models={groupedModels}
       mode={mode}
       variant={variant}
+      effort={effort}
+      effortSupported={effortSupported}
+      onEffortChange={onEffortChange}
       onSetDefault={onSetDefault}
       onPick={(id) => {
         if (mode === "default") onChange?.(id);

@@ -6,8 +6,8 @@ export function wellStyle(colors, { focused = false, error = false } = {}) {
   return {
     backgroundColor: focused ? mixHex(colors.bgInput, 0.9, colors.ink) : colors.bgInput,
     borderRadius: radii.xs,
-    borderWidth: 1,
-    borderColor: error ? colors.dangerText : focused ? `${colors.ink}4d` : 'transparent',
+    borderWidth: 2,
+    borderColor: error ? colors.dangerText : focused ? colors.focus : 'transparent',
   };
 }
 

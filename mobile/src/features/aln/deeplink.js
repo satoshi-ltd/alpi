@@ -37,7 +37,7 @@ export function requestFromResponse(response) {
   return { domain, requestId, choice };
 }
 
-export const STALE_REQUEST_TOAST = { title: 'Already answered or expired', message: 'The agent is no longer waiting on this request.', duration: 2600 };
+export const STALE_REQUEST_TOAST = { title: 'Already answered or expired', message: 'The agent is no longer waiting on this request.' };
 
 export async function applyResponse(response, { setActive, push, respond, focus = focusRequest, notify }) {
   const { link, connectionId } = routeFromResponse(response);

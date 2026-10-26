@@ -10,10 +10,12 @@ const h = vi.hoisted(() => ({ profiles: [] }));
 
 vi.mock('react-native', () => {
   const View = ({ children, style }) =>
-    React.createElement('div', style?.shadowColor ? { 'data-shadow': style.shadowColor } : {}, children);
+    React.createElement('div', { 'data-style': JSON.stringify(style ?? {}), ...(style?.borderColor ? { 'data-edge': style.borderColor } : {}) }, children);
   const Text = ({ children }) => React.createElement('span', {}, children);
-  const Pressable = ({ children, onPress }) => React.createElement('button', { type: 'button', onClick: onPress }, children);
-  return { Pressable, Text, View };
+  const Pressable = ({ children, onPress, style, accessibilityRole, accessibilityLabel }) =>
+    React.createElement('button', { type: 'button', onClick: onPress, role: accessibilityRole, 'aria-label': accessibilityLabel, 'data-style': JSON.stringify(typeof style === 'function' ? style({ pressed: false }) : style ?? {}) }, children);
+  const ScrollView = ({ children, style }) => React.createElement('div', { 'data-scroll': JSON.stringify(style ?? {}) }, children);
+  return { Pressable, ScrollView, Text, View };
 });
 
 vi.mock('../../components/Fold', () => ({
@@ -24,19 +26,43 @@ vi.mock('../../hooks/useDaemonData', () => ({ useProfileSummaries: () => ({ data
 vi.mock('../../theme/ThemeContext', () => ({
   useTheme: () => ({
     colors: { bgElev: '#fff', ink: '#000', ink3: '#666', line: '#eee', selected: '#ddd' },
-    fonts: { mono: 'GeistMono_400Regular' },
+    fonts: { mono: 'GeistMono_400Regular', sans: { regular: 'Geist_400Regular' } },
     fontSizes: { sm: 12, md: 14 },
-    shadow: { base: { shadowColor: '#token-shadow', shadowRadius: 24 } },
+    shadow: { float: { borderWidth: 1, borderColor: '#token-edge' } },
   }),
 }));
 
+import { PANE_PAD_X } from '../../lib/panes';
 import { MentionPopover } from './MentionPopover';
 
 describe('MentionPopover', () => {
-  it('casts the theme shadow, not a literal one', () => {
+  it('floats on the theme edge, not a literal one', () => {
     h.profiles = [];
     const { container } = render(<MentionPopover candidates={[{ id: 'doc' }]} />);
-    expect(container.querySelector('[data-shadow]').getAttribute('data-shadow')).toBe('#token-shadow');
+    expect(container.querySelector('[data-edge]').getAttribute('data-edge')).toBe('#token-edge');
+  });
+
+  it('insets the card by the pane gutter and gives every row a 44 pt button target', () => {
+    h.profiles = [];
+    const { container, getAllByRole } = render(<MentionPopover candidates={[{ id: 'doc' }, { id: 'lex' }]} />);
+    expect(JSON.parse(container.firstChild.getAttribute('data-style')).marginHorizontal).toBe(PANE_PAD_X);
+    const rows = getAllByRole('button');
+    expect(rows).toHaveLength(2);
+    for (const row of rows) expect(JSON.parse(row.getAttribute('data-style')).minHeight).toBeGreaterThanOrEqual(44);
+  });
+
+  it('scrolls past four rows instead of growing', () => {
+    h.profiles = [];
+    const { container } = render(<MentionPopover candidates={['a', 'b', 'c', 'd', 'e'].map((id) => ({ id }))} />);
+    expect(JSON.parse(container.querySelector('[data-scroll]').getAttribute('data-scroll')).maxHeight).toBe(176);
+  });
+
+  it('says so when the token matches nobody, and vanishes only without a token', () => {
+    h.profiles = [];
+    const { container, rerender } = render(<MentionPopover candidates={[]} token="zz" />);
+    expect(container.textContent).toBe('No peer matches “zz”');
+    rerender(<MentionPopover candidates={[]} token="" />);
+    expect(container.firstChild).toBeNull();
   });
 
   it('paints each candidate with its summary accent', () => {

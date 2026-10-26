@@ -95,14 +95,14 @@ describe("Sidebar footer fit", () => {
     expect(footer.textContent).toContain("Settings");
   });
 
-  it("draws Settings with its label and bell, activity and theme as 22 px sm icon buttons", () => {
+  it("draws Settings with its label and bell, activity and theme as sm icon buttons with 28 px targets", () => {
     const { settings } = mountFooter();
     const four = [settings, ...[/^Notifications/, /^Activity/, /^Theme/].map((name) => screen.getByRole("button", { name }))];
     for (const btn of four) {
       expect(btn.className).toMatch(/_sm_|\bsm\b/);
       expect(btn.querySelector("svg").getAttribute("width")).toBe("14");
     }
-    expect(read("Sidebar.module.css")).toMatch(/\.footer :global\(\.ds-tip\) \.footerIcon \{\s*width: var\(--ctrl-xs\);/);
+    expect(read("Sidebar.module.css")).toMatch(/\.footer :global\(\.ds-tip\) \.footerIcon \{\s*width: var\(--ctrl-sm\);/);
   });
 
   it("keeps the ink colour but not the tight padding on the settings-mode Command button", () => {

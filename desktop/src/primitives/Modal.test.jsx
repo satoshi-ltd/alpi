@@ -72,3 +72,11 @@ describe("Modal exit", () => {
     expect(screen.getByRole("dialog").textContent).toContain("b");
   });
 });
+
+describe("Modal title", () => {
+  it("renders the title as a heading that names the dialog", () => {
+    render(<Modal open title="Reasoning effort">body</Modal>);
+    expect(screen.getByRole("heading", { level: 2, name: "Reasoning effort" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Reasoning effort" })).toBeInTheDocument();
+  });
+});

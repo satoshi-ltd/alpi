@@ -47,7 +47,7 @@ export default function ConnPill({
           {kind === "local" ? <CpuIcon /> : <ServerIcon />}
           <Dot
             color={statusColor}
-            pulse={isOffline || isProbing}
+            pulse={isProbing}
             className={styles.dot}
           />
         </span>
@@ -67,10 +67,10 @@ export default function ConnPill({
               : isRateLimited
                 ? "rate limited · retrying in a minute"
               : isOffline
-                ? "offline · retrying…"
+                ? "offline"
                 : isProbing
                   ? "connecting…"
-                  : host}
+                  : host ? `online · ${host}` : "online"}
           </span>
         </span>
         <ChevDownIcon className={styles.chev} />

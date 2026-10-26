@@ -30,6 +30,8 @@ vi.mock('expo-router', () => ({
   useRouter: () => ({ push: vi.fn(), back: vi.fn(), replace: vi.fn(), canGoBack: () => true }),
 }));
 vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: ({ children }) => React.createElement('div', {}, children) }));
+vi.mock('../src/components/FadeIn', () => ({ FadeIn: ({ children }) => children }));
+vi.mock('../src/hooks/useSkeleton', () => ({ useSkeleton: (loading) => loading }));
 vi.mock('../src/theme/ThemeContext', () => ({
   useTheme: () => ({
     colors: { bg: '#fff', ink: '#000', ink2: '#222', ink3: '#666', dangerText: '#b73737', selected: '#eee' },
@@ -46,11 +48,11 @@ vi.mock('../src/components/Row', () => ({
   RowSeparator: () => React.createElement('hr', {}),
   SectionHeader: ({ children }) => React.createElement('h3', {}, children),
 }));
-vi.mock('../src/components/SkeletonBar', () => ({ SkeletonBar: () => React.createElement('i', { 'data-bar': '' }) }));
+vi.mock('../src/components/SkeletonBar', () => ({ STAGGER_MS: 90, SkeletonBar: () => React.createElement('i', { 'data-bar': '' }) }));
 vi.mock('../src/components/Sheet', () => ({ Sheet: ({ open, children }) => (open ? React.createElement('div', {}, children) : null) }));
 vi.mock('../src/components/ScreenHeader', () => ({ ScreenHeader: ({ title }) => React.createElement('h1', {}, title) }));
 vi.mock('../src/components/Toast', () => ({ useToast: () => vi.fn() }));
-vi.mock('../src/components/TypedConfirm', () => ({ Bold: ({ children }) => children, Code: ({ children }) => children, TypedConfirm: () => null }));
+vi.mock('../src/components/ConfirmDialog', () => ({ Bold: ({ children }) => children, Code: ({ children }) => children, ConfirmDialog: () => null }));
 vi.mock('../src/hooks/usePullRefresh', () => ({ usePullRefresh: () => ({ refreshing: false, onRefresh: () => {} }) }));
 vi.mock('../src/hooks/useAttention', () => ({ useAttention: () => ({ att: null, refresh: () => {} }) }));
 vi.mock('../src/hooks/useBack', () => ({ useBack: () => () => {} }));

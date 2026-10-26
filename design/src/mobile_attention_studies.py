@@ -106,14 +106,6 @@ def pmono_(value):
     return mono(value, 10, P["ink3"])
 
 
-def sheet_item(icon, label, detail="", danger=False):
-    color = P["danger"] if danger else P["ink"]
-    det = mono(detail, 11, P["ink3"]) if detail else ""
-    return (f'<div style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 16px; box-shadow: inset 0 -0.5px 0 {P["line"]}">'
-            f'<span style="width: 20px; display: inline-flex; justify-content: center">{glyph(icon, 16, P["danger"] if danger else P["ink2"])}</span>'
-            f'<span style="flex: 1; font-size: 14px; color: {color}">{label}</span>{det}</div>')
-
-
 def job_status(job, running):
     if running:
         return flex(dot(P["ink"], 7, "box-shadow: 0 0 0 3px " + P["selected"]), mono("running", 10, P["ink2"]), gap=5)
@@ -155,22 +147,14 @@ def job_running():
     return job_page(MJOBS[1], running=True, h=870)
 
 
-def sheet_item(icon, label, detail="", danger=False):
-    color = P["danger"] if danger else P["ink"]
-    det = mono(detail, 11, P["ink3"]) if detail else ""
-    return (f'<div style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 16px; box-shadow: inset 0 -0.5px 0 {P["line"]}">'
-            f'<span style="width: 20px; display: inline-flex; justify-content: center">{glyph(icon, 16, P["danger"] if danger else P["ink2"])}</span>'
-            f'<span style="flex: 1; font-size: 14px; color: {color}">{label}</span>{det}</div>')
-
-
 def job_more():
     dimmed = job_page_head() + pk.phone_body(job_title("Daily review digest", pk.phone_status("failed", "danger"), "every day at 07:30"), gap=10)
-    sheet = (f'<div style="position: absolute; left: 0; right: 0; bottom: 0; border-radius: 4px 4px 0 0; background: {P["pane"]}; box-shadow: 0 0 0 0.5px {P["line2"]}; padding-top: 8px">'
-             f'<div style="display: flex; justify-content: center; padding-bottom: 10px"><span style="width: 36px; height: 4px; border-radius: 2px; background: {P["ink4"]}; opacity: 0.6"></span></div>'
-             f'{sheet_item("file-text", "Last output", "opens the notification")}{sheet_item("copy", "Copy job id", "7be40d19")}{sheet_item("trash-2", "Delete job…", "", True)}'
-             f'<div style="height: 16px"></div></div>')
+    from mobile_overlays import LINE as SHEET_LINE, action_item, sheet_header
+    items = action_item("file-text", "Last output", "opens the notification") + action_item("copy", "Copy job id", "7be40d19") + action_item("trash-2", "Delete job…", danger=True)
+    sheet = (f'<div style="position: absolute; left: 0; right: 0; bottom: 0; border-radius: 4px 4px 0 0; background: {P["pane"]}; box-shadow: 0 0 0 1px #8c8c8c; overflow: hidden">'
+             f'{sheet_header("Daily review digest", "")}<div style="height: 0.5px; background: {SHEET_LINE}"></div><div style="padding-bottom: 24px">{items}</div></div>')
     dim = f'<div style="position: absolute; inset: 0; background: color-mix(in srgb, {P["pane"]} 72%, transparent)"></div>'
-    return panel_phone(f'<div style="position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column">{dimmed}<div style="flex: 1; background: {P["bg"]}"></div>{dim}{sheet}</div>', 330)
+    return panel_phone(f'<div style="position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column">{dimmed}<div style="flex: 1; background: {P["bg"]}"></div>{dim}{sheet}</div>', 420)
 
 
 def fold_pane(selected):
@@ -224,7 +208,7 @@ def needs_band():
 def chat_menu_row(icon, label, detail="", dot_color=None):
     mark = f'<span style="position: relative; display: inline-flex">{ic(icon, 20, INK2)}' + (f'<span style="position: absolute; top: -2px; right: -3px; width: 8px; height: 8px; border-radius: 4px; background: {dot_color}; border: 1.5px solid #ffffff; box-sizing: border-box"></span>' if dot_color else "") + "</span>"
     det = f'<span style="font-family: {MONO}; font-weight: 500; font-size: 12px; color: {DANGER if dot_color else INK3}">{detail}</span>' if detail else ""
-    return (f'<div style="display: flex; align-items: center; gap: 14px; min-height: 48px; padding: 0 20px"><span style="width: 24px; display: inline-flex; justify-content: center">{mark}</span>'
+    return (f'<div style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 16px"><span style="width: 24px; display: inline-flex; justify-content: center">{mark}</span>'
             f'<span style="flex: 1; font-size: 15px; color: {INK}">{label}</span>{det}</div>')
 
 

@@ -9,6 +9,7 @@ import Dropdown from "../../../primitives/Dropdown.jsx";
 import SelectField from "../../../primitives/SelectField.jsx";
 import Modal from "../../../primitives/Modal.jsx";
 import Skeleton from "../../../primitives/Skeleton.jsx";
+import { useSkeleton } from "../../../hooks/useSkeleton.js";
 import { CopyIcon } from "../../../primitives/icons.jsx";
 import { Checkbox, Fold, Radio } from "../../../primitives/index.js";
 import Tip from "../../../primitives/Tip.jsx";
@@ -43,6 +44,7 @@ export function DevicesField({
   const notify = useNotify();
   const key = cacheKey(connectionId);
   const [devices, setDevices] = useState(() => _devicesCache.get(key) ?? null);
+  const showSkeleton = useSkeleton(devices === null);
   const [adding, setAdding] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState(null);
   const [revokeTarget, setRevokeTarget] = useState(null);
@@ -104,10 +106,10 @@ export function DevicesField({
     }
   }
 
-  if (devices === null) {
+  if (devices === null || showSkeleton) {
     return (
       <Row label="paired">
-        <Skeleton width="180px" />
+        {showSkeleton ? <Skeleton width="112px" height="22px" radius="var(--r-tag)" delay={0} /> : null}
       </Row>
     );
   }

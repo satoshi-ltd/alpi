@@ -58,7 +58,7 @@ export default function AcceptPendingPeer() {
         address: addressStr || undefined,
         allow: Array.from(scopes),
       });
-      toast({ title: 'Peer added', message: `@${handle}`, duration: 1800 });
+      toast({ title: 'Peer added', message: `@${handle}` });
       goBack();
     } catch (e) {
       toast({ title: 'Accept failed', message: String(e) });

@@ -8,6 +8,7 @@
 
 .title {
   flex: 1;
+  margin: 0;
   font-size: var(--text-ui);
   font-weight: var(--fw-semibold);
   color: var(--ink);

@@ -29,12 +29,13 @@ vi.mock('react-native', () => {
     );
   const Text = ({ children, numberOfLines, style, ...p }) =>
     React.createElement('span', { ...p, 'data-style': JSON.stringify(h.flat(style)) }, children);
-  const Pressable = ({ children, style, android_ripple, onPress, onLongPress, accessibilityLabel, ...p }) =>
+  const Pressable = ({ children, style, android_ripple, onPress, onLongPress, accessibilityLabel, accessibilityState, ...p }) =>
     React.createElement(
       'button',
       {
         type: 'button',
         onClick: onPress,
+        'aria-selected': accessibilityState ? String(!!accessibilityState.selected) : undefined,
         ...(accessibilityLabel ? { 'aria-label': accessibilityLabel } : {}),
         'data-style': JSON.stringify(h.flat(style)),
         ...p,
@@ -108,6 +109,7 @@ vi.mock('../../components/ActionSheet', () => ({
 
 import { mobile, radii, space } from '../../theme/tokens';
 import { PaneContext } from '../../nav/PaneContext';
+import { FALLBACK_ACCENT } from '../../../../common/folds.mjs';
 import { InboxRow } from './InboxRow';
 import { RowContextSheet } from './RowContextSheet';
 
@@ -270,7 +272,7 @@ describe('InboxRow sidebar variant', () => {
   it('draws the selected row as the pane\'s own sheet, square and edge to edge', () => {
     const { container } = sidebarRow({ item: WORKGROUP, selected: true });
     const style = styleOf(pressable(container));
-    expect(style.backgroundColor).toBe('#fafafa');
+    expect(style.backgroundColor).toBe('#00012');
     expect(style.marginHorizontal).toBe(0);
     expect(style.borderRadius).toBe(0);
   });
@@ -282,6 +284,33 @@ describe('InboxRow sidebar variant', () => {
     expect(style.borderRadius).toBeUndefined();
     expect(style.marginHorizontal).toBeUndefined();
     expect(style.minHeight).toBe(64);
+  });
+});
+
+describe('InboxRow selection and muting', () => {
+  it('draws a 3 pt accent bar on the leading edge of the selected row and reports it as selected', () => {
+    const { container } = sidebarRow({ item: WORKGROUP, selected: true });
+    const bar = container.querySelector('[testid="selected-bar"]');
+    expect(styleOf(bar)).toMatchObject({ position: 'absolute', left: 0, width: 3, backgroundColor: FALLBACK_ACCENT });
+    expect(pressable(container).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('draws no bar on a resting row', () => {
+    const { container } = sidebarRow({ item: WORKGROUP });
+    expect(container.querySelector('[testid="selected-bar"]')).toBeNull();
+  });
+
+  it('never fades a paused row; it keeps opaque secondary ink and says paused', () => {
+    const { container } = sidebarRow({ item: { ...WORKGROUP, paused: true } });
+    expect(styleOf(pressable(container)).opacity).toBeUndefined();
+    expect(styleOf(screen.getByText('alpha')).color).toBe('#666');
+    expect(screen.getByText('paused')).toBeTruthy();
+    expect(pressable(container).getAttribute('aria-label')).toContain('paused');
+  });
+
+  it('does not fade a needs-provider row either', () => {
+    const { container } = renderRow({ item: { ...WORKGROUP, needsProvider: true } });
+    expect(styleOf(pressable(container)).opacity).toBeUndefined();
   });
 });
 
@@ -413,13 +442,20 @@ describe('RowContextSheet title', () => {
   it('keeps the hash so a workgroup reads apart from a same-named profile', () => {
     render(<RowContextSheet target={{ ...WORKGROUP }} />);
     expect(sheet.props.title).toBe('#alpha');
-    expect(sheet.props.subtitle).toBe('WORKGROUP');
+    expect(sheet.props.subtitle).toBe('workgroup');
   });
 
   it('sigils a profile with @ under the same name', () => {
     render(<RowContextSheet target={{ kind: 'profile', id: 'alpha', name: 'alpha' }} />);
     expect(sheet.props.title).toBe('@alpha');
-    expect(sheet.props.subtitle).toBe('PROFILE');
+    expect(sheet.props.subtitle).toBe('profile');
+  });
+});
+
+describe('RowContextSheet default profile', () => {
+  it('titles the default profile with its display name, not the raw id', () => {
+    render(<RowContextSheet target={{ kind: 'profile', id: 'default', name: 'default' }} />);
+    expect(sheet.props.title).toBe('@alpi');
   });
 });
 

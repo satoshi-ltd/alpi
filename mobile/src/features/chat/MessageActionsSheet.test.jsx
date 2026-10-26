@@ -49,6 +49,14 @@ describe('MessageActionsSheet', () => {
     render(<Host target={{ kind: 'agent', text: 'the whole\nanswer' }} />);
     await act(async () => { fireEvent.click(screen.getByText('Copy')); });
     expect(h.copied).toEqual(['the whole\nanswer']);
+    expect(h.toast).toHaveBeenCalledWith({ title: 'Copied', kind: 'success' });
+  });
+
+  it('confirms nothing when there was nothing to copy', async () => {
+    h.toast.mockClear();
+    render(<Host target={{ kind: 'agent', text: '' }} />);
+    await act(async () => { fireEvent.click(screen.getByText('Copy')); });
+    expect(h.toast).not.toHaveBeenCalled();
   });
 
   it('Select text opens the message in a selectable view once the menu has gone', () => {

@@ -2,6 +2,7 @@ import { navigateMenu } from "../lib/menuNavigation.js";
 import { OverlayScope, useOverlay } from "../hooks/useOverlay.js";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { MenuSeparator, menuRowClass } from "./Menu.jsx";
 import styles from "./ContextMenu.module.css";
 
 export function ContextMenuMount() {
@@ -71,7 +72,7 @@ export default function ContextMenu({ x, y, items, onClose }) {
       >
         {items.map((it, i) => {
           if (it.kind === "separator") {
-            return <div key={`sep-${i}`} role="separator" className={styles.sep} />;
+            return <MenuSeparator key={`sep-${i}`} />;
           }
           const danger = it.kind === "danger";
           return (
@@ -84,7 +85,7 @@ export default function ContextMenu({ x, y, items, onClose }) {
                 onClose();
                 it.onClick?.();
               }}
-              className={`row ${styles.item} ${danger ? styles.itemDanger : ""}`}
+              className={menuRowClass({ danger })}
             >
               <span className={`${styles.icon} ${danger ? styles.iconDanger : ""}`}>
                 {it.icon}

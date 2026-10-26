@@ -41,7 +41,7 @@
   flex-shrink: 0;
 }
 .dotActive { background: var(--ink); }
-.dotInactive { border: 1px solid var(--ink-4); }
+.dotInactive { border: 1px solid var(--edge); }
 .dotInvalid { border: 1px solid var(--c-danger); }
 .dotFlag { background: var(--c-danger); }
 
@@ -132,7 +132,7 @@
 .reqMissing { color: var(--ink-3); }
 .reqDot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 .reqOk { background: var(--ink); }
-.reqNo { border: 1px solid var(--ink-4); }
+.reqNo { border: 1px solid var(--edge); }
 
 .kwFlow { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .kw {

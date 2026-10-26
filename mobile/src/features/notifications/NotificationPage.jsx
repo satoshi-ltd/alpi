@@ -163,9 +163,9 @@ export function NotificationPage({ profile, id, connectionId, embedded = false, 
     setRunning(true);
     try {
       await runJob(jobId);
-      toast({ message: 'Running again', kind: 'success', duration: 2000 });
+      toast({ message: 'Running again', kind: 'success' });
     } catch (e) {
-      toast({ message: `Run failed: ${String(e?.message ?? e)}`, kind: 'danger', duration: 4000 });
+      toast({ message: `Run failed: ${String(e?.message ?? e)}`, kind: 'danger' });
     } finally {
       runningRef.current = false;
       setRunning(false);

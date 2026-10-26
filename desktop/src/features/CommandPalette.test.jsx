@@ -4,6 +4,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ICON_ROLES } from "../../../common/iconRoles.mjs";
 import CommandPalette, { RECENT_SESSION_ROWS, SESSION_CACHE_TTL_MS, entityGroups, _resetSessionCache, loadRecentSessions } from "./CommandPalette.jsx";
 
+describe("CommandPalette dialog", () => {
+  it("is a labelled modal dialog", () => {
+    render(<CommandPalette open onClose={vi.fn()} commands={[]} />);
+    expect(screen.getByRole("dialog", { name: "Command palette" })).toHaveAttribute("aria-modal", "true");
+  });
+});
+
 describe("CommandPalette", () => {
   it("keeps shortcut help rows informational", () => {
     const onClose = vi.fn();

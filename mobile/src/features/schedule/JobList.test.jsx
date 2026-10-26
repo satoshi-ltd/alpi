@@ -17,11 +17,14 @@ vi.mock('react-native', () => {
   return { View, Text, Pressable, ScrollView: ({ children }) => React.createElement('div', {}, children), RefreshControl: () => null };
 });
 vi.mock('expo-router', () => ({ useRouter: () => ({ push: h.push }) }));
+vi.mock('../../components/FadeIn', () => ({ FadeIn: ({ children }) => children }));
+vi.mock('../../hooks/useSkeleton', () => ({ useSkeleton: (loading) => loading }));
 vi.mock('../../components/Button', () => ({ Button: ({ title, onPress }) => React.createElement('button', { type: 'button', onClick: onPress }, title) }));
 vi.mock('../../components/Dot', () => ({ Dot: ({ color, pulse }) => React.createElement('i', { 'data-dot': color, 'data-pulse': String(!!pulse) }) }));
 vi.mock('../../components/Field', () => ({
   Field: ({ value, onChangeText, placeholder }) => React.createElement('input', { value, placeholder, 'aria-label': 'search', onChange: (e) => onChangeText(e.target.value) }),
 }));
+vi.mock('../../components/EmptyState', () => ({ EmptyState: ({ title, detail, action }) => React.createElement('div', {}, `${title}|${detail}`, React.createElement('button', { type: 'button', onClick: action?.onPress }, action?.label)) }));
 vi.mock('../../components/ListSkeleton', () => ({ ListSkeleton: () => React.createElement('div', {}, 'skeleton') }));
 vi.mock('../../components/LoadFailed', () => ({
   LoadFailed: ({ label, error, onRetry }) => React.createElement('div', { role: 'alert' }, `Couldn't load ${label}: ${error}`, React.createElement('button', { type: 'button', onClick: onRetry }, 'Retry')),

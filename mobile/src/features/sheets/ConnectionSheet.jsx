@@ -8,9 +8,10 @@ import { Dot } from '../../components/Dot';
 import { Icon } from '../../components/Icon';
 import { Row, RowSeparator } from '../../components/Row';
 import { Sheet } from '../../components/Sheet';
+import { Pill } from '../../components/Pill';
 import { TextPrompt } from '../../components/TextPrompt';
 import { useToast } from '../../components/Toast';
-import { Bold, Code, TypedConfirm } from '../../components/TypedConfirm';
+import { Bold, Code, ConfirmDialog } from '../../components/ConfirmDialog';
 import { canUpdateConnection } from '../../lib/connectionUpdate';
 import { updateHint } from '../../../../common/updateHint.mjs';
 import { useEndpoint } from '../../lib/EndpointContext';
@@ -23,17 +24,6 @@ function statusColor(status, colors) {
   if (status === 'offline' || status === 'auth-failed') return colors.danger;
   if (status === 'disabled') return colors.ink3;
   return colors.warning;
-}
-
-function Tag({ label, tone }) {
-  const { colors, fonts, fontSizes } = useTheme();
-  const bg = tone === 'danger' ? `${colors.danger}22` : tone === 'warn' ? `${colors.warning}22` : colors.hover;
-  const fg = tone === 'danger' ? colors.danger : tone === 'warn' ? colors.warning : colors.ink2;
-  return (
-    <View style={{ paddingHorizontal: space.s3, paddingVertical: space.s1, borderRadius: radii.tag, backgroundColor: bg }}>
-      <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: fg }}>{label}</Text>
-    </View>
-  );
 }
 
 export function ConnectionSheet({ open, onClose }) {
@@ -55,17 +45,17 @@ export function ConnectionSheet({ open, onClose }) {
     try {
       const res = await rpc(conn, 'host.daemon.update', {});
       if (res?.updated) {
-        toast({ title: 'Updating', message: `${conn.name} → v${res.latest} · daemon restarting`, duration: 3000 });
+        toast({ title: 'Updating', message: `${conn.name} → v${res.latest} · daemon restarting` });
       } else if (res?.reason === 'up-to-date') {
-        toast({ title: 'Up to date', message: `${conn.name} is on v${res.current}`, duration: 2000 });
+        toast({ title: 'Up to date', message: `${conn.name} is on v${res.current}` });
       } else if (res?.reason === 'manual') {
-        toast({ title: "Can't self-update", message: updateHint(res.installer, res.latest), duration: 4000 });
+        toast({ title: "Can't self-update", message: updateHint(res.installer, res.latest) });
       } else {
-        toast({ title: 'Update failed', message: String(res?.reason || 'unknown'), duration: 4000 });
+        toast({ title: 'Update failed', message: String(res?.reason || 'unknown') });
       }
       probeAll().catch(() => {});
     } catch (e) {
-      toast({ title: 'Update failed', message: String(e), duration: 4000 });
+      toast({ title: 'Update failed', message: String(e) });
     }
   };
 
@@ -79,7 +69,7 @@ export function ConnectionSheet({ open, onClose }) {
       open={open}
       onClose={onClose}
       title="Connection"
-      subtitle="WHERE ALPI RUNS"
+      subtitle="where alpi runs"
       primaryAction={{ label: 'Pair this phone', onPress: handlePair }}
     >
       <ScrollView>
@@ -117,11 +107,11 @@ export function ConnectionSheet({ open, onClose }) {
                   value={
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
                       {status === 'disabled' ? (
-                        <Tag label="disabled" />
+                        <Pill>disabled</Pill>
                       ) : c.id === activeId ? (
-                        <Tag label="current" />
+                        <Pill>current</Pill>
                       ) : status === 'offline' ? (
-                        <Tag label="offline" tone="danger" />
+                        <Pill tone="err">offline</Pill>
                       ) : null}
                     </View>
                   }
@@ -178,7 +168,7 @@ export function ConnectionSheet({ open, onClose }) {
             : []
         }
       />
-      <TypedConfirm
+      <ConfirmDialog
         open={!!confirmForget}
         onClose={() => setConfirmForget(null)}
         title={`Forget ${confirmForget?.name ?? ''}`}
@@ -209,7 +199,7 @@ export function ConnectionSheet({ open, onClose }) {
           try {
             await rename(id, name);
           } catch (e) {
-            toast({ title: "Couldn't rename", message: e?.message ?? String(e), duration: 3000 });
+            toast({ title: "Couldn't rename", message: e?.message ?? String(e) });
           }
         }}
       />

@@ -18,6 +18,7 @@ import { Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { ConfirmProvider } from '../src/components/ConfirmProvider';
 import { ToastProvider, useToast } from '../src/components/Toast';
 import { ApprovalSheet } from '../src/features/approval/ApprovalSheet';
 import { ClarificationSheet } from '../src/features/clarification/ClarificationSheet';
@@ -65,7 +66,6 @@ function AuthFailedBridge() {
         toast({
           title: 'Connection disabled',
           message: 'Ask an admin to enable it in Settings → Connections',
-          duration: 3200,
         });
         return;
       }
@@ -77,7 +77,6 @@ function AuthFailedBridge() {
         message: wasActive
           ? (remaining.length ? 'Switched to another paired daemon' : 'Pair again to keep going')
           : 'Auth token rejected — removed from list',
-        duration: 3200,
       });
       if (wasActive && remaining.length === 0) {
         router.replace('/pair');
@@ -163,7 +162,7 @@ export default function RootLayout() {
         <ThemeProvider>
           <EndpointProvider>
             <EventsProvider>
-              <ToastProvider>{fontsReady ? <Routes /> : <Boot />}</ToastProvider>
+              <ToastProvider><ConfirmProvider>{fontsReady ? <Routes /> : <Boot />}</ConfirmProvider></ToastProvider>
             </EventsProvider>
           </EndpointProvider>
         </ThemeProvider>

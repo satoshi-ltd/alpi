@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Alert, Image, Pressable, Text, View } from 'react-native';
+import { Image, Pressable, Text, View } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 
 import { Icon } from '../../components/Icon';
 import { Spinner } from '../../components/Spinner';
+import { useToast } from '../../components/Toast';
 import { useEndpoint } from '../../lib/EndpointContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { radii, space } from '../../theme/tokens';
@@ -16,7 +17,7 @@ const ICON = { code: 'file-code', text: 'file-text', file: 'file', image: 'file'
 const BOX = 32;
 const MESSAGE_MAX = 4;
 
-async function shareAttachment(call, profile, a) {
+async function shareAttachment(call, profile, a, toast) {
   try {
     const r = await call('host.attachments.fetch', { profile, path: a.path }, { timeoutMs: FETCH_TIMEOUT_MS });
     if (!r?.data_base64) throw new Error('empty response');
@@ -27,7 +28,7 @@ async function shareAttachment(call, profile, a) {
       await Sharing.shareAsync(uri, { mimeType: r.mime || a.mime, dialogTitle: a.name });
     }
   } catch (e) {
-    Alert.alert('Could not open file', String(e?.message || e));
+    toast({ title: 'Could not open file', message: String(e?.message || e), kind: 'danger', onRetry: () => shareAttachment(call, profile, a, toast) });
   }
 }
 
@@ -72,6 +73,7 @@ const REMOVE_SLOP = 15;
 export function AttachmentCards({ items, onRemove, variant = 'composer', profile }) {
   const { colors, fonts, fontSizes } = useTheme();
   const { call } = useEndpoint();
+  const toast = useToast();
   if (!items?.length) return null;
   const message = variant === 'message';
   const shown = message ? items.slice(0, MESSAGE_MAX) : items;
@@ -97,7 +99,7 @@ export function AttachmentCards({ items, onRemove, variant = 'composer', profile
         const clickable = message && !!a.path;
         const CardComp = clickable ? Pressable : View;
         const cardProps = clickable
-          ? { onPress: () => shareAttachment(call, profile, a), accessibilityRole: 'button', accessibilityLabel: `Open ${a.name}` }
+          ? { onPress: () => shareAttachment(call, profile, a, toast), accessibilityRole: 'button', accessibilityLabel: `Open ${a.name}` }
           : {};
         return (
           <CardComp

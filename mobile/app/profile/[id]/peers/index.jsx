@@ -48,7 +48,7 @@ export default function PeersList() {
   const discard = async (pubkey) => {
     try {
       await call('host.peers.pending_discard', { profile: id, pubkey });
-      toast({ title: 'Discarded', message: shortPubkey(pubkey), duration: 1500 });
+      toast({ title: 'Discarded', message: shortPubkey(pubkey) });
       pendingQ.refresh?.();
       refreshDetail?.();
     } catch (e) {

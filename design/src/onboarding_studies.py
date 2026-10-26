@@ -25,7 +25,6 @@ def _load_copy():
 COPY = _load_copy()
 READ, REACH, SIGN = COPY["steps"]
 SKETCH_ZOOM = 1.35
-PHONE_ZOOM = 390 / 168
 
 
 def say(value, p=VIEW, size=11.5):
@@ -208,103 +207,97 @@ def desktop_onboarding():
     return page("Desktop · first run", 1280, DESKTOP_ONBOARDING_H, body)
 
 
-def phone(p, *parts, pad="8px 12px 14px", gap=8):
-    bar = f'<div style="display: flex; padding: 7px 14px 2px">{mono("9:41", 8.5, p["ink"], 600)}</div>'
-    return (f'<div style="width: 168px; height: 364px; box-sizing: border-box; overflow: hidden; background: {p["bg"]}; display: flex; flex-direction: column">{bar}'
-            f'<div style="flex: 1; min-height: 0; display: flex; flex-direction: column; gap: {gap}px; padding: {pad}">{"".join(parts)}</div></div>')
-
-
-def pbtn(p, label, kind="primary", h=30, icon=""):
-    bg, fg = {"primary": (p["ink"], p["pane"]), "secondary": (p["selected"], p["ink"]), "ghost": ("transparent", p["ink2"])}[kind]
-    glyph = ic(icon, 11, fg) if icon else ""
-    return (f'<span style="display: flex; align-items: center; justify-content: center; gap: 5px; height: {h}px; border-radius: 4px; background: {bg}; color: {fg}; '
-            f'font-size: 10.5px; font-weight: 500; white-space: nowrap; flex-shrink: 0">{glyph}{label}</span>')
-
-
-def center(*items, gap=8):
-    return f'<div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: {gap}px">{"".join(items)}</div>'
-
-
-def ptitle(value, p, size=17):
-    return text(value, size, p["ink"], 600, "letter-spacing: -0.01em; white-space: normal")
-
-
-def pbody(value, p, size=10):
-    return wrap(value, size, p["ink2"], lh=1.45)
-
-
-def p_head(p, title, sub=""):
-    return flex(ic("back", 13, p["ink"]), stack(text(title, 12, p["ink"], 600), mono(sub, 8, p["ink3"]) if sub else "", gap=1), gap=6, extra="padding: 2px 0 4px")
-
-
-def well(p, value, filled=False):
-    return (f'<div style="min-height: 34px; box-sizing: border-box; padding: 5px 7px; border-radius: 4px; background: {p["hover"]}; font-family: {MONO}; font-size: 8px; '
-            f'line-height: 1.4; color: {p["ink"] if filled else p["ink4"]}; word-break: break-all">{value}</div>')
-
-
-def where_link(p):
-    rows = text("Where do I get a link?", 9.5, p["ink"], 600) + "".join(wrap(s, 8.5, p["ink2"], lh=1.45) for s in COPY["sources"])
-    return f'<div style="display: flex; flex-direction: column; gap: 3px; padding: 7px 8px; border-radius: 4px; background: {p["hover"]}; text-align: left">{rows}</div>'
-
-
-def m_welcome(p=VIEW):
-    return phone(p, center(black_alpaca(46, p["ink"]), ptitle("Pair with your alpi", p), pbody("alpi runs on a computer or a server. Pair this phone once and its profiles come with you.", p, 9.5)),
-                 where_link(p) + pbtn(p, "Scan QR", h=34, icon="qr") + pbtn(p, "Paste link", "ghost"))
-
-
 LINK = "alpi://device?url=ws%3A%2F%2F100.99.29.84%3A49200&amp;name=casa&amp;pairing_token=…"
 
 
-def m_pair(p, link, states, failure=None, action="Pair"):
-    guide = wrap(f'Open your daemon’s settings, choose {code("Settings → Connections → New connection / Add device", p, 7.5)}, then scan the QR or paste the link below.', 8, p["ink2"], lh=1.4)
-    box = (f'<div style="display: flex; flex-direction: column; gap: 6px; padding: 7px 8px; border-radius: 4px; background: {p["hover"]}">'
-           f'{pairing_ladder(p, states, 8.5)}{failure_note(p, failure, 9.5) if failure else ""}</div>')
-    return phone(p, p_head(p, "Pair this phone", "CONNECT TO YOUR DAEMON") + guide + pbtn(p, "Scan QR", h=24) + mono("OR PASTE LINK", 7.5, p["ink3"])
-                 + well(p, link or "alpi://device?url=wss://…&amp;name=…&amp;pairing_token=…", bool(link)) + box
-                 + f'<div style="margin-top: auto">{pbtn(p, action, h=28)}</div>', pad="4px 10px 12px", gap=6)
+INK, INK2, INK3, INK4 = "#141414", "#454545", "#6b6b6b", "#b4b4b4"
+DANGER_INK = "#b73737"
+HOVER = "rgba(20,20,20,0.04)"
+FILL = "width: 100%; box-sizing: border-box"
 
 
-def m_connecting(p=VIEW):
-    return m_pair(p, LINK, ("done", "done", "now"), action="Pairing…")
+def full(html):
+    return html.replace("border-radius: 4px", f"border-radius: 4px; {FILL}", 1)
 
 
-def m_unreachable(p=VIEW):
-    failure = COPY["unreachable"]
-    return m_pair(p, LINK, ("done", "fail", "todo"), failure, failure["action"])
+def mono_run(value):
+    return f'<span style="font-family: {MONO}; color: {INK}">{value}</span>'
 
 
-def m_link_used(p=VIEW):
-    failure = COPY["used"]
-    return m_pair(p, "", ("done", "done", "fail"), failure, failure["action"])
+def welcome_screen():
+    from gen import m_button, m_eyebrow
+    sources = "".join(f'<span style="font-size: 12px; line-height: 1.65; color: {INK2}">{line}</span>' for line in COPY["sources"])
+    card = (f'<div style="display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 4px; background: {HOVER}">'
+            f'<span style="font-weight: 600; font-size: 14px; color: {INK}">Where do I get a link?</span>{sources}</div>')
+    top = (f'<div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; text-align: center">{black_alpaca(88, INK)}'
+           f'<span style="font-weight: 600; font-size: 28px; letter-spacing: -0.018em; color: {INK}">Pair with your alpi</span>'
+           f'<span style="max-width: 320px; font-size: 15px; line-height: 1.65; color: {INK2}">alpi runs on a computer or a server. Pair this phone once and its profiles come with you.</span></div>')
+    bottom = f'<div style="display: flex; flex-direction: column; gap: 10px">{card}{full(m_button("Scan QR", "primary", "hero"))}{full(m_button("Paste link", "ghost", "lg"))}</div>'
+    return f'<div style="height: 100%; box-sizing: border-box; display: flex; flex-direction: column; padding: 24px">{top}{bottom}</div>'
 
 
-def m_paired(p=VIEW):
-    return phone(p, center(black_alpaca(40, p["ink"]), ptitle("Paired with casa", p), mono(COPY["admin"], 8.5, p["ink3"]),
-                           pbody("Your daemon is reachable and your profiles are available.", p, 9.5)),
-                 pbtn(p, "Open inbox", h=34))
+def ladder_rows(states):
+    rows = ""
+    for state, label in zip(states, (READ, REACH, SIGN)):
+        glyph = {"done": ic("check", 14, INK), "fail": ic("x", 14, "#c14545"),
+                 "now": f'<span style="width: 6px; height: 6px; border-radius: 4px; background: {INK2}"></span>',
+                 "todo": f'<span style="width: 6px; height: 6px; border-radius: 4px; background: {INK4}"></span>'}[state]
+        colour = DANGER_INK if state == "fail" else INK3 if state == "todo" else INK
+        rows += (f'<div style="display: flex; align-items: center; gap: 8px"><span style="width: 16px; display: inline-flex; justify-content: center">{glyph}</span>'
+                 f'<span style="flex: 1; font-size: 14px; font-weight: {400 if state == "todo" else 500}; color: {colour}">{label}</span></div>')
+    return f'<div style="display: flex; flex-direction: column; gap: 8px">{rows}</div>'
 
 
-def footer_bar(p):
-    return flex(ic("gear", 12, p["ink2"]), spacer(), ic("bell", 12, p["ink2"]), ic("activity", 12, p["ink2"]), gap=12, extra=f"margin-top: auto; padding-top: 8px; box-shadow: inset 0 0.5px 0 {p['line']}")
+def pair_screen(link, states, failure=None, action="Pair"):
+    from gen import m_button, m_eyebrow
+    head = (f'<div style="display: flex; align-items: center; gap: 12px; padding: 16px">{ic("back", 20, INK)}<div style="flex: 1; display: flex; flex-direction: column">'
+            f'<span style="font-weight: 600; font-size: 18px; color: {INK}">Pair this phone</span>{m_eyebrow("Connect to your daemon", INK3, 500, 0.06, 11, "margin-top: 4px")}</div></div>')
+    intro = (f'<span style="font-size: 14px; line-height: 1.5; color: {INK2}">Open your daemon’s settings, choose {mono_run("Settings → Connections → New connection / Add device")}, '
+             f'then either scan the QR or paste the {mono_run("alpi://")} link below.</span>')
+    shown = link or "alpi://device?url=wss://…&amp;name=…&amp;pairing_token=…"
+    well = (f'<div style="min-height: 64px; box-sizing: border-box; padding: 12px; border-radius: 4px; border: 2px solid transparent; background: #f2f2f2; font-family: {MONO}; '
+            f'font-size: 12px; line-height: 1.3; color: {INK if link else INK4}; word-break: break-all">{shown}</div>')
+    paste = (f'<div style="display: flex; flex-direction: column; gap: 8px">{m_eyebrow("or paste link", INK3)}{well}'
+             f'<span style="align-self: flex-end; font-weight: 500; font-size: 14px; color: {INK2}">Paste from clipboard</span></div>')
+    told = ""
+    if failure:
+        told = (f'<div style="display: flex; flex-direction: column; gap: 6px"><span style="font-weight: 600; font-size: 15px; color: {INK}">{failure["title"]}</span>'
+                f'<span style="font-size: 14px; line-height: 1.5; color: {INK2}">{failure["hint"]}</span></div>')
+    box = f'<div style="display: flex; flex-direction: column; gap: 12px; padding: 14px; border-radius: 4px; background: {HOVER}">{ladder_rows(states)}{told}</div>'
+    body = (f'<div style="display: flex; flex-direction: column; gap: 20px; padding: 20px">{intro}{full(m_button("Scan QR", "primary", "lg"))}{paste}{box}'
+            f'{full(m_button(action, "primary", "lg"))}</div>')
+    return f'<div style="display: flex; flex-direction: column; height: 100%">{head}{body}</div>'
 
 
-def m_member_empty(p=VIEW):
-    head = flex(stack(flex(text("mirai", 12, p["ink"], 600), status_dot(p, "online", 5), gap=5), mono("wss://alpi.mirai.example", 8, p["ink3"]), gap=1), spacer(), ic("search", 12, p["ink2"]), gap=6, extra="padding: 2px 0 6px")
+def paired_screen():
+    from gen import m_button
+    top = (f'<div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; text-align: center">{black_alpaca(88, INK)}'
+           f'<span style="font-weight: 600; font-size: 28px; letter-spacing: -0.018em; color: {INK}">Paired with casa</span>'
+           f'<span style="font-family: {MONO}; font-size: 12px; color: {INK3}">{COPY["admin"]}</span>'
+           f'<span style="max-width: 320px; font-size: 15px; line-height: 1.65; color: {INK2}">Your daemon is reachable and your profiles are available.</span></div>')
+    return f'<div style="height: 100%; box-sizing: border-box; display: flex; flex-direction: column; padding: 24px">{top}{full(m_button("Open inbox", "primary", "hero"))}</div>'
+
+
+def member_screen():
+    from gen import m_conn_header, m_empty_state, m_shell_footer
     copy = COPY["member"]
-    empty = center(text(copy["title"], 11.5, p["ink"], 600, "white-space: normal"), pbody(copy["hint"], p, 9), gap=6)
-    return phone(p, head + empty + footer_bar(p))
+    return (f'<div style="display: flex; flex-direction: column; height: 100%; background: #ffffff">{m_conn_header(ring="#ffffff", collapse=False, bg="#ffffff")}'
+            f'<div style="height: 0.5px; background: rgba(20,20,20,0.07)"></div>'
+            f'<div style="flex: 1; min-height: 0; display: flex; flex-direction: column">{m_empty_state(copy["title"], copy["hint"])}</div>'
+            f'{m_shell_footer(ring="#ffffff", border=True)}</div>')
 
 
-def phone_screen(title, drawing):
-    return page(title, 390, 844, f'<div style="zoom: {PHONE_ZOOM}">{drawing}</div>')
+def phone_screen(title, drawing, bg="#ffffff"):
+    return page(title, 390, 844, drawing, bg=bg)
 
 
 def phone_onboarding():
+    unreachable, used = COPY["unreachable"], COPY["used"]
     return {
-        "welcome": phone_screen("Phone · pair with your alpi", m_welcome()),
-        "connecting": phone_screen("Phone · pairing", m_connecting()),
-        "paired": phone_screen("Phone · paired", m_paired()),
-        "unreachable": phone_screen("Phone · host unreachable", m_unreachable()),
-        "used": phone_screen("Phone · link used", m_link_used()),
-        "member": phone_screen("Phone · nothing shared", m_member_empty()),
+        "welcome": phone_screen("Phone · pair with your alpi", welcome_screen()),
+        "connecting": phone_screen("Phone · pairing", pair_screen(LINK, ("done", "done", "now"), action="Pairing…")),
+        "paired": phone_screen("Phone · paired", paired_screen()),
+        "unreachable": phone_screen("Phone · host unreachable", pair_screen(LINK, ("done", "fail", "todo"), unreachable, unreachable["action"])),
+        "used": phone_screen("Phone · link used", pair_screen("", ("done", "done", "fail"), used, used["action"])),
+        "member": phone_screen("Phone · nothing shared", member_screen()),
     }

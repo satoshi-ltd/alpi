@@ -1,0 +1,74 @@
+.wrap {
+  --u-bar-w: 20px;
+}
+
+.stats {
+  display: flex;
+  align-items: flex-start;
+  padding-bottom: var(--space-6);
+  border-bottom: 0.5px solid var(--line-2);
+}
+
+.stat {
+  flex: 1;
+  min-width: 0;
+}
+
+.labelSlot {
+  display: flex;
+  align-items: center;
+  height: calc(var(--text-meta) * var(--lh-normal));
+  margin-bottom: var(--space-2);
+}
+
+.leadSlot {
+  display: flex;
+  align-items: center;
+  height: calc(var(--text-display) * var(--lh-tight));
+}
+
+.valueSlot {
+  display: flex;
+  align-items: center;
+  height: calc(var(--text-title) * var(--lh-tight));
+}
+
+.track {
+  height: 104px;
+  margin-top: var(--space-8);
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-1);
+}
+
+.col {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.bar {
+  max-width: var(--u-bar-w);
+}
+
+.labels {
+  height: calc(var(--text-meta) * var(--lh-tight));
+  margin-top: var(--space-3);
+}
+
+.foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+.footSlot {
+  display: flex;
+  align-items: center;
+  height: calc(var(--text-meta) * var(--lh-normal));
+}

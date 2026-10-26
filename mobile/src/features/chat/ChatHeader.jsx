@@ -46,8 +46,9 @@ export function headerMenuActions({
       id: 'auto-read',
       label: 'Auto-read replies',
       icon: glyph('volume-2'),
-      detail: autoRead ? 'on' : 'off',
-      onPress: onToggleAutoRead,
+      kind: 'switch',
+      value: autoRead,
+      onValueChange: onToggleAutoRead,
     });
   }
   const brain = [];

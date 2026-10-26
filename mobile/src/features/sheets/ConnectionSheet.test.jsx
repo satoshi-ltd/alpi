@@ -39,12 +39,13 @@ vi.mock('../../components/Row', () => ({
 vi.mock('../../components/Sheet', () => ({
   Sheet: ({ open, children }) => (open ? React.createElement('div', { 'data-sheet': 'true' }, children) : null),
 }));
+vi.mock('../../components/Pill', () => ({ Pill: ({ tone, children }) => React.createElement('em', { 'data-pill': tone ?? 'neutral' }, children) }));
 vi.mock('../../components/Toast', () => ({ useToast: () => vi.fn() }));
 vi.mock('../../components/TextPrompt', () => ({ TextPrompt: () => null }));
-vi.mock('../../components/TypedConfirm', () => ({
+vi.mock('../../components/ConfirmDialog', () => ({
   Bold: ({ children }) => React.createElement('b', {}, children),
   Code: ({ children }) => React.createElement('code', {}, children),
-  TypedConfirm: () => null,
+  ConfirmDialog: () => null,
 }));
 vi.mock('../../lib/rpc', () => ({ call: vi.fn(async () => ({})) }));
 const endpoint = vi.hoisted(() => ({ state: null }));
@@ -89,6 +90,15 @@ describe('ConnectionSheet list', () => {
     render(<ConnectionSheet open onClose={() => {}} />);
     expect(screen.getByText('current')).toBeTruthy();
     expect(screen.queryByText('update')).toBeNull();
+  });
+});
+
+describe('ConnectionSheet status pills', () => {
+  it('draws an offline connection as the shared danger pill', () => {
+    const casa = { id: 'c1', kind: 'remote', name: 'casa', url: 'ws://casa:49200', lastUsed: 1 };
+    endpoint.state = { ...emptyEndpoint(), connections: [casa], activeId: null, probeState: new Map([['c1', 'offline']]) };
+    render(<ConnectionSheet open onClose={() => {}} />);
+    expect(screen.getByText('offline').getAttribute('data-pill')).toBe('err');
   });
 });
 

@@ -34,4 +34,14 @@ describe("CreateProfileModal", () => {
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(onClose).toHaveBeenCalled();
   });
+
+  it("links the name field to its validation message", () => {
+    render(<CreateProfileModal open existingNames={["work"]} onClose={() => {}} />);
+    const input = screen.getByPlaceholderText(/work · personal/);
+    expect(input).not.toHaveAttribute("aria-invalid");
+    fireEvent.change(input, { target: { value: "work" } });
+    const message = screen.getByText("@work already exists");
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input.getAttribute("aria-describedby")).toBe(message.id);
+  });
 });

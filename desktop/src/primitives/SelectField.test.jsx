@@ -14,8 +14,9 @@ describe("SelectField", () => {
     const trigger = screen.getByRole("button", { name: "Session scope" });
     expect(trigger).toHaveTextContent("Private to each device");
     fireEvent.click(trigger);
-    const active = screen.getByRole("button", { name: /Private to each device/ });
-    expect(active.className).toMatch(/rowActive/);
+    const active = screen.getByRole("menuitemradio", { name: /Private to each device/ });
+    expect(active).toHaveAttribute("aria-checked", "true");
+    expect(active.className).toMatch(/rowSelected/);
     expect(screen.getByText("each device keeps its own thread")).toBeInTheDocument();
   });
 

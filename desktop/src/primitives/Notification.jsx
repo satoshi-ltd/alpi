@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { plainError } from "../../../common/plainError.mjs";
+import Icon from "./Icon.jsx";
 import styles from "./Notification.module.css";
 
 const NotifyContext = createContext(null);
@@ -33,15 +34,23 @@ function normalize(arg, extra) {
     onAction: o.onAction,
     onPause: o.onPause,
     onResume: o.onResume,
-    duration: o.duration ?? 5000,
-    persistent: !!o.persistent,
+    duration: o.duration ?? (kind === "danger" ? 6000 : 2800),
+    persistent: o.persistent ?? (kind === "danger" && !!o.action),
   };
 }
 
 function capStack(items) {
   let over = items.length - MAX_TOASTS;
   if (over <= 0) return items;
-  return items.filter((x) => x.pinned || over-- <= 0);
+  const evict = new Set();
+  const order = [...items.filter((x) => !x.persistent), ...items.filter((x) => x.persistent)];
+  for (const x of order) {
+    if (over <= 0) break;
+    if (x.pinned) continue;
+    evict.add(x);
+    over--;
+  }
+  return items.filter((x) => !evict.has(x));
 }
 
 export function NotificationProvider({ children }) {
@@ -104,7 +113,6 @@ export function useNotify() {
 }
 
 function NotificationStack({ items, onDismiss }) {
-  if (items.length === 0) return null;
   return (
     <div className={styles.stack} aria-live="polite">
       {items.map((n) => (
@@ -163,18 +171,29 @@ function Notification({ n, onDismiss }) {
       info: "var(--ink-3)",
     }[n.kind] || "var(--ink-3)";
   const pulsing = n.kind !== "info";
+  const isError = n.kind === "danger";
+
+  const pause = () => {
+    if (pausedRef.current) return;
+    pausedRef.current = true;
+    setPaused(true);
+    n.onPause?.();
+  };
+  const resume = () => {
+    if (!pausedRef.current) return;
+    pausedRef.current = false;
+    setPaused(false);
+    n.onResume?.();
+  };
 
   return (
     <div
-      onMouseEnter={() => {
-        pausedRef.current = true;
-        setPaused(true);
-        n.onPause?.();
-      }}
-      onMouseLeave={() => {
-        pausedRef.current = false;
-        setPaused(false);
-        n.onResume?.();
+      role={isError ? "alert" : undefined}
+      onMouseEnter={pause}
+      onMouseLeave={resume}
+      onFocus={pause}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) resume();
       }}
       className={`${styles.toast} ${n.action ? styles.toastWithAction : ""}`}
       style={{
@@ -187,7 +206,7 @@ function Notification({ n, onDismiss }) {
         className={`${styles.dot} ${pulsing ? styles.dotPulse : ""}`}
         style={{ background: dotColor }}
       />
-      <span className={styles.text}>{n.text}</span>
+      <span className={styles.text} title={n.text}>{n.text}</span>
       {n.action && (
         <>
           <span aria-hidden className={styles.divider} />
@@ -202,6 +221,16 @@ function Notification({ n, onDismiss }) {
             {n.action}
           </button>
         </>
+      )}
+      {n.persistent && (
+        <button
+          type="button"
+          aria-label="Dismiss"
+          onClick={beginExit}
+          className={styles.closeBtn}
+        >
+          <Icon name="x" size={14} />
+        </button>
       )}
     </div>
   );

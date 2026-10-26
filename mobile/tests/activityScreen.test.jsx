@@ -13,6 +13,10 @@ const h = vi.hoisted(() => ({
   toast: null,
 }));
 
+vi.mock('../src/components/EmptyState', async () => {
+  const R = await import('react');
+  return { EmptyState: ({ title, detail, action }) => R.createElement('div', null, R.createElement('span', null, title), R.createElement('span', null, detail), action ? R.createElement('button', { onClick: action.onPress }, action.label) : null) };
+});
 vi.mock('react-native', () => {
   const View = ({ children, accessibilityRole }) => React.createElement('div', { role: accessibilityRole }, children);
   const Text = ({ children }) => React.createElement('span', {}, children);

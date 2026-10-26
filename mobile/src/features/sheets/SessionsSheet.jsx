@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { space } from '../../theme/tokens';
 
+import { PICKER_TEXT_EDGE } from '../../components/PickerLead';
 import { PickerRow } from '../../components/PickerRow';
 import { Row, RowSeparator, SectionHeader } from '../../components/Row';
 import { Sheet } from '../../components/Sheet';
@@ -99,7 +100,7 @@ export function SessionsSheet({ open, onClose, profile, accent, activeSessionId,
                 );
                 return (
                   <View key={s.id}>
-                    {i > 0 ? <RowSeparator /> : null}
+                    {i > 0 ? <RowSeparator indent={PICKER_TEXT_EDGE} /> : null}
                     <PickerRow
                       selected={s.id === activeSessionId}
                       accent={accent}

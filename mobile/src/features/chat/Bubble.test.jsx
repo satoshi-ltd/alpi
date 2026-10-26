@@ -14,12 +14,17 @@ vi.mock('react-native', () => {
   const View = ({ children, style, ...p }) =>
     React.createElement('div', { ...p, 'data-style': JSON.stringify(flatStyle(style)) }, children);
   const Text = ({ children, style, ...p }) => React.createElement('span', { ...p, 'data-text-size': style?.fontSize, 'data-text-color': style?.color }, children);
-  const Pressable = ({ children, style, onLongPress, delayLongPress, ...p }) =>
+  const Pressable = ({ children, style, onLongPress, delayLongPress, accessibilityActions, onAccessibilityAction, onPress, accessibilityLabel, accessibilityRole, ...p }) =>
     React.createElement(
       'button',
       {
         type: 'button',
         ...p,
+        onClick: onPress,
+        'aria-label': accessibilityLabel,
+        'data-role': accessibilityRole,
+        'data-a11y-actions': accessibilityActions ? JSON.stringify(accessibilityActions) : undefined,
+        onDoubleClick: () => onAccessibilityAction?.({ nativeEvent: { actionName: accessibilityActions?.[0]?.name } }),
         onContextMenu: onLongPress,
         'data-style': JSON.stringify(flatStyle(typeof style === 'function' ? style({ pressed: false }) : style)),
         'data-pressed-style': JSON.stringify(flatStyle(typeof style === 'function' ? style({ pressed: true }) : style)),
@@ -42,6 +47,7 @@ vi.mock('../../theme/ThemeContext', async () => {
 
 vi.mock('../../lib/reduceMotion', () => ({ useReduceMotion: () => themeState.reduce }));
 vi.mock('../../lib/haptics', () => ({ selection: () => themeState.ticks.push('selection'), tap: () => themeState.ticks.push('tap') }));
+vi.mock('../../components/Icon', () => ({ Icon: ({ name }) => React.createElement('i', { 'data-icon': name }) }));
 vi.mock('../../components/Fold', () => ({ Fold: ({ fold, color, size, outlined }) => React.createElement('span', { 'data-fold': fold ?? 'diamond', 'data-color': color, 'data-size': size, 'data-outlined': String(!!outlined) }) }));
 vi.mock('./AttachmentCards', () => ({ AttachmentCards: () => React.createElement('span', { 'data-cards': 'true' }) }));
 vi.mock('../../components/RichText', () => ({
@@ -200,4 +206,39 @@ describe('message footer and long press', () => {
     expect(themeState.ticks).toEqual(['selection']);
   });
 
+});
+
+describe('message actions without a long press', () => {
+  it.each(VARIANTS.map(([name]) => name))('exposes the %s message actions to a screen reader and runs the same handler', (name) => {
+    const onLongPress = vi.fn();
+    const make = {
+      user: <ProfileUserMessage text="ship it" ts="now" onLongPress={onLongPress} />,
+      assistant: <ProfileAssistantMessage text="shipped" onLongPress={onLongPress} />,
+      workgroup: <WorkgroupMessage body="status?" speakerName="scout" speakerAccent="#0af0af" onLongPress={onLongPress} />,
+    }[name];
+    const { container } = render(make);
+    const press = container.querySelector('[data-a11y-actions]');
+    expect(JSON.parse(press.getAttribute('data-a11y-actions'))).toEqual([{ name: 'message-actions', label: 'Message actions' }]);
+    fireEvent.doubleClick(press);
+    expect(onLongPress).toHaveBeenCalledTimes(1);
+  });
+
+  it('declares no accessibility action when the message has no actions', () => {
+    const { container } = render(<ProfileAssistantMessage text="shipped" />);
+    expect(container.querySelector('[data-a11y-actions]')).toBeNull();
+  });
+
+  it('shows a 44 pt more button only when asked, and it opens the same actions', () => {
+    const onMore = vi.fn();
+    const { rerender } = render(<ProfileAssistantMessage text="shipped" onMore={onMore} />);
+    const more = screen.getByLabelText('Message actions');
+    expect(more.getAttribute('data-role')).toBe('button');
+    const box = JSON.parse(more.getAttribute('data-style'));
+    expect(box.minWidth).toBeGreaterThanOrEqual(44);
+    expect(box.minHeight).toBeGreaterThanOrEqual(44);
+    fireEvent.click(more);
+    expect(onMore).toHaveBeenCalledTimes(1);
+    rerender(<ProfileAssistantMessage text="shipped" />);
+    expect(screen.queryByLabelText('Message actions')).toBeNull();
+  });
 });

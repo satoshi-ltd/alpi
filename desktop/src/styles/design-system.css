@@ -17,7 +17,7 @@
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  border: 1.5px solid var(--ink-4);
+  border: 1.5px solid var(--edge);
   background: transparent;
   flex-shrink: 0;
 }
@@ -36,7 +36,7 @@
   width: 16px;
   height: 16px;
   border-radius: var(--r-xs);
-  border: 1.5px solid var(--ink-4);
+  border: 1.5px solid var(--edge);
   background: transparent;
   color: var(--bg-pane);
   flex-shrink: 0;
@@ -252,6 +252,10 @@
 .ds-field:focus, .field:focus {
   background: var(--well-focus);
   box-shadow: var(--well-ring);
+}
+.ds-field[aria-invalid="true"], .field[aria-invalid="true"],
+.ds-field[aria-invalid="true"]:focus, .field[aria-invalid="true"]:focus {
+  box-shadow: inset 0 0 0 1px var(--c-danger);
 }
 .ds-selectish:focus, .selectish:focus,
 .ds-selectish:focus-visible, .selectish:focus-visible,
@@ -710,7 +714,9 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
 
 .msg-row { -webkit-user-select: text; user-select: text; cursor: text; }
 .msg-row :is(button, a, [role="button"]) { cursor: pointer; }
-.msg-row:hover .msg-actions { opacity: 1; }
+.msg-row:hover .msg-actions,
+.msg-row:focus-within .msg-actions,
+.msg-actions[data-rest] { opacity: 1; }
 
 @keyframes ds-spin { to { transform: rotate(360deg); } }
 .ds-spin { animation: ds-spin var(--dur-spin) linear infinite; }
@@ -742,9 +748,15 @@ a:focus-visible,
   cursor: pointer;
   transition: background var(--dur-1);
 }
-.ds-sb-row:hover, .sb-row:hover { background: color-mix(in srgb, var(--bg-pane) 50%, transparent); }
+.ds-sb-row:hover, .sb-row:hover { background: var(--hover); }
 .ds-sb-row.sel, .sb-row.sel,
-.ds-sb-row.sel:hover, .sb-row.sel:hover { background: var(--bg-pane); }
+.ds-sb-row[data-sel], .sb-row[data-sel],
+.ds-sb-row.sel:hover, .sb-row.sel:hover,
+.ds-sb-row[data-sel]:hover, .sb-row[data-sel]:hover {
+  background: var(--selected);
+  box-shadow: inset 3px 0 0 var(--row-accent, var(--accent));
+}
+.ds-sb-row:hover, .sb-row:hover,
 .ds-sb-row[data-sel], .sb-row[data-sel] {
   width: calc(100% + 2 * var(--sb-bleed, 0px));
   margin: 0 calc(-1 * var(--sb-bleed, 0px));
@@ -779,24 +791,21 @@ a:focus-visible,
     transform 160ms var(--ease);
 }
 
-/* Workgroup paused: pause glyph already signals it via leading icon, so just dim the row. */
-.ds-sb-row[data-state="paused"],
-.sb-row[data-state="paused"] {
-  opacity: var(--alpha-muted);
-}
-
-/* Profile without a model/provider configured. Discovery happens on click → NeedsProviderState. */
-.ds-sb-row[data-state="needs-provider"],
-.sb-row[data-state="needs-provider"] {
-  opacity: var(--alpha-muted);
-}
+.ds-sb-row[data-state="paused"] .sb-name,
+.sb-row[data-state="paused"] .sb-name,
 .ds-sb-row[data-state="needs-provider"] .sb-name,
-.sb-row[data-state="needs-provider"] .sb-name {
+.sb-row[data-state="needs-provider"] .sb-name,
+.ds-sb-row[data-muted] .sb-name,
+.sb-row[data-muted] .sb-name {
   font-weight: var(--fw-regular);
   color: var(--ink-3);
 }
+.ds-sb-row[data-state="paused"] .sb-name.is-sel,
+.sb-row[data-state="paused"] .sb-name.is-sel,
 .ds-sb-row[data-state="needs-provider"] .sb-name.is-sel,
-.sb-row[data-state="needs-provider"] .sb-name.is-sel {
+.sb-row[data-state="needs-provider"] .sb-name.is-sel,
+.ds-sb-row[data-muted] .sb-name.is-sel,
+.sb-row[data-muted] .sb-name.is-sel {
   font-weight: var(--fw-medium);
   color: var(--ink);
 }
@@ -817,7 +826,7 @@ a:focus-visible,
 .ds-chat-header .title-row .ds-hash, .hash {
   font-size: var(--text-display);
   font-weight: var(--fw-medium);
-  color: var(--ink-4);
+  color: var(--ink-3);
   line-height: var(--lh-tight);
 }
 .ds-chat-header h1 {

@@ -15,7 +15,7 @@
   cursor: pointer;
   opacity: 0;
   pointer-events: none;
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-edge);
   transition:
     opacity var(--dur-1) var(--ease),
     transform var(--dur-1) var(--ease),
@@ -36,5 +36,5 @@
 
 .btn:focus-visible {
   outline: none;
-  box-shadow: var(--shadow), var(--well-ring);
+  box-shadow: var(--shadow-edge), var(--well-ring);
 }

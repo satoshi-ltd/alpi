@@ -50,7 +50,7 @@ export function SectionHeader({ children, kicker, first = false, onLayout }) {
           {children}
         </Eyebrow>
         {kicker ? (
-          <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink4 }}>
+          <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>
             {kicker}
           </Text>
         ) : null}
@@ -112,7 +112,6 @@ function WideRow({ label, helper, value, leading, trailing, onPress, onLongPress
         gap: space.s9,
         minHeight: mobile.tap,
         paddingVertical: space.s3,
-        opacity: disabled ? 0.45 : 1,
       }}
     >
       {leading ? <View>{leading}</View> : null}
@@ -124,7 +123,7 @@ function WideRow({ label, helper, value, leading, trailing, onPress, onLongPress
               fontFamily: fonts.sans.semibold,
               fontSize: fontSizes.md,
               lineHeight: fontSizes.md * lineHeights.cozy,
-              color: danger ? colors.dangerText : colors.ink,
+              color: danger ? colors.dangerText : disabled ? colors.ink3 : colors.ink,
             }}
           >
             {label}
@@ -141,7 +140,7 @@ function WideRow({ label, helper, value, leading, trailing, onPress, onLongPress
         {helper ? (
           <Text
             numberOfLines={helperLines ?? 2}
-            style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: helperDanger ? colors.dangerText : item ? colors.ink3 : colors.ink4, marginTop: space.s1 }}
+            style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: helperDanger ? colors.dangerText : colors.ink3, marginTop: space.s1 }}
           >
             {helper}
           </Text>
@@ -219,7 +218,7 @@ export function Row({ label, helper, value, leading, trailing, onPress, onLongPr
       style={{
         fontFamily: fonts.sans.regular,
         fontSize: fontSizes.lg,
-        color: danger ? colors.dangerText : colors.ink,
+        color: danger ? colors.dangerText : disabled ? colors.ink3 : colors.ink,
         lineHeight: fontSizes.lg * 1.3,
       }}
     >
@@ -248,7 +247,6 @@ export function Row({ label, helper, value, leading, trailing, onPress, onLongPr
         paddingHorizontal: space.s7,
         paddingVertical: space.s6,
         gap: space.s5,
-        opacity: disabled ? 0.45 : 1,
       }}
     >
       {leading ? <View>{leading}</View> : null}

@@ -9,6 +9,13 @@ import { fmtTok } from "../lib/format.js";
 import { modelLabel } from "../lib/modelLabel.js";
 import styles from "./ModelPicker.module.css";
 
+const EFFORT_OPTIONS = [
+  { value: "", label: "Default" },
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+];
+
 export default function ModelPicker({
   currentModel,
   accent,
@@ -18,6 +25,9 @@ export default function ModelPicker({
   override = false,
   mode = "override",
   variant = "ghost",
+  effort = "",
+  effortSupported = false,
+  onEffortChange,
 }) {
   const [open, setOpen] = useState(false);
   const [picked, setPicked] = useState(currentModel);
@@ -37,6 +47,8 @@ export default function ModelPicker({
   }, [currentModel]);
 
   const label = modelLabel(picked);
+  const supported = typeof effortSupported === "function" ? !!effortSupported(picked) : !!effortSupported;
+  const effortTag = supported && effort ? effort : null;
 
   return (
     <span ref={ref} className={styles.modelPickerWrap}>
@@ -57,23 +69,25 @@ export default function ModelPicker({
             className={override ? styles.modelPickerIconOverride : styles.modelPickerIcon}
             style={override && accent ? { "--c": accent } : undefined}
           />
-          <span className={styles.modelPickerLabel}>{label}</span>
+          <span className={styles.modelPickerLabel}>
+            <span className={styles.modelPickerLabelModel}>{label}</span>
+            {effortTag && <span className={styles.modelPickerLabelEffort}>{` · ${effortTag}`}</span>}
+          </span>
           <I.ChevDown style={{ width: 12, height: 12 }} />
         </Button>
       </Tip>
       {open && (
         <div
           ref={popRef}
-          role="listbox"
           onKeyDown={(event) => navigateMenu(event, popRef.current)}
           className={`anim-pop ${styles.modelPickerPop} ${
             mode === "default" ? styles.modelPickerPopDown : styles.modelPickerPopUp
           }`}
         >
-          <div className={`col ${styles.modelPickerList}`}>
+          <div role="listbox" aria-label="Model" className={`col ${styles.modelPickerList}`}>
             {Object.entries(models).map(([provider, list]) => (
-              <div key={provider}>
-                <div className={`eyebrow ${styles.modelPickerEyebrow}`}>
+              <div key={provider} role="group" aria-label={provider}>
+                <div role="presentation" className={`eyebrow ${styles.modelPickerEyebrow}`}>
                   {provider}
                 </div>
                 {list.map((m) => {
@@ -132,6 +146,28 @@ export default function ModelPicker({
               </div>
             ))}
           </div>
+          {supported && (
+            <div className={styles.modelPickerEffort}>
+              <div role="presentation" className={`eyebrow ${styles.modelPickerEyebrow}`}>Reasoning effort · saved for this profile</div>
+              <div role="radiogroup" aria-label="Reasoning effort" className={styles.modelPickerSegments}>
+                {EFFORT_OPTIONS.map((opt) => {
+                  const on = opt.value === (effort ?? "");
+                  return (
+                    <button
+                      key={opt.value || "default"}
+                      type="button"
+                      role="radio"
+                      aria-checked={on}
+                      onClick={() => onEffortChange?.(opt.value)}
+                      className={`${styles.modelPickerSegment} ${on ? styles.modelPickerSegmentOn : ""}`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {mode === "override" && (
             <div className={`row between ${styles.modelPickerFooter}`}>
               <span>Override for this message only</span>

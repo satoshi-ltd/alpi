@@ -22,3 +22,11 @@
   color: var(--ink-3);
   flex-shrink: 0;
 }
+
+.stateWord {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  line-height: var(--lh-cozy);
+  color: var(--ink-3);
+}

@@ -38,12 +38,11 @@ function AlnTestScreenInner() {
       toast?.({
         title: 'Permission needed',
         message: 'Grant notification permission in Settings first.',
-        duration: 3000,
       });
       return;
     }
     if (!conn) {
-      toast?.({ title: 'No paired daemon', message: 'Pair one first.', duration: 2400 });
+      toast?.({ title: 'No paired daemon', message: 'Pair one first.' });
       return;
     }
     const ev = sampleEvent(kind, { seqOffset: Math.floor(Math.random() * 1000) });
@@ -51,7 +50,6 @@ function AlnTestScreenInner() {
     toast?.({
       title: fired ? `Sent ${kind}` : 'Could not send',
       message: fired ? 'Tap the notification to test the deep link.' : 'Native scheduler rejected the dispatch.',
-      duration: 2400,
     });
   };
 

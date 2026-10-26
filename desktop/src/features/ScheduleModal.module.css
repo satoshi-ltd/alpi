@@ -28,7 +28,7 @@
 
 .dot[data-on="off"] {
   background: transparent;
-  border: 1.5px solid var(--ink-4);
+  border: 1.5px solid var(--edge);
 }
 
 .jobTitle {

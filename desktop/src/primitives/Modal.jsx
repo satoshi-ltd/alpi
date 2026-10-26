@@ -72,7 +72,7 @@ export default function Modal({
       >
         {(shownTitle || closeButton) && (
           <div className={styles.titleRow}>
-            {shownTitle && <div id={titleId} className={styles.title}>{shownTitle}</div>}
+            {shownTitle && <h2 id={titleId} className={styles.title}>{shownTitle}</h2>}
             {closeButton && (
               <Tip text="Close" side="down">
                 <IconBtn

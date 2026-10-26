@@ -62,10 +62,22 @@ function Swatch({ color }) {
 }
 
 export const NARROW_TILES_W = 520;
+export const LEGEND_LINE = 1.3;
+
+export function usageMetrics(fontSizes) {
+  return {
+    label: fontSizes.xs * lineHeights.tight,
+    today: fontSizes.display * lineHeights.tight,
+    mono: fontSizes.xl * lineHeights.tight,
+    dayLabel: fontSizes.xs * lineHeights.tight,
+    legend: Math.round(fontSizes.xs * LEGEND_LINE),
+  };
+}
 
 export function UsageChart({ days = [], accent, capLine = null, total30 = null, height = CHART_H }) {
   const { colors, fonts, fontSizes } = useTheme();
   const ground = useGroundTone();
+  const legendLine = usageMetrics(fontSizes).legend;
   const [selected, setSelected] = useState(null);
   const [tilesW, setTilesW] = useState(0);
   if (!days.length) return null;
@@ -266,12 +278,12 @@ export function UsageChart({ days = [], accent, capLine = null, total30 = null, 
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
           <Swatch color={inColor} />
-          <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>input</Text>
-          <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink4 }}>·</Text>
+          <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, lineHeight: legendLine, color: colors.ink3 }}>input</Text>
+          <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, lineHeight: legendLine, color: colors.ink4 }}>·</Text>
           <Swatch color={tint} />
-          <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>output</Text>
+          <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, lineHeight: legendLine, color: colors.ink3 }}>output</Text>
         </View>
-        <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3, fontVariant: ['tabular-nums'] }}>
+        <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, lineHeight: legendLine, color: colors.ink3, fontVariant: ['tabular-nums'] }}>
           {foot}
         </Text>
       </View>

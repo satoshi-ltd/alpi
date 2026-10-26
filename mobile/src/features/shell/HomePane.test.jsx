@@ -25,6 +25,13 @@ vi.mock('../../components/Fold', () => ({
   Fold: ({ fold, color, size }) => React.createElement('span', { 'data-mark': fold, 'data-color': color ?? '', 'data-size': size }),
 }));
 
+vi.mock('../../components/EmptyState', () => ({
+  EmptyState: ({ mark, title, detail, action }) =>
+    React.createElement('div', null, mark, React.createElement('h1', null, title), React.createElement('p', null, detail), action ? React.createElement('button', { type: 'button', onClick: action.onPress }, action.label) : null),
+}));
+vi.mock('../sheets/CreateProfileSheet', () => ({ CreateProfileSheet: ({ open }) => React.createElement('div', { 'data-create': String(open) }) }));
+const role = vi.hoisted(() => ({ admin: true }));
+vi.mock('../../hooks/useActiveRole', () => ({ useIsAdmin: () => role.admin }));
 vi.mock('../../components/Icon', () => ({
   Icon: ({ name }) => React.createElement('i', { 'data-icon': name }),
 }));
@@ -38,10 +45,29 @@ function pane(value, ui) {
 }
 
 describe('HomePane', () => {
-  it('holds the detail pane with a silent mark — nothing to resume says nothing', () => {
+  it('says what to do with nothing selected and keeps the quiet mark', () => {
     const { container } = render(<HomePane />);
     expect(container.querySelectorAll('[data-mark]')).toHaveLength(1);
-    expect(container.textContent).toBe('');
+    expect(screen.getByText('Pick a profile or a workgroup')).toBeTruthy();
+    expect(screen.getByText('Their chats open here.')).toBeTruthy();
+  });
+
+  it('offers New profile to an admin and opens the create sheet', () => {
+    role.admin = true;
+    const { container } = render(<HomePane />);
+    expect(container.querySelector('[data-create]').getAttribute('data-create')).toBe('false');
+    fireEvent.click(screen.getByRole('button', { name: 'New profile' }));
+    expect(container.querySelector('[data-create]').getAttribute('data-create')).toBe('true');
+  });
+
+  it('offers a member no way to create', () => {
+    role.admin = false;
+    try {
+      render(<HomePane />);
+      expect(screen.queryByRole('button', { name: 'New profile' })).toBeNull();
+    } finally {
+      role.admin = true;
+    }
   });
 
   it('draws the alpaca fold so it takes the brand ink of the theme', () => {
@@ -69,10 +95,10 @@ describe('HomePane with a hidden roster', () => {
 
   it('stays silent while the roster is visible or on a phone', () => {
     pane({ twoPane: true, side: 'detail', sidebarOpen: true, toggleSidebar() {} }, <HomePane />);
-    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Show sidebar' })).toBeNull();
     cleanup();
     pane({ twoPane: false, side: 'full', sidebarOpen: false, toggleSidebar() {} }, <HomePane />);
-    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Show sidebar' })).toBeNull();
   });
 });
 

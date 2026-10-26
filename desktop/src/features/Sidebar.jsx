@@ -461,7 +461,6 @@ function Sidebar({
       rowState={rosterState?.profiles?.[p.name] ?? null}
       isPinned={pinnedProfileNames.includes(p.name)}
       pinnable={!isDefaultProfile(p)}
-      offline={daemonOffline}
       connId={connId}
       checkUnread={checkUnread}
       onOpen={openProfile}
@@ -482,7 +481,6 @@ function Sidebar({
         run={rosterState?.workgroups?.[key] ?? null}
         active={activeWorkgroupId === key}
         isPinned={pinnedWorkgroupKeys.includes(key)}
-        offline={daemonOffline}
         connId={connId}
         checkUnread={checkWorkgroupUnread}
         onOpen={openWorkgroup}
@@ -828,7 +826,6 @@ const ProfileRow = memo(function ProfileRow({
   rowState = null,
   isPinned,
   pinnable = true,
-  offline = false,
   connId,
   checkUnread,
   onOpen,
@@ -865,7 +862,7 @@ const ProfileRow = memo(function ProfileRow({
       : null;
   const label = profileLabel(profile.name);
   const incompleteHint = `@${label}, needs provider — tap to set up`;
-  const leadingDiamond = <Fold fold={profile.fold} color={profile.accent || undefined} pulse={pending} outlined={incomplete} unfolded={offline || !!profile.paused} />;
+  const leadingDiamond = <Fold fold={profile.fold} color={profile.accent || undefined} pulse={pending} outlined={incomplete} unfolded={!!profile.paused} />;
   const bio = (profile.bio || profile.public_bio || "").trim();
 
   return (
@@ -911,7 +908,6 @@ const WorkgroupRow = memo(function WorkgroupRow({
   run = null,
   active,
   isPinned,
-  offline = false,
   connId,
   checkUnread,
   onOpen,
@@ -986,10 +982,10 @@ const WorkgroupRow = memo(function WorkgroupRow({
           <span className={styles.workgroupLeading} style={{ color: hubAccent || "var(--ink-3)" }}>
             {working && !paused ? (
               <Tip text={stateLabel} side="up-l">
-                <Fold fold={WORKGROUP_FOLD} color={hubAccent || undefined} pulse unfolded={offline} />
+                <Fold fold={WORKGROUP_FOLD} color={hubAccent || undefined} pulse />
               </Tip>
             ) : (
-              <Fold fold={WORKGROUP_FOLD} color={hubAccent || undefined} unfolded={offline || paused} />
+              <Fold fold={WORKGROUP_FOLD} color={hubAccent || undefined} unfolded={paused} />
             )}
           </span>
         }

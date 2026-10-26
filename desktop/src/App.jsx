@@ -1540,6 +1540,7 @@ export default function App() {
                     setSettingsTarget({ kind: "profile", id: p.name });
                     setView({ kind: "settings" });
                   } : null}
+                  onProfileSaved={reload}
                   onTogglePauseProfile={adminOnTogglePauseProfile}
                   onRewriteMessage={onRewriteMessage}
                   onRetryMessage={onRetryMessage}

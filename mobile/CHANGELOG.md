@@ -14,6 +14,16 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.8.7 — 2026-10-26 — one dialog, one empty state, errors that wait for you
+
+- The model chip opens the effort picker straight away and an effort applies on tap; the chip never cuts the effort.
+- A paused or offline composer says why at full contrast, a paused profile offers Resume, and the Connection sheet no longer opens by itself.
+- One confirmation dialog for every destructive action, one empty state everywhere, and toasts that sit at the bottom, wrap to two lines and keep an error you can retry until you dismiss it.
+- Menus and pickers share one row, a toggle in a menu keeps it open, and the last agent message shows a visible ‘…’ for its actions.
+- Floating surfaces get a clear edge, loading states draw the shape of what is coming instead of a grey slab, the selected profile has an accent bar in its own colour, and the footer entries are labelled.
+  Requires alpi 0.17.28.
+
+
 ## v0.8.6 — 2026-10-26 — tidier settings, headers and usage figures
 
 - The usage figures stop colliding on a phone: today and the cap share one line, input and output sit on the next.

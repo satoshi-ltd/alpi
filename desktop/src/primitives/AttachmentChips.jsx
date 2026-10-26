@@ -54,6 +54,7 @@ function MessageChip({ a, profile, connectionId }) {
           message: `Saved ${a.name}`,
           variant: "success",
           action: "Reveal",
+          duration: 5000,
           onAction: () => invoke("reveal_in_finder", { path: saved }).catch(() => {}),
         });
       }

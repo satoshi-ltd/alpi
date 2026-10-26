@@ -94,15 +94,15 @@ vi.mock('../src/components/ActionSheet', () => ({
               ? React.createElement('hr', { key: `d-${i}` })
               : React.createElement(
                   'button',
-                  { key: a.id, type: 'button', 'data-action': a.id, 'data-detail': a.detail, onClick: a.onPress },
+                  { key: a.id, type: 'button', 'data-action': a.id, 'data-detail': a.detail, 'data-value': a.kind === 'switch' ? String(a.value) : undefined, onClick: a.onPress ?? (() => a.onValueChange?.(!a.value)) },
                   a.label,
                 )),
         )
       : null,
 }));
 vi.mock('../src/components/Banner', () => ({
-  Banner: ({ kind, children, action }) =>
-    React.createElement('div', { 'data-banner': kind, 'data-banner-action': action }, children),
+  Banner: ({ kind, children, action, onAction }) =>
+    React.createElement('div', { 'data-banner': kind }, children, action ? React.createElement('button', { type: 'button', 'data-banner-action': action, onClick: onAction }) : null),
 }));
 vi.mock('../src/components/Button', () => ({ Button: ({ title }) => React.createElement('button', { type: 'button' }, title) }));
 vi.mock('../src/components/Diamond', () => ({ Diamond: () => React.createElement('span', { 'data-diamond': 'true' }) }));
@@ -277,7 +277,8 @@ describe('Profile chat header menu', () => {
   it('offers Resume once the profile is paused, matching the banner copy', () => {
     h.profile = { ...READY, paused: true };
     render(<ProfileChat />);
-    expect(screen.getByText(/resume from ··· to chat/)).toBeTruthy();
+    expect(screen.getByText(/You can read the history/)).toBeTruthy();
+    expect(screen.queryByText(/···/)).toBeNull();
     openMenu();
     expect(action('pause').textContent).toBe('Resume profile');
     fireEvent.click(action('pause'));
@@ -288,10 +289,18 @@ describe('Profile chat header menu', () => {
     });
   });
 
+  it('resumes from the paused banner with the same toggle as the menu', () => {
+    h.profile = { ...READY, paused: true };
+    render(<ProfileChat />);
+    const banner = document.querySelector('[data-banner="warning"]');
+    fireEvent.click(banner.querySelector('[data-banner-action="Resume"]'));
+    expect(h.call).toHaveBeenCalledWith('host.config.set_field', { profile: 'doc', key: 'paused', value: 'false' });
+  });
+
   it('toggles auto-read through the voice RPC and shows its state', () => {
     render(<ProfileChat />);
     openMenu();
-    expect(action('auto-read').getAttribute('data-detail')).toBe('off');
+    expect(action('auto-read').getAttribute('data-value')).toBe('false');
     fireEvent.click(action('auto-read'));
     expect(h.call).toHaveBeenCalledWith('host.voice.set_auto_read', { profile: 'doc', enabled: true });
   });

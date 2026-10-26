@@ -126,7 +126,7 @@ export function Sheet({
               borderTopLeftRadius: radii.xs,
               borderTopRightRadius: radii.xs,
               overflow: 'hidden',
-              ...shadow.base,
+              ...shadow.float,
               ...dialog,
             },
             sheetStyle,

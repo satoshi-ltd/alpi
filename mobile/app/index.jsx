@@ -21,7 +21,6 @@ import { useUnifiedOutputs } from '../src/hooks/useUnifiedOutputs';
 import { useEndpoint } from '../src/lib/EndpointContext';
 import { endpointHost } from '../src/lib/endpoint';
 import { ACTIVITY_PATH, openVerb, OUTPUTS_PATH, SETTINGS_PATH, subjectPath } from '../src/lib/panes';
-import { useFireOnce } from '../src/lib/useFireOnce';
 import { usePins } from '../src/lib/pins';
 import { useTheme } from '../src/theme/ThemeContext';
 import { useCanAdminEarly } from '../src/hooks/useActiveRole';
@@ -62,7 +61,6 @@ function InboxScreen({ items, loading, refresh, error = null }) {
   const daemonStatus = endpoint ? probeState.get(endpoint.id) ?? 'unknown' : 'offline';
 
   const activeFailed = !!endpoint && isDaemonDown(daemonStatus);
-  useFireOnce(activeFailed, () => setSheet('conn'));
 
   const enriched = useMemo(() => {
     const seen = new Set();
@@ -165,7 +163,7 @@ function InboxScreen({ items, loading, refresh, error = null }) {
         onToggleSearch={toggleSearch}
         onConnPress={() => setSheet('conn')}
       />
-      <DaemonBanner status={daemonStatus} paired={!!endpoint} onRetry={onRefresh} />
+      <DaemonBanner status={daemonStatus} paired={!!endpoint} onRetry={onRefresh} onManage={() => setSheet('conn')} />
       {activity.supported ? <NeedsYouBand activity={activity.activity} onOpen={openNeeds} onRun={runAgain} onOpenActivity={activityEntry} /> : null}
       <Roster
         items={enriched}

@@ -55,7 +55,7 @@ export function TextPrompt({
             width: '100%',
             maxWidth: 420,
             backgroundColor: colors.bgPane,
-            ...shadow.base,
+            ...shadow.float,
             borderRadius: radii.xs,
             padding: space.s9,
             gap: space.s7,
@@ -81,7 +81,7 @@ export function TextPrompt({
               value={value}
               onChangeText={setValue}
               placeholder={placeholder}
-              placeholderTextColor={colors.ink4}
+              placeholderTextColor={colors.ink3}
               maxLength={maxLength}
               keyboardType={keyboardType}
               autoFocus

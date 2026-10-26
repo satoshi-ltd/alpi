@@ -49,7 +49,7 @@ describe("neutral chrome", () => {
   });
 
   it("seams the toast and lifts the tooltip with tokens, never a literal shadow", () => {
-    expect(rule("primitives/Notification.module.css", ".toast")).toMatch(/box-shadow: var\(--shadow\);/);
+    expect(rule("primitives/Notification.module.css", ".toast")).toMatch(/box-shadow: var\(--shadow-edge\);/);
     expect(rule("styles/design-system.css", ".ds-tip-body")).toMatch(/box-shadow: var\(--shadow-sm\);/);
   });
 

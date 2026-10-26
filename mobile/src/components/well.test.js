@@ -6,14 +6,15 @@ import { wellStyle } from './well';
 describe('a field is a well', () => {
   it.each(['light', 'dark'])('sits borderless in the %s input tone with the 4 pt sheet corner', (mode) => {
     const colors = palettes[mode];
-    expect(wellStyle(colors)).toEqual({ backgroundColor: colors.bgInput, borderRadius: 4, borderWidth: 1, borderColor: 'transparent' });
+    expect(wellStyle(colors)).toEqual({ backgroundColor: colors.bgInput, borderRadius: 4, borderWidth: 2, borderColor: 'transparent' });
   });
 
-  it.each(['light', 'dark'])('deepens one tone and rings at ink 30 %% when focused in %s, never an underline', (mode) => {
+  it.each(['light', 'dark'])('deepens one tone and rings with the focus token when focused in %s, never an underline', (mode) => {
     const colors = palettes[mode];
     const focused = wellStyle(colors, { focused: true });
     expect(focused.backgroundColor).toBe(mixHex(colors.bgInput, 0.9, colors.ink));
-    expect(focused.borderColor).toBe(`${colors.ink}4d`);
+    expect(focused.borderColor).toBe(colors.focus);
+    expect(focused.borderWidth).toBe(2);
     expect(Object.keys(focused).some((key) => key.startsWith('borderBottom'))).toBe(false);
   });
 

@@ -1,3 +1,4 @@
+from loading_studies import BREATH, bone
 from notif_studies import MONO, ell, flex, spacer, stack, wrap
 from wg_settings_studies import (P, PIPELINES, WG_NAME, crease_name, glyph, mono, obj, phase_chip, phone, rippling)
 
@@ -193,7 +194,7 @@ def m_sheet(key="sh"):
     scrim = "rgba(20,20,20,0.32)"
     return (f'<div style="flex: 1; position: relative; display: flex; flex-direction: column; justify-content: flex-end; background: {P["bg"]}">'
             f'<div style="position: absolute; inset: 0; background: {scrim}"></div>'
-            f'<div style="position: relative; padding: 10px 16px 18px; border-radius: 12px 12px 0 0; background: {P["elev"]}">{body}</div></div>')
+            f'<div style="position: relative; padding: 10px 16px 18px; border-radius: 4px 4px 0 0; background: {P["elev"]}; box-shadow: 0 0 0 1px #8c8c8c">{body}</div></div>')
 
 
 def m_sheet_phone():
@@ -214,16 +215,9 @@ def _widths(src, name):
 
 GHOST_WIDTHS = _widths(_source("desktop", "src", "primitives", "PipelineStages.jsx"), "GHOST_WIDTHS")
 PLACEHOLDER_WIDTHS = _widths(_source("mobile", "src", "features", "chat", "PipelineStrip.jsx"), "PLACEHOLDER_WIDTHS")
-GHOST_STYLE = (f"<style>@keyframes ghostShimmer{{0%{{background-position: 100% 0}}100%{{background-position: -100% 0}}}}"
-               f".pl-ghost{{background: linear-gradient(90deg, {P['hover']} 0%, {P['selected']} 50%, {P['hover']} 100%); background-size: 200% 100%; animation: ghostShimmer 1.4s ease-in-out infinite}}"
-               f"@keyframes ghostPulse{{0%, 100%{{opacity: 0.4}}50%{{opacity: 0.8}}}}.pl-bar{{background: {P['hover']}; animation: ghostPulse 1.4s ease-in-out infinite}}"
-               f"@media (prefers-reduced-motion: reduce){{.pl-ghost, .pl-bar{{animation: none}}}}</style>")
-
-
 def ghost_chips(count):
     n = min(max(count, 1), len(GHOST_WIDTHS))
-    return GHOST_STYLE + "".join((arrow_sep() if i else "") + f'<span class="pl-ghost" style="display: inline-block; width: {GHOST_WIDTHS[i]}px; height: 21px; border-radius: 2px; flex-shrink: 0"></span>'
-                                 for i in range(n))
+    return BREATH + "".join((arrow_sep() if i else "") + bone(f"{GHOST_WIDTHS[i]}px", 21, 2, i, "pl-ghost") for i in range(n))
 
 
 def d_before_run():
@@ -244,10 +238,10 @@ def m_pending_strip(key="mbr"):
 
 def m_placeholder_strip():
     n = min(len(CHAIN), len(PLACEHOLDER_WIDTHS))
-    bars = "".join((sep(12) if i else "") + f'<span class="pl-bar" style="display: inline-block; width: {PLACEHOLDER_WIDTHS[i]}px; height: 30px; border-radius: 4px; flex-shrink: 0; animation-delay: {i * 80}ms"></span>'
+    bars = "".join((sep(12) if i else "") + bone(f"{PLACEHOLDER_WIDTHS[i]}px", 30, 4, i, "pl-bar")
                    for i in range(n))
     return (f'<div style="display: flex; align-items: center; gap: 8px; height: 46px; padding: 0 16px; overflow: hidden; background: {P["pane"]}; '
-            f'box-shadow: inset 0 -0.5px 0 {P["line"]}">{GHOST_STYLE}{bars}</div>')
+            f'box-shadow: inset 0 -0.5px 0 {P["line"]}">{BREATH}{bars}</div>')
 
 
 def m_before_run():

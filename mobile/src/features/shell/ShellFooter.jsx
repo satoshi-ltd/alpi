@@ -14,14 +14,6 @@ const ENTRY_H = space.s11;
 const ENTRY_SLOP = (CHROME_H - ENTRY_H) / 2;
 const APP_VERSION = Constants.expoConfig?.version ?? '0.0.0';
 
-const THEME_ORDER = ['light', 'dark', 'system'];
-const THEME_ICON = { light: 'sun', dark: 'moon', system: 'sun-moon' };
-const THEME_LABEL = { light: 'Light', dark: 'Dark', system: 'System' };
-
-export function nextThemePref(pref) {
-  return THEME_ORDER[(THEME_ORDER.indexOf(pref) + 1) % THEME_ORDER.length];
-}
-
 export function countBadgeText(fonts, color) {
   return {
     fontFamily: fonts.sans.semibold,
@@ -67,19 +59,21 @@ export function CountBadge({ count, ring }) {
 }
 
 export function ShellFooter({ unread = 0, onNotificationsPress, onSettingsPress, needsYou = 0, onActivityPress }) {
-  const { colors, fonts, fontSizes, pref, setMode, chromeScale } = useTheme();
+  const { colors, fonts, fontSizes, chromeScale } = useTheme();
   const { twoPane } = usePane();
-  const themePref = THEME_ORDER.includes(pref) ? pref : 'system';
   const ring = twoPane ? colors.bgSide : colors.bg;
   const entryStyle = ({ pressed }) => ({
-    flexDirection: 'row',
+    flex: 1,
+    flexDirection: 'column',
     alignItems: 'center',
-    gap: space.s2,
+    justifyContent: 'center',
+    gap: space.s1 / 2,
     minHeight: ENTRY_H,
     paddingHorizontal: space.s3,
     borderRadius: radii.xs,
     backgroundColor: pressed ? colors.selected : 'transparent',
   });
+  const entryLabel = { fontFamily: fonts.sans.medium, fontSize: fontSizes.xs, color: colors.ink2 };
   return (
     <View
       style={{
@@ -93,7 +87,7 @@ export function ShellFooter({ unread = 0, onNotificationsPress, onSettingsPress,
     >
       <Pressable onPress={onSettingsPress} style={entryStyle} hitSlop={ENTRY_SLOP} accessibilityRole="button" accessibilityLabel="Settings">
         <Icon name={ICON_ROLES.settings} size="md" color={colors.ink2} />
-        <Text maxFontSizeMultiplier={chromeScale} style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.sm, color: colors.ink2 }}>
+        <Text maxFontSizeMultiplier={chromeScale} numberOfLines={1} style={entryLabel}>
           Settings
         </Text>
       </Pressable>
@@ -109,6 +103,9 @@ export function ShellFooter({ unread = 0, onNotificationsPress, onSettingsPress,
             <Icon name={ICON_ROLES.notifications} size="md" color={colors.ink2} />
             <CountBadge count={unread} ring={ring} />
           </View>
+          <Text maxFontSizeMultiplier={chromeScale} numberOfLines={1} style={entryLabel}>
+            Notifications
+          </Text>
         </Pressable>
       ) : null}
       {onActivityPress ? (
@@ -123,21 +120,12 @@ export function ShellFooter({ unread = 0, onNotificationsPress, onSettingsPress,
             <Icon name={ICON_ROLES.activity} size="md" color={colors.ink2} />
             <CountBadge count={needsYou} ring={ring} />
           </View>
+          <Text maxFontSizeMultiplier={chromeScale} numberOfLines={1} style={entryLabel}>
+            Activity
+          </Text>
         </Pressable>
       ) : null}
-      {twoPane ? (
-        <Pressable
-          onPress={() => setMode?.(nextThemePref(themePref))}
-          style={entryStyle}
-          hitSlop={ENTRY_SLOP}
-          accessibilityRole="button"
-          accessibilityLabel={`Theme: ${THEME_LABEL[themePref]}`}
-        >
-          <Icon name={THEME_ICON[themePref]} size="md" color={colors.ink2} />
-        </Pressable>
-      ) : null}
-      <View style={{ flex: 1 }} />
-      <Text maxFontSizeMultiplier={chromeScale} style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.xs, color: colors.ink4 }}>
+      <Text maxFontSizeMultiplier={chromeScale} style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.xs, color: colors.ink3, marginLeft: space.s3 }}>
         v{APP_VERSION}
       </Text>
     </View>

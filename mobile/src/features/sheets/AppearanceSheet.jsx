@@ -45,10 +45,10 @@ export function AppearanceSheet({ open, onClose, profileName, initialValue, init
     setSaving(true);
     try {
       await onSave?.(changes);
-      toast({ title: 'Appearance saved', duration: 1400 });
+      toast({ title: 'Appearance saved' });
       onClose?.();
     } catch (e) {
-      toast({ title: 'Save failed', message: String(e), duration: 2400 });
+      toast({ title: 'Save failed', message: String(e) });
     } finally {
       setSaving(false);
     }

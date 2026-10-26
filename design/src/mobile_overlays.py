@@ -1,4 +1,4 @@
-from gen import DANGER, DOC_ACCENT, diamond, ic, m_button, m_group, m_row, m_screen_header, m_section, mix, page, pill
+from gen import DANGER, DOC_ACCENT, FLOAT_EDGE, diamond, ic, m_button, m_confirm_dialog, m_group, m_row, m_screen_header, m_section, mix, page, pill, switch
 
 INK, INK2, INK3, INK4 = "#141414", "#454545", "#6b6b6b", "#b4b4b4"
 LINE, LINE2, SELECTED, INPUT = "rgba(20,20,20,0.07)", "rgba(20,20,20,0.14)", "rgba(20,20,20,0.06)", "#f2f2f2"
@@ -31,7 +31,7 @@ def sheet(w, h, title, subtitle, body, primary=None, variant="primary", dialog=F
     else:
         box = f'position: absolute; left: 0; right: 0; bottom: 0; border-radius: 4px 4px 0 0;'
     return f"""{backdrop(w, h)}
-<div style="{box} background: #ffffff; box-shadow: 0 0 0 0.5px rgba(20,20,20,0.14); overflow: hidden; display: flex; flex-direction: column">
+<div style="{box} background: #ffffff; {FLOAT_EDGE}; overflow: hidden; display: flex; flex-direction: column">
 {sheet_header(title, subtitle)}
 {body}
 {bar}
@@ -40,22 +40,24 @@ def sheet(w, h, title, subtitle, body, primary=None, variant="primary", dialog=F
 
 def picker_row(label, helper="", selected=False, accent=DOC_ACCENT, meta=""):
     dot = f'<span style="width: 7px; height: 7px; border-radius: 999px; background: {accent}"></span>' if selected else ""
-    m = f'{pill(meta, tone="success")}' if meta else ""
+    m = f'{pill(meta, tone="neutral")}' if meta else ""
     return f"""<div style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: {SELECTED if selected else "transparent"}">
 <span style="width: 14px; display: inline-flex; justify-content: center">{dot}</span>
-<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px"><span style="font-weight: 500; font-size: 14px; color: {INK}">{label}</span>{f'<span style="font-family: {MONO}; font-size: 11px; color: {INK3}">{helper}</span>' if helper else ""}</div>
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px"><span style="font-weight: 500; font-size: 14px; color: {INK}">{label}</span>{f'<span style="font-family: {MONO}; font-size: 11px; color: {INK3}">{helper}</span>' if helper else ""}</div>
 {m}
 </div>"""
 
 
-def separator(inset=20):
+def separator(inset=42):
     return f'<div style="height: 0.5px; background: {LINE}; margin-left: {inset}px"></div>'
 
 
-def action_item(icon, label, detail="", danger=False):
+def action_item(icon, label, detail="", danger=False, toggle=None):
     color = DANGER if danger else INK
     det = f'<span style="font-family: {MONO}; font-weight: 500; font-size: 12px; color: {INK3}">{detail}</span>' if detail else ""
-    return f"""<div style="display: flex; align-items: center; gap: 14px; padding: 14px 16px">
+    if toggle is not None:
+        det = switch(toggle, DOC_ACCENT, label)
+    return f"""<div style="display: flex; align-items: center; gap: 12px; padding: 14px 16px">
 <span style="width: 24px; display: inline-flex; justify-content: center">{ic(icon, 20, DANGER if danger else INK2)}</span>
 <span style="flex: 1; font-size: 15px; color: {color}">{label}</span>{det}
 </div>"""
@@ -63,13 +65,7 @@ def action_item(icon, label, detail="", danger=False):
 
 def typed_confirm(w, h, title, body, code, confirm):
     return f"""{backdrop(w, h)}
-<div style="position: absolute; left: 24px; right: 24px; top: {h // 2 - 190}px; border-radius: 4px; background: #ffffff; padding: 24px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 0 0 0.5px rgba(20,20,20,0.14)">
-<span style="font-weight: 600; font-size: 18px; color: {DANGER}">{title}</span>
-<span style="font-size: 14px; line-height: 1.5; color: {INK2}">{body}</span>
-<span style="font-family: {MONO}; font-size: 11px; letter-spacing: 0.06em; color: {INK3}">TYPE <span style="font-weight: 500; font-size: 12px; color: {INK}; background: {INPUT}; border-radius: 4px; padding: 1px 6px; letter-spacing: 0">{code}</span> TO CONFIRM</span>
-<div style="height: 44px; border-radius: 4px; background: {INPUT}; border: 0.5px solid {LINE2}; display: flex; align-items: center; padding: 0 12px; font-family: {MONO}; font-size: 14px; color: {INK4}">{code[:2]}<span style="width: 1px; height: 18px; background: {INK}; margin-left: 1px"></span></div>
-<div style="display: flex; flex-direction: column; gap: 8px">{m_button(confirm, "danger", "lg")}{m_button("Cancel", "ghost", "lg")}</div>
-</div>"""
+<div style="position: absolute; left: 24px; right: 24px; top: 50%; transform: translateY(-50%)">{m_confirm_dialog(title, body, confirm, typed=code)}</div>"""
 
 
 def settings_backdrop_rows():
@@ -82,10 +78,15 @@ def settings_backdrop_rows():
 {m_group(m_row("Delete profile", "removes everything under ~/.alpi/profiles/doc", danger=True, sep=False))}"""
 
 
+def effort_rows(model_row=""):
+    rows = separator(16).join((picker_row("Default", "use provider default"), picker_row("Low", "fastest, cheapest"), picker_row("Medium", "balanced", selected=True), picker_row("High", "slower, more thorough")))
+    more = separator(16) + picker_row("Change model…", model_row) if model_row else ""
+    return f'<div style="padding: 12px 0">{rows}{more}</div>'
+
+
 def phone_sheet():
-    body = f"""<div style="padding: 12px 0 0">{picker_row("Default", "use provider default")}{separator()}{picker_row("Low", "fastest, cheapest")}{separator()}{picker_row("Medium", "balanced", selected=True)}{separator()}{picker_row("High", "slower, more thorough")}</div>"""
-    page_body = f"""<div style="display: flex; flex-direction: column">{settings_backdrop_rows()}</div>
-{sheet(390, 844, "Reasoning effort", "how hard the model thinks before answering", body, primary="Save")}
+    page_body = f"""{chat_backdrop()}
+{sheet(390, 844, "Reasoning effort", "how hard the model thinks before answering", effort_rows("deepseek-v4.1-flash"))}
 """
     return page("Phone · sheet with picker rows", 390, 844, page_body)
 
@@ -97,8 +98,8 @@ def _schedule_item():
 
 
 def phone_action_sheet():
-    divider = f'<div style="height: 0.5px; background: {LINE}; margin: 4px 0"></div>'
-    items = (action_item("settings", "Profile settings") + action_item("pause", "Pause profile") + action_item("volume-2", "Auto-read replies", "off") + divider
+    divider = f'<div style="height: 0.5px; background: {LINE}; margin-left: 52px"></div>'
+    items = (action_item("settings", "Profile settings") + action_item("pause", "Pause profile") + action_item("volume-2", "Auto-read replies", toggle=False) + divider
              + action_item("sparkle", "Skills") + action_item("archive", "Memory") + action_item("cpu", "Tools") + _schedule_item() + divider
              + action_item("refresh-cw", "Refresh thread"))
     body = f'<div style="height: 0.5px; background: {LINE}"></div><div style="padding-bottom: 24px">{items}</div>'
@@ -112,7 +113,7 @@ def phone_typed_confirm():
     page_body = f"""<div style="display: flex; flex-direction: column">{settings_backdrop_rows()}</div>
 {typed_confirm(390, 844, "Delete profile @doc", "Permanently removes <span style='font-family: " + MONO + "'>~/.alpi/profiles/doc/</span> — identity, memory, skills, schedule and chat history. <b>This action cannot be undone.</b>", "doc", "Delete profile")}
 """
-    return page("Phone · typed confirm", 390, 844, page_body)
+    return page("Phone · confirm dialog", 390, 844, page_body)
 
 
 def fold_sheet():
@@ -121,9 +122,9 @@ def fold_sheet():
 {m_screen_header("doc", "SETTINGS", wide=True, back=False, creased=True)}
 <div style="padding: 0 24px">{m_wide_section("Model", first=True)}{m_wide_row("Default model", value="deepseek-v4.1-flash")}{m_wide_row("Reasoning effort", "how hard the model thinks", "Medium")}{m_wide_section("Budget")}{m_wide_row("Daily cap", "$0.00 of $1.00 today", "$1.00")}</div>
 </div>"""
-    body = f"""<div style="padding: 12px 0 0">{picker_row("Default", "use provider default")}{separator()}{picker_row("Low", "fastest, cheapest")}{separator()}{picker_row("Medium", "balanced", selected=True)}{separator()}{picker_row("High", "slower, more thorough")}</div>"""
+    body = effort_rows()
     page_body = f"""<div style="display: flex; height: 100%">{m_sidebar(884)}{detail}</div>
-{sheet(852, 884, "Reasoning effort", "how hard the model thinks before answering", body, primary="Save", dialog=True)}
+{sheet(852, 884, "Reasoning effort", "how hard the model thinks before answering", body, dialog=True)}
 """
     return page("Fold · sheet as a centred dialog", 852, 884, page_body)
 
@@ -163,7 +164,7 @@ def phone_select_text():
 
 
 def phone_message_actions():
-    items = action_item("copy", "Copy") + separator(56) + action_item("file", "Select text") + separator(56) + action_item("download", "Download .md") + separator(56) + action_item("file-text", "Export PDF…") + separator(56) + action_item("refresh", "Ask again")
+    items = action_item("copy", "Copy") + action_item("file-text", "Select text") + action_item("download", "Download .md") + action_item("file-text", "Export PDF…") + action_item("refresh-cw", "Ask again")
     body = f'<div style="height: 0.5px; background: {LINE}"></div><div style="padding-bottom: 24px">{items}</div>'
     page_body = f"""{chat_backdrop()}
 {sheet(390, 844, "Agent message", "", body)}
@@ -171,5 +172,31 @@ def phone_message_actions():
     return page("Phone · message actions", 390, 844, page_body)
 
 
-MOBILE_OVERLAYS = {"phone_sheet": phone_sheet, "phone_action": phone_action_sheet, "phone_confirm": phone_typed_confirm, "fold_sheet": fold_sheet,
+def connection_row(name, url, status, tag="", tag_tone="neutral", server=False):
+    dot = {"online": "#3fb37a", "offline": "#c14545", "disabled": "#6b6b6b"}[status]
+    tile = (f'<span style="position: relative; width: 40px; height: 40px; border-radius: 4px; background: #f6f6f6; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">'
+            f'{ic("server" if server else "cpu", 20, INK2)}<span style="position: absolute; right: 2px; bottom: 2px; width: 7px; height: 7px; border-radius: 999px; background: {dot}"></span></span>')
+    return (f'<div style="display: flex; align-items: center; gap: 12px; padding: 14px 16px">{tile}'
+            f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 15px; line-height: 1.3; color: {INK}">{name}</span>'
+            f'<span style="font-family: {MONO}; font-weight: 500; font-size: 11px; color: {INK3}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{url}</span></div>'
+            f'{pill(tag, tone=tag_tone) if tag else ""}</div>')
+
+
+def phone_connection_sheet():
+    rows = (connection_row("casa", "ws://100.99.29.84:49200 · v0.17.37", "online", "current")
+            + separator(60) + connection_row("mirai", "wss://alpi.mirai.example · v0.17.36", "offline", "offline", "danger", True)
+            + separator(60) + connection_row("satoshi-ltd", "ws://100.99.29.91:49202", "disabled", "disabled"))
+    page_body = f"""<div style="height: 100%">{_roster_backdrop()}</div>
+{sheet(390, 844, "Connection", "where alpi runs", f'<div style="padding-bottom: 12px">{rows}</div>', primary="Pair this phone")}
+"""
+    return page("Phone · connection sheet", 390, 844, page_body)
+
+
+def _roster_backdrop():
+    from gen import m_conn_header, m_roster, m_shell_footer
+    return (f'<div style="display: flex; flex-direction: column; height: 100%; background: #ffffff">{m_conn_header(ring="#ffffff", collapse=False, bg="#ffffff")}'
+            f'<div style="height: 0.5px; background: {LINE}"></div><div style="flex: 1; min-height: 0; overflow: hidden">{m_roster(compact=False)}</div>{m_shell_footer(ring="#ffffff", border=True)}</div>')
+
+
+MOBILE_OVERLAYS = {"phone_connection": phone_connection_sheet, "phone_sheet": phone_sheet, "phone_action": phone_action_sheet, "phone_confirm": phone_typed_confirm, "fold_sheet": fold_sheet,
                    "phone_tool": phone_tool_sheet, "phone_select": phone_select_text, "phone_message": phone_message_actions}

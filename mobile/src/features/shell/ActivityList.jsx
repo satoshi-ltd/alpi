@@ -2,6 +2,7 @@ import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native'
 
 import { WORKGROUP_FOLD } from '../../../../common/folds.mjs';
 import { ICON_ROLES } from '../../../../common/iconRoles.mjs';
+import { EmptyState } from '../../components/EmptyState';
 import { Eyebrow } from '../../components/Eyebrow';
 import { Fold } from '../../components/Fold';
 import { Icon } from '../../components/Icon';
@@ -224,16 +225,10 @@ export function ActivityRow({ row, onPress, onRun, who }) {
 }
 
 function Empty({ unsupported }) {
-  const { colors, fonts, fontSizes } = useTheme();
   const [title, body] = !unsupported
     ? [EMPTY.activity.title, EMPTY.activity.hint]
     : ['Activity needs a newer daemon', 'Update alpi on this connection to see what is running and what waits on you.'];
-  return (
-    <View style={{ alignItems: 'center', padding: space.s8, gap: space.s3, marginTop: space.s11 }}>
-      <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.ink2, textAlign: 'center' }}>{title}</Text>
-      <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink3, textAlign: 'center' }}>{body}</Text>
-    </View>
-  );
+  return <EmptyState title={title} detail={body} />;
 }
 
 export function ActivityList({ activity, supported, unsupported = false, onOpen, onRun, refreshing = false, onRefresh, nowSec }) {
@@ -245,7 +240,7 @@ export function ActivityList({ activity, supported, unsupported = false, onOpen,
   return (
     <ScrollView
       style={{ flex: 1 }}
-      contentContainerStyle={{ paddingBottom: space.s9 }}
+      contentContainerStyle={{ paddingBottom: space.s9, flexGrow: 1 }}
       refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.ink3} /> : undefined}
     >
       {settled && sections.length === 0 ? <Empty unsupported={unsupported} /> : null}

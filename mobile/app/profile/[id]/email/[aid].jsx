@@ -7,7 +7,7 @@ import { Field } from '../../../../src/components/Field';
 import { Pill } from '../../../../src/components/Pill';
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useToast } from '../../../../src/components/Toast';
-import { Bold, Code, TypedConfirm } from '../../../../src/components/TypedConfirm';
+import { Bold, Code, ConfirmDialog } from '../../../../src/components/ConfirmDialog';
 import { useBack } from '../../../../src/hooks/useBack';
 import { useEmailConfig } from '../../../../src/hooks/useDaemonData';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
@@ -98,7 +98,7 @@ export default function EmailConfig() {
         )}
       </ScrollView>
 
-      <TypedConfirm
+      <ConfirmDialog
         open={confirmRemove}
         onClose={() => setConfirmRemove(false)}
         title="Remove email account"

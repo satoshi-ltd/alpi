@@ -1,13 +1,20 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, Easing, Modal, Pressable, Text, View } from 'react-native';
+import { AccessibilityInfo, Animated, Easing, Keyboard, Modal, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { mobile, radii, space } from '../theme/tokens';
 
 import { useReduceMotion } from '../lib/reduceMotion';
+import { Icon } from './Icon';
 import { useTheme } from '../theme/ThemeContext';
 import { plainError } from '../../../common/plainError.mjs';
 
+export const TOAST_MS = { info: 2800, undo: 5000, error: 6000 };
+export const TOAST_CLEARANCE = 72;
+const OFFSCREEN = 140;
+
 const ToastContext = createContext(null);
+
+export const isErrorToast = (toast) => (toast?.kind ?? inferKind(toast?.title)) === 'danger';
 
 function dotColorFor(kind, colors) {
   if (kind === 'success') return colors.success;
@@ -16,7 +23,6 @@ function dotColorFor(kind, colors) {
   return colors.ink3;
 }
 
-// Title-based fallback so legacy toast({title:'…'}) sites still pick the right dot without rewriting.
 const SUCCESS_RE = /\b(saved|removed|deleted|created|added|paired|kicked|revoked|enabled|disabled|signed out|copied|sent|joined|left)\b/;
 const DANGER_RE = /\b(failed|error|invalid|denied)\b/;
 function inferKind(title) {
@@ -29,7 +35,7 @@ function inferKind(title) {
 
 export function ToastProvider({ children }) {
   const [toast, setToast] = useState(null);
-  const slide = useRef(new Animated.Value(-100)).current;
+  const slide = useRef(new Animated.Value(OFFSCREEN)).current;
   const fade = useRef(new Animated.Value(0)).current;
   const timer = useRef(null);
   const reduceMotion = useReduceMotion();
@@ -44,7 +50,7 @@ export function ToastProvider({ children }) {
       return;
     }
     Animated.parallel([
-      Animated.timing(slide, { toValue: -100, duration: 200, useNativeDriver: true }),
+      Animated.timing(slide, { toValue: OFFSCREEN, duration: 200, useNativeDriver: true }),
       Animated.timing(fade, { toValue: 0, duration: 200, useNativeDriver: true }),
     ]).start(({ finished }) => { if (finished) setToast(null); });
   }, [slide, fade]);
@@ -52,8 +58,7 @@ export function ToastProvider({ children }) {
   const show = useCallback(
     (next) => {
       if (timer.current) clearTimeout(timer.current);
-      const danger = (next?.kind ?? inferKind(next?.title)) === 'danger';
-      const shown = danger && typeof next.message === 'string' ? { ...next, message: plainError(next.message) } : next;
+      const shown = isErrorToast(next) && typeof next.message === 'string' ? { ...next, message: plainError(next.message) } : next;
       setToast(shown);
       const spoken = [shown?.title, shown?.message].filter((part) => typeof part === 'string' && part).join('. ');
       if (spoken) AccessibilityInfo.announceForAccessibility?.(spoken);
@@ -66,7 +71,11 @@ export function ToastProvider({ children }) {
           Animated.timing(fade, { toValue: 1, duration: 220, useNativeDriver: true }),
         ]).start();
       }
-      timer.current = setTimeout(hide, next?.duration ?? 2800);
+      const undoable = !!(next?.action && next?.onAction);
+      const error = isErrorToast(next);
+      const sticky = error && typeof next.onRetry === 'function';
+      const lasts = undoable ? (next.duration ?? TOAST_MS.undo) : error ? TOAST_MS.error : TOAST_MS.info;
+      timer.current = sticky ? null : setTimeout(hide, lasts);
     },
     [slide, fade, hide],
   );
@@ -103,13 +112,43 @@ function ToastView({ toast, slide, fade, onDismiss }) {
     loop.start();
     return () => loop.stop();
   }, [kind, pulse, reduceMotion]);
+  const error = kind === 'danger';
   const actionable = !!(toast.action && toast.onAction);
+  const retryable = error && typeof toast.onRetry === 'function';
+  const [kbHeight, setKbHeight] = useState(0);
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', (e) => setKbHeight(e.endCoordinates.height));
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKbHeight(0));
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, []);
   const onAction = () => {
     onDismiss();
     toast.onAction();
   };
+  const onRetry = () => {
+    onDismiss();
+    toast.onRetry();
+  };
+  const textButton = (label, onPress) => (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={({ pressed }) => ({
+        minHeight: mobile.tap,
+        minWidth: mobile.tap,
+        marginVertical: -space.s4,
+        paddingHorizontal: space.s4,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: radii.xs,
+        backgroundColor: pressed ? colors.selected : 'transparent',
+      })}
+    >
+      <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, color: colors.ink }}>{label}</Text>
+    </Pressable>
+  );
 
-  // <Modal> here forces a higher native layer than bottom-sheet Modals; <View pointerEvents="box-none"> is required so taps fall through.
   return (
     <Modal
       visible
@@ -122,19 +161,21 @@ function ToastView({ toast, slide, fade, onDismiss }) {
       <View pointerEvents="box-none" style={{ flex: 1 }}>
         <SafeAreaView
           pointerEvents="box-none"
-          edges={['top']}
-          style={{ position: 'absolute', left: 0, right: 0, top: 0, alignItems: 'center', paddingHorizontal: space.s7 }}
+          edges={['bottom']}
+          style={{ position: 'absolute', left: 0, right: 0, bottom: kbHeight, alignItems: 'center', paddingHorizontal: space.s7 }}
         >
           <Animated.View
-            pointerEvents={actionable ? 'box-none' : 'none'}
+            pointerEvents={actionable || error ? 'box-none' : 'none'}
+            accessibilityRole={error ? 'alert' : undefined}
+            accessibilityLiveRegion={error ? 'assertive' : 'polite'}
             style={{
-              marginVertical: space.s7,
+              marginBottom: kbHeight > 0 ? space.s7 : TOAST_CLEARANCE,
               width: '100%',
               maxWidth: 560,
               padding: space.s6,
               backgroundColor: colors.bgPane,
               borderRadius: radii.xs,
-              ...shadow.base,
+              ...shadow.float,
               transform: [{ translateY: slide }],
               opacity: fade,
               flexDirection: 'row',
@@ -154,12 +195,13 @@ function ToastView({ toast, slide, fade, onDismiss }) {
             />
             <View style={{ flex: 1, minWidth: 0 }}>
               {toast.title ? (
-                <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, color: colors.ink }}>
+                <Text numberOfLines={1} style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, color: colors.ink }}>
                   {toast.title}
                 </Text>
               ) : null}
               {toast.message ? (
                 <Text
+                  numberOfLines={2}
                   style={{
                     fontFamily: fonts.sans.regular,
                     fontSize: fontSizes.md,
@@ -171,24 +213,25 @@ function ToastView({ toast, slide, fade, onDismiss }) {
                 </Text>
               ) : null}
             </View>
-            {actionable ? (
+            {actionable ? textButton(toast.action, onAction) : null}
+            {retryable ? textButton('Retry', onRetry) : null}
+            {error ? (
               <Pressable
-                onPress={onAction}
+                onPress={onDismiss}
                 accessibilityRole="button"
-                accessibilityLabel={toast.action}
+                accessibilityLabel="Dismiss"
                 style={({ pressed }) => ({
-                  minHeight: mobile.tap,
-                  minWidth: mobile.tap,
+                  width: mobile.tap,
+                  height: mobile.tap,
                   marginVertical: -space.s4,
-                  marginRight: -space.s3,
-                  paddingHorizontal: space.s4,
+                  marginRight: -space.s4,
                   alignItems: 'center',
                   justifyContent: 'center',
                   borderRadius: radii.xs,
                   backgroundColor: pressed ? colors.selected : 'transparent',
                 })}
               >
-                <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, color: colors.ink }}>{toast.action}</Text>
+                <Icon name="x" size="md" color={colors.ink2} />
               </Pressable>
             ) : null}
           </Animated.View>

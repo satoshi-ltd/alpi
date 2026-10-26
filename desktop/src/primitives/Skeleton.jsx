@@ -35,6 +35,20 @@ export default function Skeleton({
   );
 }
 
+export function Bone({ width, height, radius, delay = 0, className = "" }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`${styles.bone} ${className}`.trim()}
+      style={{ width, height, borderRadius: radius, animationDelay: `${Math.round(delay * 100) / 100}s` }}
+    />
+  );
+}
+
+export function Reveal({ children, className = "", animate = true }) {
+  return <div className={`${animate ? styles.reveal : ""} ${className}`.trim()}>{children}</div>;
+}
+
 export function SkeletonRow({ children, className = "" }) {
   return <span className={`${styles.row} ${className}`}>{children}</span>;
 }
@@ -54,7 +68,7 @@ export function SkParagraph({ widths, lg = false, className = "" }) {
   return (
     <div aria-hidden="true" className={`${styles.skPara} ${className}`.trim()}>
       {widths.map((w, i) => (
-        <SkLine key={i} lg={lg} width={w} delay={i * 0.12} />
+        <SkLine key={i} lg={lg} width={w} delay={i * 0.09} />
       ))}
     </div>
   );
@@ -74,8 +88,8 @@ export function SkeletonRows({ count = 4, label = null, as: Tag = "div", mark = 
           <div key={i} className={styles.listRow} aria-hidden="true">
             {mark ? <div className={styles.skMark} /> : null}
             <div className={styles.listText}>
-              <SkLine width={head} delay={i * 0.12} />
-              <SkLine width={sub} delay={i * 0.12 + 0.06} className={styles.skLineSm} />
+              <SkLine width={head} delay={i * 0.09} />
+              <SkLine width={sub} delay={i * 0.09 + 0.045} className={styles.skLineSm} />
             </div>
           </div>
         );

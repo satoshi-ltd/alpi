@@ -24,10 +24,10 @@ export function IdentityEditor({ profileId, profile, call, onSaved }) {
     setBusy('save');
     try {
       await saveIdentity(call, profileId, text);
-      toast({ title: 'Identity saved', duration: 1400 });
+      toast({ title: 'Identity saved' });
       await onSaved?.();
     } catch (e) {
-      toast({ title: 'Save failed', message: String(e), duration: 2400 });
+      toast({ title: 'Save failed', message: String(e) });
     } finally {
       setBusy(null);
     }
@@ -35,7 +35,7 @@ export function IdentityEditor({ profileId, profile, call, onSaved }) {
 
   const draft = async () => {
     if (!canDraftIdentity(profile)) {
-      toast({ title: 'Set a model first', message: 'Drafting needs an LLM wired up', duration: 2400 });
+      toast({ title: 'Set a model first', message: 'Drafting needs an LLM wired up' });
       return;
     }
     setBusy('draft');
@@ -43,9 +43,9 @@ export function IdentityEditor({ profileId, profile, call, onSaved }) {
       const bio = await draftIdentity(call, profileId);
       if (bio) {
         setText(bio);
-        toast({ title: 'Drafted from AGENT.md', duration: 1600 });
+        toast({ title: 'Drafted from AGENT.md' });
       } else {
-        toast({ title: 'Draft empty', message: 'AGENT.md may be missing or terse', duration: 2400 });
+        toast({ title: 'Draft empty', message: 'AGENT.md may be missing or terse' });
       }
     } catch (e) {
       toast({ title: 'Draft failed', message: String(e) });

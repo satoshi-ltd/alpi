@@ -513,9 +513,11 @@ describe('headerMenuActions', () => {
     expect(entry.icon.props.name).toBe('pause');
   });
 
-  it('shows the auto-read state as on or off', () => {
-    expect(headerMenuActions({ ...ALL, autoRead: true }).find((a) => a.id === 'auto-read').detail).toBe('on');
-    expect(headerMenuActions({ ...ALL, autoRead: false }).find((a) => a.id === 'auto-read').detail).toBe('off');
+  it('offers auto-read as a switch that carries its state', () => {
+    const on = headerMenuActions({ ...ALL, autoRead: true }).find((a) => a.id === 'auto-read');
+    const off = headerMenuActions({ ...ALL, autoRead: false }).find((a) => a.id === 'auto-read');
+    expect([on.kind, on.value, off.value]).toEqual(['switch', true, false]);
+    expect(on.onValueChange).toBe(ALL.onToggleAutoRead);
   });
 
   it('names the workgroup noun and drops the brain group', () => {
@@ -542,7 +544,7 @@ describe('headerMenuActions', () => {
 
   it('wires each entry to the handler it was given', () => {
     const actions = headerMenuActions(ALL);
-    for (const a of actions.filter((x) => !x.divider)) a.onPress();
+    for (const a of actions.filter((x) => !x.divider)) (a.onPress ?? (() => a.onValueChange(true)))();
     for (const fn of Object.values(ALL)) expect(fn).toHaveBeenCalledTimes(1);
   });
 });

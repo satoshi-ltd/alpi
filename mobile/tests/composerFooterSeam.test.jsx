@@ -68,7 +68,7 @@ vi.mock('../src/components/Icon', () => ({
 vi.mock('../src/features/chat/AttachmentCards', () => ({ AttachmentCards: () => React.createElement('span', {}) }));
 vi.mock('../src/features/chat/MentionPopover', () => ({ MentionPopover: () => null }));
 
-import { CHROME_BTN, CHROME_H, COMPOSER_CTRL, COMPOSER_PAD_Y, PANE_PAD_X, tapSlop } from '../src/lib/panes';
+import { CHROME_H, COMPOSER_CTRL, COMPOSER_PAD_Y, PANE_PAD_X, tapSlop } from '../src/lib/panes';
 import * as tokens from '../src/theme/tokens';
 import { mobile, space } from '../src/theme/tokens';
 import { Composer, composerPlaceholder } from '../src/features/chat/Composer';
@@ -91,7 +91,7 @@ function card(container) {
 function restingHeight(row) {
   const outer = styleOf(row);
   const c = styleOf(card(row.ownerDocument.body));
-  const ctrl = Math.max(...[...row.querySelectorAll('button')].map((b) => styleOf(b).height ?? 0), 0);
+  const ctrl = Math.max(...[...row.querySelectorAll('button')].map((b) => (styleOf(b).minHeight ?? styleOf(b).height ?? 0)), 0);
   const line = Math.round(tokens.fontSizes[tokens.typography.chat.size] * 1.5);
   return outer.paddingTop + c.paddingTop + line + c.gap + ctrl + c.paddingBottom + outer.paddingBottom;
 }
@@ -160,13 +160,13 @@ describe('composer controls', () => {
     const slop = JSON.parse(attach.getAttribute('data-hitslop'));
     const box = styleOf(attach);
     const pad = typeof slop === 'number' ? { left: slop, right: slop, top: slop, bottom: slop } : slop;
-    expect(box.width + pad.left + pad.right).toBeGreaterThanOrEqual(mobile.tap);
-    expect(box.height + pad.top + pad.bottom).toBeGreaterThanOrEqual(mobile.tap);
+    expect(box.minWidth + pad.left + pad.right).toBeGreaterThanOrEqual(mobile.tap);
+    expect(box.minHeight + pad.top + pad.bottom).toBeGreaterThanOrEqual(mobile.tap);
 
     const send = screen.getByLabelText('Send');
     const sendSlop = Number(JSON.parse(send.getAttribute('data-hitslop')));
-    expect(styleOf(send).height + sendSlop * 2).toBeGreaterThanOrEqual(mobile.tap);
-    expect(sendSlop).toBe(tapSlop(styleOf(send).height));
+    expect(styleOf(send).minHeight + sendSlop * 2).toBeGreaterThanOrEqual(mobile.tap);
+    expect(sendSlop).toBe(tapSlop(styleOf(send).minHeight));
     expect(screen.queryByLabelText('Voice message')).toBeNull();
   });
 
@@ -191,8 +191,8 @@ describe('composer controls', () => {
   it('shrinks the attach box and its glyph so the field is not shoved over', () => {
     render(<Composer placeholder="Message @doc…" onPickAttachment={() => {}} />);
     const attach = screen.getByLabelText('Attach file');
-    expect(styleOf(attach).width).toBe(CHROME_BTN);
-    expect(styleOf(attach).width).toBeLessThan(mobile.tap);
+    expect(styleOf(attach).minWidth).toBe(36);
+    expect(styleOf(attach).minWidth).toBeLessThan(mobile.tap);
     expect(attach.querySelector('[data-icon="paperclip"]').getAttribute('data-size')).toBe('lg');
   });
 
@@ -215,11 +215,12 @@ describe('composer matches the desktop card', () => {
     expect(styleOf(container.firstChild).borderTopWidth).toBeGreaterThan(0);
   });
 
-  it('draws send as a 4 pt sheet of desktop\'s size, like desktop\'s send', () => {
+  it('draws send as a 4 pt sheet that never fixes its height, so large text cannot clip it', () => {
     render(<Composer placeholder="Message @doc…" onPickAttachment={() => {}} />);
     const send = styleOf(screen.getByLabelText('Send'));
-    expect(send.width).toBe(30);
-    expect(send.height).toBe(30);
+    expect(send.minWidth).toBe(36);
+    expect(send.minHeight).toBe(36);
+    expect(send.height).toBeUndefined();
     expect(send.borderRadius).toBe(tokens.radii.xs);
   });
 

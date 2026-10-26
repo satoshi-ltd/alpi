@@ -8,6 +8,7 @@ import Dropdown from "../../primitives/Dropdown.jsx";
 import Textarea from "../../primitives/Textarea.jsx";
 import { MemberRow as DsMemberRow } from "../../primitives/SettingsLayout.jsx";
 import Skeleton from "../../primitives/Skeleton.jsx";
+import { useSkeleton } from "../../hooks/useSkeleton.js";
 import { useNotify } from "../../primitives/Notification.jsx";
 import { profileLabel } from "../../lib/profile-display.js";
 import { Section, Row, CopyButton } from "./primitives.jsx";
@@ -152,6 +153,7 @@ export default function WorkgroupDetail({
   };
   const members = membersData ?? null;
   const membersFailed = !membersData && !!membersError;
+  const showMembersSkeleton = useSkeleton(members === null && !membersFailed);
   const [busyAction, setBusyAction] = useState(null);
   const [briefing, setBriefing] = useState(workgroup.briefing ?? "");
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -566,12 +568,12 @@ export default function WorkgroupDetail({
           <Section title="Members" kicker={members ? `${members.filter((m) => m.joined).length} profiles` : null} alignTop>
             {membersFailed ? (
               <LoadFailed inline label="members" onRetry={reloadMembers} />
-            ) : members === null ? (
+            ) : showMembersSkeleton ? (
               <>
-                <Skeleton width="220px" />
-                <Skeleton width="180px" />
+                <Skeleton width="220px" height="22px" radius="var(--r-tag)" delay={0} />
+                <Skeleton width="180px" height="22px" radius="var(--r-tag)" delay={0} />
               </>
-            ) : members.filter((m) => m.joined).length === 0 ? (
+            ) : members === null ? null : members.filter((m) => m.joined).length === 0 ? (
               <span className={styles.muted}>{emptyLine("members")}</span>
             ) : (
               members

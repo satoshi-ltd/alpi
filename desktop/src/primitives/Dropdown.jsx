@@ -4,6 +4,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CaretIcon } from "./icons.jsx";
 import Eyebrow from "./Eyebrow.jsx";
+import { MenuCheck, menuRowClass } from "./Menu.jsx";
 import styles from "./Dropdown.module.css";
 
 export default function Dropdown({
@@ -106,6 +107,7 @@ export default function Dropdown({
       <div
         ref={menuRef}
         id={menuId}
+        role="menu"
         onKeyDown={(event) => navigateMenu(event, menuRef.current)}
         className={`anim-pop ${styles.menu} ${portaled ? styles.menuPortal : ""}`}
         style={
@@ -147,6 +149,7 @@ export default function Dropdown({
         type="button"
         ref={triggerRef}
         className={`${styles.trigger} ${variantClass(variant)} ${open ? styles.triggerOpen : ""}`}
+        aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         aria-label={ariaLabel}
@@ -183,8 +186,8 @@ export default function Dropdown({
 
 function Group({ label, children }) {
   return (
-    <div className={styles.group}>
-      {label && <Eyebrow as="div" className={styles.groupLabel}>{label}</Eyebrow>}
+    <div className={styles.group} role="group" aria-label={label || undefined}>
+      {label && <Eyebrow as="div" role="presentation" className={styles.groupLabel}>{label}</Eyebrow>}
       {children}
     </div>
   );
@@ -199,14 +202,21 @@ function Row({
   caption,
   children,
 }) {
+  const choice = active !== undefined;
   return (
     <button
       type="button"
-      className={`${styles.row} ${active ? styles.rowActive : ""}`}
+      role={choice ? "menuitemradio" : "menuitem"}
+      aria-checked={choice ? !!active : undefined}
+      className={menuRowClass({ selected: active })}
       onClick={onClick}
       disabled={disabled}
     >
-      {leading && <span className={styles.rowLeading}>{leading}</span>}
+      {leading ? (
+        <span className={styles.rowLeading}>{leading}</span>
+      ) : (
+        choice && <MenuCheck on={!!active} />
+      )}
       <span className={styles.rowMain}>
         <span className={styles.rowName}>{children}</span>
         {caption && <span className={styles.rowCaption}>{caption}</span>}

@@ -8,6 +8,7 @@ import ConfirmDelete from "../../../primitives/ConfirmDelete.jsx";
 import Field from "../../../primitives/Field.jsx";
 import { useNotify } from "../../../primitives/Notification.jsx";
 import { useDismissOnOutside } from "../../../hooks/useDismissOnOutside.js";
+import { useSkeleton } from "../../../hooks/useSkeleton.js";
 import { Row } from "../primitives.jsx";
 import styles from "../Settings.module.css";
 
@@ -67,6 +68,7 @@ function parsePublicRoute(value) {
 export function PrivateRouteField({ onLoadingChange = null }) {
   const notify = useNotify();
   const [status, setStatus] = useState(null);
+  const showStatusSkeleton = useSkeleton(!status);
 
   const refresh = useCallback(async () => {
     onLoadingChange?.(true);
@@ -95,9 +97,11 @@ export function PrivateRouteField({ onLoadingChange = null }) {
         state={endpoint ? "on" : "off"}
         tooltip="Direct private-network route derived from the address and listen port"
       >
-        {!status
-          ? <Skeleton width="12em" label="Loading the private route" />
-          : !supportsEndpoints || needsRestart
+        {showStatusSkeleton
+          ? <Skeleton width="112px" height="22px" radius="var(--r-tag)" delay={0} label="Loading the private route" />
+          : !status
+            ? null
+            : !supportsEndpoints || needsRestart
             ? "restart required"
             : endpoint?.url || "unavailable"}
       </Chip>
@@ -111,6 +115,7 @@ export function PublicRouteField({ onLoadingChange = null }) {
   const [confirmRemove, setConfirmRemove] = useState(false);
   const wrapRef = useRef(null);
   const [status, setStatus] = useState(null);
+  const showStatusSkeleton = useSkeleton(!status);
   const [value, setValue] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -170,7 +175,7 @@ export function PublicRouteField({ onLoadingChange = null }) {
       <span ref={wrapRef} className={styles.popoverAnchor}>
         <span className={styles.inlineRow}>
           <Chip state={current ? "on" : "off"} tooltip="Optional certificate-validated Internet route">
-            {!status ? <Skeleton width="12em" label="Loading the public route" /> : !supportsEndpoints ? "restart required" : current?.url || "off"}
+            {showStatusSkeleton ? <Skeleton width="112px" height="22px" radius="var(--r-tag)" delay={0} label="Loading the public route" /> : !status ? null : !supportsEndpoints ? "restart required" : current?.url || "off"}
           </Chip>
           {supportsEndpoints && (
             <Button size="sm" onClick={() => setOpen((visible) => !visible)}>
@@ -237,6 +242,7 @@ export function NetworkAddressField({ profile, onSaved, onLoadingChange = null }
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   const [status, setStatus] = useState(null);
+  const showStatusSkeleton = useSkeleton(!status);
   const [port, setPort] = useState("");
   const [saving, setSaving] = useState(false);
   const [portFree, setPortFree] = useState(null);
@@ -338,7 +344,7 @@ export function NetworkAddressField({ profile, onSaved, onLoadingChange = null }
             state={status?.host_in_use ? "on" : "off"}
             tooltip={`${source}. The address is read-only.`}
           >
-            {!status ? <Skeleton width="9em" label="Loading the address" /> : address}
+            {showStatusSkeleton ? <Skeleton width="112px" height="22px" radius="var(--r-tag)" delay={0} label="Loading the address" /> : !status ? null : address}
           </Chip>
           <Chip
             state="on"
