@@ -18,10 +18,10 @@ STATES = ("quiet", "dot", "needs", "offline")
 SIZES = (16, 20, 22, 24, 32, 36)
 
 POPOVER_HEIGHTS = {
-    "next": 227, "next_long": 155, "none": 107, "member": 107, "needs": 267, "many": 307, "failing": 147, "running": 195, "update": 147,
+    "next": 227, "next_long": 155, "none": 107, "member": 107, "needs": 255, "many": 307, "failing": 295, "running": 323, "other": 283, "running_one": 283, "needs_running": 351, "full": 295, "update": 147,
     "stopped": 127, "unreachable": 107, "starting": 139, "connecting": 107, "online": 107, "hero": 307,
 }
-TRAY_H = 2460
+TRAY_H = 2950
 TRAY_ICON_H = 1590
 
 
@@ -172,31 +172,70 @@ def s_member():
     return popover(head("All quiet", "Nothing needs you · online"), foot(bell=False))
 
 
-def s_needs():
-    return popover(head("2 need you", "abby is waiting for an approval"), needs_section(ROWS[:2]), counts_section(FAILING_COUNT, RUNNING_COUNT), foot(1))
-
-
-def s_many():
-    return popover(head("7 need you", "5 approvals, 2 questions"), needs_section(ROWS, 3), foot(4))
-
-
-def s_failing():
-    return popover(head("3 jobs failing", "sentinel and clonara · last 24 h"), counts_section(FAILING_COUNT), foot())
-
-
-def turn_row(profile, color, title, elapsed):
+def turn_row(profile, color, title, elapsed, where=""):
     return (f'<li style="display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border-radius: 4px">'
             f'<span style="width: 16px; display: inline-flex; justify-content: center; flex-shrink: 0">{identity_glyph(profile, color, 16)}</span>'
             f'<span style="flex: 1; min-width: 0; display: flex; flex-direction: column">'
             f'<span style="font-size: 13px; line-height: 16px; color: {INK}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{title}</span>'
-            f'<span style="font-family: \'Geist Mono\', monospace; font-size: 11px; line-height: 16px; color: {INK3}">{profile} · running</span></span>'
+            f'<span style="font-family: \'Geist Mono\', monospace; font-size: 11px; line-height: 16px; color: {INK3}">{profile} · {where + " · " if where else ""}running</span></span>'
             f'<span style="font-family: \'Geist Mono\', monospace; font-size: 11px; color: {INK3}">{elapsed}</span></li>')
+
+
+def labelled(name, *parts):
+    return (f'<section aria-label="{name}" style="padding: 0 8px 8px"><p style="margin: 0; padding: 4px 12px 0; font-size: 11px; line-height: 16px; letter-spacing: 0.08em; text-transform: uppercase; color: {INK3}">{name}</p>'
+            f'<ul style="margin: 0; padding: 0; list-style: none">{"".join(parts)}</ul></section>')
+
+
+def next_jobs(n):
+    rows = (job_row("scribe", "#3b6fe0", "Blog · post semanal", "Thu 4:00 PM", "casa"),
+            job_row(*DOC, "Daily brief", "Wed 9:00 AM", "atlas"),
+            job_row(*SENTINEL, "Weekly review", "Fri 10:00 AM", "mirai"))
+    return rows[:n]
+
+
+def failing_line():
+    return f'<section aria-label="Counts" style="padding: 0 8px 8px">{FAILING_COUNT}</section>'
+
+
+def s_needs():
+    return popover(head("2 things need you", "abby and doc"), labelled("Needs you", *ROWS[:2]), failing_line(), foot(1))
+
+
+def s_other():
+    rows = (needs_row(*SENTINEL, APPROVAL, "sentinel · mirai · approval · 30s ago"),
+            needs_row(*DOC, "Which lab should I book with?", "doc · atlas · question · just now"))
+    return popover(head("2 things need you", "sentinel and doc"), labelled("Needs you", *rows),
+                   labelled("Running", turn_row(*ALPI, "Summarize yesterday’s deploys", "<1m", "atlas")), foot(1))
+
+
+def s_many():
+    return popover(head("7 things need you", "abby, doc and 2 more"), needs_section(ROWS, 3), foot(4))
+
+
+def s_failing():
+    return popover(head("3 jobs are failing", "sentinel and clonara · last 24 h"), failing_line(), labelled("Coming up", *next_jobs(3)), foot())
+
+
+def turn_row_title(title):
+    return turn_row(*SENTINEL, title, "11m")
+
+
+def s_running_one():
+    return popover(head("Sentinel is working", "11m · 3 coming up"), labelled("Running", turn_row_title("Sentinel #force-review watch")), labelled("Coming up", *next_jobs(2)), foot())
 
 
 def s_running():
     rows = (turn_row(*ALPI, "Summarize yesterday’s deploys", "<1m"), turn_row(*SENTINEL, "Review the open pull requests", "2m"))
-    section = f'<section aria-label="Running" style="padding: 0 8px 8px"><ul style="margin: 0; padding: 0; list-style: none">{"".join(rows)}</ul></section>'
-    return popover(head("2 running", "Working now", nowrap=True), section, foot())
+    return popover(head("Alpi and sentinel are working", "3 coming up", nowrap=True), labelled("Running", *rows), labelled("Coming up", *next_jobs(2)), foot())
+
+
+def s_needs_running():
+    return popover(head("Abby needs you", "1 running · 3 coming up"), labelled("Needs you", ROWS[0]),
+                   labelled("Running", turn_row_title("Sentinel #force-review watch")), labelled("Coming up", *next_jobs(2)), foot(1))
+
+
+def s_full():
+    return popover(head("3 things need you", "abby, doc and clonara"), labelled("Needs you", *ROWS[:3]), counts_section(count_row("activity", "Running", "2")), foot(3))
 
 
 def s_update():
@@ -311,10 +350,14 @@ def tray_board():
         cell(s_online(), "Online, no activity verb", "An older daemon without host.activity.list: the heading says only that it is online.", "online"),
         cell(s_update(), "Update ready", "The update row sits above the footer in every state.", "update")))
     attention = section("Needs you, failing and running", grid3(
-        cell(s_needs(), "Needs you", "Approvals and questions with Review; the failing and running counts below.", "needs"),
+        cell(s_needs(), "Needs you", "Approvals and questions with Review under a label, since the failing line shows too.", "needs"),
+        cell(s_other(), "Other connections", "Needs you, failing and running read every connected daemon, not only the active one: each row names its connection and Review switches to it.", "other"),
         cell(s_many(), "Many items", "Four rows, then the rest named; the row opens alpi.", "many"),
-        cell(s_failing(), "Failing jobs", "Danger count over the last 24 h; the row opens alpi.", "failing"),
-        cell(s_running(), "Running turns", "One row per running turn with its fold; the count line only shows below needs you or failing jobs.", "running")))
+        cell(s_failing(), "Failing jobs", "A danger count over the last 24 h; Coming up fills the rest, three rows at most.", "failing"),
+        cell(s_running_one(), "One agent working", "The title names the agent and the subtitle gives its time and how many jobs are coming up.", "running_one"),
+        cell(s_running(), "Several running", "One row per running turn with its fold; Coming up keeps two rows beside running.", "running"),
+        cell(s_needs_running(), "Needs you with a running turn", "Needs you first, then running, then what is left of the five-row budget.", "needs_running"),
+        cell(s_full(), "Full popover", "Needs you fills three rows: running collapses to a count line and Coming up is hidden.", "full")))
     link = section("Daemon states", grid3(
         cell(s_stopped(), "Daemon stopped", "Installed here: Start alpi is the one action.", "stopped"),
         cell(s_unreachable(), "Can’t reach alpi", "A remote daemon: the heading names the problem and the footer stays.", "unreachable"),
@@ -325,7 +368,7 @@ def tray_board():
         note("Esc and losing focus hide it. Open alpi and Review show, unminimize and focus the main window; Review carries the deeplink of an approval or a question. The footer bell is hidden for members."),
         per_platform(), gap=10))
     body = (f'<div style="padding: 28px 32px; display: flex; flex-direction: column; gap: 28px; box-sizing: border-box">'
-            f'{intro("Tray popover", "A left click on the menu bar icon opens a small popover that triages: what needs you with Review, failing jobs, running turns (a row each, with its fold, that opens the session), the next three scheduled jobs across all connections (a row each, opening that schedule), an update ready, and Open alpi, notifications, Settings and Quit in the footer. A right click keeps the native menu.")}'
+            f'{intro("Tray popover", "A left click on the menu bar icon opens a small popover that triages: what needs you with Review, failing jobs, running turns (a row each, with its fold, that opens the session), the next scheduled jobs under Coming up beside them, within a five-row budget, and everything that needs you, fails or runs on any connected daemon (each row names its connection and opens there), an update ready, and Open alpi, notifications, Settings and Quit in the footer. A right click keeps the native menu.")}'
             f'{hero}{states}{attention}{link}{rules}</div>')
     return page("Desktop · tray", 1280, TRAY_H, body)
 

@@ -71,6 +71,16 @@
   padding: 0 var(--sp-8) var(--sp-8);
 }
 
+.sectionLabel {
+  margin: 0;
+  padding: var(--sp-4) var(--sp-12) 0;
+  font-size: var(--eyebrow-size);
+  line-height: var(--sp-16);
+  letter-spacing: var(--eyebrow-tracking);
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
 .list {
   margin: 0;
   padding: 0;

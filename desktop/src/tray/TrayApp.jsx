@@ -194,6 +194,7 @@ export default function TrayApp() {
         </header>
         {model.rows.length > 0 ? (
           <section className={styles.section} aria-label="Needs you">
+            {model.labels ? <p className={styles.sectionLabel}>Needs you</p> : null}
             <ul className={styles.list}>
               {model.rows.map((row) => <NeedsRow key={row.key} row={row} onReview={review} />)}
             </ul>
@@ -207,6 +208,7 @@ export default function TrayApp() {
         ) : null}
         {model.runs.length > 0 ? (
           <section className={styles.section} aria-label="Running">
+            {model.labels ? <p className={styles.sectionLabel}>Running</p> : null}
             <ul className={styles.list}>
               {model.runs.map((row) => <RunRow key={row.key} row={row} onOpen={review} />)}
             </ul>
@@ -220,6 +222,7 @@ export default function TrayApp() {
         ) : null}
         {model.nextRows.length > 0 ? (
           <section className={styles.section} aria-label="Next">
+            {model.labels ? <p className={styles.sectionLabel}>Coming up</p> : null}
             <ul className={styles.list}>
               {model.nextRows.map((row) => <NextRow key={row.key} row={row} onOpen={review} />)}
             </ul>

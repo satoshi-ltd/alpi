@@ -74,7 +74,7 @@ describe("TrayApp states", () => {
       failing: { jobs: 3, profileCount: 2, profiles: ["a", "b"] },
       running: { count: 2, rows: [] },
     }));
-    expect(screen.getByRole("heading", { name: "2 need you" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "2 things need you" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /^Review:/ })).toHaveLength(2);
     expect(screen.getByRole("button", { name: /Failing jobs, 3 in 2 profiles/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Running, 2/ })).toBeInTheDocument();
@@ -85,16 +85,16 @@ describe("TrayApp states", () => {
     await mount(snap({ state: "needs", needs: { total: 7, approvals: 5, questions: 2, rows: [0, 1, 2, 3].map((i) => need(i)) } }));
     expect(screen.getAllByRole("button", { name: /^Review:/ })).toHaveLength(4);
     expect(screen.getByRole("button", { name: "3 more · Open alpi" })).toBeInTheDocument();
-    expect(screen.getByText("5 approvals, 2 questions")).toBeInTheDocument();
+    expect(screen.getByText("p0, p1 and 2 more")).toBeInTheDocument();
   });
 
   it("renders running, failing, update, starting and stopped", async () => {
     await mount(snap({ state: "running", running: { count: 1, rows: [{ id: "t", profile: "alpi", label: "alpi", title: "Deploys", ts: Date.now() / 1000 - 120, fold: null, accent: null, deeplink: { kind: "chat", profile: "alpi", id: "s1", connection_id: "c" } }] } }));
-    expect(screen.getByText("Working now")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Alpi is working" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Deploys, alpi · running/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Running, 1/ })).toBeNull();
     await push(snap({ state: "failing", failing: { jobs: 3, profileCount: 2, profiles: ["sentinel", "clonara"] } }));
-    expect(screen.getByRole("heading", { name: "3 jobs failing" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "3 jobs are failing" })).toBeInTheDocument();
     await push(snap({ update: { version: "0.9.3", busy: false } }));
     expect(screen.getByText("alpi 0.9.3 is ready")).toBeInTheDocument();
     await push(snap({ state: "starting" }));
@@ -120,7 +120,7 @@ describe("TrayApp states", () => {
   it("replaces what it draws when a new snapshot arrives", async () => {
     await mount(snap());
     await push(snap({ state: "needs", needs: { total: 1, approvals: 1, questions: 0, rows: [need(0)] } }));
-    expect(screen.getByRole("heading", { name: "1 needs you" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "P0 needs you" })).toBeInTheDocument();
   });
 
   it("never calls a daemon verb or reads files itself", async () => {
@@ -333,6 +333,14 @@ describe("TrayApp Next line", () => {
     expect(screen.getByRole("button", { name: /Job 0, scribe · casa/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Job 1, scribe · mirai/ })).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
+  it("labels each section once two of them show", async () => {
+    const turn = { id: "t", profile: "alpi", label: "alpi", title: "Deploys", ts: Date.now() / 1000 - 120, fold: null, accent: null, deeplink: null };
+    await mount(snap({ state: "running", running: { count: 1, rows: [turn] }, next: { total: 1, rows: [row(0)] } }));
+    expect(screen.getByText("Running")).toBeInTheDocument();
+    expect(screen.getByText("Coming up")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Job 0/ })).toBeInTheDocument();
   });
 
   it("opens the schedule of the row on its connection", async () => {

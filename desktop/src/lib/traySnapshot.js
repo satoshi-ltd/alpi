@@ -30,18 +30,19 @@ export function trayLink({ connection, daemon }) {
   return "offline";
 }
 
-function needsRows(items, { connectionId, foldByProfile, accentByProfile }) {
-  return items.slice(0, MAX_NEEDS_ROWS).map((item) => {
+function needsRows(items) {
+  return items.slice(0, MAX_NEEDS_ROWS).map(({ item, source, connectionId, prefix, folds, accents }) => {
     const question = item.kind === "clarification";
     return {
-      id: String(item.request_id),
+      id: `${prefix}${item.request_id}`,
       kind: question ? "question" : "approval",
       profile: item.profile ?? null,
       label: clip(profileLabel(item.profile ?? "")),
       title: clip(item.title),
       ts: Number.isFinite(item.ts) ? item.ts : null,
-      fold: foldByProfile?.[item.profile] ?? null,
-      accent: accentByProfile?.[item.profile] ?? null,
+      source,
+      fold: folds?.[item.profile] ?? null,
+      accent: accents?.[item.profile] ?? null,
       deeplink: { kind: question ? "clarification" : "approval", profile: item.profile ?? null, id: String(item.request_id), connection_id: connectionId ?? "" },
     };
   });
@@ -56,11 +57,11 @@ function runDeeplink(item, connectionId) {
   return { kind: "profile", profile, id: profile, connection_id };
 }
 
-function runningRows(items, { connectionId, foldByProfile, accentByProfile }) {
+function runningRows(items) {
   const seen = new Map();
-  return items.slice(0, MAX_RUNNING_ROWS).map((item) => {
+  return items.slice(0, MAX_RUNNING_ROWS).map(({ item, source, connectionId, prefix, folds, accents }) => {
     const profile = item.profile ?? null;
-    const base = `${profile ?? ""}/${item.workgroup_id ?? item.job_id ?? item.session_id ?? ""}`;
+    const base = `${prefix}${profile ?? ""}/${item.workgroup_id ?? item.job_id ?? item.session_id ?? ""}`;
     const n = seen.get(base) ?? 0;
     seen.set(base, n + 1);
     return {
@@ -69,8 +70,9 @@ function runningRows(items, { connectionId, foldByProfile, accentByProfile }) {
       label: clip(profileLabel(profile ?? "")),
       title: clip(item.title || item.name),
       ts: Number.isFinite(item.started_at) ? item.started_at : null,
-      fold: foldByProfile?.[profile] ?? null,
-      accent: accentByProfile?.[profile] ?? null,
+      source,
+      fold: folds?.[profile] ?? null,
+      accent: accents?.[profile] ?? null,
       deeplink: runDeeplink(item, connectionId),
     };
   });
@@ -86,7 +88,7 @@ export function buildTraySnapshot({
   update = null,
   foldByProfile = {},
   accentByProfile = {},
-  otherSchedules = [],
+  otherActivity = [],
   nowMs = Date.now(),
 } = {}) {
   const rawLink = trayLink({ connection, daemon });
@@ -94,43 +96,52 @@ export function buildTraySnapshot({
   const loading = online && activitySupported && activity == null;
   const unsupported = online && !activitySupported;
   const link = loading ? "connecting" : rawLink;
-  const groups = groupActivity(online && activitySupported ? activity : null, { nowMs });
-  const failingProfiles = member ? [] : groups.failing;
+  const activeKnown = online && activitySupported && activity != null;
+  const activeName = connection?.name ?? connection?.id ?? "";
+  const sources = [
+    ...(activeKnown ? [{ id: connection?.id ?? "", name: activeName, member, prefix: "", folds: foldByProfile, accents: accentByProfile, groups: groupActivity(activity, { nowMs }) }] : []),
+    ...otherActivity.filter((other) => other.id !== connection?.id).map((other) => ({
+      id: other.id,
+      name: other.name ?? other.id ?? "",
+      member: Boolean(other.member),
+      prefix: `${other.id}/`,
+      folds: other.folds,
+      accents: other.accents,
+      groups: groupActivity(other.activity, { nowMs }),
+    })),
+  ];
+  const several = sources.length > 1;
+  const tag = (src, item) => ({ item, source: several ? clip(src.name, 40) : null, connectionId: src.id, prefix: src.prefix, folds: src.folds, accents: src.accents });
+  const needs = sources.flatMap((src) => src.groups.needs.map((item) => tag(src, item)));
+  const running = sources.flatMap((src) => src.groups.running.map((item) => tag(src, item)));
+  const failingGroups = sources.flatMap((src) => (src.member ? [] : src.groups.failing.map((group) => ({ group, src }))));
+  const failingProfiles = failingGroups.map(({ group }) => group);
+  const failingLabels = failingGroups.map(({ group }) => clip(profileLabel(group.profile ?? "")));
+  const failingNames = failingGroups.map(({ src }, i) => (failingLabels.indexOf(failingLabels[i]) !== failingLabels.lastIndexOf(failingLabels[i]) ? `${failingLabels[i]} · ${clip(src.name, 40)}` : failingLabels[i]));
   const failingJobs = failingProfiles.reduce((n, g) => n + g.count, 0);
-  const needs = groups.needs;
-  const approvals = needs.filter((i) => i.kind !== "clarification").length;
-  const counts = { needs: needs.length, failing: failingJobs, running: groups.running.length };
+  const approvals = needs.filter(({ item }) => item.kind !== "clarification").length;
+  const counts = { needs: needs.length, failing: failingJobs, running: running.length };
   const local = connection?.kind === "local";
   const unreadCount = member ? 0 : Math.max(0, Math.floor(Number(unread) || 0));
-  const known = !member && online && activitySupported && activity != null;
-  const activeName = connection?.name ?? connection?.id ?? "";
-  const candidates = known
-    ? [
-        ...groups.upcoming.map((job) => ({ job, id: connection?.id, name: activeName, folds: foldByProfile, accents: accentByProfile })),
-        ...otherSchedules.filter((other) => other.id !== connection?.id).flatMap((other) =>
-          groupActivity({ scheduled: other.scheduled }, { nowMs }).upcoming.map((job) => ({ job, id: other.id, name: other.name ?? other.id ?? "", folds: other.folds, accents: other.accents })),
-        ),
-      ]
-    : [];
-  const several = new Set(candidates.map((c) => c.id)).size > 1;
-  const nextRows = known
-    ? candidates
-        .sort((a, b) => a.job.nextAt - b.job.nextAt)
-        .slice(0, MAX_NEXT_ROWS)
-        .map(({ job, id, name, folds, accents }) => ({
-          id: `${id ?? ""}/${job.profile ?? ""}/${job.job_id ?? ""}`,
-          title: clip(job.title || job.job_id),
-          label: clip(profileLabel(job.profile ?? "")),
-          at: new Date(job.nextAt * 1000).toISOString(),
-          source: several ? clip(name, 40) : null,
-          fold: folds?.[job.profile] ?? null,
-          accent: accents?.[job.profile] ?? null,
-          deeplink: job.profile ? { kind: "settings", profile: job.profile, id: "schedules", connection_id: id ?? "" } : null,
-        }))
-    : [];
+  const candidates = sources
+    .filter((src) => !src.member)
+    .flatMap((src) => src.groups.upcoming.map((job) => ({ job, src })));
+  const nextRows = candidates
+    .sort((a, b) => a.job.nextAt - b.job.nextAt)
+    .slice(0, MAX_NEXT_ROWS)
+    .map(({ job, src }) => ({
+      id: `${src.id}/${job.profile ?? ""}/${job.job_id ?? ""}`,
+      title: clip(job.title || job.job_id),
+      label: clip(profileLabel(job.profile ?? "")),
+      at: new Date(job.nextAt * 1000).toISOString(),
+      source: several ? clip(src.name, 40) : null,
+      fold: src.folds?.[job.profile] ?? null,
+      accent: src.accents?.[job.profile] ?? null,
+      deeplink: job.profile ? { kind: "settings", profile: job.profile, id: "schedules", connection_id: src.id } : null,
+    }));
   return {
     v: TRAY_SNAPSHOT_VERSION,
-    state: unsupported ? "online" : trayState({ link, ...counts }),
+    state: unsupported && !counts.needs && !counts.failing && !counts.running ? "online" : trayState({ link, ...counts }),
     counts,
     member: Boolean(member),
     unread: unreadCount,
@@ -139,18 +150,18 @@ export function buildTraySnapshot({
       total: needs.length,
       approvals,
       questions: needs.length - approvals,
-      rows: needsRows(needs, { connectionId: connection?.id, foldByProfile, accentByProfile }),
+      rows: needsRows(needs),
     },
     failing: {
       jobs: failingJobs,
       profileCount: failingProfiles.length,
-      profiles: failingProfiles.slice(0, 2).map((g) => clip(profileLabel(g.profile ?? ""))),
+      profiles: failingNames.slice(0, 2),
     },
     running: {
       count: counts.running,
-      rows: runningRows(groups.running, { connectionId: connection?.id, foldByProfile, accentByProfile }),
+      rows: runningRows(running),
     },
-    next: nextRows.length ? { rows: nextRows } : null,
+    next: nextRows.length ? { rows: nextRows, total: candidates.length } : null,
     offline: rawLink === "offline"
       ? { local, canStart: local && daemon?.state === "stopped", absent: local && (daemon?.state === "absent" || daemon?.state === "unsupported") }
       : null,

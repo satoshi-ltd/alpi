@@ -4,6 +4,9 @@ import { formatNextFire, relativeTime } from "../lib/time.js";
 export const MAX_NEEDS_ROWS = 4;
 export const MAX_RUNNING_ROWS = 4;
 export const MAX_NEXT_ROWS = 3;
+export const ROW_BUDGET = 5;
+const NEEDS_FULL = 3;
+const NEXT_WITH_RUNNING = 2;
 const NOT_ONLINE = ["offline", "starting", "connecting"];
 export const TRAY_STATES = ["quiet", "needs", "running", "failing", "offline", "starting", "connecting", "online"];
 
@@ -19,19 +22,62 @@ export function trayState({ link = "online", needs = 0, failing = 0, running = 0
 
 const count = (n) => (Number.isFinite(n) && n > 0 ? Math.floor(n) : 0);
 
-function sentence(row) {
-  return row.kind === "question" ? `${row.label} has a question` : `${row.label} is waiting for an approval`;
+const capital = (text) => (text ? text[0].toUpperCase() + text.slice(1) : "");
+
+function distinct(rows) {
+  return [...new Set((rows ?? []).map((r) => r.label || r.profile).filter(Boolean))];
 }
 
-function needsSub(needs) {
-  const total = count(needs.total);
-  if (total <= 2 && needs.rows?.[0]) return sentence(needs.rows[0]);
+function enumerate(names) {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+function breakdown(needs) {
   const parts = [];
   const approvals = count(needs.approvals);
   const questions = count(needs.questions);
   if (approvals) parts.push(`${approvals} ${pluralize(approvals, "approval")}`);
   if (questions) parts.push(`${questions} ${pluralize(questions, "question")}`);
   return parts.join(", ");
+}
+
+function aside(snapshot) {
+  const parts = [];
+  const running = count(snapshot.running?.count);
+  const next = count(snapshot.next?.total ?? snapshot.next?.rows?.length);
+  if (running) parts.push(`${running} running`);
+  if (next) parts.push(`${next} coming up`);
+  return parts;
+}
+
+function needsHeading(snapshot) {
+  const needs = snapshot.needs;
+  const n = count(needs.total);
+  const first = needs.rows?.[0];
+  if (n === 1) {
+    const rest = aside(snapshot);
+    if (!first) return { title: "1 thing needs you", sub: breakdown(needs) };
+    const fallback = [first.kind === "question" ? "Has a question" : "Waiting for an approval", first.source].filter(Boolean).join(" · ");
+    return { title: `${capital(first.label || first.profile || "Something")} needs you`, sub: rest.length ? rest.join(" · ") : fallback };
+  }
+  const names = distinct(needs.rows);
+  const title = `${n} things need you`;
+  if (names.length === 1) return { title, sub: [names[0], breakdown(needs)].filter(Boolean).join(" · ") };
+  if (names.length > 3) return { title, sub: `${names.slice(0, 2).join(", ")} and ${names.length - 2} more` };
+  return { title, sub: names.length ? enumerate(names) : breakdown(needs) };
+}
+
+function runningHeading(snapshot, nowMs) {
+  const running = snapshot.running;
+  const n = count(running.count);
+  const names = (running.rows ?? []).length >= n ? distinct(running.rows) : [];
+  const rest = aside({ next: snapshot.next });
+  const single = n === 1 && running.rows?.[0] ? elapsed(running.rows[0].ts, nowMs) : "";
+  const sub = [single, ...rest].filter(Boolean).join(" · ") || "Working now";
+  if (names.length === 1) return { title: `${capital(names[0])} is working`, sub };
+  if (names.length === 2) return { title: `${capital(names[0])} and ${names[1]} are working`, sub };
+  return { title: `${n} running`, sub };
 }
 
 function failingSub(failing) {
@@ -52,27 +98,20 @@ function offlineCopy(offline) {
 
 function heading(snapshot, nowMs) {
   const { state } = snapshot;
-  const needs = snapshot.needs ?? {};
   const failing = snapshot.failing ?? {};
-  const running = snapshot.running ?? {};
-  if (state === "needs") {
-    const n = count(needs.total);
-    return { title: `${n} ${pluralize(n, "needs", "need")} you`, sub: needsSub(needs) };
-  }
+  if (state === "needs") return needsHeading(snapshot);
   if (state === "failing") {
     const n = count(failing.jobs);
-    return { title: `${n} ${pluralize(n, "job")} failing`, sub: failingSub(failing) };
+    return { title: `${n} ${n === 1 ? "job is" : "jobs are"} failing`, sub: failingSub(failing) };
   }
-  if (state === "running") {
-    return { title: `${count(running.count)} running`, sub: "Working now" };
-  }
+  if (state === "running") return runningHeading(snapshot, nowMs);
   if (state === "offline") return offlineCopy(snapshot.offline);
   if (state === "starting") return { title: "Starting alpi…", sub: "Waiting for the daemon" };
   if (state === "online") return { title: "alpi", sub: "online" };
   if (state === "connecting") return { title: "Connecting…", sub: "Waiting for the daemon" };
+  if (snapshot.next?.rows?.length) return { title: "All quiet", sub: "Coming up" };
   if (snapshot.member || snapshot.next === undefined) return { title: "All quiet", sub: "Nothing needs you · online" };
-  if (snapshot.next === null) return { title: "All quiet", sub: "Nothing scheduled" };
-  return { title: "All quiet", sub: "Coming up" };
+  return { title: "All quiet", sub: "Nothing scheduled" };
 }
 
 function elapsed(ts, nowMs) {
@@ -88,7 +127,7 @@ function ago(ts, nowMs) {
 
 function row(r, nowMs) {
   const kind = r.kind === "question" ? "question" : "approval";
-  const parts = [r.label, kind, ago(r.ts, nowMs)].filter(Boolean);
+  const parts = [r.label, r.source, kind, ago(r.ts, nowMs)].filter(Boolean);
   return {
     key: r.id,
     kind,
@@ -119,7 +158,7 @@ function runRow(r, nowMs) {
   return {
     key: r.id,
     title: r.title || label,
-    sub: label ? `${label} · running` : "running",
+    sub: [label, r.source, "running"].filter(Boolean).join(" · "),
     elapsed: elapsed(r.ts, nowMs),
     fold: r.fold ?? null,
     accent: r.accent ?? null,
@@ -156,17 +195,21 @@ export function trayModel(snapshot, nowMs = Date.now()) {
       danger: true,
     });
   }
-  const runs = online && state === "running" ? (view.running.rows ?? []).slice(0, MAX_RUNNING_ROWS).map((r) => runRow(r, nowMs)) : [];
+  const needsFull = rows.length >= NEEDS_FULL;
+  const budget = ROW_BUDGET - rows.length - (failingJobs > 0 ? 1 : 0);
+  const runs = online && !needsFull ? (view.running.rows ?? []).slice(0, Math.max(0, Math.min(MAX_RUNNING_ROWS, budget))).map((r) => runRow(r, nowMs)) : [];
   const runsMore = runs.length > 0 ? Math.max(0, runningCount - runs.length) : 0;
   if (online && runningCount > 0 && runs.length === 0) counts.push({ key: "running", icon: "activity", label: "Running", value: String(runningCount), danger: false });
   const update = s.update
     ? { text: s.update.version ? `alpi ${s.update.version} is ready` : "An update is ready", busy: Boolean(s.update.busy) }
     : null;
   const unread = count(s.unread);
-  const quiet = state === "quiet";
-  const nextRows = quiet && !s.member && s.next?.rows ? s.next.rows.slice(0, MAX_NEXT_ROWS).map((r) => nextRow(r, nowMs)) : [];
+  const nextCap = Math.min(runs.length > 0 ? NEXT_WITH_RUNNING : MAX_NEXT_ROWS, budget - runs.length);
+  const nextRows = online && !needsFull && s.next?.rows ? s.next.rows.slice(0, Math.max(0, nextCap)).map((r) => nextRow(r, nowMs)) : [];
+  const sections = [rows, runs, nextRows, counts].filter((list) => list.length > 0).length;
   return {
     nextRows,
+    labels: sections > 1,
     state,
     title,
     sub,

@@ -11,6 +11,15 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.9.8 — 2026-10-27 — the menu bar reads every connection
+
+- Needs you, failing jobs and running turns in the menu bar popover now cover every connected daemon, not only the active one; each row names its connection and a click opens it there.
+- The icon, the heading and the counts follow the sum, so a question waiting on another daemon lights the ring.
+- Other connections refresh as they change instead of waiting for a timer.
+- Coming up now sits beside running, needs you and failing jobs, under labelled sections and within five rows, so a busy menu bar still shows the next jobs.
+- Headings read as a sentence: `Sentinel is working`, `Abby needs you`, `3 jobs are failing`, with the rest in the subtitle.
+- Requires alpi 0.17.28.
+
 ## v0.9.7 — 2026-10-27 — headers back on the left edge
 
 - The chat and workgroup headers, and the banners under them, sit on the pane's left edge again, in line with the pipeline bar.

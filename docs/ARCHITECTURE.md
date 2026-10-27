@@ -1633,26 +1633,43 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   - *Snapshot.* The popover never calls `host.*` and never reads `~/.alpi`. The
     main window pushes one snapshot (`tray_announce_state`, versioned, debounced
     250 ms, an identical snapshot is not resent) already filtered by connection
-    and profile scope: state, counts, the first four needs-you rows (profile,
-    fold, accent, a deeplink for an approval or a clarification only), failing
-    jobs, the first four running turns (profile, fold, accent, title, start time and a deeplink: `chat` to the session, `workgroup` to a pipeline, `profile` for a scheduled run), the next three scheduled jobs across every online connection (the main window reads each other connection's `host.activity.list` and profile summaries every five minutes and merges the jobs by time; each row carries its profile, that connection's fold and accent for it, a `settings/schedules` deeplink on its own connection and the connection's name when there is more than one), unread, update and
+    and profile scope, over every online connection: the active one from the
+    main window's own activity, each other one read with `host.activity.list` and
+    profile summaries (on its `activity.changed` events after a short wait, and
+    every five minutes as a backstop; a member connection counts for needs you
+    and running, never for schedules or failing). The snapshot holds state, counts
+    summed over the connections, the first four needs-you rows (profile, fold,
+    accent, a deeplink for an approval or a clarification on its own connection),
+    failing jobs, the first four running turns (profile, fold, accent, title,
+    start time and a deeplink: `chat` to the session, `workgroup` to a pipeline,
+    `profile` for a scheduled run), the next three scheduled jobs merged by time
+    (each with a `settings/schedules` deeplink), unread, update and
     offline facts. Titles are cut to 200 characters; when the invoke fails a
     reduced `{v, state, counts}` is sent instead; Rust refuses a snapshot over
     64 KB and caps each deeplink field. The popover reads it with `tray_state`
     when it opens and on the `tray-state` event, and follows the app theme
     (System, Light or Dark) through the shared `storage` event and on show.
-  - *States.* Heading and rows come from `trayModel.js`: all quiet (an admin
-    with an upcoming scheduled job on any connection reads `Coming up` over up to three job rows (job, profile · connection, time) that open that schedule, one without
-    reads `Nothing scheduled`, a member reads `Nothing needs you · online` and
-    never sees scheduled jobs or the bell), needs you (approval and question
-    rows with Review, then the failing and running counts), failing jobs,
-    running turns (a row each with its fold, the prompt on one line and the
-    elapsed time, opening the session, workgroup or profile; `Working now` under the heading, and
-    the Running count line only below needs you or failing), update ready (a row above the footer in every state), daemon
-    stopped (Start alpi), starting, connecting (activity still loading: it never
-    claims all quiet) and `alpi · online` when the daemon has no
-    `host.activity.list`. More than four needs-you or running rows end in `N more · Open
-    alpi`. The footer is Open alpi, the bell, Settings and Quit.
+  - *States.* Heading and rows come from `trayModel.js`. The state, the icon
+    and the counts follow the sum over every connection read, while the active
+    connection's own link (offline, starting, connecting) still wins, and every row
+    names its connection while more than one is read. Sections come in a fixed order
+    (needs you, failing, running, `Coming up`) within a budget of five rows: needs you
+    keeps up to four rows with Review; failing is a count line; running is a row per
+    turn with its fold, the prompt on one line and the elapsed time (opening the
+    session, workgroup or profile); `Coming up` takes what is left, up to three job
+    rows (job, profile · connection, time) that open that schedule, two beside
+    running. Once needs you has three rows, running collapses to a count line and
+    `Coming up` is hidden. Each section carries a label when more than one shows.
+    The heading is a sentence: `Sentinel is working` (two agents are named, more
+    read `N running`), `Abby needs you` (several read `N things need you` over the
+    profiles), `N jobs are failing`; the subtitle holds the elapsed time, `N running`
+    and `N coming up`. All quiet: an admin with an upcoming job on any connection reads `Coming up` over the
+    rows, one without reads `Nothing scheduled`, a member reads `Nothing needs you · online`,
+    never sees the bell and sees only the jobs another connection brings. Also: update ready
+    (a row above the footer in every state), daemon stopped (Start alpi), starting,
+    connecting (activity still loading: it never claims all quiet) and `alpi · online`
+    when the daemon has no `host.activity.list`. More than four needs-you or running rows
+    end in `N more · Open alpi`. The footer is Open alpi, the bell, Settings and Quit.
   - *Window.* 340 px wide inside a 342 px transparent, undecorated,
     always-on-top window that skips the taskbar (`macos-private-api` makes the
     transparency possible on macOS); the page reports its height with

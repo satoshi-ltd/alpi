@@ -22,11 +22,11 @@ export function reducedSnapshot(snapshot) {
   return { v: snapshot.v, state: snapshot.state, counts: snapshot.counts };
 }
 
-export function useTrayAnnouncer({ connection, daemon, activity, activitySupported, member, unread, foldByProfile, accentByProfile, otherSchedules }) {
+export function useTrayAnnouncer({ connection, daemon, activity, activitySupported, member, unread, foldByProfile, accentByProfile, otherActivity }) {
   const update = useUpdaterFacts();
   const snapshot = useMemo(
-    () => buildTraySnapshot({ connection, daemon, activity, activitySupported, member, unread, update, foldByProfile, accentByProfile, otherSchedules, nowMs: Date.now() }),
-    [connection, daemon, activity, activitySupported, member, unread, update, foldByProfile, accentByProfile, otherSchedules],
+    () => buildTraySnapshot({ connection, daemon, activity, activitySupported, member, unread, update, foldByProfile, accentByProfile, otherActivity, nowMs: Date.now() }),
+    [connection, daemon, activity, activitySupported, member, unread, update, foldByProfile, accentByProfile, otherActivity],
   );
   const lastSent = useRef(null);
   useEffect(() => {

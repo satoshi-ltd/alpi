@@ -49,15 +49,22 @@ describe("buildTraySnapshot next", () => {
     expect(s.next.rows[0]).toMatchObject({ at: new Date(future(600) * 1000).toISOString(), source: null, deeplink: { kind: "settings", profile: "doc", id: "schedules", connection_id: "local" } });
   });
 
+  it("counts every upcoming job beside the rows it keeps", () => {
+    const jobs = [0, 1, 2, 3, 4].map((i) => sched({ job_id: `j${i}`, next_fire: new Date(future(600 * (i + 1)) * 1000).toISOString() }));
+    const s = buildTraySnapshot(quiet(jobs));
+    expect(s.next.rows).toHaveLength(3);
+    expect(s.next.total).toBe(5);
+  });
+
   it("keeps three rows across every connection and names the one each comes from", () => {
     const at = (secs) => new Date(future(secs) * 1000).toISOString();
     const own = [sched({ job_id: "h1", title: "Here", next_fire: at(7200) }), sched({ job_id: "h2", title: "Here 2", next_fire: at(9000) })];
     const there = [sched({ job_id: "t1", title: "There", next_fire: at(600) }), sched({ job_id: "t2", title: "There 2", next_fire: at(1200) })];
-    const s = buildTraySnapshot({ ...quiet(own), connection: { ...online, name: "casa" }, otherSchedules: [{ id: "mirai", name: "mirai", scheduled: there }] });
+    const s = buildTraySnapshot({ ...quiet(own), connection: { ...online, name: "casa" }, otherActivity: [{ id: "mirai", name: "mirai", activity: { scheduled: there } }] });
     expect(s.next.rows.map((r) => [r.title, r.source])).toEqual([["There", "mirai"], ["There 2", "mirai"], ["Here", "casa"]]);
     expect(s.next.rows[0].deeplink.connection_id).toBe("mirai");
-    expect(buildTraySnapshot({ ...quiet([]), otherSchedules: [{ id: "mirai", name: "mirai", scheduled: there }] }).next.rows[0].title).toBe("There");
-    expect(buildTraySnapshot({ ...quiet([]), otherSchedules: [{ id: "mirai", name: "mirai", scheduled: [] }] }).next).toBeNull();
+    expect(buildTraySnapshot({ ...quiet([]), otherActivity: [{ id: "mirai", name: "mirai", activity: { scheduled: there } }] }).next.rows[0].title).toBe("There");
+    expect(buildTraySnapshot({ ...quiet([]), otherActivity: [{ id: "mirai", name: "mirai", activity: { scheduled: [] } }] }).next).toBeNull();
   });
 
   it("draws each row with the fold and accent of its own connection", () => {
@@ -69,26 +76,33 @@ describe("buildTraySnapshot next", () => {
       connection: { ...online, name: "casa" },
       foldByProfile: { doc: "owl" },
       accentByProfile: { doc: "#aa0000" },
-      otherSchedules: [{ id: "mirai", name: "mirai", scheduled: there, folds: { sentinel: "diamond" }, accents: { sentinel: "#00aa00" } }],
+      otherActivity: [{ id: "mirai", name: "mirai", activity: { scheduled: there }, folds: { sentinel: "diamond" }, accents: { sentinel: "#00aa00" } }],
     });
     expect(s.next.rows.map((r) => [r.title, r.fold, r.accent])).toEqual([["There", "diamond", "#00aa00"], ["Here", "owl", "#aa0000"]]);
   });
 
-  it("names no connection while only one contributes jobs", () => {
+  it("names the connection of a row only while more than one connection is read", () => {
     const own = sched({ title: "Here" });
-    const s = buildTraySnapshot({ ...quiet([own]), connection: { ...online, name: "casa" }, otherSchedules: [{ id: "mirai", name: "mirai", scheduled: [] }] });
-    expect(s.next.rows.map((r) => r.source)).toEqual([null]);
+    expect(buildTraySnapshot({ ...quiet([own]), connection: { ...online, name: "casa" } }).next.rows.map((r) => r.source)).toEqual([null]);
+    const s = buildTraySnapshot({ ...quiet([own]), connection: { ...online, name: "casa" }, otherActivity: [{ id: "mirai", name: "mirai", activity: { scheduled: [] } }] });
+    expect(s.next.rows.map((r) => r.source)).toEqual(["casa"]);
+  });
+
+  it("lists the jobs of another connection even when the active one is a member", () => {
+    const there = [sched({ title: "There" })];
+    const s = buildTraySnapshot({ ...quiet([sched({})]), member: true, otherActivity: [{ id: "mirai", name: "mirai", activity: { scheduled: there } }] });
+    expect(s.next.rows.map((r) => r.title)).toEqual(["There"]);
   });
 
   it("does not list the active connection twice while its own rows are still in the other list", () => {
     const own = sched({ title: "Here" });
-    const s = buildTraySnapshot({ ...quiet([own]), connection: { ...online, name: "casa" }, otherSchedules: [{ id: "local", name: "casa", scheduled: [own] }] });
+    const s = buildTraySnapshot({ ...quiet([own]), connection: { ...online, name: "casa" }, otherActivity: [{ id: "local", name: "casa", activity: { scheduled: [own] } }] });
     expect(s.next.rows).toHaveLength(1);
   });
 
   it("ignores another connection's job that is already past", () => {
     const past = sched({ next_fire: new Date(future(-60) * 1000).toISOString() });
-    expect(buildTraySnapshot({ ...quiet([]), otherSchedules: [{ id: "m", name: "m", scheduled: [past] }] }).next).toBeNull();
+    expect(buildTraySnapshot({ ...quiet([]), otherActivity: [{ id: "m", name: "m", activity: { scheduled: [past] } }] }).next).toBeNull();
   });
 
   it("falls back to the job id and cuts a long title at 200 characters", () => {
@@ -112,6 +126,67 @@ describe("buildTraySnapshot next", () => {
     const s = buildTraySnapshot(quiet([]));
     expect(s.v).toBe(1);
     expect(s).not.toHaveProperty("ask");
+  });
+});
+
+describe("buildTraySnapshot across connections", () => {
+  const other = (over) => ({
+    id: "mirai",
+    name: "mirai",
+    member: false,
+    activity: {
+      needs_you: [{ request_id: "r9", kind: "approval", profile: "sentinel", title: "wants to push", ts: sec(30) }],
+      running: [{ profile: "sentinel", session_id: "s7", title: "Review PR" }],
+      scheduled: [{ profile: "sentinel", job_id: "x", title: "scan", last_run_status: "error", last_run_at: sec(600) }],
+    },
+    folds: { sentinel: "diamond" },
+    accents: { sentinel: "#00aa00" },
+    ...over,
+  });
+  const here = { ...online, name: "casa" };
+
+  it("counts needs, failing and running over every connection and keeps the state honest", () => {
+    const s = buildTraySnapshot({ connection: here, activity: { needs_you: [], running: [], scheduled: [] }, otherActivity: [other()], nowMs: NOW });
+    expect(s.counts).toEqual({ needs: 1, failing: 1, running: 1 });
+    expect(s.state).toBe("needs");
+    expect(s.needs.total).toBe(1);
+    expect(s.failing).toMatchObject({ jobs: 1, profileCount: 1 });
+  });
+
+  it("opens a row of another connection on that connection and keeps its ids apart", () => {
+    const mine = { needs_you: [{ request_id: "r9", kind: "approval", profile: "abby", title: "t", ts: sec(5) }], running: [], scheduled: [] };
+    const s = buildTraySnapshot({ connection: here, activity: mine, otherActivity: [other()], nowMs: NOW });
+    expect(s.needs.rows.map((r) => [r.id, r.source, r.deeplink.connection_id])).toEqual([["r9", "casa", "local"], ["mirai/r9", "mirai", "mirai"]]);
+    expect(s.needs.rows[1]).toMatchObject({ fold: "diamond", accent: "#00aa00" });
+    expect(s.running.rows[0]).toMatchObject({ source: "mirai", deeplink: { kind: "chat", id: "s7", connection_id: "mirai" } });
+  });
+
+  it("names no connection while only the active one is read", () => {
+    const s = buildTraySnapshot({ connection: here, activity, nowMs: NOW });
+    expect(s.needs.rows.every((r) => r.source === null)).toBe(true);
+  });
+
+  it("tells apart a profile that fails on two connections", () => {
+    const failed = { scheduled: [{ profile: "abby", job_id: "j", title: "scan", last_run_status: "error", last_run_at: sec(3600) }] };
+    const s = buildTraySnapshot({ connection: { ...online, name: "casa" }, activity: { needs_you: [], running: [], ...failed }, otherActivity: [{ id: "mirai", name: "mirai", activity: { needs_you: [], running: [], ...failed } }], nowMs: NOW });
+    expect(s.failing.profiles).toEqual(["abby · casa", "abby · mirai"]);
+  });
+
+  it("takes needs and running but no failing jobs from a member connection", () => {
+    const s = buildTraySnapshot({ connection: here, activity: { needs_you: [], running: [], scheduled: [] }, otherActivity: [other({ member: true })], nowMs: NOW });
+    expect(s.counts).toEqual({ needs: 1, failing: 0, running: 1 });
+  });
+
+  it("lets the active connection's link win over what other connections need", () => {
+    const s = buildTraySnapshot({ connection: { ...here, status: "offline" }, activity: null, otherActivity: [other()], nowMs: NOW });
+    expect(s.state).toBe("offline");
+  });
+
+  it("counts other connections while the active one has no activity verb", () => {
+    const s = buildTraySnapshot({ connection: here, activity: null, activitySupported: false, otherActivity: [other()], nowMs: NOW });
+    expect(s.counts.needs).toBe(1);
+    expect(s.state).toBe("needs");
+    expect(buildTraySnapshot({ connection: here, activity: null, activitySupported: false, nowMs: NOW }).state).toBe("online");
   });
 });
 
