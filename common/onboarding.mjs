@@ -11,6 +11,11 @@ export const LINK_SOURCES = [
   "In a terminal on the host: alpi setup → Connections → New connection.",
 ];
 
+export const LINK_SOURCE_ROWS = LINK_SOURCES.map((line) => {
+  const at = line.indexOf(": ");
+  return { label: line.slice(0, at), path: line.slice(at + 2).replace(/\.$/, "") };
+});
+
 export const INSTALL_COMMANDS = ["uv tool install alpi-agent", "alpi setup"];
 
 export const START_COMMAND = "alpi daemon start";

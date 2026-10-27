@@ -1,3 +1,5 @@
+import { useRef } from 'react';
+
 import { splitDefaultProfile } from '../../../common/rosterOrder.mjs';
 
 const MATCH_FIELDS = ['label', 'name', 'id', 'preview'];
@@ -34,4 +36,15 @@ export function rosterSections(items, query, options) {
 
 export function rosterIsEmpty(sections) {
   return (sections ?? []).every((section) => (section.data?.length ?? 0) === 0);
+}
+
+export function isFirstProfile({ empty, initialLoading = false, paired = true, query = '', daemonDown = false, error = null }) {
+  return !!empty && !initialLoading && !!paired && !String(query ?? '').trim() && !daemonDown && !error;
+}
+
+export function useSettledOnce(loading, key) {
+  const seen = useRef({ key, settled: false });
+  if (seen.current.key !== key) seen.current = { key, settled: false };
+  if (!loading) seen.current.settled = true;
+  return loading && !seen.current.settled;
 }

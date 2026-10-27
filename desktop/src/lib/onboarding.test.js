@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  LINK_SOURCES,
+  LINK_SOURCE_ROWS,
   failedStep,
   memberEmptyCopy,
   pairedRoleLine,
@@ -9,6 +11,16 @@ import {
   pairingStepLabel,
 } from "../../../common/onboarding.mjs";
 import { emptyCopyProblems } from "../../../common/emptyCopy.rules.mjs";
+
+describe("link source rows", () => {
+  it("splits every shipped source into a label and a path, in order, without the full stop", () => {
+    expect(LINK_SOURCE_ROWS).toEqual([
+      { label: "In the alpi desktop app", path: "Settings → Connections → New connection" },
+      { label: "In a terminal on the host", path: "alpi setup → Connections → New connection" },
+    ]);
+    expect(LINK_SOURCE_ROWS).toHaveLength(LINK_SOURCES.length);
+  });
+});
 
 describe("onboarding copy", () => {
   it("maps every probe status and transport error to one named failure", () => {

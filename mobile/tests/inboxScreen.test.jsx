@@ -135,6 +135,7 @@ vi.mock('../src/components/Banner', () => ({
     ),
 }));
 vi.mock('../src/components/Icon', () => ({ Icon: ({ name }) => React.createElement('span', { 'data-icon': name }) }));
+vi.mock('../src/components/Fold', () => ({ Fold: ({ size }) => React.createElement('span', { 'data-mark': 'fold', 'data-size': size }) }));
 vi.mock('../src/components/Glyph', () => ({ Glyph: ({ offline }) => React.createElement('span', { 'data-glyph': 'true', 'data-offline': String(!!offline) }) }));
 vi.mock('../src/components/Dot', () => ({ Dot: () => React.createElement('span', { 'data-dot': 'true' }) }));
 vi.mock('../src/features/inbox/ConnHeader', () => ({
@@ -157,13 +158,13 @@ vi.mock('../src/features/sheets/CreateProfileSheet', () => ({
 vi.mock('../src/features/sheets/CreateWorkgroupSheet', () => ({
   CreateWorkgroupSheet: ({ open }) => (open ? React.createElement('div', { 'data-create': 'workgroup' }) : null),
 }));
-vi.mock('../src/features/shell/HomePane', () => ({ HomePane: () => React.createElement('div', { 'data-home': 'true' }) }));
+vi.mock('../src/features/shell/HomePane', () => ({ HomePane: ({ empty }) => React.createElement('div', { 'data-home': 'true', 'data-empty': String(!!empty) }) }));
 
 vi.mock('../src/components/Toast', () => ({ useToast: () => h.toast }));
 vi.mock('../src/hooks/useDebouncedCallback', () => ({ useDebouncedCallback: (fn) => fn }));
 vi.mock('../src/hooks/useEvents', () => ({ useEventEffect: () => {} }));
 vi.mock('../src/hooks/useInbox', () => ({
-  useInbox: () => ({ items: h.items, loading: false, refresh: h.refresh }),
+  useInbox: () => ({ items: h.items, loading: !!h.loading, refresh: h.refresh }),
 }));
 vi.mock('../src/hooks/useActivity', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -189,6 +190,7 @@ vi.mock('../src/lib/pins', () => ({
 }));
 import { DAEMON_STATUS_BANNERS } from '../src/components/DaemonBanner';
 import { space } from '../src/theme/tokens';
+import { PaneContext } from '../src/nav/PaneContext';
 import { _resetLaunchRestore } from '../src/features/shell/launchRestore';
 import Index from '../app/index.jsx';
 
@@ -347,10 +349,13 @@ describe('Inbox screen creation', () => {
     expect(document.querySelector('[data-create="workgroup"]')).toBeTruthy();
   });
 
-  it('offers the first profile and the first workgroup on a daemon with nothing at all', () => {
+  it('offers the first profile as the one action of the first-run page on a daemon with nothing at all', () => {
     h.items = [];
     render(<Index />);
     expect(screen.getByText('No profiles or workgroups yet')).toBeTruthy();
+    expect(document.querySelector('[data-mark="fold"]').getAttribute('data-size')).toBe('72');
+    expect(screen.queryByLabelText('New workgroup')).toBeNull();
+    expect(screen.getAllByLabelText('New profile')).toHaveLength(1);
     fireEvent.click(screen.getByLabelText('New profile'));
     expect(document.querySelector('[data-create="profile"]')).toBeTruthy();
   });
@@ -360,8 +365,49 @@ describe('Inbox screen creation', () => {
     h.role = 'member';
     render(<Index />);
     expect(screen.getByText('Nothing shared with this device yet')).toBeTruthy();
+    expect(screen.getByText('member · nothing shared yet')).toBeTruthy();
     expect(screen.queryByLabelText('New profile')).toBeNull();
     expect(screen.queryByLabelText('New workgroup')).toBeNull();
+  });
+
+  it('tells the fold detail pane the roster is empty, and only then', () => {
+    const fold = (ui) => React.createElement(PaneContext.Provider, { value: { twoPane: true, side: 'detail', sidebarOpen: true, toggleSidebar() {} } }, ui);
+    h.items = [];
+    render(fold(<Index />));
+    expect(document.querySelector('[data-home]').dataset.empty).toBe('true');
+    cleanup();
+    h.items = [{ kind: 'profile', id: 'alpi', name: 'alpi', label: 'alpi', preview: '' }];
+    render(fold(<Index />));
+    expect(document.querySelector('[data-home]').dataset.empty).toBe('false');
+  });
+
+  it('holds the skeleton, not the empty page, when the active connection changes to one still loading', () => {
+    const fold = (ui) => React.createElement(PaneContext.Provider, { value: { twoPane: true, side: 'detail', sidebarOpen: true, toggleSidebar() {} } }, ui);
+    h.items = [];
+    h.loading = false;
+    const view = render(fold(<Index />));
+    expect(document.querySelector('[data-home]').dataset.empty).toBe('true');
+    h.endpoint = { id: 'c2', name: 'work', url: 'ws://work:49200' };
+    h.loading = true;
+    view.rerender(fold(<Index />));
+    expect(document.querySelector('[data-home]').dataset.empty).toBe('false');
+    h.loading = false;
+    view.rerender(fold(<Index />));
+    expect(document.querySelector('[data-home]').dataset.empty).toBe('true');
+    h.loading = true;
+    view.rerender(fold(<Index />));
+    expect(document.querySelector('[data-home]').dataset.empty).toBe('true');
+    h.loading = false;
+    h.endpoint = { id: 'c1', name: 'casa', url: 'ws://casa:49200' };
+  });
+
+  it('does not call the roster empty while the daemon is down, a load failed or nothing is paired', () => {
+    const fold = (ui) => React.createElement(PaneContext.Provider, { value: { twoPane: true, side: 'detail', sidebarOpen: true, toggleSidebar() {} } }, ui);
+    h.items = [];
+    h.status = 'offline';
+    render(fold(<Index />));
+    expect(document.querySelector('[data-home]').dataset.empty).toBe('false');
+    h.status = 'online';
   });
 
   it('mounts no create sheet for a non-admin', () => {

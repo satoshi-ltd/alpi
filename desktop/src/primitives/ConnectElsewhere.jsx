@@ -1,8 +1,8 @@
-import { useState } from "react";
-import { Button } from "./index.js";
+import { useEffect, useId, useRef, useState } from "react";
+import { Button, Mono } from "./index.js";
 import StepLadder, { ladderSteps } from "./StepLadder.jsx";
 import {
-  LINK_SOURCES,
+  LINK_SOURCE_ROWS,
   PAIRING_STEPS,
   failedStep,
   pairingFailure,
@@ -12,8 +12,17 @@ import {
 } from "../../../common/onboarding.mjs";
 import styles from "./ConnectElsewhere.module.css";
 
-export default function ConnectElsewhere({ onConnect, autoFocus = false }) {
-  const [link, setLink] = useState("");
+export default function ConnectElsewhere({ onConnect, onBack = null, autoFocus = false, initialLink = "", onLinkChange = null }) {
+  const fieldId = useId();
+  const fieldRef = useRef(null);
+  const [link, setLinkState] = useState(initialLink);
+  const setLink = (value) => {
+    setLinkState(value);
+    onLinkChange?.(value);
+  };
+  useEffect(() => {
+    if (autoFocus) fieldRef.current?.focus({ preventScroll: true });
+  }, [autoFocus]);
   const [current, setCurrent] = useState(null);
   const [failure, setFailure] = useState(null);
   const host = pairingLinkHost(link);
@@ -45,16 +54,29 @@ export default function ConnectElsewhere({ onConnect, autoFocus = false }) {
 
   return (
     <form className={styles.connect} onSubmit={submit}>
+      <label className={styles.label} htmlFor={fieldId}>alpi:// link</label>
       <input
+        id={fieldId}
+        ref={fieldRef}
         className={`field field-mono ${styles.linkInput}`}
         value={link}
         onChange={(e) => setLink(e.target.value)}
         placeholder="alpi://device?url=…"
-        aria-label="alpi:// link"
-        autoFocus={autoFocus}
       />
-      <p className={styles.sources}>{LINK_SOURCES.join(" ")}</p>
-      {steps ? <StepLadder steps={steps} /> : null}
+      <div className={styles.middle}>
+        {steps ? (
+          <StepLadder steps={steps} />
+        ) : (
+          <ul className={styles.sources}>
+            {LINK_SOURCE_ROWS.map(({ label, path }) => (
+              <li key={label} className={styles.source}>
+                <span className={styles.sourceLabel}>{label}</span>
+                <Mono className={styles.sourcePath}>{path}</Mono>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
       {failure ? (
         <div className={styles.failure} role="alert">
           <strong>{failure.title}</strong>
@@ -62,9 +84,10 @@ export default function ConnectElsewhere({ onConnect, autoFocus = false }) {
         </div>
       ) : null}
       <div className={styles.actions}>
-        <Button type="submit" variant="primary" size="lg" disabled={busy || !link.trim()}>
+        <Button type="submit" variant="primary" size="lg" className={styles.primary} disabled={busy || !link.trim()}>
           {failure ? failure.action : "Connect"}
         </Button>
+        {onBack ? <Button variant="ghost" size="lg" onClick={onBack}>Back</Button> : null}
       </div>
     </form>
   );

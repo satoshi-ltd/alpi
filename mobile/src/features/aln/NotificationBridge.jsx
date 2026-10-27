@@ -1,18 +1,19 @@
+import { usePathname } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
 import { useEventEffect } from '../../hooks/useEvents';
+import { FIRST_RUN_PATHS } from '../../lib/firstRun';
 import { useEndpoint } from '../../lib/EndpointContext';
 import { runPollOnce } from './backgroundTask';
 import { deliverEvents } from './deliver';
 import { NOTIFIABLE_KINDS } from './kinds';
 import { getPermissionStatus, registerNotificationCategories, requestPermission } from './notify';
 import { NotificationPrimer } from './NotificationPrimer';
-import { alnStateKey, eventId, loadFlag, saveFlag } from './state';
+import { alnStateKey, eventId, loadFlag, PRIMER_FLAG, saveFlag } from './state';
 
 const CATCHUP_INTERVAL_MS = 30000;
 const CATCHUP_MIN_GAP_MS = 10000;
-const PRIMER_FLAG = 'notificationPrimer';
 
 export function NotificationBridge() {
   const { endpoint, connections } = useEndpoint();
@@ -23,6 +24,8 @@ export function NotificationBridge() {
   const catchupBusyRef = useRef(false);
   const inFlightRef = useRef(new Set());
   const [primerOpen, setPrimerOpen] = useState(false);
+  const pathname = usePathname();
+  const onFirstRun = FIRST_RUN_PATHS.includes(pathname);
 
   useEffect(() => {
     registerNotificationCategories();
@@ -49,7 +52,7 @@ export function NotificationBridge() {
       if (status === 'undetermined') {
         const answered = await loadFlag(PRIMER_FLAG, null);
         if (cancelled) return;
-        if (!answered) {
+        if (!answered && !onFirstRun) {
           setPrimerOpen(true);
           return;
         }
@@ -57,7 +60,7 @@ export function NotificationBridge() {
       await catchUp({ force: true });
     })();
     return () => { cancelled = true; };
-  }, [hasConnection, catchUp]);
+  }, [hasConnection, catchUp, onFirstRun]);
 
   const onPrimerEnable = useCallback(async () => {
     setPrimerOpen(false);

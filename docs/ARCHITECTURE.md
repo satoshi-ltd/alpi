@@ -1574,22 +1574,70 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   guards every `/profile/<id>` screen (`ProfileGuard`) so it does not ask at all.
 
 - **First run is one welcome, not an error.** On a local connection that
-  has not answered yet in this session, the desktop replaces the main pane
-  by state (once it has answered, an outage keeps the open view under the
-  reconnecting banner, whose Retry runs this flow again): `stopped`
-  starts alpi once on its own, then offers Start alpi; while starting it
-  shows the steps (start requested, waiting for alpi to answer); a failed
-  start shows the error, `alpi daemon start` to run by hand and Retry;
-  `absent` offers Install and start alpi (with installation progress and retry),
-  plus Check again (also re-detected when the window gains focus), beside a
-  pasted `alpi://` link; `unsupported` offers only the
-  link. Once alpi answers, a one-time card says how to add a phone. Both
-  clients pair through the same three named steps (link read, reaching
-  the host, signing in) and name each failure with its next action from
-  `common/onboarding.mjs`; a used, expired or malformed link is cleared,
-  any other failure keeps it. The phone's Scan QR opens the camera
-  directly, Paired names the host and the role, and Open inbox clears the
-  stack. A member with nothing shared sees whom to ask, naming the device.
+  has not answered yet in this session, the desktop draws one Welcome by
+  state in place of the main pane (once it has answered, an outage keeps the
+  open view under the reconnecting banner, whose Retry runs this flow again
+  and never replaces the window). It reads as a console screen: one
+  left-aligned column of `--modal-md` (520 px) under the 38 px drag strip, the
+  alpaca's ink on the column edge (the tonal Fold at 72 px, the BusyMark in
+  its place while installing or starting), a title, one sentence, facts in
+  Mono, then one primary Button lg (176 px) per state with ghosts after it,
+  never two primaries; the primary holds first focus. `stopped` starts alpi
+  once on its own, then offers Start alpi; a launch that returned keeps the
+  starting state for 15 s so the window never flashes the offline banner;
+  while starting it shows the steps (start requested, waiting for alpi to
+  answer); a failed start shows the error log (capped at 12 lines, scrolled to
+  its tail, a focusable region), `alpi daemon start` to run by hand and Retry as
+  the primary; `absent` offers one Install and start alpi primary (installation
+  progress, and Retry on failure) with Check again (also re-detected when the
+  window gains focus) and Connect to another computer as ghosts;
+  `unsupported` offers only the link form. The form is a labelled `alpi://
+  link` field (40 px), the link sources as a two-row list (`LINK_SOURCE_ROWS`
+  in `common/onboarding.mjs`), the three pairing steps in place of the list
+  while connecting, one failure line and one action row (Connect, then Back
+  except where alpi cannot run).
+  The full-window frame, with no Sidebar, exists only on a true first run:
+  the local daemon has never been online on this machine (a persisted flag,
+  read and written like the first-run hint) and at most one connection is
+  saved. Until the local connection has a status (no connections yet, unknown,
+  probing, offline and detecting) that frame is held, empty but for the
+  drag strip, rather than flashing the Sidebar and the offline banner, and
+  every shortcut that changes the view or opens a panel is off while it
+  shows. It resolves straight to the Sidebar when the daemon answers. In every other
+  case the Sidebar stays and the same Welcome fills the main pane beside it.
+  Once alpi answers, a one-time card says how to add a phone.
+- **The phone's first run is the same console.** `/onboarding`, `/pair` and
+  `/paired` are one column on a single left edge (16 pt, 24 pt on a fold,
+  where these routes render full-bleed; `lib/firstRun.js`): the alpaca's
+  ink on the edge, a terse title, one sentence, facts in mono and one primary
+  Button hero anchored above the safe area, with ghosts under it and never two
+  primaries. The welcome adds the link sources under Where do I get a link?;
+  the scan screen has one Paste link button; with the camera not allowed the
+  page offers Grant access, or Open settings when the system will not ask
+  again (the permission is read again when the app returns). The paste page
+  hides the mark and the sources while the keyboard is open; pairing shows the
+  three steps and one wait (the busy mark, no button spinner) and names a
+  failure in the same slot. The pairing fact is the host and its URL, a long
+  host name cut at 40 characters, and a second scan in the same tick starts one
+  exchange. A spent deep link opens the link-used state instead of the inbox.
+  With a connection already saved, `/pair` also offers Open inbox as a second
+  ghost; a failure that left the connection saved keeps Open inbox as the
+  primary. Paired names the host and the role and lists two optional rows,
+  Face ID unlock (hidden without hardware or enrolment) and Notifications:
+  Enable asks the system and records the primer flag only after the answer
+  (`accepted` when granted, `declined` when denied, nothing otherwise), a
+  denial shows Open settings and a grant the on pill; Open inbox never waits
+  for them. The notifications primer sheet stays closed on these routes and is
+  evaluated again when the user leaves them, so skipping Enable still shows it
+  on the first inbox.
+- **An empty roster is the first-profile page.** One condition,
+  `isFirstProfile` in `lib/roster.js` (empty roster after the first load,
+  paired, no filter, daemon not down, no error), drives both panes. The list
+  shows the mark at 72 pt, the title, one sentence and New profile as the one
+  primary for an admin; a member sees the role line `member · nothing shared
+  yet`, naming the device in the sentence, and no action. On a fold the detail
+  pane then says only Their chats open here; with the list folded an admin
+  keeps New profile in the pane. The fold's sidebar is 280 pt.
 
 - **`host.version` says whether a daemon can update itself.** It returns
   `installer` (`uv` | `pipx` | `docker` | `source`, cached after a successful probe by
@@ -1628,7 +1676,7 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   On the phone a tap follows `deepLinkFor`: `schedule.failed` opens its output
   row (`deep_link`) or, on a daemon without one, the job page; a link from
   another app never carries a `draft`, and a pairing link the system hands over
-  again after its token was used leaves for the inbox.
+  again after its token was used opens the link-used state of `/pair`.
 
 - **A chat send is accepted when the stream starts.** The desktop keeps what
   was typed until the first frame of `host.chat.send` (`session_start`); an
@@ -1868,7 +1916,7 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   (`settingsContentStyle`); detail screens share one 22 pt title
   (`components/detailTitle.js`); `CountBadge` is 18 pt; the fold sheet has no
   grabber and `ActionSheet` takes an `anchor` to open as a 280 pt popover; first
-  run follows `lib/firstRun.js` (columns of at most 480, centred); a notification
+  run follows `lib/firstRun.js` (columns of at most 480, left-aligned on one edge); a notification
   row keeps a fixed trailing time column with the level pill before the title;
   theme (System, Light, Dark) and text size (four steps) are `Segmented` controls
   in Settings, biometric lock is a `Toggle`, and ConnHeader draws its status

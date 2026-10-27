@@ -1,9 +1,12 @@
-import { useState } from "react";
-import { Button, Fold, IconBtn, Mono } from "../primitives/index.js";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Button, DisplayHeading, Fold, IconBtn, Mono } from "../primitives/index.js";
+import { BusyMark } from "../primitives/Busy.jsx";
+import { useBusyVisible } from "../lib/useBusyVisible.js";
 import { CopyIcon } from "../primitives/icons.jsx";
 import StepLadder from "../primitives/StepLadder.jsx";
 import ConnectElsewhere from "../primitives/ConnectElsewhere.jsx";
 import { copyText } from "../lib/clipboard.js";
+import { ALPACA_FOLD, FOLD_SIZES, foldPolygons } from "../../../common/folds.mjs";
 import { START_COMMAND } from "../../../common/onboarding.mjs";
 import styles from "./Welcome.module.css";
 
@@ -23,6 +26,22 @@ export function markFirstRunHintSeen() {
   } catch {}
 }
 
+const LOCAL_EVER_ONLINE_KEY = "alpi.localEverOnline.v1";
+
+export function localEverOnlineSeen() {
+  try {
+    return localStorage.getItem(LOCAL_EVER_ONLINE_KEY) === "seen";
+  } catch {
+    return false;
+  }
+}
+
+export function markLocalEverOnline() {
+  try {
+    localStorage.setItem(LOCAL_EVER_ONLINE_KEY, "seen");
+  } catch {}
+}
+
 export function FirstRunHint({ onDismiss }) {
   return (
     <aside className={styles.hint}>
@@ -35,111 +54,158 @@ export function FirstRunHint({ onDismiss }) {
   );
 }
 
+const INK = (() => {
+  const points = foldPolygons(ALPACA_FOLD, "#808080", FOLD_SIZES.hero).flatMap((facet) => facet.points);
+  const scale = FOLD_SIZES.hero / 100;
+  return {
+    left: Math.min(...points.map(([x]) => x)) * scale,
+    top: Math.min(...points.map(([, y]) => y)) * scale,
+    bottom: (100 - Math.max(...points.map(([, y]) => y))) * scale,
+  };
+})();
+const MARK_MARGIN = `-${INK.top}px 0 -${INK.bottom}px -${INK.left}px`;
+
+function Mark({ busy = false }) {
+  const waiting = useBusyVisible(busy);
+  return (
+    <span className={styles.mark} style={{ width: FOLD_SIZES.hero, height: FOLD_SIZES.hero, margin: MARK_MARGIN }} aria-hidden={busy ? "true" : undefined}>
+      {busy && waiting ? <BusyMark size={FOLD_SIZES.hero} /> : <Fold fold={ALPACA_FOLD} size={FOLD_SIZES.hero} />}
+    </span>
+  );
+}
+
+export function WelcomeFrame() {
+  return (
+    <section className={styles.welcome}>
+      <div className={styles.strip} data-drag />
+    </section>
+  );
+}
+
+function Screen({ busy = false, title, sub = null, live = null, busyState = false, children }) {
+  return (
+    <section className={styles.welcome} aria-live={live || undefined} aria-busy={busyState || undefined}>
+      <div className={styles.strip} data-drag />
+      <div className={styles.scroll}>
+        <div className={styles.column}>
+          <Mark busy={busy} />
+          <DisplayHeading hero className={styles.title} style={{ marginTop: "var(--sp-24)" }}>{title}</DisplayHeading>
+          {sub ? <p className={styles.sub}>{sub}</p> : null}
+          {children}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function Command({ value }) {
   return (
     <div className={styles.command}>
       <Mono className={styles.commandText}>{value}</Mono>
-      <IconBtn tip="Copy" aria-label={`Copy ${value}`} onClick={() => copyText(value)}>
+      <IconBtn size="sm" tip="Copy" aria-label={`Copy ${value}`} onClick={() => copyText(value)}>
         <CopyIcon />
       </IconBtn>
     </div>
   );
 }
 
+function Log({ text }) {
+  const ref = useRef(null);
+  useLayoutEffect(() => {
+    if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
+  }, [text]);
+  return <pre ref={ref} className={styles.log} role="region" aria-label="Error output" tabIndex={0}>{text}</pre>;
+}
+
+function Actions({ primary, onPrimary, ghosts }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    ref.current?.focus({ preventScroll: true });
+  }, []);
+  return (
+    <div className={styles.actions}>
+      {primary ? <Button ref={ref} variant="primary" size="lg" className={styles.primary} onClick={onPrimary}>{primary}</Button> : null}
+      {ghosts.map(({ label, onClick }) => (
+        <Button key={label} variant="ghost" size="lg" onClick={onClick}>{label}</Button>
+      ))}
+    </div>
+  );
+}
+
 export { ConnectElsewhere };
+
+const CONNECT_SUB = "Paste the link made on the computer that runs it.";
 
 export default function Welcome({ localState, phase = "idle", error = null, onStart, onInstall, onCheckAgain, onConnect }) {
   const [elsewhere, setElsewhere] = useState(false);
+  const [draft, setDraft] = useState("");
+  const toForm = { label: "Connect to another computer", onClick: () => setElsewhere(true) };
+  const unsupported = localState === "unsupported";
+  const working = phase === "installing" || phase === "starting";
+
+  if (!working && (elsewhere || unsupported)) {
+    return (
+      <Screen title="Connect to alpi" sub={unsupported ? "alpi does not run on this system yet, so connect to one that runs elsewhere." : CONNECT_SUB}>
+        <ConnectElsewhere onConnect={onConnect} initialLink={draft} onLinkChange={setDraft} autoFocus onBack={unsupported ? null : () => setElsewhere(false)} />
+      </Screen>
+    );
+  }
 
   if (phase === "installing") {
     return (
-      <section className={styles.welcome} aria-live="polite" aria-busy="true">
-        <Fold fold="alpaca" size={40} />
-        <h1 className={styles.title}>Installing alpi…</h1>
-        <p className={styles.sub}>Downloading uv, Python and alpi. This can take a few minutes. Keep this window open.</p>
-        <StepLadder steps={[
-          { id: "install", state: "now", label: "Installing alpi and its runtime" },
-          { id: "start", state: "todo", label: "Start alpi" },
-        ]} />
-      </section>
+      <Screen busy busyState live="polite" title="Installing alpi…" sub="Downloading uv, Python and alpi. This can take a few minutes. Keep this window open.">
+        <div className={styles.facts}>
+          <StepLadder steps={[
+            { id: "install", state: "now", label: "Installing alpi and its runtime" },
+            { id: "start", state: "todo", label: "Start alpi" },
+          ]} />
+        </div>
+      </Screen>
     );
   }
 
   if (phase === "starting") {
     return (
-      <section className={styles.welcome} aria-live="polite">
-        <Fold fold="alpaca" size={40} />
-        <h1 className={styles.title}>Starting alpi…</h1>
-        <StepLadder
-          steps={[
-            { id: "asked", state: "done", label: "Start requested" },
-            { id: "answer", state: "now", label: "Waiting for alpi to answer" },
-          ]}
-        />
-      </section>
+      <Screen busy live="polite" title="Starting alpi…">
+        <div className={styles.facts}>
+          <StepLadder
+            steps={[
+              { id: "asked", state: "done", label: "Start requested" },
+              { id: "answer", state: "now", label: "Waiting for alpi to answer" },
+            ]}
+          />
+        </div>
+      </Screen>
     );
   }
 
-  if (["failed", "install-failed"].includes(phase)) {
+  if (phase === "failed" || phase === "install-failed") {
+    const install = phase === "install-failed";
     return (
-      <section className={styles.welcome}>
-        <Fold fold="alpaca" size={40} />
-        <h1 className={styles.title}>{phase === "install-failed" ? "alpi couldn't be installed" : "alpi didn't start"}</h1>
-        {error ? <pre className={styles.error}>{error}</pre> : null}
-        {phase === "install-failed"
-          ? (error ? null : <p className={styles.sub}>Check your internet connection, then try again.</p>)
-          : <><p className={styles.sub}>Start it from a terminal to see what it says:</p><Command value={START_COMMAND} /></>}
-        <div className={styles.actions}>
-          <Button variant="secondary" size="lg" onClick={phase === "install-failed" ? onInstall : onStart}>Retry</Button>
-          <Button variant="ghost" size="lg" className={styles.ghostFlush} onClick={() => setElsewhere(true)}>Connect to another computer</Button>
-        </div>
-        {elsewhere ? <ConnectElsewhere onConnect={onConnect} autoFocus /> : null}
-      </section>
+      <Screen title={install ? "alpi couldn't be installed" : "alpi didn't start"} sub={!error && install ? "Check your internet connection, then try again." : null}>
+        {error ? <Log text={error} /> : null}
+        {install ? null : (
+          <>
+            <p className={`${styles.sub} ${error ? styles.below : ""}`}>Start it from a terminal to see what it says:</p>
+            <Command value={START_COMMAND} />
+          </>
+        )}
+        <Actions primary="Retry" onPrimary={install ? onInstall : onStart} ghosts={[toForm]} />
+      </Screen>
     );
   }
 
   if (localState === "stopped") {
     return (
-      <section className={styles.welcome}>
-        <Fold fold="alpaca" size={40} />
-        <h1 className={styles.title}>alpi is installed but not running</h1>
-        <p className={styles.sub}>Start it here, or connect to an alpi that runs somewhere else.</p>
-        <div className={styles.actions}>
-          <Button variant="primary" size="lg" onClick={onStart}>Start alpi</Button>
-          <Button variant="ghost" size="lg" className={styles.ghostFlush} onClick={() => setElsewhere(true)}>Connect to another computer</Button>
-        </div>
-        {elsewhere ? <ConnectElsewhere onConnect={onConnect} autoFocus /> : null}
-      </section>
+      <Screen title="alpi is installed but not running" sub="Start it here, or connect to an alpi that runs somewhere else.">
+        <Actions primary="Start alpi" onPrimary={onStart} ghosts={[toForm]} />
+      </Screen>
     );
   }
 
-  const unsupported = localState === "unsupported";
   return (
-    <section className={styles.welcome}>
-      <Fold fold="alpaca" size={40} />
-      <h1 className={styles.title}>{unsupported ? "Connect to alpi" : "Set up alpi"}</h1>
-      <p className={styles.sub}>
-        {unsupported
-          ? "alpi does not run on this system yet, so connect to one that runs elsewhere."
-          : "No alpi on this computer yet. Both paths end in the same window."}
-      </p>
-      <div className={styles.choices}>
-        {unsupported ? null : (
-          <div className={styles.choice}>
-            <h2 className={styles.choiceTitle}>Run alpi here</h2>
-            <p className={styles.choiceSub}>Install alpi and its runtime here, then choose a model in Settings. Requires an internet connection.</p>
-            <div className={styles.actions}>
-              <Button variant="primary" size="lg" onClick={onInstall}>Install and start alpi</Button>
-              <Button variant="ghost" size="lg" className={styles.ghostFlush} onClick={onCheckAgain}>Check again</Button>
-            </div>
-          </div>
-        )}
-        <div className={styles.choice}>
-          <h2 className={styles.choiceTitle}>Connect to alpi elsewhere</h2>
-          <p className={styles.choiceSub}>Paste the link made on the computer that runs it.</p>
-          <ConnectElsewhere onConnect={onConnect} />
-        </div>
-      </div>
-    </section>
+    <Screen title="Set up alpi" sub="alpi runs your agents on this computer. Installing it needs an internet connection.">
+      <Actions primary="Install and start alpi" onPrimary={onInstall} ghosts={[{ label: "Check again", onClick: onCheckAgain }, toForm]} />
+    </Screen>
   );
 }

@@ -2,35 +2,55 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Clipboard from 'expo-clipboard';
 import Constants from 'expo-constants';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { AppState, Keyboard, Linking, Platform, ScrollView, Text, TextInput, View } from 'react-native';
+import { ALPACA_FOLD, FOLD_SIZES } from '../../common/folds.mjs';
+import { LINK_SOURCE_ROWS, PAIRING_STEPS, failedStep, pairingFailure, pairingFailureKind, pairingLinkHost, pairingStepLabel } from '../../common/onboarding.mjs';
 import { KeyboardPane } from '../src/components/KeyboardPane';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { radii, space, lineHeights } from '../src/theme/tokens';
-import { firstRun } from '../src/lib/firstRun';
+import { palettes, space } from '../src/theme/tokens';
+import {
+  BUSY_MARK_PX,
+  busyMarkStyle,
+  firstRun,
+  firstRunActions,
+  firstRunBottom,
+  firstRunColumn,
+  firstRunScroll,
+  firstRunType,
+  foldMarkStyle,
+} from '../src/lib/firstRun';
 
+import { Busy } from '../src/components/Busy';
 import { Button } from '../src/components/Button';
 import { Eyebrow } from '../src/components/Eyebrow';
-import { Icon } from '../src/components/Icon';
-import { useBack } from '../src/hooks/useBack';
+import { Fold } from '../src/components/Fold';
+import { StepLadder, ladderSteps } from '../src/components/StepLadder';
+import { useWell } from '../src/components/well';
+import { useFirstRunLayout, useKeyboardOpen } from '../src/hooks/useFirstRunLayout';
 import { useEndpoint } from '../src/lib/EndpointContext';
-import { exchangePairing, pairingLinkFromParams, parsePairing } from '../src/lib/pairing';
+import { exchangePairing, pairingLinkFact, pairingLinkFromParams, parsePairing } from '../src/lib/pairing';
 import { RATE_LIMITED_STATUS } from '../src/lib/rateLimit';
 import { isSpentPairing, rememberSpentPairing } from '../src/lib/spentPairings';
 import { probe } from '../src/lib/probe';
 import { call } from '../src/lib/rpc';
-import { useTheme } from '../src/theme/ThemeContext';
-import { useWell } from '../src/components/well';
-import { StepLadder, ladderSteps } from '../src/components/StepLadder';
-import { PAIRING_STEPS, failedStep, pairingFailure, pairingFailureKind, pairingLinkHost, pairingStepLabel } from '../../common/onboarding.mjs';
+import { ThemeContext, useTheme } from '../src/theme/ThemeContext';
+
+const CAMERA_GROUND = '#000';
 
 export default function Pair() {
-  const { colors, fonts, fontSizes, mobile } = useTheme();
+  const theme = useTheme();
+  const { colors, fonts, fontSizes } = theme;
   const [well, focus] = useWell(colors);
   const router = useRouter();
-  const goBack = useBack();
+  const { edge, insets } = useFirstRunLayout();
+  const keyboardOpen = useKeyboardOpen();
+  const type = firstRunType(theme);
+  const fieldRef = useRef(null);
   // addConnection keeps SecureStore and the provider's live connection list in sync.
-  const { addConnection } = useEndpoint();
+  const { addConnection, connections } = useEndpoint();
+  const hasConnection = (connections?.length ?? 0) > 0;
+  const inFlight = useRef(false);
+  const mounted = useRef(true);
   const params = useLocalSearchParams();
   const routedLink = pairingLinkFromParams(params);
   const [mode, setMode] = useState(params.mode === 'scan' && !routedLink ? 'scan' : 'paste');
@@ -38,7 +58,13 @@ export default function Pair() {
   const [busy, setBusy] = useState(false);
   const [current, setCurrent] = useState(null);
   const [failure, setFailure] = useState(null);
-  const [permission, requestPermission] = useCameraPermissions();
+  const [permission, requestPermission, getPermission] = useCameraPermissions();
+  const darkTheme = useMemo(() => ({ ...theme, mode: 'dark', colors: palettes.dark }), [theme]);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
   useEffect(() => {
     if (!routedLink) return undefined;
@@ -46,13 +72,27 @@ export default function Pair() {
     isSpentPairing(params.pairing_token ?? params.token).then((spent) => {
       if (cancelled) return;
       if (spent) {
-        router.replace('/');
+        const host = pairingLinkHost(routedLink);
+        setFailure({ ...pairingFailure('link-used', host), host, at: 'sign-in' });
+        setCurrent('sign-in');
         return;
       }
       setText(routedLink);
     });
     return () => { cancelled = true; };
   }, [routedLink]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (failure && !failure.keepLink && !failure.saved && !text) fieldRef.current?.focus?.();
+  }, [failure]);
+
+  useEffect(() => {
+    if (mode !== 'scan' || permission?.granted || !getPermission) return undefined;
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') getPermission();
+    });
+    return () => sub?.remove?.();
+  }, [mode, permission?.granted, getPermission]);
 
   const fail = (kind, host, failedAt, savedNote) => {
     const next = pairingFailure(kind, host);
@@ -72,14 +112,18 @@ export default function Pair() {
     if (failure?.saved) {
       if (router.canDismiss?.()) router.dismissAll();
       router.replace('/');
-    } else if (!text.trim()) {
-      setMode('scan');
-    } else {
+    } else if (failure && !failure.keepLink) {
+      editLink('');
+      fieldRef.current?.focus?.();
+    } else if (text.trim()) {
       tryPair(text);
     }
   };
 
   const tryPair = async (input) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    Keyboard.dismiss();
     setBusy(true);
     setFailure(null);
     setCurrent('read');
@@ -91,6 +135,7 @@ export default function Pair() {
     } catch {
       fail('invalid', host, 'read');
       setBusy(false);
+      inFlight.current = false;
       return;
     }
     try {
@@ -125,6 +170,7 @@ export default function Pair() {
       const finalEndpoint = { ...endpoint, deviceId, ...(deviceName ? { name: deviceName } : {}) };
       await addConnection(finalEndpoint);
       setCurrent('done');
+      if (!mounted.current) return;
       const shared = Array.isArray(summaries?.profiles) ? summaries.profiles.length : Array.isArray(summaries) ? summaries.length : null;
       router.replace({
         pathname: '/paired',
@@ -134,6 +180,7 @@ export default function Pair() {
       fail(pairingFailureKind(e), host, null, exchangedCredentialSaved);
     } finally {
       setBusy(false);
+      inFlight.current = false;
     }
   };
 
@@ -143,7 +190,7 @@ export default function Pair() {
   };
 
   const handleScan = async ({ data }) => {
-    if (busy) return;
+    if (busy || inFlight.current) return;
     setMode('paste');
     setText(data);
     await tryPair(data);
@@ -153,154 +200,148 @@ export default function Pair() {
   const steps = current
     ? ladderSteps(PAIRING_STEPS, current, failure ? failure.at : null, (id) => pairingStepLabel(id, ladderHost))
     : null;
+  const fact = pairingLinkFact(text);
 
-  if (mode === 'scan') {
-    const ready = permission?.granted;
+  if (mode === 'scan' && permission?.granted) {
+    const dark = darkTheme.colors;
     return (
-      <View style={{ flex: 1, backgroundColor: '#000' }}>
-        <SafeAreaView edges={['top']} style={{ zIndex: 2 }}>
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              padding: space.s7,
-              gap: space.s5,
-            }}
-          >
-            <Pressable onPress={() => setMode('paste')} hitSlop={12} accessibilityRole="button" accessibilityLabel="Back to the pairing link">
-              <Icon name="back" size="md" color="#fff" />
-            </Pressable>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: '#fff', fontFamily: fonts.sans.semibold, fontSize: fontSizes.md }}>
-                Pair this phone
-              </Text>
-              <Text
-                style={{
-                  color: 'rgba(255,255,255,0.6)',
-                  fontFamily: fonts.mono,
-                  fontSize: fontSizes.xs,
-                  marginTop: space.s1,
-                }}
-              >
-                Scan the QR shown on your daemon
-              </Text>
-            </View>
+      <View style={{ flex: 1, backgroundColor: CAMERA_GROUND }}>
+        <View style={{ paddingTop: insets.top + space.s7, paddingHorizontal: edge, paddingBottom: space.s7, gap: space.s1 }}>
+          <Text accessibilityRole="header" style={{ color: dark.ink, fontFamily: fonts.sans.semibold, fontSize: fontSizes.md }}>
+            Pair this phone
+          </Text>
+          <Text style={{ color: dark.ink3, fontFamily: fonts.mono, fontSize: fontSizes.xs }}>
+            Scan the QR shown on your daemon
+          </Text>
+        </View>
+        <CameraView
+          onBarcodeScanned={busy ? undefined : handleScan}
+          barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+          style={{ flex: 1 }}
+        />
+        <View style={firstRunBottom(insets, edge)}>
+          <View style={firstRunColumn}>
+            <ThemeContext.Provider value={darkTheme}>
+              <Button title="Paste link" variant="secondary" size="lg" fullWidth onPress={() => setMode('paste')} />
+            </ThemeContext.Provider>
           </View>
-        </SafeAreaView>
-        {ready ? (
-          <CameraView
-            onBarcodeScanned={busy ? undefined : handleScan}
-            barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-            style={{ flex: 1 }}
-          />
-        ) : (
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.s9, gap: space.s7 }}>
-            <Text style={{ color: '#fff', textAlign: 'center', fontFamily: fonts.sans.regular, fontSize: fontSizes.lg }}>
-              Camera permission needed to scan the pairing QR.
-            </Text>
-            <Button title="Grant access" onPress={requestPermission} />
-          </View>
-        )}
-        <SafeAreaView edges={['bottom']}>
-          <View style={{ padding: space.s7 }}>
-            <Pressable
-              onPress={() => setMode('paste')}
-              style={({ pressed }) => ({
-                padding: space.s6,
-                borderRadius: radii.xs,
-                backgroundColor: pressed ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.12)',
-                alignItems: 'center',
-              })}
-            >
-              <Text style={{ color: '#fff', fontFamily: fonts.sans.medium, fontSize: fontSizes.md }}>
-                Paste alpi:// link instead
-              </Text>
-            </Pressable>
-          </View>
-        </SafeAreaView>
+        </View>
       </View>
     );
   }
 
-  return (
-    <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', padding: space.s7, gap: space.s5 }}>
-        <Pressable onPress={goBack} hitSlop={12} accessibilityRole="button" accessibilityLabel="Back">
-          <Icon name="back" size="md" color={colors.ink} />
-        </Pressable>
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.xl, color: colors.ink }}>
-            Pair this phone
-          </Text>
-          <Eyebrow style={{ marginTop: space.s1 }}>Connect to your daemon</Eyebrow>
+  if (mode === 'scan' && !permission) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
+
+  if (mode === 'scan') {
+    const blocked = permission?.canAskAgain === false;
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.bg }}>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={firstRunScroll(insets, edge)}>
+          <View style={firstRunColumn}>
+            <View style={foldMarkStyle}>
+              <Fold fold={ALPACA_FOLD} size={FOLD_SIZES.hero} />
+            </View>
+            <Text accessibilityRole="header" style={type.title}>Pair this phone</Text>
+            <Text style={type.fact}>camera · not allowed</Text>
+            <Text style={type.sentence}>Camera permission needed to scan the pairing QR.</Text>
+          </View>
+        </ScrollView>
+        <View style={firstRunBottom(insets, edge)}>
+          <View style={firstRunActions}>
+            <Button
+              title={blocked ? 'Open settings' : 'Grant access'}
+              size="hero"
+              fullWidth
+              onPress={blocked ? () => Linking.openSettings() : requestPermission}
+            />
+            <Button title="Paste link" variant="ghost" fullWidth onPress={() => setMode('paste')} />
+          </View>
         </View>
       </View>
+    );
+  }
 
+  const primaryTitle = failure ? failure.action : 'Pair';
+
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <KeyboardPane>
-      <ScrollView contentContainerStyle={{ padding: firstRun.body, gap: firstRun.gap }} keyboardShouldPersistTaps="handled">
-        <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink2, lineHeight: fontSizes.md * lineHeights.normal }}>
-          Open your daemon's settings, choose{' '}
-          <Text style={{ fontFamily: fonts.mono, color: colors.ink }}>Settings → Connections → New connection / Add device</Text>, then either
-          scan the QR or paste the <Text style={{ fontFamily: fonts.mono, color: colors.ink }}>alpi://</Text> link below.
-        </Text>
-
-        <Button title="Scan QR" onPress={() => setMode('scan')} fullWidth />
-
-        <View style={{ gap: space.s3 }}>
-          <Eyebrow>or paste link</Eyebrow>
-          <View
-            style={{
-              ...well,
-              padding: space.s5,
-            }}
-          >
-            <TextInput
-              value={text}
-              onChangeText={editLink}
-              placeholder="alpi://device?url=wss://…&name=…&pairing_token=…"
-              placeholderTextColor={colors.ink4}
-              {...focus}
-              multiline
-              numberOfLines={3}
-              autoCapitalize="none"
-              autoCorrect={false}
-              style={{
-                minHeight: 64,
-                fontFamily: fonts.mono,
-                fontSize: fontSizes.sm,
-                color: colors.ink,
-                textAlignVertical: 'top',
-              }}
-            />
-          </View>
-          <Pressable onPress={handlePaste} hitSlop={6} style={{ alignSelf: 'flex-end' }}>
-            <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.ink2 }}>
-              Paste from clipboard
-            </Text>
-          </Pressable>
-        </View>
-
-        {steps ? (
-          <View style={{ padding: firstRun.card, borderRadius: radii.xs, backgroundColor: colors.hover, gap: space.s5 }}>
-            <StepLadder steps={steps} />
-            {failure ? (
-              <View accessibilityRole="alert" style={{ gap: space.s2 }}>
-                <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.ink }}>{failure.title}</Text>
-                <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, lineHeight: fontSizes.md * lineHeights.normal, color: colors.ink2 }}>{failure.hint}</Text>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={firstRunScroll(insets, edge)} keyboardShouldPersistTaps="handled">
+          <View style={firstRunColumn}>
+            {keyboardOpen ? null : busy ? (
+              <Busy visible size={BUSY_MARK_PX} style={busyMarkStyle} />
+            ) : (
+              <View style={foldMarkStyle}>
+                <Fold fold={ALPACA_FOLD} size={FOLD_SIZES.hero} />
               </View>
-            ) : null}
+            )}
+            <Text accessibilityRole="header" style={[type.title, keyboardOpen ? { marginTop: 0 } : null]}>Pair this phone</Text>
+            {fact ? <Text style={type.fact}>{fact}</Text> : null}
+            <View style={{ marginTop: firstRun.gap, gap: space.s3 }}>
+              <Eyebrow>alpi:// link</Eyebrow>
+              <View style={{ ...well, padding: space.s5 }}>
+                <TextInput
+                  ref={fieldRef}
+                  value={text}
+                  onChangeText={editLink}
+                  editable={!busy}
+                  accessibilityLabel="alpi:// link"
+                  placeholder="alpi://device?url=wss://…&name=…&pairing_token=…"
+                  placeholderTextColor={colors.ink4}
+                  {...focus}
+                  multiline
+                  numberOfLines={3}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={{
+                    minHeight: 64,
+                    fontFamily: fonts.mono,
+                    fontSize: fontSizes.sm,
+                    color: colors.ink,
+                    textAlignVertical: 'top',
+                  }}
+                />
+              </View>
+            </View>
+            {steps ? (
+              <View style={{ marginTop: firstRun.stack, gap: firstRun.stack }}>
+                <StepLadder steps={steps} />
+                {failure ? (
+                  <View accessibilityRole="alert" style={{ gap: space.s2 }}>
+                    <Text style={type.failureTitle}>{failure.title}</Text>
+                    <Text style={type.failureHint}>{failure.hint}</Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : (
+              <>
+                <View style={{ marginTop: firstRun.tight, marginLeft: -space.s6, alignSelf: 'flex-start' }}>
+                  <Button title="Paste from clipboard" variant="ghost" size="md" onPress={handlePaste} />
+                </View>
+                {keyboardOpen ? null : (
+                  <View style={{ marginTop: firstRun.stack, gap: space.s3 }}>
+                    {LINK_SOURCE_ROWS.map(({ label, path }) => (
+                      <View key={label}>
+                        <Text style={type.sourceLabel}>{label}</Text>
+                        <Text style={type.sourcePath}>{path}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </>
+            )}
           </View>
-        ) : null}
-
-        <Button
-          title={busy ? 'Pairing…' : failure ? failure.action : 'Pair'}
-          onPress={onPrimary}
-          loading={busy}
-          disabled={busy || (!text.trim() && !failure)}
-          fullWidth
-        />
-      </ScrollView>
+        </ScrollView>
+        {busy ? null : (
+          <View style={firstRunBottom(insets, edge, keyboardOpen)}>
+            <View style={firstRunActions}>
+              <Button title={primaryTitle} size="hero" fullWidth disabled={!text.trim() && !failure} onPress={onPrimary} />
+              {failure?.saved ? null : <Button title="Scan QR" variant="ghost" fullWidth onPress={() => setMode('scan')} />}
+              {failure?.saved || !hasConnection ? null : <Button title="Open inbox" variant="ghost" fullWidth onPress={() => router.replace('/')} />}
+            </View>
+          </View>
+        )}
       </KeyboardPane>
-    </SafeAreaView>
+    </View>
   );
 }

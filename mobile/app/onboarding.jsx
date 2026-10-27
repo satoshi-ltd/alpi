@@ -1,63 +1,53 @@
 import { useRouter } from 'expo-router';
-import { Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { ALPACA_FOLD } from '../../common/folds.mjs';
-import { LINK_SOURCES } from '../../common/onboarding.mjs';
-import { radii, space, tracking } from '../src/theme/tokens';
-import { firstRun, firstRunColumn } from '../src/lib/firstRun';
+import { ScrollView, Text, View } from 'react-native';
+import { ALPACA_FOLD, FOLD_SIZES } from '../../common/folds.mjs';
+import { LINK_SOURCE_ROWS } from '../../common/onboarding.mjs';
+import { space } from '../src/theme/tokens';
+import { firstRun, firstRunActions, firstRunBottom, firstRunColumn, firstRunScroll, firstRunType, foldMarkStyle } from '../src/lib/firstRun';
 
 import { Button } from '../src/components/Button';
+import { Eyebrow } from '../src/components/Eyebrow';
 import { Fold } from '../src/components/Fold';
+import { useFirstRunLayout } from '../src/hooks/useFirstRunLayout';
 import { useTheme } from '../src/theme/ThemeContext';
 
 export default function Onboarding() {
   const router = useRouter();
-  const { colors, fonts, fontSizes, lineHeights } = useTheme();
+  const theme = useTheme();
+  const { colors } = theme;
+  const { edge, insets } = useFirstRunLayout();
+  const type = firstRunType(theme);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg, padding: firstRun.hero }}>
-      <View style={firstRunColumn}>
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: firstRun.gap }}>
-        <Fold fold={ALPACA_FOLD} size={88} />
-        <Text
-          style={{
-            fontFamily: fonts.sans.semibold,
-            fontSize: fontSizes.display,
-            color: colors.ink,
-            textAlign: 'center',
-            letterSpacing: fontSizes.display * tracking.tight,
-          }}
-        >
-          Pair with your alpi
-        </Text>
-        <Text
-          style={{
-            fontFamily: fonts.sans.regular,
-            fontSize: fontSizes.lg,
-            color: colors.ink2,
-            textAlign: 'center',
-            lineHeight: fontSizes.lg * lineHeights.relaxed,
-            maxWidth: 320,
-          }}
-        >
-          alpi runs on a computer or a server. Pair this phone once and its profiles come with you.
-        </Text>
-      </View>
-      <View style={{ gap: firstRun.gap }}>
-        <View style={{ gap: space.s2, padding: firstRun.card, borderRadius: radii.xs, backgroundColor: colors.hover }}>
-          <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, color: colors.ink }}>Where do I get a link?</Text>
-          {LINK_SOURCES.map((line) => (
-            <Text key={line} style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * lineHeights.relaxed, color: colors.ink2 }}>
-              {line}
-            </Text>
-          ))}
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={firstRunScroll(insets, edge)}>
+        <View style={firstRunColumn}>
+          <View style={foldMarkStyle}>
+            <Fold fold={ALPACA_FOLD} size={FOLD_SIZES.hero} />
+          </View>
+          <Text accessibilityRole="header" style={type.title}>Pair with your alpi</Text>
+          <Text style={type.sentence}>
+            alpi runs on a computer or a server. Pair this phone once and its profiles come with you.
+          </Text>
+          <View style={{ marginTop: firstRun.gap, gap: space.s3 }}>
+            <Eyebrow>Where do I get a link?</Eyebrow>
+            <View style={{ gap: space.s3 }}>
+              {LINK_SOURCE_ROWS.map(({ label, path }) => (
+                <View key={label}>
+                  <Text style={type.sourceLabel}>{label}</Text>
+                  <Text style={type.sourcePath}>{path}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
         </View>
-        <View style={{ gap: space.s4 }}>
-          <Button title="Scan QR" onPress={() => router.push({ pathname: '/pair', params: { mode: 'scan' } })} fullWidth size="hero" />
-          <Button title="Paste link" variant="ghost" onPress={() => router.push('/pair')} fullWidth />
+      </ScrollView>
+      <View style={firstRunBottom(insets, edge)}>
+        <View style={firstRunActions}>
+          <Button title="Scan QR" size="hero" fullWidth onPress={() => router.push({ pathname: '/pair', params: { mode: 'scan' } })} />
+          <Button title="Paste link" variant="ghost" fullWidth onPress={() => router.push('/pair')} />
         </View>
       </View>
-      </View>
-    </SafeAreaView>
+    </View>
   );
 }

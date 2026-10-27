@@ -17,6 +17,7 @@ const h = vi.hoisted(() => ({
   categoriesMock: vi.fn(async () => true),
   pollMock: vi.fn(async () => ({ groups: 1, notifications: 0 })),
   primer: { open: false, onEnable: null, onDecline: null },
+  pathname: '/',
 }));
 
 vi.mock('expo-secure-store', () => ({
@@ -34,6 +35,8 @@ vi.mock('react-native', () => ({
     get currentState() { return h.currentState; },
   },
 }));
+
+vi.mock('expo-router', () => ({ usePathname: () => h.pathname }));
 
 vi.mock('../../hooks/useEvents', () => ({
   useEventEffect: (kinds, fn) => {
@@ -100,6 +103,7 @@ beforeEach(() => {
   h.pollMock.mockReset();
   h.pollMock.mockImplementation(async () => ({ groups: 1, notifications: 0 }));
   h.primer = { open: false, onEnable: null, onDecline: null };
+  h.pathname = '/';
 });
 
 describe('NotificationBridge actionable categories', () => {
@@ -264,6 +268,43 @@ describe('NotificationBridge permission priming', () => {
 
     expect(h.primer.open).toBe(true);
     expect(h.requestPermMock).not.toHaveBeenCalled();
+  });
+
+  it.each(['/onboarding', '/pair', '/paired'])('keeps the sheet closed on %s, where the first-run checklist owns the alerts step', async (path) => {
+    h.permMock.mockImplementation(async () => 'undetermined');
+    h.pathname = path;
+    render(<NotificationBridge />);
+    await settle();
+
+    expect(h.primer.open).toBe(false);
+    expect(h.requestPermMock).not.toHaveBeenCalled();
+    expect(h.pollMock).toHaveBeenCalled();
+  });
+
+  it.each(['/paired', '/pair'])('opens the sheet on the first inbox once the route leaves %s with the question still unanswered', async (path) => {
+    h.permMock.mockImplementation(async () => 'undetermined');
+    h.pathname = path;
+    const view = render(<NotificationBridge />);
+    await settle();
+    expect(h.primer.open).toBe(false);
+
+    h.pathname = '/';
+    view.rerender(<NotificationBridge />);
+    await settle();
+    expect(h.primer.open).toBe(true);
+    expect(h.requestPermMock).not.toHaveBeenCalled();
+  });
+
+  it('stays closed after leaving the first-run routes when the checklist already got an answer', async () => {
+    h.permMock.mockImplementation(async () => 'undetermined');
+    h.store.set('aln.flag.notificationPrimer', JSON.stringify('declined'));
+    h.pathname = '/paired';
+    const view = render(<NotificationBridge />);
+    await settle();
+    h.pathname = '/';
+    view.rerender(<NotificationBridge />);
+    await settle();
+    expect(h.primer.open).toBe(false);
   });
 
   it('Enable notifications closes the primer, prompts, and catches up', async () => {

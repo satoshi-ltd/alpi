@@ -121,6 +121,7 @@ vi.mock('../../components/Banner', () => ({
     ),
 }));
 vi.mock('../../components/Icon', () => ({ Icon: ({ name }) => React.createElement('span', { 'data-icon': name }) }));
+vi.mock('../../components/Fold', () => ({ Fold: ({ size }) => React.createElement('span', { 'data-mark': 'fold', 'data-size': size }) }));
 vi.mock('../../components/Glyph', () => ({ Glyph: ({ offline }) => React.createElement('span', { 'data-glyph': 'true', 'data-offline': String(!!offline) }) }));
 vi.mock('../../components/Dot', () => ({ Dot: () => React.createElement('span', { 'data-dot': 'true' }) }));
 vi.mock('react-native-gesture-handler', () => ({

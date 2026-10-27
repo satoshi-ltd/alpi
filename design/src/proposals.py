@@ -7,8 +7,9 @@ PAGE_W = 1280
 from proposals_e import PROPOSALS_E
 from proposals_f import PROPOSALS_F
 from proposals_g import PROPOSALS_G
+from proposals_h import PROPOSALS_H
 
-PROPOSALS = PROPOSALS_E + PROPOSALS_F + PROPOSALS_G
+PROPOSALS = PROPOSALS_E + PROPOSALS_F + PROPOSALS_G + PROPOSALS_H
 
 
 def drawing(title, inner):

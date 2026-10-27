@@ -2,28 +2,21 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
+import { reset, state } from './mocks/firstRun.js';
+
 afterEach(cleanup);
 
 const h = vi.hoisted(() => ({ params: {}, push: vi.fn(), replace: vi.fn(), call: vi.fn(), probe: vi.fn() }));
 
-vi.mock('react-native', () => {
-  const View = ({ children, style, accessibilityRole, ...p }) => React.createElement('div', p, children);
-  const Text = ({ children, style, ...p }) => React.createElement('span', p, children);
-  const Pressable = ({ children, onPress, hitSlop, style, ...p }) =>
-    React.createElement('button', { type: 'button', onClick: onPress }, children instanceof Function ? children({ pressed: false }) : children);
-  return {
-    View,
-    Text,
-    Pressable,
-    Platform: { OS: 'ios', constants: { Model: 'iPhone' }, select: (sel) => sel?.ios ?? sel?.default },
-    ScrollView: ({ children }) => React.createElement('div', {}, children),
-    KeyboardAvoidingView: ({ children }) => React.createElement('div', {}, children),
-    Keyboard: { addListener: () => ({ remove: () => {} }) },
-    TextInput: ({ value, onChangeText, style, ...p }) =>
-      React.createElement('input', { 'data-pair-input': '1', value: value ?? '', onChange: (e) => onChangeText?.(e.target.value) }),
-  };
-});
-vi.mock('expo-camera', () => ({ CameraView: () => React.createElement('div', { 'data-camera': '1' }), useCameraPermissions: () => [{ granted: true }, vi.fn()] }));
+vi.mock('react-native', () => import('./mocks/firstRun.js'));
+vi.mock('../src/theme/ThemeContext', () => import('./mocks/firstRun.js'));
+vi.mock('../src/components/Button', () => import('./mocks/firstRun.js'));
+vi.mock('../src/components/Fold', () => import('./mocks/firstRun.js'));
+vi.mock('../src/components/Busy', () => import('./mocks/firstRun.js'));
+vi.mock('../src/components/Icon', () => import('./mocks/firstRun.js'));
+vi.mock('../src/components/KeyboardPane', () => import('./mocks/firstRun.js'));
+vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 47, bottom: 34, left: 0, right: 0 }) }));
+vi.mock('expo-camera', () => ({ CameraView: () => React.createElement('div', { 'data-camera': '1' }), useCameraPermissions: () => [{ granted: true }, vi.fn(), vi.fn()] }));
 vi.mock('expo-clipboard', () => ({ getStringAsync: vi.fn(async () => '') }));
 vi.mock('expo-constants', () => ({ default: { expoConfig: { version: '0.7.0' } } }));
 vi.mock('expo-router', () => ({
@@ -31,38 +24,32 @@ vi.mock('expo-router', () => ({
   usePathname: () => '/pair',
   useLocalSearchParams: () => h.params,
 }));
-vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: ({ children }) => React.createElement('div', {}, children) }));
-vi.mock('../src/theme/ThemeContext', () => ({
-  useTheme: () => ({
-    colors: { bg: '#fff', ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', danger: '#f00', dangerText: '#b00', line: '#ddd', bgInput: '#fafafa', hover: '#eee' },
-    fonts: { sans: { regular: 'r', medium: 'm', semibold: 's' }, mono: 'mono' },
-    fontSizes: { xs: 11, sm: 12, md: 14, lg: 15, xl: 18, display: 28 },
-    lineHeights: { normal: 1.5, relaxed: 1.6 },
-    mobile: {},
-  }),
-}));
-vi.mock('../src/components/Button', () => ({
-  Button: ({ title, onPress, disabled }) => React.createElement('button', { type: 'button', onClick: onPress, disabled }, title),
-}));
-vi.mock('../src/components/Icon', () => ({ Icon: () => null }));
-vi.mock('../src/components/Fold', () => ({ Fold: () => null }));
-vi.mock('../src/components/Toast', () => ({ useToast: () => vi.fn() }));
 vi.mock('../src/lib/EndpointContext', () => ({ useEndpoint: () => ({ addConnection: vi.fn() }) }));
 vi.mock('../src/lib/rpc', async () => {
   const actual = await vi.importActual('../src/lib/rpc');
   return { ...actual, call: (...args) => h.call(...args) };
 });
 vi.mock('../src/lib/probe', () => ({ probe: (...args) => h.probe(...args) }));
+vi.mock('../src/features/aln/notify', () => ({ getPermissionStatus: vi.fn(async () => 'undetermined'), requestPermission: vi.fn(async () => 'granted') }));
+vi.mock('../src/lib/biometric', () => ({
+  biometricCapabilities: vi.fn(async () => ({ hasHardware: false, enrolled: false, label: 'Biometric' })),
+  getBiometricPref: vi.fn(async () => false),
+  setBiometricPref: vi.fn(async () => {}),
+  authenticate: vi.fn(async () => true),
+}));
 
 import Onboarding from '../app/onboarding.jsx';
 import Pair from '../app/pair.jsx';
 import PairSuccess from '../app/paired.jsx';
 
+const style = (el) => JSON.parse(el.getAttribute('data-style') ?? '{}');
 const stepState = (label) => screen.getByText(label).closest('[data-state]').getAttribute('data-state');
+const primaries = () => [...document.querySelectorAll('button[data-variant="primary"]')];
 
 const LINK = 'alpi://device?url=ws%3A%2F%2F100.1.2.3%3A49200&name=casa&pairing_token=abc';
 
 beforeEach(() => {
+  reset();
   h.params = {};
   h.push.mockReset();
   h.replace.mockReset();
@@ -73,29 +60,91 @@ beforeEach(() => {
 
 const pairWith = async (link) => {
   fireEvent.change(document.querySelector('[data-pair-input]'), { target: { value: link } });
-  fireEvent.click(screen.getAllByRole('button').find((b) => /^pair$/i.test(b.textContent.trim())));
+  fireEvent.click(screen.getByText('Pair'));
 };
 
 describe('welcome', () => {
   it('opens the camera straight from Scan QR and says where a link comes from', () => {
     render(<Onboarding />);
     expect(screen.getByText('Where do I get a link?')).toBeTruthy();
-    expect(screen.getByText(/Settings → Connections → New connection/)).toBeTruthy();
+    expect(screen.getByText('In the alpi desktop app')).toBeTruthy();
+    expect(screen.getByText('Settings → Connections → New connection')).toBeTruthy();
+    expect(screen.getByText('In a terminal on the host')).toBeTruthy();
+    expect(screen.getByText('alpi setup → Connections → New connection')).toBeTruthy();
     fireEvent.click(screen.getByText('Scan QR'));
     expect(h.push).toHaveBeenCalledWith({ pathname: '/pair', params: { mode: 'scan' } });
     fireEvent.click(screen.getByText('Paste link'));
     expect(h.push).toHaveBeenLastCalledWith('/pair');
   });
 
+  it('keeps every shipped string', () => {
+    const { container } = render(<Onboarding />);
+    expect(screen.getByText('Pair with your alpi')).toBeTruthy();
+    expect(screen.getByText('alpi runs on a computer or a server. Pair this phone once and its profiles come with you.')).toBeTruthy();
+    expect(container.textContent).not.toMatch(/Connect to your alpi|Scan QR code|Paste a link instead/);
+  });
+
+  it('has one primary, Scan QR at 56 pt, over the ghost Paste link at 48 pt, both full width', () => {
+    render(<Onboarding />);
+    expect(primaries().map((b) => b.textContent)).toEqual(['Scan QR']);
+    const scan = screen.getByText('Scan QR');
+    const paste = screen.getByText('Paste link');
+    expect([scan.dataset.size, scan.dataset.height, scan.dataset.full]).toEqual(['hero', '56', 'true']);
+    expect([paste.dataset.variant, paste.dataset.size, paste.dataset.height]).toEqual(['ghost', 'lg', '48']);
+    expect(scan.compareDocumentPosition(paste) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('anchors the actions below the scrolling page, 16 pt above the safe area, on the 16 pt edge', () => {
+    render(<Onboarding />);
+    const scroll = document.querySelector('[data-scroll]');
+    const actions = screen.getByText('Scan QR').parentElement;
+    const bar = actions.parentElement;
+    expect(scroll.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(style(bar)).toEqual({ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 50 });
+    expect(style(actions)).toMatchObject({ gap: 8, maxWidth: 480, alignSelf: 'flex-start' });
+    expect(JSON.parse(scroll.getAttribute('data-content'))).toMatchObject({ paddingTop: 71, paddingHorizontal: 16 });
+  });
+
+  it('starts the mark ink, title, sentence and sources on one left edge with nothing centred', () => {
+    const { container } = render(<Onboarding />);
+    const column = screen.getByText('Pair with your alpi').parentElement;
+    expect(style(column)).toMatchObject({ maxWidth: 480, alignSelf: 'flex-start' });
+    const mark = container.querySelector('[data-fold]');
+    expect(mark.dataset.size).toBe('72');
+    expect(style(mark.parentElement).marginLeft).toBeCloseTo(-12.42, 2);
+    for (const el of container.querySelectorAll('[data-style]')) {
+      expect(style(el).textAlign, el.textContent).toBeUndefined();
+    }
+    expect(style(screen.getByText('Pair with your alpi'))).toMatchObject({ fontSize: 28, lineHeight: 36, marginTop: 24 });
+  });
+
+  it('moves the column to the 24 pt edge on a fold, still 480 wide at most', () => {
+    state.width = 852;
+    state.height = 884;
+    render(<Onboarding />);
+    const bar = screen.getByText('Scan QR').parentElement.parentElement;
+    expect(style(bar).paddingHorizontal).toBe(24);
+    expect(JSON.parse(document.querySelector('[data-scroll]').getAttribute('data-content')).paddingHorizontal).toBe(24);
+    expect(style(screen.getByText('Pair with your alpi').parentElement).maxWidth).toBe(480);
+  });
+
+  it('wraps at the Largest text step without clipping: no line limits, the page scrolls', () => {
+    state.scale = 1.3;
+    const { container } = render(<Onboarding />);
+    expect(document.querySelector('[data-scroll]')).toBeTruthy();
+    expect(container.innerHTML).not.toMatch(/numberOfLines/);
+    expect(style(screen.getByText('Pair with your alpi')).fontSize).toBeGreaterThan(28);
+  });
+});
+
+describe('pairing', () => {
   it('lands on the camera when Scan QR opened the pairing screen', () => {
     h.params = { mode: 'scan' };
     const { container } = render(<Pair />);
     expect(container.querySelector('[data-camera]')).toBeTruthy();
   });
-});
 
-describe('pairing', () => {
-  it('names the host it cannot reach, keeps the link and offers to try again', async () => {
+  it('names the host it cannot reach, keeps the link and offers to try again as the one primary', async () => {
     h.call.mockRejectedValue(Object.assign(new Error('connection failed to ws://100.1.2.3:49200'), { code: -32001, transport: true }));
     render(<Pair />);
     await pairWith(LINK);
@@ -103,7 +152,10 @@ describe('pairing', () => {
     expect(stepState('Reaching casa')).toBe('fail');
     expect(stepState('Link read')).toBe('done');
     expect(document.querySelector('[data-pair-input]').value).toBe(LINK);
-    expect(screen.getByText('Try again')).toBeTruthy();
+    expect(primaries().map((b) => b.textContent)).toEqual(['Try again']);
+    expect(screen.getByText('Scan QR').dataset.variant).toBe('ghost');
+    expect(screen.getByText("Can't reach casa").parentElement.getAttribute('role')).toBe('alert');
+    expect(style(screen.getByText("Can't reach casa")).color).toBe('#b73737');
   });
 
   it('asks for a new link when the host says this one was used, clears it, and pairs the next one pasted', async () => {
@@ -115,6 +167,7 @@ describe('pairing', () => {
     expect(stepState('Signing in')).toBe('fail');
     expect(stepState('Reaching casa')).toBe('done');
     expect(document.querySelector('[data-pair-input]').value).toBe('');
+    expect(primaries().map((b) => b.textContent)).toEqual(['Use a new link']);
     await pairWith(LINK);
     await waitFor(() => expect(h.replace).toHaveBeenCalledWith(expect.objectContaining({ pathname: '/paired' })));
     expect(h.call.mock.calls.filter(([, m]) => m === 'host.connections.exchange_pairing')).toHaveLength(2);
@@ -125,6 +178,7 @@ describe('pairing', () => {
     render(<Pair />);
     await pairWith(LINK);
     await waitFor(() => expect(screen.getByText(/This phone kept the connection/)).toBeTruthy());
+    expect(screen.queryByText('Scan QR')).toBeNull();
     fireEvent.click(screen.getByText('Open inbox'));
     expect(h.replace).toHaveBeenCalledWith('/');
     expect(h.call.mock.calls.filter(([, m]) => m === 'host.connections.exchange_pairing')).toHaveLength(1);

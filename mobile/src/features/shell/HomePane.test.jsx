@@ -29,6 +29,12 @@ vi.mock('../../components/EmptyState', () => ({
   EmptyState: ({ mark, title, detail, action }) =>
     React.createElement('div', null, mark, React.createElement('h1', null, title), React.createElement('p', null, detail), action ? React.createElement('button', { type: 'button', onClick: action.onPress }, action.label) : null),
 }));
+vi.mock('../../components/Button', () => ({
+  Button: ({ title, onPress }) => React.createElement('button', { type: 'button', onClick: onPress }, title),
+}));
+vi.mock('../../components/NothingSelected', () => ({
+  NothingSelected: ({ children }) => React.createElement('p', { 'data-nothing': '' }, children),
+}));
 vi.mock('../sheets/CreateProfileSheet', () => ({ CreateProfileSheet: ({ open }) => React.createElement('div', { 'data-create': String(open) }) }));
 const role = vi.hoisted(() => ({ admin: true }));
 vi.mock('../../hooks/useActiveRole', () => ({ useIsAdmin: () => role.admin }));
@@ -82,6 +88,53 @@ describe('HomePane', () => {
     const { container } = render(<HomePane />);
     const wrapper = container.querySelector('[data-mark]').parentElement;
     expect(Number(wrapper.getAttribute('data-opacity'))).toBeLessThan(0.5);
+  });
+});
+
+describe('HomePane over an empty roster', () => {
+  it('says only that chats open here: nothing to pick, no mark, no second New profile', () => {
+    role.admin = true;
+    const { container } = render(<HomePane empty />);
+    expect(container.querySelector('[data-nothing]').textContent).toBe('Their chats open here.');
+    expect(screen.queryByText('Pick a profile or a workgroup')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'New profile' })).toBeNull();
+    expect(container.querySelector('[data-mark]')).toBeNull();
+    expect(container.querySelector('[data-create]')).toBeNull();
+  });
+
+  it('keeps the sidebar toggle reachable on a hidden roster', () => {
+    const toggleSidebar = vi.fn();
+    pane({ twoPane: true, side: 'detail', sidebarOpen: false, toggleSidebar }, <HomePane empty />);
+    fireEvent.click(screen.getByRole('button', { name: 'Show sidebar' }));
+    expect(toggleSidebar).toHaveBeenCalledTimes(1);
+  });
+
+  it('gives an admin a New profile path in the pane when the sidebar is folded away', () => {
+    role.admin = true;
+    const { container } = pane({ twoPane: true, side: 'detail', sidebarOpen: false, toggleSidebar() {} }, <HomePane empty />);
+    expect(container.querySelector('[data-create]').getAttribute('data-create')).toBe('false');
+    fireEvent.click(screen.getByRole('button', { name: 'New profile' }));
+    expect(container.querySelector('[data-create]').getAttribute('data-create')).toBe('true');
+    expect(container.querySelector('[data-nothing]')).toBeTruthy();
+  });
+
+  it('leaves a member and an open sidebar without that button', () => {
+    role.admin = false;
+    try {
+      pane({ twoPane: true, side: 'detail', sidebarOpen: false, toggleSidebar() {} }, <HomePane empty />);
+      expect(screen.queryByRole('button', { name: 'New profile' })).toBeNull();
+    } finally {
+      role.admin = true;
+    }
+    cleanup();
+    pane({ twoPane: true, side: 'detail', sidebarOpen: true, toggleSidebar() {} }, <HomePane empty />);
+    expect(screen.queryByRole('button', { name: 'New profile' })).toBeNull();
+  });
+
+  it('keeps Pick a profile or a workgroup once something exists', () => {
+    const { container } = render(<HomePane empty={false} />);
+    expect(screen.getByText('Pick a profile or a workgroup')).toBeTruthy();
+    expect(container.querySelector('[data-nothing]')).toBeNull();
   });
 });
 

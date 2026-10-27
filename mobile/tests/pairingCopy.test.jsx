@@ -4,11 +4,20 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 afterEach(cleanup);
 
-vi.mock('react-native', () => {
-  const View = ({ children, style, ...p }) => React.createElement('div', p, children);
-  const Text = ({ children, style, ...p }) => React.createElement('span', p, children);
-  return { View, Text };
-});
+vi.mock('react-native', () => import('./mocks/firstRun.js'));
+vi.mock('../src/theme/ThemeContext', () => import('./mocks/firstRun.js'));
+vi.mock('../src/components/Button', () => import('./mocks/firstRun.js'));
+vi.mock('../src/components/Fold', () => import('./mocks/firstRun.js'));
+vi.mock('../src/components/Icon', () => import('./mocks/firstRun.js'));
+vi.mock('../src/components/Toggle', () => import('./mocks/firstRun.js'));
+vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 47, bottom: 34, left: 0, right: 0 }) }));
+vi.mock('../src/features/aln/notify', () => ({ getPermissionStatus: vi.fn(async () => 'undetermined'), requestPermission: vi.fn(async () => 'granted') }));
+vi.mock('../src/lib/biometric', () => ({
+  biometricCapabilities: vi.fn(async () => ({ hasHardware: false, enrolled: false, label: 'Biometric' })),
+  getBiometricPref: vi.fn(async () => false),
+  setBiometricPref: vi.fn(async () => {}),
+  authenticate: vi.fn(async () => true),
+}));
 
 const nav = vi.hoisted(() => ({ calls: [], params: {} }));
 vi.mock('expo-router', () => ({
@@ -20,24 +29,6 @@ vi.mock('expo-router', () => ({
     canDismiss: () => true,
     dismissAll: () => nav.calls.push(['dismissAll']),
   }),
-}));
-vi.mock('react-native-safe-area-context', () => ({
-  SafeAreaView: ({ children }) => React.createElement('div', {}, children),
-}));
-vi.mock('../src/theme/ThemeContext', () => ({
-  useTheme: () => ({
-    colors: { bg: '#fff', ink: '#000', ink2: '#333', success: '#0a0' },
-    fonts: { sans: { regular: 'r', semibold: 's' } },
-    fontSizes: { lg: 15, display: 28 },
-    lineHeights: { relaxed: 1.6 },
-  }),
-}));
-vi.mock('../src/components/Button', () => ({
-  Button: ({ title, onPress }) => React.createElement('button', { type: 'button', onClick: onPress }, title),
-}));
-vi.mock('../src/components/Icon', () => ({ Icon: () => null }));
-vi.mock('../src/components/Fold', () => ({
-  Fold: ({ fold, color, size }) => React.createElement('span', { 'data-fold': fold, 'data-color': color ?? '', 'data-size': size }),
 }));
 
 import Onboarding from '../app/onboarding.jsx';
@@ -55,8 +46,7 @@ describe('pairing copy vocabulary', () => {
     const { container } = render(<Onboarding />);
     const mark = container.querySelector('[data-fold]');
     expect(mark.getAttribute('data-fold')).toBe('alpaca');
-    expect(mark.getAttribute('data-color')).toBe('');
-    expect(mark.getAttribute('data-size')).toBe('88');
+    expect(mark.getAttribute('data-size')).toBe('72');
   });
 
   it('calls the entity a profile on the paired screen', () => {

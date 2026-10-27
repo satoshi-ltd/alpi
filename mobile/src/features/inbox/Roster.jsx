@@ -1,16 +1,20 @@
 import { useCallback, useMemo } from 'react';
 import { Pressable, RefreshControl, SectionList, Text, TextInput, View } from 'react-native';
 import { mobile, radii, space } from '../../theme/tokens';
+import { ALPACA_FOLD, FOLD_SIZES } from '../../../../common/folds.mjs';
 
+import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { Eyebrow } from '../../components/Eyebrow';
+import { Fold } from '../../components/Fold';
 import { Icon } from '../../components/Icon';
-import { rosterIsEmpty, rosterSections } from '../../lib/roster';
+import { firstRun, firstRunType, foldMarkStyle } from '../../lib/firstRun';
+import { isFirstProfile, rosterIsEmpty, rosterSections, useSettledOnce } from '../../lib/roster';
 import { usePane } from '../../nav/PaneContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { SEPARATOR_INSET } from './InboxRow';
 import { InboxSkeleton } from './InboxSkeleton';
-import { memberEmptyCopy } from '../../../../common/onboarding.mjs';
+import { memberEmptyCopy, pairedRoleLine } from '../../../../common/onboarding.mjs';
 import { EMPTY } from '../../../../common/emptyCopy.mjs';
 import { plainError } from '../../../../common/plainError.mjs';
 import { useWell } from '../../components/well';
@@ -81,7 +85,27 @@ function SectionAdd({ label, onPress }) {
   );
 }
 
-function RosterEmpty({ paired, query, device, canCreate = false, daemonDown = false, error = null, onRetry }) {
+function RosterFirstRun({ device, member, onCreate }) {
+  const theme = useTheme();
+  const type = firstRunType(theme, theme.fontSizes.xxl);
+  const copy = member ? memberEmptyCopy(device ? `this ${device}` : null) : { title: EMPTY.roster.title, hint: EMPTY.roster.hint };
+  return (
+    <View style={{ flex: 1, paddingTop: firstRun.top, paddingHorizontal: firstRun.edge, paddingBottom: firstRun.stack }}>
+      <View style={{ flex: 1 }}>
+        <View style={foldMarkStyle}>
+          <Fold fold={ALPACA_FOLD} size={FOLD_SIZES.hero} />
+        </View>
+        <Text accessibilityRole="header" style={type.title}>{copy.title}</Text>
+        {member ? <Text style={type.fact}>{pairedRoleLine('member', 0)}</Text> : null}
+        <Text style={type.sentence}>{copy.hint}</Text>
+      </View>
+      {member ? null : <Button title="New profile" size="hero" fullWidth onPress={onCreate} />}
+    </View>
+  );
+}
+
+function RosterEmpty({ paired, query, device, canCreate = false, daemonDown = false, error = null, onRetry, onCreate, first = false }) {
+  if (first) return <RosterFirstRun device={device} member={!canCreate} onCreate={onCreate} />;
   const needle = String(query ?? '').trim();
   const [title, body] = !paired
     ? ['Not paired', `Pair this ${device} to a daemon and its profiles show up here.`]
@@ -113,13 +137,17 @@ export function Roster({
   searchOpen = false,
   daemonDown = false,
   error = null,
+  endpointId,
 }) {
   const { colors, fonts, fontSizes } = useTheme();
   const { twoPane } = usePane();
   const keepEmpty = useMemo(() => Object.keys(addActions ?? {}), [addActions]);
-  const sections = useMemo(() => rosterSections(items, query, { keepEmpty }), [items, query, keepEmpty]);
+  const allSections = useMemo(() => rosterSections(items, query, { keepEmpty }), [items, query, keepEmpty]);
+  const initialLoading = useSettledOnce(loading, endpointId);
+  const first = isFirstProfile({ empty: rosterIsEmpty(allSections), initialLoading, paired, query, daemonDown, error });
+  const sections = first ? [] : allSections;
   const empty = rosterIsEmpty(sections);
-  const placeholder = loading ? <InboxSkeleton label="Loading profiles and workgroups" /> : <RosterEmpty paired={paired} query={query} device={device} canCreate={addActions != null} daemonDown={daemonDown} error={error} onRetry={onRefresh} />;
+  const placeholder = initialLoading ? <InboxSkeleton label="Loading profiles and workgroups" /> : <RosterEmpty paired={paired} query={query} device={device} canCreate={addActions != null} daemonDown={daemonDown} error={error} onRetry={onRefresh} onCreate={addActions?.profiles?.onPress} first={first} />;
 
   const renderSectionHeader = useCallback(
     ({ section }) => {
@@ -175,7 +203,7 @@ export function Roster({
         stickySectionHeadersEnabled={false}
         keyboardShouldPersistTaps="handled"
         ItemSeparatorComponent={twoPane ? undefined : separator}
-        contentContainerStyle={{ paddingBottom: CONTENT_PAD_BOTTOM, flexGrow: 1 }}
+        contentContainerStyle={{ paddingBottom: first ? 0 : CONTENT_PAD_BOTTOM, flexGrow: 1 }}
         refreshControl={
           onRefresh ? (
             <RefreshControl refreshing={refreshing} onRefresh={pull} tintColor={colors.ink3} />

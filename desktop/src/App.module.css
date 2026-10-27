@@ -10,6 +10,8 @@
   overflow: hidden;
 }
 
+.bare { grid-template-columns: 1fr; }
+
 .main {
   display: flex;
   flex-direction: column;

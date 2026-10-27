@@ -216,6 +216,7 @@ export function SidebarPane({ onCollapse }) {
           addActions={addActions}
           daemonDown={activeFailed}
           error={inboxError}
+          endpointId={endpoint?.id}
         />
         <ShellFooter
           unread={unreadCount}

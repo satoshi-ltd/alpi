@@ -3,9 +3,11 @@ import { Pressable, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ALPACA_FOLD } from '../../../../common/folds.mjs';
+import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { Fold } from '../../components/Fold';
 import { Icon } from '../../components/Icon';
+import { NothingSelected } from '../../components/NothingSelected';
 import { useIsAdmin } from '../../hooks/useActiveRole';
 import { CHROME_BTN, tapSlop } from '../../lib/panes';
 import { usePane } from '../../nav/PaneContext';
@@ -16,7 +18,7 @@ import { CreateProfileSheet } from '../sheets/CreateProfileSheet';
 const MARK_SIZE = 96;
 const MARK_OPACITY = 0.16;
 
-export function HomePane() {
+export function HomePane({ empty = false }) {
   const { colors } = useTheme();
   const { twoPane, sidebarOpen, toggleSidebar } = usePane();
   const isAdmin = useIsAdmin();
@@ -45,17 +47,28 @@ export function HomePane() {
           <Icon name="panel-left" size="md" color={colors.ink2} />
         </Pressable>
       ) : null}
-      <EmptyState
-        mark={(
-          <View style={{ opacity: MARK_OPACITY }}>
-            <Fold fold={ALPACA_FOLD} size={MARK_SIZE} />
-          </View>
-        )}
-        title="Pick a profile or a workgroup"
-        detail="Their chats open here."
-        action={isAdmin ? { label: 'New profile', onPress: () => setCreating(true) } : null}
-      />
-      {isAdmin ? <CreateProfileSheet open={creating} onClose={() => setCreating(false)} /> : null}
+      {empty ? (
+        <>
+          <NothingSelected>Their chats open here.</NothingSelected>
+          {isAdmin && twoPane && !sidebarOpen ? (
+            <View style={{ padding: space.s7 }}>
+              <Button title="New profile" size="hero" fullWidth onPress={() => setCreating(true)} />
+            </View>
+          ) : null}
+        </>
+      ) : (
+        <EmptyState
+          mark={(
+            <View style={{ opacity: MARK_OPACITY }}>
+              <Fold fold={ALPACA_FOLD} size={MARK_SIZE} />
+            </View>
+          )}
+          title="Pick a profile or a workgroup"
+          detail="Their chats open here."
+          action={isAdmin ? { label: 'New profile', onPress: () => setCreating(true) } : null}
+        />
+      )}
+      {isAdmin && (!empty || (twoPane && !sidebarOpen)) ? <CreateProfileSheet open={creating} onClose={() => setCreating(false)} /> : null}
     </SafeAreaView>
   );
 }

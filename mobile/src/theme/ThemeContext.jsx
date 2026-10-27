@@ -6,7 +6,7 @@ import { chromeFontMultiplier, clampTextScale, DEFAULT_TEXT_SCALE, scaleFontSize
 import { loadTextScale, saveTextScale } from './textScalePref';
 import { palettes, shadows, fonts, lineHeights, mobile, alpha, motion } from './tokens';
 
-const ThemeContext = createContext(null);
+export const ThemeContext = createContext(null);
 
 export function ThemeProvider({ children }) {
   const osScheme = useColorScheme();

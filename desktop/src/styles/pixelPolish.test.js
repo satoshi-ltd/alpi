@@ -125,3 +125,75 @@ describe("approved pixel decisions", () => {
     expect(rule(css("primitives/SectionLabel.module.css"), ".label")).toMatch(/padding-left:\s*0;/);
   });
 });
+
+describe("first-run welcome", () => {
+  const welcome = css("features/Welcome.module.css");
+  const connect = css("primitives/ConnectElsewhere.module.css");
+
+  it("keeps one left edge: 64 px (2 x --sp-32) from the window, one --modal-md column", () => {
+    expect(rule(welcome, ".scroll")).toMatch(/padding:\s*var\(--sp-32\) calc\(var\(--sp-32\) \* 2\)/);
+    expect(rule(welcome, ".scroll")).toMatch(/overflow-y:\s*auto/);
+    const column = rule(welcome, ".column");
+    expect(column).toMatch(/width:\s*var\(--modal-md\)/);
+    expect(column).toMatch(/align-items:\s*flex-start/);
+    expect(column).toMatch(/text-align:\s*left/);
+    expect(column).not.toMatch(/margin:\s*0 auto|align-self:\s*center|justify-content:\s*center/);
+    expect(rule(welcome, ".welcome")).not.toMatch(/max-width/);
+  });
+
+  it("clears the traffic lights with a --titlebar-h strip above a 32 px top padding", () => {
+    expect(rule(welcome, ".strip")).toMatch(/flex:\s*0 0 var\(--titlebar-h\)/);
+    expect(rule(welcome, ".strip")).toMatch(/height:\s*var\(--titlebar-h\)/);
+    expect(css("styles/tokens.css")).toMatch(/--titlebar-h:\s*38px/);
+    expect(css("styles/tokens.css")).toMatch(/--modal-md:\s*520px/);
+  });
+
+  it("sets the rhythm 24 / 8 / 16 / 24 on whole-pixel lines", () => {
+    const jsx = readFileSync(join(SRC, "features/Welcome.jsx"), "utf8");
+    expect(jsx).toMatch(/marginTop:\s*"var\(--sp-24\)"/);
+    expect(rule(welcome, ".title")).toMatch(/line-height:\s*calc\(var\(--text-display\) \+ var\(--sp-8\)\)/);
+    expect(rule(welcome, ".sub")).toMatch(/margin:\s*var\(--sp-8\) 0 0/);
+    expect(rule(welcome, ".sub")).toMatch(/line-height:\s*calc\(var\(--sp-16\) \+ var\(--sp-4\)\)/);
+    expect(rule(welcome, ".sub.below")).toMatch(/margin-top:\s*var\(--sp-16\)/);
+    expect(rule(welcome, ".facts")).toMatch(/margin-top:\s*var\(--sp-16\)/);
+    expect(rule(welcome, ".actions")).toMatch(/margin-top:\s*var\(--sp-24\)/);
+    expect(rule(welcome, ".actions")).toMatch(/gap:\s*var\(--sp-8\)/);
+    expect(rule(welcome, ".command")).toMatch(/margin-top:\s*var\(--sp-8\)/);
+    expect(rule(welcome, ".command")).toMatch(/height:\s*var\(--ctl-28\)/);
+  });
+
+  it("draws every primary 176 px wide, in the welcome and in the link form", () => {
+    expect(rule(welcome, ".primary")).toMatch(/width:\s*176px/);
+    expect(rule(connect, ".primary")).toMatch(/width:\s*176px/);
+  });
+
+  it("caps the failure log at 12 lines of 16 px inside the column, danger ink, no box", () => {
+    const log = rule(welcome, ".log");
+    expect(log).toMatch(/max-height:\s*calc\(var\(--sp-16\) \* 12\)/);
+    expect(log).toMatch(/line-height:\s*var\(--sp-16\)/);
+    expect(log).toMatch(/overflow-y:\s*auto/);
+    expect(log).toMatch(/overflow-wrap:\s*anywhere/);
+    expect(log).toMatch(/color:\s*var\(--c-danger-text\)/);
+    expect(log).not.toMatch(/background|padding/);
+  });
+
+  it("sizes the link form: label 11 px, 40 px field, sources 11 over 13 Mono, failure 13 over 11", () => {
+    expect(rule(connect, ".label")).toMatch(/font-size:\s*var\(--text-meta\)/);
+    expect(rule(connect, ".label")).toMatch(/margin-bottom:\s*var\(--sp-4\)/);
+    expect(rule(connect, ".connect .linkInput")).toMatch(/height:\s*var\(--ctl-40\)/);
+    expect(rule(connect, ".sourceLabel")).toMatch(/font-size:\s*var\(--text-meta\)/);
+    expect(rule(connect, ".sources .sourcePath")).toMatch(/font-size:\s*var\(--text-ui\)/);
+    expect(rule(connect, ".sources")).toMatch(/gap:\s*var\(--sp-8\)/);
+    expect(rule(connect, ".middle")).toMatch(/margin-top:\s*var\(--sp-16\)/);
+    expect(rule(connect, ".failure")).toMatch(/margin-top:\s*var\(--sp-16\)/);
+    expect(rule(connect, ".failure strong")).toMatch(/font-size:\s*var\(--text-ui\)/);
+    expect(rule(connect, ".failure span")).toMatch(/font-size:\s*var\(--text-meta\)/);
+    expect(rule(connect, ".actions")).toMatch(/margin-top:\s*var\(--sp-24\)/);
+  });
+
+  it("mounts the sidebar only outside the welcome and lets the single column fill the window", () => {
+    const app = readFileSync(join(SRC, "App.jsx"), "utf8");
+    expect(app).toMatch(/\{bare \? null : \(\s*<Sidebar/);
+    expect(rule(css("App.module.css"), ".bare")).toMatch(/grid-template-columns:\s*1fr/);
+  });
+});

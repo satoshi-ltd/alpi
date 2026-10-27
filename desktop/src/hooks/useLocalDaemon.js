@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
+const LAUNCH_GRACE_MS = 15000;
+
 export function useLocalDaemon({ enabled, onStarted }) {
   const [state, setState] = useState(null);
   const [phase, setPhase] = useState("idle");
   const [error, setError] = useState(null);
+  const [launched, setLaunched] = useState(false);
   const autoStartedRef = useRef(false);
   const onStartedRef = useRef(onStarted);
   onStartedRef.current = onStarted;
@@ -29,8 +32,10 @@ export function useLocalDaemon({ enabled, onStarted }) {
     phaseRef.current = "starting";
     setPhase("starting");
     setError(null);
+    setLaunched(false);
     try {
       await invoke("local_daemon_start");
+      setLaunched(true);
       setPhase("idle");
       setState("running");
       onStartedRef.current?.();
@@ -57,6 +62,7 @@ export function useLocalDaemon({ enabled, onStarted }) {
   useEffect(() => {
     if (!enabled) {
       autoStartedRef.current = false;
+      setLaunched(false);
       setPhase("idle");
       setError(null);
       return undefined;
@@ -75,5 +81,11 @@ export function useLocalDaemon({ enabled, onStarted }) {
     };
   }, [enabled, detect, start]);
 
-  return { state: enabled ? state : null, phase, error, start, install, detect };
+  useEffect(() => {
+    if (!launched) return undefined;
+    const timer = setTimeout(() => setLaunched(false), LAUNCH_GRACE_MS);
+    return () => clearTimeout(timer);
+  }, [launched]);
+
+  return { state: enabled ? state : null, phase, error, launched: enabled && launched, start, install, detect };
 }

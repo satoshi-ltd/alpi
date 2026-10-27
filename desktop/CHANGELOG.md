@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.9.2 — 2026-10-27 — a console welcome for the first run
+
+- The first-run welcome is a left-aligned console screen with one primary action per state: Install and start alpi, Start alpi or Retry, with Check again and Connect to another computer as quiet actions after it. A failed start shows its log capped at 12 lines, scrolled to the end, and reachable by keyboard.
+- Connecting to another computer is one clear form: an `alpi://` link field with a label, where to get the link as two rows, each pairing step named while it runs, a single failure line and Back.
+- The window has no sidebar only on a true first run, when alpi has never answered on this computer and at most one connection is saved; after that the same welcome sits beside the sidebar, and a later outage never replaces the whole window.
+- While that first-run window shows, the shortcuts for Settings, Notifications and Activity are off, and starting alpi no longer flashes the offline banner before it answers.
+  Requires alpi 0.17.28.
+
 ## v0.9.1 — 2026-10-27 — the exported PDF footer actually prints
 
 - A message or report exported to PDF now shows the alpi footer (mark, profile, server, date): it never printed on macOS or Linux, because the system print engine there silently drops a repeating table footer.

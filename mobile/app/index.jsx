@@ -22,6 +22,7 @@ import { useEndpoint } from '../src/lib/EndpointContext';
 import { endpointHost } from '../src/lib/endpoint';
 import { ACTIVITY_PATH, openVerb, OUTPUTS_PATH, SETTINGS_PATH, subjectPath } from '../src/lib/panes';
 import { usePins } from '../src/lib/pins';
+import { isFirstProfile, useSettledOnce } from '../src/lib/roster';
 import { useTheme } from '../src/theme/ThemeContext';
 import { useCanAdminEarly } from '../src/hooks/useActiveRole';
 import { HomePane } from '../src/features/shell/HomePane';
@@ -180,6 +181,7 @@ function InboxScreen({ items, loading, refresh, error = null }) {
         addActions={addActions}
         daemonDown={activeFailed}
         error={error}
+        endpointId={endpoint?.id}
       />
       <ShellFooter
         unread={unreadCount}
@@ -211,6 +213,15 @@ function InboxScreen({ items, loading, refresh, error = null }) {
 export default function Index() {
   const { twoPane } = usePane();
   const { items, loading, refresh, error } = useInbox();
+  const { endpoint, probeState } = useEndpoint();
+  const initialLoading = useSettledOnce(loading, endpoint?.id);
   useLaunchRestore({ items, twoPane });
-  return twoPane ? <HomePane /> : <InboxScreen items={items} loading={loading} refresh={refresh} error={error} />;
+  const empty = isFirstProfile({
+    empty: items.length === 0,
+    initialLoading,
+    paired: !!endpoint,
+    daemonDown: !!endpoint && isDaemonDown(probeState.get(endpoint.id) ?? 'unknown'),
+    error,
+  });
+  return twoPane ? <HomePane empty={empty} /> : <InboxScreen items={items} loading={loading} refresh={refresh} error={error} />;
 }

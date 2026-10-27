@@ -4,6 +4,8 @@ const KEY_PREFIX = 'aln.state.';
 const FLAG_PREFIX = 'aln.flag.';
 const SEEN_CAP = 500;
 
+export const PRIMER_FLAG = 'notificationPrimer';
+
 export function alnStateKey(connection) {
   const id = connection?.deviceId;
   return id ? `daemon:${id}` : '';

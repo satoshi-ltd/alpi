@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { PairingError, exchangePairing, parsePairing } from './pairing.js';
+import { PairingError, exchangePairing, pairingLinkFact, parsePairing } from './pairing.js';
 
 describe('parsePairing', () => {
   it('accepts the URL payload without a version marker', () => {
@@ -78,5 +78,23 @@ describe('parsePairing', () => {
       .toThrow(PairingError);
     expect(() => parsePairing('{"u":"wss://user:pass@client.example.com","t":"secret"}'))
       .toThrow(PairingError);
+  });
+});
+
+describe('pairingLinkFact', () => {
+  const link = (name) => `alpi://device?url=ws%3A%2F%2F100.1.2.3%3A49200&name=${encodeURIComponent(name)}&pairing_token=abc`;
+
+  it('shows the host name and its real URL', () => {
+    expect(pairingLinkFact(link('casa'))).toBe('casa · ws://100.1.2.3:49200');
+  });
+
+  it('cuts a long name at 40 characters with an ellipsis and keeps the whole URL', () => {
+    const fact = pairingLinkFact(link('x'.repeat(80)));
+    expect(fact).toBe(`${'x'.repeat(40)}… · ws://100.1.2.3:49200`);
+    expect(pairingLinkFact(link('y'.repeat(40)))).toBe(`${'y'.repeat(40)} · ws://100.1.2.3:49200`);
+  });
+
+  it('says nothing for text that is not a link', () => {
+    expect(pairingLinkFact('hello')).toBeNull();
   });
 });

@@ -14,6 +14,15 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.9.2 — 2026-10-27 — a console first run
+
+- Welcome, pairing and paired read like a terminal session: one left edge, a terse title, the host and role in mono, and one primary button anchored above the safe area, so there is never a second primary on the screen.
+- A camera that is not allowed has its own page with Grant access, or Open settings when the system will not ask again; a link that was already used now says so instead of dropping you into the inbox, and a failure that left the connection saved keeps Open inbox as the primary.
+- With a connection already saved, the pairing page offers Open inbox beside Scan QR, and scanning the same code twice no longer starts two exchanges.
+- Paired lists two optional rows: Face ID unlock, and Notifications with Enable, which asks the system, shows Open settings after a denial and keeps the first-inbox prompt when you skip it.
+- An empty roster is a first-profile page with New profile for an admin and a plain note for a member; on a fold the detail pane only says Their chats open here, and the sidebar is 280 pt.
+  Requires alpi 0.17.28.
+
 ## v0.9.1 — 2026-10-27 — the exported PDF footer actually prints
 
 - A message or report exported to PDF now shows the alpi footer (mark, profile, server, date): it never printed on iOS, because the system print engine there silently drops a repeating table footer.

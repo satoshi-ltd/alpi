@@ -58,7 +58,8 @@ def _points(points):
     return " ".join(f"{x:.2f},{y:.2f}" for x, y in points)
 
 
-def alpaca(size, key=None, at=None):
+def alpaca(size, key=None, at=None, fill=None):
+    ink = fill or BRAND_INK
     style = ""
     polys = []
     if key:
@@ -67,11 +68,11 @@ def alpaca(size, key=None, at=None):
     levels = frame_levels(at) if at is not None else None
     for i, pts in enumerate(BUSY["polygons"]):
         if key:
-            extra = f' class="{key}-f" style="fill: {BRAND_INK}; animation-delay: {BUSY["delays"][i]}s"'
+            extra = f' class="{key}-f" style="fill: {ink}; animation-delay: {BUSY["delays"][i]}s"'
         elif levels:
-            extra = f' style="fill: {BRAND_INK}; opacity: {levels[i]}"'
+            extra = f' style="fill: {ink}; opacity: {levels[i]}"'
         else:
-            extra = f' style="fill: {BRAND_INK}"'
+            extra = f' style="fill: {ink}"'
         polys.append(f'<polygon points="{_points(pts)}"{extra}/>')
     svg = f'<svg viewBox="0 0 100 100" width="{size}" height="{size}" style="display: block; overflow: visible; flex-shrink: 0">{"".join(polys)}</svg>'
     return f'<span role="img" aria-label="Loading" style="display: inline-flex; flex-shrink: 0">{style}{svg}</span>'

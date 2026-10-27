@@ -78,13 +78,23 @@ vi.mock('../../theme/ThemeContext', () => ({
       ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999',
     },
     fonts: { sans: { regular: 'r', semibold: 's' }, mono: 'mono', monoMedium: 'monoMedium' },
-    fontSizes: { xs: 11, sm: 12, md: 14, lg: 15 },
+    fontSizes: { xs: 11, sm: 12, md: 14, lg: 15, xxl: 22, display: 28 },
+    lineHeights: { cozy: 1.3, normal: 1.5 },
     mobile: { inputH: 44 },
   }),
 }));
 
 vi.mock('../../components/Icon', () => ({
   Icon: ({ name }) => React.createElement('span', { 'data-icon': name }),
+}));
+
+vi.mock('../../components/Fold', () => ({
+  Fold: ({ size }) => React.createElement('span', { 'data-testid': 'mark', 'data-size': size }),
+}));
+
+vi.mock('../../components/Button', () => ({
+  Button: ({ title, size, variant, onPress }) =>
+    React.createElement('button', { type: 'button', 'data-primary': String((variant ?? 'primary') === 'primary'), 'data-size': size, onClick: onPress }, title),
 }));
 
 vi.mock('./InboxRow', () => ({ SEPARATOR_INSET: 52 }));
@@ -203,6 +213,8 @@ describe('Roster front door', () => {
   });
 });
 
+const addActions = () => ({ profiles: { label: 'New profile', onPress: vi.fn() }, workgroups: { label: 'New workgroup', onPress: vi.fn() } });
+
 describe('Roster empty states', () => {
   it('asks for a pairing when no daemon is paired, and hides the filter', () => {
     render(<Roster items={[]} query="" onQueryChange={() => {}} renderRow={plainRow} paired={false} device="phone" />);
@@ -230,6 +242,48 @@ describe('Roster empty states', () => {
     expect(screen.getByText('Nothing shared with this device yet')).toBeTruthy();
     expect(screen.getByText('Ask the host admin to share a profile with this phone.')).toBeTruthy();
     expect(screen.queryByText('Create one to begin.')).toBeNull();
+  });
+
+  it('names the tablet to a member in the fold sidebar, with the mark and no action', () => {
+    render(<Roster items={[]} query="" onQueryChange={() => {}} renderRow={plainRow} device="tablet" gutter={space.s5} />);
+    expect(screen.getByText('Ask the host admin to share a profile with this tablet.')).toBeTruthy();
+    expect(screen.getByTestId('mark').getAttribute('data-size')).toBe('72');
+  });
+
+  it('keeps the plain empty states for an unpaired phone, a daemon that is down and a failed load', () => {
+    const { rerender } = render(<Roster items={[]} paired={false} device="phone" renderRow={plainRow} />);
+    expect(screen.getByText('Not paired')).toBeTruthy();
+    expect(screen.queryByTestId('mark')).toBeNull();
+    rerender(<Roster items={[]} paired daemonDown renderRow={plainRow} />);
+    expect(screen.getByText('Daemon unreachable')).toBeTruthy();
+    expect(screen.queryByTestId('mark')).toBeNull();
+  });
+
+  it('keeps the first-profile page mounted through a background refresh of an empty roster', () => {
+    const props = { query: '', onQueryChange: () => {}, renderRow: plainRow, addActions: addActions() };
+    const view = render(<Roster items={[]} loading {...props} />);
+    expect(screen.getByTestId('skeleton')).toBeTruthy();
+    view.rerender(<Roster items={[]} loading={false} {...props} />);
+    expect(screen.getByText('No profiles or workgroups yet')).toBeTruthy();
+    view.rerender(<Roster items={[]} loading {...props} />);
+    expect(screen.queryByTestId('skeleton')).toBeNull();
+    expect(screen.getByText('No profiles or workgroups yet')).toBeTruthy();
+    expect(screen.getByText('New profile')).toBeTruthy();
+  });
+
+  it('goes back to the skeleton when the active connection changes to one still loading', () => {
+    const props = { query: '', onQueryChange: () => {}, renderRow: plainRow, addActions: addActions() };
+    const view = render(<Roster items={[]} loading={false} endpointId="a" {...props} />);
+    expect(screen.getByText('No profiles or workgroups yet')).toBeTruthy();
+    view.rerender(<Roster items={[]} loading endpointId="b" {...props} />);
+    expect(screen.getByTestId('skeleton')).toBeTruthy();
+    expect(screen.queryByText('No profiles or workgroups yet')).toBeNull();
+    expect(screen.queryByText('New profile')).toBeNull();
+    view.rerender(<Roster items={[]} loading={false} endpointId="b" {...props} />);
+    expect(screen.getByText('No profiles or workgroups yet')).toBeTruthy();
+    view.rerender(<Roster items={[]} loading endpointId="b" {...props} />);
+    expect(screen.queryByTestId('skeleton')).toBeNull();
+    expect(screen.getByText('No profiles or workgroups yet')).toBeTruthy();
   });
 
   it('shows the skeleton while the first load is in flight, never an empty verdict', () => {
@@ -334,18 +388,27 @@ describe('Roster creation reachability', () => {
     expect(actions.workgroups.onPress).toHaveBeenCalledTimes(1);
   });
 
-  it('holds both headings on an empty daemon and still names it empty', () => {
-    render(<Roster items={[]} query="" onQueryChange={() => {}} renderRow={plainRow} addActions={addActions()} />);
-    expect(sections()).toEqual(['profiles', 'workgroups']);
-    expect(screen.getByLabelText('New profile')).toBeTruthy();
-    expect(screen.getByLabelText('New workgroup')).toBeTruthy();
+  it('swaps the headings for the first-run page on an empty daemon, with one New profile primary', () => {
+    const actions = addActions();
+    render(<Roster items={[]} query="" onQueryChange={() => {}} renderRow={plainRow} addActions={actions} />);
+    expect(sections()).toEqual([]);
+    expect(screen.queryByLabelText('New workgroup')).toBeNull();
     expect(screen.getByText('No profiles or workgroups yet')).toBeTruthy();
+    expect(screen.getByText('Create one to begin.')).toBeTruthy();
+    expect(screen.getByTestId('mark').getAttribute('data-size')).toBe('72');
+    const primaries = [...document.querySelectorAll('[data-primary="true"]')];
+    expect(primaries.map((b) => b.textContent)).toEqual(['New profile']);
+    expect(primaries[0].getAttribute('data-size')).toBe('hero');
+    fireEvent.click(primaries[0]);
+    expect(actions.profiles.onPress).toHaveBeenCalledTimes(1);
   });
 
   it('holds no heading for a reader who cannot create', () => {
     render(<Roster items={[]} query="" onQueryChange={() => {}} renderRow={plainRow} />);
     expect(sections()).toEqual([]);
     expect(screen.getByText('Nothing shared with this device yet')).toBeTruthy();
+    expect(screen.getByText('member · nothing shared yet')).toBeTruthy();
+    expect(document.querySelector('button')).toBeNull();
   });
 
   it('drops the held headings while a filter is on, so a miss reads as a miss', () => {
@@ -379,7 +442,7 @@ describe('Roster creation reachability', () => {
 
 describe('Roster section add targets', () => {
   it('pads the New profile and New workgroup buttons to the 44 pt minimum', () => {
-    render(<Roster items={[]} paired addActions={{ profiles: { label: 'New profile', onPress: () => {} }, workgroups: { label: 'New workgroup', onPress: () => {} } }} />);
+    render(<Roster items={[pixel]} paired renderRow={plainRow} addActions={{ profiles: { label: 'New profile', onPress: () => {} }, workgroups: { label: 'New workgroup', onPress: () => {} } }} />);
     for (const name of ['New profile', 'New workgroup']) {
       const button = screen.getByLabelText(name);
       expect(Number(button.getAttribute('data-h')) + Number(button.getAttribute('data-slop')) * 2).toBe(44);

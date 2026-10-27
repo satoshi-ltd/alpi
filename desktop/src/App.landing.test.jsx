@@ -439,13 +439,272 @@ describe("App landing", () => {
     expect(pending()).toBe(before + 2);
   });
 
-  it("welcomes a computer with no alpi with two paths instead of a locked panel", async () => {
+  it("welcomes a computer with no alpi with one primary and a way to connect elsewhere, instead of a locked panel", async () => {
     daemon({ localStatus: "offline", local: "absent", profiles: [] });
     render(<App />);
     await waitFor(() => expect(screen.getByText("Set up alpi")).toBeInTheDocument());
-    expect(screen.getByText("Run alpi here")).toBeInTheDocument();
-    expect(screen.getByText("Connect to alpi elsewhere")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Install and start alpi" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Connect to another computer" })).toBeInTheDocument();
+    expect(screen.queryByText("Run alpi here")).toBeNull();
     expect(screen.queryByText("No host yet. Add a connection to continue.")).toBeNull();
+  });
+
+  it("shows the welcome full window with no sidebar and a drag strip, and mounts the sidebar once the roster is shown", async () => {
+    daemon({ localStatus: "offline", local: "absent" });
+    const { container } = render(<App />);
+    await waitFor(() => expect(screen.getByText("Set up alpi")).toBeInTheDocument());
+    expect(container.querySelector("aside")).toBeNull();
+    expect(screen.queryByText("This computer")).toBeNull();
+    expect(container.querySelectorAll("[data-drag]")).toHaveLength(1);
+    expect(container.querySelector("[data-drag]").closest("section")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Install and start alpi" }));
+    await waitFor(() => expect(selected("alpi")).toBe(true));
+    expect(container.querySelector("aside")).not.toBeNull();
+    expect(container.querySelectorAll("[data-drag]").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Set up alpi")).toBeNull();
+  });
+
+  it("keeps the sidebar and its connection switcher beside the welcome when another connection is saved", async () => {
+    daemon({ localStatus: "offline", local: "absent", remote: { profiles: [DOC], status: "online" } });
+    const { container } = render(<App />);
+    await waitFor(() => expect(screen.getByText("Set up alpi")).toBeInTheDocument());
+    expect(container.querySelector("aside")).not.toBeNull();
+    expect(screen.getByText("This computer")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Install and start alpi" })).toBeInTheDocument();
+    expect(container.querySelector("main [data-drag]")).not.toBeNull();
+    expect(container.firstElementChild.className).not.toMatch(/bare/);
+  });
+
+  it("hands the bare first run over to the sidebar when the link form connects to another computer", async () => {
+    const state = daemon({ localStatus: "offline", local: "absent", remote: { profiles: [DOC], status: "online" } });
+    const base = invoke.getMockImplementation();
+    invoke.mockImplementation(async (cmd, args) => {
+      if (cmd === "host_connection_add_remote") {
+        state.added = true;
+        state.active = "remote";
+        return null;
+      }
+      const result = await base(cmd, args);
+      if (cmd === "host_connections" && !state.added) {
+        return { ...result, connections: result.connections.filter((c) => c.id === "local") };
+      }
+      return result;
+    });
+    const { container } = render(<App />);
+    await waitFor(() => expect(screen.getByText("Set up alpi")).toBeInTheDocument());
+    expect(container.querySelector("aside")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Connect to another computer" }));
+    fireEvent.change(screen.getByLabelText("alpi:// link"), { target: { value: "alpi://device?url=ws%3A%2F%2Fmirai%3A7423&name=mirai&pairing_token=abc" } });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Connect" })); });
+    await waitFor(() => expect(container.querySelector("aside")).not.toBeNull());
+    expect(screen.queryByText("Set up alpi")).toBeNull();
+  });
+
+  it("never replaces the whole window when a daemon that was online stops: the sidebar stays through Retry and a failure", async () => {
+    const state = daemon();
+    const { container } = render(<App />);
+    await waitFor(() => expect(selected("alpi")).toBe(true));
+    state.localStatus = "offline";
+    state.local = "stopped";
+    state.startFails = "daemon start failed (1): bad config";
+    await act(async () => { listeners["connection-status"]?.({ payload: { id: "local", status: "offline" } }); });
+    await waitFor(() => expect(screen.getByText("alpi on this computer is not answering — reconnecting…")).toBeInTheDocument());
+    expect(container.querySelector("aside")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(screen.getByText("alpi didn't start")).toBeInTheDocument());
+    expect(container.querySelector("aside")).not.toBeNull();
+    expect(container.firstElementChild.className).not.toMatch(/bare/);
+  });
+
+  it("ignores the shell shortcuts while the first-run welcome is bare, and keeps them when it is not", async () => {
+    daemon({ localStatus: "offline", local: "absent" });
+    const { container, unmount } = render(<App />);
+    await waitFor(() => expect(screen.getByText("Set up alpi")).toBeInTheDocument());
+    openSettings();
+    for (const key of ["j", "o"]) act(() => { window.dispatchEvent(new KeyboardEvent("keydown", { key, metaKey: true, bubbles: true, cancelable: true })); });
+    fireEvent.click(screen.getByRole("button", { name: "Install and start alpi" }));
+    await waitFor(() => expect(selected("alpi")).toBe(true));
+    expect(container.querySelector("aside")).not.toBeNull();
+    expect(inSettingsView()).toBe(false);
+    unmount();
+    localStorage.clear();
+    daemon({ localStatus: "offline", local: "absent", remote: { profiles: [DOC], status: "online" } });
+    render(<App />);
+    await waitFor(() => expect(screen.getByText("Set up alpi")).toBeInTheDocument());
+    openSettings();
+    fireEvent.click(screen.getByRole("button", { name: "Install and start alpi" }));
+    await waitFor(() => expect(inSettingsView()).toBe(true));
+  });
+
+  it("paints the cold start as the bare frame with no sidebar and no offline banner, then mounts the sidebar straight into the roster", async () => {
+    daemon({ localStatus: "offline", local: "stopped" });
+    const seen = [];
+    const observer = new MutationObserver(() => {
+      seen.push([!!document.querySelector("aside"), /not answering/.test(document.body.textContent)]);
+    });
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    render(<App />);
+    await waitFor(() => expect(selected("alpi")).toBe(true));
+    observer.disconnect();
+    expect(seen.some(([sidebar, banner]) => sidebar && banner)).toBe(false);
+  });
+
+  it("never paints the bare frame on a machine whose local daemon was online before: sidebar and welcome in the main pane", async () => {
+    localStorage.setItem("alpi.localEverOnline.v1", "seen");
+    daemon({ localStatus: "offline", local: "stopped", startFails: "daemon start failed (1): bad config" });
+    const { container } = render(<App />);
+    expect(container.firstElementChild.className).not.toMatch(/bare/);
+    await waitFor(() => expect(screen.getByText("alpi didn't start")).toBeInTheDocument());
+    expect(container.querySelector("aside")).not.toBeNull();
+    expect(container.querySelector("main [data-drag]")).not.toBeNull();
+    expect(container.firstElementChild.className).not.toMatch(/bare/);
+  });
+
+  it("writes the ever-online flag the first time the local connection answers", async () => {
+    expect(localStorage.getItem("alpi.localEverOnline.v1")).toBeNull();
+    daemon();
+    render(<App />);
+    await waitFor(() => expect(selected("alpi")).toBe(true));
+    expect(localStorage.getItem("alpi.localEverOnline.v1")).toBe("seen");
+  });
+
+  it("does not write the flag while the local daemon is offline, and paints bare on a first run", async () => {
+    daemon({ localStatus: "offline", local: "absent" });
+    const { container } = render(<App />);
+    await waitFor(() => expect(screen.getByText("Set up alpi")).toBeInTheDocument());
+    expect(container.firstElementChild.className).toMatch(/bare/);
+    expect(localStorage.getItem("alpi.localEverOnline.v1")).toBeNull();
+  });
+
+  it("keeps the first-run path working when localStorage throws", async () => {
+    const realGet = Storage.prototype.getItem;
+    const realSet = Storage.prototype.setItem;
+    const get = vi.spyOn(Storage.prototype, "getItem").mockImplementation(function (key) {
+      if (key === "alpi.localEverOnline.v1") throw new Error("blocked");
+      return realGet.call(this, key);
+    });
+    const set = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (key, value) {
+      if (key === "alpi.localEverOnline.v1") throw new Error("blocked");
+      return realSet.call(this, key, value);
+    });
+    daemon({ localStatus: "offline", local: "absent" });
+    const { container } = render(<App />);
+    await waitFor(() => expect(screen.getByText("Set up alpi")).toBeInTheDocument());
+    expect(container.firstElementChild.className).toMatch(/bare/);
+    fireEvent.click(screen.getByRole("button", { name: "Install and start alpi" }));
+    await waitFor(() => expect(selected("alpi")).toBe(true));
+    get.mockRestore();
+    set.mockRestore();
+  });
+
+  describe("cold start", () => {
+    const FLAG = "alpi.localEverOnline.v1";
+    const shell = (container) => ({ bare: /bare/.test(container.firstElementChild.className), aside: container.querySelector("aside") !== null });
+
+    it.each(["unknown", "probing"])("first run with the local status %s: bare strip only, no sidebar, no banner", async (status) => {
+      daemon({ localStatus: status, local: "absent" });
+      const { container } = render(<App />);
+      await waitFor(() => expect(invoke.mock.calls.some(([cmd]) => cmd === "host_connections")).toBe(true));
+      await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+      expect(shell(container)).toEqual({ bare: true, aside: false });
+      expect(container.querySelectorAll("main [data-drag]")).toHaveLength(1);
+      expect(screen.queryByText(/not answering/)).toBeNull();
+    });
+
+    it("first run before the connection list has loaded: bare strip only", async () => {
+      invoke.mockImplementation(async (cmd) => (cmd === "host_connections" ? { active_id: "local", connections: [] } : null));
+      const { container } = render(<App />);
+      await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+      expect(shell(container)).toEqual({ bare: true, aside: false });
+    });
+
+    it.each(["unknown", "probing"])("a returning user with the local status %s gets the sidebar and never the bare frame", async (status) => {
+      localStorage.setItem(FLAG, "seen");
+      daemon({ localStatus: status });
+      const { container } = render(<App />);
+      expect(shell(container)).toEqual({ bare: false, aside: true });
+      await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+      expect(shell(container)).toEqual({ bare: false, aside: true });
+    });
+
+    it("a user whose only connection is a remote one never sees the bare frame once the list loads", async () => {
+      invoke.mockImplementation(async (cmd) => {
+        if (cmd === "host_connections") return { active_id: "remote", connections: [{ id: "remote", kind: "remote", name: "mirai", url: "ws://mirai:7423", status: "online", role: "admin" }] };
+        if (cmd === "profile_summaries") return [ALPI];
+        return cmd === "workgroups" || cmd === "profiles" ? [] : null;
+      });
+      const { container } = render(<App />);
+      await waitFor(() => expect(selected("alpi")).toBe(true));
+      expect(shell(container)).toEqual({ bare: false, aside: true });
+    });
+
+    it("resolves probing to online by mounting the sidebar straight into the roster, never the welcome", async () => {
+      const state = daemon({ localStatus: "probing", local: "running" });
+      const { container } = render(<App />);
+      await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+      expect(shell(container)).toEqual({ bare: true, aside: false });
+      state.localStatus = "online";
+      await act(async () => { listeners["connection-status"]?.({ payload: { id: "local", status: "online" } }); });
+      await waitFor(() => expect(selected("alpi")).toBe(true));
+      expect(shell(container)).toEqual({ bare: false, aside: true });
+      expect(screen.queryByText("Set up alpi")).toBeNull();
+    });
+
+    it("resolves probing to offline as the welcome, still bare", async () => {
+      const state = daemon({ localStatus: "probing", local: "absent" });
+      const { container } = render(<App />);
+      await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+      expect(shell(container)).toEqual({ bare: true, aside: false });
+      state.localStatus = "offline";
+      await act(async () => { listeners["connection-status"]?.({ payload: { id: "local", status: "offline" } }); });
+      await waitFor(() => expect(screen.getByText("Set up alpi")).toBeInTheDocument());
+      expect(shell(container)).toEqual({ bare: true, aside: false });
+    });
+
+    it("ignores every shell shortcut while bare and honours them as soon as it ends", async () => {
+      const state = daemon({ localStatus: "probing", local: "running" });
+      const { container } = render(<App />);
+      await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+      const press = (key, extra = {}) => act(() => { window.dispatchEvent(new KeyboardEvent("keydown", { key, metaKey: true, bubbles: true, cancelable: true, ...extra })); });
+      const all = () => { press("k"); press(","); press("j"); press("o"); press("n"); press("1"); press("f"); press("s"); press("N", { shiftKey: true }); press("W", { shiftKey: true }); };
+      all();
+      expect(screen.queryByRole("combobox")).toBeNull();
+      state.localStatus = "online";
+      await act(async () => { listeners["connection-status"]?.({ payload: { id: "local", status: "online" } }); });
+      await waitFor(() => expect(selected("alpi")).toBe(true));
+      expect(inSettingsView()).toBe(false);
+      expect(container.querySelector("aside")).not.toBeNull();
+      press("k");
+      expect(await screen.findByRole("combobox")).toBeInTheDocument();
+      press("k");
+      press(",");
+      await waitFor(() => expect(inSettingsView()).toBe(true));
+    });
+  });
+
+  it("keeps the welcome on screen until the daemon answers, so the sidebar never mounts with the offline banner", async () => {
+    const state = daemon({ localStatus: "offline", local: "absent" });
+    const base = invoke.getMockImplementation();
+    invoke.mockImplementation(async (cmd, args) => {
+      if (cmd === "local_daemon_start") {
+        state.calls.push([cmd, args]);
+        state.local = "running";
+        return "started";
+      }
+      return base(cmd, args);
+    });
+    const { container } = render(<App />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Install and start alpi" })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Install and start alpi" }));
+    await waitFor(() => expect(state.calls.some(([cmd]) => cmd === "local_daemon_start")).toBe(true));
+    await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+    expect(screen.getByRole("heading", { name: "Starting alpi…" })).toBeInTheDocument();
+    expect(container.querySelector("aside")).toBeNull();
+    expect(screen.queryByText(/not answering/)).toBeNull();
+    state.localStatus = "online";
+    await act(async () => { listeners["connection-status"]?.({ payload: { id: "local", status: "online" } }); });
+    await waitFor(() => expect(selected("alpi")).toBe(true));
+    expect(container.querySelector("aside")).not.toBeNull();
   });
 
   it("installs and starts from the welcome, then opens the roster", async () => {

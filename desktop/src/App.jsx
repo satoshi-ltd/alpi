@@ -68,7 +68,7 @@ import {
   useNotificationDeeplink,
 } from "./hooks/useNotificationDeeplink.js";
 import { useLocalDaemon } from "./hooks/useLocalDaemon.js";
-import Welcome, { FirstRunHint, firstRunHintSeen, markFirstRunHintSeen } from "./features/Welcome.jsx";
+import Welcome, { WelcomeFrame, FirstRunHint, localEverOnlineSeen, markLocalEverOnline, firstRunHintSeen, markFirstRunHintSeen } from "./features/Welcome.jsx";
 import { useDelayedFlag } from "./lib/useDelayedFlag.js";
 import { hasDirtySettings } from "./lib/settingsDirty.js";
 import styles from "./App.module.css";
@@ -944,37 +944,41 @@ export default function App() {
   }, [approval, clarification]);
 
   const newSessionAvailable = profiles.length > 0;
+  const bareRef = useRef(false);
+  const unlessBare = (action) => (action ? () => { if (!bareRef.current) action(); } : action);
   useWindowChrome({
     viewRef,
-    onNewSession: newSessionAvailable ? onNewSession : null,
-    onJumpToProfile,
-    onNewProfile: adminOnNewProfile,
-    onNewWorkgroup: adminOnNewWorkgroup,
-    onOpenSettings: adminOnOpenSettings,
-    onToggleSearch,
-    onToggleSidebarSearch,
+    onNewSession: unlessBare(newSessionAvailable ? onNewSession : null),
+    onJumpToProfile: unlessBare(onJumpToProfile),
+    onNewProfile: unlessBare(adminOnNewProfile),
+    onNewWorkgroup: unlessBare(adminOnNewWorkgroup),
+    onOpenSettings: unlessBare(adminOnOpenSettings),
+    onToggleSearch: unlessBare(onToggleSearch),
+    onToggleSidebarSearch: unlessBare(onToggleSidebarSearch),
     sidebarSearchAvailableRef,
-    onTogglePalette,
+    onTogglePalette: unlessBare(onTogglePalette),
     paletteOpenRef,
     onClosePalette,
     activeProfileName,
     historyKind,
-    onOpenHistory,
-    onRefreshThread:
+    onOpenHistory: unlessBare(onOpenHistory),
+    onRefreshThread: unlessBare(
       view.kind === "profile" || view.kind === "workgroup"
         ? onRefreshActiveThread
         : null,
-    onToggleContextPause:
+    ),
+    onToggleContextPause: unlessBare(
       view.kind === "profile" || view.kind === "workgroup"
         ? onToggleActiveContextPause
         : null,
-    onToggleReadAloud: canReadAloud ? onToggleReadAloud : null,
-    onBrowseTools: canManageProfileSurfaces ? onBrowseTools : null,
-    onBrowseSkills: canManageProfileSurfaces ? onBrowseSkills : null,
-    onBrowseMemory: canManageProfileSurfaces ? onBrowseMemory : null,
-    onBrowseSchedule: canManageProfileSurfaces ? onBrowseSchedule : null,
-    onToggleNotifications: canManageProfileSurfaces ? onOpenNotifications : null,
-    onToggleActivity: onToggleActivityIfSupported,
+    ),
+    onToggleReadAloud: unlessBare(canReadAloud ? onToggleReadAloud : null),
+    onBrowseTools: unlessBare(canManageProfileSurfaces ? onBrowseTools : null),
+    onBrowseSkills: unlessBare(canManageProfileSurfaces ? onBrowseSkills : null),
+    onBrowseMemory: unlessBare(canManageProfileSurfaces ? onBrowseMemory : null),
+    onBrowseSchedule: unlessBare(canManageProfileSurfaces ? onBrowseSchedule : null),
+    onToggleNotifications: canManageProfileSurfaces ? unlessBare(onOpenNotifications) : null,
+    onToggleActivity: unlessBare(onToggleActivityIfSupported),
     onToggleShortcuts,
   });
 
@@ -1210,16 +1214,30 @@ export default function App() {
   }, [sidebarSearchAvailable]);
 
   const localActive = activeConnection?.kind === "local";
+  const localOnline = hostConnections.connections.some((c) => c.kind === "local" && c.status === "online");
   const [localSeenOnline, setLocalSeenOnline] = useState(false);
+  const [localEverOnline, setLocalEverOnline] = useState(localEverOnlineSeen);
   useEffect(() => {
     if (localActive && activeConnection?.status === "online") setLocalSeenOnline(true);
   }, [localActive, activeConnection?.status]);
+  useEffect(() => {
+    if (!localOnline) return;
+    markLocalEverOnline();
+    setLocalEverOnline(true);
+  }, [localOnline]);
+  const localDaemonEnabled = localActive && !localSeenOnline && activeConnection?.status === "offline";
   const localDaemon = useLocalDaemon({
-    enabled: localActive && !localSeenOnline && activeConnection?.status === "offline",
+    enabled: localDaemonEnabled,
     onStarted: onLocalDaemonStarted,
   });
   const showWelcome = localActive && daemonOffline
-    && (localDaemon.phase !== "idle" || ["stopped", "absent", "unsupported"].includes(localDaemon.state));
+    && (localDaemon.phase !== "idle" || localDaemon.launched || ["stopped", "absent", "unsupported"].includes(localDaemon.state));
+  const welcomePhase = localDaemon.launched && localDaemon.phase === "idle" ? "starting" : localDaemon.phase;
+  const firstRun = !localEverOnline && hostConnections.connections.length <= 1;
+  const detecting = localDaemonEnabled && localDaemon.state === null && localDaemon.phase === "idle";
+  const localUndecided = !activeConnection || (localActive && ["unknown", "probing", undefined].includes(activeConnection.status));
+  const bare = firstRun && (showWelcome || detecting || localUndecided);
+  bareRef.current = bare;
   const retryLocal = useCallback(() => {
     setLocalSeenOnline(false);
     onRefreshHostConnectionStatus();
@@ -1362,51 +1380,53 @@ export default function App() {
   }, []);
 
   return (
-    <div className={styles.app}>
-      <Sidebar
-        profiles={profiles}
-        workgroups={workgroups}
-        taskByWorkgroup={taskByWorkgroup}
-        activityByWorkgroup={activityByWorkgroup}
-        pendingProfiles={pendingProfiles}
-        rosterState={rosterState}
-        view={view}
-        settingsTarget={settingsTarget}
-        pinned={pinned}
-        jumpHints={jumpHints}
-        hostConnections={hostConnections}
-        daemonOffline={daemonOffline}
-        connectionSyncing={connectionSyncing}
-        rosterAnswered={rosterAnswered}
-        onNewSessionWith={onNewSessionWith}
-        onOpenProfile={onOpenProfile}
-        onOpenWorkgroup={onOpenWorkgroup}
-        onViewAllWorkgroups={onViewAllWorkgroups}
-        onOpenSettings={adminOnOpenSettings}
-        onOpenPalette={onTogglePalette}
-        onNewProfile={adminOnNewProfile}
-        onNewWorkgroup={adminOnNewWorkgroup}
-        onCloseSettings={closeSettings}
-        onSetSettingsTarget={setSettingsTarget}
-        onOpenSettingsTarget={adminOpenSettingsFor}
-        onTogglePin={onTogglePin}
-        onTogglePauseProfile={adminOnTogglePauseProfile}
-        onSetHostConnection={onSetHostConnection}
-        onAddHostConnection={onAddHostConnection}
-        onForgetHostConnection={onForgetHostConnection}
-        onRenameHostConnection={onRenameHostConnection}
-        onRefreshHostConnectionStatus={onRefreshHostConnectionStatus}
-        autoOpenConnectionSwitcher={autoOpenConnectionSwitcher}
-        connectionLocked={connectionLocked}
-        onOpenNotifications={canManageProfileSurfaces ? onOpenNotifications : null}
-        notificationsUnread={canManageProfileSurfaces ? notificationsUnread : 0}
-        searchOpen={sidebarSearchOpen}
-        onCloseSearch={onCloseSidebarSearch}
-        onOpenActivity={onToggleActivityIfSupported}
-        activityNeedsYou={activityCounts.needsYou}
-      />
+    <div className={bare ? `${styles.app} ${styles.bare}` : styles.app}>
+      {bare ? null : (
+        <Sidebar
+          profiles={profiles}
+          workgroups={workgroups}
+          taskByWorkgroup={taskByWorkgroup}
+          activityByWorkgroup={activityByWorkgroup}
+          pendingProfiles={pendingProfiles}
+          rosterState={rosterState}
+          view={view}
+          settingsTarget={settingsTarget}
+          pinned={pinned}
+          jumpHints={jumpHints}
+          hostConnections={hostConnections}
+          daemonOffline={daemonOffline}
+          connectionSyncing={connectionSyncing}
+          rosterAnswered={rosterAnswered}
+          onNewSessionWith={onNewSessionWith}
+          onOpenProfile={onOpenProfile}
+          onOpenWorkgroup={onOpenWorkgroup}
+          onViewAllWorkgroups={onViewAllWorkgroups}
+          onOpenSettings={adminOnOpenSettings}
+          onOpenPalette={onTogglePalette}
+          onNewProfile={adminOnNewProfile}
+          onNewWorkgroup={adminOnNewWorkgroup}
+          onCloseSettings={closeSettings}
+          onSetSettingsTarget={setSettingsTarget}
+          onOpenSettingsTarget={adminOpenSettingsFor}
+          onTogglePin={onTogglePin}
+          onTogglePauseProfile={adminOnTogglePauseProfile}
+          onSetHostConnection={onSetHostConnection}
+          onAddHostConnection={onAddHostConnection}
+          onForgetHostConnection={onForgetHostConnection}
+          onRenameHostConnection={onRenameHostConnection}
+          onRefreshHostConnectionStatus={onRefreshHostConnectionStatus}
+          autoOpenConnectionSwitcher={autoOpenConnectionSwitcher}
+          connectionLocked={connectionLocked}
+          onOpenNotifications={canManageProfileSurfaces ? onOpenNotifications : null}
+          notificationsUnread={canManageProfileSurfaces ? notificationsUnread : 0}
+          searchOpen={sidebarSearchOpen}
+          onCloseSearch={onCloseSidebarSearch}
+          onOpenActivity={onToggleActivityIfSupported}
+          activityNeedsYou={activityCounts.needsYou}
+        />
+      )}
       <main className={styles.main}>
-          {daemonOffline && !showWelcome && (
+          {daemonOffline && !showWelcome && !bare && (
             <Banner
               kind={connectionDisabled || connectionRateLimited ? "warning" : "danger"}
               pulsing={!connectionDisabled && !connectionRateLimited}
@@ -1420,10 +1440,12 @@ export default function App() {
             </Banner>
           )}
           {showFirstRunHint && <FirstRunHint onDismiss={dismissFirstRunHint} />}
-          {showWelcome ? (
+          {bare && !showWelcome ? (
+            <WelcomeFrame />
+          ) : showWelcome ? (
             <Welcome
               localState={localDaemon.state}
-              phase={localDaemon.phase}
+              phase={welcomePhase}
               error={localDaemon.error}
               onStart={localDaemon.start}
               onInstall={localDaemon.install}

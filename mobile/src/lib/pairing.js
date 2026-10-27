@@ -107,3 +107,12 @@ function parseJson(obj) {
     throw new PairingError(error.message);
   }
 }
+
+export function pairingLinkFact(text) {
+  try {
+    const { name, url } = parsePairing(text);
+    return `${name.length > 40 ? `${name.slice(0, 40)}…` : name} · ${url}`;
+  } catch {
+    return null;
+  }
+}
