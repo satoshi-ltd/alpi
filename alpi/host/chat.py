@@ -735,7 +735,7 @@ def _truncate_hydrated_session(engine, keep_turns: Any) -> None:  # noqa: ANN401
         ),
     })
     from alpi import attachments as _att
-    from alpi.session import turn_replayable, with_host_context
+    from alpi.session import clarification_messages, turn_replayable, with_host_context
     for turn in kept:
         if not turn_replayable(turn):
             continue
@@ -746,6 +746,7 @@ def _truncate_hydrated_session(engine, keep_turns: Any) -> None:  # noqa: ANN401
             text = f"{user}\n{marker}".strip() if marker else user
             text = with_host_context(text, getattr(turn, "host_context", "") or "")
             messages.append({"role": "user", "content": text})
+        messages.extend(clarification_messages(turn))
         produced = _att.describe_produced(getattr(turn, "output_attachments", None))
         if getattr(turn, "assistant", "") or produced:
             atext = f"{turn.assistant}\n{produced}".strip() if produced else turn.assistant

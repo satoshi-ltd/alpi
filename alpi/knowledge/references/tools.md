@@ -245,3 +245,7 @@ Output attachments (MM.2):
 `architecture` (engine/host contracts) · `skills` (skill lifecycle) ·
 `config` (denylist, sandbox, approvals) · `security` (guards/sandbox) ·
 `alp` (peer/workgroup tool context)
+
+## Interactive browser evidence
+
+Use `browser(action="trace_start")` before navigating to a workflow's start. All following browser actions record network evidence in that same authenticated context. Finish with `browser(action="trace_stop", role="heading", name="<exact observed confirmation>")`; omit the confirmation selector to save a partial trace. The returned path is a workspace JSON report, not a raw HAR. It checkpoints after actions, caps requests/actions/bodies, removes cookies, headers, query values and form values (path segments made only of letters are kept, so do not put secrets in them), preserves selected financial/state fields, and correlates other JSON values through per-trace keyed references. Response bodies with unknown or excessive lengths are explicitly omitted. A complete result needs successful navigation/actions, no pending, failed or 4xx/5xx document/API requests, no trace truncation or write error, and a visible confirmation. It does not prove server-side validation. `close` saves any active trace as incomplete. Ordinary browser network and workspace restrictions remain in force.

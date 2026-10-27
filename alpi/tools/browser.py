@@ -45,6 +45,7 @@ _state: dict[str, Any] = {
     "browser": None,
     "context": None,
     "page": None,
+    "trace": None,
 }
 
 
@@ -166,6 +167,13 @@ def _launch_chromium(pw):
 
 
 def _close_blocking() -> None:
+    trace = _state.get("trace")
+    if trace is not None:
+        try:
+            trace.close()
+        except Exception:
+            pass
+        _state["trace"] = None
     try:
         if _state["context"] is not None:
             _state["context"].storage_state(path=str(_storage_dir() / "state.json"))
@@ -247,6 +255,34 @@ def _do_snapshot() -> ToolResult:
     if err is not None:
         return ToolResult(ok=False, output="", error=err)
     return ToolResult(ok=True, output=_snapshot(page))
+
+
+def _do_trace_start() -> ToolResult:
+    from alpi.tools._browser_trace import BrowserTrace
+    import json
+    if _state.get("trace") is not None:
+        return ToolResult(ok=False, output="", error="A trace is already active; stop it first")
+    page, err = _ensure_page_blocking()
+    if err:
+        return ToolResult(ok=False, output="", error=err)
+    trace = BrowserTrace(_state["context"])
+    _state["trace"] = trace
+    return ToolResult(ok=True, output=json.dumps({"path": str(trace.path), "recording": True,
+        "next": "Navigate to the start of the workflow; subsequent browser actions use this same session"}))
+
+
+def _do_trace_stop(role: str, name: str) -> ToolResult:
+    import json
+    trace = _state.get("trace")
+    if trace is None:
+        return ToolResult(ok=False, output="", error="No active trace")
+    _state["page"].wait_for_timeout(500)
+    confirmed = False
+    if role and name:
+        confirmed = _state["page"].get_by_role(role, name=name, exact=True).first.is_visible()
+    result = trace.close(confirmed)
+    _state["trace"] = None
+    return ToolResult(ok=True, output=json.dumps(result))
 
 
 def _do_click(role: str, name: str, text: str) -> ToolResult:
@@ -386,6 +422,8 @@ class Browser(Tool):
         "`read_image` manually when you need visual analysis.\n"
         "  close       — tear down Chromium, keep cookies on disk\n"
         "  logout      — tear down Chromium AND delete saved cookies\n"
+        "  trace_start — record sanitised network evidence in this same browser session; call before navigating to the workflow start\n"
+        "  trace_stop  — save the recording; optional role + exact name checks a visible confirmation. An incomplete trace does not prove a completed workflow\n"
         "\n"
         "After every action a fresh snapshot is returned so you see the new "
         "page state. Identify elements by role + accessible name whenever "
@@ -406,6 +444,7 @@ class Browser(Tool):
                     "navigate", "snapshot", "click", "type",
                     "scroll", "press", "screenshot",
                     "close", "logout",
+                    "trace_start", "trace_stop",
                 ],
             },
             "url": {"type": "string", "description": "URL for navigate."},
@@ -462,10 +501,31 @@ class Browser(Tool):
         key: str = "",
         question: str = "",
     ) -> ToolResult:
+        recorded = _trace_steps()
+        result = self._run_action(action, url, role, name, text, direction, key, question)
+        if not result.ok and action not in ("trace_start", "trace_stop") and _state.get("trace") is not None and _trace_steps() == recorded:
+            _on_browser_thread(lambda: _state["trace"].step(action, False))
+        return result
+
+    def _run_action(
+        self,
+        action: str,
+        url: str = "",
+        role: str = "",
+        name: str = "",
+        text: str = "",
+        direction: str = "down",
+        key: str = "",
+        question: str = "",
+    ) -> ToolResult:
         from alpi.tools._sandbox import require_network
         blocked = require_network("browser")
         if blocked is not None:
             return blocked
+        if action == "trace_start":
+            return _run(_do_trace_start)
+        if action == "trace_stop":
+            return _run(_do_trace_stop, role, name)
         if action == "close":
             _on_browser_thread(_close_blocking)
             return ToolResult(ok=True, output="browser context closed")
@@ -533,9 +593,25 @@ class Browser(Tool):
         return ToolResult(ok=False, output="", error=f"unknown action: {action}")
 
 
+def _trace_steps() -> int | None:
+    trace = _state.get("trace")
+    return None if trace is None else len(trace.steps)
+
+
 def _run(fn: Callable[..., ToolResult], *args: Any) -> ToolResult:
+    def execute():
+        trace = _state.get("trace")
+        try:
+            result = fn(*args)
+        except Exception:
+            if trace is not None and fn not in (_do_trace_start, _do_trace_stop):
+                trace.step(fn.__name__.removeprefix("_do_"), False)
+            raise
+        if trace is not None and fn not in (_do_trace_start, _do_trace_stop):
+            trace.step(fn.__name__.removeprefix("_do_"), result.ok)
+        return result
     try:
-        return _on_browser_thread(lambda: fn(*args))
+        return _on_browser_thread(execute)
     except Exception as e:  # noqa: BLE001
         return ToolResult(ok=False, output="", error=f"{type(e).__name__}: {e}")
 

@@ -1,9 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { normalizeActivity } from "./useActivity.js";
+import { defaultAsAlpaca } from "../../../common/folds.mjs";
 import { connectionCanManage } from "../lib/connection-access.js";
 
 export const OTHER_SCHEDULES_POLL_MS = 300000;
+
+function profileLooks(profiles) {
+  const folds = {};
+  const accents = {};
+  for (const p of Array.isArray(profiles) ? profiles.map(defaultAsAlpaca("var(--accent)")) : []) {
+    folds[p.name] = p.fold ?? null;
+    accents[p.name] = p.accent ?? null;
+  }
+  return { folds, accents };
+}
 
 export function useOtherSchedules({ connections, activeId }) {
   const key = useMemo(
@@ -22,8 +33,11 @@ export function useOtherSchedules({ connections, activeId }) {
     const load = () =>
       Promise.all(
         targets.map(([id, name]) =>
-          invoke("activity_list", { connectionId: id })
-            .then((res) => ({ id, name, scheduled: normalizeActivity(res).scheduled }))
+          Promise.all([
+            invoke("activity_list", { connectionId: id }),
+            invoke("profile_summaries", { connectionId: id }).catch(() => []),
+          ])
+            .then(([res, profiles]) => ({ id, name, scheduled: normalizeActivity(res).scheduled, ...profileLooks(profiles) }))
             .then((row) => {
               last.current.set(id, row);
               return row;

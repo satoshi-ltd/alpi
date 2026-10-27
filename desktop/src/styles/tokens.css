@@ -119,7 +119,6 @@
   --well-off: var(--field);
 
   --pane-pad-x: var(--sp-32);
-  --pane-edge: max(var(--pane-pad-x), calc((100% - var(--stream-max)) / 2));
   --row-bleed: var(--sp-12);
   --hero-pad-top: 46px;
   --hero-pad-bottom: 18px;

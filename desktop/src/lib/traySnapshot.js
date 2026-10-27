@@ -106,9 +106,9 @@ export function buildTraySnapshot({
   const activeName = connection?.name ?? connection?.id ?? "";
   const candidates = known
     ? [
-        ...groups.upcoming.map((job) => ({ job, id: connection?.id, name: activeName, own: true })),
+        ...groups.upcoming.map((job) => ({ job, id: connection?.id, name: activeName, folds: foldByProfile, accents: accentByProfile })),
         ...otherSchedules.filter((other) => other.id !== connection?.id).flatMap((other) =>
-          groupActivity({ scheduled: other.scheduled }, { nowMs }).upcoming.map((job) => ({ job, id: other.id, name: other.name ?? other.id ?? "", own: false })),
+          groupActivity({ scheduled: other.scheduled }, { nowMs }).upcoming.map((job) => ({ job, id: other.id, name: other.name ?? other.id ?? "", folds: other.folds, accents: other.accents })),
         ),
       ]
     : [];
@@ -117,14 +117,14 @@ export function buildTraySnapshot({
     ? candidates
         .sort((a, b) => a.job.nextAt - b.job.nextAt)
         .slice(0, MAX_NEXT_ROWS)
-        .map(({ job, id, name, own }) => ({
+        .map(({ job, id, name, folds, accents }) => ({
           id: `${id ?? ""}/${job.profile ?? ""}/${job.job_id ?? ""}`,
           title: clip(job.title || job.job_id),
           label: clip(profileLabel(job.profile ?? "")),
           at: new Date(job.nextAt * 1000).toISOString(),
           source: several ? clip(name, 40) : null,
-          fold: own ? foldByProfile?.[job.profile] ?? null : null,
-          accent: own ? accentByProfile?.[job.profile] ?? null : null,
+          fold: folds?.[job.profile] ?? null,
+          accent: accents?.[job.profile] ?? null,
           deeplink: job.profile ? { kind: "settings", profile: job.profile, id: "schedules", connection_id: id ?? "" } : null,
         }))
     : [];

@@ -5,14 +5,24 @@ import { describe, expect, it } from "vitest";
 const read = (file) => readFileSync(join(import.meta.dirname, "..", file), "utf8");
 
 describe("one left edge", () => {
-  it("declares the shared pane edge from the pane padding and the stream width", () => {
-    expect(read("styles/tokens.css")).toMatch(/--pane-edge:\s*max\(var\(--pane-pad-x\),\s*calc\(\(100% - var\(--stream-max\)\) \/ 2\)\);/);
+  it("pads the chat header and banners on the pane edge, not on the centred column", () => {
+    const css = read("styles/design-system.css");
+    expect(css).toMatch(/\.ds-chat-header \{[^}]*padding:[^;]*var\(--pane-pad-x\)/);
+    expect(css).toMatch(/\n\.banner \{[^}]*padding:[^;]*var\(--pane-pad-x\)/);
+    expect(css + read("styles/tokens.css")).not.toMatch(/--pane-edge/);
   });
 
-  it("pads the chat header and banners on that edge", () => {
-    const css = read("styles/design-system.css");
-    expect(css).toMatch(/\.ds-chat-header \{[^}]*padding:[^;]*var\(--pane-edge\)/);
-    expect(css).toMatch(/\n\.banner \{[^}]*padding:[^;]*var\(--pane-edge\)/);
+  it("keeps the settings body on the left edge, not in a centred column", () => {
+    const css = read("features/settings/Settings.module.css");
+    expect(css).toMatch(/\.body > \* \{[^}]*max-width: calc\(var\(--stream-max\) \+ 200px\)[^}]*width: 100%/);
+    expect(css).not.toMatch(/\.body > \* \{[^}]*margin-left: auto/);
+    expect(css).not.toMatch(/\.navLayout \{[^}]*max-width/);
+  });
+
+  it("lets the brief and identity textareas fill the settings column", () => {
+    const css = read("features/settings/Settings.module.css");
+    expect(css).toMatch(/\.briefingWrap \.textarea \{\s*max-width: none;/);
+    expect(css).not.toMatch(/\.identityBlock \{[^}]*max-width/);
   });
 
   it("keeps stream and composer on the same centred column", () => {

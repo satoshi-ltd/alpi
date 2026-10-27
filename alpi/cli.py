@@ -135,7 +135,7 @@ def _continue_specific_session(
 
 def _hydrate_from_path(engine: Engine, path: Path, console=None) -> bool:
     import json
-    from alpi.session import load_turns, turn_replayable
+    from alpi.session import clarification_messages, load_turns, turn_replayable
 
     try:
         data = json.loads(path.read_text())
@@ -169,6 +169,7 @@ def _hydrate_from_path(engine: Engine, path: Path, console=None) -> bool:
             # Byte-stable replay: the persisted host-context suffix re-enters exactly as the provider saw it live.
             text = _with_hc(text, getattr(t, "host_context", "") or "")
             engine.session.messages.append({"role": "user", "content": text})
+        engine.session.messages.extend(clarification_messages(t))
         if t.assistant or t.output_attachments:
             produced = _att.describe_produced(t.output_attachments)
             atext = f"{t.assistant}\n{produced}".strip() if produced else t.assistant

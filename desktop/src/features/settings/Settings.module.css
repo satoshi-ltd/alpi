@@ -177,10 +177,8 @@
 }
 
 .body > * {
-  max-width: var(--stream-max);
+  max-width: calc(var(--stream-max) + 200px);
   width: 100%;
-  margin-left: auto;
-  margin-right: auto;
   min-width: 0;
 }
 
@@ -433,7 +431,12 @@
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-width: 0;
   gap: var(--sp-8);
+}
+
+.briefingWrap .textarea {
+  max-width: none;
 }
 
 .codeChip {
@@ -826,7 +829,6 @@
 
 .identityBlock {
   flex: 1;
-  max-width: 520px;
 }
 
 .draftSpacer {
@@ -874,7 +876,6 @@
   grid-template-columns: 168px minmax(0, 1fr);
   gap: var(--sp-32);
   align-items: start;
-  max-width: calc(var(--stream-max) + 200px);
 }
 
 .rail {

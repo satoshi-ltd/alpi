@@ -15,8 +15,27 @@ describe("useOtherSchedules", () => {
     const connections = [conn("local"), conn("casa"), conn("mirai"), conn("down", "offline"), conn("off", "disabled")];
     const { result } = renderHook(() => useOtherSchedules({ connections, activeId: "casa" }));
     await waitFor(() => expect(result.current).toHaveLength(2));
-    expect(invoke.mock.calls.map(([, args]) => args.connectionId).sort()).toEqual(["local", "mirai"]);
+    expect(invoke.mock.calls.filter(([cmd]) => cmd === "activity_list").map(([, args]) => args.connectionId).sort()).toEqual(["local", "mirai"]);
     expect(result.current.map((r) => r.name).sort()).toEqual(["local", "mirai"]);
+  });
+
+  it("carries the fold and accent of each profile of that connection", async () => {
+    invoke.mockImplementation((cmd) =>
+      cmd === "profile_summaries"
+        ? Promise.resolve([{ name: "sentinel", fold: "diamond", accent: "#123456" }, { name: "default", fold: "default", accent: null }])
+        : Promise.resolve({ scheduled: [] }),
+    );
+    const { result } = renderHook(() => useOtherSchedules({ connections: [conn("casa"), conn("mirai")], activeId: "casa" }));
+    await waitFor(() => expect(result.current).toHaveLength(1));
+    expect(result.current[0].folds.sentinel).toBe("diamond");
+    expect(result.current[0].accents.sentinel).toBe("#123456");
+  });
+
+  it("keeps the schedule when the profiles of that connection cannot be read", async () => {
+    invoke.mockImplementation((cmd) => (cmd === "profile_summaries" ? Promise.reject(new Error("x")) : Promise.resolve({ scheduled: [{ profile: "p", job_id: "j" }] })));
+    const { result } = renderHook(() => useOtherSchedules({ connections: [conn("casa"), conn("mirai")], activeId: "casa" }));
+    await waitFor(() => expect(result.current).toHaveLength(1));
+    expect(result.current[0].folds).toEqual({});
   });
 
   it("drops a connection that fails and keeps the others", async () => {
@@ -35,7 +54,7 @@ describe("useOtherSchedules", () => {
       await vi.waitFor(() => expect(result.current).toHaveLength(1));
       invoke.mockRejectedValue(new Error("boom"));
       await vi.advanceTimersByTimeAsync(OTHER_SCHEDULES_POLL_MS);
-      expect(invoke).toHaveBeenCalledTimes(2);
+      expect(invoke.mock.calls.filter(([cmd]) => cmd === "activity_list")).toHaveLength(2);
       expect(result.current.map((r) => r.id)).toEqual(["mirai"]);
     } finally {
       vi.useRealTimers();
@@ -46,8 +65,8 @@ describe("useOtherSchedules", () => {
     invoke.mockResolvedValue({ scheduled: [] });
     const connections = [conn("casa"), { ...conn("mirai"), role: "member" }, conn("atlas")];
     renderHook(() => useOtherSchedules({ connections, activeId: "casa" }));
-    await waitFor(() => expect(invoke).toHaveBeenCalledTimes(1));
-    expect(invoke.mock.calls[0][1].connectionId).toBe("atlas");
+    await waitFor(() => expect(invoke).toHaveBeenCalled());
+    expect([...new Set(invoke.mock.calls.map(([, args]) => args.connectionId))]).toEqual(["atlas"]);
   });
 
   it("drops the rows of a connection that became active before the next load lands", async () => {

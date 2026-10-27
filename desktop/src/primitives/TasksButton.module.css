@@ -144,8 +144,8 @@
 
 .phaseTrigger {
   height: var(--ctl-40);
-  width: var(--ctl-40);
-  max-width: 220px;
+  width: var(--pop-xs);
+  max-width: var(--pop-xs);
 }
 
 .phaseBody {

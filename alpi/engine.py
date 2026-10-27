@@ -115,6 +115,8 @@ def _clip_text(text: str, cap: int) -> str:
 
 
 def _result_for_log(name: str, payload: str) -> str:
+    if name == "ask_user":
+        return _clip_text(payload, session.CLARIFICATION_CAP)
     if name != "peer":
         return truncate_result(payload)
     return _clip_text(_peer_reply_from_payload(payload), ASSISTANT_CAP)

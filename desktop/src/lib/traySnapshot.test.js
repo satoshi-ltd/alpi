@@ -60,6 +60,20 @@ describe("buildTraySnapshot next", () => {
     expect(buildTraySnapshot({ ...quiet([]), otherSchedules: [{ id: "mirai", name: "mirai", scheduled: [] }] }).next).toBeNull();
   });
 
+  it("draws each row with the fold and accent of its own connection", () => {
+    const at = (secs) => new Date(future(secs) * 1000).toISOString();
+    const own = [sched({ job_id: "h", title: "Here", profile: "doc", next_fire: at(7200) })];
+    const there = [sched({ job_id: "t", title: "There", profile: "sentinel", next_fire: at(600) })];
+    const s = buildTraySnapshot({
+      ...quiet(own),
+      connection: { ...online, name: "casa" },
+      foldByProfile: { doc: "owl" },
+      accentByProfile: { doc: "#aa0000" },
+      otherSchedules: [{ id: "mirai", name: "mirai", scheduled: there, folds: { sentinel: "diamond" }, accents: { sentinel: "#00aa00" } }],
+    });
+    expect(s.next.rows.map((r) => [r.title, r.fold, r.accent])).toEqual([["There", "diamond", "#00aa00"], ["Here", "owl", "#aa0000"]]);
+  });
+
   it("names no connection while only one contributes jobs", () => {
     const own = sched({ title: "Here" });
     const s = buildTraySnapshot({ ...quiet([own]), connection: { ...online, name: "casa" }, otherSchedules: [{ id: "mirai", name: "mirai", scheduled: [] }] });

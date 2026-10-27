@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.9.7 — 2026-10-27 — headers back on the left edge
+
+- The chat and workgroup headers, and the banners under them, sit on the pane's left edge again, in line with the pipeline bar.
+- Settings, Connections and the workgroup list start at that edge and stop at a maximum width; the brief and identity fields fill the settings column.
+- The task button in a workgroup header is wide enough for its phase and count again.
+- The menu bar's Coming up rows show each agent's own fold and colour, also for other connections.
+- Requires alpi 0.17.28.
+
 ## v0.9.6 — 2026-10-27 — running turns in the menu bar
 
 - The menu bar popover lists each running turn as a row with the agent's fold, the prompt on one line and how long it has run; a click opens it.

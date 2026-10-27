@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.17.40 — 2026-10-27 — answers you gave stay when a chat resumes
+
+- When you answer a question the agent asked mid-turn, the answer now comes back with the question after you resume the chat or rewrite a message, instead of being lost.
+- Failed, timed-out and oversized answers are never replayed as instructions.
+- The agent can record what a website does while it works in the browser: `trace_start` before the workflow, `trace_stop` after it. The recording keeps only names and shapes, never cookies, tokens or personal data, and an unfinished flow is never reported as done.
+
 ## v0.17.39 — 2026-10-27 — activity shows when a failing job last worked
 
 - The activity list gives every scheduled job the time of its last success next to its last run, so the apps can say "failed 48m ago · last ok 6h ago".

@@ -28,7 +28,7 @@ def test_schema_lists_all_actions() -> None:
     assert set(actions) == {
         "navigate", "snapshot", "click", "type",
         "scroll", "press", "screenshot",
-        "close", "logout",
+        "close", "logout", "trace_start", "trace_stop",
     }
 
 

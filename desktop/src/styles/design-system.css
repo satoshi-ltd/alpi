@@ -410,7 +410,7 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
   display: flex;
   align-items: center;
   gap: var(--sp-8);
-  padding: var(--sp-8) var(--pane-edge);
+  padding: var(--sp-8) var(--pane-pad-x);
   font-family: var(--font-sans);
   font-size: var(--text-meta);
   color: var(--ink);
@@ -811,7 +811,7 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
 
 .ds-chat-header {
 
-  padding: var(--hero-pad-top) var(--pane-edge) var(--hero-pad-bottom);
+  padding: var(--hero-pad-top) var(--pane-pad-x) var(--hero-pad-bottom);
   border-bottom: .5px solid var(--line);
   position: relative;
   background: var(--bg-pane);

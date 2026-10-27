@@ -42,6 +42,8 @@ def sessions_lock(sessions_dir: Path, *, exclusive: bool) -> Iterator[None]:
 # Per-tool log stored under each Turn. Short, human-friendly, JSON-safe.
 # We deliberately keep ``result`` capped so search snippets stay tight.
 TOOL_RESULT_CAP = 400
+CLARIFICATION_CAP = 4096
+CLARIFICATION_REPLAY_CAP = 8192
 SESSION_SCHEMA_VERSION = 3
 USER_CAP = 64 * 1024
 ASSISTANT_CAP = 64 * 1024
@@ -467,11 +469,43 @@ def _spans_from_serialized(raw: Any) -> list[dict[str, Any]]:
     return out
 
 
-# tools aren't replayed into the prompt, so they don't make a turn replayable.
+def clarification_messages(turn: Turn | dict[str, Any]) -> list[dict[str, str]]:
+    tools = turn.get("tools", []) if isinstance(turn, dict) else getattr(turn, "tools", [])
+    messages = []
+    remaining = CLARIFICATION_REPLAY_CAP
+    for tool in tools or []:
+        name = tool.get("name") if isinstance(tool, dict) else tool.name
+        ok = tool.get("ok", tool.get("status") != "failed") if isinstance(tool, dict) else tool.ok
+        if name != "ask_user" or not ok:
+            continue
+        args = _args_from_serialized(tool.get("args")) if isinstance(tool, dict) else tool.args
+        answer = _preview(tool.get("result")) if isinstance(tool, dict) else tool.result
+        answer = (answer or "").strip()
+        question = str(args.get("question") or "").strip()
+        if (
+            not question or len(question.encode("utf-8")) > 1024
+            or not answer or answer.endswith("…")
+            or len(answer.encode("utf-8")) > CLARIFICATION_CAP
+        ):
+            continue
+        if answer.startswith((
+            "No response received", "No user-facing surface accepted",
+            "Clarification handler failed:", "This run has no live user;",
+        )):
+            continue
+        text = f"User clarification provided during this turn:\nQuestion: {question}\nAnswer: {answer}"
+        size = len(text.encode("utf-8"))
+        if size > remaining:
+            break
+        messages.append({"role": "user", "content": text})
+        remaining -= size
+    return messages
+
+
 def turn_replayable(t: Turn | dict[str, Any]) -> bool:
     if isinstance(t, dict):
-        return bool(t.get("assistant") or t.get("output_attachments"))
-    return bool(getattr(t, "assistant", "") or getattr(t, "output_attachments", None))
+        return bool(t.get("assistant") or t.get("output_attachments") or clarification_messages(t))
+    return bool(getattr(t, "assistant", "") or getattr(t, "output_attachments", None) or clarification_messages(t))
 
 
 def truncate_result(raw: str) -> str:

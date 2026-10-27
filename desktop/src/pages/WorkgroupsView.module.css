@@ -2,7 +2,7 @@
 .header { position: sticky; top: 0; z-index: var(--z-chrome); display: flex; align-items: flex-end; justify-content: space-between; gap: var(--sp-16); }
 .titleBlock { min-width: 0; display: flex; flex: 1; flex-direction: column; gap: var(--sp-8); }
 .body { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: var(--sp-24) var(--pane-pad-x) 80px; }
-.table { width: 100%; max-width: var(--stream-max); margin: 0 auto; }
+.table { width: 100%; max-width: calc(var(--stream-max) + 200px); }
 .toolbar, .tableHead, .row { width: calc(100% + 2 * var(--row-bleed)); margin-inline: calc(-1 * var(--row-bleed)); }
 .toolbar { min-height: 42px; padding: 0 var(--sp-12); border-bottom: .5px solid var(--line); display: flex; align-items: center; gap: var(--sp-16); color: var(--ink-3); }
 .search { width: min(360px, 100%); height: var(--ctl-28); padding: 0 var(--sp-12); display: flex; align-items: center; gap: var(--sp-8); border-radius: var(--r-xs); background: var(--well); box-shadow: var(--well-edge); }
