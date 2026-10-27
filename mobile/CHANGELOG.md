@@ -14,6 +14,13 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.9.1 — 2026-10-27 — the exported PDF footer actually prints
+
+- A message or report exported to PDF now shows the alpi footer (mark, profile, server, date): it never printed on iOS, because the system print engine there silently drops a repeating table footer.
+- The footer prints once, at the end of the document, instead of repeating on every page.
+- An untitled export is now named `alpi-<profile>-<fingerprint>-<day>` instead of just `<profile>-<day>`, so two untitled messages from the same profile on the same day no longer share a file name.
+  Requires alpi 0.17.28.
+
 ## v0.9.0 — 2026-10-27 — a new icon, an Activity that triages, one scale
 
 - Activity (the phone page and the fold's detail pane) opens on chips with counts and groups failing jobs per profile under sticky headers, with `last ok` when the daemon sends it, a Retry per job and a confirmed Retry all for admins; Upcoming lists only future runs.
