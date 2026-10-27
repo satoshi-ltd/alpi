@@ -1,4 +1,4 @@
-from gen import LIGHT_ACCENT, FIELD, GROUP_TONE, app_version, button_heights, ALPI_ACCENT, DANGER, DOC_ACCENT, FRONT, PROFILES, diamond, di as ic, identity_glyph, mix, profile_mark, page, usage_chart
+from gen import LIGHT_ACCENT, FIELD, WELL, GROUP_TONE, app_version, button_heights, ALPI_ACCENT, DANGER, DOC_ACCENT, FRONT, PROFILES, diamond, di as ic, identity_glyph, mix, profile_mark, page, usage_chart
 
 INK, INK2, INK3, INK4 = "#141414", "#454545", "#6b6b6b", "#b4b4b4"
 LINE, LINE2, HOVER, SELECTED = "rgba(20,20,20,0.07)", "rgba(20,20,20,0.14)", "rgba(20,20,20,0.04)", "rgba(20,20,20,0.06)"
@@ -151,19 +151,19 @@ def code_chip(text):
 
 def selectish(inner, mono=True):
     fam = MONO if mono else "Geist, sans-serif"
-    return (f'<span style="display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 4px; background: {FIELD}; '
+    return (f'<span style="display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 4px; {WELL}; '
             f'font-family: {fam}; font-size: {11 if mono else 13}px; font-weight: {400 if mono else 500}; color: {INK if mono else INK2}; box-sizing: border-box">{inner}{ic("chev-d", 14, INK3)}</span>')
 
 
 def field_input(value, w=520, placeholder=False):
     color = INK3 if placeholder else INK
-    return (f'<span style="display: inline-flex; align-items: center; height: 32px; max-width: {w}px; flex: 1; padding: 0 12px; border-radius: 4px; background: {FIELD}; '
+    return (f'<span style="display: inline-flex; align-items: center; height: 32px; max-width: {w}px; flex: 1; padding: 0 12px; border-radius: 4px; {WELL}; '
             f'font-size: 13px; color: {color}; box-sizing: border-box">{value}</span>')
 
 
 def textarea(text, rows=3, w=520, placeholder=False):
     color = INK3 if placeholder else INK
-    return (f'<div style="width: 100%; max-width: {w}px; min-height: {max(88, rows * 21 + 20)}px; padding: 12px; border-radius: 4px; background: {FIELD}; '
+    return (f'<div style="width: 100%; max-width: {w}px; min-height: {max(88, rows * 21 + 20)}px; padding: 12px; border-radius: 4px; {WELL}; '
             f'font-size: 13px; line-height: 1.5; color: {color}; box-sizing: border-box">{text}</div>')
 
 
@@ -300,7 +300,7 @@ def d_body(inner, pad_bottom=80):
 
 def settings_rail(sections, active=0, query=""):
     value = f'<span style="font-size: 13px; color: {INK}">{query}</span>' if query else f'<span style="font-size: 13px; color: {INK3}">Search settings…</span>'
-    search = (f'<label style="display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 8px; margin-bottom: 8px; border-radius: 4px; background: {FIELD}; box-sizing: border-box">'
+    search = (f'<label style="display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 8px; margin-bottom: 8px; border-radius: 4px; {WELL}; box-sizing: border-box">'
               f'{ic("search", 14, INK3)}{value}</label>')
     rows = "".join(f'<span style="display: flex; align-items: center; height: 28px; padding: 0 12px; border-radius: 4px; background: {SELECTED if i == active else "transparent"}; font-size: 13px; font-weight: 500; color: {INK}">{t}</span>'
                    for i, t in enumerate(sections))
@@ -500,7 +500,7 @@ BLEED = "width: calc(100% + 24px); margin: 0 -12px; box-sizing: border-box"
 
 def search_toolbar(placeholder, right):
     return (f'<div style="display: flex; align-items: center; gap: 16px; min-height: 42px; padding: 0 12px; {BLEED}; border-bottom: 0.5px solid {LINE}; color: {INK3}">'
-            f'<label style="display: inline-flex; align-items: center; gap: 8px; width: 360px; height: 28px; padding: 0 12px; border-radius: 4px; background: {FIELD}; box-sizing: border-box">{ic("search", 14, INK3)}<span style="font-size: 13px; color: {INK3}">{placeholder}</span></label>'
+            f'<label style="display: inline-flex; align-items: center; gap: 8px; width: 360px; height: 28px; padding: 0 12px; border-radius: 4px; {WELL}; box-sizing: border-box">{ic("search", 14, INK3)}<span style="font-size: 13px; color: {INK3}">{placeholder}</span></label>'
             f'<span style="margin-left: auto; display: flex; align-items: center; gap: 16px">{right}</span></div>')
 
 

@@ -89,19 +89,21 @@ describe("paper fields", () => {
     ["styles/design-system.css", ".ds-field, .field"],
   ];
 
-  it.each(FIELDS)("makes %s %s a borderless 4 px well", (file, selector) => {
+  it.each(FIELDS)("makes %s %s a 4 px well on the elevated surface with a hairline edge", (file, selector) => {
     const body = rule(read(file), selector);
     expect(body).toMatch(/background:\s*var\(--well\)/);
+    expect(body).toMatch(/box-shadow:\s*var\(--well-edge\)/);
     expect(body).toMatch(/border-radius:\s*var\(--r-xs\)/);
     expect(body).not.toMatch(/border:\s*[.\d]+px solid var\(--line/);
   });
 
-  it("focuses a well by deepening it and ringing it, never with an underline or a halo", () => {
+  it("focuses a well by sharpening its edge, never with a darker fill, an underline or a halo", () => {
     const tokens = read("styles/tokens.css");
-    expect(tokens).toMatch(/--well-ring:\s*inset 0 0 0 1px var\(--focus-border\);/);
+    expect(tokens).toMatch(/--well-edge:\s*inset 0 0 0 1px var\(--line-2\);/);
+    expect(tokens).toMatch(/--well-ring:\s*inset 0 0 0 1px var\(--edge\);/);
     const FOCUS = [
-      ["features/settings/Settings.module.css", ".input:focus-visible"],
       ["primitives/Composer.module.css", ".body:has(.input:focus)"],
+      ["features/settings/Settings.module.css", ".input:focus-visible"],
       ["primitives/Dropdown.module.css", ".triggerField.triggerField.triggerOpen:hover"],
       ["styles/design-system.css", ".ds-field:focus, .field:focus"],
       ["features/ConnectionSwitcher.module.css", ".payload:focus,\n.payload:focus-visible"],
@@ -115,6 +117,28 @@ describe("paper fields", () => {
       expect(body, selector).toMatch(/box-shadow:\s*var\(--well-ring\)/);
       expect(body, selector).not.toMatch(/border-bottom|focus-ring/);
     }
+  });
+});
+
+describe("disabled fields", () => {
+  it("turn grey only when disabled, with no edge", () => {
+    expect(read("primitives/Composer.module.css")).toMatch(/\.body\[data-disabled="true"\]:not\(\[data-busy\]\)\s*\{[^}]*background:\s*var\(--well-off\);[^}]*box-shadow:\s*none;/);
+    expect(read("styles/design-system.css")).toMatch(/\.ds-field:disabled, \.field:disabled \{[^}]*background:\s*var\(--well-off\);\s*box-shadow:\s*none;/);
+    expect(read("features/settings/Settings.module.css")).toMatch(/\.input:disabled,\s*\.textarea:disabled \{[^}]*background:\s*var\(--well-off\);\s*box-shadow:\s*none;/);
+    expect(read("primitives/Dropdown.module.css")).toMatch(/\.triggerField\.triggerField:disabled \{[^}]*background:\s*var\(--well-off\);\s*box-shadow:\s*none;/);
+  });
+
+  it("keeps a composer white while it is only busy sending", () => {
+    expect(read("pages/WorkgroupView.jsx")).toMatch(/busy=\{posting && !paused\}/);
+    expect(read("primitives/Composer.jsx")).toMatch(/data-busy=\{busy \|\| undefined\}/);
+  });
+
+  it("keeps the input edge token for inputs, and a stronger ring on rows and segments", () => {
+    for (const file of ["styles/design-system.css", "primitives/JumpToLatest.module.css"]) {
+      expect(read(file)).not.toMatch(/(\.ds-seg > button:focus-visible|\.jump[^{]*:focus-visible)[^{]*\{[^}]*--well-ring/);
+    }
+    expect(read("styles/design-system.css")).toMatch(/\.ds-seg > button:focus-visible \{[^}]*inset 0 0 0 1px var\(--focus-border\)/);
+    expect(read("features/NotificationsModal.module.css")).toMatch(/\.row:focus-visible \{ box-shadow: inset 0 0 0 1px var\(--focus-border\); \}/);
   });
 });
 

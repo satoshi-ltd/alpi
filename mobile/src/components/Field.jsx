@@ -26,14 +26,13 @@ export function Field({
   error,
 }) {
   const { colors, fonts, fontSizes, mobile } = useTheme();
-  const [well, focus] = useWell(colors, !!error);
+  const [well, focus] = useWell(colors, !!error, !editable);
   return (
     <View style={{ gap: space.s2 }}>
       {label ? <FieldLabel>{label}</FieldLabel> : null}
       <View
         style={{
           ...well,
-          ...(editable ? null : { backgroundColor: colors.bgPane }),
           paddingHorizontal: space.s5,
           paddingVertical: multiline ? 12 : 0,
           minHeight: multiline ? rows * 22 + 24 : mobile.inputH,

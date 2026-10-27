@@ -33,7 +33,7 @@
   flex-direction: column;
 }
 .row:hover { background: var(--hover); }
-.row:focus-visible { box-shadow: var(--well-ring); }
+.row:focus-visible { box-shadow: inset 0 0 0 1px var(--focus-border); }
 .rowActive,
 .rowActive:hover { background: var(--bg-pane); }
 

@@ -14,6 +14,7 @@
   border: .5px solid transparent;
   border-radius: var(--r-xs);
   background: var(--well);
+  box-shadow: var(--well-edge);
   color: var(--ink);
   font: inherit;
   line-height: 18px;

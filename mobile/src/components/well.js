@@ -1,17 +1,16 @@
 import { useState } from 'react';
-import { mixHex } from '../../../common/color.mjs';
 import { radii } from '../theme/tokens';
 
-export function wellStyle(colors, { focused = false, error = false } = {}) {
+export function wellStyle(colors, { focused = false, error = false, disabled = false } = {}) {
   return {
-    backgroundColor: focused ? mixHex(colors.field, 0.9, colors.ink) : colors.field,
+    backgroundColor: disabled ? colors.field : colors.bgElev,
     borderRadius: radii.xs,
-    borderWidth: 2,
-    borderColor: error ? colors.dangerText : focused ? colors.focus : 'transparent',
+    borderWidth: 1,
+    borderColor: disabled ? 'transparent' : error ? colors.dangerText : focused ? colors.edge : colors.line2,
   };
 }
 
-export function useWell(colors, error = false) {
+export function useWell(colors, error = false, disabled = false) {
   const [focused, setFocused] = useState(false);
-  return [wellStyle(colors, { focused, error }), { onFocus: () => setFocused(true), onBlur: () => setFocused(false) }];
+  return [wellStyle(colors, { focused, error, disabled }), { onFocus: () => setFocused(true), onBlur: () => setFocused(false) }];
 }

@@ -112,9 +112,11 @@
   --focus-border: var(--focus);
   --focus-ring: 0 0 0 4px color-mix(in srgb, var(--ink) 6%, transparent);
   --veil: color-mix(in srgb, var(--bg) 72%, transparent);
-  --well: var(--field);
-  --well-focus: color-mix(in srgb, var(--ink) 6%, var(--field));
-  --well-ring: inset 0 0 0 1px var(--focus-border);
+  --well: var(--bg-elev);
+  --well-edge: inset 0 0 0 1px var(--line-2);
+  --well-focus: var(--bg-elev);
+  --well-ring: inset 0 0 0 1px var(--edge);
+  --well-off: var(--field);
 
   --pane-pad-x: var(--sp-32);
   --pane-edge: max(var(--pane-pad-x), calc((100% - var(--stream-max)) / 2));

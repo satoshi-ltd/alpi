@@ -29,9 +29,10 @@ describe("surface ladder", () => {
     expect(declared("bg-elev")).toEqual([palettes.light.bgElev, palettes.dark.bgElev, palettes.dark.bgElev]);
   });
 
-  it("draws every well and field on the field tone and focuses it a step deeper", () => {
-    expect(TOKENS).toMatch(/--well:\s*var\(--field\);/);
-    expect(TOKENS).toMatch(/--well-focus:\s*color-mix\(in srgb, var\(--ink\) 6%, var\(--field\)\);/);
+  it("draws every well on the elevated surface, keeps that fill on focus and leaves the field tone to disabled wells", () => {
+    expect(TOKENS).toMatch(/--well:\s*var\(--bg-elev\);/);
+    expect(TOKENS).toMatch(/--well-focus:\s*var\(--bg-elev\);/);
+    expect(TOKENS).toMatch(/--well-off:\s*var\(--field\);/);
   });
 
   it.each([

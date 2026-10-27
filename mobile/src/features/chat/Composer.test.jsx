@@ -153,15 +153,27 @@ describe('composer controls', () => {
 });
 
 describe('composer states', () => {
-  it('dims only the controls when disabled and keeps the reason legible on an edged well', () => {
+  it('dims only the controls when disabled and greys the well with no edge', () => {
     render(<Composer onSend={() => {}} disabled onPickAttachment={() => {}} mentionSource={() => []} modelChip={{ label: 'm', onPress: () => {} }} />);
     const styles = [...document.querySelectorAll('div[data-style]')].map((d) => JSON.parse(d.getAttribute('data-style')));
     expect(styles.some((st) => st.opacity != null && st.opacity < 1)).toBe(false);
     for (const label of ['Mention a peer', 'Model and effort: m', 'Attach file', 'Send']) {
       expect(JSON.parse(screen.getByLabelText(label).getAttribute('data-style')).opacity).toBe(0.45);
     }
-    expect(styles.some((st) => st.borderColor === palettes.light.edge)).toBe(true);
+    const well = styles.find((st) => st.borderWidth === 1);
+    expect(well.backgroundColor).toBe(palettes.light.field);
+    expect(well.borderColor).toBe('transparent');
     expect(field().getAttribute('data-placeholder-color')).toBe(palettes.light.ink2);
+  });
+
+  it('rests on the elevated surface and focuses by sharpening only the edge', () => {
+    render(<Composer onSend={() => {}} />);
+    const well = () => [...document.querySelectorAll('div[data-style]')].map((d) => JSON.parse(d.getAttribute('data-style'))).find((st) => st.borderWidth === 1);
+    expect(well()).toMatchObject({ backgroundColor: palettes.light.bgElev, borderColor: palettes.light.line2 });
+    fireEvent.focus(field());
+    expect(well()).toMatchObject({ backgroundColor: palettes.light.bgElev, borderColor: palettes.light.edge, borderWidth: 1 });
+    fireEvent.blur(field());
+    expect(well().borderColor).toBe(palettes.light.line2);
   });
 
   it('shows no Resume action under a disabled composer', () => {

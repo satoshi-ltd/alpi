@@ -36,5 +36,5 @@
 
 .btn:focus-visible {
   outline: none;
-  box-shadow: var(--shadow-edge-sm), var(--well-ring);
+  box-shadow: var(--shadow-edge-sm), inset 0 0 0 1px var(--focus-border);
 }

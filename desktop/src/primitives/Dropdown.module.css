@@ -45,6 +45,7 @@
   height: var(--ctl-32);
   padding: 0 var(--sp-12);
   background: var(--well);
+  box-shadow: var(--well-edge);
 }
 
 .triggerField.triggerField:hover {
@@ -66,6 +67,11 @@
 
 .triggerOpen {
   background: var(--hover);
+}
+
+.triggerField.triggerField:disabled {
+  background: var(--well-off);
+  box-shadow: none;
 }
 
 .triggerList {
@@ -191,6 +197,7 @@
   border-radius: var(--r-xs);
   border: .5px solid transparent;
   background: var(--well);
+  box-shadow: var(--well-edge);
   font: inherit;
   font-size: var(--text-meta);
   color: var(--ink);

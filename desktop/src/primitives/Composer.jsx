@@ -10,6 +10,7 @@ export default function Composer({
   onCancel = null,
   stopping = false,
   disabled = false,
+  busy = false,
   canSend = true,
   placeholder = "Send a message…",
   sendTitle = "Send (⌘↵)",
@@ -175,6 +176,7 @@ export default function Composer({
       <div
         className={styles.body}
         data-disabled={disabled || undefined}
+        data-busy={busy || undefined}
         onMouseDown={focusOnBlankClick}
       >
         {topBar && <div className={styles.topBar}>{topBar}</div>}

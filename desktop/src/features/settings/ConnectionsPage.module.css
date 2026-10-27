@@ -3,7 +3,7 @@
 .table { width: 100%; max-width: var(--stream-max); margin: 0 auto; }
 .tableToolbar, .tableHead, .group, .auditToolbar, .auditHead, .auditRow { margin-inline: calc(-1 * var(--row-bleed)); }
 .tableToolbar { min-height: 42px; padding: 0 var(--sp-12); border-bottom: .5px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: var(--sp-12); color: var(--ink-3); }
-.search { width: min(360px, 100%); height: var(--ctl-28); padding: 0 var(--sp-12); display: flex; align-items: center; gap: var(--sp-8); border-radius: var(--r-xs); background: var(--well); }
+.search { width: min(360px, 100%); height: var(--ctl-28); padding: 0 var(--sp-12); display: flex; align-items: center; gap: var(--sp-8); border-radius: var(--r-xs); background: var(--well); box-shadow: var(--well-edge); }
 .search:focus-within { background: var(--well-focus); box-shadow: var(--well-ring); }
 .search svg { flex-shrink: 0; }
 .search input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font: inherit; }

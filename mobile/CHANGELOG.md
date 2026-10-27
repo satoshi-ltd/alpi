@@ -14,6 +14,13 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.9.4 — 2026-10-27 — white inputs
+
+- Every input, the composer included, now rests on the raised surface (white in light) with a hairline edge instead of a grey well.
+- Focus keeps the fill and only darkens the edge, so typing no longer turns the box into a dark slab.
+- Grey now means disabled: a paused or offline composer and a read-only field turn grey with no edge.
+  Requires alpi 0.17.28.
+
 ## v0.9.3 — 2026-10-27 — a calmer Activity
 
 - A filter chip appears only while it has something in it, and the row goes away when everything is one kind.

@@ -206,12 +206,12 @@ describe('composer controls', () => {
 });
 
 describe('composer matches the desktop card', () => {
-  it('draws the composer as a borderless 4 pt well and rules it off from the transcript, as desktop does', () => {
+  it('draws the composer as a 4 pt well on the elevated surface with a hairline edge and rules it off from the transcript, as desktop does', () => {
     const { container } = render(<Composer placeholder="Message @doc…" onPickAttachment={() => {}} />);
     const c = styleOf(card(container));
-    expect(c.backgroundColor).toBe(tokens.palettes.light.field);
+    expect(c.backgroundColor).toBe(tokens.palettes.light.bgElev);
     expect(c.borderRadius).toBe(4);
-    expect(c.borderColor).toBe('transparent');
+    expect(c.borderColor).toBe(tokens.palettes.light.line2);
     expect(styleOf(container.firstChild).borderTopWidth).toBeGreaterThan(0);
   });
 

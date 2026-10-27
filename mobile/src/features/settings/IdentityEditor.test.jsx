@@ -50,6 +50,17 @@ describe('IdentityEditor', () => {
     expect(h.toast).toHaveBeenCalledWith(expect.objectContaining({ title: 'Identity saved' }));
   });
 
+  it('keeps the box on its normal well while saving and ignores typing until the save lands', async () => {
+    render(<IdentityEditor profileId="doc" profile={profile} call={vi.fn(() => new Promise(() => {}))} />);
+    const box = screen.getByPlaceholderText('public identity — visible to peers');
+    fireEvent.change(box, { target: { value: 'Village doctor' } });
+    fireEvent.click(screen.getByLabelText('Save'));
+    await waitFor(() => expect(screen.getByLabelText('Save').disabled).toBe(true));
+    expect(box.readOnly).toBe(false);
+    fireEvent.change(box, { target: { value: 'Village doctor, retired' } });
+    expect(box.value).toBe('Village doctor');
+  });
+
   it('discards an edit back to the saved bio', () => {
     render(<IdentityEditor profileId="doc" profile={profile} call={vi.fn()} />);
     const box = screen.getByPlaceholderText('public identity — visible to peers');

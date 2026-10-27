@@ -11,6 +11,13 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.9.5 — 2026-10-27 — white inputs
+
+- Every input, the composer included, now rests on the raised surface (white in light) with a hairline edge instead of a grey well.
+- Focus keeps the fill and only darkens the edge, so typing no longer turns the box into a dark slab.
+- Grey now means disabled: a paused composer and disabled fields and pickers turn grey with no edge.
+  Requires alpi 0.17.28.
+
 ## v0.9.4 — 2026-10-27 — Activity reads by day
 
 - Upcoming runs are grouped under Today, Tomorrow and then the weekday, each on one line with the time first and the profile at the right.

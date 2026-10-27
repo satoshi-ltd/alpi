@@ -1013,6 +1013,7 @@ function WorkgroupComposer({ paused, offline, mentions, onSend, hubName, hubAcce
       onChange={updateText}
       onSubmit={trySend}
       disabled={paused || posting}
+      busy={posting && !paused}
       canSend={canSend}
       accent={hubAccent ?? null}
       placeholder={placeholder}

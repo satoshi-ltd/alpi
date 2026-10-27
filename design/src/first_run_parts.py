@@ -65,8 +65,8 @@ def dbtn(label, kind="primary", h=40, w=None, flush=False):
 
 
 def dfield(value, w=360, h=40, placeholder=True, focus=False):
-    ring = f"box-shadow: inset 0 0 0 2px {INK};" if focus else ""
-    return (f'<span style="display: inline-flex; align-items: center; width: {w}px; height: {h}px; padding: 0 12px; box-sizing: border-box; border-radius: 4px; background: {HOVER}; {ring} '
+    ring = f"box-shadow: inset 0 0 0 1px {'#8c8c8c' if focus else LINE2};"
+    return (f'<span style="display: inline-flex; align-items: center; width: {w}px; height: {h}px; padding: 0 12px; box-sizing: border-box; border-radius: 4px; background: var(--bg-elev, #ffffff); {ring} '
             f'font-family: {MONO}; font-size: 13px; color: {INK3 if placeholder else INK}; white-space: nowrap; overflow: hidden">{value}</span>')
 
 
@@ -311,8 +311,8 @@ def q_label(text):
 
 def q_field(value="", focus=False):
     shown = value or "alpi://device?url=wss://…&amp;name=…&amp;pairing_token=…"
-    ring = INK2 if focus else "transparent"
-    return (f'<div style="min-height: 92px; box-sizing: border-box; padding: 12px; border-radius: 4px; border: 2px solid {ring}; background: var(--field); font-family: {MONO}; '
+    ring = "#8c8c8c" if focus else LINE2
+    return (f'<div style="min-height: 92px; box-sizing: border-box; padding: 12px; border-radius: 4px; border: 1px solid {ring}; background: var(--bg-elev, #ffffff); font-family: {MONO}; '
             f'font-size: 12px; line-height: 1.3; color: {INK if value else INK4}; word-break: break-all">{shown}</div>')
 
 

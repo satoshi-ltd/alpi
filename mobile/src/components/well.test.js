@@ -1,21 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { mixHex } from '../../../common/color.mjs';
 import { palettes } from '../theme/tokens';
 import { wellStyle } from './well';
 
 describe('a field is a well', () => {
-  it.each(['light', 'dark'])('sits borderless in the %s input tone with the 4 pt sheet corner', (mode) => {
+  it.each(['light', 'dark'])('rests on the %s elevated surface with a hairline edge and the 4 pt sheet corner', (mode) => {
     const colors = palettes[mode];
-    expect(wellStyle(colors)).toEqual({ backgroundColor: colors.field, borderRadius: 4, borderWidth: 2, borderColor: 'transparent' });
+    expect(wellStyle(colors)).toEqual({ backgroundColor: colors.bgElev, borderRadius: 4, borderWidth: 1, borderColor: colors.line2 });
   });
 
-  it.each(['light', 'dark'])('deepens one tone and rings with the focus token when focused in %s, never an underline', (mode) => {
+  it.each(['light', 'dark'])('keeps its fill and only sharpens the edge when focused in %s, never an underline', (mode) => {
     const colors = palettes[mode];
     const focused = wellStyle(colors, { focused: true });
-    expect(focused.backgroundColor).toBe(mixHex(colors.field, 0.9, colors.ink));
-    expect(focused.borderColor).toBe(colors.focus);
-    expect(focused.borderWidth).toBe(2);
+    expect(focused.backgroundColor).toBe(colors.bgElev);
+    expect(focused.borderColor).toBe(colors.edge);
+    expect(focused.borderWidth).toBe(1);
     expect(Object.keys(focused).some((key) => key.startsWith('borderBottom'))).toBe(false);
+  });
+
+  it.each(['light', 'dark'])('turns grey with no edge only when disabled in %s', (mode) => {
+    const colors = palettes[mode];
+    expect(wellStyle(colors, { disabled: true, focused: true })).toMatchObject({ backgroundColor: colors.field, borderColor: 'transparent', borderWidth: 1 });
   });
 
   it('rings an invalid field in the danger text colour', () => {

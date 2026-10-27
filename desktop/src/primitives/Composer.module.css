@@ -10,6 +10,7 @@
 .body {
   background: var(--well);
   border: .5px solid transparent;
+  box-shadow: var(--well-edge);
   border-radius: var(--r-xs);
   padding: calc(var(--sp-16) + .5px) calc(var(--sp-16) - .5px) calc(var(--sp-12) - .5px);
   display: flex;
@@ -49,6 +50,11 @@
 .body:has(.input:focus) {
   background: var(--well-focus);
   box-shadow: var(--well-ring);
+}
+
+.body[data-disabled="true"]:not([data-busy]) {
+  background: var(--well-off);
+  box-shadow: none;
 }
 
 .body button,

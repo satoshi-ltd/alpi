@@ -1,4 +1,4 @@
-from gen import ic as _ic, DANGER, DOC_ACCENT, EDGE, FIELD, FLOAT_EDGE, diamond, di as ic, identity_glyph, m_button, mi, mix, page, profile_mark
+from gen import ic as _ic, DANGER, DOC_ACCENT, EDGE, FIELD, WELL, FLOAT_EDGE, diamond, di as ic, identity_glyph, m_button, mi, mix, page, profile_mark
 from desktop_boards import ELEV, HOVER, INK, INK2, INK3, INK4, LG_FLOAT, LINE, LINE2, MONO, PANE, RING_CTRL, SELECTED, SIDE, SM_FLOAT
 
 AMBER = "#14110c"
@@ -179,7 +179,8 @@ def d_composer(text="", state="idle", hint=True, model=True, name="alpi", model_
         from desktop_boards import button
         act = button(reason_action, "secondary", "sm") if reason_action else ""
         why = f'<div style="display: flex; align-items: center; gap: 12px; min-height: 28px"><span style="flex: 1; min-width: 0; font-size: 13px; font-weight: 500; color: {INK2}">{reason}</span>{act}</div>'
-    return (f'<div style="display: flex; flex-direction: column; gap: 8px; padding: 16px 16px 12px; border-radius: 4px; background: {FIELD}">'
+    well = f"background: {FIELD}" if dim and not reason else WELL
+    return (f'<div style="display: flex; flex-direction: column; gap: 8px; padding: 16px 16px 12px; border-radius: 4px; {well}">'
             f'<div style="min-height: 24px; {fade}">{value}</div>{why}'
             f'<div style="display: flex; align-items: center; gap: 8px; {fade}">{hints}<span style="flex: 1"></span>{iconbtn("clip", 28, 16)}{picker}{d_send(state)}</div></div>')
 
@@ -323,7 +324,7 @@ def desktop_conversation():
 {row(spec("Attachments · composer and message variants", d_attachment("deploy-report.pdf", "1.2 MB") + d_attachment("chart.png", "png · 240 KB", "message"), 380), spec("Produced images · 2-column grid, 4:3", d_images(), 380), spec("Ask user · answered and unanswered", d_ask_answered() + d_ask_missing(), 380))}
 {row(spec("Composer · idle", d_composer(), 580), spec("Composer · ready to send", d_composer("Open a fix for the lint error", "ready"), 580))}
 {row(spec("Composer · busy (Stop)", d_composer("Open a fix for the lint error", "busy"), 580), spec("Mention popover · peer alias caption, 1 px edge ring · jump to latest", row(d_mention(), d_jump()), 580))}
-{row(spec("Composer · model label capped at 160 px with an ellipsis, the effort stays after it", d_composer(model_name="claude-sonnet-4-5-20251001-extended", effort="medium"), 580), spec("Composer · paused: only the input dims; the banner above is the one place that says it and offers Resume", d_composer(name="doc", dim=True, placeholder="Paused — resume to chat"), 580))}
+{row(spec("Composer · model label capped at 160 px with an ellipsis, the effort stays after it", d_composer(model_name="claude-sonnet-4-5-20251001-extended", effort="medium"), 580), spec("Composer · paused: grey only here, with no edge; the input dims and the banner above is the one place that says it and offers Resume", d_composer(name="doc", dim=True, placeholder="Paused — resume to chat"), 580))}
 {row(spec("Composer · offline: the placeholder stays normal, the reason line is the only offline text", d_composer(name="doc", dim=True, reason="Daemon offline — sending paused"), 580), spec("Mention popover · empty rows: no peers, no match", d_mention(empty="No peers yet. Add one in Connections.") + d_mention(empty="No peer matches @zz"), 580))}
 </div>"""
     return page("System · desktop conversation", 1280, 3040, body)
@@ -380,7 +381,7 @@ def d_pipeline_detail():
 
 def d_wg_composer():
     hint = f'<span style="font-size: 11px; color: {INK3}"><span style="color: {INK3}">→</span> {identity_glyph("alpi", AMBER, 16)} {mono("@alpi", 11, INK2)} formulates as {mono("#task #&lt;slug&gt;", 11, INK2)}</span>'
-    return (f'<div style="display: flex; flex-direction: column; gap: 8px; padding: 16px 16px 12px; border-radius: 4px; background: {FIELD}">'
+    return (f'<div style="display: flex; flex-direction: column; gap: 8px; padding: 16px 16px 12px; border-radius: 4px; {WELL}">'
             f'<span style="font-size: 13px; color: {INK3}">Send a message — use @&lt;peer&gt; or #task #&lt;slug&gt; to open</span>'
             f'<div style="display: flex; align-items: center; gap: 6px">{hint}<span style="flex: 1"></span>{kbd("⌘")}{kbd("↵")}{d_send()}</div></div>')
 
@@ -484,18 +485,18 @@ def m_composer(text="", state="idle", workgroup=False, name="alpi", chip="sonnet
     dim = (lambda inner: f'<span style="display: inline-flex; min-width: 0; opacity: 0.45">{inner}</span>') if paused else (lambda inner: inner)
     box = lambda inner, bg: f'<span style="width: 36px; height: 36px; border-radius: 4px; background: {bg}; display: inline-flex; align-items: center; justify-content: center">{inner}</span>'
     if state == "busy":
-        send = box('<span style="width: 12px; height: 12px; background: #141414; border-radius: 2px"></span>', accent)
+        send = box('<span style="width: 12px; height: 12px; background: #ffffff; border-radius: 2px"></span>', accent)
     elif state == "ready":
-        send = box(mi("up", 14, "#141414"), accent)
+        send = box(mi("up", 14, "#ffffff"), accent)
     else:
         send = box(mi("up", 16, INK3), LINE)
     clip = "" if workgroup else dim(f'<span style="width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center">{mi("clip", 20, INK3)}</span>')
     model = "" if workgroup else dim(m_model_chip(chip))
     mention_html = dim(m_mention_chip()) if (workgroup if mention is None else mention) else ""
     controls = f'<div style="display: flex; align-items: center; gap: 8px">{mention_html}{model}<span style="flex: 1"></span>{clip}{dim(send)}</div>'
-    edge = f"border: 2px solid {EDGE};" if paused else "border: 2px solid transparent;"
+    well = "border: 1px solid transparent; background: var(--field)" if paused else f"border: 1px solid {LINE2}; background: {ELEV}"
     resume_html = f'<div style="display: flex; justify-content: flex-end; padding-top: 8px">{m_button("Resume profile", "secondary", "lg")}</div>' if resume else ""
-    return (f'<div style="padding: 8px 16px; border-top: 0.5px solid {LINE}; background: {PANE}"><div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px 8px; box-sizing: border-box; border-radius: 4px; {edge} background: var(--field)">'
+    return (f'<div style="padding: 8px 16px; border-top: 0.5px solid {LINE}; background: {PANE}"><div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px 8px; box-sizing: border-box; border-radius: 4px; {well}">'
             f'{value}{controls}</div>{resume_html}</div>')
 
 

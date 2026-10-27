@@ -140,6 +140,7 @@
   padding: 0 var(--sp-12);
   border-radius: var(--r-xs);
   background: var(--well);
+  box-shadow: var(--well-edge);
 }
 
 .searchIcon {

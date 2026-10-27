@@ -65,8 +65,7 @@ def field(placeholder, p, s, width=None, focus=False):
         if focus:
             edge += f" box-shadow: 0 0 0 4px {p['hover']};"
     elif s["field"] == "well":
-        ring = f" box-shadow: inset 0 0 0 1px color-mix(in srgb, {p['ink']} 30%, transparent);" if focus else ""
-        edge = f"background: {p['selected'] if focus else p['hover']}; border-radius: {s['radius']}px;{ring}"
+        edge = f"background: {p['pane']}; box-shadow: inset 0 0 0 1px {'#8c8c8c' if focus else p['line2']}; border-radius: {s['radius']}px;"
     else:
         edge = f"background: transparent; border-bottom: {'1.5px' if focus else '1px'} solid {p['ink'] if focus else p['line2']};"
     return (f'<span style="{w} height: 32px; padding: 0 10px; box-sizing: border-box; display: inline-flex; align-items: center; {edge} '

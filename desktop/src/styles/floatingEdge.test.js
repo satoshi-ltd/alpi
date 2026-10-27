@@ -42,7 +42,7 @@ describe("floating surfaces", () => {
   });
 
   it("keeps the jump button's focus ring on top of the edge", () => {
-    expect(read("primitives/JumpToLatest.module.css")).toMatch(/box-shadow:\s*var\(--shadow-edge-sm\),\s*var\(--well-ring\)/);
+    expect(read("primitives/JumpToLatest.module.css")).toMatch(/box-shadow:\s*var\(--shadow-edge-sm\),\s*inset 0 0 0 1px var\(--focus-border\)/);
   });
 
   it("draws the shared Popover with the small ring and no border", () => {

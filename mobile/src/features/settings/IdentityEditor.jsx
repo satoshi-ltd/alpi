@@ -58,11 +58,10 @@ export function IdentityEditor({ profileId, profile, call, onSaved }) {
     <View style={{ gap: space.s3 }}>
       <Field
         value={text}
-        onChangeText={setText}
+        onChangeText={busy === 'save' ? () => {} : setText}
         multiline
         rows={3}
         placeholder="public identity — visible to peers"
-        editable={busy !== 'save'}
       />
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s4 }}>
         {dirty ? (

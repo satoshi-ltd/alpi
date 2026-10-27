@@ -1,4 +1,4 @@
-from gen import DANGER, DOC_ACCENT, FIELD, diamond, di as ic, identity_glyph, page, profile_mark
+from gen import DANGER, DOC_ACCENT, FIELD, WELL, diamond, di as ic, identity_glyph, page, profile_mark
 from desktop_boards import (ALPI_ACCENT, AMBER, EDGE, ELEV, LG_FLOAT, SM_FLOAT, RING, HOVER, INK, INK2, INK3, INK4, LINE, LINE2, MONO, PANE, SELECTED, SIDE, button, d_sidebar, wg_mark, eyebrow, field_input,
                             iconbtn, kbd, key_hint, palette, palette_row, selectish, small_diamond)
 
@@ -28,7 +28,7 @@ def dropdown_trigger(label):
 
 def ds_field(value, w=200):
     return (f'<span style="display: inline-flex; align-items: center; width: {w}px; height: 32px; padding: 0 12px; box-sizing: border-box; border-radius: 4px; '
-            f'background: {FIELD}; font-size: 13px; color: {INK}">{value}</span>')
+            f'{WELL}; font-size: 13px; color: {INK}">{value}</span>')
 
 
 def checkbox(on=False):

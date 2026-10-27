@@ -1954,10 +1954,14 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
 - **Shared look and interaction rules of the apps.** `common/tokens.mjs` (and
   `desktop/src/styles/tokens.css`, held equal by a parity test) is the one value
   source. The palette adds `edge` (control-boundary ink at about 3:1: checkbox,
-  radio, toggle off-track, input and chip borders), `focus` (the focus ring, 50 %
-  ink), and the surface tones `card` (group card) and `field` (well, field), whose
+  radio, toggle off-track, chip borders and the focused input edge), `focus` (the focus ring, 50 %
+  ink), and the surface tones `card` (group card) and `field` (disabled inputs and quiet fills), whose
   ladder descends in light and ascends in dark (`ladderDirection`; dark `bgElev` is
-  `#202020`). Scales: spacing 4/8/12/16/24/32 (`spaceScale`, `--sp-*`), control
+  `#202020`). Every input, the composer included, is one well: it rests on `bgElev`
+  with a 1 px `line2` edge (`--well`, `--well-edge`; mobile `wellStyle`), focus keeps
+  the fill and darkens only the edge to `edge`, at 3:1 (`--well-ring`), an invalid one rings
+  in danger, and grey `field` with no edge means disabled or read-only
+  (`--well-off`); a composer that is only sending stays on the raised surface. Scales: spacing 4/8/12/16/24/32 (`spaceScale`, `--sp-*`), control
   heights 24/28/32/40 (`controlHeight`, `--ctl-*`), type 11/13/15/18/22/28 at
   weights 400/500/600 (`typeLadder`, `fontWeights`), dots 6/8 (`dotScale`; every desktop status dot is `--dot-md`, 8 px, centred in a 16 px lane, so it lands on whole pixels); the
   legacy `--space-1` to `--space-11`, `--ctrl-*` (but the 18 px chip and 48 px hero button heights), `--fs-*` and `--shadow-edge` are gone; the 1, 2 and 3 px micro spaces stay. There is

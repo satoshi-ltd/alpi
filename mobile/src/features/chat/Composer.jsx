@@ -191,8 +191,7 @@ export function Composer({
       >
         <View
           style={{
-            ...wellStyle(colors, { focused }),
-            ...(disabled ? { borderColor: colors.edge } : null),
+            ...wellStyle(colors, { focused, disabled }),
             paddingTop: space.s6,
             paddingHorizontal: space.s7,
             paddingBottom: space.s4,

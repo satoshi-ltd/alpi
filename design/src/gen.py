@@ -267,6 +267,8 @@ def m_row_below(label, helper, below, sep=True):
 
 GROUP_TONE = "var(--card)"
 FIELD = "var(--field)"
+WELL = "background: var(--bg-elev, #ffffff); box-shadow: inset 0 0 0 1px rgba(20,20,20,0.14)"
+WELL_FOCUS = "background: var(--bg-elev, #ffffff); box-shadow: inset 0 0 0 1px #8c8c8c"
 PILL_TONE = "rgba(20,20,20,0.04)"
 
 
@@ -326,7 +328,7 @@ def switch(on=False, accent=DOC_ACCENT, label="", disabled=False):
 
 def textbox(text, rows=3, placeholder=False):
     color = "#6b6b6b" if placeholder else "#141414"
-    return (f'<div style="min-height: {rows * 22 + 24}px; padding: 12px; border-radius: 4px; background: {FIELD}; '
+    return (f'<div style="min-height: {rows * 22 + 24}px; padding: 12px; border-radius: 4px; {WELL}; '
             f'font-size: 15px; line-height: 1.5; color: {color}">{text}</div>')
 
 
@@ -405,7 +407,7 @@ def m_confirm_dialog(title, body, confirm, typed="", tone="danger", ready=False,
     if typed:
         shown = value or typed
         field = (f'<div style="display: flex; flex-direction: column; gap: 8px"><span style="font-family: {MONO}; font-size: 11px; letter-spacing: 0.06em; color: #6b6b6b">TYPE <span style="font-weight: 500; font-size: 12px; color: #141414; background: {FIELD}; border-radius: 4px; padding: 0 8px; letter-spacing: 0">{typed}</span> TO CONFIRM</span>'
-                 f'<div style="min-height: 44px; box-sizing: border-box; border-radius: 4px; border: 2px solid transparent; background: {FIELD}; display: flex; align-items: center; padding: 0 12px; font-family: {MONO}; font-size: 14px; color: {"#141414" if value else "#6b6b6b"}">{shown}</div></div>')
+                 f'<div style="min-height: 44px; box-sizing: border-box; border-radius: 4px; {WELL}; display: flex; align-items: center; padding: 0 12px; font-family: {MONO}; font-size: 14px; color: {"#141414" if value else "#6b6b6b"}">{shown}</div></div>')
     ok = ready or not typed
     return (f'<div style="width: 100%; max-width: 420px; box-sizing: border-box; border-radius: 4px; background: #ffffff; {FLOAT_EDGE}; padding: 24px; display: flex; flex-direction: column; gap: 16px">'
             f'<span style="font-weight: 600; font-size: 18px; letter-spacing: -0.005em; color: {DANGER if danger else "#141414"}">{title}</span>'

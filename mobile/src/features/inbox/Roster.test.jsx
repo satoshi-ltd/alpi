@@ -180,11 +180,11 @@ describe('Roster sections', () => {
     expect(screen.getByText('pixel')).toBeTruthy();
   });
 
-  it('fills the filter as a borderless well, like every field', () => {
+  it('draws the filter as a well on the elevated surface with a hairline edge, like every field', () => {
     render(<Roster items={ITEMS} query="" onQueryChange={() => {}} renderRow={plainRow} searchOpen />);
     const field = screen.getByLabelText('Filter list').parentElement;
-    expect(field.getAttribute('data-bg')).toBe('#f1f3f5');
-    expect(field.getAttribute('data-border')).toBe('transparent');
+    expect(field.getAttribute('data-bg')).toBe('#ffffff');
+    expect(field.getAttribute('data-border')).toBe('#ddd');
   });
 
   it('calls the entity a profile in the filter, so the @alpi row stays unambiguous', () => {
