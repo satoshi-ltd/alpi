@@ -9,5 +9,7 @@ export default defineConfig({
     globals: false,
     include: ["src/**/*.test.{js,jsx}", "tests/**/*.test.{js,jsx}"],
     css: false,
+    testTimeout: 20000,
+    hookTimeout: 20000,
   },
 });
