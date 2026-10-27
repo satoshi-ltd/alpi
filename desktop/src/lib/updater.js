@@ -1,4 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { check } from "@tauri-apps/plugin-updater";
 import { exit, relaunch } from "@tauri-apps/plugin-process";
@@ -54,14 +53,6 @@ export function describeUpdaterError(raw, phase = "check") {
   return phase === "install" ? "Couldn't install the update" : "Couldn't check for updates";
 }
 
-async function announce(available, version) {
-  try {
-    await invoke("tray_announce_update", { available, version: version ?? null });
-  } catch {
-    // Tray not ready yet — non-fatal; the next tick will retry.
-  }
-}
-
 export async function checkForUpdates() {
   if (state.installing) return state;
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
@@ -73,12 +64,10 @@ export async function checkForUpdates() {
     if (update?.available) {
       pending = update;
       const next = setState({ checking: false, available: true, version: update.version, error: null, errorPhase: null });
-      await announce(true, update.version);
       return next;
     }
     pending = null;
     const next = setState({ checking: false, available: false, version: null, error: null, errorPhase: null });
-    await announce(false, null);
     return next;
   } catch (e) {
     // A failed check does not forget an update already found; the download may still work.

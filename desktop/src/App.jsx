@@ -68,6 +68,7 @@ import {
   useNotificationDeeplink,
 } from "./hooks/useNotificationDeeplink.js";
 import { useLocalDaemon } from "./hooks/useLocalDaemon.js";
+import { useTrayAnnouncer } from "./hooks/useTrayAnnouncer.js";
 import Welcome, { WelcomeFrame, FirstRunHint, localEverOnlineSeen, markLocalEverOnline, firstRunHintSeen, markFirstRunHintSeen } from "./features/Welcome.jsx";
 import { useDelayedFlag } from "./lib/useDelayedFlag.js";
 import { hasDirtySettings } from "./lib/settingsDirty.js";
@@ -489,11 +490,6 @@ export default function App() {
     activeId: hostConnections.active_id,
   });
   const notificationsUnread = unreadOutputs.length;
-  const trayUnread = canManageProfileSurfaces ? notificationsUnread : 0;
-
-  useEffect(() => {
-    invoke("tray_announce_notifications", { unread: trayUnread }).catch(() => {});
-  }, [trayUnread]);
 
   // The tray listener registers once; a ref feeds it the live permission so a member-connection click can't arm the modal (which would then pop open on the next switch to admin).
   const notificationsAllowedRef = useRef(canManageProfileSurfaces);
@@ -1009,6 +1005,12 @@ export default function App() {
     return s;
   }, [pendingTurns, hostConnections.active_id]);
 
+  const [firstRunHint, setFirstRunHint] = useState(() => !firstRunHintSeen());
+  const dismissFirstRunHint = useCallback(() => {
+    markFirstRunHintSeen();
+    setFirstRunHint(false);
+  }, []);
+
   const onSend = useCallback(
     async (text, model, opts) => {
       const attachments = opts?.attachments?.length ? opts.attachments : null;
@@ -1121,12 +1123,13 @@ export default function App() {
           notify({ message: describeConnectionError(verdict.text) || "The daemon did not take the message.", variant: "error" });
           return false;
         }
+        dismissFirstRunHint();
         return true;
       } finally {
         release();
       }
     },
-    [activeProfile, view, rewriteDraft, notify, startTurn, removeTurn, pendingTurnsRef, hostConnectionsRef],
+    [activeProfile, view, rewriteDraft, notify, dismissFirstRunHint, startTurn, removeTurn, pendingTurnsRef, hostConnectionsRef],
   );
 
   const onCancelTurn = useCallback(() => {
@@ -1242,12 +1245,7 @@ export default function App() {
     setLocalSeenOnline(false);
     onRefreshHostConnectionStatus();
   }, [onRefreshHostConnectionStatus]);
-  const [firstRunHint, setFirstRunHint] = useState(() => !firstRunHintSeen());
-  const showFirstRunHint = firstRunHint && localActive && activeConnection?.status === "online" && view.kind !== "settings";
-  const dismissFirstRunHint = useCallback(() => {
-    markFirstRunHintSeen();
-    setFirstRunHint(false);
-  }, []);
+  const showFirstRunHint = firstRunHint && localActive && activeConnection?.status === "online" && view.kind === "profile";
 
   const activeStatus = activeConnection?.status;
   const connectionDisabled = activeStatus === "disabled";
@@ -1325,6 +1323,20 @@ export default function App() {
       firstProfile,
     });
 
+  const trayDaemon = useMemo(
+    () => ({ state: localDaemon.state, phase: localDaemon.phase, launched: localDaemon.launched }),
+    [localDaemon.state, localDaemon.phase, localDaemon.launched],
+  );
+  useTrayAnnouncer({
+    connection: activeConnection,
+    daemon: trayDaemon,
+    activity,
+    activitySupported,
+    member: !canManageProfileSurfaces,
+    unread: notificationsUnread,
+    foldByProfile,
+    accentByProfile,
+  });
   const jumpHints = useMemo(() => {
     const out = {};
     jumpTargets.slice(0, 9).forEach((item, i) => {
@@ -1439,7 +1451,6 @@ export default function App() {
                   : "alpi on this computer is not answering — reconnecting…")}
             </Banner>
           )}
-          {showFirstRunHint && <FirstRunHint onDismiss={dismissFirstRunHint} />}
           {bare && !showWelcome ? (
             <WelcomeFrame />
           ) : showWelcome ? (
@@ -1591,6 +1602,7 @@ export default function App() {
               )}
             </>
           )}
+          {showFirstRunHint && !bare && !showWelcome && <FirstRunHint />}
       </main>
       <CommandPalette
         open={paletteOpen}

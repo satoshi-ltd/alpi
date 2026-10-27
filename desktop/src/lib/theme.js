@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
-const KEY = "alpi.theme";
+export const THEME_KEY = "alpi.theme";
+const KEY = THEME_KEY;
 const ORDER = ["light", "dark", "system"];
 
 export function getTheme() {

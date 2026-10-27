@@ -1486,7 +1486,7 @@ Threat model: prompt injection via email/web content, LLM-issued tool calls on t
 
 ### App icon (`scripts/gen_icons.py`)
 
-Run it to rewrite every icon under `desktop/src-tauri/icons/` and `mobile/assets/`; `tests/test_icons.py` fails on drift. The icon is the twelve-facet alpaca of the mark (`foldFacets('alpaca')`; the nine-facet `alpaca-low` at 64 px and below), one piece, with no gradient, shadow or outline. Full-colour icons (the desktop tile, `icon.icns`, `icon.ico`, the iOS light and dark icons, the store icon, the adaptive foreground and the splash marks) paint each facet in one of the three crease tones of the brand ink from `common/crease.mjs` (`creaseTones`, the lightest tone on the light-catching facets), on paper in the light theme and on near-black in the dark one, so the folds read as paper; every pixel is a tone, the ground or an antialiased edge. The mark is 82 % of the tile height, so about 16 % of the tile carries ink. The adaptive foreground stays inside the 0.306 safe radius. Below 64 px of nominal size each facet grows outwards by `thickness()` (0.3 px at 64 plus 0.012 px per pixel smaller, capped at 0.9, scaled to the render size) and later facets win overlaps, so the gaps close, the silhouette is one piece and the ears survive at 29 px; larger icons keep the paper seams. The single-ink icons stay one flat ink with the same fill and thickening: the iOS tinted icon (white on black), the tray templates (brand ink on transparency; the notification one adds a dot in the same ink inside a knocked-out ring) and the favicon (nine facets, thickened as at 32 px). Rendering is deterministic: a second run writes the same bytes.
+Run it to rewrite every icon under `desktop/src-tauri/icons/` and `mobile/assets/`; `tests/test_icons.py` fails on drift. The icon is the twelve-facet alpaca of the mark (`foldFacets('alpaca')`; the nine-facet `alpaca-low` at 64 px and below), one piece, with no gradient, shadow or outline. Full-colour icons (the desktop tile, `icon.icns`, `icon.ico`, the iOS light and dark icons, the store icon, the adaptive foreground and the splash marks) paint each facet in one of the three crease tones of the brand ink from `common/crease.mjs` (`creaseTones`, the lightest tone on the light-catching facets), on paper in the light theme and on near-black in the dark one, so the folds read as paper; every pixel is a tone, the ground or an antialiased edge. The mark is 82 % of the tile height, so about 16 % of the tile carries ink. The adaptive foreground stays inside the 0.306 safe radius. Below 64 px of nominal size each facet grows outwards by `thickness()` (0.3 px at 64 plus 0.012 px per pixel smaller, capped at 0.9, scaled to the render size) and later facets win overlaps, so the gaps close, the silhouette is one piece and the ears survive at 29 px; larger icons keep the paper seams. The single-ink icons stay one flat ink with the same fill and thickening: the iOS tinted icon (white on black), the tray icons (`icons/tray/`, brand ink with binary alpha, drawn per size and state; see the tray bullet under the contracts) and the favicon (nine facets, thickened as at 32 px). Rendering is deterministic: a second run writes the same bytes.
 
 ## Dependencies
 
@@ -1605,7 +1605,73 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   every shortcut that changes the view or opens a panel is off while it
   shows. It resolves straight to the Sidebar when the daemon answers. In every other
   case the Sidebar stays and the same Welcome fills the main pane beside it.
-  Once alpi answers, a one-time card says how to add a phone.
+  Once alpi answers, one Mono line under the main pane says "This is alpi on
+  this computer · To use it from a phone: Settings → Connections"; it has no
+  button, shows once per machine (a persisted flag) and goes away when the
+  first message is accepted. A chat opened with nothing holding focus (the
+  document body) focuses its composer; a focused sidebar search, modal or
+  other control keeps focus.
+- **The desktop window outlives its close.** Closing the window hides it and
+  keeps the process, so the tray, its notifications and the global shortcut
+  (⌘⇧A, which only brings the window to the front) keep working; ⌘Q quits.
+  Clicking the Dock icon while no window is visible shows the main window
+  again (`RunEvent::Reopen`, macOS only), as the tray, the shortcut and a
+  second launch do.
+- **The tray is a popover that triages.** A second webview window, `tray`
+  (`tray.html`, `src/tray/`), opens under the menu bar icon on a left click on
+  macOS and Windows and closes on Esc or when it loses focus; a right click
+  shows the native menu (Open Alpi, Settings…, Notifications (N) when unread,
+  the update header and Restart to update, Quit), and Linux keeps that menu on
+  every click. The icon click is decided on press and executed on release,
+  with a guard so the click that blurs the popover does not reopen it. Every
+  route to the main window goes through one `show_main_window`: it hides the
+  popover, drops the pending banner, shows, unminimizes and focuses.
+  - *Snapshot.* The popover never calls `host.*` and never reads `~/.alpi`. The
+    main window pushes one snapshot (`tray_announce_state`, versioned, debounced
+    250 ms, an identical snapshot is not resent) already filtered by connection
+    and profile scope: state, counts, the first four needs-you rows (profile,
+    fold, accent, a deeplink only for an approval or a clarification), failing
+    jobs, the first running turn, the next scheduled job, unread, update and
+    offline facts. Titles are cut to 200 characters; when the invoke fails a
+    reduced `{v, state, counts}` is sent instead; Rust refuses a snapshot over
+    64 KB and caps each deeplink field. The popover reads it with `tray_state`
+    when it opens and on the `tray-state` event, and follows the app theme
+    (System, Light or Dark) through the shared `storage` event and on show.
+  - *States.* Heading and rows come from `trayModel.js`: all quiet (an admin
+    with an upcoming scheduled job reads `Next: <job> · <time>`, one without
+    reads `Nothing scheduled`, a member reads `Nothing needs you · online` and
+    never sees scheduled jobs or the bell), needs you (approval and question
+    rows with Review, then the failing and running counts), failing jobs,
+    running turns, update ready (a row above the footer in every state), daemon
+    stopped (Start alpi), starting, connecting (activity still loading: it never
+    claims all quiet) and `alpi · online` when the daemon has no
+    `host.activity.list`. More than four needs-you rows end in `N more · Open
+    alpi`. The footer is Open alpi, the bell, Settings and Quit.
+  - *Window.* 340 px wide inside a 342 px transparent, undecorated,
+    always-on-top window that skips the taskbar (`macos-private-api` makes the
+    transparency possible on macOS); the page reports its height with
+    `resize_tray` (48 to 640 px). The container takes focus when it opens and
+    shows no ring until Tab. App commands: `show_main(deeplink)`,
+    `open_settings`, `open_notifications`, `restart_to_update`, `start_alpi`,
+    `quit_app`, `resize_tray`, `hide_tray`, `tray_state`. The `tray` capability
+    only grants event listening; app commands are not restricted by
+    capabilities, so the popover relies on loading nothing but app assets under
+    the default CSP and does not get defence in depth.
+  - *Icon.* `scripts/gen_icons.py` writes pixel-exact assets
+    `icons/tray/tray-{quiet,dot,needs,offline}-{size}.png` for 16, 20, 22, 24,
+    32 and 36 px: one ink, binary alpha, facets snapped to the target grid,
+    creases as exact 1 px gaps from 32 px, a 1 px knock-out around the mark (a
+    dot, a ring for needs you, a slash for offline). macOS uses 36 px (18 pt);
+    Windows 16, 20, 24 or 32 px at scale 1.0, 1.25, 1.5 or 2.0 and up; Linux 22
+    px, 24 above 1.0. The state is needs you, then offline, then unread or
+    update, then quiet; `refresh_icon` makes one `set_icon_with_as_template`
+    call, and only when the state or the size changed. On Windows and Linux the
+    size is re-read on a state change only, so moving between displays of
+    different scale keeps the old size until then. The tooltip names the heading
+    state (`alpi · 2 need you`).
+  - *Standard behaviour stays.* Closing the window hides it, ⌘Q quits, Hide and
+    Hide Others are the predefined items, a second launch re-shows the window and
+    ⌘⇧A shows, unminimizes and focuses it.
 - **The phone's first run is the same console.** `/onboarding`, `/pair` and
   `/paired` are one column on a single left edge (16 pt, 24 pt on a fold,
   where these routes render full-bleed; `lib/firstRun.js`): the alpaca's
@@ -1666,7 +1732,7 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   app opens the latest banner raised while the window was unfocused when the
   window gains focus within 20 s: only the latest, an approval or question
   outranks a later notice, connection and budget notices are never opened, and
-  opening the app from the tray, the shortcut or a menu drops it. `chat`,
+  opening the app from the tray, the shortcut, the Dock icon or a menu drops it. `chat`,
   `profile` and `workgroup` open that view, `output` opens the notification,
   `approval` and `clarification` bring that request to the front, and
   `settings` with id `schedules` opens the profile's Schedule panel (an admin

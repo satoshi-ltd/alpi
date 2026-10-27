@@ -1,0 +1,265 @@
+:global(html),
+:global(body),
+:global(#root) {
+  height: auto;
+  background: transparent;
+}
+
+.frame {
+  width: calc(var(--pop-md) + 2px);
+  padding: 1px;
+  box-sizing: border-box;
+}
+
+.frame:focus {
+  outline: none;
+}
+
+.frame:focus-visible {
+  outline-style: none;
+}
+
+.pop button:focus-visible {
+  outline-offset: calc(var(--focus-outline-offset) * -1);
+}
+
+.pop {
+  display: flex;
+  flex-direction: column;
+  width: var(--pop-md);
+  border-radius: var(--r-xs);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-edge-lg);
+  color: var(--ink);
+  overflow: hidden;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  padding: var(--sp-12);
+}
+
+.headText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-tight);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-chat);
+  font-weight: var(--fw-semibold);
+  line-height: calc(var(--sp-16) + var(--sp-4));
+  color: var(--ink);
+}
+
+.sub {
+  margin: 0;
+  font-size: var(--text-ui);
+  line-height: var(--sp-16);
+  color: var(--ink-3);
+}
+
+.sub[data-next] {
+  display: flex;
+  white-space: nowrap;
+}
+
+.nextLead,
+.nextWhen {
+  flex-shrink: 0;
+}
+
+.nextTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.section {
+  padding: 0 var(--sp-8) var(--sp-8);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  height: var(--ctl-40);
+  padding-right: var(--sp-8);
+  border-radius: var(--r-xs);
+}
+
+.row:hover,
+.row:focus-within {
+  background: var(--hover);
+}
+
+.rowMain {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  padding: 0 var(--sp-12);
+  cursor: pointer;
+}
+
+.glyph {
+  width: var(--icon-md);
+  display: inline-flex;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--ink-3);
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.rowTitle {
+  font-size: var(--text-ui);
+  line-height: var(--sp-16);
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowSub {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  line-height: var(--sp-16);
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.line,
+.busy {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  width: 100%;
+  height: var(--ctl-32);
+  padding: 0 var(--sp-12);
+  border: 0;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: var(--text-ui);
+  line-height: var(--sp-16);
+  text-align: left;
+}
+
+.line {
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease);
+}
+
+.line:hover,
+.line:focus-visible {
+  background: var(--hover);
+}
+
+.line:focus-visible {
+  outline-offset: calc(var(--focus-outline-offset) * -1);
+}
+
+.lineIcon {
+  width: var(--icon-md);
+  display: inline-flex;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--ink-3);
+}
+
+.lineIcon[data-tone="danger"] {
+  color: var(--c-danger-text);
+}
+
+.lineIcon[data-tone="success"] {
+  color: var(--c-success-text);
+}
+
+.lineLabel {
+  flex: 1;
+  min-width: 0;
+}
+
+.lineValue {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--ink-3);
+}
+
+.lineValue[data-tone="danger"] {
+  color: var(--c-danger-text);
+}
+
+.chev {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--ink-3);
+}
+
+.update {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  min-height: var(--ctl-40);
+  padding: var(--sp-4) var(--sp-12);
+  border-top: .5px solid var(--line);
+}
+
+.updateText {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-ui);
+  line-height: var(--sp-16);
+  color: var(--ink);
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-8) var(--sp-12);
+  border-top: .5px solid var(--line);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.bellWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.bellDot {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: var(--dot-md);
+  height: var(--dot-md);
+  transform: translate(25%, -25%);
+  border-radius: 50%;
+  background: var(--c-danger);
+  pointer-events: none;
+}

@@ -32,8 +32,6 @@ SIZES = {
 PAPER = (0xFF, 0xFF, 0xFF)
 INK = (0x0C, 0x0B, 0x09)
 SINGLE_INK = {
-    "desktop/src-tauri/icons/tray-template.png": (64, 6),
-    "desktop/src-tauri/icons/tray-template-notification.png": (64, 6),
     "mobile/assets/ios-tinted.png": (1024, 6),
     "mobile/assets/favicon.png": (96, 6),
 }
@@ -205,24 +203,6 @@ def test_the_thickened_silhouette_is_wider_than_the_drawn_one():
     assert span(gen.mark_polygons(29, gen.FULL_MARK)) > span(drawn) + 1
 
 
-@pytest.mark.parametrize("rel", sorted(r for r in SINGLE_INK if "tray" in r))
-def test_tray_templates_are_one_flat_ink_on_transparency(rel):
-    image = decode(rel)
-    seen = colours(image)
-    assert {c[:3] for c in seen if c[3] > 0} == {rgb for rgb in [tuple(gen.rgb_of(gen.LIGHT_ACCENT))]}
-    alphas = {c[3] for c in seen}
-    assert 0 in alphas and 255 in alphas
-    opaque = sum(n for c, n in seen.items() if c[3] > 128) / (64 * 64)
-    assert opaque >= 0.2
-
-
-def test_the_notification_tray_template_adds_a_dot_in_the_same_ink():
-    plain = colours(decode("desktop/src-tauri/icons/tray-template.png"))
-    badge = colours(decode("desktop/src-tauri/icons/tray-template-notification.png"))
-    count = lambda seen: sum(n for c, n in seen.items() if c[3] == 255)
-    assert count(badge) > count(plain)
-
-
 def test_the_tinted_icon_is_white_on_black_with_no_other_hue():
     seen = colours(decode("mobile/assets/ios-tinted.png"))
     assert all(c[0] == c[1] == c[2] and c[3] == 255 for c in seen)
@@ -386,3 +366,122 @@ def test_the_dark_splash_wears_the_dark_accent_and_the_light_splash_the_light_on
 
 def test_icons_up_to_64_px_use_the_nine_facet_alpaca_and_larger_ones_the_twelve():
     assert [len(gen.mark_polygons(size, 0.5)) for size in (16, 32, 64, 128, 512)] == [9, 9, 9, 12, 12]
+
+
+TRAY_DIR = "desktop/src-tauri/icons/tray"
+PLATFORM_SIZES = {"macos": (36,), "windows": (16, 20, 24, 32), "linux": (22, 24)}
+TRAY_SIZES = sorted({n for sizes in PLATFORM_SIZES.values() for n in sizes})
+STATES = ("quiet", "dot", "needs", "offline")
+TRAY_FILES = [f"{TRAY_DIR}/tray-{state}-{size}.png" for state in STATES for size in TRAY_SIZES]
+
+
+def tray_alpha(state, size):
+    image = decode(f"{TRAY_DIR}/tray-{state}-{size}.png")
+    return [[image[4][y][x * 4 + 3] for x in range(size)] for y in range(size)]
+
+
+def diff_cells(a, b):
+    return {(x, y) for y, row in enumerate(a) for x, v in enumerate(row) if v != b[y][x]}
+
+
+def test_the_tray_set_is_exactly_the_state_by_size_matrix():
+    on_disk = sorted(str(p.relative_to(REPO)) for p in (REPO / TRAY_DIR).glob("*.png"))
+    assert on_disk == sorted(TRAY_FILES)
+    assert set(gen.TRAY_SIZES) == set(TRAY_SIZES) and set(gen.TRAY_STATES) == set(STATES)
+
+
+@pytest.mark.parametrize("rel", TRAY_FILES)
+def test_each_tray_asset_has_its_exact_pixel_size_one_ink_and_binary_alpha(rel):
+    size = int(rel.rsplit("-", 1)[1].split(".")[0])
+    image = decode(rel)
+    assert image[:3] == (size, size, 6)
+    seen = colours(image)
+    assert {c[3] for c in seen} == {0, 255}
+    assert {c[:3] for c in seen if c[3] == 255} == {gen.rgb_of(gen.LIGHT_ACCENT)}
+    assert {c[:3] for c in seen if c[3] == 0} == {gen.rgb_of(gen.LIGHT_ACCENT)}
+
+
+@pytest.mark.parametrize("size", TRAY_SIZES)
+def test_the_nine_facets_survive_snapping_with_whole_pixel_vertices(size):
+    facets = gen.snap_facets(size)
+    assert len(facets) == 9
+    assert all(isinstance(v, int) for _, poly in facets for point in poly for v in point)
+    grid = gen.fold_alpha(size)[1]
+    assert all(sum(row.count(i) for row in grid) >= 2 for i in range(9))
+
+
+@pytest.mark.parametrize("size", TRAY_SIZES)
+def test_creases_are_one_pixel_gaps_from_32_px_and_absent_below(size):
+    quiet = tray_alpha("quiet", size)
+    raw = gen.owners(size, gen.snap_facets(size))
+    cleared = {(x, y) for y in range(size) for x in range(size) if raw[y][x] >= 0 and quiet[y][x] == 0}
+    if size < 32:
+        assert not cleared
+        return
+    assert cleared
+    assert not any({(x + 1, y), (x, y + 1), (x + 1, y + 1)} <= cleared for x, y in cleared)
+    assert all(quiet[y][x] == 255 for y in range(size) for x in range(size) if raw[y][x] >= 0 and (x, y) not in cleared)
+
+
+@pytest.mark.parametrize("size", TRAY_SIZES)
+def test_the_quiet_silhouette_is_centred_in_its_square(size):
+    alpha = tray_alpha("quiet", size)
+    xs = [x for row in alpha for x, a in enumerate(row) if a]
+    assert abs((min(xs) + max(xs) + 1) / 2 - size / 2) <= 0.5
+
+
+@pytest.mark.parametrize("size", TRAY_SIZES)
+def test_the_state_marks_change_the_quiet_icon_only_around_their_mark(size):
+    quiet = tray_alpha("quiet", size)
+    d, c = gen.dot_geometry(size)
+    dot, needs, offline = (tray_alpha(s, size) for s in ("dot", "needs", "offline"))
+
+    def near_disc(cells, radius):
+        return all((x + 0.5 - c) ** 2 + (y + 0.5 - c) ** 2 <= radius ** 2 for x, y in cells)
+
+    assert near_disc(diff_cells(dot, quiet), d / 2 + 1)
+    assert near_disc(diff_cells(needs, quiet), d / 2 + 2)
+    assert any(dot[y][x] == 255 and quiet[y][x] == 0 for x, y in diff_cells(dot, quiet))
+    assert any(needs[y][x] == 255 and quiet[y][x] == 0 for x, y in diff_cells(needs, quiet))
+    assert any(needs[y][x] == 0 for y in range(size) for x in range(size) if needs[y][x] == 0 and 0 < (x + 0.5 - c) ** 2 + (y + 0.5 - c) ** 2 <= (d / 2) ** 2)
+
+    xs = [x for row in quiet for x, a in enumerate(row) if a]
+    ys = [y for y, row in enumerate(quiet) if any(row)]
+    cx, cy, w = (min(xs) + max(xs)) // 2, (min(ys) + max(ys)) // 2, gen.ring_thickness(size)
+    cells = diff_cells(offline, quiet)
+    assert cells and all(abs((x - cx) - (y - cy)) <= w for x, y in cells)
+    assert any(offline[y][x] == 255 and quiet[y][x] == 0 for x, y in cells)
+    assert any(offline[y][x] == 0 and quiet[y][x] == 255 for x, y in cells)
+
+
+def test_every_state_differs_from_every_other_at_every_size():
+    for size in TRAY_SIZES:
+        assert len({str(tray_alpha(s, size)) for s in STATES}) == 4
+
+
+def test_the_tray_assets_are_byte_identical_across_two_generator_runs():
+    first, second = gen.tray_files(), gen.tray_files()
+    assert first == second
+    assert set(first) == set(TRAY_FILES)
+    for rel, data in first.items():
+        assert (REPO / rel).read_bytes() == data
+
+
+@pytest.mark.parametrize("size, ink_cell", [(36, [(14, 13), (13, 14), (29, 30), (28, 29)]), (32, [(12, 12), (14, 14), (26, 26), (25, 23)])])
+def test_the_offline_slash_runs_from_top_left_to_bottom_right(size, ink_cell):
+    quiet, offline = tray_alpha("quiet", size), tray_alpha("offline", size)
+    for x, y in ink_cell:
+        assert quiet[y][x] == 0 and offline[y][x] == 255, (x, y)
+        assert offline[y][size - 1 - x] == quiet[y][size - 1 - x]
+
+
+@pytest.mark.parametrize("size", TRAY_SIZES)
+def test_needs_you_is_a_ring_with_a_hole_and_the_dot_is_solid(size):
+    _, c = gen.dot_geometry(size)
+    cx = cy = int(c)
+    dot, needs = tray_alpha("dot", size), tray_alpha("needs", size)
+    assert dot[cy][cx] == 255 and needs[cy][cx] == 0
+    d = round(gen.DOT_FRACTION * size)
+    inside = [(x, y) for y in range(size) for x in range(size) if (x + 0.5 - c) ** 2 + (y + 0.5 - c) ** 2 <= (d / 2) ** 2]
+    assert sum(dot[y][x] == 255 for x, y in inside) == len(inside)
+    assert sum(needs[y][x] == 0 for x, y in inside) >= 1

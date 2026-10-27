@@ -40,11 +40,11 @@ beforeEach(() => {
 });
 
 describe("checkForUpdates", () => {
-  it("records an available update and tells the tray", async () => {
+  it("records an available update for subscribers", async () => {
     h.check.mockResolvedValueOnce(found(vi.fn()));
     const s = await checkForUpdates();
     expect(s).toMatchObject({ available: true, version: "0.6.3", checking: false, error: null });
-    expect(h.invoke).toHaveBeenCalledWith("tray_announce_update", { available: true, version: "0.6.3" });
+    expect(h.invoke).not.toHaveBeenCalled();
   });
 
   it("keeps an update it already found when a later check fails", async () => {

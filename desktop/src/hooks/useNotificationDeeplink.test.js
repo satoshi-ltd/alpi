@@ -298,3 +298,10 @@ describe("useNotificationDeeplink", () => {
     expect(onSwitchConnection).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("compose deeplink", () => {
+  it("is not a deeplink the main window understands", () => {
+    expect(resolveDeeplink({ kind: "compose", profile: "abby", text: "hi", connection_id: "local" })).toBeNull();
+    expect(connectionToSwitch({ kind: "compose", profile: "abby", connection_id: "remote" }, "local")).toBeNull();
+  });
+});

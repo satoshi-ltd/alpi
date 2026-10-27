@@ -33,6 +33,7 @@ configure({ asyncUtilTimeout: 5000 });
 
 const inSettingsView = () => screen.queryAllByRole("button", { name: "Settings" }).some((el) => el.getAttribute("aria-current") === "page");
 
+const HINT_LINE = "This is alpi on this computer · To use it from a phone: Settings → Connections";
 const ALPI = { name: "default", is_default: true, model: "m/a", latest_session: { kind: "chat", id: "s-alpi", updated_at: 1 } };
 const DOC = { name: "doc", model: "m/d", latest_session: { kind: "chat", id: "s-doc", updated_at: 50 } };
 const SCOUT = { name: "scout", model: "m/s", latest_session: { kind: "chat", id: "s-scout", updated_at: 90 } };
@@ -790,16 +791,63 @@ describe("App landing", () => {
     expect(state.calls.some(([cmd]) => cmd === "host_connections_probe_active")).toBe(true);
   });
 
-  it("names this computer once, with where a phone gets its link, and remembers the dismissal", async () => {
+  it("names this computer in one mono line under the composer until the first message is accepted", async () => {
     daemon();
     const { unmount } = render(<App />);
-    await waitFor(() => expect(screen.getByText("This is alpi on this computer")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "Got it" }));
-    expect(screen.queryByText("This is alpi on this computer")).toBeNull();
+    await waitFor(() => expect(screen.getByText(HINT_LINE)).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: "Got it" })).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("textbox")));
     unmount();
+    localStorage.setItem("alpi.firstRunHint.v1", "seen");
     render(<App />);
     await waitFor(() => expect(selected("alpi")).toBe(true));
-    expect(screen.queryByText("This is alpi on this computer")).toBeNull();
+    expect(screen.queryByText(HINT_LINE)).toBeNull();
+  });
+
+  async function sendFirstMessage(verdictPayload) {
+    const state = daemon();
+    const chatListeners = [];
+    listen.mockImplementation(async (name, cb) => {
+      listeners[name] = cb;
+      if (name === "chat-event") chatListeners.push(cb);
+      return () => {};
+    });
+    window.notify = vi.fn();
+    render(<App />);
+    await waitFor(() => expect(screen.getByText(HINT_LINE)).toBeInTheDocument());
+    const box = screen.getByPlaceholderText(/Message/);
+    fireEvent.change(box, { target: { value: "hello" } });
+    fireEvent.keyDown(box, { key: "Enter", metaKey: true });
+    await waitFor(() => expect(state.calls.filter(([c]) => c === "chat_send_stream")).toHaveLength(1));
+    const [, args] = state.calls.find(([c]) => c === "chat_send_stream");
+    await act(async () => {
+      chatListeners.forEach((cb) => cb({ payload: { request_id: args.requestId, ...verdictPayload } }));
+    });
+  }
+
+  it("drops the hint line and remembers it once the daemon accepts the first message", async () => {
+    await sendFirstMessage({ kind: "delta", text: "hi" });
+    await waitFor(() => expect(screen.queryByText(HINT_LINE)).toBeNull());
+    expect(localStorage.getItem("alpi.firstRunHint.v1")).toBe("seen");
+  });
+
+  it("keeps the hint line and writes nothing when the daemon refuses the first message", async () => {
+    await sendFirstMessage({ kind: "error", text: "session already has a running turn" });
+    await waitFor(() => expect(screen.getByPlaceholderText(/Message/).value).toBe("hello"));
+    expect(screen.getByText(HINT_LINE)).toBeInTheDocument();
+    expect(localStorage.getItem("alpi.firstRunHint.v1")).toBeNull();
+  });
+
+  it("shows the hint line only in a profile chat", async () => {
+    daemon();
+    render(<App />);
+    await waitFor(() => expect(screen.getByText(HINT_LINE)).toBeInTheDocument());
+    fireEvent.click(row("crew"));
+    await waitFor(() => expect(selected("crew")).toBe(true));
+    expect(screen.queryByText(HINT_LINE)).toBeNull();
+    fireEvent.click(row("doc"));
+    await waitFor(() => expect(screen.getByText(HINT_LINE)).toBeInTheDocument());
+    expect(localStorage.getItem("alpi.firstRunHint.v1")).toBeNull();
   });
 
   it("keeps the empty roster state on screen while a later reload is in flight", async () => {

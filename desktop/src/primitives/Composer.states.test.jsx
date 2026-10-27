@@ -104,3 +104,64 @@ describe("Composer mentions", () => {
     expect(css).toMatch(/\.mentionPopover\s*\{[^}]*box-shadow:\s*var\(--shadow-edge-sm\)/);
   });
 });
+
+describe("Composer focusOnOpen", () => {
+  it("focuses the field when nothing else holds focus", () => {
+    mount({ focusOnOpen: "doc" });
+    expect(document.activeElement).toBe(screen.getByRole("textbox"));
+  });
+
+  it("leaves focus alone when another control holds it", () => {
+    const other = document.createElement("input");
+    document.body.appendChild(other);
+    other.focus();
+    mount({ focusOnOpen: "doc" });
+    expect(document.activeElement).toBe(other);
+    other.remove();
+  });
+
+  it("does not focus without the prop or while disabled", () => {
+    mount();
+    expect(document.activeElement).toBe(document.body);
+    mount({ focusOnOpen: "doc", disabled: true });
+    expect(document.activeElement).toBe(document.body);
+  });
+});
+
+describe("Composer focusOnOpen keeps the user's focus", () => {
+  function held() {
+    const other = document.createElement("button");
+    document.body.appendChild(other);
+    other.focus();
+    return other;
+  }
+
+  it("does not steal focus on a re-render with the same props", () => {
+    const { rerender } = mount({ focusOnOpen: "doc" });
+    const other = held();
+    rerender(<Composer value="" onChange={() => {}} onSubmit={() => {}} focusOnOpen="doc" />);
+    expect(document.activeElement).toBe(other);
+    other.remove();
+  });
+
+  it("does not steal focus when disabled turns false while another control holds it", () => {
+    const { rerender } = mount({ focusOnOpen: "doc", disabled: true });
+    const other = held();
+    rerender(<Composer value="" onChange={() => {}} onSubmit={() => {}} focusOnOpen="doc" disabled={false} />);
+    expect(document.activeElement).toBe(other);
+    other.remove();
+  });
+
+  it("focuses a remount for another profile only when nothing holds focus", () => {
+    const first = mount({ focusOnOpen: "doc" });
+    first.unmount();
+    expect(document.activeElement).toBe(document.body);
+    const second = mount({ focusOnOpen: "scout" });
+    expect(document.activeElement).toBe(screen.getByRole("textbox"));
+    second.unmount();
+    const other = held();
+    mount({ focusOnOpen: "pixel" });
+    expect(document.activeElement).toBe(other);
+    other.remove();
+  });
+});

@@ -1169,6 +1169,7 @@ def build(desktop_boards):
         notes[id_] = {"x": x, "y": y, "text": text, "kind": "title1", "maxW": max_w, "page": page}
 
     from desktop_overlays import OVERLAYS_H, desktop_overlays
+    from desktop_tray import TRAY_H, TRAY_ICON_H, tray_board, tray_icon_board
     from mobile_overlays import MOBILE_OVERLAYS
     from system_boards import DESKTOP_COMPONENTS_H, MOBILE_COMPONENTS_H, SYSTEM, TOKENS_H
 
@@ -1202,6 +1203,8 @@ def build(desktop_boards):
         ("Desktop-AppSettings.dc.html", desktop_boards["app"], 740, "App settings"),
         ("Desktop-FirstRun.dc.html", desktop_onboarding(), DESKTOP_ONBOARDING_H, "First run"),
         ("Desktop-Overlays.dc.html", desktop_overlays(), OVERLAYS_H, "Overlays"),
+        ("Desktop-Tray.dc.html", tray_board(), TRAY_H, "Tray"),
+        ("Desktop-TrayIcon.dc.html", tray_icon_board(), TRAY_ICON_H, "Tray icon"),
     ):
         y += 240
         title(f"d-{label}", label, y - 223, "desktop")

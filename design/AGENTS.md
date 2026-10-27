@@ -9,7 +9,7 @@ this file is the whole contract of the kit.
 - `python3 design/build.py` rewrites every `design/*.html`, `boards.css`, `favicon.svg` and the canvas artboards under
   `design/canvas/project/`. It needs `node` on PATH to read the shared icons in `common/`.
 - `design/src/` is the source, one module per family of boards: `build.py` (page shell and nav), `gen.py` (canvas index, mobile screens),
-  `system_boards.py`, `desktop_boards.py`, `desktop_overlays.py`, `conversation_boards.py`, `mobile_overlays.py`,
+  `system_boards.py`, `desktop_boards.py`, `desktop_overlays.py`, `desktop_tray.py` (the tray popover and the tray icon views, the icons read from the shipped PNGs under `desktop/src-tauri/icons/tray/`), `conversation_boards.py`, `mobile_overlays.py`,
   `brand_boards.py` and `folds.py` (the Brand tab), `panel_kit.py` (the drawing helpers of the profile window and phone panels, one place for the views and the proposals),
   `profile_panel_studies.py` (the Desktop and Mobile panel views, drawn from the shipped panels), `mobile_state_studies.py` (the empty, error and offline states of the phone), `onboarding_studies.py` and `first_run_parts.py` (the first-run views of both clients, the welcome, pairing, paired and first-profile screens, and the drawing helpers the proposals reuse), `mobile_attention_studies.py` (the drawings of the schedule job pages, the roster band, the chat menu, the settings jump and the fold's two-pane schedule and notifications, drawn from the mobile components) and `proposals.py` (the proposal boards). Never edit a generated file by hand.
 - `design/drift.py` runs the build and exits 1 naming every file it had to regenerate; `scripts/validate.py` runs it as the

@@ -35,9 +35,6 @@ TRAY_NOMINAL = 32
 THICK_BASE = 0.3
 THICK_SLOPE = 0.012
 THICK_MAX = 0.9
-DOT_CENTER = 0.8
-DOT_RADIUS = 0.13
-DOT_RING = 0.045
 TINT_GROUND = (0, 0, 0)
 TINT_INK = (255, 255, 255)
 SAFE_RADIUS = 0.306
@@ -45,7 +42,7 @@ SPLASH_MARK = 0.88
 SAFE_FILL = 0.97
 ICNS_ENTRIES = ((b"ic07", 128), (b"ic08", 256), (b"ic09", 512), (b"ic10", 1024), (b"ic11", 32), (b"ic12", 64), (b"ic13", 256), (b"ic14", 512))
 ICO_SIZES = (16, 32, 48, 64, 128, 256)
-SINGLE_INK = ("desktop/src-tauri/icons/tray-template.png", "desktop/src-tauri/icons/tray-template-notification.png", "mobile/assets/ios-tinted.png", "mobile/assets/favicon.png")
+SINGLE_INK = ("mobile/assets/ios-tinted.png", "mobile/assets/favicon.png")
 
 
 def node(script):
@@ -143,10 +140,6 @@ def mark_polygons(size, height=None, safe=False, nominal=None, low=None):
     return [(tone, outset(poly, grow) if grow else poly) for tone, poly in polys]
 
 
-def circle(cx, cy, r, steps=96):
-    return [(cx + r * math.cos(2 * math.pi * k / steps), cy + r * math.sin(2 * math.pi * k / steps)) for k in range(steps)]
-
-
 class Row:
     def __init__(self, size):
         self.size = size
@@ -222,12 +215,9 @@ def resolve(intervals):
     return placed
 
 
-def render(size, background, tile, accent, mark_height=None, safe=False, rgb=False, flat=False, nominal=None, low=None, dot=False):
+def render(size, background, tile, accent, mark_height=None, safe=False, rgb=False, flat=False, nominal=None, low=None):
     tones = tone_set(accent, background, flat)
     polys = mark_polygons(size, mark_height, safe, nominal, low)
-    if dot:
-        c = DOT_CENTER * size
-        polys += [(None, circle(c, c, (DOT_RADIUS + DOT_RING) * size)), (1, circle(c, c, DOT_RADIUS * size))]
     edges = []
     for cls, poly in polys:
         es = [(x1, y1, x2, y2) if y1 < y2 else (x2, y2, x1, y1) for (x1, y1), (x2, y2) in zip(poly, poly[1:] + poly[:1]) if y1 != y2]
@@ -284,8 +274,160 @@ def tile_icon(size):
     return render(size, PAPER, "tile", LIGHT_ACCENT, mark_height=TILE_MARK)
 
 
-def tray_icon(dot):
-    return render(64, PAPER, "none", LIGHT_ACCENT, mark_height=TRAY_MARK, flat=True, nominal=TRAY_NOMINAL, low=True, dot=dot)
+CREASE_MIN_SIZE = 32
+MIN_RUN = 3
+MIN_AREA = 10
+DOT_FRACTION = 0.26
+TRAY_DIR = "desktop/src-tauri/icons/tray"
+TRAY_STATES = ("quiet", "dot", "needs", "offline")
+TRAY_SIZES = (16, 20, 22, 24, 32, 36)
+
+
+def floor_half(v):
+    return int(v + 0.5) if v >= 0 else -int(-v + 0.5)
+
+
+def snap_facets(size):
+    out = []
+    for cls, poly in mark_polygons(size, TRAY_MARK, False, TRAY_NOMINAL, True):
+        snapped = []
+        for x, y in poly:
+            q = (floor_half(x), floor_half(y))
+            if not snapped or snapped[-1] != q:
+                snapped.append(q)
+        if len(snapped) > 1 and snapped[0] == snapped[-1]:
+            snapped.pop()
+        out.append((cls - 1, snapped))
+    xs = [x for _, poly in out for x, _ in poly]
+    shift = floor_half(size / 2 - (min(xs) + max(xs)) / 2)
+    return [(tone, [(x + shift, y) for x, y in poly]) for tone, poly in out]
+
+
+def inside(poly, px, py):
+    hit = False
+    n = len(poly)
+    for i in range(n):
+        (xa, ya), (xb, yb) = poly[i], poly[(i + 1) % n]
+        if (ya > py) != (yb > py) and px < xa + (py - ya) * (xb - xa) / (yb - ya):
+            hit = not hit
+    return hit
+
+
+def owners(size, facets):
+    grid = [[-1] * size for _ in range(size)]
+    for y in range(size):
+        for x in range(size):
+            for i, (_, poly) in enumerate(facets):
+                if len(poly) >= 3 and inside(poly, x + 0.5, y + 0.5):
+                    grid[y][x] = i
+    return grid
+
+
+def run_length(grid, x, y, dx, dy):
+    o = grid[y][x]
+    n = 1
+    for sign in (1, -1):
+        cx, cy = x + sign * dx, y + sign * dy
+        while 0 <= cx < len(grid) and 0 <= cy < len(grid) and grid[cy][cx] == o:
+            n += 1
+            cx, cy = cx + sign * dx, cy + sign * dy
+    return n
+
+
+def carve(grid, min_run=MIN_RUN, min_area=MIN_AREA):
+    size = len(grid)
+    area = {}
+    for row in grid:
+        for o in row:
+            area[o] = area.get(o, 0) + 1
+    out = [row[:] for row in grid]
+    for y in range(size):
+        for x in range(size):
+            o = grid[y][x]
+            if o < 0:
+                continue
+            for nx, ny in ((x + 1, y), (x, y + 1)):
+                if nx < size and ny < size and grid[ny][nx] >= 0 and grid[ny][nx] != o and area[o] >= min_area and area[grid[ny][nx]] >= min_area and run_length(grid, x, y, nx - x, ny - y) >= min_run:
+                    out[y][x] = -1
+    return out
+
+
+def fold_alpha(size, creases=None):
+    facets = snap_facets(size)
+    grid = owners(size, facets)
+    if (size >= CREASE_MIN_SIZE) if creases is None else creases:
+        grid = carve(grid)
+    alpha = [[255 if grid[y][x] >= 0 else 0 for x in range(size)] for y in range(size)]
+    return alpha, grid, facets
+
+
+def disc(size, cx, cy, radius):
+    return [[(x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2 <= radius ** 2 for x in range(size)] for y in range(size)]
+
+
+def dot_geometry(size):
+    d = round(DOT_FRACTION * size)
+    left = round(0.8 * size - d / 2)
+    return d, left + d / 2
+
+
+def ring_thickness(size):
+    return max(1, round(size / 18))
+
+
+def with_dot(size):
+    alpha, _, _ = fold_alpha(size)
+    d, c = dot_geometry(size)
+    keep = disc(size, c, c, d / 2 + 1)
+    solid = disc(size, c, c, d / 2)
+    return [[255 if solid[y][x] else (0 if keep[y][x] else alpha[y][x]) for x in range(size)] for y in range(size)]
+
+
+def with_ring(size):
+    alpha, _, _ = fold_alpha(size)
+    d, c = dot_geometry(size)
+    outer, t = d / 2 + 1, ring_thickness(size)
+    keep = disc(size, c, c, outer + 1)
+    big = disc(size, c, c, outer)
+    hole = disc(size, c, c, outer - t)
+    return [[255 if big[y][x] and not hole[y][x] else (0 if keep[y][x] else alpha[y][x]) for x in range(size)] for y in range(size)]
+
+
+def with_slash(size):
+    alpha, _, _ = fold_alpha(size)
+    xs = [x for row in alpha for x, a in enumerate(row) if a]
+    ys = [y for y, row in enumerate(alpha) if any(row)]
+    x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+    cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
+    w = ring_thickness(size)
+    out = [row[:] for row in alpha]
+    for y in range(y0, y1 + 1):
+        for x in range(x0, x1 + 1):
+            off = abs((x - cx) - (y - cy))
+            if not any(alpha[yy][xx] for yy in range(max(0, y - w - 1), min(len(alpha), y + w + 2)) for xx in range(max(0, x - w - 1), min(len(alpha), x + w + 2))):
+                continue
+            if off <= w - 1:
+                out[y][x] = 255
+            elif off == w:
+                out[y][x] = 0
+    return out
+
+
+def tray_alpha(state, size):
+    if state == "quiet":
+        return fold_alpha(size)[0]
+    return {"dot": with_dot, "needs": with_ring, "offline": with_slash}[state](size)
+
+
+def alpha_png(alpha, ink=None):
+    ink = bytes(rgb_of(ink or LIGHT_ACCENT))
+    size = len(alpha)
+    raw = b"".join(b"\x00" + b"".join(ink + bytes([a]) for a in row) for row in alpha)
+    return Image(size, False, raw, 4).png()
+
+
+def tray_files():
+    return {f"{TRAY_DIR}/tray-{state}-{size}.png": alpha_png(tray_alpha(state, size)) for state in TRAY_STATES for size in TRAY_SIZES}
 
 
 def build_icns(images):
@@ -323,8 +465,7 @@ def generate():
     files["mobile/assets/splash-icon-dark.png"] = render(1024, INK, "none", DARK_ACCENT, mark_height=SPLASH_MARK).png()
     files["mobile/assets/favicon.png"] = render(96, PAPER, "none", FAVICON_ACCENT, mark_height=FAVICON_MARK, flat=True, nominal=FAVICON_NOMINAL, low=True).png()
     files["mobile/assets/ios-tinted.png"] = render(1024, TINT_GROUND, "full", hex_of(TINT_INK), mark_height=FULL_MARK, flat=True).png()
-    files["desktop/src-tauri/icons/tray-template.png"] = tray_icon(False).png()
-    files["desktop/src-tauri/icons/tray-template-notification.png"] = tray_icon(True).png()
+    files.update(tray_files())
     return files
 
 
@@ -374,6 +515,7 @@ def main(argv=None):
             print(f"stale: {rel}", file=sys.stderr)
         return 1 if stale else 0
     for rel, data in files.items():
+        (REPO / rel).parent.mkdir(parents=True, exist_ok=True)
         (REPO / rel).write_bytes(data)
         print(f"wrote {rel} ({len(data)} bytes)")
     return 0

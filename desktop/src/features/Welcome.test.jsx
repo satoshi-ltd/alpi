@@ -347,12 +347,16 @@ describe("ConnectElsewhere", () => {
 });
 
 describe("FirstRunHint", () => {
-  it("is remembered once dismissed on this machine", () => {
+  it("is one Mono line with the fact and where a phone gets its link, and no button", () => {
+    const { container } = render(<FirstRunHint />);
+    const line = container.querySelector("p .mono");
+    expect(line.textContent).toBe("This is alpi on this computer · To use it from a phone: Settings → Connections");
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("is remembered once marked on this machine", () => {
     expect(firstRunHintSeen()).toBe(false);
-    const onDismiss = vi.fn(() => markFirstRunHintSeen());
-    render(<FirstRunHint onDismiss={onDismiss} />);
-    expect(screen.getByText("This is alpi on this computer")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Got it" }));
+    markFirstRunHintSeen();
     expect(firstRunHintSeen()).toBe(true);
   });
 });

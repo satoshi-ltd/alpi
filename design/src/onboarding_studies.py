@@ -60,14 +60,12 @@ def composer(p, name="alpi"):
     return f'<div style="display: flex; padding: 8px 12px 10px">{field(f"Message {name}…", p, PAPER)}</div>'
 
 
-def hint_card(p):
-    body = stack(text("This is alpi on this computer", 10.5, p["ink"], 600), wrap("To use it from a phone: Settings → Connections → New connection, then scan the code.", 9.5, p["ink2"], lh=1.45), gap=2, extra="flex: 1")
-    return flex(body, button("Got it", "secondary", p, PAPER, 22), gap=10, align="flex-start",
-                extra=f"margin: 10px 12px; padding: 8px 10px; border-radius: 4px; background: {p['hover']}")
+def hint_line(p):
+    return f'<div style="padding: 0 12px 8px; text-align: center">{mono("This is alpi on this computer · To use it from a phone: Settings → Connections", 8.5, p["ink3"])}</div>'
 
 
 def d_running(p=VIEW):
-    main = hint_card(p) + chat_head(p) + f'<div style="flex: 1; display: flex; align-items: center; justify-content: center">{say("A session starts with your first message.", p, 10)}</div>' + composer(p)
+    main = chat_head(p) + f'<div style="flex: 1; display: flex; align-items: center; justify-content: center">{say("A session starts with your first message.", p, 10)}</div>' + composer(p) + hint_line(p)
     return window(p, sidebar(p, "online", ROSTER), main)
 
 
@@ -76,7 +74,7 @@ def sketch(title, body, drawing, zoom=None):
     return f'<div style="display: flex; gap: 24px; align-items: flex-start"><div style="width: 300px; flex-shrink: 0">{note(title, body)}</div>{wrapped}</div>'
 
 
-RUNNING = ("alpi runs here", "The window lands on the roster, alpi first. The connection reads This computer; a one-time card says how to add a phone and stays dismissed on this machine.")
+RUNNING = ("alpi runs here", "The window lands on the roster, alpi first. The connection reads This computer; one Mono line under the composer, with the composer focused, says how to add a phone and goes away with the first message.")
 DESKTOP_ONBOARDING_H = 5660
 
 

@@ -42,15 +42,11 @@ export function markLocalEverOnline() {
   } catch {}
 }
 
-export function FirstRunHint({ onDismiss }) {
+export function FirstRunHint() {
   return (
-    <aside className={styles.hint}>
-      <div className={styles.hintBody}>
-        <strong className={styles.hintTitle}>This is alpi on this computer</strong>
-        <span className={styles.hintText}>To use it from a phone: Settings → Connections → New connection, then scan the code.</span>
-      </div>
-      <Button variant="secondary" size="sm" onClick={onDismiss}>Got it</Button>
-    </aside>
+    <p className={styles.hint}>
+      <Mono>This is alpi on this computer · To use it from a phone: Settings → Connections</Mono>
+    </p>
   );
 }
 

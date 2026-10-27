@@ -4,6 +4,7 @@ mod home;
 mod notifications;
 mod state;
 mod tray;
+mod tray_popover;
 pub mod tts;
 mod watcher;
 
@@ -3694,16 +3695,6 @@ async fn voice_script(profile: String, text: String) -> Result<String, String> {
     .await?
 }
 
-#[tauri::command]
-fn tray_announce_update(app: AppHandle, available: bool, version: Option<String>) {
-    tray::announce_update(&app, available, version.as_deref());
-}
-
-#[tauri::command]
-fn tray_announce_notifications(app: AppHandle, unread: u64) {
-    tray::announce_notifications(&app, unread);
-}
-
 fn subscribe_daemon_events(app: AppHandle) {
     use crate::event_dispatch::{classify_frame, daemon_states, history_was_reset, SubscribeAction, SubscribeState, STATE_SEEN_CAP};
 
@@ -4046,7 +4037,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(tauri_plugin_window_state::Builder::default().with_denylist(&[tray_popover::LABEL]).build())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(move |app, shortcut, event| {
@@ -4065,6 +4056,7 @@ pub fn run() {
         .setup(move |app| {
             install_app_menu(app.handle())?;
             tray::install(app)?;
+            tray_popover::create(app)?;
             if let Err(e) = app.global_shortcut().register(toggle_shortcut) {
                 eprintln!("global shortcut register failed: {e}");
             }
@@ -4117,6 +4109,10 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            if window.label() == tray_popover::LABEL {
+                tray_popover::on_window_event(window, event);
+                return;
+            }
             // Close-to-tray keeps the process (and with it ⌘⇧A + tray notifications) alive — destroying the only window would exit the app.
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let _ = window.hide();
@@ -4262,12 +4258,67 @@ pub fn run() {
             workgroup_saved_recipes,
             workgroup_launch_recipe,
             workgroup_add_member,
-            tray_announce_update,
-            tray_announce_notifications,
+            tray_popover::tray_announce_state,
+            tray_popover::tray_state,
+            tray_popover::resize_tray,
+            tray_popover::hide_tray,
+            tray_popover::show_main,
+            tray_popover::open_settings,
+            tray_popover::open_notifications,
+            tray_popover::restart_to_update,
+            tray_popover::quit_app,
+            tray_popover::start_alpi,
             set_active_view
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = event {
+                if reopen_shows_window(main_window_showing(app)) {
+                    show_main_window(app);
+                }
+            }
+            #[cfg(not(target_os = "macos"))]
+            let _ = (app, event);
+        });
+}
+
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn reopen_shows_window(main_visible: bool) -> bool {
+    !main_visible
+}
+
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn main_window_showing(app: &AppHandle) -> bool {
+    app.get_webview_window("main")
+        .map(|w| w.is_visible().unwrap_or(false) && !w.is_minimized().unwrap_or(false))
+        .unwrap_or(false)
+}
+
+pub(crate) fn show_main_window(app: &AppHandle) -> Option<tauri::WebviewWindow> {
+    tray_popover::hide_popover(app);
+    notifications::clear_activation();
+    let window = app.get_webview_window("main")?;
+    let _ = window.show();
+    let _ = window.unminimize();
+    let _ = window.set_focus();
+    Some(window)
+}
+
+#[cfg(test)]
+mod reopen_tests {
+    use super::reopen_shows_window;
+
+    #[test]
+    fn a_dock_click_with_the_main_window_hidden_or_minimized_shows_it() {
+        assert!(reopen_shows_window(false));
+    }
+
+    #[test]
+    fn a_dock_click_with_the_main_window_showing_leaves_it_alone() {
+        assert!(!reopen_shows_window(true));
+    }
 }
 
 #[cfg(test)]

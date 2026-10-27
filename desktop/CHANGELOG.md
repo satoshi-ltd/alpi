@@ -11,6 +11,15 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.9.3 — 2026-10-27 — a menu bar popover and a crisp icon
+
+- A left click on the menu bar icon opens a popover that triages: what needs you with Review, failing jobs, running turns, the next scheduled job, an update ready, and Open alpi, notifications, Settings and Quit; it follows the app theme and a right click keeps the native menu. It never calls the daemon, and members see no scheduled jobs.
+- The icon has four pixel-exact states drawn per size and display scale: needs you (ring), offline (slash), unread or update (dot) and quiet, and its tooltip names the state.
+- The first-run card is now one quiet line under the composer and chats open with the composer focused; the line goes away with your first message.
+- Clicking alpi's Dock icon after closing its window shows it again, as macOS apps do.
+  Requires alpi 0.17.28.
+
+
 ## v0.9.2 — 2026-10-27 — a console welcome for the first run
 
 - The first-run welcome is a left-aligned console screen with one primary action per state: Install and start alpi, Start alpi or Retry, with Check again and Connect to another computer as quiet actions after it. A failed start shows its log capped at 12 lines, scrolled to the end, and reachable by keyboard.

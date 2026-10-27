@@ -27,10 +27,7 @@ def _load_copy():
 
 COPY = _load_copy()
 DANGER_TEXT = "#b73737"
-Z_PHONE = 0.6
 Z_FOLD = 0.6
-Z_WIN = 0.75
-WIN_W, WIN_H = 720, 440
 
 
 def t(value, size=13, color=INK, weight=400, extra=""):
@@ -58,15 +55,6 @@ def scaled(inner, w, h, z):
             f'<div style="width: {w}px; height: {h}px; zoom: {z}; box-sizing: border-box; overflow: hidden; background: {PANE}; position: relative">{inner}</div></div>')
 
 
-def shot(title, note, drawing, w=None):
-    width = f"width: {w}px;" if w else ""
-    return col(drawing, t(title, 13, INK, 600, "margin-top: 4px"), t(note, 12, INK3, 400, "line-height: 1.5"), gap=4, extra=f"{width} min-width: 0")
-
-
-def grid(*cells, cols=2, gap=16, row_gap=28, cw=round(390 * Z_PHONE)):
-    return f'<div style="display: grid; grid-template-columns: repeat({cols}, {cw}px); gap: {row_gap}px {gap}px; align-items: start">{"".join(cells)}</div>'
-
-
 def dbtn(label, kind="primary", h=40, w=None, flush=False):
     bg, fg, fw = {"primary": (INK, PANE, 600), "secondary": (SELECTED, INK, 500), "ghost": ("transparent", INK2, 500)}[kind]
     pad = 24 if h >= 48 else 16 if h >= 40 else 12
@@ -82,23 +70,6 @@ def dfield(value, w=360, h=40, placeholder=True, focus=False):
             f'font-family: {MONO}; font-size: 13px; color: {INK3 if placeholder else INK}; white-space: nowrap; overflow: hidden">{value}</span>')
 
 
-def dwin(inner, side="", w=WIN_W, h=WIN_H, z=Z_WIN):
-    dots = "".join(f'<span style="width: 10px; height: 10px; border-radius: 999px; background: {INK4}; display: inline-block"></span>' for _ in range(3))
-    bar = f'<div style="height: 32px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: {SIDE}; box-shadow: inset 0 -0.5px 0 {LINE}">{dots}</div>'
-    body = f'<div style="flex: 1; min-height: 0; display: flex">{side}<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: {PANE}">{inner}</div></div>'
-    return scaled(f'<div style="display: flex; flex-direction: column; height: 100%">{bar}{body}</div>', w, h, z)
-
-
-def stage(*items, top=0, gap=0):
-    return (f'<div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: {top}px 32px 0; gap: {gap}px">'
-            f'{"".join(items)}</div>')
-
-
-def head(title, sub="", size=96, sub_w=360):
-    sub_html = t(sub, 15, INK2, 400, f"line-height: 1.5; max-width: {sub_w}px; margin-top: 8px") if sub else ""
-    return (alp(size) + t(title, 28, INK, 600, "letter-spacing: -0.018em; line-height: 1.2; margin-top: 24px") + sub_html)
-
-
 def sidebar_chip(state, extra="", w=192):
     dot = {"online": INK, "offline": DANGER_TEXT, "stopped": INK4}[state]
     status_dot = f'<span style="width: 8px; height: 8px; border-radius: 999px; background: {dot}"></span>'
@@ -106,10 +77,6 @@ def sidebar_chip(state, extra="", w=192):
             f'{mono("Connection", 11, INK3, "letter-spacing: 0.08em; text-transform: uppercase")}'
             f'{line(di("chip", 16, INK2), col(t("This computer", 13, INK, 500), mono("host.sock", 11, INK3), gap=0, extra="flex: 1"), status_dot, gap=8, extra=f"padding: 8px; border-radius: 4px; background: {PANE}; box-shadow: 0 0 0 0.5px {LINE2}")}'
             f'{extra}</div>')
-
-
-def zoomed(drawing, z=0.84):
-    return f'<div style="zoom: {z}">{drawing}</div>'
 
 
 U_W, U_H, U_Z = 960, 600, 0.75

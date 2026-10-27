@@ -238,6 +238,7 @@ export default function ChatComposer({
       stopping={stopping}
       canSend={canSend}
       disabled={paused}
+      focusOnOpen={activeProfile?.name ?? null}
       minHeight={minHeight}
       accent={activeProfile?.accent ?? null}
       placeholder={placeholder}

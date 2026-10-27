@@ -176,6 +176,22 @@
    "title": "Desktop \u00b7 overlays",
    "page": "desktop"
   },
+  "Desktop-Tray.dc.html": {
+   "x": 0,
+   "y": 25540,
+   "w": 1280,
+   "h": 2460,
+   "title": "Desktop \u00b7 tray",
+   "page": "desktop"
+  },
+  "Desktop-TrayIcon.dc.html": {
+   "x": 0,
+   "y": 28240,
+   "w": 1280,
+   "h": 1590,
+   "title": "Desktop \u00b7 tray icon",
+   "page": "desktop"
+  },
   "Fold-FirstRun.dc.html": {
    "x": 0,
    "y": 240,
@@ -599,14 +615,6 @@
    "h": 1270,
    "title": "Brand \u00b7 states and motion",
    "page": "brand"
-  },
-  "Proposals-UX.46.dc.html": {
-   "x": 0,
-   "y": 240,
-   "w": 1280,
-   "h": 2520,
-   "title": "Proposals \u00b7 ux.46 \u00b7 every first empty screen says what to do next",
-   "page": "proposals"
   }
  },
  "order": [
@@ -628,6 +636,8 @@
   "Desktop-AppSettings.dc.html",
   "Desktop-FirstRun.dc.html",
   "Desktop-Overlays.dc.html",
+  "Desktop-Tray.dc.html",
+  "Desktop-TrayIcon.dc.html",
   "Fold-FirstRun.dc.html",
   "Phone-PairWelcome.dc.html",
   "Phone-PairPaste.dc.html",
@@ -680,8 +690,7 @@
   "Brand-Mark.dc.html",
   "Brand-Pairs.dc.html",
   "Brand-Palette.dc.html",
-  "Brand-Motion.dc.html",
-  "Proposals-UX.46.dc.html"
+  "Brand-Motion.dc.html"
  ],
  "notes": {
   "s-Foundations": {
@@ -792,6 +801,22 @@
    "x": 0,
    "y": 21697,
    "text": "Overlays",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "desktop"
+  },
+  "d-Tray": {
+   "x": 0,
+   "y": 25317,
+   "text": "Tray",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "desktop"
+  },
+  "d-Tray icon": {
+   "x": 0,
+   "y": 28017,
+   "text": "Tray icon",
    "kind": "title1",
    "maxW": 2600,
    "page": "desktop"
@@ -987,14 +1012,6 @@
    "kind": "title1",
    "maxW": 2600,
    "page": "brand"
-  },
-  "p-UX.46 \u00b7 Every first empty screen says what to do next": {
-   "x": 0,
-   "y": 17,
-   "text": "UX.46 \u00b7 Every first empty screen says what to do next",
-   "kind": "title1",
-   "maxW": 2600,
-   "page": "proposals"
   }
  },
  "designSystems": []

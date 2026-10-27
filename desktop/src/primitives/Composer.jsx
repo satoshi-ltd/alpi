@@ -16,6 +16,7 @@ export default function Composer({
   disabledTitle = "Type a message",
   leftActions = null,
   hint = null,
+  focusOnOpen = null,
   mentions,
   accent = null,
   topBar = null,
@@ -43,6 +44,13 @@ export default function Composer({
     composingRef.current = false;
     setSettled((n) => n + 1);
   }, [disabled]);
+
+  useEffect(() => {
+    if (focusOnOpen == null || disabled) return;
+    const held = document.activeElement;
+    if (held && held !== document.body) return;
+    textareaRef.current?.focus({ preventScroll: true });
+  }, [focusOnOpen, disabled]);
 
   useEffect(() => {
     const ta = textareaRef.current;

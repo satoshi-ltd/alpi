@@ -73,8 +73,7 @@ describe("whole-pixel line boxes", () => {
     expect(rule(css("styles/design-system.css"), ".ds-alink, .alink")).toMatch(/line-height:\s*var\(--sp-16\)/);
     expect(rule(css("primitives/Notification.module.css"), ".text")).toMatch(/line-height:\s*var\(--sp-16\)/);
     const welcome = css("features/Welcome.module.css");
-    expect(rule(welcome, ".hintTitle")).toMatch(/line-height:\s*var\(--sp-16\)/);
-    expect(rule(welcome, ".hintText")).toMatch(/line-height:\s*var\(--sp-16\)/);
+    expect(rule(welcome, ".hint")).toMatch(/line-height:\s*var\(--sp-16\)/);
     expect(rule(css("pages/ChatPane.module.css"), ".emptyModel")).toMatch(/line-height:\s*var\(--sp-16\)/);
   });
 });
