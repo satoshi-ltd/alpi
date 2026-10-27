@@ -1,5 +1,5 @@
 import { groupActivity } from "../../../common/activityGroups.mjs";
-import { trayState, MAX_NEEDS_ROWS } from "../tray/trayModel.js";
+import { trayState, MAX_NEEDS_ROWS, MAX_RUNNING_ROWS, MAX_NEXT_ROWS } from "../tray/trayModel.js";
 import { profileLabel } from "./profile-display.js";
 
 export const TRAY_SNAPSHOT_VERSION = 1;
@@ -47,6 +47,35 @@ function needsRows(items, { connectionId, foldByProfile, accentByProfile }) {
   });
 }
 
+function runDeeplink(item, connectionId) {
+  const profile = item.profile ?? null;
+  if (!profile) return null;
+  const connection_id = connectionId ?? "";
+  if (item.kind === "workgroup" && item.workgroup_id) return { kind: "workgroup", profile, id: String(item.workgroup_id), connection_id };
+  if (item.session_id) return { kind: "chat", profile, id: String(item.session_id), connection_id };
+  return { kind: "profile", profile, id: profile, connection_id };
+}
+
+function runningRows(items, { connectionId, foldByProfile, accentByProfile }) {
+  const seen = new Map();
+  return items.slice(0, MAX_RUNNING_ROWS).map((item) => {
+    const profile = item.profile ?? null;
+    const base = `${profile ?? ""}/${item.workgroup_id ?? item.job_id ?? item.session_id ?? ""}`;
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    return {
+      id: n ? `${base}#${n}` : base,
+      profile,
+      label: clip(profileLabel(profile ?? "")),
+      title: clip(item.title || item.name),
+      ts: Number.isFinite(item.started_at) ? item.started_at : null,
+      fold: foldByProfile?.[profile] ?? null,
+      accent: accentByProfile?.[profile] ?? null,
+      deeplink: runDeeplink(item, connectionId),
+    };
+  });
+}
+
 export function buildTraySnapshot({
   connection = null,
   daemon = null,
@@ -57,6 +86,7 @@ export function buildTraySnapshot({
   update = null,
   foldByProfile = {},
   accentByProfile = {},
+  otherSchedules = [],
   nowMs = Date.now(),
 } = {}) {
   const rawLink = trayLink({ connection, daemon });
@@ -70,10 +100,34 @@ export function buildTraySnapshot({
   const needs = groups.needs;
   const approvals = needs.filter((i) => i.kind !== "clarification").length;
   const counts = { needs: needs.length, failing: failingJobs, running: groups.running.length };
-  const first = groups.running[0];
   const local = connection?.kind === "local";
   const unreadCount = member ? 0 : Math.max(0, Math.floor(Number(unread) || 0));
-  const upcoming = !member && online && activitySupported && activity != null ? groups.upcoming[0] : null;
+  const known = !member && online && activitySupported && activity != null;
+  const activeName = connection?.name ?? connection?.id ?? "";
+  const candidates = known
+    ? [
+        ...groups.upcoming.map((job) => ({ job, id: connection?.id, name: activeName, own: true })),
+        ...otherSchedules.filter((other) => other.id !== connection?.id).flatMap((other) =>
+          groupActivity({ scheduled: other.scheduled }, { nowMs }).upcoming.map((job) => ({ job, id: other.id, name: other.name ?? other.id ?? "", own: false })),
+        ),
+      ]
+    : [];
+  const several = new Set(candidates.map((c) => c.id)).size > 1;
+  const nextRows = known
+    ? candidates
+        .sort((a, b) => a.job.nextAt - b.job.nextAt)
+        .slice(0, MAX_NEXT_ROWS)
+        .map(({ job, id, name, own }) => ({
+          id: `${id ?? ""}/${job.profile ?? ""}/${job.job_id ?? ""}`,
+          title: clip(job.title || job.job_id),
+          label: clip(profileLabel(job.profile ?? "")),
+          at: new Date(job.nextAt * 1000).toISOString(),
+          source: several ? clip(name, 40) : null,
+          fold: own ? foldByProfile?.[job.profile] ?? null : null,
+          accent: own ? accentByProfile?.[job.profile] ?? null : null,
+          deeplink: job.profile ? { kind: "settings", profile: job.profile, id: "schedules", connection_id: id ?? "" } : null,
+        }))
+    : [];
   return {
     v: TRAY_SNAPSHOT_VERSION,
     state: unsupported ? "online" : trayState({ link, ...counts }),
@@ -94,9 +148,9 @@ export function buildTraySnapshot({
     },
     running: {
       count: counts.running,
-      first: first ? { label: clip(profileLabel(first.profile ?? "")), title: clip(first.title || first.name) } : null,
+      rows: runningRows(groups.running, { connectionId: connection?.id, foldByProfile, accentByProfile }),
     },
-    next: upcoming ? { title: clip(upcoming.title || upcoming.job_id), at: new Date(upcoming.nextAt * 1000).toISOString() } : null,
+    next: nextRows.length ? { rows: nextRows } : null,
     offline: rawLink === "offline"
       ? { local, canStart: local && daemon?.state === "stopped", absent: local && (daemon?.state === "absent" || daemon?.state === "unsupported") }
       : null,

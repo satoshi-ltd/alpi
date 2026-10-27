@@ -24,7 +24,7 @@ const snap = (over = {}) => ({
   update: null,
   needs: { total: 0, approvals: 0, questions: 0, rows: [] },
   failing: { jobs: 0, profileCount: 0, profiles: [] },
-  running: { count: 0, first: null },
+  running: { count: 0, rows: [] },
   offline: null,
   ...over,
 });
@@ -33,6 +33,8 @@ const needsSnap = (n, over = {}) => {
   const rows = Array.from({ length: Math.min(n, 4) }, (_, i) => need(i));
   return snap({ state: "needs", needs: { total: n, approvals: n, questions: 0, rows }, ...over });
 };
+
+const turn = (i, over = {}) => ({ id: `t${i}`, profile: "alpi", label: "alpi", title: `Turn ${i}`, ts: NOW / 1000 - 120, fold: "llama", accent: "#14110c", deeplink: { kind: "chat", profile: "alpi", id: `s${i}`, connection_id: "c" }, ...over });
 
 describe("trayState", () => {
   it("lets the link outrank everything and then ranks needs-you, failing, running", () => {
@@ -55,7 +57,7 @@ describe("trayModel states", () => {
 
   it("draws Needs you with the first request spelled out and the counts below", () => {
     const m = trayModel(
-      needsSnap(2, { failing: { jobs: 3, profileCount: 2, profiles: ["sentinel", "clonara"] }, running: { count: 2, first: null }, unread: 1 }),
+      needsSnap(2, { failing: { jobs: 3, profileCount: 2, profiles: ["sentinel", "clonara"] }, running: { count: 2, rows: [] }, unread: 1 }),
       NOW,
     );
     expect(m.title).toBe("2 need you");
@@ -70,11 +72,29 @@ describe("trayModel states", () => {
     expect(m.bellLabel).toBe("Notifications · 1 unread");
   });
 
-  it("draws Running turns with the first one named", () => {
-    const m = trayModel(snap({ state: "running", running: { count: 2, first: { label: "alpi", title: "Summarize yesterday’s deploys" } } }), NOW);
+  it("lists the running turns as rows with their fold and elapsed time", () => {
+    const m = trayModel(snap({ state: "running", running: { count: 2, rows: [turn(0), turn(1, { ts: null })] } }), NOW);
     expect(m.title).toBe("2 running");
-    expect(m.sub).toBe("alpi · Summarize yesterday’s deploys");
-    expect(m.counts).toEqual([{ key: "running", icon: "activity", label: "Running", value: "2", danger: false }]);
+    expect(m.sub).toBe("Working now");
+    expect(m.runs).toEqual([
+      { key: "t0", title: "Turn 0", sub: "alpi · running", elapsed: "2m", fold: "llama", accent: "#14110c", deeplink: { kind: "chat", profile: "alpi", id: "s0", connection_id: "c" } },
+      expect.objectContaining({ key: "t1", elapsed: "" }),
+    ]);
+    expect(m.counts).toEqual([]);
+    expect(m.runsMore).toBe(0);
+  });
+
+  it("caps running rows at four and counts the rest", () => {
+    const m = trayModel(snap({ state: "running", running: { count: 7, rows: [0, 1, 2, 3, 4, 5].map((i) => turn(i)) } }), NOW);
+    expect(m.runs).toHaveLength(4);
+    expect(m.runsMore).toBe(3);
+  });
+
+  it("keeps the Running count line below needs you and falls back to it without rows", () => {
+    const needing = trayModel(snap({ ...needsSnap(1), running: { count: 2, rows: [turn(0)] } }), NOW);
+    expect(needing.runs).toEqual([]);
+    expect(needing.counts).toEqual([{ key: "running", icon: "activity", label: "Running", value: "2", danger: false }]);
+    expect(trayModel(snap({ state: "running", running: { count: 2, rows: [] } }), NOW).counts).toHaveLength(1);
   });
 
   it("draws Failing jobs with the profiles and the Activity window", () => {
@@ -131,7 +151,7 @@ describe("trayModel copy and plurals", () => {
     });
     const one = trayModel(snap({ state: "failing", failing: { jobs: 1, profileCount: 1, profiles: ["sentinel"] } }), NOW);
     expect(one.counts[0].value).toBe("1 in 1 profile");
-    expect(trayModel(snap({ state: "running", running: { count: 1, first: null } }), NOW).title).toBe("1 running");
+    expect(trayModel(snap({ state: "running", running: { count: 1, rows: [] } }), NOW).title).toBe("1 running");
   });
 
   it("describes a question as a question", () => {
@@ -159,10 +179,9 @@ describe("trayModel copy and plurals", () => {
     expect(trayModel(snap({ state: "failing", failing: { jobs: 2, profileCount: 0, profiles: [] } }), NOW).sub).toBe("Last 24 h");
   });
 
-  it("names the running turn by its profile alone when it has no title", () => {
-    const m = trayModel(snap({ state: "running", running: { count: 1, first: { label: "alpi", title: "" } } }), NOW);
-    expect(m.sub).toBe("alpi");
-    expect(trayModel(snap({ state: "running", running: { count: 1, first: null } }), NOW).sub).toBe("");
+  it("falls back to the profile when a running turn has no title", () => {
+    const m = trayModel(snap({ state: "running", running: { count: 1, rows: [turn(0, { title: "" })] } }), NOW);
+    expect(m.runs[0].title).toBe("alpi");
   });
 
   it("explains an outage by its cause", () => {
@@ -202,12 +221,12 @@ describe("trayModel limits and ordering", () => {
   });
 
   it("lists failing before running", () => {
-    const m = trayModel(snap({ state: "needs", needs: { total: 1, approvals: 1, questions: 0, rows: [need(0)] }, running: { count: 2, first: null }, failing: { jobs: 1, profileCount: 1, profiles: ["x"] } }), NOW);
+    const m = trayModel(snap({ state: "needs", needs: { total: 1, approvals: 1, questions: 0, rows: [need(0)] }, running: { count: 2, rows: [] }, failing: { jobs: 1, profileCount: 1, profiles: ["x"] } }), NOW);
     expect(m.counts.map((c) => c.key)).toEqual(["failing", "running"]);
   });
 
   it("hides rows and counts while the daemon is not reachable", () => {
-    const m = trayModel(snap({ state: "offline", needs: { total: 2, approvals: 2, questions: 0, rows: [need(0)] }, running: { count: 1, first: null }, failing: { jobs: 1, profileCount: 1, profiles: ["x"] } }), NOW);
+    const m = trayModel(snap({ state: "offline", needs: { total: 2, approvals: 2, questions: 0, rows: [need(0)] }, running: { count: 1, rows: [] }, failing: { jobs: 1, profileCount: 1, profiles: ["x"] } }), NOW);
     expect(m).toMatchObject({ rows: [], more: 0, counts: [] });
   });
 
@@ -266,47 +285,51 @@ describe("trayModel without a verdict on activity", () => {
 
 describe("trayModel quiet Next line", () => {
   const AT = new Date(NOW + 5 * 3600e3).toISOString();
-  const quiet = (over = {}) => snap({ next: { title: "Daily brief", at: AT }, ...over });
+  const job = (i, over = {}) => ({ id: `c/p/j${i}`, title: `Job ${i}`, label: "scribe", at: AT, source: null, fold: "llama", accent: "#14110c", deeplink: { kind: "settings", profile: "scribe", id: "schedules", connection_id: "c" }, ...over });
+  const quiet = (over = {}) => snap({ next: { rows: [job(0)] }, ...over });
 
-  it("names the next job and when it runs", () => {
-    const m = trayModel(quiet(), NOW);
+  it("lists the next jobs under a Coming up heading", () => {
+    const m = trayModel(quiet({ next: { rows: [job(0), job(1, { source: "mirai" })] } }), NOW);
     expect(m.title).toBe("All quiet");
-    expect(m.sub).toMatch(/^Next: Daily brief · /);
-    expect(m.next).toEqual({ title: "Daily brief", when: expect.any(String) });
-    expect(m.sub.endsWith(m.next.when)).toBe(true);
+    expect(m.sub).toBe("Coming up");
+    expect(m.nextRows).toEqual([
+      { key: "c/p/j0", title: "Job 0", sub: "scribe", when: expect.any(String), fold: "llama", accent: "#14110c", deeplink: expect.any(Object) },
+      expect.objectContaining({ key: "c/p/j1", sub: "scribe · mirai" }),
+    ]);
   });
 
-  it("keeps a long title whole for the view to ellipsize and the time apart", () => {
-    const title = "Summarize yesterday’s deploys and flag anything that needs a rollback";
-    const m = trayModel(quiet({ next: { title, at: AT } }), NOW);
-    expect(m.next.title).toBe(title);
-    expect(m.next.when).not.toContain(title);
+  it("caps the list at three rows", () => {
+    expect(trayModel(quiet({ next: { rows: [0, 1, 2, 3, 4].map((i) => job(i)) } }), NOW).nextRows).toHaveLength(3);
+  });
+
+  it("falls back to the title-less profile label", () => {
+    expect(trayModel(quiet({ next: { rows: [job(0, { title: "" })] } }), NOW).nextRows[0].title).toBe("scribe");
   });
 
   it("says Nothing scheduled for an admin with no job", () => {
     const m = trayModel(quiet({ next: null }), NOW);
     expect(m.sub).toBe("Nothing scheduled");
-    expect(m.next).toBeNull();
+    expect(m.nextRows).toEqual([]);
   });
 
   it("keeps the neutral line for a member, even if a next slipped in", () => {
     const m = trayModel(quiet({ member: true }), NOW);
     expect(m.sub).toBe("Nothing needs you · online");
-    expect(m.next).toBeNull();
+    expect(m.nextRows).toEqual([]);
   });
 
   it("renders today's popover for a snapshot without next", () => {
-    expect(trayModel(snap(), NOW)).toMatchObject({ sub: "Nothing needs you · online", next: null });
+    expect(trayModel(snap(), NOW)).toMatchObject({ sub: "Nothing needs you · online", nextRows: [] });
   });
 
   it("makes no claim when the daemon cannot list activity or is still loading", () => {
-    expect(trayModel(quiet({ state: "online", next: null }), NOW)).toMatchObject({ title: "alpi", sub: "online", next: null });
-    expect(trayModel(quiet({ state: "connecting" }), NOW)).toMatchObject({ title: "Connecting…", next: null });
+    expect(trayModel(quiet({ state: "online", next: null }), NOW)).toMatchObject({ title: "alpi", sub: "online", nextRows: [] });
+    expect(trayModel(quiet({ state: "connecting" }), NOW)).toMatchObject({ title: "Connecting…", nextRows: [] });
   });
 
   it("shows the line in the quiet state only", () => {
     for (const state of ["needs", "failing", "running", "offline", "starting"]) {
-      expect(trayModel(quiet({ state }), NOW).next, state).toBeNull();
+      expect(trayModel(quiet({ state }), NOW).nextRows, state).toEqual([]);
     }
   });
 });

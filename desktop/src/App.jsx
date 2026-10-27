@@ -69,6 +69,7 @@ import {
 } from "./hooks/useNotificationDeeplink.js";
 import { useLocalDaemon } from "./hooks/useLocalDaemon.js";
 import { useTrayAnnouncer } from "./hooks/useTrayAnnouncer.js";
+import { useOtherSchedules } from "./hooks/useOtherSchedules.js";
 import Welcome, { WelcomeFrame, FirstRunHint, localEverOnlineSeen, markLocalEverOnline, firstRunHintSeen, markFirstRunHintSeen } from "./features/Welcome.jsx";
 import { useDelayedFlag } from "./lib/useDelayedFlag.js";
 import { hasDirtySettings } from "./lib/settingsDirty.js";
@@ -1327,6 +1328,7 @@ export default function App() {
     () => ({ state: localDaemon.state, phase: localDaemon.phase, launched: localDaemon.launched }),
     [localDaemon.state, localDaemon.phase, localDaemon.launched],
   );
+  const otherSchedules = useOtherSchedules({ connections: hostConnections.connections, activeId: hostConnections.active_id });
   useTrayAnnouncer({
     connection: activeConnection,
     daemon: trayDaemon,
@@ -1336,6 +1338,7 @@ export default function App() {
     unread: notificationsUnread,
     foldByProfile,
     accentByProfile,
+    otherSchedules,
   });
   const jumpHints = useMemo(() => {
     const out = {};

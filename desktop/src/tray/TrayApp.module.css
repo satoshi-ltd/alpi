@@ -62,22 +62,9 @@
   font-size: var(--text-ui);
   line-height: var(--sp-16);
   color: var(--ink-3);
-}
-
-.sub[data-next] {
-  display: flex;
-  white-space: nowrap;
-}
-
-.nextLead,
-.nextWhen {
-  flex-shrink: 0;
-}
-
-.nextTitle {
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .section {
@@ -112,6 +99,11 @@
   align-items: center;
   gap: var(--sp-8);
   padding: 0 var(--sp-12);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
 }
 

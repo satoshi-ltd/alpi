@@ -16,7 +16,7 @@ const MAX_HEIGHT: f64 = 640.0;
 const MAX_FIELD_CHARS: usize = 128;
 const GAP: f64 = 14.0;
 const REOPEN_GUARD: Duration = Duration::from_millis(250);
-const DEEPLINK_KINDS: [&str; 2] = ["approval", "clarification"];
+const DEEPLINK_KINDS: [&str; 6] = ["approval", "clarification", "chat", "profile", "workgroup", "settings"];
 
 static ANCHOR: Mutex<Option<(f64, f64)>> = Mutex::new(None);
 static PENDING: Mutex<Option<ClickAction>> = Mutex::new(None);
@@ -96,7 +96,7 @@ fn deeplink_field_ok(value: &str) -> bool {
 pub fn deeplink_payload(arg: Option<DeeplinkArg>) -> Option<Value> {
     let arg = arg?;
     let id = arg.id.filter(|id| !id.is_empty())?;
-    if !DEEPLINK_KINDS.contains(&arg.kind.as_str()) {
+    if !DEEPLINK_KINDS.contains(&arg.kind.as_str()) || (arg.kind == "settings" && id != "schedules") {
         return None;
     }
     let fields = [Some(id.as_str()), arg.profile.as_deref(), arg.connection_id.as_deref()];
@@ -487,11 +487,23 @@ mod tests {
     }
 
     #[test]
+    fn a_running_row_opens_its_session_or_its_profile() {
+        assert_eq!(
+            deeplink_payload(arg("chat", Some("s1"))),
+            Some(json!({"deeplink": {"kind": "chat", "profile": "abby", "id": "s1", "connection_id": "conn-1"}}))
+        );
+        assert!(deeplink_payload(arg("profile", Some("abby"))).is_some());
+        assert!(deeplink_payload(arg("workgroup", Some("wg1"))).is_some());
+        assert!(deeplink_payload(arg("settings", Some("schedules"))).is_some());
+        assert_eq!(deeplink_payload(arg("settings", Some("providers"))), None);
+    }
+
+    #[test]
     fn the_popover_cannot_steer_the_main_window_anywhere_else() {
         assert_eq!(deeplink_payload(None), None);
         assert_eq!(deeplink_payload(arg("approval", None)), None);
         assert_eq!(deeplink_payload(arg("approval", Some(""))), None);
-        for kind in ["settings", "chat", "output", "workgroup", "profile", ""] {
+        for kind in ["output", ""] {
             assert_eq!(deeplink_payload(arg(kind, Some("x"))), None, "{kind}");
         }
     }
@@ -514,7 +526,7 @@ mod tests {
 
     #[test]
     fn compose_and_chat_kinds_are_refused() {
-        for kind in ["compose", "chat"] {
+        for kind in ["compose", "chat-new"] {
             assert_eq!(deeplink_payload(arg(kind, Some("x"))), None, "{kind}");
         }
     }

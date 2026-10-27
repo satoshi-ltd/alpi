@@ -11,6 +11,13 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.9.6 — 2026-10-27 — running turns in the menu bar
+
+- The menu bar popover lists each running turn as a row with the agent's fold, the prompt on one line and how long it has run; a click opens it.
+- The heading says "Working now" instead of repeating the prompt, and the heading never wraps over several lines.
+- The quiet popover lists the next three scheduled jobs of every connected daemon, each with its agent's fold and the connection it comes from; a click opens that schedule.
+  Requires alpi 0.17.28.
+
 ## v0.9.5 — 2026-10-27 — white inputs
 
 - Every input, the composer included, now rests on the raised surface (white in light) with a hairline edge instead of a grey well.

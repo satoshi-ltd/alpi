@@ -41,18 +41,47 @@ describe("buildTraySnapshot next", () => {
   const sched = (over) => ({ profile: "doc", job_id: "j", title: "Daily brief", next_fire: new Date(future(3600) * 1000).toISOString(), ...over });
   const quiet = (scheduled) => ({ connection: online, activity: { needs_you: [], running: [], scheduled }, nowMs: NOW });
 
-  it("carries the earliest upcoming job with an ISO time", () => {
+  it("lists the earliest upcoming jobs first with an ISO time", () => {
     const early = sched({ job_id: "a", title: "Early", next_fire: new Date(future(600) * 1000).toISOString() });
     const late = sched({ job_id: "b", title: "Late", next_fire: new Date(future(7200) * 1000).toISOString() });
     const s = buildTraySnapshot(quiet([late, early]));
-    expect(s.next).toEqual({ title: "Early", at: new Date(future(600) * 1000).toISOString() });
+    expect(s.next.rows.map((r) => r.title)).toEqual(["Early", "Late"]);
+    expect(s.next.rows[0]).toMatchObject({ at: new Date(future(600) * 1000).toISOString(), source: null, deeplink: { kind: "settings", profile: "doc", id: "schedules", connection_id: "local" } });
+  });
+
+  it("keeps three rows across every connection and names the one each comes from", () => {
+    const at = (secs) => new Date(future(secs) * 1000).toISOString();
+    const own = [sched({ job_id: "h1", title: "Here", next_fire: at(7200) }), sched({ job_id: "h2", title: "Here 2", next_fire: at(9000) })];
+    const there = [sched({ job_id: "t1", title: "There", next_fire: at(600) }), sched({ job_id: "t2", title: "There 2", next_fire: at(1200) })];
+    const s = buildTraySnapshot({ ...quiet(own), connection: { ...online, name: "casa" }, otherSchedules: [{ id: "mirai", name: "mirai", scheduled: there }] });
+    expect(s.next.rows.map((r) => [r.title, r.source])).toEqual([["There", "mirai"], ["There 2", "mirai"], ["Here", "casa"]]);
+    expect(s.next.rows[0].deeplink.connection_id).toBe("mirai");
+    expect(buildTraySnapshot({ ...quiet([]), otherSchedules: [{ id: "mirai", name: "mirai", scheduled: there }] }).next.rows[0].title).toBe("There");
+    expect(buildTraySnapshot({ ...quiet([]), otherSchedules: [{ id: "mirai", name: "mirai", scheduled: [] }] }).next).toBeNull();
+  });
+
+  it("names no connection while only one contributes jobs", () => {
+    const own = sched({ title: "Here" });
+    const s = buildTraySnapshot({ ...quiet([own]), connection: { ...online, name: "casa" }, otherSchedules: [{ id: "mirai", name: "mirai", scheduled: [] }] });
+    expect(s.next.rows.map((r) => r.source)).toEqual([null]);
+  });
+
+  it("does not list the active connection twice while its own rows are still in the other list", () => {
+    const own = sched({ title: "Here" });
+    const s = buildTraySnapshot({ ...quiet([own]), connection: { ...online, name: "casa" }, otherSchedules: [{ id: "local", name: "casa", scheduled: [own] }] });
+    expect(s.next.rows).toHaveLength(1);
+  });
+
+  it("ignores another connection's job that is already past", () => {
+    const past = sched({ next_fire: new Date(future(-60) * 1000).toISOString() });
+    expect(buildTraySnapshot({ ...quiet([]), otherSchedules: [{ id: "m", name: "m", scheduled: [past] }] }).next).toBeNull();
   });
 
   it("falls back to the job id and cuts a long title at 200 characters", () => {
-    expect(buildTraySnapshot(quiet([sched({ title: "" })])).next.title).toBe("j");
+    expect(buildTraySnapshot(quiet([sched({ title: "" })])).next.rows[0].title).toBe("j");
     const s = buildTraySnapshot(quiet([sched({ title: "t".repeat(5000) })]));
-    expect(s.next.title.length).toBe(200);
-    expect(s.next.title.endsWith("…")).toBe(true);
+    expect(s.next.rows[0].title.length).toBe(200);
+    expect(s.next.rows[0].title.endsWith("…")).toBe(true);
   });
 
   it("is null with no scheduled job, and for a member whatever the daemon lists", () => {
@@ -81,7 +110,11 @@ describe("buildTraySnapshot", () => {
     expect(s.counts).toEqual({ needs: 2, failing: 2, running: 2 });
     expect(s.needs).toMatchObject({ total: 2, approvals: 1, questions: 1 });
     expect(s.failing).toEqual({ jobs: 2, profileCount: 2, profiles: ["sentinel", "clonara"] });
-    expect(s.running).toEqual({ count: 2, first: { label: "alpi", title: "Summarize deploys" } });
+    expect(s.running.count).toBe(2);
+    expect(s.running.rows.map((r) => [r.label, r.title, r.deeplink])).toEqual([
+      ["alpi", "Summarize deploys", { kind: "profile", profile: "default", id: "default", connection_id: "local" }],
+      ["doc", "Daily brief", { kind: "profile", profile: "doc", id: "doc", connection_id: "local" }],
+    ]);
     expect(s.unread).toBe(3);
   });
 
@@ -116,6 +149,19 @@ describe("buildTraySnapshot", () => {
     expect(buildTraySnapshot({ connection: online, activity: empty }).state).toBe("quiet");
   });
 
+  it("opens a running chat turn by its session", () => {
+    const s = buildTraySnapshot({ connection: online, activity: { needs_you: [], running: [{ kind: "turn", profile: "abby", session_id: "s9", title: "x", started_at: 100 }], scheduled: [] }, foldByProfile: { abby: "llama" }, nowMs: NOW });
+    expect(s.running.rows[0]).toMatchObject({ profile: "abby", fold: "llama", ts: 100, deeplink: { kind: "chat", profile: "abby", id: "s9", connection_id: "local" } });
+  });
+
+  it("opens a workgroup pipeline row by its workgroup and keeps repeated runs distinct", () => {
+    const run = { kind: "turn", profile: "sentinel", job_id: "j1", title: "Sweep" };
+    const s = buildTraySnapshot({ connection: online, activity: { needs_you: [], running: [{ kind: "workgroup", profile: "hub", workgroup_id: "wg1", name: "Release" }, run, run], scheduled: [] }, nowMs: NOW });
+    expect(s.running.rows[0].deeplink).toEqual({ kind: "workgroup", profile: "hub", id: "wg1", connection_id: "local" });
+    expect(new Set(s.running.rows.map((r) => r.id)).size).toBe(3);
+    expect(s.running.rows[1].id).toBe("sentinel/j1");
+  });
+
   it("does not announce quiet while the first activity reply is pending", () => {
     const s = buildTraySnapshot({ connection: online, activity: null });
     expect(s.state).toBe("connecting");
@@ -145,7 +191,7 @@ describe("buildTraySnapshot", () => {
     expect(JSON.stringify(s).length).toBeLessThan(8 * 1024);
     expect(s.needs.rows[0].title.length).toBe(200);
     expect(s.needs.rows[0].title.endsWith("…")).toBe(true);
-    expect(s.running.first.title.length).toBe(200);
+    expect(s.running.rows[0].title.length).toBe(200);
     expect(s.update.version.length).toBe(32);
   });
 

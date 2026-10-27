@@ -2,6 +2,8 @@ import { pluralize } from "../../../common/pluralize.mjs";
 import { formatNextFire, relativeTime } from "../lib/time.js";
 
 export const MAX_NEEDS_ROWS = 4;
+export const MAX_RUNNING_ROWS = 4;
+export const MAX_NEXT_ROWS = 3;
 const NOT_ONLINE = ["offline", "starting", "connecting"];
 export const TRAY_STATES = ["quiet", "needs", "running", "failing", "offline", "starting", "connecting", "online"];
 
@@ -62,10 +64,7 @@ function heading(snapshot, nowMs) {
     return { title: `${n} ${pluralize(n, "job")} failing`, sub: failingSub(failing) };
   }
   if (state === "running") {
-    const n = count(running.count);
-    const first = running.first;
-    const sub = first ? [first.label, first.title].filter(Boolean).join(" · ") : "";
-    return { title: `${n} running`, sub };
+    return { title: `${count(running.count)} running`, sub: "Working now" };
   }
   if (state === "offline") return offlineCopy(snapshot.offline);
   if (state === "starting") return { title: "Starting alpi…", sub: "Waiting for the daemon" };
@@ -73,7 +72,12 @@ function heading(snapshot, nowMs) {
   if (state === "connecting") return { title: "Connecting…", sub: "Waiting for the daemon" };
   if (snapshot.member || snapshot.next === undefined) return { title: "All quiet", sub: "Nothing needs you · online" };
   if (snapshot.next === null) return { title: "All quiet", sub: "Nothing scheduled" };
-  return { title: "All quiet", sub: `Next: ${snapshot.next.title} · ${formatNextFire(snapshot.next.at, nowMs)}` };
+  return { title: "All quiet", sub: "Coming up" };
+}
+
+function elapsed(ts, nowMs) {
+  const rel = relativeTime(ts, nowMs);
+  return rel === "now" ? "<1m" : rel;
 }
 
 function ago(ts, nowMs) {
@@ -91,6 +95,32 @@ function row(r, nowMs) {
     title: r.title || (kind === "question" ? "has a question" : "wants to run a command"),
     sub: parts.join(" · "),
     profile: r.profile ?? null,
+    fold: r.fold ?? null,
+    accent: r.accent ?? null,
+    deeplink: r.deeplink ?? null,
+  };
+}
+
+function nextRow(r, nowMs) {
+  const label = r.label || r.profile || "";
+  return {
+    key: r.id,
+    title: r.title || label,
+    sub: [label, r.source].filter(Boolean).join(" · "),
+    when: formatNextFire(r.at, nowMs),
+    fold: r.fold ?? null,
+    accent: r.accent ?? null,
+    deeplink: r.deeplink ?? null,
+  };
+}
+
+function runRow(r, nowMs) {
+  const label = r.label || r.profile || "";
+  return {
+    key: r.id,
+    title: r.title || label,
+    sub: label ? `${label} · running` : "running",
+    elapsed: elapsed(r.ts, nowMs),
     fold: r.fold ?? null,
     accent: r.accent ?? null,
     deeplink: r.deeplink ?? null,
@@ -126,20 +156,24 @@ export function trayModel(snapshot, nowMs = Date.now()) {
       danger: true,
     });
   }
-  if (online && runningCount > 0) counts.push({ key: "running", icon: "activity", label: "Running", value: String(runningCount), danger: false });
+  const runs = online && state === "running" ? (view.running.rows ?? []).slice(0, MAX_RUNNING_ROWS).map((r) => runRow(r, nowMs)) : [];
+  const runsMore = runs.length > 0 ? Math.max(0, runningCount - runs.length) : 0;
+  if (online && runningCount > 0 && runs.length === 0) counts.push({ key: "running", icon: "activity", label: "Running", value: String(runningCount), danger: false });
   const update = s.update
     ? { text: s.update.version ? `alpi ${s.update.version} is ready` : "An update is ready", busy: Boolean(s.update.busy) }
     : null;
   const unread = count(s.unread);
   const quiet = state === "quiet";
-  const next = quiet && !s.member && s.next ? { title: s.next.title, when: formatNextFire(s.next.at, nowMs) } : null;
+  const nextRows = quiet && !s.member && s.next?.rows ? s.next.rows.slice(0, MAX_NEXT_ROWS).map((r) => nextRow(r, nowMs)) : [];
   return {
-    next,
+    nextRows,
     state,
     title,
     sub,
     rows,
     more,
+    runs,
+    runsMore,
     counts,
     busy: state === "starting" ? "Start requested" : null,
     start: state === "offline" && Boolean(s.offline?.canStart),

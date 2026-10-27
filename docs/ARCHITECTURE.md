@@ -1630,22 +1630,24 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
     main window pushes one snapshot (`tray_announce_state`, versioned, debounced
     250 ms, an identical snapshot is not resent) already filtered by connection
     and profile scope: state, counts, the first four needs-you rows (profile,
-    fold, accent, a deeplink only for an approval or a clarification), failing
-    jobs, the first running turn, the next scheduled job, unread, update and
+    fold, accent, a deeplink for an approval or a clarification only), failing
+    jobs, the first four running turns (profile, fold, accent, title, start time and a deeplink: `chat` to the session, `workgroup` to a pipeline, `profile` for a scheduled run), the next three scheduled jobs across every online connection (the main window reads each other connection's `host.activity.list` every five minutes and merges them by time; each row carries its profile, fold, a `settings/schedules` deeplink on its own connection and the connection's name when there is more than one), unread, update and
     offline facts. Titles are cut to 200 characters; when the invoke fails a
     reduced `{v, state, counts}` is sent instead; Rust refuses a snapshot over
     64 KB and caps each deeplink field. The popover reads it with `tray_state`
     when it opens and on the `tray-state` event, and follows the app theme
     (System, Light or Dark) through the shared `storage` event and on show.
   - *States.* Heading and rows come from `trayModel.js`: all quiet (an admin
-    with an upcoming scheduled job reads `Next: <job> · <time>`, one without
+    with an upcoming scheduled job on any connection reads `Coming up` over up to three job rows (job, profile · connection, time) that open that schedule, one without
     reads `Nothing scheduled`, a member reads `Nothing needs you · online` and
     never sees scheduled jobs or the bell), needs you (approval and question
     rows with Review, then the failing and running counts), failing jobs,
-    running turns, update ready (a row above the footer in every state), daemon
+    running turns (a row each with its fold, the prompt on one line and the
+    elapsed time, opening the session, workgroup or profile; `Working now` under the heading, and
+    the Running count line only below needs you or failing), update ready (a row above the footer in every state), daemon
     stopped (Start alpi), starting, connecting (activity still loading: it never
     claims all quiet) and `alpi · online` when the daemon has no
-    `host.activity.list`. More than four needs-you rows end in `N more · Open
+    `host.activity.list`. More than four needs-you or running rows end in `N more · Open
     alpi`. The footer is Open alpi, the bell, Settings and Quit.
   - *Window.* 340 px wide inside a 342 px transparent, undecorated,
     always-on-top window that skips the taskbar (`macos-private-api` makes the

@@ -18,7 +18,7 @@ STATES = ("quiet", "dot", "needs", "offline")
 SIZES = (16, 20, 22, 24, 32, 36)
 
 POPOVER_HEIGHTS = {
-    "next": 107, "none": 107, "member": 107, "needs": 267, "many": 307, "failing": 147, "running": 147, "update": 147,
+    "next": 227, "next_long": 155, "none": 107, "member": 107, "needs": 267, "many": 307, "failing": 147, "running": 195, "update": 147,
     "stopped": 127, "unreachable": 107, "starting": 139, "connecting": 107, "online": 107, "hero": 307,
 }
 TRAY_H = 2460
@@ -67,11 +67,6 @@ def head(title, sub, right="", nowrap=False):
             f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">'
             f'<h1 style="margin: 0; font-size: 15px; line-height: 20px; font-weight: 600; color: {INK}">{title}</h1>'
             f'<p style="margin: 0; font-size: 13px; line-height: 16px; color: {INK3}; {sub_style}">{sub}</p></div>{right}</header>')
-
-
-def next_sub(title, when):
-    return (f'<span style="flex-shrink: 0">Next:&nbsp;</span><span style="min-width: 0; overflow: hidden; text-overflow: ellipsis">{title}</span>'
-            f'<span style="flex-shrink: 0">&nbsp;·&nbsp;{when}</span>')
 
 
 def needs_row(profile, color, title, sub):
@@ -143,12 +138,30 @@ ROWS = (
 )
 
 
+def job_row(profile, color, title, when, where):
+    mono = "font-family: 'Geist Mono', monospace; font-size: 11px; line-height: 16px"
+    return (f'<li style="display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border-radius: 4px">'
+            f'<span style="width: 16px; display: inline-flex; justify-content: center; flex-shrink: 0">{identity_glyph(profile, color, 16)}</span>'
+            f'<span style="flex: 1; min-width: 0; display: flex; flex-direction: column">'
+            f'<span style="font-size: 13px; line-height: 16px; color: {INK}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{title}</span>'
+            f'<span style="{mono}; color: {INK3}">{profile} · {where}</span></span>'
+            f'<span style="{mono}; color: {INK3}">{when}</span></li>')
+
+
+def next_section(*rows):
+    return f'<section aria-label="Next" style="padding: 0 8px 8px"><ul style="margin: 0; padding: 0; list-style: none">{"".join(rows)}</ul></section>'
+
+
 def s_next():
-    return popover(head("All quiet", next_sub("Daily brief", "today 18:00"), nowrap=True), foot())
+    rows = (job_row("scribe", "#3b6fe0", "Blog · post semanal", "Thu 4:00 PM", "casa"),
+            job_row(*DOC, "Daily brief", "Wed 9:00 AM", "atlas"),
+            job_row(*SENTINEL, "Weekly review", "Fri 10:00 AM", "mirai"))
+    return popover(head("All quiet", "Coming up"), next_section(*rows), foot())
 
 
 def s_next_long():
-    return popover(head("All quiet", next_sub("Summarize yesterday’s deploys and flag anything that needs a rollback", "tomorrow 07:30"), nowrap=True), foot())
+    rows = (job_row(*ALPI, "Summarize yesterday’s deploys and flag anything that needs a rollback", "tomorrow 7:30 AM", "local"),)
+    return popover(head("All quiet", "Coming up"), next_section(*rows), foot())
 
 
 def s_none():
@@ -171,12 +184,23 @@ def s_failing():
     return popover(head("3 jobs failing", "sentinel and clonara · last 24 h"), counts_section(FAILING_COUNT), foot())
 
 
+def turn_row(profile, color, title, elapsed):
+    return (f'<li style="display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border-radius: 4px">'
+            f'<span style="width: 16px; display: inline-flex; justify-content: center; flex-shrink: 0">{identity_glyph(profile, color, 16)}</span>'
+            f'<span style="flex: 1; min-width: 0; display: flex; flex-direction: column">'
+            f'<span style="font-size: 13px; line-height: 16px; color: {INK}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{title}</span>'
+            f'<span style="font-family: \'Geist Mono\', monospace; font-size: 11px; line-height: 16px; color: {INK3}">{profile} · running</span></span>'
+            f'<span style="font-family: \'Geist Mono\', monospace; font-size: 11px; color: {INK3}">{elapsed}</span></li>')
+
+
 def s_running():
-    return popover(head("2 running", "alpi · Summarize yesterday’s deploys"), counts_section(RUNNING_COUNT), foot())
+    rows = (turn_row(*ALPI, "Summarize yesterday’s deploys", "<1m"), turn_row(*SENTINEL, "Review the open pull requests", "2m"))
+    section = f'<section aria-label="Running" style="padding: 0 8px 8px"><ul style="margin: 0; padding: 0; list-style: none">{"".join(rows)}</ul></section>'
+    return popover(head("2 running", "Working now", nowrap=True), section, foot())
 
 
 def s_update():
-    return popover(head("All quiet", next_sub("Daily brief", "today 18:00"), nowrap=True), update_row(), foot())
+    return popover(head("All quiet", "Nothing scheduled"), update_row(), foot())
 
 
 def s_stopped():
@@ -280,8 +304,8 @@ def per_platform():
 def tray_board():
     hero = section("Left click and right click", click_pair())
     states = section("Quiet and member", grid3(
-        cell(s_next(), "All quiet, next job", "An admin with an upcoming scheduled job: Next: the job, then when.", "next"),
-        cell(s_next_long(), "All quiet, long job title", "The title truncates with an ellipsis; the lead and the time stay whole.", "next"),
+        cell(s_next(), "All quiet, next job", "Up to three upcoming jobs of every connection, soonest first: the fold, the job, the profile and connection, and when.", "next"),
+        cell(s_next_long(), "All quiet, long job title", "The title truncates with an ellipsis; the time stays whole. With one connection the connection name is left out.", "next_long"),
         cell(s_none(), "All quiet, nothing scheduled", "An admin with no upcoming job.", "none"),
         cell(s_member(), "All quiet, member", "No scheduled jobs and no bell: a member never sees them.", "member"),
         cell(s_online(), "Online, no activity verb", "An older daemon without host.activity.list: the heading says only that it is online.", "online"),
@@ -290,7 +314,7 @@ def tray_board():
         cell(s_needs(), "Needs you", "Approvals and questions with Review; the failing and running counts below.", "needs"),
         cell(s_many(), "Many items", "Four rows, then the rest named; the row opens alpi.", "many"),
         cell(s_failing(), "Failing jobs", "Danger count over the last 24 h; the row opens alpi.", "failing"),
-        cell(s_running(), "Running turns", "The first running turn is named under the count.", "running")))
+        cell(s_running(), "Running turns", "One row per running turn with its fold; the count line only shows below needs you or failing jobs.", "running")))
     link = section("Daemon states", grid3(
         cell(s_stopped(), "Daemon stopped", "Installed here: Start alpi is the one action.", "stopped"),
         cell(s_unreachable(), "Can’t reach alpi", "A remote daemon: the heading names the problem and the footer stays.", "unreachable"),
@@ -301,7 +325,7 @@ def tray_board():
         note("Esc and losing focus hide it. Open alpi and Review show, unminimize and focus the main window; Review carries the deeplink of an approval or a question. The footer bell is hidden for members."),
         per_platform(), gap=10))
     body = (f'<div style="padding: 28px 32px; display: flex; flex-direction: column; gap: 28px; box-sizing: border-box">'
-            f'{intro("Tray popover", "A left click on the menu bar icon opens a small popover that triages: what needs you with Review, failing jobs, running turns, the next scheduled job, an update ready, and Open alpi, notifications, Settings and Quit in the footer. A right click keeps the native menu.")}'
+            f'{intro("Tray popover", "A left click on the menu bar icon opens a small popover that triages: what needs you with Review, failing jobs, running turns (a row each, with its fold, that opens the session), the next three scheduled jobs across all connections (a row each, opening that schedule), an update ready, and Open alpi, notifications, Settings and Quit in the footer. A right click keeps the native menu.")}'
             f'{hero}{states}{attention}{link}{rules}</div>')
     return page("Desktop · tray", 1280, TRAY_H, body)
 

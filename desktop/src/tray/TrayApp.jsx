@@ -81,6 +81,40 @@ function NeedsRow({ row, onReview }) {
   );
 }
 
+function NextRow({ row, onOpen }) {
+  return (
+    <li className={styles.row} data-kind="next">
+      <button type="button" className={styles.rowMain} onClick={() => onOpen(row)} aria-label={`${row.title}, ${row.sub}, ${row.when}. Open schedule`}>
+        <span className={styles.glyph}>
+          <Fold fold={row.fold} color={row.accent || undefined} />
+        </span>
+        <span className={styles.text}>
+          <span className={styles.rowTitle} title={row.title}>{row.title}</span>
+          <span className={styles.rowSub}>{row.sub}</span>
+        </span>
+        <span className={styles.lineValue}>{row.when}</span>
+      </button>
+    </li>
+  );
+}
+
+function RunRow({ row, onOpen }) {
+  return (
+    <li className={styles.row} data-kind="running">
+      <button type="button" className={styles.rowMain} onClick={() => onOpen(row)} aria-label={`${row.title}, ${row.sub}. Open`}>
+        <span className={styles.glyph}>
+          <Fold fold={row.fold} color={row.accent || undefined} />
+        </span>
+        <span className={styles.text}>
+          <span className={styles.rowTitle} title={row.title}>{row.title}</span>
+          <span className={styles.rowSub}>{row.sub}</span>
+        </span>
+        {row.elapsed ? <span className={styles.lineValue}>{row.elapsed}</span> : null}
+      </button>
+    </li>
+  );
+}
+
 export default function TrayApp() {
   useTrayTheme();
   const [snapshot, shown] = useSnapshot();
@@ -152,15 +186,7 @@ export default function TrayApp() {
           <Fold fold={ALPACA_FOLD} size={28} />
           <div className={styles.headText}>
             <h1 className={styles.title} aria-live="polite">{title}</h1>
-            {model.next && !starting && !startError ? (
-              <p className={styles.sub} data-next>
-                <span className={styles.nextLead}>Next:&nbsp;</span>
-                <span className={styles.nextTitle}>{model.next.title}</span>
-                <span className={styles.nextWhen}>&nbsp;·&nbsp;{model.next.when}</span>
-              </p>
-            ) : (
-              <p className={styles.sub}>{sub}</p>
-            )}
+            <p className={styles.sub}>{sub}</p>
           </div>
           {model.start && !starting ? (
             <Button size="sm" variant="primary" onClick={start}>Start alpi</Button>
@@ -177,6 +203,26 @@ export default function TrayApp() {
                 <span className={styles.chev}><Icon name="chevron-right" size="sm" /></span>
               </button>
             ) : null}
+          </section>
+        ) : null}
+        {model.runs.length > 0 ? (
+          <section className={styles.section} aria-label="Running">
+            <ul className={styles.list}>
+              {model.runs.map((row) => <RunRow key={row.key} row={row} onOpen={review} />)}
+            </ul>
+            {model.runsMore > 0 ? (
+              <button type="button" className={styles.line} onClick={() => openAlpi()}>
+                <span className={styles.lineLabel}>{model.runsMore} more · Open alpi</span>
+                <span className={styles.chev}><Icon name="chevron-right" size="sm" /></span>
+              </button>
+            ) : null}
+          </section>
+        ) : null}
+        {model.nextRows.length > 0 ? (
+          <section className={styles.section} aria-label="Next">
+            <ul className={styles.list}>
+              {model.nextRows.map((row) => <NextRow key={row.key} row={row} onOpen={review} />)}
+            </ul>
           </section>
         ) : null}
         {model.counts.length > 0 ? (

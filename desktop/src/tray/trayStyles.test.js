@@ -24,6 +24,11 @@ describe("tray popover pixels", () => {
     expect(pop).toMatch(/overflow:\s*hidden/);
   });
 
+  it("keeps the heading subtitle on one line", () => {
+    expect(rule(".sub")).toMatch(/white-space:\s*nowrap/);
+    expect(rule(".sub")).toMatch(/text-overflow:\s*ellipsis/);
+  });
+
   it("lets the transparent window show through the page", () => {
     expect(css).toMatch(/:global\(html\),\s*:global\(body\),\s*:global\(#root\) \{[^}]*background:\s*transparent/);
   });
@@ -70,15 +75,8 @@ describe("tray popover pixels", () => {
   });
 });
 
-describe("tray Next line pixels", () => {
-  it("keeps the time from truncating while the title gives way", () => {
-    expect(css).toMatch(/\.nextLead,\s*\.nextWhen \{\s*flex-shrink:\s*0/);
-    expect(rule(".nextTitle")).toMatch(/text-overflow:\s*ellipsis/);
-    expect(rule(".nextTitle")).toMatch(/min-width:\s*0/);
-    expect(rule(".sub[data-next]")).toMatch(/white-space:\s*nowrap/);
-  });
-
-  it("adds no row, so the quiet popover keeps its 107 px", () => {
+describe("tray quiet list pixels", () => {
+  it("adds no chip or ask element to the popover", () => {
     expect(css).not.toMatch(/\.ask|\.chip/);
   });
 });
