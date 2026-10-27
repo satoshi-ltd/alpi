@@ -161,7 +161,7 @@ describe('activity screen', () => {
     expect(screen.queryByLabelText(/Run again/)).toBeNull();
   });
 
-  it('puts a count on every filter, speaks it, and paints Failing in danger only when it is above zero', () => {
+  it('puts a count on every filter that has entries, speaks it, and paints Failing in danger', () => {
     h.activity = state(FLEET);
     render(<ActivityScreen />);
     expect(chips().map((n) => n.getAttribute('aria-label'))).toEqual(['All, 9', 'Needs you, 2', 'Failing, 3', 'Running, 2', 'Upcoming, 2']);
@@ -170,10 +170,16 @@ describe('activity screen', () => {
     expect(style(count('Failing')).color).toBe('#b73737');
     expect(style(count('Running')).color).toBe('#666');
     expect(chip('All').getAttribute('aria-selected')).toBe('true');
-    cleanup();
-    h.activity = state({ needsYou: [], running: FULL.running, scheduled: [] });
+  });
+
+  it('shows only the chips that have entries, and none when one kind holds everything', () => {
+    h.activity = state({ needsYou: [], running: FULL.running, scheduled: [FULL.scheduled[0]] });
     render(<ActivityScreen />);
-    expect(style([...chip('Failing').querySelectorAll('span')].at(-1)).color).toBe('#666');
+    expect(chips().map((n) => n.getAttribute('aria-label'))).toEqual(['All, 3', 'Running, 2', 'Upcoming, 1']);
+    cleanup();
+    h.activity = state({ needsYou: [], running: [], scheduled: [FULL.scheduled[0]] });
+    render(<ActivityScreen />);
+    expect(chips()).toHaveLength(0);
   });
 
   it('filters to one section and says so when that section is empty', () => {
@@ -182,17 +188,12 @@ describe('activity screen', () => {
     expect(heads()).toEqual(['Running · 2']);
     expect(chip('Running').getAttribute('aria-selected')).toBe('true');
     expect(chip('All').getAttribute('aria-selected')).toBe('false');
-    cleanup();
-    h.activity = state({ needsYou: [], running: [], scheduled: [FULL.scheduled[0]] });
-    render(<ActivityScreen />);
-    fireEvent.click(chip('Failing'));
-    expect(screen.getByText('No failing jobs')).toBeTruthy();
-    fireEvent.click(chip('Needs you'));
-    expect(screen.getByText('Nothing needs you')).toBeTruthy();
-    fireEvent.click(chip('Running'));
-    expect(screen.getByText('Nothing running')).toBeTruthy();
     fireEvent.click(chip('Upcoming'));
     expect(heads()).toEqual(['Upcoming · 1', 'Today']);
+    h.activity = state({ needsYou: [], running: [], scheduled: [FULL.scheduled[0]] });
+    cleanup();
+    render(<ActivityScreen />);
+    expect(chips()).toHaveLength(0);
   });
 
   it('keeps the chips fixed above a scroller that pins every section header', () => {
@@ -211,8 +212,39 @@ describe('activity screen', () => {
   it('says the calm state when nothing needs the user, and keeps Running and Upcoming', () => {
     h.activity = state({ needsYou: [], running: FULL.running, scheduled: [FULL.scheduled[0]] });
     render(<ActivityScreen />);
-    expect(screen.getByText('Nothing needs you now')).toBeTruthy();
+    expect(screen.getByText(/^Nothing needs you · next daily brief, today \d{2}:\d{2}$/)).toBeTruthy();
     expect(heads()).toEqual(['Running · 2', 'Upcoming · 1', 'Today']);
+  });
+
+  it('names a later next run by its weekday or date, lowercasing only today and tomorrow', () => {
+    const later = { profile: 'doc', job_id: 'far', title: 'far run', next_fire: new Date((NOW + 4 * 86400) * 1000).toISOString(), last_run_status: 'ok' };
+    h.activity = state({ needsYou: [], running: FULL.running, scheduled: [later] });
+    render(<ActivityScreen />);
+    expect(screen.getByText(/^Nothing needs you · next far run, [A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2} \d{2}:\d{2}$/)).toBeTruthy();
+  });
+
+  it('says only that nothing needs you when no run is upcoming', () => {
+    h.activity = state({ needsYou: [], running: FULL.running, scheduled: [] });
+    render(<ActivityScreen />);
+    expect(screen.getByText('Nothing needs you now')).toBeTruthy();
+  });
+
+  it('shows ten upcoming runs and reveals the rest behind Show more', () => {
+    const scheduled = Array.from({ length: 14 }, (_, i) => ({ profile: 'a', job_id: `j${i}`, title: `job ${i}`, next_fire: new Date((NOW + 60 * (i + 1)) * 1000).toISOString(), last_run_status: 'ok' }));
+    h.activity = state({ needsYou: [], running: FULL.running, scheduled });
+    render(<ActivityScreen />);
+    expect(screen.getAllByLabelText(/a · job \d+/)).toHaveLength(10);
+    expect(heads()).toContain('Upcoming · 14');
+    fireEvent.click(screen.getByLabelText('Show 4 more upcoming'));
+    expect(screen.getAllByLabelText(/a · job \d+/)).toHaveLength(14);
+    expect(screen.queryByLabelText(/more upcoming$/)).toBeNull();
+  });
+
+  it('has no Show more at ten upcoming runs', () => {
+    const scheduled = Array.from({ length: 10 }, (_, i) => ({ profile: 'a', job_id: `j${i}`, title: `job ${i}`, next_fire: new Date((NOW + 60 * (i + 1)) * 1000).toISOString(), last_run_status: 'ok' }));
+    h.activity = state({ needsYou: [], running: FULL.running, scheduled });
+    render(<ActivityScreen />);
+    expect(screen.queryByLabelText(/more upcoming$/)).toBeNull();
   });
 
   it('groups failures per profile, the latest first and expanded, the rest one collapsed line', () => {

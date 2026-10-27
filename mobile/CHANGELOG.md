@@ -14,6 +14,13 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.9.3 — 2026-10-27 — a calmer Activity
+
+- A filter chip appears only while it has something in it, and the row goes away when everything is one kind.
+- When nothing needs you, one line says so and names the next run.
+- The first ten upcoming runs show and Show more reveals the rest.
+  Requires alpi 0.17.28.
+
 ## v0.9.2 — 2026-10-27 — a console first run
 
 - Welcome, pairing and paired read like a terminal session: one left edge, a terse title, the host and role in mono, and one primary button anchored above the safe area, so there is never a second primary on the screen.

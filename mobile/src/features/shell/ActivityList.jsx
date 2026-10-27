@@ -15,10 +15,9 @@ import { clockOf, dayLabel } from '../../lib/scheduleFormat';
 import { mobile, lineHeights, radii, space } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeContext';
 import { EMPTY } from '../../../../common/emptyCopy.mjs';
-import { applyFilter, failingJobs, stripProfilePrefix } from '../../../../common/activityGroups.mjs';
+import { applyFilter, capDays, failingJobs, nextRun, stripProfilePrefix, visibleFilters } from '../../../../common/activityGroups.mjs';
 import { pluralize } from '../../../../common/pluralize.mjs';
 import {
-  ACTIVITY_FILTERS,
   CHIP_H,
   CHIP_ROW_H,
   FILTER_EMPTY,
@@ -264,12 +263,12 @@ function SectionHeader({ label, tone, right = null }) {
   );
 }
 
-function FilterChips({ filter, counts, onChange }) {
+function FilterChips({ filter, counts, ids, onChange }) {
   const { colors, fonts, fontSizes, chromeScale } = useTheme();
   return (
     <View accessibilityRole="radiogroup" accessibilityLabel="Filter activity" style={{ backgroundColor: colors.bg, borderBottomWidth: 0.5, borderBottomColor: colors.line }}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: space.s7, gap: space.s3 }}>
-        {ACTIVITY_FILTERS.map((id) => {
+        {ids.map((id) => {
           const on = filter === id;
           const danger = id === 'failing' && counts[id] > 0;
           return (
@@ -425,10 +424,12 @@ export function ActivityList({
   const [toggled, setToggled] = useState({});
   const [busy, setBusy] = useState(() => new Set());
   const [retryGone, setRetryGone] = useState(false);
+  const [showAllUpcoming, setShowAllUpcoming] = useState(false);
   const [tick, setTick] = useState(() => Date.now() / 1000);
 
   useEffect(() => {
     setRetryGone(false);
+    setShowAllUpcoming(false);
   }, [connectionId]);
   useEffect(() => {
     setTick(Date.now() / 1000);
@@ -499,7 +500,13 @@ export function ActivityList({
     } else if (filter !== 'all' && groups.counts[filter] === 0) {
       add(<Quiet key="filter-empty">{FILTER_EMPTY[filter]}</Quiet>);
     } else if (filter === 'all' && groups.counts.needs === 0 && groups.counts.failing === 0) {
-      add(<Quiet key="calm">Nothing needs you now</Quiet>);
+      const next = nextRun(groups);
+      const at = next ? toEpochSeconds(next.next_fire) : null;
+      add(
+        <Quiet key="calm">
+          {at === null ? 'Nothing needs you now' : `Nothing needs you · next ${next.title || next.job_id}, ${dayLabel(at, now).replace(/^(Today|Tomorrow)$/, (word) => word.toLowerCase())} ${clockOf(at)}`}
+        </Quiet>,
+      );
     }
     if (shown.needs.length) {
       add(<SectionHeader key="h-needs" label={`Needs you · ${shown.needs.length}`} tone="warning" />, true);
@@ -547,7 +554,9 @@ export function ActivityList({
     if (shown.upcoming.length) {
       const count = shown.upcoming.length;
       add(<SectionHeader key="h-upcoming" label={count >= NEXT_UP_CAP ? `Upcoming · ${count} shown` : `Upcoming · ${count}`} />, true);
-      nextGroups(shown.upcoming, now).forEach((day) => {
+      const days = nextGroups(shown.upcoming, now);
+      const capped = showAllUpcoming ? { days, hidden: 0 } : capDays(days);
+      capped.days.forEach((day) => {
         add(
           <View key={`day:${day.label}`}>
             <View style={{ paddingHorizontal: space.s7, paddingTop: space.s3, paddingBottom: space.s1 }}>
@@ -557,6 +566,19 @@ export function ActivityList({
           </View>,
         );
       });
+      if (capped.hidden > 0) {
+        add(
+          <Pressable
+            key="more-upcoming"
+            onPress={() => setShowAllUpcoming(true)}
+            accessibilityRole="button"
+            accessibilityLabel={`Show ${capped.hidden} more upcoming`}
+            style={({ pressed }) => ({ minHeight: mobile.tap, justifyContent: 'center', paddingHorizontal: space.s7, backgroundColor: pressed ? colors.selected : 'transparent' })}
+          >
+            <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.sm, color: colors.ink2 }}>{`Show ${capped.hidden} more`}</Text>
+          </Pressable>,
+        );
+      }
     }
   } else if (settled) {
     add(<Empty key="unsupported" unsupported={unsupported} />);
@@ -564,7 +586,7 @@ export function ActivityList({
 
   return (
     <View style={{ flex: 1 }}>
-      {groups && groups.counts.all > 0 ? <FilterChips filter={filter} counts={groups.counts} onChange={setFilter} /> : null}
+      {groups && groups.counts.all > 0 && visibleFilters(groups.counts, filter).length > 0 ? <FilterChips filter={filter} counts={groups.counts} ids={visibleFilters(groups.counts, filter)} onChange={setFilter} /> : null}
       <ScrollView
         style={{ flex: 1 }}
         stickyHeaderIndices={sticky}
