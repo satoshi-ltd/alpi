@@ -1663,13 +1663,19 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   `{title?, profile, server, at, body}` into the Markdown file (title, `@profile · server · date`, body with the raw
   chart block) or into a light-palette document (the body parsed by `parseNotificationBody`, charts as `chartSvg`,
   ordered lists keeping their own numbers, one block per table row so a chart or a table row never splits across
-  pages) whose footer repeats on every page as a `tfoot` with the alpi mark, the profile, the server and the date.
+  pages) closing with a footer row carrying the alpi mark, the profile, the server and the date — the last row
+  of the same table, not a `tfoot`: WebKit's print engine (desktop on macOS/Linux, `expo-print` on iOS) silently
+  drops a `display: table-footer-group` footer instead of repeating it, so it never reached a printed page; a
+  footer that is ordinary table content prints once, reliably, everywhere.
   Desktop mounts that document in a hidden print root and calls `window.print()` (the system print sheet;
   `core:webview:allow-print` is granted to the main window only), naming the document after the file. The root
   and the title stay until `afterprint` or ten minutes, never removed when the call returns, because macOS answers
   before the sheet has paginated; the next export replaces it. The phone writes it with `expo-print` and shares it,
   giving each export a cache folder of its own (the readable file name inside it) that the next export clears once
-  it is ten minutes old. The file name is the title, else the profile and day. No page numbers: the web views
+  it is ten minutes old. The file name is the title, slugged; an untitled export has no message id to key on, so
+  it is named `alpi-<profile>-<fingerprint>-<day>`, an 8-hex FNV-1a hash of profile, server, timestamp and body —
+  two untitled messages from the same profile in the same second with the same body still collide, but same-day
+  collisions from the old `<profile>-<day>` name are otherwise gone. No page numbers: the web views
   behind both clients do not draw them.
 - **Two messaging intents: `notify` (owner) vs `send_message` (third party).**
   `notify(text, title?, summary?, type?)` pushes to the OWNER's own paired Alpi apps —

@@ -26,10 +26,25 @@ export function exportTitle(message) {
   return String(message?.title || "").replace(/\s+/g, " ").trim();
 }
 
+// No message id exists to key on, so untitled exports use an FNV-1a fingerprint of profile+server+at+body instead.
+function exportFingerprint(message) {
+  const basis = [message?.profile, message?.server, message?.at, message?.body].filter((v) => v !== undefined && v !== null).join("|");
+  let h = 0x811c9dc5;
+  for (let i = 0; i < basis.length; i += 1) {
+    h ^= basis.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+
 export function exportFileName(message, ext) {
   const d = message?.at ? new Date(message.at * 1000) : null;
   const day = d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` : "";
-  const base = exportSlug(exportTitle(message)) || exportSlug([message?.profile, day].filter(Boolean).join(" ")) || "message";
+  const title = exportSlug(exportTitle(message));
+  if (title) return `${title}.${ext}`;
+  const profile = exportSlug(message?.profile);
+  if (!profile && !day) return `message.${ext}`;
+  const base = ["alpi", profile, exportFingerprint(message), day].filter(Boolean).join("-");
   return `${base}.${ext}`;
 }
 
@@ -133,9 +148,8 @@ export function exportCss(accent) {
   @page { margin: 16mm 16mm 16mm; }
 }
 .alpi-export .ax-sheet { width: 100%; border-collapse: collapse; }
-.alpi-export .ax-sheet > tbody > tr > td, .alpi-export .ax-sheet > tfoot > tr > td { padding: 0; }
+.alpi-export .ax-sheet > tbody > tr > td { padding: 0; }
 .alpi-export .ax-sheet > tbody > tr { break-inside: avoid; }
-.alpi-export .ax-sheet > tfoot { display: table-footer-group; }
 .alpi-export .ax-foot { margin-top: 10px; }`;
 }
 
@@ -149,9 +163,9 @@ export function exportArticle(message) {
     const leads = blocks[i].kind === "heading" || blocks[i].kind === "label";
     rows.push(leads && i + 1 < blocks.length ? block(blocks[i]) + block(blocks[++i]) : block(blocks[i]));
   }
+  const footRow = `<tr><td><footer class="ax-foot">${mark(11)}<b>alpi</b>${footer ? `<span>· ${escapeHtml(footer)}</span>` : ""}</footer></td></tr>`;
   return `<article class="alpi-export" data-export-profile="${escapeHtml(message?.profile || "")}" data-export-server="${escapeHtml(message?.server || "")}">`
-    + `<table class="ax-sheet"><tbody>${rows.map((r) => `<tr><td>${r}</td></tr>`).join("")}</tbody>`
-    + `<tfoot><tr><td><footer class="ax-foot">${mark(11)}<b>alpi</b>${footer ? `<span>· ${escapeHtml(footer)}</span>` : ""}</footer></td></tr></tfoot></table></article>`;
+    + `<table class="ax-sheet"><tbody>${rows.map((r) => `<tr><td>${r}</td></tr>`).join("")}${footRow}</tbody></table></article>`;
 }
 
 export function exportHtml(message, { accent } = {}) {

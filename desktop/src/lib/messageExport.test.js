@@ -35,10 +35,18 @@ describe("common/messageExport", () => {
     expect(md).toContain("| Booking | 744 |");
   });
 
-  it("names the file after the title, else after the profile and day", () => {
+  it("names the file after the title, else alpi-profile-fingerprint-day", () => {
     expect(exportFileName(MESSAGE, "pdf")).toBe("weekly-chat-report.pdf");
-    expect(exportFileName({ profile: "pulse", at: NOON }, "md")).toBe("pulse-2026-10-25.md");
+    expect(exportFileName({ profile: "pulse", at: NOON }, "md")).toMatch(/^alpi-pulse-[0-9a-f]{8}-2026-10-25\.md$/);
+    expect(exportFileName({ profile: "pulse" }, "md")).toMatch(/^alpi-pulse-[0-9a-f]{8}\.md$/);
     expect(exportFileName({}, "md")).toBe("message.md");
+  });
+
+  it("fingerprints untitled exports so two messages never share a name", () => {
+    const a = exportFileName({ profile: "pulse", at: NOON, body: "first" }, "pdf");
+    const b = exportFileName({ profile: "pulse", at: NOON, body: "second" }, "pdf");
+    expect(a).not.toBe(b);
+    expect(exportFileName({ profile: "pulse", at: NOON, body: "first" }, "pdf")).toBe(a);
   });
 
   it("keeps a multi-line title on one line so it cannot add Markdown lines", () => {
@@ -55,10 +63,12 @@ describe("common/messageExport", () => {
     expect(html).toContain('<figure class="ax-chart">');
     expect(html).toContain("<svg");
     expect(html).toContain("<td>744</td>");
-    expect(html).toContain('<tfoot><tr><td><footer class="ax-foot">');
+    expect(html).toContain('<tr><td><footer class="ax-foot">');
+    expect(html).not.toContain("<tfoot>");
     expect(html).toContain("@pulse on casa");
     expect(html).toContain("<strong>8 %</strong>");
     expect(html).not.toMatch(/position:\s*absolute/);
+    expect(html.indexOf('<footer class="ax-foot">')).toBeGreaterThan(html.indexOf("<strong>8 %</strong>"));
   });
 
   it("keeps the numbers of an ordered list, even when it starts past 1 or skips", () => {
@@ -82,7 +92,7 @@ describe("common/messageExport", () => {
     expect(css).toContain("color: #141414");
     expect(css).toContain("--chart-1: #3fb37a");
     expect(css).toMatch(/\.ax-table tr, \.alpi-export figure, \.alpi-export pre \{ break-inside: avoid; \}/);
-    expect(css).toContain("display: table-footer-group");
+    expect(css).not.toContain("table-footer-group");
     expect(css).not.toContain("counter(page)");
   });
 
@@ -100,7 +110,7 @@ describe("common/messageExport", () => {
     const doc = exportHtml(MESSAGE, { accent: "#3fb37a" });
     expect(doc.startsWith("<!doctype html>")).toBe(true);
     expect(doc).toContain("<title>Weekly chat report</title>");
-    expect(exportHtml({ profile: "pulse", at: NOON })).toContain("<title>pulse-2026-10-25</title>");
+    expect(exportHtml({ profile: "pulse", at: NOON })).toMatch(/<title>alpi-pulse-[0-9a-f]{8}-2026-10-25<\/title>/);
   });
 });
 

@@ -53,12 +53,12 @@ afterEach(() => {
 describe("ChatPane reply exports", () => {
   it("downloads an assistant reply as markdown signed with profile and server", async () => {
     renderChat();
-    invoke.mockResolvedValueOnce({ name: "pulse-2026-10-25.md" });
+    invoke.mockResolvedValueOnce({ name: "alpi-pulse-a971f9a7-2026-10-25.md" });
     const menu = await openExport();
     await act(async () => {
       fireEvent.click(within(menu).getByRole("menuitem", { name: "Download .md" }));
     });
-    expect(invoke).toHaveBeenCalledWith("save_text_file", expect.objectContaining({ name: "pulse-2026-10-25.md", dest: "download" }));
+    expect(invoke).toHaveBeenCalledWith("save_text_file", expect.objectContaining({ name: expect.stringMatching(/^alpi-pulse-[0-9a-f]{8}-2026-10-25\.md$/), dest: "download" }));
     const { content } = invoke.mock.calls.find(([cmd]) => cmd === "save_text_file")[1];
     expect(content).toContain("_@pulse · casa · ");
     expect(content).toContain("```chart");

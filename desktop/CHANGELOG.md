@@ -11,6 +11,13 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.9.1 — 2026-10-27 — the exported PDF footer actually prints
+
+- A message or report exported to PDF now shows the alpi footer (mark, profile, server, date): it never printed on macOS or Linux, because the system print engine there silently drops a repeating table footer.
+- The footer prints once, at the end of the document, instead of repeating on every page.
+- An untitled export is now named `alpi-<profile>-<fingerprint>-<day>` instead of just `<profile>-<day>`, so two untitled messages from the same profile on the same day no longer share a file name.
+  Requires alpi 0.17.28; `last ok` needs 0.17.39, and older daemons simply omit it.
+
 ## v0.9.0 — 2026-10-27 — a new icon, an Activity that triages, one grid
 
 - Activity opens on counts and filters (All, Needs you, Failing, Running, Upcoming): failing jobs group per profile with the first group open, red marks only the failed time, `last ok` shows when the daemon sends it, and Open and Retry appear on the row; admins get Retry all, with a confirmation.
