@@ -209,6 +209,18 @@ def activity_group(label, rows, right="", first=False):
             f'<ul style="margin: 0; padding: 0; list-style: none">{"".join(rows)}</ul></section>')
 
 
+def timed_row(at, title, name, color):
+    return (f'<li style="display: flex; align-items: center; gap: 12px; height: 32px; padding: 0 12px; border-radius: 4px">'
+            f'<span style="width: 64px; flex-shrink: 0; font-family: {MONO}; font-size: 11px; line-height: 16px; color: {INK3}">{at}</span>'
+            f'<span style="flex: 1; min-width: 0; font-size: 13px; line-height: 16px; color: {INK}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{title}</span>'
+            f'<span style="display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0">{identity_glyph(name, color, 16)}'
+            f'<span style="font-family: {MONO}; font-size: 11px; line-height: 16px; color: {INK3}">{name}</span></span></li>')
+
+
+def day_head(label):
+    return f'<li style="list-style: none"><h4 style="display: flex; align-items: center; height: 24px; margin: 0; padding: 0 12px">{eyebrow(label)}</h4></li>'
+
+
 def activity_chip(label, count, on=False, danger=False):
     n = f'<span style="font-family: {MONO}; font-size: 11px; font-weight: 400; color: {DANGER if danger else INK3}">{count}</span>'
     return (f'<span role="radio" aria-checked="{"true" if on else "false"}" style="display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border-radius: 4px; box-sizing: border-box; '
@@ -253,8 +265,9 @@ def activity_panel_shell():
         activity_row(lambda c: wg_mark(DOC_ACCENT), "alpha · #collect", "alpha · phase 3 of 4", "accent"),
         activity_row(glyph("alpi", AMBER), "Summarize yesterday’s deploys", "alpi · 4m · schedule", "accent")])
     upcoming = activity_group("Upcoming · 2", [
-        activity_row(glyph("doc", DOC_ACCENT), "Daily brief", "doc · tomorrow 07:00"),
-        activity_row(glyph("abby", "#df4b9d"), "Invoice reminder", "abby · tomorrow 09:00")])
+        day_head("Tomorrow · 2"),
+        timed_row("07:00 AM", "Daily brief", "doc", DOC_ACCENT),
+        timed_row("09:00 AM", "Invoice reminder", "abby", "#df4b9d")])
     counts = {"all": 9, "needs": 2, "failing": 3, "running": 2, "upcoming": 2}
     body = f'<div style="padding: 0 8px 12px">{needs}{failing}{running}{upcoming}</div>'
     return shell(sheet_head("role:activity", "Activity", "⌘J") + activity_filters(counts) + body, 500)

@@ -67,3 +67,46 @@ export function applyFilter(groups, filter = "all") {
 export function failingJobs(groups) {
   return groups.failing.flatMap((g) => g.jobs);
 }
+
+export const UPCOMING_CAP = 10;
+
+export function visibleFilters(counts, current = "all") {
+  const filled = ACTIVITY_FILTERS.filter((id) => id !== "all" && counts?.[id] > 0);
+  if (filled.length < 2 && current === "all") return [];
+  return ACTIVITY_FILTERS.filter((id) => id === "all" || id === current || counts?.[id] > 0);
+}
+
+export function nextRun(groups) {
+  return groups.upcoming[0] ?? null;
+}
+
+const startOfDay = (ms) => {
+  const d = new Date(ms);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+};
+
+export function groupByDay(rows, { nowMs = Date.now() } = {}) {
+  const today = startOfDay(nowMs);
+  const days = [];
+  for (const row of rows) {
+    const start = startOfDay(row.nextAt * 1000);
+    const last = days[days.length - 1];
+    if (last && last.start === start) last.rows.push(row);
+    else days.push({ start, days: Math.max(0, Math.round((start - today) / 86400000)), rows: [row] });
+  }
+  return days;
+}
+
+export function capDays(days, limit = UPCOMING_CAP) {
+  let left = limit;
+  const shown = [];
+  for (const day of days) {
+    if (left <= 0) break;
+    const rows = day.rows.slice(0, left);
+    left -= rows.length;
+    shown.push({ ...day, rows, total: day.rows.length });
+  }
+  const total = days.reduce((n, day) => n + day.rows.length, 0);
+  return { days: shown, hidden: total - (limit - left) };
+}

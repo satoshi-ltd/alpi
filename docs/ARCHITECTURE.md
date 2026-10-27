@@ -1860,8 +1860,13 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   pending state. Reopening a job reads current activity, and a job row in Activity opens its
   schedule detail rather than an empty chat. Older daemons without Activity retain schedule controls.
   Both clients draw Activity with `common/activityGroups.mjs`, the one grouping: counts and filters
-  (All, Needs you, Failing, Running, Upcoming); failing jobs (an error in the last 24 hours, not
-  re-running) grouped per profile with the first group open; Upcoming lists only future runs;
+  (All, Needs you, Failing, Running, Upcoming), where a chip shows only while its count is above zero
+  or it is the current filter and the whole row is absent when at most one kind has entries; when
+  nothing needs you or fails, one quiet line says so and names the next run; failing jobs (an error
+  in the last 24 hours, not re-running) grouped per profile with the first group open; Upcoming lists
+  only future runs, grouped under the viewer's local day (`groupByDay`), the first ten showing and
+  the rest behind Show more (`capDays`), and on desktop each run is one 32 px line with the clock
+  first and the profile as a trailing tag;
   section eyebrows stay sticky; red marks only the failed time and `last ok` shows when the daemon
   sends `last_ok_at`. Retry and Retry all (confirmed) fire `host.schedule.fire`, are admin-only and
   hide for members, `forbidden` and `-32601`. Desktop shows it as a 500 px float (Open and Retry

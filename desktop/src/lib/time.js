@@ -42,6 +42,17 @@ export function formatNextFire(iso, nowMs = Date.now()) {
   return `${SHORT.format(d)} ${clock}`;
 }
 
+export function clockOf(unixSeconds) {
+  return CLOCK.format(new Date(unixSeconds * 1000));
+}
+
+export function formatDay(startMs, days) {
+  if (days <= 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  const d = new Date(startMs);
+  return days < 7 ? WEEKDAY.format(d) : SHORT.format(d);
+}
+
 export function shortDate(unixSeconds) {
   if (!unixSeconds) return "";
   const d = new Date(unixSeconds * 1000);

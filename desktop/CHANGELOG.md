@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.9.4 — 2026-10-27 — Activity reads by day
+
+- Upcoming runs are grouped under Today, Tomorrow and then the weekday, each on one line with the time first and the profile at the right.
+- The first ten runs show and Show more reveals the rest, so a busy fleet no longer fills the panel.
+- A filter chip appears only while it has something in it, and the whole row goes away when everything is one kind.
+- When nothing needs you, one line says so and names the next run.
+  Requires alpi 0.17.28.
+
 ## v0.9.3 — 2026-10-27 — a menu bar popover and a crisp icon
 
 - A left click on the menu bar icon opens a popover that triages: what needs you with Review, failing jobs, running turns, the next scheduled job, an update ready, and Open alpi, notifications, Settings and Quit; it follows the app theme and a right click keeps the native menu. It never calls the daemon, and members see no scheduled jobs.

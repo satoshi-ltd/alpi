@@ -31,6 +31,13 @@ describe("Activity panel finish", () => {
     expect(rule(".text")).not.toMatch(/gap:/);
   });
 
+  it("draws a timed run on one 32 px line under a 24 px day heading", () => {
+    expect(rule(".timedRow")).toMatch(/height:\s*var\(--ctl-32\)/);
+    expect(rule(".dayHead")).toMatch(/height:\s*var\(--ctl-24\)/);
+    expect(rule(".time")).toMatch(/font-family:\s*var\(--font-mono\)/);
+    expect(rule(".timedMain:focus-visible")).toMatch(/outline-offset:\s*calc\(var\(--focus-outline-offset\) \* -1\)/);
+  });
+
   it("keeps the filters on one line and reveals Open and Retry on hover and focus", () => {
     expect(rule(".filters")).toMatch(/flex-wrap:\s*nowrap/);
     expect(sheet).toMatch(/\.row\[data-reveal\]:hover \.actions,\s*\.row\[data-reveal\]:focus-within \.actions\s*\{\s*display:\s*flex/);

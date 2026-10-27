@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ACTIVITY_FILTERS, applyFilter, failingJobs, groupActivity, stripProfilePrefix } from "../../../common/activityGroups.mjs";
+import { ACTIVITY_FILTERS, UPCOMING_CAP, applyFilter, capDays, failingJobs, groupActivity, groupByDay, nextRun, stripProfilePrefix, visibleFilters } from "../../../common/activityGroups.mjs";
 
 const NOW = Date.parse("2026-10-26T12:00:00Z");
 const S = NOW / 1000;
@@ -82,5 +82,73 @@ describe("stripProfilePrefix", () => {
     expect(stripProfilePrefix("Sentinel", "sentinel")).toBe("Sentinel");
     expect(stripProfilePrefix("Sentinelfoo", "sentinel")).toBe("Sentinelfoo");
     expect(stripProfilePrefix("Profiles watch", "alpi", "default")).toBe("Profiles watch");
+  });
+});
+
+describe("visibleFilters", () => {
+  const counts = (over) => ({ all: 0, needs: 0, failing: 0, running: 0, upcoming: 0, ...over });
+
+  it("hides the whole row when at most one kind has entries", () => {
+    expect(visibleFilters(counts({ all: 20, upcoming: 20 }))).toEqual([]);
+    expect(visibleFilters(counts())).toEqual([]);
+  });
+
+  it("shows All and only the kinds above zero once two kinds have entries", () => {
+    expect(visibleFilters(counts({ all: 5, needs: 2, upcoming: 3 }))).toEqual(["all", "needs", "upcoming"]);
+  });
+
+  it("keeps the current filter and All so a chosen kind that empties can be left", () => {
+    expect(visibleFilters(counts({ all: 3, upcoming: 3 }), "failing")).toEqual(["all", "failing", "upcoming"]);
+  });
+});
+
+describe("day grouping", () => {
+  const at = (iso) => ({ nextAt: Date.parse(iso) / 1000 });
+
+  it("groups upcoming runs by the viewer's local day with the day offset", () => {
+    const now = new Date(2026, 9, 26, 12, 0).getTime();
+    const rows = [at(new Date(2026, 9, 26, 15, 0)), at(new Date(2026, 9, 26, 23, 59)), at(new Date(2026, 9, 27, 0, 1)), at(new Date(2026, 9, 31, 9, 0))];
+    const days = groupByDay(rows, { nowMs: now });
+    expect(days.map((d) => [d.days, d.rows.length])).toEqual([[0, 2], [1, 1], [5, 1]]);
+  });
+
+  it("keeps a day boundary correct across a daylight-saving change", () => {
+    const zone = process.env.TZ;
+    process.env.TZ = "America/New_York";
+    try {
+      const now = new Date(2026, 9, 31, 12, 0).getTime();
+      const rows = [at(new Date(2026, 10, 1, 0, 30)), at(new Date(2026, 10, 1, 23, 30)), at(new Date(2026, 10, 2, 0, 30))];
+      expect(groupByDay(rows, { nowMs: now }).map((d) => [d.days, d.rows.length])).toEqual([[1, 2], [2, 1]]);
+    } finally {
+      if (zone === undefined) delete process.env.TZ;
+      else process.env.TZ = zone;
+    }
+  });
+
+  it("names the next run as the first upcoming one", () => {
+    const g = groupActivity(ACTIVITY, { nowMs: NOW });
+    expect(nextRun(g)).toBe(g.upcoming[0]);
+    expect(nextRun(g).job_id).toBe("stale");
+    expect(nextRun({ upcoming: [] })).toBeNull();
+  });
+});
+
+describe("capDays", () => {
+  const day = (start, n) => ({ start, days: 0, rows: Array.from({ length: n }, (_, i) => ({ i })) });
+
+  it("cuts across days at the limit and counts what is hidden", () => {
+    const { days, hidden } = capDays([day(1, 4), day(2, 6), day(3, 5)], UPCOMING_CAP);
+    expect(days.map((d) => [d.rows.length, d.total])).toEqual([[4, 4], [6, 6]]);
+    expect(hidden).toBe(5);
+  });
+
+  it("cuts inside a day and keeps that day's full total", () => {
+    const { days, hidden } = capDays([day(1, 7), day(2, 7)], 10);
+    expect(days.map((d) => [d.rows.length, d.total])).toEqual([[7, 7], [3, 7]]);
+    expect(hidden).toBe(4);
+  });
+
+  it("hides nothing under the limit", () => {
+    expect(capDays([day(1, 3)]).hidden).toBe(0);
   });
 });

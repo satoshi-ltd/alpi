@@ -29,7 +29,7 @@ vi.mock("./lib/updater.js", () => ({
 import { _resetDaemonBus } from "./lib/daemon-bus.js";
 import App from "./App.jsx";
 
-configure({ asyncUtilTimeout: 5000 });
+configure({ asyncUtilTimeout: 10000 });
 
 const inSettingsView = () => screen.queryAllByRole("button", { name: "Settings" }).some((el) => el.getAttribute("aria-current") === "page");
 

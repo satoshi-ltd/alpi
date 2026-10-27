@@ -84,11 +84,12 @@ describe("ActivityPanel sections", () => {
     expect(within(screen.getByRole("region", { name: "Running" })).queryByText("daily brief")).toBeNull();
   });
 
-  it("moves the profile into the meta line", () => {
+  it("puts the clock first and the profile as a trailing tag on an upcoming run", () => {
     mount();
     const upcoming = screen.getByRole("region", { name: "Upcoming" });
-    expect(within(upcoming).getByText("daily brief")).toBeInTheDocument();
-    expect(within(upcoming).getByText(/^doc · /)).toBeInTheDocument();
+    const row = within(upcoming).getByText("daily brief").closest("button");
+    expect(row.children[0].textContent).toMatch(/\d{1,2}:\d{2}/);
+    expect(row.children[2]).toHaveTextContent("doc");
     const running = screen.getByRole("region", { name: "Running" });
     expect(within(running).getByText("deploy summary")).toBeInTheDocument();
     expect(within(running).getByText(/^alpi · 42s|^alpi · now|^alpi · 0m/)).toBeInTheDocument();
@@ -192,26 +193,55 @@ describe("ActivityPanel filters", () => {
     expect(stops()).toHaveLength(1);
   });
 
-  it("says what is empty under a filter", () => {
-    mount({ activity: { needs_you: [], running: [ACTIVITY.running[0]], scheduled: [] } });
+  it("says what is empty under a filter once the chosen kind has emptied", () => {
+    const view = mount().view;
     fireEvent.click(radio("Failing"));
+    const props = { open: true, onClose: vi.fn(), canRetry: false, onReview: vi.fn(), onOpenSession: vi.fn(), onOpenWorkgroup: vi.fn(), onOpenProfile: vi.fn(), onOpenJob: vi.fn() };
+    view.rerender(<ActivityPanel {...props} activity={{ needs_you: [], running: [ACTIVITY.running[0]], scheduled: [ACTIVITY.scheduled[0]] }} />);
     expect(screen.getByText("No failing jobs")).toBeInTheDocument();
-    fireEvent.click(radio("Needs you"));
-    expect(screen.getByText("Nothing needs you")).toBeInTheDocument();
-    fireEvent.click(radio("Upcoming"));
-    expect(screen.getByText("Nothing upcoming")).toBeInTheDocument();
+    expect(radio("Failing")).toHaveAttribute("aria-checked", "true");
+    expect(radio("All")).toBeInTheDocument();
+    fireEvent.click(radio("All"));
+    expect(screen.getAllByRole("radio").map((c) => c.textContent)).toEqual(["All2", "Running1", "Upcoming1"]);
+  });
+
+  it("shows only the chips that have entries, and none when one kind holds everything", () => {
+    mount({ activity: { needs_you: [], running: [ACTIVITY.running[0]], scheduled: [ACTIVITY.scheduled[0]] } });
+    expect(screen.getAllByRole("radio").map((c) => c.textContent)).toEqual(["All2", "Running1", "Upcoming1"]);
+  });
+
+  it("moves with the arrow keys over the visible chips only", () => {
+    mount({ activity: { needs_you: [], running: [ACTIVITY.running[0]], scheduled: [ACTIVITY.scheduled[0]] } });
+    fireEvent.keyDown(radio("All"), { key: "ArrowRight" });
+    expect(radio("Running")).toHaveAttribute("aria-checked", "true");
+    fireEvent.keyDown(radio("Running"), { key: "ArrowRight" });
+    expect(radio("Upcoming")).toHaveAttribute("aria-checked", "true");
+    fireEvent.keyDown(radio("Upcoming"), { key: "ArrowRight" });
+    expect(radio("All")).toHaveAttribute("aria-checked", "true");
+    fireEvent.keyDown(radio("All"), { key: "ArrowLeft" });
+    expect(radio("Upcoming")).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("drops the whole chip row when only upcoming runs exist", () => {
+    mount({ activity: { needs_you: [], running: [], scheduled: [ACTIVITY.scheduled[0]] } });
+    expect(screen.queryByRole("radiogroup")).toBeNull();
   });
 });
 
 describe("ActivityPanel empty states", () => {
-  it("says nothing needs you when only running and upcoming remain", () => {
+  it("says nothing needs you and names the next run when only running and upcoming remain", () => {
     mount({ activity: { needs_you: [], running: [ACTIVITY.running[0]], scheduled: [ACTIVITY.scheduled[0]] } });
+    expect(screen.getByText(/^Nothing needs you · next daily brief, today /)).toBeInTheDocument();
+  });
+
+  it("says only that nothing needs you when no run is upcoming", () => {
+    mount({ activity: { needs_you: [], running: [ACTIVITY.running[0]], scheduled: [] } });
     expect(screen.getByText("Nothing needs you now")).toBeInTheDocument();
   });
 
   it("does not say it while something needs you or fails", () => {
     mount();
-    expect(screen.queryByText("Nothing needs you now")).toBeNull();
+    expect(screen.queryByText(/^Nothing needs you/)).toBeNull();
   });
 
   it("says so when nothing is going on, without filters", () => {
@@ -346,5 +376,42 @@ describe("ActivityPanel iconography", () => {
     const cells = [...glyph.querySelectorAll("polygon")];
     expect(cells.map((c) => c.getAttribute("fill"))).toContain("#3899e2");
     expect(cells.every((c) => c.style.animationDelay !== "")).toBe(true);
+  });
+});
+
+describe("ActivityPanel upcoming by day", () => {
+  const run = (i, s) => ({ profile: "doc", job_id: `j${i}`, title: `run ${i}`, next_fire: future(s), last_run_status: "ok" });
+  const many = (n) => Array.from({ length: n }, (_, i) => run(i, 600 + i * 60));
+
+  it("groups runs under a day heading with the day's count", () => {
+    mount({ activity: { needs_you: [], running: [], scheduled: [run(1, 600), run(2, 700), run(3, 3 * 86400)] } });
+    const headings = screen.getAllByRole("heading", { level: 4 }).map((h) => h.textContent);
+    expect(headings.length).toBeGreaterThanOrEqual(2);
+    expect(headings[0]).toMatch(/^(Today|Tomorrow) · \d+$/);
+    expect(headings.at(-1)).toMatch(/ · 1$/);
+  });
+
+  it("shows ten runs and reveals the rest behind Show more", () => {
+    mount({ activity: { needs_you: [], running: [], scheduled: many(14) } });
+    const upcoming = screen.getByRole("region", { name: "Upcoming" });
+    expect(within(upcoming).getAllByRole("button", { name: /run \d+/ })).toHaveLength(10);
+    expect(screen.getByText("Upcoming · 14")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Show 4 more" }));
+    expect(within(upcoming).getAllByRole("button", { name: /run \d+/ })).toHaveLength(14);
+    expect(screen.queryByRole("button", { name: /^Show \d+ more/ })).toBeNull();
+  });
+
+  it("has no Show more at ten runs or fewer", () => {
+    mount({ activity: { needs_you: [], running: [], scheduled: many(10) } });
+    expect(screen.queryByRole("button", { name: /^Show \d+ more/ })).toBeNull();
+  });
+
+  it("folds back to ten runs after the panel closes and reopens", () => {
+    const first = mount({ activity: { needs_you: [], running: [], scheduled: many(14) } });
+    fireEvent.click(screen.getByRole("button", { name: "Show 4 more" }));
+    const props = { onClose: vi.fn(), canRetry: false, onReview: vi.fn(), onOpenSession: vi.fn(), onOpenWorkgroup: vi.fn(), onOpenProfile: vi.fn(), onOpenJob: vi.fn(), activity: { needs_you: [], running: [], scheduled: many(14) } };
+    first.view.rerender(<ActivityPanel {...props} open={false} />);
+    first.view.rerender(<ActivityPanel {...props} open />);
+    expect(screen.getByRole("button", { name: "Show 4 more" })).toBeInTheDocument();
   });
 });

@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { WORKGROUP_FOLD } from "../../../common/folds.mjs";
-import { ACTIVITY_FILTERS, applyFilter, failingJobs, groupActivity, stripProfilePrefix } from "../../../common/activityGroups.mjs";
+import { ACTIVITY_FILTERS, applyFilter, capDays, failingJobs, groupActivity, groupByDay, nextRun, stripProfilePrefix, visibleFilters } from "../../../common/activityGroups.mjs";
 import { Scrim, PanelShell } from "../primitives/Panels.jsx";
 import { Button, Fold, Icon, IconBtn, Kbd } from "../primitives/index.js";
 import { useNotify } from "../primitives/Notification.jsx";
 import { useNow } from "../hooks/useNow.js";
 import { isMissingVerb, toEpochSeconds } from "../hooks/useActivity.js";
 import { profileLabel } from "../lib/profile-display.js";
-import { formatNextFire, relativeTime } from "../lib/time.js";
+import { clockOf, formatDay, formatNextFire, relativeTime } from "../lib/time.js";
 import styles from "./ActivityPanel.module.css";
 import { ICON_ROLES } from "../../../common/iconRoles.mjs";
 import { EMPTY } from "../../../common/emptyCopy.mjs";
@@ -55,6 +55,21 @@ function Row({ glyph = null, title, sub = null, lead = null, leadTone = null, ne
   );
 }
 
+function TimedRow({ job, glyph, onClick }) {
+  return (
+    <li className={styles.timedRow}>
+      <button type="button" className={styles.timedMain} onClick={onClick}>
+        <span className={styles.time}>{clockOf(job.nextAt)}</span>
+        <span className={styles.timedTitle} title={job.title || job.job_id}>{job.title || job.job_id}</span>
+        <span className={styles.tag}>
+          <span className={styles.glyph}>{glyph}</span>
+          <span className={styles.tagName}>{profileLabel(job.profile ?? "")}</span>
+        </span>
+      </button>
+    </li>
+  );
+}
+
 function Section({ label, count, right = null, children }) {
   return (
     <section className={styles.group} aria-label={label}>
@@ -67,20 +82,20 @@ function Section({ label, count, right = null, children }) {
   );
 }
 
-function Filters({ filter, onChange, counts }) {
+function Filters({ filter, onChange, counts, ids }) {
   const refs = useRef([]);
   const move = (event, index) => {
-    const last = ACTIVITY_FILTERS.length - 1;
+    const last = ids.length - 1;
     const next = { ArrowRight: index === last ? 0 : index + 1, ArrowDown: index === last ? 0 : index + 1, ArrowLeft: index === 0 ? last : index - 1, ArrowUp: index === 0 ? last : index - 1, Home: 0, End: last }[event.key];
     if (next == null) return;
     event.preventDefault();
     event.stopPropagation();
-    onChange(ACTIVITY_FILTERS[next]);
+    onChange(ids[next]);
     refs.current[next]?.focus();
   };
   return (
     <div role="radiogroup" aria-label="Filter activity" className={styles.filters}>
-      {ACTIVITY_FILTERS.map((id, i) => (
+      {ids.map((id, i) => (
         <button
           key={id}
           ref={(node) => { refs.current[i] = node; }}
@@ -123,10 +138,12 @@ export default function ActivityPanel({
   const [busy, setBusy] = useState(() => new Set());
   const [retryGone, setRetryGone] = useState(false);
   const [confirmAll, setConfirmAll] = useState(false);
+  const [showAllUpcoming, setShowAllUpcoming] = useState(false);
 
   useEffect(() => {
     setRetryGone(false);
     setConfirmAll(false);
+    setShowAllUpcoming(false);
   }, [connectionId]);
 
   useEffect(() => {
@@ -134,6 +151,7 @@ export default function ActivityPanel({
       setFilter("all");
       setToggled({});
       setConfirmAll(false);
+      setShowAllUpcoming(false);
     }
   }, [open]);
 
@@ -206,6 +224,10 @@ export default function ActivityPanel({
   ) : null;
 
   const nothingNeeds = groups.counts.needs === 0 && groups.counts.failing === 0;
+  const next = nextRun(groups);
+  const filterIds = visibleFilters(groups.counts, filter);
+  const upcomingDays = groupByDay(shown.upcoming, { nowMs: now });
+  const capped = showAllUpcoming ? { days: upcomingDays.map((day) => ({ ...day, total: day.rows.length })), hidden: 0 } : capDays(upcomingDays);
 
   return (
     <Scrim onClose={onClose} top={80}>
@@ -221,14 +243,14 @@ export default function ActivityPanel({
             <Icon name="x" />
           </IconBtn>
         </div>
-        {total > 0 ? <Filters filter={filter} onChange={setFilter} counts={groups.counts} /> : null}
+        {total > 0 && filterIds.length > 0 ? <Filters filter={filter} onChange={setFilter} counts={groups.counts} ids={filterIds} /> : null}
         <div className={`scroll ${styles.body}`}>
           {total === 0 ? (
             <p className={styles.empty}>{EMPTY.activity.title}. {EMPTY.activity.hint}</p>
           ) : filter !== "all" && groups.counts[filter] === 0 ? (
             <p className={styles.empty}>{FILTER_EMPTY[filter]}</p>
           ) : null}
-          {filter === "all" && total > 0 && nothingNeeds ? <p className={styles.calm}>Nothing needs you now</p> : null}
+          {filter === "all" && total > 0 && nothingNeeds ? <p className={styles.calm}>{next ? `Nothing needs you · next ${next.title || next.job_id}, ${formatNextFire(new Date(next.nextAt * 1000).toISOString(), now)}` : "Nothing needs you now"}</p> : null}
           {shown.needs.length > 0 && (
             <Section label="Needs you" count={shown.needs.length}>
               {shown.needs.map((item) => (
@@ -337,15 +359,26 @@ export default function ActivityPanel({
           )}
           {shown.upcoming.length > 0 && (
             <Section label="Upcoming" count={shown.upcoming.length}>
-              {shown.upcoming.map((job) => (
-                <Row
-                  key={`job:${job.profile}/${job.job_id}`}
-                  glyph={<Fold fold={foldByProfile[job.profile]} color={accentByProfile[job.profile] || undefined} />}
-                  title={job.title || job.job_id}
-                  sub={`${profileLabel(job.profile ?? "")} · ${formatNextFire(job.next_fire, now)}`}
-                  onClick={close(() => openJob(job.profile, job.job_id))}
-                />
+              {capped.days.map((day) => (
+                <li key={day.start} className={styles.day}>
+                  <h4 className={`eyebrow ${styles.dayHead}`}>{`${formatDay(day.start, day.days)} · ${day.total}`}</h4>
+                  <ul className={styles.list}>
+                    {day.rows.map((job) => (
+                      <TimedRow
+                        key={`job:${job.profile}/${job.job_id}`}
+                        job={job}
+                        glyph={<Fold fold={foldByProfile[job.profile]} color={accentByProfile[job.profile] || undefined} />}
+                        onClick={close(() => openJob(job.profile, job.job_id))}
+                      />
+                    ))}
+                  </ul>
+                </li>
               ))}
+              {capped.hidden > 0 ? (
+                <li className={styles.more}>
+                  <Button size="sm" onClick={() => setShowAllUpcoming(true)}>Show {capped.hidden} more</Button>
+                </li>
+              ) : null}
             </Section>
           )}
         </div>
