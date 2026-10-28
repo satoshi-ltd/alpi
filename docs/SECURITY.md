@@ -42,7 +42,39 @@ not reach.
   redirections against the profile's `.env` or `config.yaml`, and bare
   `env` / `printenv`, are classified dangerous. `env VAR=x cmd` stays
   allowed: it sets one variable for one child instead of dumping the
-  environment.
+  environment. The classifier also resolves what a command names before
+  judging it: `~`, `$HOME`, `$ALPI_HOME`, `$PWD`, `$OLDPWD` and variables
+  assigned earlier in the same command are expanded, `.`, `..` and `//`
+  normalised, letter case ignored, braces and globs (`**` included) expanded,
+  symlinks followed, `cd`, `cd -`, `tar -C` and `env -C` tracked (also inside
+  `( … )`, `{ … }`, `bash -c` and `eval`), values glued to short options
+  (`-T<file>`, `-d@<file>`) and `$(<file)` read, and relative arguments
+  resolved against the working directory. Any argument or redirection that
+  lands on the alpi home's `.env`, `config.yaml`, `secrets/`, `alp/secrets/`,
+  `host/connections.yaml` or a skill's `secrets/`, on SSH private keys,
+  `~/.aws/credentials`, `~/.gnupg`, the `~/.netrc`-style files in the home or
+  the `gh` and `gcloud` token files, is dangerous whatever the binary. The key
+  named by `ssh -i`, `ssh -o IdentityFile=`, `sftp -i` and `ssh-add`, and
+  `ssh-keygen -f` with `-l`, `-y` or `-t`, is allowed. Recursing into the alpi
+  home, a directory that holds its secrets (`profiles`, `skills`, `alp`,
+  `host`), `~/.config` or a credential directory with `tar`, `zip`, `rsync`,
+  `scp`, `ditto`, `pax`, `rclone`, `aws s3 sync`, `rg`, `grep -r`, `cp -r` or
+  `find -exec` is dangerous. A glob given to a listing (`ls ~/.alpi/*`, `du -sh *`) is not a read.
+  Code fetched by a downloader and then run (`bash <(curl …)`,
+  `eval "$(curl …)"`, `a=$(curl …); eval $a`, `curl -o f && . f`,
+  `wget u && sh u`, `sh < f`) is dangerous like a pipe into a shell; a
+  downloaded file given to an interpreter as data, or only syntax-checked, is
+  not. A command
+  that takes more than two seconds to resolve is refused; globs are also
+  matched by shape against the known credential names, so a deep or crowded
+  glob cannot slip past the filesystem walk.
+  This is a textual classifier, not a boundary: a path assembled by a command
+  substitution, a script or another program (`python3 -c`, a skill script) is
+  not seen, nor is a directory handed over as a whole to a tool that reads it
+  later (`find ~/.ssh | xargs cat`, `docker run -v ~/.ssh:/r`, `tar` of
+  `$HOME` or `/`), a link created in the same command, names printed by a listing and piped to a reader, or a downloaded file
+  run through a tool outside the interpreter list (`uv run`, `install`). The
+  sandbox is the enforcing layer for an unattended profile.
 
 - **SSRF block** on `web_fetch`, `web_extract` and `browser`. Private
   ranges, loopback, link-local and cloud metadata endpoints are refused;
@@ -221,7 +253,8 @@ breaks: `git
 push` over SSH relies on `~/.ssh`, Apple Silicon Homebrew lives in
 `/opt/homebrew`, `docker` needs `/var/run/docker.sock`, npm wants
 `~/.npm`. For interactive chat where you approve every command, the
-Layer 1 denylist is already sufficient.
+Layer 1 denylist is a strong filter for the obvious reads and downloads, but
+it is syntactic: it reads what the command says, not what a program does.
 
 **Where it really earns its keep: unattended profiles.** The
 alpi daemon (scheduler task),

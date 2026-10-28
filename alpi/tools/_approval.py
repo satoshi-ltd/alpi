@@ -9,7 +9,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, Optional
 
-from alpi.tools._pipe_to_interpreter import is_pipe_to_interpreter
+from alpi.tools._command_paths import touches_credential_path
+from alpi.tools._pipe_to_interpreter import is_pipe_to_interpreter, runs_remote_code
 
 
 class Severity(str, Enum):
@@ -188,7 +189,7 @@ def _persist_always(pattern_desc: str) -> None:
     p.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
 
 
-def classify(cmd: str) -> tuple[Severity, str]:
+def classify(cmd: str, cwd: str | None = None) -> tuple[Severity, str]:
     """Return ``(worst_severity, desc_of_that_match)``.
 
     Scans every pattern: if any matches with ``DANGEROUS``, that one wins
@@ -210,6 +211,10 @@ def classify(cmd: str) -> tuple[Severity, str]:
             return p.severity, p.desc
         if caution_match is None:
             caution_match = (p.severity, p.desc)
+    if runs_remote_code(cmd):
+        return Severity.DANGEROUS, "remote code execution"
+    if touches_credential_path(cmd, cwd):
+        return Severity.DANGEROUS, "credential path"
     return caution_match if caution_match else (Severity.SAFE, "")
 
 
@@ -288,7 +293,7 @@ def check(cmd: str, cwd: str | None = None) -> Decision:
 
 
 def _check_inner(cmd: str, cwd: str | None = None) -> Decision:
-    severity, desc = classify(cmd)
+    severity, desc = classify(cmd, cwd)
     if severity == Severity.SAFE:
         return Decision(allowed=True, severity=severity)
 

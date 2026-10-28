@@ -62,7 +62,9 @@ model actually sees.
 - **Workgroup history**: use `workgroup_search` only on hub-owned workgroups.
   It is profile-local, scoped per workgroup, and opt-in via `index_workgroups`.
 - **Risky shell command**: use `terminal` only when needed. Caution commands
-  may prompt for approval; dangerous commands are refused.
+  may prompt for approval; dangerous commands are refused, including any that
+  names a credential path (alpi `.env`/`secrets`, `~/.ssh`, `~/.aws`) however it
+  is spelled, and running downloaded code. A path built inside a script is not seen.
 - **Discrete user choice**: use `ask_user` for 2-4 realistic options; do not use
   it as a pre-confirmation for terminal approvals.
 - **Reusable procedure**: make or update a skill with `skill`, not ad-hoc files

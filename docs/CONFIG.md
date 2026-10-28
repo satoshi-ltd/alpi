@@ -237,8 +237,10 @@ severities:
   user to rerun from the TUI or edit the config allowlist.
 - **dangerous** — matches a pattern that's almost never legitimate.
   Examples: `mkfs`, `dd of=/dev/…`, fork bomb, pipe-to-interpreter
-  from an unknown URL (`curl … | bash`), `chown -R` on `/`, `~` or
-  `$HOME`, reading SSH private keys, writes into `/etc` or `/var`. These
+  from an unknown URL (`curl … | bash`, `bash <(curl …)`, `eval "$(curl …)"`,
+  download then source), `chown -R` on `/`, `~` or `$HOME`, any command
+  that names the alpi home's secrets or an SSH, AWS or GPG credential
+  (after `~`, `$ALPI_HOME`, globs and `..` are resolved), writes into `/etc` or `/var`. These
   are **always blocked**. No override — if you genuinely need to run
   one of these, do it directly from your shell, not through the
   agent.

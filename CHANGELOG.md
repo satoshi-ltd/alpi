@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.17.41 — 2026-10-28 — the shell cannot reach secrets by spelling them differently
+
+- `terminal` now works out what a command names before judging it: `cat "$ALPI_HOME/.env"`, `cat ~/.alpi/./.env`, `cat ~/.ssh/*`, `cat ~/.alpi/**/.env`, `echo x >> "$ALPI_HOME/config.yaml"` and `tar` of the alpi home, its `skills` or `~/.ssh` are refused like the plain forms, whatever the letter case, never prompted.
+- Code fetched and run is refused however it is wrapped: `bash <(curl …)`, `eval "$(curl …)"`, `source <(curl …)`, and downloading to a file then sourcing or running it.
+- Ordinary commands keep working: `ls` and `du` of the alpi home, `GIT_SSH_COMMAND="ssh -i …"`, `known_hosts`, `ssh -i`, `ssh-add`, `~/.aws/config`, project files and `/etc` are untouched, and downloading a file and feeding it to a tool as data (`python3 -m json.tool a.json`) is not treated as running it.
+- Why: the classifier read the command text literally, so a variable, a `~` or a glob slipped past it; the security docs no longer promise more than a text check can keep.
+
 ## v0.17.40 — 2026-10-27 — answers you gave stay when a chat resumes
 
 - When you answer a question the agent asked mid-turn, the answer now comes back with the question after you resume the chat or rewrite a message, instead of being lost.

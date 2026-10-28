@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import re
 import shlex
 
 _DOWNLOADERS = frozenset({"curl", "wget", "fetch"})
@@ -329,3 +331,253 @@ def is_pipe_to_interpreter(command: str) -> bool:
                 if _segment_contains(later, _INTERPRETERS):
                     return True
     return False
+
+
+_EXEC_BUILTINS = frozenset({"eval", "source", "."})
+_MARK = "\x00SUB\x00"
+_MARK_AT_COMMAND_RE = re.compile(r"(?:^|[;&|(]\s*)\x00SUB\x00")
+_DOWNLOAD_WORD_RE = re.compile(r"(?:^|[\s;&|(`/])(?<!git )(?:curl|wget|fetch)(?=\s|$)")
+_ASSIGNMENT_RE = re.compile(r"([A-Za-z_]\w*)=")
+_VALUE_LETTER = {"curl": "o", "wget": "O", "fetch": "o"}
+_VALUE_LONG = {
+    "curl": frozenset({"--output"}),
+    "wget": frozenset({"--output-document"}),
+    "fetch": frozenset({"--output"}),
+}
+_PREFIX_FLAGS = frozenset({"-P", "--directory-prefix"})
+_NO_RUN_FLAGS = frozenset({"-n", "--check"})
+_VALUE_FLAGS = frozenset({"-o", "-W", "-X", "-r", "--require"})
+_WRAPPER_NAMES = frozenset(_WRAPPER_SPECS) | {"exec"}
+_KEYWORDS = frozenset({"if", "then", "do", "else", "elif", "while", "until", "!", "exec", "time"})
+
+
+def command_segments(command: str) -> list[list[str]] | None:
+    tokens = _tokenize(command)
+    if tokens is None:
+        return None
+    return [seg for chain in _split_by_separators(tokens) for seg in _split_by_pipe(chain)]
+
+
+def segment_executable(segment: list[str]) -> str:
+    return _segment_executable(segment)
+
+
+def _substitution_spans(text: str) -> list[tuple[int, int, str]]:
+    spans: list[tuple[int, int, str]] = []
+    n = len(text)
+    i = 0
+    while i < n:
+        if text[i] == "`":
+            j = text.find("`", i + 1)
+            if j < 0:
+                break
+            spans.append((i, j + 1, text[i + 1:j]))
+            i = j + 1
+            continue
+        if text.startswith(("$(", "<("), i):
+            depth = 0
+            j = i + 1
+            while j < n:
+                if text[j] == "(":
+                    depth += 1
+                elif text[j] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                j += 1
+            if j >= n:
+                break
+            spans.append((i, j + 1, text[i + 2:j]))
+            i = j + 1
+            continue
+        i += 1
+    return spans
+
+
+def _head_index(segment: list[str]) -> int:
+    toks = _strip_redirs_and_groups(segment)
+    for i, tok in enumerate(toks):
+        if _ASSIGNMENT_RE.match(tok) or tok in _KEYWORDS:
+            continue
+        return i
+    return -1
+
+
+def _head_token(segment: list[str]) -> str:
+    toks = _strip_redirs_and_groups(segment)
+    i = _head_index(segment)
+    return toks[i] if i >= 0 else ""
+
+
+def _first_positional(rest: list[str]) -> str:
+    skip = False
+    prev = ""
+    for tok in rest:
+        if skip:
+            skip = False
+            prev = tok
+            continue
+        if tok in _VALUE_FLAGS:
+            skip = True
+        elif tok.startswith("-") or tok in _REDIR_OPS:
+            pass
+        elif prev not in _REDIR_OPS:
+            return tok
+        prev = tok
+    return ""
+
+
+def _is_command_word(segment: list[str], tok: str) -> bool:
+    return tok != "." or _head_token(segment) == "."
+
+
+def _segment_runs_substitution(segment: list[str], marks: tuple[str, ...]) -> bool:
+    def has_mark(tok: str) -> bool:
+        return any(m in tok for m in marks)
+
+    def code_mark(tok: str) -> bool:
+        return tok in marks or bool(_MARK_AT_COMMAND_RE.search(tok)) or any(
+            re.search(r"(?:^|[;&|(]\s*)" + re.escape(m), tok) for m in marks
+        )
+
+    head = _head_token(segment)
+    if head == _MARK or head in marks:
+        return True
+    for i, tok in enumerate(segment):
+        exe = _normalize_exe(tok)
+        if exe in _WRAPPER_NAMES and i + 1 < len(segment) and segment[i + 1] == _MARK:
+            return True
+        is_builtin = exe in _EXEC_BUILTINS
+        if not is_builtin and exe not in _INTERPRETERS:
+            continue
+        if not _is_command_word(segment, tok):
+            continue
+        rest = segment[i + 1:]
+        if is_builtin and any(has_mark(t) for t in rest):
+            return True
+        positional = _first_positional(rest)
+        for j, t in enumerate(rest):
+            prev = rest[j - 1] if j else ""
+            if re.fullmatch(r"-[A-Za-z]*c[A-Za-z]*", prev) and code_mark(t):
+                return True
+            if prev in _REDIR_OPS and has_mark(t) and (not positional or has_mark(positional)):
+                return True
+        if positional and has_mark(positional) and code_mark(positional):
+            return True
+    return False
+
+
+def _norm(token: str, work: str) -> str:
+    return os.path.normpath(os.path.join(work, os.path.expanduser(token)))
+
+
+def _download_outputs(segment: list[str], exe: str, work: str) -> set[str]:
+    letter = _VALUE_LETTER.get(exe, "")
+    longs = _VALUE_LONG.get(exe, frozenset())
+    out: set[str] = set()
+    urls = [t for t in segment if "://" in t]
+    remote_name = False
+    explicit = False
+    prefix = work
+    for i, tok in enumerate(segment):
+        value = ""
+        nxt = segment[i + 1] if i + 1 < len(segment) else ""
+        if exe == "wget" and tok in _PREFIX_FLAGS and nxt:
+            prefix = _norm(nxt, work)
+        elif exe == "wget" and tok.startswith(("-P", "--directory-prefix=")) and tok not in _PREFIX_FLAGS:
+            prefix = _norm(tok.split("=", 1)[1] if tok.startswith("--") else tok[2:], work)
+        if tok in longs or tok in (">", ">>"):
+            value = nxt
+        elif "=" in tok and tok.split("=", 1)[0] in longs:
+            value = tok.split("=", 1)[1]
+        elif re.fullmatch(r"-[A-Za-z]+", tok) and letter and tok[-1] == letter:
+            value = nxt
+        elif letter and tok.startswith("-" + letter) and len(tok) > 2:
+            value = tok[2:]
+        if value:
+            explicit = True
+            out.add(_norm(value, work))
+        if tok in ("--remote-name", "--remote-name-all") or (
+            exe == "curl" and re.fullmatch(r"-[A-Za-z]*O[A-Za-z]*", tok)
+        ):
+            remote_name = True
+    if remote_name or (exe == "wget" and not explicit):
+        for url in urls:
+            name = url.split("?", 1)[0].rstrip("/").rsplit("/", 1)[-1]
+            if name and "://" not in name:
+                out.add(_norm(name, prefix))
+    return out
+
+
+def _downloaded_file_executed(segments: list[list[str]]) -> bool:
+    outputs: set[str] = set()
+    downloaded = False
+    work = ""
+    for seg in segments:
+        exe = _segment_executable(seg)
+        if exe in _DOWNLOADERS:
+            downloaded = True
+            outputs |= _download_outputs(seg, exe, work)
+            continue
+        if exe in ("cd", "pushd"):
+            args = [t for t in _strip_redirs_and_groups(seg)[1:] if not t.startswith("-")]
+            if args:
+                work = _norm(args[0], work)
+            continue
+        if downloaded and exe == "tee":
+            outputs |= {_norm(t, work) for t in seg[1:] if not t.startswith("-") and t != "tee"}
+            continue
+        if not outputs:
+            continue
+        if exe in ("cp", "mv"):
+            args = [t for t in _strip_redirs_and_groups(seg)[1:] if not t.startswith("-")]
+            if len(args) >= 2 and _norm(args[0], work) in outputs:
+                outputs.add(_norm(args[-1], work))
+            continue
+        for i, tok in enumerate(seg):
+            name = _normalize_exe(tok)
+            if name not in _INTERPRETERS and name not in _EXEC_BUILTINS:
+                continue
+            if not _is_command_word(seg, tok):
+                continue
+            rest = seg[i + 1:]
+            if any(t in _NO_RUN_FLAGS for t in rest):
+                continue
+            operand = _first_positional(rest)
+            if operand and _norm(operand, work) in outputs:
+                return True
+            if name in _INTERPRETERS and (not operand or operand.isdigit() or "-s" in rest) and any(
+                prev == "<" and _norm(t, work) in outputs for prev, t in zip(rest, rest[1:])
+            ):
+                return True
+        head = _head_token(seg)
+        if head and _norm(head, work) in outputs:
+            return True
+    return False
+
+
+def runs_remote_code(command: str) -> bool:
+    if not command or not command.strip():
+        return False
+    text = _normalize_command(command)
+    parts: list[str] = []
+    last = 0
+    for start, end, body in _substitution_spans(text):
+        if _DOWNLOAD_WORD_RE.search(body):
+            parts.append(text[last:start])
+            parts.append(_MARK)
+            last = end
+    if parts:
+        parts.append(text[last:])
+        masked = command_segments("".join(parts))
+        if masked:
+            marks = [_MARK]
+            for seg in masked:
+                for tok in seg:
+                    match = _ASSIGNMENT_RE.match(tok)
+                    if match and _MARK in tok:
+                        marks += [f"${match.group(1)}", f"${{{match.group(1)}}}"]
+            if any(_segment_runs_substitution(seg, tuple(marks)) for seg in masked):
+                return True
+    segments = command_segments(text)
+    return bool(segments) and _downloaded_file_executed(segments)

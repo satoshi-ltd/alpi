@@ -1,6 +1,6 @@
 # alpi roadmap
 
-Updated 2026-10-19. Current versions live in the changelogs. The Queue runs top to bottom; the creator
+Updated 2026-10-28. Current versions live in the changelogs. The Queue runs top to bottom; the creator
 approves the next tasks from Proposed.
 
 This is the task pool. [ARCHITECTURE.md](ARCHITECTURE.md) owns current state and
@@ -175,6 +175,72 @@ _None._
   pending. Use a creator-approved run; no agent launches, installs or daemon restarts are implied.
 
 ## Proposed
+
+### Security audit 2026-10-28
+
+- **SEC.SKILL-ENV** — Skill scripts, scheduler runs and `chat --once` children get an allow-listed environment
+  `bug · alpi · agent · high`
+  note: report SEC-1. The root `.env` loads into `os.environ`, `effective_profile_env` starts from it, and
+  `run.py` receives all of it.
+  accept: the `run.py`, scheduler and `chat --once` environments are built like `terminal` (safe keys, the
+  skill's declared env, `ALPI_*`); the root `.env` no longer enters `os.environ` beyond the daemon-wide keys
+  that are read explicitly. Test: profile A with a secret, profile B whose `run.py` dumps its environment sees
+  neither A's keys nor B's undeclared ones.
+
+- **SEC.REDACT** — Persisted sidecars, logs and outputs are redacted and created 0600
+  `bug · alpi · agent · normal`
+  note: report SEC-2 to SEC-8.
+  accept: `_redact.py` covers JWT, `Bearer`, `ya29.`, `1//0`, `github_pat_`, `glpat-`, `gsk_`, PGP private key
+  blocks, `access_token=` and `Cookie:`/`x-api-key:`; replay sidecars, `agent.log`, `approval.log`,
+  `schedule.log`, `outputs.jsonl`, `events.jsonl` and `turns.jsonl` redact and open 0600; `config.yaml` writers
+  use the atomic writer; `alpi audit` covers `secrets/` and the other listed targets. One test per pattern and
+  per writer.
+
+- **SEC.HOST-LOCAL-ONLY** — A remote admin cannot rebind or restart the daemon, and pre-auth sockets are bounded
+  `bug · alpi · agent · normal`
+  note: report HOST-1 to HOST-4.
+  accept: `host.config.set_field`/`unset_field` normalise the key (empty segments rejected) before the
+  local-only check, so `host.allow_public_bind.` and `.network.host` are refused under `require_token=True`;
+  `host.daemon.restart` and `host.daemon.update` are local-only; remote callers get fixed error detail with no
+  paths; the first frame of an unauthenticated socket is capped near 64 KB and pre-auth timeouts count in the
+  per-origin limiter. Console parity unchanged.
+
+- **SEC.BROWSER-PIN** — The browser connects to the IP its guard verified
+  `bug · alpi · agent · normal`
+  note: report TOOLS-2. `_route_guard` resolves with `check_url` and Chromium resolves again.
+  accept: Chromium is pinned to the verified address (host-resolver rule or the pinned transport) for every
+  navigation and subresource; a stub resolver that answers public then loopback cannot reach loopback.
+
+- **SEC.ALP-CONFINE** — ALP files, blobs and envelopes are confined before any peer is paired
+  `bug · alpi · agent · normal`
+  note: report ALP-1 to ALP-6; nothing on the fleet has peers or workgroups yet.
+  accept: `get_file` validates the hub's `name` (no `/` or `\` on any platform) and writes inside the workspace;
+  blobs have a per-profile quota, a TTL sweep and an in-flight cap per sender; `envelope.verify` raises
+  `EnvelopeError` for malformed fields; `_append_marker` takes the transcript lock; continuation requests need an
+  existing part; a Noise identity that does not match the envelope sender is cut before dispatch. A stub hub
+  returning `../x` and `..\x` is a test.
+
+- **SEC.MOBILE-TRUST** — The phone trusts only what pairing established
+  `bug · mobile · alpi · agent · high`
+  note: report MOB-1 to MOB-5 and CLIENT-1. The device check and the EAS build are the creator's.
+  accept: `deep_link` accepts only an allow-list of internal relative routes; ALN state keys use the local
+  connection id and `device_id` comes only from pairing; links require a single-use `pairing_token` and an
+  explicit host confirmation; keychain items are `THIS_DEVICE_ONLY`; frames, deltas and notification payloads
+  are capped. `deepLinkFor` with an external URL returns `'/'`.
+
+- **SEC.REPO-GOVERNANCE** — GitHub controls for the release chain
+  `chore · alpi · creator · high`
+  note: report SUPPLY-1, 2, 4, 5. No code. Pin every action to a full SHA with `sha_pinning_required` and
+  `allowed_actions: selected`, add `dependabot.yml`, a ruleset on `main` and on the four tag patterns, immutable
+  releases, an `environment: release` with a reviewer for the signing and publishing jobs, secret scanning and
+  push protection, and a root `SECURITY.md`.
+  accept: `gh api` shows each control on; a release still publishes end to end.
+
+- **SEC.HARDENING-BATCH** — Desktop, client and supply-chain minors
+  `chore · alpi · desktop · agent · low`
+  depends: SEC.MOBILE-TRUST
+  note: report DESK-1 to DESK-4, CLIENT-2, MOB-6, SUPPLY-3 and the nits, taken in batches.
+  accept: each batch names the IDs it closes and their tests.
 
 ### Reliability before another feature
 
