@@ -133,7 +133,7 @@ Every turn binds one `RunContext`, `ToolExecutor`, and `ExecutionWorld`. Tools a
 
 - `write_file` / `edit_file` — syntax-lint before writing supported formats. Multi-document YAML (`---`, as in Spring `application.yml` and Kubernetes manifests) is accepted; each document is checked.
 - `safe_write_secret(...)` — canonical path for credential files.
-- `knowledge(action="search", query, k=5)` — semantic + lexical recall over synthesized Markdown pages in `<workspace>/knowledge/` (text sent in `topic`, or in a `name` that is not a filename, instead of `query` is still searched); one bundle is indexed at a time and a `path` the index was not built for returns a hint, not another bundle's pages.
+- `knowledge(action="search", query, k=5)` — semantic + lexical recall over synthesized Markdown pages in `<workspace>/knowledge/`; one bundle is indexed at a time and a `path` the index was not built for returns a hint, not another bundle's pages.
 - `knowledge(action="ingest", source_path?|name?, topic?, ocr?)` — explicit learning from a source file or current-turn attachment. The source is read and summarized into Markdown; the raw file is not copied.
 - `knowledge(action="maintain", source_path?, topic?, apply=true, ocr=false)` — explicit LLM-wiki workflow: write/update pages, update index/log, lint, then refresh the derived index.
 - `knowledge(action="lint", path?)` / `knowledge(action="index", path?, force?)` — validate the bundle or rebuild the `okf_*` derived tables in `knowledge.sqlite`; indexing without a `path` also repairs the workspace bundle (required files, unlinked pages); a root given as an explicit `path` is never written to, indexing another bundle is refused without `force=true`, and the rebuild is a single transaction.

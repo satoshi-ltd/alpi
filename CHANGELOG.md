@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.17.44 — 2026-10-29 — a knowledge search runs only on its query
+
+- `knowledge(action="search")` no longer guesses its terms from `topic` or `name` when `query` is empty: the call is refused with the form to resend.
+- Why: the guess turned a model's misplaced arguments into a search for the wrong words, which returned unrelated pages as a valid answer; the clear error is corrected on the next call.
+
 ## v0.17.43 — 2026-10-29 — a knowledge search finds its words wherever the model put them
 
 - `knowledge(action="search")` now searches the text a model sent in `topic` or `name` when `query` is empty, instead of refusing it.

@@ -141,7 +141,8 @@ Output attachments (MM.2):
   time: a `path` the index was not built for yields no results and a hint naming
   the indexed bundle, never another bundle's pages. Send `action` and `query`,
   adding `k` or `path` only if needed; the ingest flags are not for search. A
-  call with no search text is refused with `Empty query` and the form to resend.
+  call without `query` is refused with `Empty query` and the form to resend,
+  even when the terms went into another argument: resend them in `query`.
 - `knowledge(action="ingest", source_path?|name?, topic?, ocr?)` reads a source
   file or current-turn attachment, synthesizes Markdown pages, updates
   `index.md` and `log.md`, lints, and refreshes the derived index. It does not

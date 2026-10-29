@@ -39,9 +39,8 @@ _MAX_SNIPPET = 700
 _MAX_RELATED_PAGE = 12_000
 _MAX_RELATED_TOTAL = 30_000
 _DEFAULT_K = 5
-_FILENAME_RE = re.compile(r"\.[A-Za-z0-9]{1,5}$")
 _EMPTY_QUERY = (
-    "Empty query: the call carried no search text. Resend it as "
+    "Empty query: only `query` is searched, and it was empty or missing. Resend the terms as "
     "knowledge(action=\"search\", query=\"<terms>\"), adding k or path only if needed; "
     "leave out the ingest flags."
 )
@@ -1464,8 +1463,7 @@ class Knowledge(Tool):
         root = _knowledge_root(get_home(), path)
         try:
             if action == "search":
-                spoken = name if isinstance(name, str) and not _FILENAME_RE.search(name.strip()) else ""
-                query = next((t.strip() for t in (query, topic, spoken) if isinstance(t, str) and t.strip()), "")
+                query = query.strip() if isinstance(query, str) else ""
                 if not query:
                     return ToolResult(ok=False, output="", error=_EMPTY_QUERY)
                 if k < 1 or k > 50:

@@ -1912,31 +1912,29 @@ def test_search_refuses_an_empty_query_and_says_how_to_resend_it(tmp_home: Path,
     assert 'query="<terms>"' in result.error
 
 
-@pytest.mark.parametrize("field", ["topic", "name"])
-def test_search_reads_the_text_a_model_put_in_topic_or_name(
-    tmp_home: Path, tmp_path: Path, stub_embedder, field,
-) -> None:
-    root = _workspace_root(tmp_home, tmp_path)
-    shutil.copytree(_bundle(tmp_path), root)
-    kb.index_knowledge(tmp_home, root, embedder=stub_embedder)
+@pytest.mark.parametrize("misplaced", [
+    {"topic": "polaris"},
+    {"name": "polaris"},
+    {"name": "query", "source_path": "polaris"},
+    {"query": 5},
+    {"query": ["polaris"]},
+    {"query": None},
+])
+def test_search_never_guesses_text_sent_outside_query(tmp_home: Path, stub_embedder, monkeypatch, misplaced) -> None:
+    seen = []
+    monkeypatch.setattr(kb, "search_knowledge", lambda home, q, k, root=None: seen.append(q) or [])
 
-    result = kb.Knowledge().run(action="search", **{field: "polaris"}, apply=True, ocr=False)
-
-    assert result.ok, result.error
-    assert "concepts/polaris.md" in [r["path"] for r in json.loads(result.output)["results"]]
-
-
-def test_search_does_not_mistake_an_attachment_filename_for_search_text(tmp_home: Path, stub_embedder) -> None:
-    result = kb.Knowledge().run(action="search", name="Q3-report.pdf")
+    result = kb.Knowledge().run(action="search", **misplaced)
 
     assert not result.ok
     assert result.error.startswith("Empty query")
+    assert seen == []
 
 
-def test_search_prefers_query_over_topic_and_name(tmp_home: Path, tmp_path: Path, stub_embedder, monkeypatch) -> None:
+def test_search_strips_the_query_it_sends(tmp_home: Path, stub_embedder, monkeypatch) -> None:
     seen = []
     monkeypatch.setattr(kb, "search_knowledge", lambda home, q, k, root=None: seen.append(q) or [])
-    kb.Knowledge().run(action="search", query=" polaris ", topic="other", name="else")
+    kb.Knowledge().run(action="search", query=" polaris ")
     assert seen == ["polaris"]
 
 
