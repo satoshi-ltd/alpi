@@ -26,7 +26,8 @@ import time
 from pathlib import Path
 from typing import Any, Iterable
 
-from alpi._redact import scrub_surrogates
+from alpi._redact import redact, scrub_surrogates
+from alpi.secrets_io import open_private
 
 MAX_OUTPUTS = 500
 
@@ -414,17 +415,17 @@ def append(
     if run_id:
         output["run_id"] = run_id
 
+    stored = redact(output)
     path = _store_path(home)
     with _lock:
         existing = _read_all(home)
-        existing.append(output)
+        existing.append(stored)
         if len(existing) > MAX_OUTPUTS:
             existing = existing[-MAX_OUTPUTS:]
             _atomic_rewrite(path, existing)
         else:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            with path.open("a", encoding="utf-8") as f:
-                f.write(scrub_surrogates(json.dumps(output, ensure_ascii=False)) + "\n")
+            with open_private(path) as f:
+                f.write(scrub_surrogates(json.dumps(stored, ensure_ascii=False)) + "\n")
     return output
 
 

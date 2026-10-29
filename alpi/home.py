@@ -240,6 +240,7 @@ _PRIVATE_SUBDIRS = (
     "outputs",
     "runs",
 )
+_PRIVATE_EXISTING = ("alp", "cache", "browser")
 
 _GITIGNORE_ENTRIES = (
     ".env",
@@ -272,6 +273,11 @@ def ensure_home(home: Path) -> None:
     for sub in _PRIVATE_SUBDIRS:
         d = home / sub
         d.mkdir(parents=True, exist_ok=True)
+        _chmod_private(d)
+    for sub in _PRIVATE_EXISTING:
+        if (home / sub).is_dir():
+            _chmod_private(home / sub)
+    for d in (home / "secrets").glob("*/"):
         _chmod_private(d)
     _ensure_out_dir(home)
     gi = home / ".gitignore"

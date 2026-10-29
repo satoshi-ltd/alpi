@@ -427,6 +427,13 @@ def _is_inside(path: Path, parent: Path) -> bool:
         return False
 
 
+def _chmod_dir_private(path: Path) -> None:
+    try:
+        os.chmod(path, 0o700)
+    except OSError:
+        pass
+
+
 def restore_backup(
     archive_path: Path,
     target_dir: Path,
@@ -466,28 +473,33 @@ def restore_backup(
         with tarfile.open(fileobj=gz, mode="r") as tar:
             entries = _restore_entries(tar)
             target_dir.mkdir(parents=True, exist_ok=True)
+            _chmod_dir_private(target_dir)
             if force and not _is_dir_empty(target_dir):
                 _wipe_children(target_dir, keep=archive_path)
             for entry in entries:
                 member = entry.member
                 dest = target_dir / entry.rel
-                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
                 if member.isdir():
-                    dest.mkdir(exist_ok=True)
+                    dest.mkdir(exist_ok=True, mode=0o700)
+                    _chmod_dir_private(dest)
                     continue
                 if not member.isfile():
                     continue
                 src = tar.extractfile(member)
                 if src is None:
                     continue
-                with dest.open("wb") as out:
+                fd = os.open(str(dest), os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_BINARY", 0), 0o600)
+                with os.fdopen(fd, "wb") as out:
                     out.write(src.read())
                 try:
-                    os.chmod(dest, member.mode & 0o777)
+                    os.chmod(dest, member.mode & 0o700)
                 except OSError:
                     pass
                 file_count += 1
 
+    for d in [target_dir, *(p for p in target_dir.rglob("*") if p.is_dir() and not p.is_symlink())]:
+        _chmod_dir_private(d)
     return RestoreInfo(
         target=target_dir,
         file_count=file_count,

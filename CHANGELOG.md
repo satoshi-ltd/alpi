@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.17.42 — 2026-10-29 — secrets stay out of logs and replay files
+
+- The replay file a reconnecting app reads, every log (including the container's output), the outputs list, the host event history and the ALP turn log now redact secrets before they reach disk, and are created readable only by you.
+- The redactor also knows JWTs, `Bearer` and Basic auth, Google OAuth tokens, GitHub fine-grained and GitLab tokens, Groq keys, cookies, `x-api-key` headers, `access_token=`-style URL values and PGP private key blocks.
+- Every `config.yaml` write (the TUI's "Always", PGP and MCP setup) is atomic and private; startup tightens `alp/`, `cache/`, `browser/` and the `secrets/` folders, and `alpi restore` no longer leaves restored secrets readable by others.
+- `alpi audit` now checks `secrets/`, `host/connections.yaml`, every skill's `secrets/` and the `alp/`, `cache/`, `out/`, `runs/` and `browser/` folders.
+- Why: a tool output or an error could carry a token into files that other local users could read.
+
 ## v0.17.41 — 2026-10-28 — the shell cannot reach secrets by spelling them differently
 
 - `terminal` now works out what a command names before judging it: `cat "$ALPI_HOME/.env"`, `cat ~/.alpi/./.env`, `cat ~/.ssh/*`, `cat ~/.alpi/**/.env`, `echo x >> "$ALPI_HOME/config.yaml"` and `tar` of the alpi home, its `skills` or `~/.ssh` are refused like the plain forms, whatever the letter case, never prompted.

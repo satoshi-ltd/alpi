@@ -294,6 +294,10 @@ no tamper-evident or external compliance sink. What is recorded:
   tool call with args + result (capped), reasoning, model, tokens, cost,
   timestamps, and the bounded provider-visible host-context suffix (`# NOW`,
   workgroup, skill hint, relay); secret-shape redaction runs before write.
+  The replay sidecar, logs, `outputs.jsonl`, `host/events.jsonl` and
+  `alp/turns.jsonl` are redacted the same way and kept 0600; redaction knows
+  API keys, JWTs, `Bearer`, Google OAuth, GitHub/GitLab/Groq tokens, cookies
+  and PEM/PGP private keys, but not a secret split across streamed deltas.
 - **Run ledger** (`logs/runs.jsonl`) — append-only, rolling ~1000 runs:
   outcome, elapsed, exit code, backend, last tool, raw cache counts, bounded
   request-shape diagnosis, `peer_id` for workgroup runs, and the cost trail:
@@ -327,7 +331,9 @@ no tamper-evident or external compliance sink. What is recorded:
 
 `alpi audit` is the installed-machine posture scan. It is read-only and scans
 every profile, not just the selected one. Offline checks: secret-file
-permissions (`.env`, ALP private key, `secrets/`), public/all-interface binds,
+permissions (`.env`, ALP private key, `secrets/`, `alp/secrets/`,
+`host/connections.yaml`, skill `secrets/`; `alp/`, `cache/`, `out/`, `runs/`,
+`browser/` as warnings), public/all-interface binds,
 terminal sandbox, LLM stale-call watchdog, and daily USD budget. Online check:
 installed Python package CVEs via OSV; `alpi audit --offline` skips it. Exit
 code is `1` only for `fail` findings; warnings are visible review items.

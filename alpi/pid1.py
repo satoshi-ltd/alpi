@@ -86,11 +86,11 @@ def _run_child(child: Callable[[], None]) -> int:
 
 
 def _configure_logging() -> None:
-    from alpi._log import FORMAT
+    from alpi._log import FORMAT, RedactingFormatter
 
-    logging.basicConfig(
-        level=logging.INFO, format=FORMAT, handlers=[logging.StreamHandler()], force=True,
-    )
+    handler = logging.StreamHandler()
+    handler.setFormatter(RedactingFormatter(FORMAT))
+    logging.basicConfig(level=logging.INFO, format=FORMAT, handlers=[handler], force=True)
 
 
 def _set_proctitle() -> None:

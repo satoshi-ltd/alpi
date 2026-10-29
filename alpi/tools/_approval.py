@@ -186,7 +186,8 @@ def _persist_always(pattern_desc: str) -> None:
     allow = approval.setdefault("allowlist", []) if isinstance(approval.get("allowlist", []), list) else approval.setdefault("allowlist", [])
     if pattern_desc not in allow:
         allow.append(pattern_desc)
-    p.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
+    from alpi.config import atomic_write_yaml
+    atomic_write_yaml(p, data)
 
 
 def classify(cmd: str, cwd: str | None = None) -> tuple[Severity, str]:

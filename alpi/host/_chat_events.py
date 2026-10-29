@@ -6,6 +6,9 @@ import time
 from pathlib import Path
 from typing import Any
 
+from alpi._redact import redact
+from alpi.secrets_io import open_private
+
 # Per-turn replay sidecar so a desktop client whose stream socket dies mid-stream can backfill on reconnect. session.json is only written after the turn completes — until then, every delta lived only on the dropped socket.
 
 _EVENTS_PREFIX = "_events_"
@@ -51,17 +54,15 @@ def reset_for_turn(
         key = _key(home, session_id)
         _seq_state[key] = 0
         try:
-            path.write_text(
-                json.dumps({
+            with open_private(path, truncate=True) as fh:
+                fh.write(json.dumps({
                     "kind": "turn_start",
                     "seq": 0,
                     "ts": time.time(),
                     "request_id": request_id,
                     "connection_id": connection_id,
                     "device_id": device_id,
-                }) + "\n",
-                encoding="utf-8",
-            )
+                }) + "\n")
         except OSError:
             pass
 
@@ -76,14 +77,15 @@ def append(
     path = _file_for(home, session_id)
     key = _key(home, session_id)
     with _lock_for(home, session_id):
-        payload = json.dumps(frame, default=str)
+        frame = redact(json.loads(json.dumps(frame, default=str)))
+        payload = json.dumps(frame)
         if len(payload) > _MAX_FRAME_BYTES:
             # Truncate text-bearing fields to keep replay log bounded.
             clipped = dict(frame)
             for k in ("text", "output"):
                 if isinstance(clipped.get(k), str):
                     clipped[k] = _clip_text(clipped[k], _MAX_TEXT_FIELD_BYTES)
-            payload = json.dumps(clipped, default=str)
+            payload = json.dumps(clipped)
         seq = _seq_state.get(key, 0) + 1
         _seq_state[key] = seq
         record = json.dumps({
@@ -93,8 +95,7 @@ def append(
             "frame": json.loads(payload),
         })
         try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            with path.open("a", encoding="utf-8") as fh:
+            with open_private(path) as fh:
                 fh.write(record + "\n")
         except OSError:
             pass

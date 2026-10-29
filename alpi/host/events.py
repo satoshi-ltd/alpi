@@ -28,6 +28,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 from alpi import home as home_mod
+from alpi._redact import redact
+from alpi.secrets_io import open_private
 from alpi.host import server as host_server
 
 
@@ -119,8 +121,7 @@ def _compact_jsonl(path: Path, snapshot: list[dict[str, Any]]) -> None:
     """
     tmp = path.with_suffix(path.suffix + ".tmp")
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with tmp.open("w", encoding="utf-8") as f:
+        with open_private(tmp, truncate=True) as f:
             for it in snapshot:
                 f.write(json.dumps(it) + "\n")
         tmp.replace(path)
@@ -133,6 +134,7 @@ def _compact_jsonl(path: Path, snapshot: list[dict[str, Any]]) -> None:
 
 def _append_history(payload: dict[str, Any]) -> None:
     global _writes_since_compact
+    payload = redact(payload)
     with _history_lock:
         _history.append(payload)
         _writes_since_compact += 1
@@ -145,8 +147,7 @@ def _append_history(payload: dict[str, Any]) -> None:
         if compact_now and snapshot is not None:
             _compact_jsonl(path, snapshot)
             return
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as f:
+        with open_private(path) as f:
             f.write(json.dumps(payload) + "\n")
     except OSError:
         # Persistence is opportunistic; never propagate from the emit path.

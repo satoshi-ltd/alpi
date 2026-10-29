@@ -17,7 +17,6 @@ import threading
 import time
 import types
 from collections.abc import Callable
-from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 
@@ -3493,18 +3492,12 @@ def turn_log_path(home: Path) -> Path:
 
 def _append_turn_event(home: Path, event: dict[str, Any]) -> None:
     import json
+    from alpi._redact import redact
+    from alpi.secrets_io import open_private
     p = turn_log_path(home)
     try:
-        p.parent.mkdir(parents=True, exist_ok=True)
-        is_new = not p.exists()
-        with p.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(event, separators=(",", ":")) + "\n")
-            f.flush()
-        if is_new:
-            try:
-                os.chmod(p, 0o600)
-            except OSError:
-                pass
+        with open_private(p) as f:
+            f.write(json.dumps(redact(event), separators=(",", ":")) + "\n")
     except Exception as e:  # noqa: BLE001
         log.warning("turn-log append failed: %s", e)
 
@@ -4265,15 +4258,16 @@ def _set_proctitle_daemon(n_profiles: int) -> None:
 
 
 def _configure_logging_daemon(root: Path) -> None:
-    from alpi._log import BACKUP_COUNT, FORMAT, MAX_BYTES
+    from alpi._log import BACKUP_COUNT, FORMAT, MAX_BYTES, PrivateRotatingFileHandler, RedactingFormatter
 
     p = daemon_log_path(root)
     p.parent.mkdir(parents=True, exist_ok=True)
-    handlers: list[logging.Handler] = [
-        RotatingFileHandler(p, maxBytes=MAX_BYTES, backupCount=BACKUP_COUNT),
-    ]
+    file_handler = PrivateRotatingFileHandler(p, maxBytes=MAX_BYTES, backupCount=BACKUP_COUNT)
+    file_handler.setFormatter(RedactingFormatter(FORMAT))
+    handlers: list[logging.Handler] = [file_handler]
     if sys.stderr.isatty():
         handlers.append(logging.StreamHandler())
+        handlers[-1].setFormatter(RedactingFormatter(FORMAT))
     # The host plane's health checks open and close a socket every second or two; at INFO that one logger was 99.9% of the daemon log and rotated everything else out in about two hours.
     logging.getLogger("websockets").setLevel(logging.WARNING)
     logging.basicConfig(

@@ -178,24 +178,6 @@ _None._
 
 ### Security audit 2026-10-28
 
-- **SEC.SKILL-ENV** — Skill scripts, scheduler runs and `chat --once` children get an allow-listed environment
-  `bug · alpi · agent · high`
-  note: report SEC-1. The root `.env` loads into `os.environ`, `effective_profile_env` starts from it, and
-  `run.py` receives all of it.
-  accept: the `run.py`, scheduler and `chat --once` environments are built like `terminal` (safe keys, the
-  skill's declared env, `ALPI_*`); the root `.env` no longer enters `os.environ` beyond the daemon-wide keys
-  that are read explicitly. Test: profile A with a secret, profile B whose `run.py` dumps its environment sees
-  neither A's keys nor B's undeclared ones.
-
-- **SEC.REDACT** — Persisted sidecars, logs and outputs are redacted and created 0600
-  `bug · alpi · agent · normal`
-  note: report SEC-2 to SEC-8.
-  accept: `_redact.py` covers JWT, `Bearer`, `ya29.`, `1//0`, `github_pat_`, `glpat-`, `gsk_`, PGP private key
-  blocks, `access_token=` and `Cookie:`/`x-api-key:`; replay sidecars, `agent.log`, `approval.log`,
-  `schedule.log`, `outputs.jsonl`, `events.jsonl` and `turns.jsonl` redact and open 0600; `config.yaml` writers
-  use the atomic writer; `alpi audit` covers `secrets/` and the other listed targets. One test per pattern and
-  per writer.
-
 - **SEC.HOST-LOCAL-ONLY** — A remote admin cannot rebind or restart the daemon, and pre-auth sockets are bounded
   `bug · alpi · agent · normal`
   note: report HOST-1 to HOST-4.
@@ -236,10 +218,26 @@ _None._
   push protection, and a root `SECURITY.md`.
   accept: `gh api` shows each control on; a release still publishes end to end.
 
+- **SEC.SKILL-ENV** — Skill scripts, scheduler runs and `chat --once` children get an allow-listed environment
+  `bug · alpi · agent · low`
+  note: report SEC-1. The root `.env` loads into `os.environ`, `effective_profile_env` starts from it, and
+  `run.py` receives all of it. Low value while `terminal` runs unsandboxed: a script the agent writes can open
+  the `.env` files directly. Enforcing it today breaks fleet skills whose `run.py` reads undeclared keys
+  (`repo-task`, `security-triage`, `lobby-knowledge-enrichment`, scribe, scout, `sports-weekend`) or hands the
+  whole environment to `mvn`, `git` or `node`, and profiles that take the provider key from the root `.env`.
+  Order: an opt-in `skills.env: declared` mode plus a `doctor`/`skill validate` warning for undeclared reads;
+  then the creator declares each skill's env and enables the mode; then it becomes the default.
+  accept: the `run.py`, scheduler and `chat --once` environments are built like `terminal` (safe keys, the
+  skill's declared env, `ALPI_*`); the root `.env` no longer enters `os.environ` beyond the daemon-wide keys
+  that are read explicitly. Test: profile A with a secret, profile B whose `run.py` dumps its environment sees
+  neither A's keys nor B's undeclared ones.
+
 - **SEC.HARDENING-BATCH** — Desktop, client and supply-chain minors
   `chore · alpi · desktop · agent · low`
   depends: SEC.MOBILE-TRUST
-  note: report DESK-1 to DESK-4, CLIENT-2, MOB-6, SUPPLY-3 and the nits, taken in batches.
+  note: report DESK-1 to DESK-4, CLIENT-2, MOB-6, SUPPLY-3 and the nits, taken in batches. Left from SEC.REDACT:
+  the ALP workgroup transcript (`alp/workgroup.py::_append_transcript`) is written unredacted, and
+  `alp/turns.jsonl` does not rotate.
   accept: each batch names the IDs it closes and their tests.
 
 ### Reliability before another feature

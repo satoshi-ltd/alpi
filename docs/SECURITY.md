@@ -214,14 +214,32 @@ not reach.
   extensions, symlinks into denied trees, path escapes); secrets surface only
   through dedicated methods.
 
-- **Credential hygiene on disk.** Session files are scanned before write and
-  known secret shapes (`sk-…`, `ghp_…`, `xox…`, `AIza…`, `AKIA…`, bot tokens)
-  are replaced with `[REDACTED]`, value-only, so resume keeps its structure.
+- **Credential hygiene on disk.** Session files, the per-turn replay
+  sidecar, every subsystem and daemon log (also the container's stderr),
+  `outputs/outputs.jsonl`, `host/events.jsonl` and `alp/turns.jsonl` are
+  scanned before write. Known secret shapes (`sk-…`, `ghp_…`, `github_pat_…`,
+  `glpat-…`, `gsk_…`, `xox…`, `AIza…`, `AKIA…`, Google `ya29.`/`1//0`
+  tokens, JWTs, bot tokens, `Bearer …`, `Authorization: Basic …`, `Cookie:`,
+  `Set-Cookie:` and `x-api-key:` header values (in text, also mid-line in a log
+  record, or as the `Cookie`/`Set-Cookie`/`x-api-key`/`Authorization` key of a
+  stored dictionary),
+  `access_token=`/`id_token=`/`client_secret=`/`api_key=`/`token=` query
+  values, PEM and PGP private key blocks) are replaced with `[REDACTED]`,
+  value-only, so resume keeps its structure. An output is stored redacted but
+  delivered to the apps as written. Those files are created 0600, never
+  through a symlink, and the live file is tightened on its next write;
+  rotated logs and lines written before this keep their content until they
+  rotate out. Redaction is by shape: a secret split across two streamed
+  deltas, or the raw stderr a scheduled run's daemon child writes to
+  `schedule.log`, is not seen.
   Outbound email attachments pass the same path denylist as file tools, so
   an injected reply cannot exfiltrate keys. Every credential file alpi writes
   (`.env`, Gmail tokens, pending peers, the ALP private key) is created at
   mode 0600 under a unique temporary name and moved into place atomically —
-  no window where it exists with loose permissions.
+  no window where it exists with loose permissions. Every `config.yaml` writer
+  goes through the same atomic 0600 writer. Startup tightens `alp/`, `cache/`,
+  `browser/` and the `secrets/` subdirectories to 0700, and `alpi restore`
+  writes files 0600 and directories 0700 whatever the umask.
 
 ## Layer 2 — OS sandbox (per profile, opt-in — with one exception)
 
@@ -462,9 +480,11 @@ Checks today:
 - **Dependencies** (global): installed Python packages are queried against
   OSV with exact versions. Network failure is fail-open (`info`), advisories
   are `warn`, and `--offline` skips the lookup.
-- **Permissions** (per profile): `.env`, ALP private keys, and `secrets/`
-  must not have group/other bits; loose mode is `fail`. `config.yaml` and
-  `peers.yaml` are `warn` when group/other readable.
+- **Permissions** (per profile): `.env`, ALP private keys, `alp/secrets/`,
+  `secrets/`, `host/connections.yaml` and each skill's `secrets/` must not
+  have group/other bits; loose mode is `fail`. `config.yaml`, `peers.yaml`
+  and the `alp/`, `cache/`, `out/`, `runs/` and `browser/` trees are `warn`
+  when group/other readable.
 - **Network bind** (per profile): reuses doctor's public-bind exposure check.
   Public or all-interface binds are `warn`, not enforcement.
 - **Hardening** (per profile): terminal sandbox off, stale-call watchdog

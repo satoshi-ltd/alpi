@@ -69,12 +69,20 @@ def _audit_permissions(home: Path) -> list[Check]:
     from alpi.alp import keys as keys_mod
     from alpi.alp import peers as peers_mod
 
-    secrets_dir = keys_mod.private_path(home).parent
+    alp_secrets = keys_mod.private_path(home).parent
     targets = [
         (home, "profile home", "warn"),
         (home / ".env", ".env", "fail"),
         (keys_mod.private_path(home), "ALP private key", "fail"),
-        (secrets_dir, "secrets/", "fail"),
+        (alp_secrets, "alp/secrets/", "fail"),
+        (home / "secrets", "secrets/", "fail"),
+        (home / "host" / "connections.yaml", "host/connections.yaml", "fail"),
+        *((d, f"{d.relative_to(home)}/", "fail") for d in sorted(home.glob("skills/*/*/secrets"))),
+        (home / "alp", "alp/", "warn"),
+        (home / "cache", "cache/", "warn"),
+        (home / "out", "out/", "warn"),
+        (home / "runs", "runs/", "warn"),
+        (home / "browser", "browser/", "warn"),
         (home / "config.yaml", "config.yaml", "warn"),
         (peers_mod.path(home), "peers.yaml", "warn"),
         (home / "memories", "memories/", "warn"),

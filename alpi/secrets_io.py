@@ -26,3 +26,18 @@ def safe_write_secret(path: Path | str, content: str | bytes, mode: int = 0o600)
         except FileNotFoundError:
             pass
         raise
+
+
+def open_private(path: Path | str, *, truncate: bool = False):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    flags = os.O_WRONLY | os.O_CREAT | (os.O_TRUNC if truncate else os.O_APPEND)
+    flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+    fd = os.open(str(path), flags, 0o600)
+    try:
+        if hasattr(os, "fchmod"):
+            os.fchmod(fd, 0o600)
+        return os.fdopen(fd, "w", encoding="utf-8")
+    except Exception:
+        os.close(fd)
+        raise

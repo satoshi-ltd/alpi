@@ -1076,7 +1076,8 @@ def ensure_running(home: Path) -> int | None:
     # Open in append mode and hand the fd to the child. The parent
     # closes its handle immediately after spawn so we don't hold extra
     # fds open in the TUI.
-    log_fd = open(log_file_path, "a")
+    from alpi.secrets_io import open_private
+    log_fd = open_private(log_file_path)
     from alpi.home import effective_profile_env as _effective_profile_env, workspace_env
     env = _effective_profile_env(home, extra={"ALPI_HOME": str(home), **workspace_env(home)})
     try:

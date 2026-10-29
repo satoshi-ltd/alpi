@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import time
 
+import pytest
+
 from alpi._redact import redact, _REDACTED
 
 
@@ -133,3 +135,71 @@ def test_a_pem_begin_without_an_end_and_public_keys_pass_through() -> None:
 def test_attachment_metadata_redacted_recursively() -> None:
     out = redact([{"name": "sk-1234567890abcdefABCDEF.png", "size": 10, "mime": "image/png"}])
     assert out == [{"name": "[REDACTED].png", "size": 10, "mime": "image/png"}]
+
+
+@pytest.mark.parametrize("text,secret", [
+    ("jwt eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36", "SflKxwRJSMeKKF2QT4fwpMeJf36"),
+    ("Authorization: Bearer abcdefghijklmnop1234567890", "abcdefghijklmnop1234567890"),
+    ("google ya29.a0AfH6SMBx1234567890abcdefghij", "a0AfH6SMBx1234567890abcdefghij"),
+    ("refresh 1//0gAbCdEfGhIjKlMnOpQrStUv", "gAbCdEfGhIjKlMnOpQrStUv"),
+    ("github_pat_11ABCDEFG0123456789_abcdefghijkl", "11ABCDEFG0123456789_abcdefghijkl"),
+    ("gitlab glpat-abcdefghij0123456789", "abcdefghij0123456789"),
+    ("groq gsk_abcdefghijklmnopqrstuvwxyz0123", "abcdefghijklmnopqrstuvwxyz0123"),
+    ("https://x/cb?access_token=abcdefghijklmnopqrst&state=1", "abcdefghijklmnopqrst"),
+    ("https://x/?api_key=0123456789abcdefghij", "0123456789abcdefghij"),
+    ("Cookie: session=abc123; csrf=def456", "session=abc123; csrf=def456"),
+    ("GET /\nSet-Cookie: sid=abcdef; HttpOnly", "sid=abcdef"),
+    ("x-api-key: k-0123456789abcdefgh", "k-0123456789abcdefgh"),
+    ('{"Cookie": "session=abcdef0123"}', "session=abcdef0123"),
+    ('{"x-api-key": "abcdef0123456789abcdef"}', "abcdef0123456789abcdef"),
+    ("Authorization: Basic dXNlcjpwYXNzd29yZA==", "dXNlcjpwYXNzd29yZA"),
+    ("https://x/cb?id_token=abcdefghijklmnopqrst", "abcdefghijklmnopqrst"),
+    ("client_secret=abcdefghijklmnopqrst", "abcdefghijklmnopqrst"),
+    ("2026-10-29 INFO alpi.x Cookie: session=abc123; csrf=def456", "session=abc123"),
+    ("cmd='curl -H Cookie: sid=abcdef0123 https://x'", "sid=abcdef0123"),
+    ("INFO hdr x-api-key: k-0123456789abcdefgh", "k-0123456789abcdefgh"),
+])
+def test_audit_secret_shapes_are_redacted(text: str, secret: str) -> None:
+    out = redact(text)
+    assert secret not in out
+    assert _REDACTED in out
+
+
+def test_pgp_private_key_block_redacted() -> None:
+    block = (
+        "-----BEGIN PGP PRIVATE KEY BLOCK-----\nlQOYBF0AAAAB\n"
+        "-----END PGP PRIVATE KEY BLOCK-----"
+    )
+    assert redact(f"key:\n{block}\nend") == f"key:\n{_REDACTED}\nend"
+
+
+@pytest.mark.parametrize("text", [
+    "max_tokens=4096 and csrf_token=abcdefghijklmnopqrstu",
+    "the bearer of bad news",
+    "eyJ is a prefix",
+    "PGP PUBLIC KEY BLOCK stays",
+    "const cookie = document.cookie.split(';')",
+    "self.cookie: str = ''",
+    "cookie = request.cookies.get('sid')",
+    "## Cookie: banner copy updated, legal approved, ship Monday",
+    "we fixed the Set-Cookie: SameSite bug in 3 services",
+    "Bearer tokens/credentials/refresh are rotated weekly",
+    "x-api-key: required header",
+    "Basic internationalization support",
+])
+def test_ordinary_text_is_untouched(text: str) -> None:
+    assert redact(text) == text
+
+
+def test_http_credential_headers_in_dicts_are_redacted() -> None:
+    frame = {"output": {"headers": {
+        "Cookie": "sid=abcdef0123", "X-Api-Key": "k-0123456789abcdefgh",
+        "Authorization": "Bearer abc", "Content-Type": "application/json",
+    }}}
+    headers = redact(frame)["output"]["headers"]
+    assert headers["Cookie"] == headers["X-Api-Key"] == headers["Authorization"] == _REDACTED
+    assert headers["Content-Type"] == "application/json"
+
+
+def test_generic_secret_names_still_pass_through() -> None:
+    assert redact({"token_count": "12", "cookie_banner": "shown"}) == {"token_count": "12", "cookie_banner": "shown"}
