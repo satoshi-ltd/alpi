@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.17.43 — 2026-10-29 — a knowledge search finds its words wherever the model put them
+
+- `knowledge(action="search")` now searches the text a model sent in `topic` or `name` when `query` is empty, instead of refusing it.
+- A search with no text at all is refused with the exact call to resend, so the agent corrects it once instead of repeating the same empty call.
+- The ingest-only flags (`force`, `apply`, `ocr`) no longer advertise a default, so search calls stop copying them.
+- Why: a knowledge assistant on DeepSeek sent about one search in ten without its query and looped for minutes on `Empty query.` before reading pages by hand.
+
 ## v0.17.42 — 2026-10-29 — secrets stay out of logs and replay files
 
 - The replay file a reconnecting app reads, every log (including the container's output), the outputs list, the host event history and the ALP turn log now redact secrets before they reach disk, and are created readable only by you.

@@ -139,7 +139,9 @@ Output attachments (MM.2):
 - `knowledge(action="search", query, k=5)` returns synthesized pages for
   compiled durable concepts/projects/people/sources. One bundle is indexed at a
   time: a `path` the index was not built for yields no results and a hint naming
-  the indexed bundle, never another bundle's pages.
+  the indexed bundle, never another bundle's pages. Send `action` and `query`,
+  adding `k` or `path` only if needed; the ingest flags are not for search. A
+  call with no search text is refused with `Empty query` and the form to resend.
 - `knowledge(action="ingest", source_path?|name?, topic?, ocr?)` reads a source
   file or current-turn attachment, synthesizes Markdown pages, updates
   `index.md` and `log.md`, lints, and refreshes the derived index. It does not

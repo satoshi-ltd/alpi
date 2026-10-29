@@ -39,6 +39,12 @@ _MAX_SNIPPET = 700
 _MAX_RELATED_PAGE = 12_000
 _MAX_RELATED_TOTAL = 30_000
 _DEFAULT_K = 5
+_FILENAME_RE = re.compile(r"\.[A-Za-z0-9]{1,5}$")
+_EMPTY_QUERY = (
+    "Empty query: the call carried no search text. Resend it as "
+    "knowledge(action=\"search\", query=\"<terms>\"), adding k or path only if needed; "
+    "leave out the ingest flags."
+)
 _LINK_TEXT = r"(?:[^\[\]\\]|\\.|\[(?:[^\[\]\\]|\\.)*\])*"
 _LINK_RE = re.compile(
     r"(?<!!)\[" + _LINK_TEXT + r"\]\(\s*(?:<([^>]*)>|([^)\s]+))(?:\s+\"[^\"]*\")?\s*\)"
@@ -1402,7 +1408,7 @@ class Knowledge(Tool):
             },
             "query": {
                 "type": "string",
-                "description": "Natural-language query for action='search'. Use the same language as the indexed knowledge; translate the user's request before searching when needed.",
+                "description": "Required for action='search': the search text. Use the same language as the indexed knowledge; translate the user's request before searching when needed.",
             },
             "k": {
                 "type": "integer",
@@ -1427,18 +1433,15 @@ class Knowledge(Tool):
             },
             "force": {
                 "type": "boolean",
-                "description": "Drop and rebuild the knowledge index for action='index'.",
-                "default": False,
+                "description": "Drop and rebuild the knowledge index for action='index'. Omit otherwise.",
             },
             "apply": {
                 "type": "boolean",
-                "description": "For maintain/ingest, false returns the proposal without writing.",
-                "default": True,
+                "description": "For maintain/ingest, false returns the proposal without writing. Omit otherwise.",
             },
             "ocr": {
                 "type": "boolean",
-                "description": "Enable OCR for scanned PDFs and image inputs during ingest/maintain.",
-                "default": False,
+                "description": "Enable OCR for scanned PDFs and image inputs during ingest/maintain. Omit otherwise.",
             },
         },
         "required": ["action"],
@@ -1461,12 +1464,14 @@ class Knowledge(Tool):
         root = _knowledge_root(get_home(), path)
         try:
             if action == "search":
-                if not query or not query.strip():
-                    return ToolResult(ok=False, output="", error="Empty query.")
+                spoken = name if isinstance(name, str) and not _FILENAME_RE.search(name.strip()) else ""
+                query = next((t.strip() for t in (query, topic, spoken) if isinstance(t, str) and t.strip()), "")
+                if not query:
+                    return ToolResult(ok=False, output="", error=_EMPTY_QUERY)
                 if k < 1 or k > 50:
                     return ToolResult(ok=False, output="", error="k must be in [1, 50].")
                 try:
-                    results = search_knowledge(get_home(), query.strip(), k, root=root)
+                    results = search_knowledge(get_home(), query, k, root=root)
                 except KnowledgeRootMismatch as e:
                     return ToolResult(
                         ok=True,

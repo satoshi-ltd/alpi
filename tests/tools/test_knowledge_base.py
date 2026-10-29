@@ -1904,11 +1904,47 @@ def test_a_proposed_page_with_no_body_gets_its_title_as_one(
     assert "# Vega" in (root / "concepts" / "vega.md").read_text()
 
 
-def test_search_refuses_an_empty_query(tmp_home: Path, stub_embedder) -> None:
-    result = kb.Knowledge().run(action="search", query="   ")
+def test_search_refuses_an_empty_query_and_says_how_to_resend_it(tmp_home: Path, stub_embedder) -> None:
+    result = kb.Knowledge().run(action="search", query="   ", apply=True, ocr=False, force=False)
 
     assert not result.ok
-    assert result.error == "Empty query."
+    assert result.error.startswith("Empty query")
+    assert 'query="<terms>"' in result.error
+
+
+@pytest.mark.parametrize("field", ["topic", "name"])
+def test_search_reads_the_text_a_model_put_in_topic_or_name(
+    tmp_home: Path, tmp_path: Path, stub_embedder, field,
+) -> None:
+    root = _workspace_root(tmp_home, tmp_path)
+    shutil.copytree(_bundle(tmp_path), root)
+    kb.index_knowledge(tmp_home, root, embedder=stub_embedder)
+
+    result = kb.Knowledge().run(action="search", **{field: "polaris"}, apply=True, ocr=False)
+
+    assert result.ok, result.error
+    assert "concepts/polaris.md" in [r["path"] for r in json.loads(result.output)["results"]]
+
+
+def test_search_does_not_mistake_an_attachment_filename_for_search_text(tmp_home: Path, stub_embedder) -> None:
+    result = kb.Knowledge().run(action="search", name="Q3-report.pdf")
+
+    assert not result.ok
+    assert result.error.startswith("Empty query")
+
+
+def test_search_prefers_query_over_topic_and_name(tmp_home: Path, tmp_path: Path, stub_embedder, monkeypatch) -> None:
+    seen = []
+    monkeypatch.setattr(kb, "search_knowledge", lambda home, q, k, root=None: seen.append(q) or [])
+    kb.Knowledge().run(action="search", query=" polaris ", topic="other", name="else")
+    assert seen == ["polaris"]
+
+
+def test_ingest_only_flags_advertise_no_default_for_search_calls_to_copy() -> None:
+    props = kb.Knowledge.parameters["properties"]
+    for flag in ("force", "apply", "ocr"):
+        assert "default" not in props[flag]
+    assert props["query"]["description"].startswith("Required for action='search'")
 
 
 @pytest.mark.parametrize("k", [0, -1, 51])

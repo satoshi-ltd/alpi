@@ -1,6 +1,6 @@
 # alpi roadmap
 
-Updated 2026-10-28. Current versions live in the changelogs. The Queue runs top to bottom; the creator
+Updated 2026-10-29. Current versions live in the changelogs. The Queue runs top to bottom; the creator
 approves the next tasks from Proposed.
 
 This is the task pool. [ARCHITECTURE.md](ARCHITECTURE.md) owns current state and
@@ -77,6 +77,13 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 ## Queue
 
 ### Approved fixes, then the terminal capability
+
+- **CI.CLIENTS-RED** — `clients` is red on `main`: two desktop tests fail only on the runner
+  `bug · desktop · agent · high`
+  note: since 2bd29913 (2026-10-27) every `clients` run fails `EmailCell.test.jsx` ("renders one chip per
+  account labeled by address") and `devices.test.jsx` ("clears old rows and ignores a late response after
+  switching daemons", 10 s timeout); both pass locally.
+  accept: the cause on the runner is found and fixed (not retried or skipped); `clients` is green on `main`.
 
 - **DESK.ACTIVE-CACHE** — The desktop's cached active connection cannot go stale during a save
   `bug · desktop · agent · normal`
