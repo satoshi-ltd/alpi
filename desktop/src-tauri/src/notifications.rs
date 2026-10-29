@@ -43,10 +43,16 @@ fn activation_rank(deeplink: &Deeplink) -> u8 {
     }
 }
 
-fn remember_for_activation(deeplink: &Deeplink, window_was_focused: bool, now: Instant) {
+fn remember_for_activation(deeplink: &Deeplink, window_was_focused: bool, active_connection: &str, now: Instant) {
     let mut pending = PENDING_ACTIVATION.lock().unwrap();
     if window_was_focused {
         *pending = None;
+        return;
+    }
+    if deeplink.connection_id != active_connection {
+        if pending.as_ref().is_some_and(|(held, _)| activation_rank(held) <= 1) {
+            *pending = None;
+        }
         return;
     }
     let rank = activation_rank(deeplink);
@@ -65,6 +71,10 @@ pub fn clear_activation() {
     PENDING_ACTIVATION.lock().unwrap().take();
 }
 
+pub fn activation_payload(deeplink: &Deeplink) -> serde_json::Value {
+    serde_json::json!({ "deeplink": deeplink, "inferred": true })
+}
+
 pub fn take_activation(now: Instant) -> Option<Deeplink> {
     let pending = PENDING_ACTIVATION.lock().unwrap().take();
     pending.and_then(|(deeplink, at)| (now.saturating_duration_since(at) <= ACTIVATION_WINDOW).then_some(deeplink))
@@ -75,7 +85,7 @@ pub struct Deeplink {
     pub kind: String,
     pub profile: Option<String>,
     pub id: Option<String>,
-    // Origin connection — the React side switches to it before applying the view.
+    // Origin connection — an explicit (tray) activation switches to it; a focus-inferred one never does.
     pub connection_id: String,
 }
 
@@ -224,7 +234,7 @@ fn schedule_failure_body(name: &str, reason: &str) -> String {
 }
 
 fn show(_app: &AppHandle, title: &str, body: &str, _deeplink: Deeplink) {
-    remember_for_activation(&_deeplink, window_focused(_app), Instant::now());
+    remember_for_activation(&_deeplink, window_focused(_app), &crate::host_client::active_connection_id(), Instant::now());
     #[cfg(all(debug_assertions, target_os = "macos"))]
     {
         // `tauri dev` runs unsigned; macOS Notification Center blocks the plugin silently. Fall back to osascript which uses the system Script Editor identity — no signing or permission grant needed for verification.
@@ -688,7 +698,7 @@ mod tests {
 
 #[cfg(test)]
 mod activation_tests {
-    use super::{clear_activation, remember_for_activation, take_activation, Deeplink, ACTIVATION_WINDOW};
+    use super::{activation_payload, clear_activation, remember_for_activation, take_activation, Deeplink, ACTIVATION_WINDOW};
     use std::sync::Mutex;
     use std::time::{Duration, Instant};
 
@@ -702,7 +712,7 @@ mod activation_tests {
     fn focusing_the_window_soon_after_a_banner_opens_that_banner_once() {
         let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
         let shown = Instant::now();
-        remember_for_activation(&link("s1"), false, shown);
+        remember_for_activation(&link("s1"), false, "local", shown);
         let opened = take_activation(shown + Duration::from_secs(3)).expect("a pending activation");
         assert_eq!(opened.id.as_deref(), Some("s1"));
         assert!(take_activation(shown + Duration::from_secs(4)).is_none());
@@ -712,7 +722,7 @@ mod activation_tests {
     fn a_banner_older_than_the_window_is_not_opened() {
         let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
         let shown = Instant::now();
-        remember_for_activation(&link("s1"), false, shown);
+        remember_for_activation(&link("s1"), false, "local", shown);
         assert!(take_activation(shown + ACTIVATION_WINDOW + Duration::from_secs(1)).is_none());
     }
 
@@ -720,17 +730,59 @@ mod activation_tests {
     fn a_banner_raised_while_the_window_had_focus_never_navigates() {
         let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
         let shown = Instant::now();
-        remember_for_activation(&link("s1"), false, shown);
-        remember_for_activation(&link("s2"), true, shown);
+        remember_for_activation(&link("s1"), false, "local", shown);
+        remember_for_activation(&link("s2"), true, "local", shown);
         assert!(take_activation(shown + Duration::from_secs(1)).is_none());
+    }
+
+    #[test]
+    fn a_banner_from_another_connection_is_never_held_for_focus() {
+        let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let shown = Instant::now();
+        clear_activation();
+        let mut host = request("r1");
+        host.connection_id = "local".into();
+        remember_for_activation(&host, false, "remote-b", shown);
+        let mut open = link("s1");
+        open.connection_id = "remote-b".into();
+        remember_for_activation(&open, false, "remote-b", shown + Duration::from_secs(1));
+        assert_eq!(take_activation(shown + Duration::from_secs(2)).and_then(|d| d.id).as_deref(), Some("s1"));
+        remember_for_activation(&link("wg"), false, "remote-b", shown);
+        assert!(take_activation(shown + Duration::from_secs(3)).is_none());
+    }
+
+    #[test]
+    fn a_later_banner_from_another_connection_drops_the_held_notice_but_not_a_request() {
+        let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let shown = Instant::now();
+        clear_activation();
+        let mut wg = link("wg");
+        wg.connection_id = "local".into();
+        let mut open = link("s1");
+        open.connection_id = "remote-b".into();
+        remember_for_activation(&open, false, "remote-b", shown);
+        remember_for_activation(&wg, false, "remote-b", shown + Duration::from_secs(5));
+        assert!(take_activation(shown + Duration::from_secs(8)).is_none());
+        let mut ask = request("r1");
+        ask.connection_id = "remote-b".into();
+        remember_for_activation(&ask, false, "remote-b", shown);
+        remember_for_activation(&wg, false, "remote-b", shown + Duration::from_secs(5));
+        assert_eq!(take_activation(shown + Duration::from_secs(8)).and_then(|d| d.id).as_deref(), Some("r1"));
+    }
+
+    #[test]
+    fn a_focus_activation_is_marked_inferred() {
+        let payload = activation_payload(&link("s1"));
+        assert_eq!(payload["inferred"], serde_json::json!(true));
+        assert_eq!(payload["deeplink"]["connection_id"], serde_json::json!("local"));
     }
 
     #[test]
     fn only_the_latest_banner_counts() {
         let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
         let shown = Instant::now();
-        remember_for_activation(&link("old"), false, shown);
-        remember_for_activation(&link("new"), false, shown + Duration::from_secs(1));
+        remember_for_activation(&link("old"), false, "local", shown);
+        remember_for_activation(&link("new"), false, "local", shown + Duration::from_secs(1));
         assert_eq!(take_activation(shown + Duration::from_secs(2)).and_then(|d| d.id).as_deref(), Some("new"));
     }
 
@@ -747,8 +799,8 @@ mod activation_tests {
         let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
         let shown = Instant::now();
         clear_activation();
-        remember_for_activation(&settings("connection"), false, shown);
-        remember_for_activation(&settings("budget"), false, shown);
+        remember_for_activation(&settings("connection"), false, "local", shown);
+        remember_for_activation(&settings("budget"), false, "local", shown);
         assert!(take_activation(shown + Duration::from_secs(1)).is_none());
     }
 
@@ -757,8 +809,8 @@ mod activation_tests {
         let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
         let shown = Instant::now();
         clear_activation();
-        remember_for_activation(&request("r1"), false, shown);
-        remember_for_activation(&link("s9"), false, shown + Duration::from_secs(2));
+        remember_for_activation(&request("r1"), false, "local", shown);
+        remember_for_activation(&link("s9"), false, "local", shown + Duration::from_secs(2));
         assert_eq!(take_activation(shown + Duration::from_secs(3)).and_then(|d| d.id).as_deref(), Some("r1"));
     }
 
@@ -767,9 +819,9 @@ mod activation_tests {
         let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
         let shown = Instant::now();
         clear_activation();
-        remember_for_activation(&request("r1"), false, shown);
+        remember_for_activation(&request("r1"), false, "local", shown);
         let later = shown + ACTIVATION_WINDOW + Duration::from_secs(5);
-        remember_for_activation(&link("s9"), false, later);
+        remember_for_activation(&link("s9"), false, "local", later);
         assert_eq!(take_activation(later + Duration::from_secs(1)).and_then(|d| d.id).as_deref(), Some("s9"));
     }
 
@@ -777,7 +829,7 @@ mod activation_tests {
     fn opening_the_app_from_the_tray_or_a_shortcut_drops_the_pending_banner() {
         let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
         let shown = Instant::now();
-        remember_for_activation(&link("s1"), false, shown);
+        remember_for_activation(&link("s1"), false, "local", shown);
         clear_activation();
         assert!(take_activation(shown + Duration::from_secs(1)).is_none());
     }

@@ -11,6 +11,13 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.9.9 — 2026-10-29 — the app stays on the connection you chose
+
+- Coming back to the window after a banner from another connection (a workgroup finishing on the host, a question on another daemon) no longer switches the app to that connection or opens its view or notification.
+- A banner from the open connection still opens what it announced when you come back within 20 seconds; banners from other connections are reached from the sidebar, the menu bar or Notifications.
+- Why: the notification plugin reports no click, so returning to the window looked like clicking the latest banner, and a busy workgroup on another connection pulled the app away mid-task.
+- Requires alpi 0.17.28.
+
 ## v0.9.8 — 2026-10-27 — the menu bar reads every connection
 
 - Needs you, failing jobs and running turns in the menu bar popover now cover every connected daemon, not only the active one; each row names its connection and a click opens it there.

@@ -52,6 +52,13 @@ export function connectionToSwitch(deeplink, activeConnectionId) {
   return id;
 }
 
+// Focus-inferred activations cannot tell a notification click from switching back to the window, so they never change connection.
+export function activationApplies(deeplink, inferred, activeConnectionId) {
+  if (!inferred) return true;
+  const id = deeplink?.connection_id;
+  return typeof id !== "string" || !id || id === activeConnectionId;
+}
+
 export function useNotificationDeeplink({
   setView,
   setSettingsTarget,
@@ -91,7 +98,8 @@ export function useNotificationDeeplink({
     let unlistenActivated = null;
     let cancelled = false;
 
-    const consume = (deeplink) => {
+    const consume = (deeplink, inferred = false) => {
+      if (!activationApplies(deeplink, inferred, activeConnectionIdRef.current)) return;
       const action = resolveDeeplink(deeplink);
       if (!action) return;
       if ((action.view || action.schedule) && hasDirtySettings()) {
@@ -125,7 +133,7 @@ export function useNotificationDeeplink({
       if (cancelled) return;
       try {
         unlistenActivated = await listen("notification-activated", (ev) => {
-          consume(ev?.payload?.deeplink || {});
+          consume(ev?.payload?.deeplink || {}, ev?.payload?.inferred === true);
         });
       } catch { /* tauri race */ }
       if (cancelled) {

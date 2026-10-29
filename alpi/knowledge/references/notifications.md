@@ -110,8 +110,11 @@ within about half a minute while the app runs. A warning row the daemon files
 itself (memory or skill attention) shows in the inbox but raises no banner.
 On the desktop, coming back to the app within about 20 seconds of a banner opens
 what it announced (the chat, the notification, the approval or question, or a
-failed job's schedule); on the phone, tapping a banner does. A failed job opens
-its failure notification, or the job's page on an older daemon.
+failed job's schedule) when the banner came from the connection that is open. A
+banner from another connection never switches the app or opens anything that
+way; open it from the sidebar, the menu bar or Notifications. On the phone,
+tapping a banner opens what it announced. A failed job opens its failure
+notification, or the job's page on an older daemon.
 
 ## Auto-simplified (don't bother — it is downgraded for you)
 

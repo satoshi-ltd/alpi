@@ -4120,7 +4120,7 @@ pub fn run() {
             }
             if let tauri::WindowEvent::Focused(true) = event {
                 if let Some(deeplink) = notifications::take_activation(std::time::Instant::now()) {
-                    let _ = window.app_handle().emit("notification-activated", serde_json::json!({ "deeplink": deeplink }));
+                    let _ = window.app_handle().emit("notification-activated", notifications::activation_payload(&deeplink));
                 }
             }
         })

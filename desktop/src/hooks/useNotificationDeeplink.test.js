@@ -8,6 +8,7 @@ vi.mock("@tauri-apps/plugin-notification", () => ({
 }));
 
 import {
+  activationApplies,
   connectionToSwitch,
   resolveDeeplink,
   useNotificationDeeplink,
@@ -131,7 +132,51 @@ describe("connectionToSwitch", () => {
   });
 });
 
+describe("activationApplies", () => {
+  it("applies every explicit activation", () => {
+    expect(activationApplies({ kind: "workgroup", connection_id: "local" }, false, "remote-b")).toBe(true);
+  });
+
+  it("drops a focus-inferred activation from another connection", () => {
+    expect(activationApplies({ kind: "workgroup", connection_id: "local" }, true, "remote-b")).toBe(false);
+    expect(activationApplies({ kind: "approval", connection_id: "remote-c" }, true, "remote-b")).toBe(false);
+  });
+
+  it("keeps a focus-inferred activation on the active connection or without one", () => {
+    expect(activationApplies({ kind: "workgroup", connection_id: "remote-b" }, true, "remote-b")).toBe(true);
+    expect(activationApplies({ kind: "chat" }, true, "remote-b")).toBe(true);
+  });
+});
+
 describe("useNotificationDeeplink", () => {
+  it("returning to the window after a background workgroup event keeps the connection and the view", async () => {
+    const listeners = new Map();
+    listen.mockImplementation(async (name, callback) => {
+      listeners.set(name, callback);
+      return () => listeners.delete(name);
+    });
+    const setView = vi.fn();
+    const onSwitchConnection = vi.fn();
+    renderHook(() => useNotificationDeeplink({
+      setView,
+      setSettingsTarget: vi.fn(),
+      openNotifications: vi.fn(),
+      onSwitchConnection,
+      activeConnectionId: "remote-b",
+    }));
+    await waitFor(() => expect(listeners.has("notification-activated")).toBe(true));
+    await act(async () => {
+      listeners.get("notification-activated")({
+        payload: {
+          deeplink: { kind: "workgroup", profile: "hub", id: "wg-1", connection_id: "local" },
+          inferred: true,
+        },
+      });
+    });
+    expect(onSwitchConnection).not.toHaveBeenCalled();
+    expect(setView).not.toHaveBeenCalled();
+  });
+
   it("navigates only after explicit notification activation, never on delivery", async () => {
     const listeners = new Map();
     listen.mockImplementation(async (name, callback) => {

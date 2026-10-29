@@ -1755,13 +1755,18 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   app opens the latest banner raised while the window was unfocused when the
   window gains focus within 20 s: only the latest, an approval or question
   outranks a later notice, connection and budget notices are never opened, and
-  opening the app from the tray, the shortcut, the Dock icon or a menu drops it. `chat`,
-  `profile` and `workgroup` open that view, `output` opens the notification,
-  `approval` and `clarification` bring that request to the front, and
-  `settings` with id `schedules` opens the profile's Schedule panel (an admin
-  connection only, decided on the connection the banner came from). The
-  client switches to the originating connection first, applies a request or a
-  schedule once the switch has landed, and never leaves unsaved settings.
+  opening the app from the tray, the shortcut, the Dock icon or a menu drops
+  it. Coming back to the window cannot be told apart from a click, so only a
+  banner from the connection open when it was raised is held, a later banner
+  from another connection drops a held notice (not a held approval or
+  question), and the activation is marked `inferred`: the client never
+  switches connection for it and drops it if the open connection has changed. `chat`, `profile` and
+  `workgroup` open that view, `output` opens the notification, `approval` and
+  `clarification` bring that request to the front, and `settings` with id
+  `schedules` opens the profile's Schedule panel (an admin connection only,
+  decided on the connection the banner came from). An explicit activation (a
+  tray row) switches to the originating connection first, applies a request or
+  a schedule once the switch has landed, and never leaves unsaved settings.
   On the phone a tap follows `deepLinkFor`: `schedule.failed` opens its output
   row (`deep_link`) or, on a daemon without one, the job page; a link from
   another app never carries a `draft`, and a pairing link the system hands over

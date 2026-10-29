@@ -78,6 +78,14 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ### Approved fixes, then the terminal capability
 
+- **DESK.ACTIVE-CACHE** — The desktop's cached active connection cannot go stale during a save
+  `bug · desktop · agent · normal`
+  note: `host_client::save_connections` clears the active-id cache before the temp write and rename, so a
+  stream or poll thread reading in that window caches the previous `connections.json` until the next save:
+  the event stream keeps the old connection and focus activations are held for it.
+  accept: the cache is set to the saved `active_id` after a successful rename; a test with a reader racing a
+  save (an injectable hook between write and rename) sees the new id afterwards.
+
 - **TERM.3** — Profile environment for `terminal`
   `feature · alpi · agent · low`
   note: a skill toolchain installed in the volume (JDK and Maven under
