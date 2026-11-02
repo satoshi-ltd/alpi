@@ -206,6 +206,23 @@ def test_workgroup_list_rows_expose_pipeline_queue_position(short_tmp: Path) -> 
     assert row["queue_position"] == 1
 
 
+def test_hub_rows_report_the_quorum_wait_with_null_for_the_default(short_tmp: Path) -> None:
+    from alpi.alp import workgroup as wg_mod
+    from alpi.host.device_state import _hub_workgroups
+
+    home = short_tmp / "h"
+    _seed(home)
+    wg_mod.create(home, name="slow", hub_kp=load_or_generate(home), member_pubkeys=[], quorum_timeout_seconds=1200)
+    wg_mod.create(home, name="plain", hub_kp=load_or_generate(home), member_pubkeys=[])
+
+    odd = wg_mod.create(home, name="odd", hub_kp=load_or_generate(home), member_pubkeys=[])
+    meta_path = home / "alp" / "workgroups" / odd.meta.id / "meta.yaml"
+    meta_path.write_text(meta_path.read_text() + "quorum_timeout_seconds: -5\n")
+
+    waits = {row["name"]: row["quorum_timeout_seconds"] for row in _hub_workgroups(home, "default")}
+    assert waits == {"slow": 1200, "plain": None, "odd": None}
+
+
 @pytest.mark.asyncio
 async def test_workgroups_list_includes_pipeline_status_only_when_requested(
     short_tmp: Path, monkeypatch,

@@ -14,6 +14,7 @@ from typing import Any
 import yaml
 
 from alpi.alp import pipeline_queue as _pipeline_queue
+from alpi.alp import workgroup as _wg_workgroup
 from alpi import __version__ as _alpi_version
 from alpi import config as cfg_mod
 from alpi import home as home_mod
@@ -1606,6 +1607,7 @@ def _hub_workgroups(
             "mtime": mtime,
             "path": str(path),
             "budget_usd": budget.get("max_usd"),
+            "quorum_timeout_seconds": _wg_workgroup._coerce_positive_int(meta.get("quorum_timeout_seconds")) or None,
             "spent_usd": float(ledger.get("usd") or 0.0),
             "is_hub": True,
             "hub_id": profile,

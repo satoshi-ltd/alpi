@@ -91,7 +91,7 @@ WebSocket or implement a second run-to-chat reconstruction path.
 
 | Method | Params | Returns |
 |---|---|---|
-| `host.workgroups.list` | `profile?`, `include_pipeline_status?` | `{ workgroups: [{ id, profile, name, members, is_hub, hub_id, pipeline_status?, queued_pipeline?, queue_position?, pipeline_note?, … }] }` |
+| `host.workgroups.list` | `profile?`, `include_pipeline_status?` | `{ workgroups: [{ id, profile, name, members, is_hub, hub_id, budget_usd, spent_usd, quorum_timeout_seconds? (hub rows only; null = default 600 s), pipeline_status?, queued_pipeline?, queue_position?, pipeline_note?, … }] }` |
 | `host.workgroup.post` | `profile`, `wg_id`, `text` | `{ ok, seq }` |
 | `host.workgroup.transcript` | `profile`, `wg_id`, `after_seq?`, `limit?`, `tail?` | `{ posts: [{ seq, at, from, body, cost }], next_seq, limit }` |
 | `host.workgroup.tasks` | `profile`, `wg_id` | `{ active, closed, blocked, pipeline_run }`; `active` = `{slug, title, opened_seq, assignees}` |

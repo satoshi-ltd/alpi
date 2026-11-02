@@ -454,6 +454,10 @@ def _create_flow(home: Path) -> None:
     if budget is False:
         return ui.cancelled()
 
+    quorum = _pick_quorum(home)
+    if quorum is None:
+        return ui.cancelled()
+
     kp = load_or_generate(home)
     # Hub never calls workgroup.join on itself; plumb hub_bio/voice into the create call directly.
     from alpi import config as _cfg
@@ -464,7 +468,7 @@ def _create_flow(home: Path) -> None:
         wg = wg_mod.create(
             home, name=name, hub_kp=kp,
             member_pubkeys=member_pks, budget=budget or {},
-            briefing=briefing,
+            briefing=briefing, quorum_timeout_seconds=quorum,
             hub_bio=hub_bio, hub_voice=hub_voice,
         )
     except ValueError as e:
@@ -688,11 +692,11 @@ def _edit_quorum_timeout(home: Path, wg) -> None:
     )
     if raw is None:
         return ui.cancelled()
-    raw = (raw or "").strip()
-    if raw and (not raw.isdigit() or int(raw) <= 0):
+    seconds = _positive_seconds((raw or "").strip())
+    if seconds is None:
         ui.fail_and_wait("must be a positive integer number of seconds (or empty for default)")
         return
-    wg.meta.quorum_timeout_seconds = int(raw) if raw else 0
+    wg.meta.quorum_timeout_seconds = seconds
     _save_meta(_wg_dir(home, wg.meta.id), wg.meta)
     ui.ok_and_wait("quorum timeout updated")
 
@@ -751,6 +755,34 @@ def _edit_budget(home: Path, wg) -> None:
         ui.ok_and_wait("budget cleared — no workgroup-level cap")
     else:
         ui.ok_and_wait(f"budget updated · {_budget_summary(home, wg)}")
+
+
+def _pick_quorum(home: Path) -> int | None:
+    ui.banner(
+        ui.crumb("setup", "workgroups", "create", "quorum timeout"),
+        subtitle="how long the hub waits for members before a round goes on",
+        home=home,
+    )
+    ui.dim("A slow member never blocks a round past this wait. Default 600 seconds (10 min).")
+    ui._console.print("")
+    raw = ui.text("Quorum timeout seconds (ENTER for the default 600):")
+    if raw is None:
+        return None
+    while (seconds := _positive_seconds(raw.strip())) is None:
+        raw = ui.text("Must be a positive number of seconds (ENTER for the default):")
+        if raw is None:
+            return None
+    return seconds
+
+
+def _positive_seconds(raw: str) -> int | None:
+    if not raw:
+        return 0
+    try:
+        n = int(raw)
+    except ValueError:
+        return None
+    return n if n > 0 else None
 
 
 def _pick_budget(home: Path) -> dict[str, Any] | bool | None:

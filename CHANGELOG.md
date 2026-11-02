@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.17.47 — 2026-11-02 — a workgroup's wait for members is reported and asked at creation
+
+- `host.workgroups.list` reports `quorum_timeout_seconds` on the workgroups this daemon hosts (null means the 10-minute default), so the apps can show how long the hub waits for members.
+- `alpi setup → Workgroups → create` asks for that wait next to the spend cap; ENTER keeps the default.
+- Why: the apps now set both limits on a new workgroup, and the console had to offer the same.
+
 ## v0.17.46 — 2026-11-02 — fallback models are set from the console and the host API
 
 - `alpi setup → Routing models` has a Fallback models entry: add a model to the end of the chain, move one up or down, remove it, or clear the chain. Adding the main model or a model already listed is refused.

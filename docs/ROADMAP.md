@@ -83,10 +83,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
   depends: PROFILE.FALLBACKS
   accept: the board UI-PROFILE.FALLBACKS; a daemon without the field hides the row.
 
-- **UI-WORKGROUP.RUN-LIMITS** — A new workgroup sets how long the hub waits for members and how much a run may spend
-  `ui · desktop, mobile · agent · normal`
-  accept: the board UI-WORKGROUP.RUN-LIMITS.
-
 - **UI-EXPORT.PAGES** — An exported PDF has a header and a page number on every page
   `ui · desktop · agent · normal`
   accept: the board UI-EXPORT.PAGES.

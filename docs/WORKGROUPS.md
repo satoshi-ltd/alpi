@@ -1075,8 +1075,9 @@ the host plane.
 
 The
 closure-quorum grace is per-workgroup via
-`meta.quorum_timeout_seconds` (default 600 s, editable in
-`alpi setup → Workgroups`).
+`meta.quorum_timeout_seconds` (default 600 s, asked when `alpi setup →
+Workgroups` creates one and editable there afterwards, set by the apps'
+New workgroup, and reported on hub rows of `host.workgroups.list`).
 
 **Stale-task watchdog (escalating).** When the hub itself posted
 last, the standard "new content from another peer" trigger never
