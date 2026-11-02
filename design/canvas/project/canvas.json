@@ -623,14 +623,6 @@
    "h": 1270,
    "title": "Brand \u00b7 states and motion",
    "page": "brand"
-  },
-  "Proposals-UI-EXPORT.PAGES.dc.html": {
-   "x": 0,
-   "y": 240,
-   "w": 1280,
-   "h": 1180,
-   "title": "Proposals \u00b7 ui-export.pages \u00b7 an exported pdf has a header and a page number on every page",
-   "page": "proposals"
   }
  },
  "order": [
@@ -707,8 +699,7 @@
   "Brand-Mark.dc.html",
   "Brand-Pairs.dc.html",
   "Brand-Palette.dc.html",
-  "Brand-Motion.dc.html",
-  "Proposals-UI-EXPORT.PAGES.dc.html"
+  "Brand-Motion.dc.html"
  ],
  "notes": {
   "s-Foundations": {
@@ -1030,14 +1021,6 @@
    "kind": "title1",
    "maxW": 2600,
    "page": "brand"
-  },
-  "p-UI-EXPORT.PAGES \u00b7 An exported PDF has a header and a page number on every page": {
-   "x": 0,
-   "y": 17,
-   "text": "UI-EXPORT.PAGES \u00b7 An exported PDF has a header and a page number on every page",
-   "kind": "title1",
-   "maxW": 2600,
-   "page": "proposals"
   }
  },
  "designSystems": []

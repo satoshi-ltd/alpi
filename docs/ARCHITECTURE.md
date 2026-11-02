@@ -1809,7 +1809,24 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   of the same table, not a `tfoot`: WebKit's print engine (desktop on macOS/Linux, `expo-print` on iOS) silently
   drops a `display: table-footer-group` footer instead of repeating it, so it never reached a printed page; a
   footer that is ordinary table content prints once, reliably, everywhere.
-  Desktop mounts that document in a hidden print root and calls `window.print()` (the system print sheet;
+  Desktop does not print that table as is: the WKWebView print operation on macOS repeats neither a `thead` nor a
+  `position: fixed` element and WebKit has no page-margin boxes or page counters, so `desktop/src/lib/printPages.js`
+  lays out the pages itself. It first lays the article out in an off-screen probe and waits for the fonts (at most
+  2 s), then cuts it into blocks (title, paragraph, quote, heading, chart, list, table, code) and measures each in a
+  probe at the page width, under the same `.alpi-export` wrap rules as the page, before anything is mounted: a list by
+  item, a table by row, code by line and text by line box (each word, as `Intl.Segmenter` cuts it so CJK splits too,
+  wrapped in a span; a new line where a word starts below the previous line), from the distance between their tops. The pure
+  `paginate(blocks, pageHeight)` packs them into fixed-height pages 8 px short of the body: a chart or row never
+  splits; lists and tables split at an item or row boundary, a table piece repeating its header row and the full
+  table's column widths (`table-layout: fixed`); text and code move whole when they fit a page and otherwise split
+  by line; a heading, or a chain of them, goes with the first piece of what follows unless that is scaled, and
+  is never left behind once placed; a
+  single unsplittable block taller than a page (a chart, a row) gets a page of its own, scaled to fit. Long words
+  wrap anywhere instead of being clipped. Each page carries a running header (mark,
+  profile, server, title) and footer (profile, date, `n / m`) in place of the meta line and the end footer. The
+  paper is chosen in the print sheet after pagination, so pages are sized for the smaller of A4 and Letter inside
+  the 16 mm margins (672 × 928 CSS px). The phone keeps the single end footer: `expo-print` gives no measured layout.
+  Desktop mounts those pages in a hidden print root and calls `window.print()` (the system print sheet;
   `core:webview:allow-print` is granted to the main window only), naming the document after the file. The root
   and the title stay until `afterprint` or ten minutes, never removed when the call returns, because macOS answers
   before the sheet has paginated; the next export replaces it. The phone writes it with `expo-print` and shares it,
@@ -1817,8 +1834,7 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   it is ten minutes old. The file name is the title, slugged; an untitled export has no message id to key on, so
   it is named `alpi-<profile>-<fingerprint>-<day>`, an 8-hex FNV-1a hash of profile, server, timestamp and body —
   two untitled messages from the same profile in the same second with the same body still collide, but same-day
-  collisions from the old `<profile>-<day>` name are otherwise gone. No page numbers: the web views
-  behind both clients do not draw them.
+  collisions from the old `<profile>-<day>` name are otherwise gone. Only the desktop numbers its pages.
 - **Two messaging intents: `notify` (owner) vs `send_message` (third party).**
   `notify(text, title?, summary?, type?)` pushes to the OWNER's own paired Alpi apps —
   it files an inbox row in `~/.alpi/outputs/` and emits the `agent.message`

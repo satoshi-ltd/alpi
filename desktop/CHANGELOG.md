@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.9.13 — 2026-11-02 — an exported PDF has a header and a page number on every page
+
+- Every page of an exported PDF opens with a header (the alpi mark, the profile, the server and the title) and closes with a footer (the profile, the date and page n / m); they replace the meta line above the title and the single footer at the end.
+- A line of text, chart, list item, table row or code line is never cut across two pages; a table that runs on repeats its header row and keeps its column widths, a paragraph, quote or code block longer than a page continues line by line, and long words wrap instead of being clipped.
+- Pages are laid out for the smaller of A4 and Letter inside the usual margins, so they fit whichever paper the print sheet picks; on A4 the bottom margin is a little wider.
+- Why: a loose page 2 did not say whose report it was and nothing numbered the pages, and the macOS print engine repeats neither a table header nor a fixed element, so the app lays out the pages itself.
+- Requires alpi 0.17.28.
+
 ## v0.9.12 — 2026-11-02 — fallback models are set and ordered from the app
 
 - A profile's Overview has a Fallbacks row under the vision model: the ordered list of models tried when the main model's provider fails, or none.

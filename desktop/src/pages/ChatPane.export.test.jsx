@@ -75,7 +75,8 @@ describe("ChatPane reply exports", () => {
     const sheet = document.querySelector(".alpi-print-root .alpi-export");
     expect(sheet.textContent).toContain("Chats went up.");
     expect(sheet.querySelector(".ax-chart svg")).not.toBeNull();
-    expect(sheet.querySelector(".ax-foot").textContent).toContain("@pulse on casa");
+    expect(sheet.querySelector(".pp-head").textContent).toContain("@pulse · casa");
+    expect(sheet.querySelector(".pp-foot").textContent).toContain("1 / 1");
     expect(sheet.querySelector("h1")).toBeNull();
   });
 });

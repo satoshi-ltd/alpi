@@ -76,12 +76,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-### Approved 2026-11-02 — design proposals
-
-- **UI-EXPORT.PAGES** — An exported PDF has a header and a page number on every page
-  `ui · desktop · agent · normal`
-  accept: the board UI-EXPORT.PAGES.
-
 ### Approved fixes, then the terminal capability
 
 - **DESK.ACTIVE-CACHE** — The desktop's cached active connection cannot go stale during a save
@@ -187,6 +181,17 @@ _None._
   the phone after backgrounding. Record installed versions and recovery time; a populated stale
   list shows its warning and recovers, and pipeline state can appear while transcript loading is
   pending. Use a creator-approved run; no agent launches, installs or daemon restarts are implied.
+
+- **EXPORT.PAGES-VERIFY** — The printed PDF on macOS shows header and footer on pages 2+, no block cut across pages
+  `verify · desktop · creator · normal`
+  note: desktop 0.9.13 paginates the export itself; jsdom has no layout, so only a real print proves the measured
+  heights, the page size and that WKWebView does not scale the sheet.
+  accept: on macOS, export a long report (a chart, a table split across pages, a code block and a blockquote each
+  longer than a page, latin-ext text such as "Ładowanie, Šťastný, Ğüç") to PDF on A4 and on Letter, at 100 % and at
+  another page zoom, and once with Landscape picked in the print sheet: every page carries the header (mark,
+  profile, server, title) and the footer (profile, date, n / m), the total matches the page count, no paragraph line, chart, table row or code line is cut or clipped,
+  split table pieces keep their column widths, and no blank page appears. Repeat once on Windows (WebView2) and
+  Linux (WebKitGTK).
 
 - **MOB.KEYBOARD-VERIFY** — The keyboard and back behave on a foldable
   `verify · mobile · creator · normal`

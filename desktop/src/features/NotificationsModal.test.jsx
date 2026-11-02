@@ -332,7 +332,8 @@ describe("NotificationsModal — reply + download", () => {
     const sheet = document.querySelector(".alpi-print-root .alpi-export");
     expect(sheet.querySelector("h1").textContent).toBe("whoop sync failed");
     expect(sheet.textContent).toContain("python3 run.py exited with code 1.");
-    expect(sheet.querySelector(".ax-foot").textContent).toContain("@alice on casa");
+    expect(sheet.querySelector(".pp-head").textContent).toContain("@alice · casa");
+    expect(sheet.querySelector(".pp-foot").textContent).toContain("1 / 1");
     expect(sheet.dataset.exportServer).toBe("casa");
     document.querySelector(".alpi-print-root").remove();
   });
