@@ -98,8 +98,9 @@ invalid block shows as code, and banners and the inbox row show the summary inst
 In the desktop and phone apps a notification, an assistant reply and a workgroup post can be downloaded as
 Markdown or exported to a PDF (desktop: More menu on a notification, a Download button under a reply or post; phone:
 the notification overflow and the long-press sheet). The PDF is a light page with the message, its charts drawn as
-vector graphics and tables, and a footer on every page naming alpi, the profile that wrote it, the server it came
-from and the date. When someone wants a chart or report to forward, tell them to export the PDF instead of copying
+vector graphics and tables. On desktop (0.9.13 and newer) every page carries a header (alpi, the profile, the server,
+the title) and a footer (the profile, the date, page n / m), and tables, lists and code continue across pages; on the
+phone one footer at the end names alpi, the profile, the server and the date. When someone wants a chart or report to forward, tell them to export the PDF instead of copying
 the text, because Copy and the Markdown file carry the raw ```` ```chart ```` block.
 
 ## Which daemons reach the owner

@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.17.49 — 2026-11-02 — the agent describes the paged PDF export
+
+- The agent's own reference now says a desktop PDF export has a header and a numbered footer on every page, while the phone keeps one footer at the end, so it no longer promises the phone a footer on every page.
+
 ## v0.17.48 — 2026-11-02 — fallbacks: the agent knows the apps edit them, and the limit is named
 
 - The agent's own reference now says fallback models can be set from the desktop and phone profile settings, next to `alpi setup` and the host API, so it no longer tells you the console is the only way.
