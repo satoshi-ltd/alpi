@@ -623,6 +623,22 @@
    "h": 1180,
    "title": "Proposals \u00b7 ui-export.pages \u00b7 an exported pdf has a header and a page number on every page",
    "page": "proposals"
+  },
+  "Proposals-UI-PROFILE.FALLBACKS.dc.html": {
+   "x": 0,
+   "y": 1660,
+   "w": 1280,
+   "h": 1240,
+   "title": "Proposals \u00b7 ui-profile.fallbacks \u00b7 fallback models are set and ordered from the apps",
+   "page": "proposals"
+  },
+  "Proposals-UI-WORKGROUP.RUN-LIMITS.dc.html": {
+   "x": 0,
+   "y": 3140,
+   "w": 1280,
+   "h": 1280,
+   "title": "Proposals \u00b7 ui-workgroup.run-limits \u00b7 a new workgroup sets how long the hub waits for members and how much a run may spend",
+   "page": "proposals"
   }
  },
  "order": [
@@ -699,7 +715,9 @@
   "Brand-Pairs.dc.html",
   "Brand-Palette.dc.html",
   "Brand-Motion.dc.html",
-  "Proposals-UI-EXPORT.PAGES.dc.html"
+  "Proposals-UI-EXPORT.PAGES.dc.html",
+  "Proposals-UI-PROFILE.FALLBACKS.dc.html",
+  "Proposals-UI-WORKGROUP.RUN-LIMITS.dc.html"
  ],
  "notes": {
   "s-Foundations": {
@@ -1026,6 +1044,22 @@
    "x": 0,
    "y": 17,
    "text": "UI-EXPORT.PAGES \u00b7 An exported PDF has a header and a page number on every page",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "proposals"
+  },
+  "p-UI-PROFILE.FALLBACKS \u00b7 Fallback models are set and ordered from the apps": {
+   "x": 0,
+   "y": 1437,
+   "text": "UI-PROFILE.FALLBACKS \u00b7 Fallback models are set and ordered from the apps",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "proposals"
+  },
+  "p-UI-WORKGROUP.RUN-LIMITS \u00b7 A new workgroup sets how long the hub waits for members and how much a run may spend": {
+   "x": 0,
+   "y": 2917,
+   "text": "UI-WORKGROUP.RUN-LIMITS \u00b7 A new workgroup sets how long the hub waits for members and how much a run may spend",
    "kind": "title1",
    "maxW": 2600,
    "page": "proposals"

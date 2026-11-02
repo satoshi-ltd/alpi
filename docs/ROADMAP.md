@@ -76,6 +76,30 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
+### Approved 2026-11-02 — design proposals
+
+- **PROFILE.FALLBACKS** — Fallback models are readable and settable over the host API and the console
+  `feature · alpi · agent · normal`
+  note: `fallback_models` (tried in order when the main model's provider fails) is only editable by hand in
+  `config.yaml`: `host.profile.detail` does not return it, `host.config.set_field` would store a list as a string, and
+  `alpi setup` has no entry for it.
+  accept: `host.profile.detail` returns `fallback_models`; `host.config.set_field` takes it as an ordered list of
+  model ids (deduplicated, the main model refused, an empty list clears it) with tests; `alpi setup`'s model section
+  edits the list; docs/CONFIG.md and the knowledge reference describe it; the interface follows board UI-PROFILE.FALLBACKS.
+
+- **UI-PROFILE.FALLBACKS** — Fallback models are set and ordered from the apps
+  `ui · desktop, mobile · agent · normal`
+  depends: PROFILE.FALLBACKS
+  accept: the board UI-PROFILE.FALLBACKS; a daemon without the field hides the row.
+
+- **UI-WORKGROUP.RUN-LIMITS** — A new workgroup sets how long the hub waits for members and how much a run may spend
+  `ui · desktop, mobile · agent · normal`
+  accept: the board UI-WORKGROUP.RUN-LIMITS.
+
+- **UI-EXPORT.PAGES** — An exported PDF has a header and a page number on every page
+  `ui · desktop · agent · normal`
+  accept: the board UI-EXPORT.PAGES.
+
 ### Approved fixes, then the terminal capability
 
 - **DESK.ACTIVE-CACHE** — The desktop's cached active connection cannot go stale during a save
