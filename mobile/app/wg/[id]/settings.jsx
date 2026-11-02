@@ -35,6 +35,7 @@ import { usePane } from '../../../src/nav/PaneContext';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { AdminGuard } from '../../../src/components/AdminGuard';
 import { EMPTY } from '../../../../common/emptyCopy.mjs';
+import { workgroupWaitLabel } from '../../../../common/runLimits.mjs';
 import { SubtitleSkeleton } from '../../../src/components/SubtitleSkeleton';
 import { UsageSkeleton } from '../../../src/components/UsageSkeleton';
 import { FadeIn } from '../../../src/components/FadeIn';
@@ -122,6 +123,7 @@ function WorkgroupSettings() {
 
   const accent = hub?.accent ?? FALLBACK_ACCENT;
   const cap = Number(wg.budget_usd ?? 0);
+  const wait = workgroupWaitLabel(wg);
   const used = Number(wg.spent_usd ?? 0);
   const pct = cap > 0 ? (used / cap) * 100 : 0;
   const paused = !!wg.paused;
@@ -269,6 +271,12 @@ function WorkgroupSettings() {
                 value={<Toggle on={!!wg.auto_read} label="Auto-read messages" color={accent} onChange={toggleAutoRead} />}
                 chevron={false}
               />
+              <RowSeparator />
+            </>
+          ) : null}
+          {wait ? (
+            <>
+              <Row label="Waits for members" helper="then the round goes on" value={wait} chevron={false} />
               <RowSeparator />
             </>
           ) : null}

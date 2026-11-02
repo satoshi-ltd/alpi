@@ -4,10 +4,12 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { mobile, radii, space } from '../../theme/tokens';
 
 import { FALLBACK_ACCENT } from '../../../../common/folds.mjs';
+import { CAP_CHOICES, DEFAULT_WAIT_SECONDS, WAIT_CHOICES, capLabel, runLimitParams, waitLabel } from '../../../../common/runLimits.mjs';
 import { ActionSheet } from '../../components/ActionSheet';
 import { Fold } from '../../components/Fold';
 import { Field, FieldLabel } from '../../components/Field';
 import { Icon } from '../../components/Icon';
+import { Row, RowGroup, RowSeparator } from '../../components/Row';
 import { Sheet } from '../../components/Sheet';
 import { useToast } from '../../components/Toast';
 import { useProfileSummaries, useWorkgroups } from '../../hooks/useDaemonData';
@@ -36,6 +38,9 @@ export function CreateWorkgroupSheet({ open, onClose }) {
   const [briefing, setBriefing] = useState('');
   const [busy, setBusy] = useState(false);
   const [hubPickerOpen, setHubPickerOpen] = useState(false);
+  const [waitSeconds, setWaitSeconds] = useState(null);
+  const [budgetUsd, setBudgetUsd] = useState(null);
+  const [limitPicker, setLimitPicker] = useState(null);
 
   const eligibleHubs = useMemo(
     () => (summaries.data?.profiles ?? []).filter((p) => (p.counts?.peers ?? p.peers?.length ?? 0) > 0),
@@ -48,6 +53,9 @@ export function CreateWorkgroupSheet({ open, onClose }) {
     setBriefing('');
     setBusy(false);
     setHubPickerOpen(false);
+    setWaitSeconds(null);
+    setBudgetUsd(null);
+    setLimitPicker(null);
   }, [open]);
 
   useEffect(() => {
@@ -83,6 +91,7 @@ export function CreateWorkgroupSheet({ open, onClose }) {
         name: name.trim(),
         members: Array.from(members),
         briefing: briefing.trim() || undefined,
+        ...runLimitParams({ waitSeconds, budgetUsd }),
       });
       const wgId = result?.wg_id ?? result?.id;
       // Refresh before navigating: /wg/<id> renders "not found" against a list that predates the create.
@@ -218,6 +227,25 @@ export function CreateWorkgroupSheet({ open, onClose }) {
             )}
           </View>
 
+          <View style={{ gap: space.s4 }}>
+            <FieldLabel>Limits</FieldLabel>
+            <RowGroup style={{ marginHorizontal: 0 }}>
+              <Row
+                label="Waits for members"
+                helper="then the round goes on"
+                value={waitLabel(waitSeconds ?? DEFAULT_WAIT_SECONDS)}
+                onPress={() => setLimitPicker('wait')}
+              />
+              <RowSeparator />
+              <Row
+                label="Spend cap"
+                helper="total the workgroup may spend"
+                value={capLabel(budgetUsd)}
+                onPress={() => setLimitPicker('cap')}
+              />
+            </RowGroup>
+          </View>
+
           <Field
             label="Briefing (optional)"
             value={briefing}
@@ -242,6 +270,29 @@ export function CreateWorkgroupSheet({ open, onClose }) {
           selected: hub === p.name,
           onPress: () => setHub(p.name),
         }))}
+      />
+
+      <ActionSheet
+        open={limitPicker !== null}
+        onClose={() => setLimitPicker(null)}
+        title={limitPicker === 'cap' ? 'Spend cap' : 'Waits for members'}
+        subtitle={limitPicker === 'cap' ? 'total the workgroup may spend' : 'then the round goes on'}
+        actions={
+          limitPicker === 'cap'
+            ? CAP_CHOICES.map((usd) => ({
+                id: String(usd),
+                label: capLabel(usd),
+                selected: usd === budgetUsd,
+                onPress: () => setBudgetUsd(usd),
+              }))
+            : WAIT_CHOICES.map((sec) => ({
+                id: String(sec),
+                label: waitLabel(sec),
+                detail: sec === DEFAULT_WAIT_SECONDS ? 'default' : undefined,
+                selected: sec === (waitSeconds ?? DEFAULT_WAIT_SECONDS),
+                onPress: () => setWaitSeconds(sec),
+              }))
+        }
       />
     </Sheet>
   );

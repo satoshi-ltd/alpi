@@ -14,6 +14,13 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.9.7 — 2026-11-02 — a new workgroup sets its wait and spend cap
+
+- New workgroup has a Limits group: Waits for members (2 to 60 min, 10 min by default) and Spend cap (No cap, or $1 to $100 for the workgroup's whole life), each sent to the daemon only when you change it.
+- A workgroup's settings show how long its hub waits for members before a round goes on, when the daemon reports it.
+- Why: the daemon and the console already took both, but every workgroup made from the app started with the default wait and no cap.
+- Requires alpi 0.17.28.
+
 ## v0.9.6 — 2026-11-02 — readable grey text and clearer ALP scopes
 
 - Secondary text that was too faint to read (the app version, empty members line, session, peer and email details, chart notes) now uses the darker secondary grey, about 4.7:1 in light and 5.7:1 in dark.

@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 afterEach(cleanup);
 
@@ -55,11 +55,11 @@ vi.mock('../../components/Button', () => ({
     React.createElement('button', { type: 'button', onClick: onPress, disabled: !!disabled }, title),
 }));
 vi.mock('../../components/ActionSheet', () => ({
-  ActionSheet: ({ open, actions = [] }) =>
+  ActionSheet: ({ open, title, actions = [] }) =>
     open
       ? React.createElement(
           'div',
-          { 'data-picker': 'hub' },
+          { 'data-picker': title === 'Pick hub profile' ? 'hub' : title },
           actions.map((a) => React.createElement('button', { key: a.id, type: 'button', onClick: a.onPress }, a.label)),
         )
       : null,
@@ -273,6 +273,38 @@ describe('CreateWorkgroupSheet creation', () => {
     expect(h.push).not.toHaveBeenCalled();
     expect(h.close).not.toHaveBeenCalled();
     await waitFor(() => expect(createButton().disabled).toBe(false));
+  });
+});
+
+describe('CreateWorkgroupSheet run limits', () => {
+  it('shows the wait and the cap at their defaults and sends neither when untouched', async () => {
+    renderSheet();
+    expect(screen.getByText('Waits for members')).toBeTruthy();
+    expect(screen.getByText('10 min')).toBeTruthy();
+    expect(screen.getByText('No cap')).toBeTruthy();
+    fillForm();
+    fireEvent.click(createButton());
+
+    await waitFor(() => expect(h.call).toHaveBeenCalled());
+    const params = h.call.mock.calls[0][1];
+    expect(params).not.toHaveProperty('quorum_timeout_seconds');
+    expect(params).not.toHaveProperty('budget_usd');
+  });
+
+  it('sends the wait in seconds and the cap in dollars once picked', async () => {
+    renderSheet();
+    fireEvent.click(screen.getByRole('button', { name: /Waits for members/ }));
+    fireEvent.click(within(document.querySelector('[data-picker="Waits for members"]')).getByText('30 min'));
+    fireEvent.click(screen.getByRole('button', { name: /Spend cap/ }));
+    fireEvent.click(within(document.querySelector('[data-picker="Spend cap"]')).getByText('$5.00'));
+    expect(screen.getByText('30 min')).toBeTruthy();
+    fillForm();
+    fireEvent.click(createButton());
+
+    await waitFor(() => expect(h.call).toHaveBeenCalledWith(
+      'host.workgroup.create',
+      expect.objectContaining({ quorum_timeout_seconds: 1800, budget_usd: 5 }),
+    ));
   });
 });
 

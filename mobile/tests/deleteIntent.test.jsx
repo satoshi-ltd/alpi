@@ -309,6 +309,29 @@ describe('delete intent on a workgroup this profile does not hub', () => {
   });
 });
 
+describe('workgroup run limits', () => {
+  it('shows the wait the workgroup was created with', () => {
+    h.wg = { ...WG, quorum_timeout_seconds: 300 };
+    h.params = { id: 'alpha' };
+    render(<WorkgroupSettings />);
+    const row = document.querySelector('[data-row="Waits for members"]');
+    expect(row.textContent).toContain('5 min');
+  });
+
+  it('reads an unset wait as the 10-minute default', () => {
+    h.wg = { ...WG, quorum_timeout_seconds: null };
+    h.params = { id: 'alpha' };
+    render(<WorkgroupSettings />);
+    expect(document.querySelector('[data-row="Waits for members"]').textContent).toContain('10 min');
+  });
+
+  it('hides the wait when the daemon does not report it', () => {
+    h.params = { id: 'alpha' };
+    render(<WorkgroupSettings />);
+    expect(document.querySelector('[data-row="Waits for members"]')).toBeNull();
+  });
+});
+
 describe('workgroup members', () => {
   it('names a remote member by its alias, matches its phases by peer id and offers its public key', () => {
     h.members = [{ pubkey: 'remote', joined: true, bio: 'Remote builder.' }];
