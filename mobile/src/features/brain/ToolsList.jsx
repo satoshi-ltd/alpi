@@ -71,6 +71,7 @@ export function ToolsList({ profile: id, selectedName = null, onOpen }) {
                     {i > 0 ? <RowSeparator /> : null}
                     <Pressable
                       onPress={() => onOpen(t)}
+                      accessibilityRole="button"
                       android_ripple={{ color: colors.selected }}
                       style={({ pressed }) => ({
                         paddingHorizontal: space.s7,

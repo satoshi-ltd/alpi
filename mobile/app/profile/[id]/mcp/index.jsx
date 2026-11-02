@@ -87,6 +87,7 @@ export default function McpList() {
                     {i > 0 ? <RowSeparator /> : null}
                     <Pressable
                       onPress={() => setTarget(s)}
+                      accessibilityRole="button"
                       android_ripple={{ color: colors.selected }}
                       style={({ pressed }) => ({
                         paddingHorizontal: space.s7,

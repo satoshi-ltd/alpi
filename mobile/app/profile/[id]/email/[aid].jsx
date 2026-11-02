@@ -12,7 +12,7 @@ import { useBack } from '../../../../src/hooks/useBack';
 import { useEmailConfig } from '../../../../src/hooks/useDaemonData';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
 import { EMAIL_TYPE_LABELS } from '../../../../src/lib/emailAccounts';
-import { space } from '../../../../src/theme/tokens';
+import { mobile, space } from '../../../../src/theme/tokens';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 import { Busy } from '../../../../src/components/Busy';
 import { useBusyVisible } from '../../../../src/hooks/useBusyVisible';
@@ -80,7 +80,7 @@ export default function EmailConfig() {
                 ) : null,
               )
             ) : (
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4, lineHeight: fontSizes.xs * 1.6 }}>
+              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3, lineHeight: fontSizes.xs * 1.6 }}>
                 Gmail accounts are managed through the OAuth grant on the alpi desktop app.
                 You can remove this account here.
               </Text>
@@ -88,7 +88,8 @@ export default function EmailConfig() {
 
             <Pressable
               onPress={() => setConfirmRemove(true)}
-              style={{ alignSelf: 'flex-start', paddingVertical: space.s4 }}
+              accessibilityRole="button"
+              style={{ alignSelf: 'flex-start', minHeight: mobile.tap, justifyContent: 'center' }}
             >
               <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, color: colors.dangerText }}>
                 Remove account

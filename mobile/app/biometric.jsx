@@ -83,7 +83,7 @@ export default function BiometricSettings() {
               <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.lg, color: colors.ink }}>
                 Require {caps.label} on cold start
               </Text>
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }}>
+              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
                 {on ? 'on' : 'off'}
               </Text>
             </View>

@@ -446,9 +446,9 @@ def usage_chart(accent=DOC_ACCENT, today="$0.00", tin="102K", tout="831", cap="$
              f'<div style="height: 104px; display: flex; align-items: flex-end; gap: 4px">{"".join(bars)}</div>'
              f'<div style="display: flex; gap: 4px; margin-top: 8px">{"".join(labels)}</div></div>'
              f'<div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 14px">'
-             f'<span style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: #6b6b6b"><span style="width: 9px; height: 9px; border-radius: 2px; background: {in_col}"></span>input <span style="color: #b4b4b4">·</span> <span style="width: 9px; height: 9px; border-radius: 2px; background: {accent}"></span>output</span>'
+             f'<span style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: #6b6b6b"><span style="width: 9px; height: 9px; border-radius: 2px; background: {in_col}"></span>input <span style="color: #6b6b6b">·</span> <span style="width: 9px; height: 9px; border-radius: 2px; background: {accent}"></span>output</span>'
              f'<span style="font-family: {MONO}; font-size: 11px; color: #6b6b6b">{footer}</span></div>')
-    empty_line = f'<span style="font-family: {MONO}; font-size: 11px; color: #b4b4b4; margin-top: 14px">No usage in the last {n} days</span>'
+    empty_line = f'<span style="font-family: {MONO}; font-size: 11px; color: #6b6b6b; margin-top: 14px">No usage in the last {n} days</span>'
     tile = lambda label, body: f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column">{m_eyebrow(label, "#6b6b6b", 400, 0.1, 11, "margin-bottom: 6px")}{body}</div>'
     def mono(v, u):
         unit = f'<span style="font-weight: 400; font-size: 11px; color: #6b6b6b"> {u}</span>' if u else ""
@@ -1130,7 +1130,7 @@ def phone_settings():
 {m_group(
     m_row("Sign out", "forgets the pairing on this phone", danger=True, sep=False),
 )}
-<div style="padding: 24px 20px; display: flex; justify-content: space-between; align-items: center">{m_eyebrow("About")}<span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #b4b4b4">Alpi mobile · v{app_version('mobile')}</span></div>
+<div style="padding: 24px 20px; display: flex; justify-content: space-between; align-items: center">{m_eyebrow("About")}<span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #6b6b6b">Alpi mobile · v{app_version('mobile')}</span></div>
 <div style="padding: 0 20px 28px; display: flex; align-items: center; gap: 12px">{black_alpaca(36, "#141414")}{app_crease("alpi", 32, "#f0b447", "#ffffff")}</div>
 </div>
 """

@@ -18,11 +18,11 @@ def arrow_sep(size=11):
 
 
 def sep(size=11):
-    return f'<span style="font-size: {size}px; color: {P["ink4"]}; flex-shrink: 0" aria-hidden="true">›</span>'
+    return f'<span style="font-size: {size}px; color: {P["ink3"]}; flex-shrink: 0" aria-hidden="true">›</span>'
 
 
 def bullet():
-    return mono("·", 11, P["ink4"])
+    return mono("·", 11, P["ink3"])
 
 
 def wave():

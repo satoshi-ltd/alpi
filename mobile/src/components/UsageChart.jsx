@@ -161,7 +161,7 @@ export function UsageChart({ days = [], accent, capLine = null, total30 = null, 
       {empty ? (
         <Text
           accessibilityLabel="No usage"
-          style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4, marginTop: space.s6 }}
+          style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3, marginTop: space.s6 }}
         >
           {usageRangeEmpty(days.length)}
         </Text>
@@ -278,7 +278,7 @@ export function UsageChart({ days = [], accent, capLine = null, total30 = null, 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
           <Swatch color={inColor} />
           <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, lineHeight: legendLine, color: colors.ink3 }}>input</Text>
-          <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, lineHeight: legendLine, color: colors.ink4 }}>·</Text>
+          <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, lineHeight: legendLine, color: colors.ink3 }}>·</Text>
           <Swatch color={tint} />
           <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, lineHeight: legendLine, color: colors.ink3 }}>output</Text>
         </View>

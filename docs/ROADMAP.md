@@ -209,19 +209,6 @@ _None._
   `ManageSessionsModal.jsx:198`); `lib/shortcuts.js` shows ⌘ on Windows and Linux, which the release builds.
   accept: macOS matches `metaKey` only, Windows/Linux `ctrlKey`; labels say Ctrl off macOS; tests per platform.
 
-- **MOB.INK4-TEXT** — Readable text on the phone meets contrast
-  `bug · mobile · agent · normal`
-  note: 27 `<Text>` use `ink4` (1.82:1 light, 2.22:1 dark), e.g. the version in `SettingsBody.jsx:229`, empty
-  states and sheet metadata; desktop never uses `--ink-4` for text.
-  accept: those move to `ink3`; `inkContract.test.js` fails on `ink4` as a text colour.
-
-- **MOB.A11Y-TOGGLES** — Toggles and rows announce their role and state with 44pt targets
-  `bug · mobile · agent · normal`
-  note: ALP scope chips in `peers/new.jsx` and `peers/accept.jsx` (duplicated loop) are ~28pt with no role or
-  checked state; "Remove account" in `email/[aid].jsx:89` is hand-made text; several list rows lack a role.
-  accept: one shared scope toggle with checkbox role and state at ≥44pt; rows carry `button` role; tests assert
-  role, state and hit size.
-
 - **MOB.DIRTY-FORMS** — Every phone form warns before back drops what was typed
   `bug · mobile · agent · normal`
   note: `providers/[key]`, `mcp/new`, `email/new`, `peers/new` and `peers/accept` skip `useDirtyBack`, so a

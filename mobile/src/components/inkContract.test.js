@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -12,6 +12,47 @@ describe('readable placeholder ink', () => {
       expect(read(path)).toMatch(/placeholderTextColor=\{colors\.ink3\}/);
     },
   );
+});
+
+function sources(dir) {
+  return readdirSync(dir).flatMap((name) => {
+    const full = join(dir, name);
+    if (statSync(full).isDirectory()) return sources(full);
+    return /\.jsx?$/.test(name) && !name.includes('.test.') ? [full] : [];
+  });
+}
+
+describe('readable text ink', () => {
+  it('never sets text in ink4, which stays for rules, grabbers and disabled marks', () => {
+    const root = join(import.meta.dirname, '..', '..');
+    const offenders = ['app', 'src'].flatMap((dir) => sources(join(root, dir)))
+      .filter((file) => /(^|[^A-Za-z])color:\s*colors\.ink4\b/.test(readFileSync(file, 'utf8')));
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe('rows say they are buttons', () => {
+  it.each([
+    'features/brain/ToolsList.jsx',
+    'features/brain/SkillsList.jsx',
+    'features/sheets/TasksSheet.jsx',
+    '../app/profile/[id]/email/index.jsx',
+    '../app/profile/[id]/email/[aid].jsx',
+    '../app/profile/[id]/mcp/index.jsx',
+    '../app/wg/[id]/member.jsx',
+  ])('%s gives every Pressable a role', (path) => {
+    const src = read(path);
+    const pressables = src.split('<Pressable').slice(1).map((chunk) => chunk.slice(0, chunk.indexOf('style=')));
+    expect(pressables.length).toBeGreaterThan(0);
+    for (const props of pressables) expect(props).toMatch(/accessibilityRole=/);
+  });
+});
+
+describe('toggles say whether they are on', () => {
+  it('announces each workgroup member chip as a checkbox with its state', () => {
+    const src = read('features/sheets/CreateWorkgroupSheet.jsx');
+    expect(src).toMatch(/accessibilityRole="checkbox"\s+accessibilityState=\{\{ checked: on \}\}/);
+  });
 });
 
 describe('one picker lane', () => {

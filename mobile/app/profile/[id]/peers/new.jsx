@@ -2,7 +2,7 @@
 
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { KeyboardPane } from '../../../../src/components/KeyboardPane';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../../../src/theme/tokens';
@@ -10,25 +10,19 @@ import { space } from '../../../../src/theme/tokens';
 import { Button } from '../../../../src/components/Button';
 import { Field } from '../../../../src/components/Field';
 import { Eyebrow } from '../../../../src/components/Eyebrow';
-import { Pill } from '../../../../src/components/Pill';
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useToast } from '../../../../src/components/Toast';
 import { useBack } from '../../../../src/hooks/useBack';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
 import { useTheme } from '../../../../src/theme/ThemeContext';
-
-const ALP_SCOPES = [
-  { id: 'link.ping', desc: 'liveness probe · zero LLM cost' },
-  { id: 'link.ask', desc: 'full agent turn · spends from your daily LLM budget' },
-  { id: 'link.cancel', desc: 'abort an in-flight ask the peer started' },
-];
+import { ScopeToggles } from '../../../../src/features/peers/ScopeToggles';
 
 export default function AddPeer() {
   const { id } = useLocalSearchParams();
   const goBack = useBack();
   const toast = useToast();
   const { call } = useEndpoint();
-  const { colors, fonts, fontSizes } = useTheme();
+  const { colors } = useTheme();
 
   const [handle, setHandle] = useState('');
   const [pubkey, setPubkey] = useState('');
@@ -109,25 +103,7 @@ export default function AddPeer() {
 
           <View style={{ gap: space.s3 }}>
             <Eyebrow>Allow scopes</Eyebrow>
-            <View style={{ gap: space.s3 }}>
-              {ALP_SCOPES.map((s) => {
-                const on = scopes.has(s.id);
-                return (
-                  <Pressable
-                    key={s.id}
-                    onPress={() => toggle(s.id)}
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: space.s4, paddingVertical: space.s1 }}
-                  >
-                    <Pill tone={on ? 'on' : undefined} off={!on}>{s.id}</Pill>
-                    <Text
-                      style={{ flex: 1, fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}
-                    >
-                      {s.desc}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+            <ScopeToggles value={scopes} onToggle={toggle} />
           </View>
         </ScrollView>
       </KeyboardPane>

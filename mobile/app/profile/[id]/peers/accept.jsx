@@ -3,7 +3,7 @@
 
 import { useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { KeyboardPane } from '../../../../src/components/KeyboardPane';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../../../src/theme/tokens';
@@ -11,18 +11,12 @@ import { space } from '../../../../src/theme/tokens';
 import { Button } from '../../../../src/components/Button';
 import { Field } from '../../../../src/components/Field';
 import { Eyebrow } from '../../../../src/components/Eyebrow';
-import { Pill } from '../../../../src/components/Pill';
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useToast } from '../../../../src/components/Toast';
 import { useBack } from '../../../../src/hooks/useBack';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
 import { useTheme } from '../../../../src/theme/ThemeContext';
-
-const SCOPES = [
-  { id: 'link.ping', label: 'link.ping', desc: 'liveness probe · zero LLM cost' },
-  { id: 'link.ask', label: 'link.ask', desc: 'full agent turn · spends from your daily LLM budget' },
-  { id: 'link.cancel', label: 'link.cancel', desc: 'abort an in-flight ask' },
-];
+import { ScopeToggles } from '../../../../src/features/peers/ScopeToggles';
 
 export default function AcceptPendingPeer() {
   const { id, pubkey, address, suggested } = useLocalSearchParams();
@@ -86,7 +80,7 @@ export default function AcceptPendingPeer() {
               {pubkeyStr}
             </Text>
             {addressStr ? (
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }}>
+              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
                 {addressStr}
               </Text>
             ) : null}
@@ -109,25 +103,7 @@ export default function AcceptPendingPeer() {
 
           <View style={{ gap: space.s3 }}>
             <Eyebrow>Allow scopes</Eyebrow>
-            <View style={{ gap: space.s3 }}>
-              {SCOPES.map((s) => {
-                const on = scopes.has(s.id);
-                return (
-                  <Pressable
-                    key={s.id}
-                    onPress={() => toggleScope(s.id)}
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: space.s4, paddingVertical: space.s1 }}
-                  >
-                    <Pill tone={on ? 'on' : undefined} off={!on}>{s.label}</Pill>
-                    <Text
-                      style={{ flex: 1, fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}
-                    >
-                      {s.desc}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+            <ScopeToggles value={scopes} onToggle={toggleScope} />
           </View>
         </ScrollView>
       </KeyboardPane>

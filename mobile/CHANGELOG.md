@@ -14,6 +14,13 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.9.6 — 2026-11-02 — readable grey text and clearer ALP scopes
+
+- Secondary text that was too faint to read (the app version, empty members line, session, peer and email details, chart notes) now uses the darker secondary grey, about 4.7:1 in light and 5.7:1 in dark.
+- Add peer and Accept peer list the ALP scopes as checkbox rows at least 44 pt tall, each with its cost line, and screen readers say whether a scope is allowed.
+- Tools, skills, email accounts, MCP servers, workgroup members and tasks announce their rows as buttons, and Remove account is a full-height button.
+  Requires alpi 0.17.28.
+
 ## v0.9.5 — 2026-11-02 — the keyboard and back behave on a foldable
 
 - The composer sits on the keyboard after a fold or unfold, a sheet opening over it or a return from the background, instead of hiding under the keyboard or floating over a gap where the keyboard was.

@@ -226,7 +226,7 @@ export function SettingsBody({ active = true, onDismiss }) {
           }}
         >
           <Eyebrow>About</Eyebrow>
-          <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.xs, color: colors.ink4 }}>
+          <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.xs, color: colors.ink3 }}>
             Alpi mobile · v{APP_VERSION}
           </Text>
         </View>

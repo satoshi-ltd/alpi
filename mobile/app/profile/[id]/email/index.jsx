@@ -61,6 +61,7 @@ export default function EmailList() {
                     {i > 0 ? <RowSeparator /> : null}
                     <Pressable
                       onPress={() => router.push(`/profile/${id}/email/${a.id}`)}
+                      accessibilityRole="button"
                       android_ripple={{ color: colors.selected }}
                       style={({ pressed }) => ({
                         paddingHorizontal: space.s7,

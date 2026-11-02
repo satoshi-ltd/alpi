@@ -217,7 +217,7 @@ def member_block(name, expanded=False, menu=False, phone=False):
         bio = ell(BIOS[name], size, P["ink2"], extra="flex: 1")
     phases = owned(name)
     held = tags(["#" + s for s in phases], 10) if phases else mono("none · the hub routes every phase", 10, P["ink3"])
-    owns = flex(mono("owns", 9.5, P["ink4"], extra="width: 30px"), held, gap=6, align="flex-start")
+    owns = flex(mono("owns", 9.5, P["ink3"] if phone else P["ink4"], extra="width: 30px"), held, gap=6, align="flex-start")
     body = stack(head, bio, owns, gap=5, extra="flex: 1")
     edge = "" if phone else f"box-shadow: inset 0 0.5px 0 {P['line']};"
     pad = "12px 16px" if phone else "10px 14px 10px 16px"

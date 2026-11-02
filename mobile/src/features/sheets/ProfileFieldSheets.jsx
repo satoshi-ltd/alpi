@@ -311,13 +311,13 @@ export function ModelSheet({
                 No models available for @{profileName}
               </Text>
               <View style={{ gap: space.s1 }}>
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }}>
+                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
                   daemon profile.models: {profileModels.length}
                 </Text>
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }}>
+                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
                   provider_keys: {providerKeys.length} ({providerKeys.map((k) => k.env).join(', ') || '—'})
                 </Text>
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }}>
+                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
                   ollama configured: {ollamaNames.length}, reachable: {ollama.data?.models?.length ?? 0}
                 </Text>
               </View>
@@ -329,7 +329,7 @@ export function ModelSheet({
                   ollama/{e.name} · {e.url} — {e.detail}
                 </Text>
               ))}
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4, marginTop: space.s1 }}>
+              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3, marginTop: space.s1 }}>
                 Go to Settings → Providers to fix.
               </Text>
             </View>
@@ -366,7 +366,7 @@ export function ModelSheet({
                 style={{
                   fontFamily: fonts.mono,
                   fontSize: fontSizes.xs,
-                  color: colors.ink4,
+                  color: colors.ink3,
                   lineHeight: fontSizes.xs * 1.5,
                 }}
               >

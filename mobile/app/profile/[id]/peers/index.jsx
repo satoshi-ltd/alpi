@@ -87,7 +87,7 @@ export default function PeersList() {
                       <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.md, color: colors.ink }} numberOfLines={1}>
                         {p.local_profile ? `@${p.local_profile}` : shortPubkey(p.pubkey)}
                       </Text>
-                      <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }} numberOfLines={1}>
+                      <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }} numberOfLines={1}>
                         {p.address ?? p.pubkey}
                       </Text>
                     </View>

@@ -13,7 +13,7 @@ export function MessageSkeleton({ style }) {
     <View style={[{ gap: space.s4 }, style]}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
         <ThinkingDots color={colors.ink3} padded={false} />
-        <Text style={{ color: colors.ink4, fontFamily: fonts.mono, fontSize: fontSizes.xs }}>
+        <Text style={{ color: colors.ink3, fontFamily: fonts.mono, fontSize: fontSizes.xs }}>
           thinking…
         </Text>
       </View>

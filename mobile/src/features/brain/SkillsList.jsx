@@ -78,6 +78,7 @@ export function SkillsList({ profile: id, selectedKey = null, onOpen }) {
                     {i > 0 ? <RowSeparator /> : null}
                     <Pressable
                       onPress={() => onOpen(s)}
+                      accessibilityRole="button"
                       android_ripple={{ color: colors.selected }}
                       style={({ pressed }) => ({
                         minHeight: 44,

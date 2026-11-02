@@ -106,6 +106,7 @@ export function TasksSheet({ open, onClose, tasks = [], workgroupId, accent, onP
             return (
               <Pressable
                 key={t.id}
+                accessibilityRole="button"
                 onPress={() => {
                   onPick?.(t.seq);
                   onClose?.();
@@ -138,11 +139,11 @@ export function TasksSheet({ open, onClose, tasks = [], workgroupId, accent, onP
                     <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
                       #{t.id}
                     </Text>
-                    <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }}>·</Text>
+                    <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>·</Text>
                     <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
                       {t.msgs} msg{t.msgs === 1 ? '' : 's'}
                     </Text>
-                    <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }}>·</Text>
+                    <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>·</Text>
                     <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: statusColor }}>
                       {statusLabel}
                     </Text>

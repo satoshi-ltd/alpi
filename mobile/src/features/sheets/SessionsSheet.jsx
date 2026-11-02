@@ -88,11 +88,11 @@ export function SessionsSheet({ open, onClose, profile, accent, activeSessionId,
                 const cost = fmtCost(s.cost_usd);
                 const helper = (
                   <View style={{ flexDirection: 'row', gap: space.s3, alignItems: 'center' }}>
-                    <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }}>
+                    <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
                       {s.turn_count} turn{s.turn_count === 1 ? '' : 's'}
                     </Text>
                     {cost ? (
-                      <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }}>
+                      <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
                         · {cost}
                       </Text>
                     ) : null}

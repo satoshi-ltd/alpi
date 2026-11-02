@@ -172,7 +172,7 @@ export function CreateWorkgroupSheet({ open, onClose }) {
           <View style={{ gap: space.s4 }}>
             <FieldLabel>Members — peers of @{hub ?? '…'}</FieldLabel>
             {peers.length === 0 ? (
-              <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink4 }}>
+              <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}>
                 @{hub} has no peers yet. Add some in the profile's ALP settings first.
               </Text>
             ) : (
@@ -184,6 +184,8 @@ export function CreateWorkgroupSheet({ open, onClose }) {
                   return (
                     <Pressable
                       key={peer.id}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: on }}
                       accessibilityLabel={`@${peer.alias || peer.id}`}
                       onPress={() => toggleMember(peer.id)}
                       hitSlop={CHIP_SLOP}

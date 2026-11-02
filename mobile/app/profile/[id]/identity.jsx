@@ -85,7 +85,7 @@ export default function EditIdentity() {
           />
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s5 }}>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4, lineHeight: fontSizes.xs * 1.6 }}>
+              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3, lineHeight: fontSizes.xs * 1.6 }}>
                 Need a starting point? Tap Draft — the agent reads <Text style={{ color: colors.ink2 }}>AGENT.md</Text> and writes a one-liner.
               </Text>
             </View>

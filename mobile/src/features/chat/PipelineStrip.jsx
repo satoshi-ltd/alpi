@@ -66,7 +66,7 @@ function Placeholders({ count }) {
     <View testID="strip-placeholder" accessible accessibilityRole="progressbar" accessibilityLabel="Loading the pipeline" style={[STYLES.content, { overflow: 'hidden' }]}>
       {Array.from({ length: count }, (_, i) => (
         <View key={i} style={STYLES.step}>
-          {i > 0 ? <Text style={{ fontSize: fontSizes.xs, color: colors.ink4 ?? colors.ink3 }}>›</Text> : null}
+          {i > 0 ? <Text style={{ fontSize: fontSizes.xs, color: colors.ink3 }}>›</Text> : null}
           <SkeletonBar width={PLACEHOLDER_WIDTHS[i]} height={CHIP_H} delay={i * 80} />
         </View>
       ))}
@@ -176,7 +176,7 @@ export function PipelineStrip({ run, phaseMap = null, active = null, pending = f
               <Text
                 accessibilityElementsHidden
                 importantForAccessibility="no-hide-descendants"
-                style={{ fontSize: fontSizes.xs, color: colors.ink4 ?? colors.ink3 }}
+                style={{ fontSize: fontSizes.xs, color: colors.ink3 }}
               >
                 ›
               </Text>

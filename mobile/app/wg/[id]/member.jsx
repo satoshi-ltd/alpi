@@ -82,6 +82,7 @@ function AddMember() {
             return (
               <Pressable
                 onPress={() => add(item)}
+                accessibilityRole="button"
                 disabled={!!busy}
                 android_ripple={{ color: colors.selected }}
                 style={({ pressed }) => ({
@@ -99,7 +100,7 @@ function AddMember() {
                   <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.md, color: colors.ink }}>
                     @{item.alias || item.id}
                   </Text>
-                  <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }}>
+                  <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
                     {(item.pubkey || '').slice(0, 16)}…
                   </Text>
                 </View>
