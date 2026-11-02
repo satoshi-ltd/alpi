@@ -28,6 +28,7 @@ export default function ModelPicker({
   effort = "",
   effortSupported = false,
   onEffortChange,
+  placeholder = null,
 }) {
   const [open, setOpen] = useState(false);
   const [picked, setPicked] = useState(currentModel);
@@ -46,14 +47,14 @@ export default function ModelPicker({
     setPicked(currentModel);
   }, [currentModel]);
 
-  const label = modelLabel(picked);
+  const label = modelLabel(picked) || placeholder || "";
   const supported = typeof effortSupported === "function" ? !!effortSupported(picked) : !!effortSupported;
   const effortTag = supported && effort ? effort : null;
 
   return (
     <span ref={ref} className={styles.modelPickerWrap}>
       <Tip
-        text={picked}
+        text={picked || placeholder}
         side="up"
       >
         <Button
@@ -99,7 +100,7 @@ export default function ModelPicker({
                       role="option"
                       aria-selected={sel}
                       onClick={() => {
-                        setPicked(m.id);
+                        if (placeholder == null) setPicked(m.id);
                         onPick?.(m.id);
                         setOpen(false);
                       }}

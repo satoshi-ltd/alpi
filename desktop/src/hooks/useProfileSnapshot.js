@@ -22,8 +22,11 @@ export function useProfileSnapshot(connectionId, profile, { sections = null } = 
   const [error, setError] = useState(null);
 
   const sectionsKey = Array.isArray(sections) ? sections.join(",") : "";
+  const latestRef = useRef(0);
   const load = useCallback(() => {
     if (!profile) return Promise.resolve(null);
+    const request = ++latestRef.current;
+    const stale = () => request !== latestRef.current;
     setLoading(true);
     return invoke("settings_profile_snapshot", {
       profile,
@@ -31,6 +34,7 @@ export function useProfileSnapshot(connectionId, profile, { sections = null } = 
       ...(sectionsKey ? { sections: sectionsKey.split(",") } : {}),
     })
       .then((s) => {
+        if (stale()) return s;
         if (s && typeof s === "object") {
           _cache.set(key, s);
           setSnapshot(s);
@@ -42,6 +46,7 @@ export function useProfileSnapshot(connectionId, profile, { sections = null } = 
         return s;
       })
       .catch((e) => {
+        if (stale()) return null;
         const msg = String(e);
         if (msg.includes("auth-failed") && !msg.includes("connection-disabled")) {
           _cache.delete(key);
@@ -50,7 +55,7 @@ export function useProfileSnapshot(connectionId, profile, { sections = null } = 
         setError(msg);
         return null;
       })
-      .finally(() => setLoading(false));
+      .finally(() => { if (!stale()) setLoading(false); });
   }, [connectionId, profile, key, sectionsKey]);
 
   useEffect(() => {

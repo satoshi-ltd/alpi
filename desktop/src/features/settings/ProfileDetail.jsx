@@ -36,6 +36,7 @@ import {
 } from "./fields/boundaries.jsx";
 import {
   AddProviderField,
+  FallbackModelsField,
   McpField,
   ModelField,
   ReasoningEffortField,
@@ -53,6 +54,7 @@ import { EmailCell } from "./fields/services.jsx";
 import { DaemonField } from "./fields/DaemonField.jsx";
 import { ThemeField } from "./fields/ThemeField.jsx";
 import { canSelfUpdate } from "../../../../common/updateHint.mjs";
+import { fallbackList, hasFallbackModels } from "../../../../common/fallbackModels.mjs";
 import {
   NetworkAddressField,
   PairingNameField,
@@ -377,6 +379,14 @@ export default function ProfileDetail({
               <VisionModelField
                 profile={profile}
                 onSaved={() => { refreshDetail(); onSaved?.(); }}
+              />
+            </Row>
+          )}
+          {hasFallbackModels(profile) && (hasModels || fallbackList(profile).length > 0) && (
+            <Row label="fallbacks" keywords="fallback models outage provider" alignTop>
+              <FallbackModelsField
+                profile={profile}
+                onSaved={() => { const landed = refreshDetail(); onSaved?.(); return landed; }}
               />
             </Row>
           )}

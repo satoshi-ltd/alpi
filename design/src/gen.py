@@ -772,7 +772,7 @@ PHONE_ACTIVITY_H = 940
 FOLD_ACTIVITY_H = 940
 
 
-PHONE_SETTINGS_H = 3830
+PHONE_SETTINGS_H = 3900
 FOLD_SETTINGS_H = 3740
 
 
@@ -795,6 +795,7 @@ def phone_profile_settings():
     m_row("Fast model", "cheap model for side-tasks &amp; delegation", "main model"),
     m_row("Deep model", "stronger model for escalation &amp; deep research", "main model"),
     m_row("Vision model", "image inspection via read_image", "main model"),
+    m_row("Fallbacks", "tried in order when the main model&#39;s provider fails", "1"),
     m_row("Budget", "daily spend cap", control=meter("$0.00", "/$1.00", 0)),
     m_row("Workspace", "", "/data/workspace/doc"),
     m_row("Appearance", "", control='<span style="display: inline-flex; align-items: center; gap: 8px">' + identity_glyph("doc", DOC_ACCENT, 16) + '<span style="font-size: 13px; color: #141414">blue shield</span><span style="font-family: ' + MONO + '; font-size: 12px; color: #454545">#3899e2</span></span>'),
@@ -878,6 +879,7 @@ def fold_profile_settings():
 {m_wide_row("Fast model", "cheap model for side-tasks &amp; delegation", "main model")}
 {m_wide_row("Deep model", "stronger model for escalation &amp; deep research", "main model")}
 {m_wide_row("Vision model", "image inspection via read_image", "main model")}
+{m_wide_row("Fallbacks", "tried in order when the main model&#39;s provider fails", "1")}
 {m_wide_row("Budget", "daily spend cap", control=meter("$0.00", "/$1.00", 0))}
 {m_wide_row("Workspace", "", "/data/workspace/doc")}
 {m_wide_row("Appearance", "", control='<span style="display: inline-flex; align-items: center; gap: 8px">' + identity_glyph("doc", DOC_ACCENT, 16) + '<span style="font-size: 13px; color: #141414">blue shield</span><span style="font-family: ' + MONO + '; font-size: 12px; color: #454545">#3899e2</span></span>')}
@@ -1236,7 +1238,7 @@ def build(desktop_boards):
         ("Activity", [("Fold-Activity.dc.html", fold_activity(), X_FOLD, 852, FOLD_ACTIVITY_H, "Fold · activity"), ("Phone-Roster.dc.html", phone_roster(), X_PHONE, 390, 844, "Phone · roster"), ("Phone-Activity.dc.html", phone_activity(), X_PHONE + 470, 390, PHONE_ACTIVITY_H, "Phone · activity")]),
         ("Overlays", [("Fold-Sheet.dc.html", MOBILE_OVERLAYS["fold_sheet"](), X_FOLD, 852, 884, "Fold · sheet as a centred dialog"), ("Phone-Sheet.dc.html", MOBILE_OVERLAYS["phone_sheet"](), X_PHONE, 390, 844, "Phone · sheet"), ("Phone-ActionSheet.dc.html", MOBILE_OVERLAYS["phone_action"](), X_PHONE + 470, 390, 844, "Phone · action sheet"), ("Phone-TypedConfirm.dc.html", MOBILE_OVERLAYS["phone_confirm"](), X_PHONE + 940, 390, 844, "Phone · typed confirm"), ("Phone-ConnectionSheet.dc.html", MOBILE_OVERLAYS["phone_connection"](), X_PHONE + 1410, 390, 844, "Phone · connection sheet")]),
         ("Fold overlays", [("Fold-ActionPopover.dc.html", MOBILE_OVERLAYS["fold_popover"](), X_FOLD, 852, 884, "Fold · action sheet as a popover under its trigger")]),
-        ("Sheets", [("Phone-ToolSheet.dc.html", MOBILE_OVERLAYS["phone_tool"](), X_PHONE, 390, 844, "Phone · tool step sheet"), ("Phone-SelectText.dc.html", MOBILE_OVERLAYS["phone_select"](), X_PHONE + 470, 390, 844, "Phone · select text"), ("Phone-MessageActions.dc.html", MOBILE_OVERLAYS["phone_message"](), X_PHONE + 940, 390, 844, "Phone · message actions")]),
+        ("Sheets", [("Phone-ToolSheet.dc.html", MOBILE_OVERLAYS["phone_tool"](), X_PHONE, 390, 844, "Phone · tool step sheet"), ("Phone-SelectText.dc.html", MOBILE_OVERLAYS["phone_select"](), X_PHONE + 470, 390, 844, "Phone · select text"), ("Phone-MessageActions.dc.html", MOBILE_OVERLAYS["phone_message"](), X_PHONE + 940, 390, 844, "Phone · message actions"), ("Phone-FallbacksSheet.dc.html", MOBILE_OVERLAYS["phone_fallbacks"](), X_PHONE + 1410, 390, 844, "Phone · fallback models, reorder and remove")]),
         ("Schedule", [("Fold-Schedule.dc.html", fold_schedule(), X_FOLD, 1104, FOLD_SCHEDULE_H, "Fold · schedule, list and job side by side"), ("Fold-Notifications.dc.html", fold_notifications(), X_FOLD + 1180, 1104, FOLD_NOTIFICATIONS_H, "Fold · notifications, list and reader side by side")]),
         ("States", [("Phone-States.dc.html", phone_states(), X_FOLD, 1280, STATES_H, "Phone · empty, error and offline states")]),
     )

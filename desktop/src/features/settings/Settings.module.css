@@ -1001,3 +1001,10 @@
 .pipelineBlock[hidden] {
   display: none;
 }
+
+.stackedField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+}

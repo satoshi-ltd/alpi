@@ -388,13 +388,13 @@
    "x": 932,
    "y": 9152,
    "w": 390,
-   "h": 3830,
+   "h": 3900,
    "title": "Phone \u00b7 profile settings",
    "page": "mobile"
   },
   "Fold-WorkgroupSettings.dc.html": {
    "x": 0,
-   "y": 13222,
+   "y": 13292,
    "w": 852,
    "h": 2700,
    "title": "Fold \u00b7 workgroup settings",
@@ -402,7 +402,7 @@
   },
   "Phone-WorkgroupSettings.dc.html": {
    "x": 932,
-   "y": 13222,
+   "y": 13292,
    "w": 390,
    "h": 3030,
    "title": "Phone \u00b7 workgroup settings",
@@ -410,7 +410,7 @@
   },
   "Phone-ProfilePanels.dc.html": {
    "x": 0,
-   "y": 16492,
+   "y": 16562,
    "w": 1280,
    "h": 6300,
    "title": "Phone \u00b7 profile panels",
@@ -418,7 +418,7 @@
   },
   "Fold-ConnectionDetail.dc.html": {
    "x": 0,
-   "y": 23032,
+   "y": 23102,
    "w": 852,
    "h": 1300,
    "title": "Fold \u00b7 connection detail",
@@ -426,7 +426,7 @@
   },
   "Phone-Connections.dc.html": {
    "x": 932,
-   "y": 23032,
+   "y": 23102,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 connections",
@@ -434,7 +434,7 @@
   },
   "Phone-ConnectionDetail.dc.html": {
    "x": 1402,
-   "y": 23032,
+   "y": 23102,
    "w": 390,
    "h": 1160,
    "title": "Phone \u00b7 connection detail",
@@ -442,7 +442,7 @@
   },
   "Phone-Settings.dc.html": {
    "x": 932,
-   "y": 24572,
+   "y": 24642,
    "w": 390,
    "h": 1200,
    "title": "Phone \u00b7 app settings",
@@ -450,7 +450,7 @@
   },
   "Phone-Notifications.dc.html": {
    "x": 932,
-   "y": 26012,
+   "y": 26082,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 notifications, filters and swipe",
@@ -458,7 +458,7 @@
   },
   "Phone-NotificationPage.dc.html": {
    "x": 1402,
-   "y": 26012,
+   "y": 26082,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 notification page, actions at the thumb",
@@ -466,7 +466,7 @@
   },
   "Fold-Activity.dc.html": {
    "x": 0,
-   "y": 27096,
+   "y": 27166,
    "w": 852,
    "h": 940,
    "title": "Fold \u00b7 activity",
@@ -474,7 +474,7 @@
   },
   "Phone-Roster.dc.html": {
    "x": 932,
-   "y": 27096,
+   "y": 27166,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 roster",
@@ -482,7 +482,7 @@
   },
   "Phone-Activity.dc.html": {
    "x": 1402,
-   "y": 27096,
+   "y": 27166,
    "w": 390,
    "h": 940,
    "title": "Phone \u00b7 activity",
@@ -490,7 +490,7 @@
   },
   "Fold-Sheet.dc.html": {
    "x": 0,
-   "y": 28276,
+   "y": 28346,
    "w": 852,
    "h": 884,
    "title": "Fold \u00b7 sheet as a centred dialog",
@@ -498,7 +498,7 @@
   },
   "Phone-Sheet.dc.html": {
    "x": 932,
-   "y": 28276,
+   "y": 28346,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 sheet",
@@ -506,7 +506,7 @@
   },
   "Phone-ActionSheet.dc.html": {
    "x": 1402,
-   "y": 28276,
+   "y": 28346,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 action sheet",
@@ -514,7 +514,7 @@
   },
   "Phone-TypedConfirm.dc.html": {
    "x": 1872,
-   "y": 28276,
+   "y": 28346,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 typed confirm",
@@ -522,7 +522,7 @@
   },
   "Phone-ConnectionSheet.dc.html": {
    "x": 2342,
-   "y": 28276,
+   "y": 28346,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 connection sheet",
@@ -530,7 +530,7 @@
   },
   "Fold-ActionPopover.dc.html": {
    "x": 0,
-   "y": 29400,
+   "y": 29470,
    "w": 852,
    "h": 884,
    "title": "Fold \u00b7 action sheet as a popover under its trigger",
@@ -538,7 +538,7 @@
   },
   "Phone-ToolSheet.dc.html": {
    "x": 932,
-   "y": 30524,
+   "y": 30594,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 tool step sheet",
@@ -546,7 +546,7 @@
   },
   "Phone-SelectText.dc.html": {
    "x": 1402,
-   "y": 30524,
+   "y": 30594,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 select text",
@@ -554,15 +554,23 @@
   },
   "Phone-MessageActions.dc.html": {
    "x": 1872,
-   "y": 30524,
+   "y": 30594,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 message actions",
    "page": "mobile"
   },
+  "Phone-FallbacksSheet.dc.html": {
+   "x": 2342,
+   "y": 30594,
+   "w": 390,
+   "h": 844,
+   "title": "Phone \u00b7 fallback models, reorder and remove",
+   "page": "mobile"
+  },
   "Fold-Schedule.dc.html": {
    "x": 0,
-   "y": 31608,
+   "y": 31678,
    "w": 1104,
    "h": 620,
    "title": "Fold \u00b7 schedule, list and job side by side",
@@ -570,7 +578,7 @@
   },
   "Fold-Notifications.dc.html": {
    "x": 1180,
-   "y": 31608,
+   "y": 31678,
    "w": 1104,
    "h": 620,
    "title": "Fold \u00b7 notifications, list and reader side by side",
@@ -578,7 +586,7 @@
   },
   "Phone-States.dc.html": {
    "x": 0,
-   "y": 32468,
+   "y": 32538,
    "w": 1280,
    "h": 1460,
    "title": "Phone \u00b7 empty, error and offline states",
@@ -622,14 +630,6 @@
    "w": 1280,
    "h": 1180,
    "title": "Proposals \u00b7 ui-export.pages \u00b7 an exported pdf has a header and a page number on every page",
-   "page": "proposals"
-  },
-  "Proposals-UI-PROFILE.FALLBACKS.dc.html": {
-   "x": 0,
-   "y": 1660,
-   "w": 1280,
-   "h": 1240,
-   "title": "Proposals \u00b7 ui-profile.fallbacks \u00b7 fallback models are set and ordered from the apps",
    "page": "proposals"
   }
  },
@@ -700,6 +700,7 @@
   "Phone-ToolSheet.dc.html",
   "Phone-SelectText.dc.html",
   "Phone-MessageActions.dc.html",
+  "Phone-FallbacksSheet.dc.html",
   "Fold-Schedule.dc.html",
   "Fold-Notifications.dc.html",
   "Phone-States.dc.html",
@@ -707,8 +708,7 @@
   "Brand-Pairs.dc.html",
   "Brand-Palette.dc.html",
   "Brand-Motion.dc.html",
-  "Proposals-UI-EXPORT.PAGES.dc.html",
-  "Proposals-UI-PROFILE.FALLBACKS.dc.html"
+  "Proposals-UI-EXPORT.PAGES.dc.html"
  ],
  "notes": {
   "s-Foundations": {
@@ -913,7 +913,7 @@
   },
   "m-Workgroup settings": {
    "x": 0,
-   "y": 12999,
+   "y": 13069,
    "text": "Workgroup settings",
    "kind": "title1",
    "maxW": 2600,
@@ -921,7 +921,7 @@
   },
   "m-Profile panels": {
    "x": 0,
-   "y": 16269,
+   "y": 16339,
    "text": "Profile panels",
    "kind": "title1",
    "maxW": 2600,
@@ -929,7 +929,7 @@
   },
   "m-Connections": {
    "x": 0,
-   "y": 22809,
+   "y": 22879,
    "text": "Connections",
    "kind": "title1",
    "maxW": 2600,
@@ -937,7 +937,7 @@
   },
   "m-App settings": {
    "x": 0,
-   "y": 24349,
+   "y": 24419,
    "text": "App settings",
    "kind": "title1",
    "maxW": 2600,
@@ -945,7 +945,7 @@
   },
   "m-Notifications": {
    "x": 0,
-   "y": 25789,
+   "y": 25859,
    "text": "Notifications",
    "kind": "title1",
    "maxW": 2600,
@@ -953,7 +953,7 @@
   },
   "m-Activity": {
    "x": 0,
-   "y": 26873,
+   "y": 26943,
    "text": "Activity",
    "kind": "title1",
    "maxW": 2600,
@@ -961,7 +961,7 @@
   },
   "m-Overlays": {
    "x": 0,
-   "y": 28053,
+   "y": 28123,
    "text": "Overlays",
    "kind": "title1",
    "maxW": 2600,
@@ -969,7 +969,7 @@
   },
   "m-Fold overlays": {
    "x": 0,
-   "y": 29177,
+   "y": 29247,
    "text": "Fold overlays",
    "kind": "title1",
    "maxW": 2600,
@@ -977,7 +977,7 @@
   },
   "m-Sheets": {
    "x": 0,
-   "y": 30301,
+   "y": 30371,
    "text": "Sheets",
    "kind": "title1",
    "maxW": 2600,
@@ -985,7 +985,7 @@
   },
   "m-Schedule": {
    "x": 0,
-   "y": 31385,
+   "y": 31455,
    "text": "Schedule",
    "kind": "title1",
    "maxW": 2600,
@@ -993,7 +993,7 @@
   },
   "m-States": {
    "x": 0,
-   "y": 32245,
+   "y": 32315,
    "text": "States",
    "kind": "title1",
    "maxW": 2600,
@@ -1035,14 +1035,6 @@
    "x": 0,
    "y": 17,
    "text": "UI-EXPORT.PAGES \u00b7 An exported PDF has a header and a page number on every page",
-   "kind": "title1",
-   "maxW": 2600,
-   "page": "proposals"
-  },
-  "p-UI-PROFILE.FALLBACKS \u00b7 Fallback models are set and ordered from the apps": {
-   "x": 0,
-   "y": 1437,
-   "text": "UI-PROFILE.FALLBACKS \u00b7 Fallback models are set and ordered from the apps",
    "kind": "title1",
    "maxW": 2600,
    "page": "proposals"

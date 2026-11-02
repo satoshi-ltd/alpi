@@ -78,11 +78,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ### Approved 2026-11-02 — design proposals
 
-- **UI-PROFILE.FALLBACKS** — Fallback models are set and ordered from the apps
-  `ui · desktop, mobile · agent · normal`
-  depends: PROFILE.FALLBACKS
-  accept: the board UI-PROFILE.FALLBACKS; a daemon without the field hides the row.
-
 - **UI-EXPORT.PAGES** — An exported PDF has a header and a page number on every page
   `ui · desktop · agent · normal`
   accept: the board UI-EXPORT.PAGES.

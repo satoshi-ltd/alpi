@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.9.12 — 2026-11-02 — fallback models are set and ordered from the app
+
+- A profile's Overview has a Fallbacks row under the vision model: the ordered list of models tried when the main model's provider fails, or none.
+- Add picks from the same model list as the main model, leaving out the main model and the ones already listed; each entry moves up, down or out in one click.
+- A change the daemon refuses shows as an error toast and the list stays as it was.
+- Why: only `alpi setup` could set fallbacks, so a profile on one provider had no cover for an outage unless its owner knew to open the console.
+- Requires alpi 0.17.46; an older daemon, or a member connection, hides the row.
+
 ## v0.9.11 — 2026-11-02 — a new workgroup sets its wait and spend cap
 
 - New workgroup has Waits for members (2 to 60 min, 10 min by default) and Spend cap (No cap, or $1 to $100 for the workgroup's whole life), each sent to the daemon only when you change it.

@@ -286,6 +286,19 @@ def ringed(control):
     return control.replace("background: transparent; color:", f"background: transparent; {RING_CTRL}; color:")
 
 
+def fallbacks_field(models=("claude-sonnet-5-5",)):
+    def act(label, icon, off=False):
+        html = button(label, "ghost", "sm", icon, icon_only=True)
+        return html.replace("cursor: pointer", "cursor: default; opacity: 0.4") if off else html
+    entries = "".join(
+        f'<span style="display: flex; align-items: center; gap: 8px">{mono12(f"{i} · {m}")}'
+        f'{act("Move up", "chevron-up", i == 1)}{act("Move down", "chevron-down", i == len(models))}{act("Remove", "x")}</span>'
+        for i, m in enumerate(models, 1)
+    ) or muted("none")
+    add = f'<span style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px">{selectish("Add")}{muted("Tried in order when the main model&#39;s provider fails.")}</span>'
+    return f'<span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">{entries}{add}</span>'
+
+
 def row(label, control, align_top=False):
     pt = "padding-top: 8px;" if align_top else ""
     text = label[:1].upper() + label[1:]
@@ -379,6 +392,7 @@ def desktop_profile_settings():
             row("fast model", muted("uses main model")),
             row("deep model", muted("uses main model")),
             row("vision model", muted("read_image uses main model")),
+            row("fallbacks", fallbacks_field(), align_top=True),
             row("budget", selectish("$1.00/day")),
             row("workspace", field_input("/data/workspace/doc") + button("Browse…", "ghost", "sm")),
             row("appearance", selectish(f'<span style="display: inline-flex; align-items: center; gap: 8px">{identity_glyph("doc", DOC_ACCENT, 16)}blue shield</span>')),

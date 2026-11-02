@@ -58,7 +58,7 @@ Three options:
 |---|---|---|---|
 | `model` | `""` (empty; pick via `alpi setup → Model` — see `docs/MODELS.md`) | string | next session |
 | `workspace` | `""` (cwd at launch) | string | next session |
-| `fallback_models` | `[]` | list of strings — availability chain: when the active model fails before producing any output (provider down, credits exhausted) the turn retries down this list, sticking with the survivor for the rest of the turn. Edit it in `alpi setup → Routing models → Fallback models` (add, move up/down, remove, clear) or over the host API (below) | next turn |
+| `fallback_models` | `[]` | list of strings — availability chain: when the active model fails before producing any output (provider down, credits exhausted) the turn retries down this list, sticking with the survivor for the rest of the turn. Edit it in `alpi setup → Routing models → Fallback models` (add, move up/down, remove, clear), in the apps' profile settings (Overview → Fallbacks, hidden on daemons that do not report the list) or over the host API (below) | next turn |
 | `tiers.fast.model` | `""` (use main) | string — cheap/fast model for routine work: compaction summaries, the memory reviewer, bio drafting, `research(depth=fast)`, and `delegate`/`schedule` runs that opt into `tier: fast` | next turn |
 | `tiers.fast.effort` | `""` | `low` \| `medium` \| `high` — reasoning effort for the fast tier's own model (never inherits the profile effort) | next turn |
 | `tiers.deep.model` | `""` (use main) | string — stronger model for hard reasoning: `research(depth=deep)`, `delegate(tier=deep)`, and the escalation target when a turn accumulates 3 consecutive tool failures or an empty reply (once per turn, skipped past 80% of `budget.daily_usd`) | next turn |

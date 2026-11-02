@@ -35,6 +35,7 @@ vi.mock("./fields/agent.jsx", () => ({
   ReasoningEffortField: ({ value }) => <span data-testid="effort-value">{value}</span>,
   TierField: () => null,
   VisionModelField: () => <span>vision field</span>,
+  FallbackModelsField: () => <span>fallbacks field</span>,
   VoiceField: () => null,
 }));
 const workgroupsProbe = vi.hoisted(() => ({ count: 0 }));
@@ -258,6 +259,37 @@ describe("ProfileDetail — vision model gating", () => {
   });
 });
 
+describe("ProfileDetail — fallback models row", () => {
+  const renderDetail = () =>
+    render(
+      <ProfileDetail
+        profile={{ name: "pulse" }}
+        profiles={[]}
+        activeConnection={{ id: "remote" }}
+      />,
+    );
+
+  it("shows the row only when the daemon sends the list", () => {
+    Object.assign(stableDetail, { models: ["openrouter/main"], fallback_models: [] });
+    const first = renderDetail();
+    expect(screen.getByText("fallbacks")).toBeInTheDocument();
+    expect(screen.getByText("fallbacks field")).toBeInTheDocument();
+    first.unmount();
+
+    delete stableDetail.fallback_models;
+    renderDetail();
+    expect(screen.queryByText("fallbacks")).toBeNull();
+    delete stableDetail.models;
+  });
+
+  it("keeps a configured list editable after its providers disappear", () => {
+    Object.assign(stableDetail, { models: [], fallback_models: ["openai/gpt-x"] });
+    renderDetail();
+    expect(screen.getByText("fallbacks field")).toBeInTheDocument();
+    delete stableDetail.models;
+    delete stableDetail.fallback_models;
+  });
+});
 
 describe("ProfileDetail — workgroups row", () => {
   it("stays mounted while hidden so the loader can report a late count", () => {

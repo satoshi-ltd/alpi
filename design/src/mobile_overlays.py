@@ -110,6 +110,27 @@ def phone_action_sheet():
     return page("Phone · action sheet", 390, 844, page_body)
 
 
+def fallback_entry(i, model, last):
+    def act(name, label, off=False):
+        return (f'<button aria-label="{label}" style="width: 44px; height: 44px; border: 0; border-radius: 4px; background: transparent; padding: 0; '
+                f'display: inline-flex; align-items: center; justify-content: center; opacity: {0.35 if off else 1}">{ic(name, 20, INK2)}</button>')
+    name = model.split("/")[-1]
+    return (f'<div style="display: flex; align-items: center; padding: 0 6px 0 16px; min-height: 56px">'
+            f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 500; font-size: 14px; color: {INK}">{i} · {name}</span>'
+            f'<span style="font-family: {MONO}; font-size: 11px; color: {INK3}">{model}</span></div>'
+            f'{act("chevron-up", f"Move {name} up", i == 1)}{act("chevron-down", f"Move {name} down", last)}{act("x", f"Remove {name}")}</div>')
+
+
+def phone_fallbacks_sheet():
+    models = ("anthropic/claude-sonnet-5-5", "openai/gpt-6.1-sol")
+    rows = separator(16).join(fallback_entry(i, m, i == len(models)) for i, m in enumerate(models, 1))
+    body = f'<div style="padding: 12px 0">{rows}{separator(16)}{picker_row("Add model…", "any model of this profile except the main one")}</div>'
+    page_body = f"""<div style="display: flex; flex-direction: column">{settings_backdrop_rows()}</div>
+{sheet(390, 844, "Fallbacks", "@doc · tried in order when the main model&#39;s provider fails", body, primary="Done")}
+"""
+    return page("Phone · fallback models sheet", 390, 844, page_body)
+
+
 def phone_typed_confirm():
     page_body = f"""<div style="display: flex; flex-direction: column">{settings_backdrop_rows()}</div>
 {typed_confirm(390, 844, "Delete profile @doc", "Permanently removes <span style='font-family: " + MONO + "'>~/.alpi/profiles/doc/</span> — identity, memory, skills, schedule and chat history. <b>This action cannot be undone.</b>", "doc", "Delete profile")}
@@ -212,4 +233,5 @@ def _roster_backdrop():
 
 
 MOBILE_OVERLAYS = {"fold_popover": fold_popover, "phone_connection": phone_connection_sheet, "phone_sheet": phone_sheet, "phone_action": phone_action_sheet, "phone_confirm": phone_typed_confirm, "fold_sheet": fold_sheet,
-                   "phone_tool": phone_tool_sheet, "phone_select": phone_select_text, "phone_message": phone_message_actions}
+                   "phone_tool": phone_tool_sheet, "phone_select": phone_select_text, "phone_message": phone_message_actions,
+                   "phone_fallbacks": phone_fallbacks_sheet}

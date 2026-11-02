@@ -15,6 +15,8 @@ export default function ModelPicker({
   effort = "",
   effortSupported = false,
   onEffortChange,
+  exclude = null,
+  placeholder = null,
 }) {
   const [ollamaModels, setOllamaModels] = useState([]);
   const [ollamaLoaded, setOllamaLoaded] = useState(false);
@@ -48,7 +50,7 @@ export default function ModelPicker({
     const seen = new Set();
     const groups = {};
     for (const m of [...(models ?? []), ...ollamaModels]) {
-      if (!m || seen.has(m)) continue;
+      if (!m || seen.has(m) || exclude?.includes(m)) continue;
       seen.add(m);
       const i = m.indexOf("/");
       const rawProvider = i === -1 ? "other" : m.slice(0, i);
@@ -58,7 +60,7 @@ export default function ModelPicker({
       groups[provider].push({ id: m, label });
     }
     return groups;
-  }, [models, ollamaModels, ollamaModelSet]);
+  }, [models, ollamaModels, ollamaModelSet, exclude]);
 
   const active = value ?? defaultModel ?? null;
   const isOverride = mode === "override" && value != null && value !== defaultModel;
@@ -81,6 +83,7 @@ export default function ModelPicker({
       effortSupported={effortSupported}
       onEffortChange={onEffortChange}
       onSetDefault={onSetDefault}
+      placeholder={placeholder}
       onPick={(id) => {
         if (mode === "default") onChange?.(id);
         else onChange?.(id === defaultModel ? null : id);

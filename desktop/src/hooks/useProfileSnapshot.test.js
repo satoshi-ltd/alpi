@@ -31,6 +31,25 @@ describe("useProfileSnapshot", () => {
     });
   });
 
+  it("ignores an older response that lands after a newer one", async () => {
+    const pending = [];
+    invokeMock.mockImplementation(() => new Promise((resolve) => pending.push(resolve)));
+    const { result } = renderHook(() => useProfileSnapshot("c1", "doc"));
+    await waitFor(() => expect(pending).toHaveLength(1));
+    let newer;
+    act(() => { newer = result.current.refresh(); });
+    expect(pending).toHaveLength(2);
+    await act(async () => {
+      pending[1]({ detail: { fallback_models: ["b/y"] } });
+      await newer;
+    });
+    await act(async () => {
+      pending[0]({ detail: { fallback_models: ["a/x", "b/y"] } });
+    });
+    expect(result.current.snapshot.detail.fallback_models).toEqual(["b/y"]);
+    expect(result.current.loading).toBe(false);
+  });
+
   it("serves the cached snapshot immediately on remount, then refreshes", async () => {
     invokeMock
       .mockResolvedValueOnce({ detail: { v: 1 } })
