@@ -23,6 +23,38 @@ describe("useSkeleton", () => {
     expect(result.current).toBe(false);
   });
 
+  it("never shows when its delay timer fires after the render that ended loading", () => {
+    const fired = [];
+    const realSetTimeout = globalThis.setTimeout;
+    const spy = vi.spyOn(globalThis, "setTimeout").mockImplementation((fn, ms, ...rest) => {
+      fired.push(fn);
+      return realSetTimeout(fn, ms, ...rest);
+    });
+    const { result, rerender } = renderHook(({ l }) => useSkeleton(l), { initialProps: { l: true } });
+    const pendingDelay = fired[0];
+    rerender({ l: false });
+    spy.mockRestore();
+    act(() => pendingDelay());
+    expect(result.current).toBe(false);
+  });
+
+  it("stays shown when its hide timer fires after the render that resumed loading", () => {
+    const { result, rerender } = renderHook(({ l }) => useSkeleton(l), { initialProps: { l: true } });
+    act(() => vi.advanceTimersByTime(150));
+    const fired = [];
+    const realSetTimeout = globalThis.setTimeout;
+    const spy = vi.spyOn(globalThis, "setTimeout").mockImplementation((fn, ms, ...rest) => {
+      fired.push(fn);
+      return realSetTimeout(fn, ms, ...rest);
+    });
+    rerender({ l: false });
+    const pendingHide = fired[0];
+    rerender({ l: true });
+    spy.mockRestore();
+    act(() => pendingHide());
+    expect(result.current).toBe(true);
+  });
+
   it("stays at least minShown once shown", () => {
     const { result, rerender } = renderHook(({ l }) => useSkeleton(l), { initialProps: { l: true } });
     act(() => vi.advanceTimersByTime(150));

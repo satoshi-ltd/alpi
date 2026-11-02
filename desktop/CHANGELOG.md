@@ -11,6 +11,12 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.9.10 — 2026-11-02 — a loaded list no longer flashes back to its loading placeholder
+
+- When a list in Settings (email accounts, paired devices and the other cells that draw a loading placeholder) finishes loading right as its placeholder was due, it stays on the loaded rows instead of swapping them for the placeholder for 0.4 s, which also closed a popover opened in that moment.
+- Why: on a slow machine the data and the placeholder's 150 ms timer landed together, and the timer won.
+- Requires alpi 0.17.28.
+
 ## v0.9.9 — 2026-10-29 — the app stays on the connection you chose
 
 - Coming back to the window after a banner from another connection (a workgroup finishing on the host, a question on another daemon) no longer switches the app to that connection or opens its view or notification.

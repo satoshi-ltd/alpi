@@ -1,6 +1,6 @@
 # alpi roadmap
 
-Updated 2026-10-29. Current versions live in the changelogs. The Queue runs top to bottom; the creator
+Updated 2026-11-02. Current versions live in the changelogs. The Queue runs top to bottom; the creator
 approves the next tasks from Proposed.
 
 This is the task pool. [ARCHITECTURE.md](ARCHITECTURE.md) owns current state and
@@ -77,13 +77,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 ## Queue
 
 ### Approved fixes, then the terminal capability
-
-- **CI.CLIENTS-RED** — `clients` is red on `main`: two desktop tests fail only on the runner
-  `bug · desktop · agent · high`
-  note: since 2bd29913 (2026-10-27) every `clients` run fails `EmailCell.test.jsx` ("renders one chip per
-  account labeled by address") and `devices.test.jsx` ("clears old rows and ignores a late response after
-  switching daemons", 10 s timeout); both pass locally.
-  accept: the cause on the runner is found and fixed (not retried or skipped); `clients` is green on `main`.
 
 - **DESK.ACTIVE-CACHE** — The desktop's cached active connection cannot go stale during a save
   `bug · desktop · agent · normal`
@@ -190,6 +183,31 @@ _None._
   pending. Use a creator-approved run; no agent launches, installs or daemon restarts are implied.
 
 ## Proposed
+
+### Found while fixing CI.CLIENTS-RED
+
+- **MOB.SKELETON-RACE** — A loaded list on the phone never flashes back to its loading placeholder
+  `bug · mobile · agent · normal`
+  note: `mobile/src/hooks/useSkeleton.js` has the race desktop 0.9.10 fixed in `desktop/src/hooks/useSkeleton.js`:
+  its 150 ms show timer and its minShown hide timer can fire after the render that changed `loading` commits and
+  before the effect cleanup clears them, so the placeholder covers loaded rows for 0.4 s (or blanks a refreshing
+  cell for 150 ms).
+  accept: both timers check the latest committed `loading` (a ref set in a layout effect) before changing state;
+  two tests fire each captured timer callback after the rerender that flips `loading` and fail without the fix.
+
+### Alexandra evaluation 2026-10-30
+
+- **KB.SEARCH-ONLY** — A profile that only searches its knowledge is offered only `search`, `query` and `k`
+  `feature · alpi · agent · normal`
+  note: in two batteries of real questions on the EC2 (deepseek-v4.1-flash), 19% and then 9% of `knowledge` search
+  calls arrived with no `query` but with the ingest arguments `apply`, `ocr`, `path`, `name` or `topic` that the tool
+  schema advertises; those answers cost about twice as much and took three times as long. Alexandra's persona already
+  forbids those arguments and reads the knowledge only. A profile can deny `ingest`, `maintain`, `lint` and `index`
+  (for example `tools.deny: ["knowledge:ingest", …]` or a `knowledge.actions` list).
+  accept: with the write actions denied, the schema sent to the model lists only `action` (enum `search`), `query` and
+  `k`, and a call to a denied action is refused with the allowed form; a profile without the setting keeps today's
+  schema; docs/CONFIG.md and the matching knowledge reference describe the setting; console parity in `alpi setup` or
+  config docs.
 
 ### Security audit 2026-10-28
 
