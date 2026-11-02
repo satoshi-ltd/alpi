@@ -72,6 +72,16 @@ def test_tier_status_and_tiers_status(tmp_path: Path) -> None:
     assert "deep: —" in model_selector.tiers_status(cfg)
     cfg.tools.read_image.model = "openrouter/vision"
     assert "vision: openrouter/vision" in model_selector.tiers_status(cfg)
+    assert "fallbacks: —" in model_selector.tiers_status(cfg)
+
+
+def test_fallbacks_status_counts_and_lists_the_chain(tmp_path: Path) -> None:
+    cfg = config.Config(home=tmp_path, model="openrouter/main")
+    assert model_selector.fallbacks_status(cfg) == "(none)"
+    cfg.fallback_models = ["openrouter/a", "openai/b"]
+    assert model_selector.fallbacks_status(cfg) == "openrouter/a → openai/b"
+    assert "fallbacks: 2" in model_selector.tiers_status(cfg)
+    assert "not set" not in model_selector.tiers_status(cfg)
 
 
 def test_configure_tier_clear_resets_and_saves(tmp_path: Path, monkeypatch) -> None:
@@ -132,3 +142,85 @@ def test_configure_vision_pick_and_clear(tmp_path: Path, monkeypatch) -> None:
 
     model_selector._configure_vision(reloaded)
     assert config.load(home).tools.read_image.model == ""
+
+
+def _fallback_home(tmp_path: Path, chain: list[str]) -> Path:
+    home = tmp_path / "h"
+    home.mkdir()
+    cfg = config.load(home)
+    cfg.model = "openrouter/main"
+    cfg.fallback_models = chain
+    config.save(cfg)
+    return home
+
+
+def _patch_picker(monkeypatch, menus, picked) -> list[str]:
+    failures: list[str] = []
+    monkeypatch.setattr("alpi.ui.menu", lambda *a, **kw: next(menus))
+    monkeypatch.setattr("alpi.ui.ok_and_wait", lambda *a, **kw: None)
+    monkeypatch.setattr("alpi.ui.fail_and_wait", lambda msg: failures.append(msg))
+    monkeypatch.setattr(model_selector, "_pick_provider", lambda cfg: object())
+    monkeypatch.setattr(model_selector, "_ensure_key", lambda cfg, p: None)
+    monkeypatch.setattr(model_selector, "_pick_model", lambda p, cfg: next(picked))
+    return failures
+
+
+def test_configure_fallbacks_adds_in_order_and_refuses_main_and_duplicates(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    home = _fallback_home(tmp_path, [])
+    menus = iter(["add", "add", "add", "add", None])
+    picked = iter(["openrouter/a", "openai/b", "openrouter/main", "openrouter/a"])
+    failures = _patch_picker(monkeypatch, menus, picked)
+
+    model_selector._configure_fallbacks(config.load(home))
+
+    reloaded = config.load(home)
+    assert reloaded.fallback_models == ["openrouter/a", "openai/b"]
+    assert reloaded.providers["openrouter"]["models"][0] == "a"
+    assert len(failures) == 2
+    assert "main model" in failures[0]
+    assert "already" in failures[1]
+
+
+def test_configure_fallbacks_reorders_removes_and_clears(tmp_path: Path, monkeypatch) -> None:
+    home = _fallback_home(tmp_path, ["openrouter/a", "openai/b", "openai/c"])
+    menus = iter([
+        ("entry", 2), "up",
+        ("entry", 0), "remove",
+        None,
+    ])
+    _patch_picker(monkeypatch, menus, iter([]))
+    model_selector._configure_fallbacks(config.load(home))
+    assert config.load(home).fallback_models == ["openai/c", "openai/b"]
+
+    _patch_picker(monkeypatch, iter(["clear", None]), iter([]))
+    model_selector._configure_fallbacks(config.load(home))
+    assert config.load(home).fallback_models == []
+    assert "fallback_models" not in (home / "config.yaml").read_text()
+
+
+def test_edit_fallback_offers_only_valid_moves(tmp_path: Path, monkeypatch) -> None:
+    home = _fallback_home(tmp_path, ["openrouter/a", "openai/b"])
+    seen: list[list[str]] = []
+
+    def menu(title, items, **kw):
+        seen.append([value for _label, value, _status in items])
+        return None
+
+    monkeypatch.setattr("alpi.ui.menu", menu)
+    cfg = config.load(home)
+    model_selector._edit_fallback(cfg, 0)
+    model_selector._edit_fallback(cfg, 1)
+    assert seen == [["down", "remove"], ["up", "remove"]]
+    assert config.load(home).fallback_models == ["openrouter/a", "openai/b"]
+
+
+def test_run_tiers_routes_to_fallback_menu(tmp_path: Path, monkeypatch) -> None:
+    home = _fallback_home(tmp_path, [])
+    calls: list[str] = []
+    menus = iter(["fallbacks", None])
+    monkeypatch.setattr("alpi.ui.menu", lambda *a, **kw: next(menus))
+    monkeypatch.setattr(model_selector, "_configure_fallbacks", lambda cfg: calls.append("fb"))
+    model_selector.run_tiers(config.load(home))
+    assert calls == ["fb"]

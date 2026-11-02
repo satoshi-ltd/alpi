@@ -53,13 +53,21 @@ def tier_status(tier: cfg_mod.TierConfig) -> str:
     return tier.model + (f" · effort {tier.effort}" if tier.effort else "")
 
 
+def fallbacks_status(cfg: cfg_mod.Config) -> str:
+    if not cfg.fallback_models:
+        return "(none)"
+    return " → ".join(cfg.fallback_models)
+
+
 def tiers_status(cfg: cfg_mod.Config) -> str:
     vision = cfg.tools.read_image.model
-    if not cfg.tiers.fast.model and not cfg.tiers.deep.model and not vision:
+    fallbacks = len(cfg.fallback_models)
+    if not cfg.tiers.fast.model and not cfg.tiers.deep.model and not vision and not fallbacks:
         return "(not set — everything runs on the main model)"
     return (
         f"fast: {cfg.tiers.fast.model or '—'} · "
-        f"deep: {cfg.tiers.deep.model or '—'} · vision: {vision or '—'}"
+        f"deep: {cfg.tiers.deep.model or '—'} · vision: {vision or '—'} · "
+        f"fallbacks: {fallbacks or '—'}"
     )
 
 
@@ -73,6 +81,8 @@ def run_tiers(cfg: cfg_mod.Config) -> None:
              f"{tier_status(cfg.tiers.deep)} — escalation, research(deep), delegate(deep)"),
             ("Vision model", "vision",
              f"{cfg.tools.read_image.model or '(main model)'} — read_image and browser screenshots"),
+            ("Fallback models", "fallbacks",
+             f"{fallbacks_status(cfg)} — tried in order when the active model fails"),
         ]
         choice = ui.menu(
             "Routing models",
@@ -85,6 +95,8 @@ def run_tiers(cfg: cfg_mod.Config) -> None:
             return
         if choice == "vision":
             _configure_vision(cfg)
+        elif choice == "fallbacks":
+            _configure_fallbacks(cfg)
         else:
             _configure_tier(cfg, choice)
 
@@ -115,6 +127,79 @@ def _configure_vision(cfg: cfg_mod.Config) -> None:
     _remember_openrouter_model(cfg, model_id)
     cfg_mod.save(cfg)
     ui.ok_and_wait(f"vision model set to [b]{model_id}[/b]")
+
+
+def _configure_fallbacks(cfg: cfg_mod.Config) -> None:
+    while True:
+        chain = cfg.fallback_models
+        items: list = [
+            (f"{index + 1}. {model_id}", ("entry", index), "move or remove")
+            for index, model_id in enumerate(chain)
+        ]
+        items.append(("Add model", "add", "appended to the end of the chain"))
+        if chain:
+            items.append(("Clear", "clear", "no fallback — a failing model fails the turn"))
+        choice = ui.menu(
+            "Fallback models",
+            items,
+            subtitle=f"main model: {cfg.model or 'none'} · tried in order when it fails",
+            home=cfg.home,
+            close="Back",
+        )
+        if choice is None:
+            return
+        if choice == "clear":
+            cfg.fallback_models = []
+            cfg_mod.save(cfg)
+            ui.ok_and_wait("fallback models cleared")
+        elif choice == "add":
+            _add_fallback(cfg)
+        elif isinstance(choice, tuple) and choice[0] == "entry":
+            _edit_fallback(cfg, choice[1])
+
+
+def _add_fallback(cfg: cfg_mod.Config) -> None:
+    provider = _pick_provider(cfg)
+    if provider is None:
+        ui.dim("No change.")
+        return
+    _ensure_key(cfg, provider)
+    model_id = _pick_model(provider, cfg)
+    if model_id is None:
+        ui.dim("No change.")
+        return
+    if model_id == cfg.model:
+        ui.fail_and_wait(f"{model_id} is the main model — pick another one")
+        return
+    if model_id in cfg.fallback_models:
+        ui.fail_and_wait(f"{model_id} is already in the chain")
+        return
+    cfg.fallback_models = [*cfg.fallback_models, model_id]
+    _remember_openrouter_model(cfg, model_id)
+    cfg_mod.save(cfg)
+    ui.ok_and_wait(f"added fallback [b]{model_id}[/b]")
+
+
+def _edit_fallback(cfg: cfg_mod.Config, index: int) -> None:
+    chain = list(cfg.fallback_models)
+    if not 0 <= index < len(chain):
+        return
+    items: list[tuple[str, str, str]] = []
+    if index > 0:
+        items.append(("Move up", "up", "tried earlier"))
+    if index < len(chain) - 1:
+        items.append(("Move down", "down", "tried later"))
+    items.append(("Remove", "remove", "drop it from the chain"))
+    choice = ui.menu(chain[index], items, home=cfg.home, close="Back")
+    if choice == "remove":
+        chain.pop(index)
+    elif choice in ("up", "down"):
+        target = index - 1 if choice == "up" else index + 1
+        chain[index], chain[target] = chain[target], chain[index]
+    else:
+        return
+    cfg.fallback_models = chain
+    cfg_mod.save(cfg)
 
 
 def _configure_tier(cfg: cfg_mod.Config, tier_name: str) -> None:

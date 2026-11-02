@@ -78,15 +78,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ### Approved 2026-11-02 — design proposals
 
-- **PROFILE.FALLBACKS** — Fallback models are readable and settable over the host API and the console
-  `feature · alpi · agent · normal`
-  note: `fallback_models` (tried in order when the main model's provider fails) is only editable by hand in
-  `config.yaml`: `host.profile.detail` does not return it, `host.config.set_field` would store a list as a string, and
-  `alpi setup` has no entry for it.
-  accept: `host.profile.detail` returns `fallback_models`; `host.config.set_field` takes it as an ordered list of
-  model ids (deduplicated, the main model refused, an empty list clears it) with tests; `alpi setup`'s model section
-  edits the list; docs/CONFIG.md and the knowledge reference describe it; the interface follows board UI-PROFILE.FALLBACKS.
-
 - **UI-PROFILE.FALLBACKS** — Fallback models are set and ordered from the apps
   `ui · desktop, mobile · agent · normal`
   depends: PROFILE.FALLBACKS

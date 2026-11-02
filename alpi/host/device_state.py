@@ -282,6 +282,7 @@ def _profile_detail_payload(home: Path) -> dict[str, Any]:
         "models": _models(cfg, home),
         "provider_catalog": _provider_catalog(),
         "vision_model": cfg.tools.read_image.model,
+        "fallback_models": list(cfg.fallback_models),
         "model_reasoning_effort": cfg.model_reasoning.effort,
         "model_reasoning_supported": supports_reasoning(cfg.model, cfg.providers),
         "tiers": {
@@ -661,6 +662,17 @@ async def _config_set_field(
         else:
             _unset_dotted(data, key)
         _prune_empty_tiers(data)
+    elif key == "fallback_models":
+        main_model = str(data.get("model") or cfg_mod.load(home).model or "").strip()
+        if main_model in coerced:
+            raise host_server.HandlerError(
+                -32602, "invalid-params",
+                data={"detail": f"fallback_models cannot include the main model {main_model}"},
+            )
+        if coerced:
+            data["fallback_models"] = coerced
+        else:
+            data.pop("fallback_models", None)
     elif key == "tools.read_image.model":
         model_val = str(coerced or "").strip()
         if model_val:
@@ -1102,7 +1114,35 @@ def _unset_dotted(data: dict[str, Any], key: str) -> None:
         cur.pop(parts[-1], None)
 
 
+_MAX_FALLBACKS = 16
+_MAX_MODEL_ID = 200
+
+
+def _plain_model_id(item: str) -> bool:
+    return len(item) <= _MAX_MODEL_ID and item.isprintable()
+
+
+def _coerce_fallback_models(value: Any) -> list[str]:
+    if isinstance(value, str):
+        try:
+            value = json.loads(value) if value.strip() else []
+        except (ValueError, RecursionError):
+            value = None
+    if (
+        not isinstance(value, list)
+        or len(value) > _MAX_FALLBACKS
+        or not all(isinstance(item, str) and _plain_model_id(item) for item in value)
+    ):
+        raise host_server.HandlerError(
+            -32602, "invalid-params",
+            data={"detail": "fallback_models must be a list of model ids"},
+        )
+    return cfg_mod._normalize_fallbacks(value)
+
+
 def _coerce_config_value(key: str, value: Any) -> Any:
+    if key == "fallback_models":
+        return _coerce_fallback_models(value)
     if key in {"alp.tcp_port", "host.tcp_port"}:
         return int(value)
     if key == "alp.max_active_workgroups":

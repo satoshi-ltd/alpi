@@ -43,7 +43,7 @@ Three options:
   `~/.alpi/profiles/<name>/config.yaml` for non-default profiles)
   and change values manually. Restart whatever surface was affected.
   Cosmetic knobs (`tui.*`, `tools.max_steps_per_turn`,
-  `tools.stt.model`, `fallback_models`) live here.
+  `tools.stt.model`) live here.
 - **Populate `.env` directly** (non-interactive, CI / devcontainers):
   alpi does not ship a `.env.example` — the Reference sections below
   (Core, Email — IMAP / Gmail) name every key with its
@@ -58,7 +58,7 @@ Three options:
 |---|---|---|---|
 | `model` | `""` (empty; pick via `alpi setup → Model` — see `docs/MODELS.md`) | string | next session |
 | `workspace` | `""` (cwd at launch) | string | next session |
-| `fallback_models` | `[]` | list of strings — availability chain: when the active model fails before producing any output (provider down, credits exhausted) the turn retries down this list, sticking with the survivor for the rest of the turn | next turn |
+| `fallback_models` | `[]` | list of strings — availability chain: when the active model fails before producing any output (provider down, credits exhausted) the turn retries down this list, sticking with the survivor for the rest of the turn. Edit it in `alpi setup → Routing models → Fallback models` (add, move up/down, remove, clear) or over the host API (below) | next turn |
 | `tiers.fast.model` | `""` (use main) | string — cheap/fast model for routine work: compaction summaries, the memory reviewer, bio drafting, `research(depth=fast)`, and `delegate`/`schedule` runs that opt into `tier: fast` | next turn |
 | `tiers.fast.effort` | `""` | `low` \| `medium` \| `high` — reasoning effort for the fast tier's own model (never inherits the profile effort) | next turn |
 | `tiers.deep.model` | `""` (use main) | string — stronger model for hard reasoning: `research(depth=deep)`, `delegate(tier=deep)`, and the escalation target when a turn accumulates 3 consecutive tool failures or an empty reply (once per turn, skipped past 80% of `budget.daily_usd`) | next turn |
@@ -68,6 +68,15 @@ Three options:
 | `providers.openrouter.ignore` | `[]` | OpenRouter provider slugs (lowercase, e.g. `together`) excluded from routing for every `openrouter/…` model of this profile, tiers and fallbacks included. An exclusion, not a pin: OpenRouter still picks freely among the rest, so `:nitro` sorting keeps working. Sent as `extra_body.provider.ignore` | next turn |
 | `public_bio` | `""` | string — one-line public tag-line broadcast to every workgroup this profile joins (source of truth for `Member.bio` on the hub). Empty = don't publish; peers see name only. `AGENT.md` stays private. | next `workgroup.join` |
 | `paused` | `false` | bool — profile-level pause flag. Surfaced in the desktop / mobile profile summary so paired apps can show + respect the state; the daemon itself does not gate turns on this flag. Persisted only when `true`. | next host-plane read |
+
+Over the host API, `host.profile.detail` returns `fallback_models` as a list
+(`[]` when unset), and `host.config.set_field` with key `fallback_models`
+takes an ordered list of model ids, either a JSON array or a string holding
+one. Entries are trimmed and deduplicated keeping order; a non-list, more than
+16 entries, an entry that is not a string of at most 200 printable
+characters, or an entry equal to the main model is refused with
+`-32602 invalid-params`; an empty list, like `host.config.unset_field`,
+removes the key.
 
 ### Tools
 

@@ -18,7 +18,7 @@
 | Field | Meaning |
 |---|---|
 | `model` | Primary LiteLLM model string. |
-| `fallback_models` | Availability chain — retried in order when the active model fails before producing output. |
+| `fallback_models` | Availability chain — retried in order when the active model fails before producing output; the main model is skipped if listed. Edited in `alpi setup → Routing models → Fallback models` (add / move up / move down / remove / clear; adding the main model or a duplicate is refused) or over `host.config.set_field` with key `fallback_models` and an ordered list of model ids (a JSON array, or a string holding one). The daemon trims and deduplicates keeping order, refuses with `-32602` a non-list, more than 16 entries, an item that is not a string of at most 200 printable characters, or an entry equal to the main model, and drops the key on an empty list or `host.config.unset_field`. `host.profile.detail` returns `fallback_models` (list, `[]` when unset). No provider-key check, same as `model` and tiers. |
 | `tiers` | Optional `fast` / `deep` `{model, effort}` slots for dynamic routing; unconfigured tiers resolve to `model`. |
 | `workspace` | Default project root for file/terminal tools. |
 | `budget` | Daily spend limit (USD or tokens, mutually exclusive). |

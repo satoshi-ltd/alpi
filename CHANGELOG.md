@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.17.46 — 2026-11-02 — fallback models are set from the console and the host API
+
+- `alpi setup → Routing models` has a Fallback models entry: add a model to the end of the chain, move one up or down, remove it, or clear the chain. Adding the main model or a model already listed is refused.
+- `host.profile.detail` returns `fallback_models`, and `host.config.set_field` takes it as an ordered list of model ids: entries are trimmed and deduplicated keeping order, a non-list, a non-string entry or the main model is refused, and an empty list removes it.
+- Why: the chain tried when the main model's provider fails could only be edited by hand in `config.yaml`, and setting it over the host API stored the list as a string.
+
 ## v0.17.45 — 2026-11-02 — a skill database's size quota is a setting, and reaching it no longer locks the agent out
 
 - The `db` tool's per-skill size quota is now `tools.db.max_mb` in the profile's `config.yaml` (default 100 MiB, up from a fixed 50 MB; `0` removes it).

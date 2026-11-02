@@ -1139,6 +1139,102 @@ async def test_vision_model_round_trips_and_empty_value_prunes_override(
     assert "tools" not in raw
 
 
+@pytest.mark.asyncio
+async def test_fallback_models_round_trip_as_ordered_deduplicated_list(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path / "h")
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    detail = await srv._dispatch({
+        "id": "d0", "method": "host.profile.detail", "params": {"profile": "default"},
+    })
+    assert detail["result"]["fallback_models"] == []
+
+    resp = await srv._dispatch({
+        "id": "set", "method": "host.config.set_field",
+        "params": {
+            "profile": "default", "key": "fallback_models",
+            "value": [" openrouter/b ", "openai/o3-mini", "openrouter/b", ""],
+        },
+    })
+    assert resp["result"]["ok"] is True
+    assert cfg_mod.load(home).fallback_models == ["openrouter/b", "openai/o3-mini"]
+    detail = await srv._dispatch({
+        "id": "d1", "method": "host.profile.detail", "params": {"profile": "default"},
+    })
+    assert detail["result"]["fallback_models"] == ["openrouter/b", "openai/o3-mini"]
+
+    await srv._dispatch({
+        "id": "json", "method": "host.config.set_field",
+        "params": {"profile": "default", "key": "fallback_models", "value": '["openai/o3-mini"]'},
+    })
+    assert cfg_mod.load(home).fallback_models == ["openai/o3-mini"]
+
+    await srv._dispatch({
+        "id": "clear", "method": "host.config.set_field",
+        "params": {"profile": "default", "key": "fallback_models", "value": []},
+    })
+    import yaml as _yaml
+    raw = _yaml.safe_load((home / "config.yaml").read_text()) or {}
+    assert "fallback_models" not in raw
+    assert cfg_mod.load(home).fallback_models == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("value", ["openrouter/b", 7, {"a": 1}, ["ok/model", 3], [None], "[1]", "{", "[" * 100000, ["a\ud800b"], ["a: b\nc: d"], ["x" * 201], [f"m/{i}" for i in range(17)]])
+async def test_fallback_models_rejects_values_that_are_not_lists_of_ids(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, value: object,
+) -> None:
+    home = _bootstrap(tmp_path / "h")
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+    before = (home / "config.yaml").read_text()
+
+    resp = await srv._dispatch({
+        "id": "bad", "method": "host.config.set_field",
+        "params": {"profile": "default", "key": "fallback_models", "value": value},
+    })
+    assert resp["error"]["code"] == -32602
+    assert "list of model ids" in resp["error"]["data"]["detail"]
+    assert (home / "config.yaml").read_text() == before
+
+
+@pytest.mark.asyncio
+async def test_fallback_models_refuses_the_main_model_and_unset_clears(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path / "h")
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    refused = await srv._dispatch({
+        "id": "main", "method": "host.config.set_field",
+        "params": {
+            "profile": "default", "key": "fallback_models",
+            "value": ["openrouter/b", " openai/gpt-5.4-mini "],
+        },
+    })
+    assert refused["error"]["code"] == -32602
+    assert "main model" in refused["error"]["data"]["detail"]
+    assert cfg_mod.load(home).fallback_models == []
+
+    await srv._dispatch({
+        "id": "set", "method": "host.config.set_field",
+        "params": {"profile": "default", "key": "fallback_models", "value": ["openrouter/b"]},
+    })
+    resp = await srv._dispatch({
+        "id": "unset", "method": "host.config.unset_field",
+        "params": {"profile": "default", "key": "fallback_models"},
+    })
+    assert resp["result"]["ok"] is True
+    assert cfg_mod.load(home).fallback_models == []
+
+
 def test_openrouter_curated_models_are_available_when_key_is_set(tmp_path: Path) -> None:
     home = _bootstrap(tmp_path / "h")
     (home / ".env").write_text("OPENROUTER_API_KEY=or-test\n")

@@ -979,7 +979,7 @@ Verb namespaces in current shape:
   last profile seen on the connection or the first row), and ⌘K opens on New session, highlighted, with the recent sessions across profiles below it. No peers/models/
   mcps/provider_keys/sandbox/voice — those live in **`host.profile.detail`**
   (`{workspace, tcp_port, advertise_host, provider_keys, provider_ollama,
-  sandbox*, voice_*, mcps, peers, models}`), fetched lazily by
+  sandbox*, voice_*, mcps, peers, models, vision_model, fallback_models, tiers, …}`), fetched lazily by
   settings/profile screens. The summaries verb is the hot poll; the
   detail verb is on-demand.
 - **Workgroup pipeline display** — Phase chips on desktop and mobile show completed on an 18% success tint and blocked on a 14% danger tint over the pane. Running uses the selected ground, a semibold slug and the worker's folding object (static under reduced motion); pending uses hover and skipped is struck through. Checks and state words stay out of the chips; accessible names and hover/tap details retain the state. The desktop chat strip starts with the literal `pipeline`, followed by phase chips and separators; mobile shows just the chips and separators. Neither repeats the pipeline's name or adds a pinned label or run-status suffix; the header keeps the run's progress and status.
