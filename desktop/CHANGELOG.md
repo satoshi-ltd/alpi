@@ -11,6 +11,13 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.9.11 — 2026-11-02 — a new workgroup sets its wait and spend cap
+
+- New workgroup has Waits for members (2 to 60 min, 10 min by default) and Spend cap (No cap, or $1 to $100 for the workgroup's whole life), each sent to the daemon only when you change it.
+- A workgroup's settings show how long its hub waits for members before a round goes on, when the daemon reports it.
+- Why: the daemon and the console already took both, but every workgroup made from the app started with the default wait and no cap.
+- Requires alpi 0.17.28.
+
 ## v0.9.10 — 2026-11-02 — a loaded list no longer flashes back to its loading placeholder
 
 - When a list in Settings (email accounts, paired devices and the other cells that draw a loading placeholder) finishes loading right as its placeholder was due, it stays on the loaded rows instead of swapping them for the placeholder for 0.4 s, which also closed a popover opened in that moment.

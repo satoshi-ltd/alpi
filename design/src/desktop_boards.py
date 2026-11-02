@@ -430,6 +430,7 @@ def desktop_wg_settings():
             row("hub", f'<span style="display: inline-flex; align-items: center; gap: 8px">{__import__("folds").fold("crown", "#6572e4", 14)}{mono12("@mira")}</span>'),
             row("status", chip("active", "on") + button("Pause", "ghost", "sm")),
             row("auto-read", chip("off", "off") + button("Enable", "ghost", "sm")),
+            row("waits for members", mono12("10 min, then the round goes on")),
             row("id", mono12("wg_4f2a…9c1e") + button("Copy", "ghost", "sm")),
         ]))
         + section("Budget", "workgroup spend cap", row("used", f'<div style="flex: 1; display: flex; flex-direction: column; gap: 10px"><div style="display: flex; align-items: baseline; gap: 10px"><span style="font-size: 28px; font-weight: 600; letter-spacing: -0.018em; line-height: 1">$0.40</span><span style="font-family: {MONO}; font-size: 12px; color: {INK3}">of <span style="color: {INK2}">$5.00</span> · 8%</span><span style="flex: 1"></span>{selectish("Edit cap")}</div><div style="height: 6px; border-radius: 4px; background: {LINE}; overflow: hidden"><div style="width: 8%; height: 100%; background: {ALPI_ACCENT}"></div></div></div>', align_top=True))

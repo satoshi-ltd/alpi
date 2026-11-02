@@ -1,6 +1,5 @@
-from desktop_boards import INK3, LINE, button, chip, code_chip, muted, row, section, selectish, textarea
-from desktop_overlays import dialog_footer, dropdown_trigger, ds_field, label_row, modal
-from gen import m_eyebrow, m_group, m_row, m_section, textbox
+from desktop_boards import INK3, LINE, button, code_chip, muted, row, section, selectish
+from gen import m_group, m_row, m_section
 from mobile_overlays import picker_row, sheet
 
 PHONE_W = 390
@@ -73,44 +72,6 @@ def fallbacks_proposed_mobile():
     return pair(phone(settings, 640), phone(picker, 640))
 
 
-def wg_body_desktop(limits):
-    recipes = "".join(chip(t) for t in ("release-notes", "hotel-site"))
-    members = "".join(chip(t, "on" if on else "plain") for t, on in (("@pixel", True), ("@quill", True), ("@lens", False)))
-    return stack(
-        label_row("Hub", hrow(dropdown_trigger("@mira · deepseek-v4.1-flash"), button("Import recipe…", "ghost", "sm"))),
-        label_row("Saved recipes", hrow(recipes, gap=6)), label_row("Name", ds_field("autumn-site", 472)),
-        label_row("Members — peers of @mira", hrow(members, gap=6)), *limits, label_row("Briefing", textarea("Build the autumn landing page.", 2, 472)), gap=12)
-
-
-def limits_now_desktop():
-    return stage(modal("New workgroup", wg_body_desktop(()), dialog_footer("Create"), w=520, x=10, y=12), 540, 520)
-
-
-def limits_proposed_desktop():
-    limits = (hrow(label_row("Waits for members", dropdown_trigger("10 min, then goes on")), label_row("Spend cap", dropdown_trigger("No cap")), gap=16),
-              caption("A slow member never blocks a round past the wait. The hub stops the run when it reaches the cap."))
-    return stage(modal("New workgroup", wg_body_desktop(limits), dialog_footer("Create"), w=520, x=10, y=12), 540, 600)
-
-
-def wg_sheet_mobile(limits, h):
-    members = "".join(chip(t, "on" if on else "plain") for t, on in (("@pixel", True), ("@quill", True), ("@lens", False)))
-    body = (m_group(m_row("Hub", "", "@mira"), m_row("Name", "", "autumn-site", chevron=False, sep=False))
-            + f'<div style="padding: 16px 16px 0; display: flex; flex-direction: column; gap: 8px">{m_eyebrow("Members")}{hrow(members, gap=6)}</div>'
-            + limits
-            + f'<div style="padding: 16px 16px 0; display: flex; flex-direction: column; gap: 8px">{m_eyebrow("Briefing (optional)")}{textbox("Build the autumn landing page.", 1)}</div>')
-    return phone(sheet(PHONE_W, h, "New workgroup", "hub · name · members", body, primary="Create"), h)
-
-
-def limits_now_mobile():
-    return wg_sheet_mobile("", 760)
-
-
-def limits_proposed_mobile():
-    limits = (f'<div style="padding: 16px 0 0">{m_section("Run limits", first=True)}'
-              + m_group(m_row("Waits for members", "then the round goes on", "10 min"), m_row("Spend cap", "the hub stops the run here", "No cap", sep=False)) + "</div>")
-    return wg_sheet_mobile(limits, 880)
-
-
 PROPOSALS_F = [
     dict(
         id="UI-PROFILE.FALLBACKS", client="mobile · desktop", area="Profile settings · model",
@@ -125,18 +86,5 @@ PROPOSALS_F = [
                 "<code>host.profile.detail</code> returns it; both clients show the Fallbacks row with the list, Add (from the same model picker) and reorder, "
                 "and an empty list reads none; the logic is its own task whose accept says the interface follows board UI-PROFILE.FALLBACKS; the console already edits it."),
         h=1240,
-    ),
-    dict(
-        id="UI-WORKGROUP.RUN-LIMITS", client="mobile · desktop", area="New workgroup",
-        title="A new workgroup sets how long the hub waits for members and how much a run may spend",
-        why=("<code>host.workgroup.create</code> already takes <code>quorum_timeout_seconds</code> and <code>budget_usd</code>, and the console edits both, "
-             "but neither client sends them, so every workgroup made from the apps starts with the 10-minute default wait and no spend cap. "
-             "The proposal adds the two settings to New workgroup on both clients, in plain words, with the defaults preselected; the rest of the form is unchanged."),
-        mobile=(limits_now_mobile, limits_proposed_mobile),
-        desktop=(limits_now_desktop, limits_proposed_desktop),
-        accept=("New workgroup on both clients shows Waits for members (default 10 min) and Spend cap (default No cap); a set value is sent as "
-                "<code>quorum_timeout_seconds</code> and <code>budget_usd</code> in <code>host.workgroup.create</code> and an untouched one is omitted; "
-                "the workgroup's settings show both values; the console's workgroup creation asks the same."),
-        h=1280,
     ),
 ]

@@ -25,6 +25,7 @@ import SettingsNav from "./SettingsNav.jsx";
 import styles from "./Settings.module.css";
 import { shortPubkey } from "../../lib/pubkey.js";
 import { EMPTY, emptyLine } from "../../../../common/emptyCopy.mjs";
+import { workgroupWaitLabel } from "../../../../common/runLimits.mjs";
 import { useSettingsDirty } from "../../lib/settingsDirty.js";
 import { copyText } from "../../lib/clipboard.js";
 import { chainChips, hasPhaseOwners, orderedPipelines, ownedPhases, pipelineTrigger, runSummary, runSummaryLine, sameName } from "../../../../common/pipelinePhases.mjs";
@@ -212,6 +213,7 @@ export default function WorkgroupDetail({
   }
 
   const autoRead = !!workgroup.auto_read;
+  const waitLabel = workgroupWaitLabel(workgroup);
   const [autoReadBusy, setAutoReadBusy] = useState(false);
   async function setAutoRead(enabled) {
     setAutoReadBusy(true);
@@ -409,6 +411,11 @@ export default function WorkgroupDetail({
                     {autoRead ? "Disable" : "Enable"}
                   </Button>
                 </span>
+              </Row>
+            )}
+            {waitLabel && (
+              <Row label="waits for members">
+                <span className={styles.mono}>{waitLabel}, then the round goes on</span>
               </Row>
             )}
             <Row label="id">

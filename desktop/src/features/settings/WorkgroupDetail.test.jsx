@@ -392,6 +392,35 @@ describe("WorkgroupDetail budget cap", () => {
   });
 });
 
+describe("WorkgroupDetail — waits for members", () => {
+  function renderWith(extra) {
+    invoke.mockResolvedValue([]);
+    render(
+      <WorkgroupDetail
+        workgroup={{ id: "wg-1", profile: "mira", hub_id: "mira", is_hub: true, ...extra }}
+        profiles={[{ name: "mira", pubkey_b64: "hub", accent: "#446" }]}
+        connectionId="casa"
+      />,
+    );
+  }
+
+  it("shows the wait the workgroup was created with", () => {
+    renderWith({ quorum_timeout_seconds: 1200 });
+    expect(screen.getByText("waits for members")).toBeTruthy();
+    expect(screen.getByText("20 min, then the round goes on")).toBeTruthy();
+  });
+
+  it("reads an unset wait as the 10-minute default", () => {
+    renderWith({ quorum_timeout_seconds: null });
+    expect(screen.getByText("10 min, then the round goes on")).toBeTruthy();
+  });
+
+  it("hides the row when the daemon does not report the wait", () => {
+    renderWith({});
+    expect(screen.queryByText("waits for members")).toBeNull();
+  });
+});
+
 describe("WorkgroupDetail — members", () => {
   const PROFILES_WITH_MEMBERS = [
     { name: "mira", pubkey_b64: "hub", accent: "#6572e4", fold: "crown" },

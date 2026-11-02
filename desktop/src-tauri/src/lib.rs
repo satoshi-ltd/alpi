@@ -1527,15 +1527,14 @@ async fn workgroup_members(
     .unwrap_or(serde_json::Value::Array(vec![]))
 }
 
-#[tauri::command]
-async fn workgroup_create(
+fn workgroup_create_params(
     profile: String,
     name: String,
     member_peer_ids: Vec<String>,
     budget_usd: Option<f64>,
+    quorum_timeout_seconds: Option<u64>,
     briefing: Option<String>,
-    connection_id: Option<String>,
-) -> Result<String, String> {
+) -> serde_json::Value {
     let mut params = serde_json::json!({
         "profile": profile,
         "name": name,
@@ -1544,9 +1543,33 @@ async fn workgroup_create(
     if let Some(b) = budget_usd {
         params["budget_usd"] = serde_json::json!(b);
     }
+    if let Some(q) = quorum_timeout_seconds {
+        params["quorum_timeout_seconds"] = serde_json::json!(q);
+    }
     if let Some(b) = briefing.filter(|s| !s.is_empty()) {
         params["briefing"] = serde_json::Value::String(b);
     }
+    params
+}
+
+#[tauri::command]
+async fn workgroup_create(
+    profile: String,
+    name: String,
+    member_peer_ids: Vec<String>,
+    budget_usd: Option<f64>,
+    quorum_timeout_seconds: Option<u64>,
+    briefing: Option<String>,
+    connection_id: Option<String>,
+) -> Result<String, String> {
+    let params = workgroup_create_params(
+        profile,
+        name,
+        member_peer_ids,
+        budget_usd,
+        quorum_timeout_seconds,
+        briefing,
+    );
     let result = tauri::async_runtime::spawn_blocking(move || {
         match connection_id.as_deref() {
             Some(cid) => host_client::call_for(cid, "host.workgroup.create", params),
@@ -4691,3 +4714,36 @@ mod local_daemon_tests {
     }
 }
 
+#[cfg(test)]
+mod workgroup_create_tests {
+    use super::workgroup_create_params;
+
+    #[test]
+    fn forwards_the_wait_and_the_cap_when_set() {
+        let params = workgroup_create_params(
+            "mira".into(),
+            "launch".into(),
+            vec!["scout".into()],
+            Some(2.0),
+            Some(1200),
+            None,
+        );
+        assert_eq!(params["budget_usd"], 2.0);
+        assert_eq!(params["quorum_timeout_seconds"], 1200);
+    }
+
+    #[test]
+    fn omits_the_wait_and_the_cap_when_untouched() {
+        let params = workgroup_create_params(
+            "mira".into(),
+            "launch".into(),
+            vec!["scout".into()],
+            None,
+            None,
+            Some(String::new()),
+        );
+        let mut keys: Vec<&String> = params.as_object().unwrap().keys().collect();
+        keys.sort();
+        assert_eq!(keys, vec!["members", "name", "profile"]);
+    }
+}

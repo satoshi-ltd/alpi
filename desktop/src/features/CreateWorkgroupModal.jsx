@@ -19,6 +19,7 @@ import { profileLabel } from "../lib/profile-display.js";
 import styles from "./CreateWorkgroupModal.module.css";
 import { shortPubkey } from "../lib/pubkey.js";
 import { isComposing } from "../lib/composition.js";
+import { CAP_CHOICES, DEFAULT_WAIT_SECONDS, WAIT_CHOICES, capLabel, waitLabel } from "../../../common/runLimits.mjs";
 
 export default function CreateWorkgroupModal({
   open,
@@ -37,6 +38,8 @@ export default function CreateWorkgroupModal({
   const [name, setName] = useState("");
   const [memberIds, setMemberIds] = useState([]);
   const [briefing, setBriefing] = useState("");
+  const [waitSeconds, setWaitSeconds] = useState(null);
+  const [budgetUsd, setBudgetUsd] = useState(null);
   const [busy, setBusy] = useState(false);
   const [importing, setImporting] = useState(false);
   const [recipeYaml, setRecipeYaml] = useState(null);
@@ -52,6 +55,8 @@ export default function CreateWorkgroupModal({
     setName("");
     setMemberIds([]);
     setBriefing("");
+    setWaitSeconds(null);
+    setBudgetUsd(null);
     setBusy(false);
     setImporting(false);
     setRecipeYaml(null);
@@ -193,7 +198,8 @@ export default function CreateWorkgroupModal({
           profile: hubProfile,
           name: name.trim(),
           memberPeerIds: memberIds,
-          budgetUsd: null,
+          budgetUsd,
+          quorumTimeoutSeconds: waitSeconds,
           briefing: briefing.trim() || null,
           ...(connectionId ? { connectionId } : {}),
         });
@@ -363,6 +369,71 @@ export default function CreateWorkgroupModal({
                 );
               })}
             </div>
+          </div>
+        )}
+
+        {!isRecipe && (
+          <div className={styles.field}>
+            <div className={styles.limits}>
+              <div className={styles.field}>
+                <Eyebrow>WAITS FOR MEMBERS</Eyebrow>
+                <Dropdown
+                  trigger={{ label: `${waitLabel(waitSeconds ?? DEFAULT_WAIT_SECONDS)}, then the round goes on` }}
+                  direction="down"
+                  align="left"
+                  width="var(--pop-sm)"
+                  variant="field"
+                  fullWidth
+                  aria-label={`Waits for members, ${waitLabel(waitSeconds ?? DEFAULT_WAIT_SECONDS)}`}
+                >
+                  {({ close }) =>
+                    WAIT_CHOICES.map((s) => (
+                      <Dropdown.Row
+                        key={s}
+                        active={s === (waitSeconds ?? DEFAULT_WAIT_SECONDS)}
+                        caption={s === DEFAULT_WAIT_SECONDS ? "default" : undefined}
+                        onClick={() => {
+                          setWaitSeconds(s);
+                          close();
+                        }}
+                      >
+                        {waitLabel(s)}
+                      </Dropdown.Row>
+                    ))
+                  }
+                </Dropdown>
+              </div>
+              <div className={styles.field}>
+                <Eyebrow>SPEND CAP</Eyebrow>
+                <Dropdown
+                  trigger={{ label: capLabel(budgetUsd) }}
+                  direction="down"
+                  align="left"
+                  width="var(--pop-sm)"
+                  variant="field"
+                  fullWidth
+                  aria-label={`Spend cap, ${capLabel(budgetUsd)}`}
+                >
+                  {({ close }) =>
+                    CAP_CHOICES.map((usd) => (
+                      <Dropdown.Row
+                        key={String(usd)}
+                        active={usd === budgetUsd}
+                        onClick={() => {
+                          setBudgetUsd(usd);
+                          close();
+                        }}
+                      >
+                        {capLabel(usd)}
+                      </Dropdown.Row>
+                    ))
+                  }
+                </Dropdown>
+              </div>
+            </div>
+            <span className={styles.limitsHint}>
+              A slow member never blocks a round past the wait. The workgroup stops spending once its total reaches the cap.
+            </span>
           </div>
         )}
 

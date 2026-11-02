@@ -51,9 +51,46 @@ describe("CreateWorkgroupModal", () => {
         name: "Launch",
         memberPeerIds: ["peer-1"],
         budgetUsd: null,
+        quorumTimeoutSeconds: null,
         briefing: null,
         connectionId: "casa",
       });
+    });
+  });
+
+  it("shows the run limits at their defaults and sends the ones the user picks", async () => {
+    invoke.mockImplementation(async (cmd) => (cmd === "workgroup_create" ? "wg-1" : null));
+    render(
+      <CreateWorkgroupModal
+        open
+        profiles={[{ name: "mira", counts: { peers: 1 } }]}
+        connectionId="casa"
+      />,
+    );
+
+    const wait = screen.getByRole("button", { name: /^Waits for members/ });
+    const cap = screen.getByRole("button", { name: /^Spend cap/ });
+    expect(wait.textContent).toContain("10 min, then the round goes on");
+    expect(cap.textContent).toContain("No cap");
+
+    fireEvent.click(wait);
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /20 min/ }));
+    fireEvent.click(cap);
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "$25.00" }));
+    expect(wait.textContent).toContain("20 min, then the round goes on");
+    expect(cap.textContent).toContain("$25.00");
+
+    fireEvent.change(screen.getByPlaceholderText("team-alpha · roadmap · customers"), {
+      target: { value: "Launch" },
+    });
+    fireEvent.click(screen.getByText("@peer-1"));
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith("workgroup_create", expect.objectContaining({
+        budgetUsd: 25,
+        quorumTimeoutSeconds: 1200,
+      }));
     });
   });
 

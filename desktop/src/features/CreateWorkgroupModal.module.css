@@ -109,3 +109,15 @@
   max-height: 34vh;
 }
 
+
+.limits {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-16);
+}
+
+.limitsHint {
+  font-size: var(--text-meta);
+  line-height: 1.45;
+  color: var(--ink-3);
+}

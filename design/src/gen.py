@@ -948,6 +948,7 @@ def phone_wg_settings():
     m_row("Hub", "", "@mira", chevron=False),
     m_row("Status", "pause stops dispatch · leave drops membership", control=pill("active", tone="success"), chevron=False),
     m_row("Auto-read messages", "reads agents' automatic messages aloud — never your directives", control=switch(False, ALPI_ACCENT, "Auto-read messages"), chevron=False),
+    m_row("Waits for members", "then the round goes on", "10 min", chevron=False),
     m_row("Accent", "", control='<span style="display: inline-flex; align-items: center; gap: 8px"><span style="width: 16px; height: 16px; border-radius: 4px; background: ' + ALPI_ACCENT + '"></span><span style="font-family: ' + MONO + '; font-size: 12px; color: #454545">&#35;14110c</span></span>'),
     m_row("Id", "", "wg_4f2a…9c1e", chevron=False, sep=False),
 )}
@@ -985,6 +986,7 @@ def fold_wg_settings():
 {m_wide_row("Hub", "", "@mira", chevron=False)}
 {m_wide_row("Status", "pause stops dispatch · leave drops membership", control=pill("active", tone="success"), chevron=False)}
 {m_wide_row("Auto-read messages", "reads agents' automatic messages aloud — never your directives", control=switch(False, ALPI_ACCENT, "Auto-read messages"), chevron=False)}
+{m_wide_row("Waits for members", "then the round goes on", "10 min", chevron=False)}
 {m_wide_row("Id", "", "wg_4f2a…9c1e", chevron=False)}
 {m_wide_section("Budget", "workgroup spend cap")}
 {m_group(wg_budget_band())}
