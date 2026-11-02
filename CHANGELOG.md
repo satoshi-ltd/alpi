@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.17.48 — 2026-11-02 — fallbacks: the agent knows the apps edit them, and the limit is named
+
+- The agent's own reference now says fallback models can be set from the desktop and phone profile settings, next to `alpi setup` and the host API, so it no longer tells you the console is the only way.
+- A fallback list longer than 16 is refused with a message that names the limit, instead of the generic "must be a list of model ids".
+
 ## v0.17.47 — 2026-11-02 — a workgroup's wait for members is reported and asked at creation
 
 - `host.workgroups.list` reports `quorum_timeout_seconds` on the workgroups this daemon hosts (null means the 10-minute default), so the apps can show how long the hub waits for members.

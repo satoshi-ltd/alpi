@@ -1129,11 +1129,12 @@ def _coerce_fallback_models(value: Any) -> list[str]:
             value = json.loads(value) if value.strip() else []
         except (ValueError, RecursionError):
             value = None
-    if (
-        not isinstance(value, list)
-        or len(value) > _MAX_FALLBACKS
-        or not all(isinstance(item, str) and _plain_model_id(item) for item in value)
-    ):
+    if isinstance(value, list) and len(value) > _MAX_FALLBACKS:
+        raise host_server.HandlerError(
+            -32602, "invalid-params",
+            data={"detail": f"fallback_models takes at most {_MAX_FALLBACKS} model ids"},
+        )
+    if not isinstance(value, list) or not all(isinstance(item, str) and _plain_model_id(item) for item in value):
         raise host_server.HandlerError(
             -32602, "invalid-params",
             data={"detail": "fallback_models must be a list of model ids"},

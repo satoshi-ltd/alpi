@@ -1184,7 +1184,23 @@ async def test_fallback_models_round_trip_as_ordered_deduplicated_list(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("value", ["openrouter/b", 7, {"a": 1}, ["ok/model", 3], [None], "[1]", "{", "[" * 100000, ["a\ud800b"], ["a: b\nc: d"], ["x" * 201], [f"m/{i}" for i in range(17)]])
+async def test_fallback_models_names_the_cap_when_the_list_is_too_long(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path / "h")
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+    reply = await srv._dispatch({
+        "id": "long", "method": "host.config.set_field",
+        "params": {"profile": "default", "key": "fallback_models", "value": [f"m/{i}" for i in range(17)]},
+    })
+    assert reply["error"]["code"] == -32602
+    assert reply["error"]["data"]["detail"] == "fallback_models takes at most 16 model ids"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("value", ["openrouter/b", 7, {"a": 1}, ["ok/model", 3], [None], "[1]", "{", "[" * 100000, ["a\ud800b"], ["a: b\nc: d"], ["x" * 201]])
 async def test_fallback_models_rejects_values_that_are_not_lists_of_ids(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, value: object,
 ) -> None:
