@@ -58,7 +58,7 @@ vi.mock('../../theme/ThemeContext', () => ({
   }),
 }));
 
-import { ReasoningEffortSheet } from './ProfileFieldSheets.jsx';
+import { ModelSheet, ReasoningEffortSheet } from './ProfileFieldSheets.jsx';
 
 describe('ReasoningEffortSheet', () => {
   it('applies the tapped effort and closes with no Save button', async () => {
@@ -105,5 +105,24 @@ describe('ReasoningEffortSheet', () => {
     expect(onPress).toHaveBeenCalledTimes(1);
     rerender(<ReasoningEffortSheet open onClose={() => {}} initialValue="" />);
     expect(screen.queryByText('Change model…')).toBeNull();
+  });
+});
+
+describe('ModelSheet', () => {
+  it('leaves the excluded models out of the list', () => {
+    render(
+      <ModelSheet
+        open
+        onClose={() => {}}
+        profileName="doc"
+        title="Fallback model"
+        initialValue=""
+        profileModels={['openrouter/main', 'anthropic/sonnet', 'openai/gpt-x']}
+        exclude={['openrouter/main', 'anthropic/sonnet']}
+      />,
+    );
+    expect(screen.getByText('gpt-x')).toBeTruthy();
+    expect(screen.queryByText('main')).toBeNull();
+    expect(screen.queryByText('sonnet')).toBeNull();
   });
 });

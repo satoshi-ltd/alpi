@@ -14,6 +14,14 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.9.8 — 2026-11-02 — fallback models are set and ordered from the app
+
+- A profile's Overview has a Fallbacks row under the vision model: how many models are tried when the main model's provider fails, or none.
+- The row opens a sheet listing them in order, each with move up, move down and remove, and Add model… picks from the profile's models except the main one and those already listed.
+- A change the daemon refuses shows as a toast and the list stays as it was.
+- Why: only `alpi setup` could set fallbacks, so a profile on one provider had no cover for an outage unless its owner knew to open the console.
+- Requires alpi 0.17.46; an older daemon, or a member connection, hides the row.
+
 ## v0.9.7 — 2026-11-02 — a new workgroup sets its wait and spend cap
 
 - New workgroup has a Limits group: Waits for members (2 to 60 min, 10 min by default) and Spend cap (No cap, or $1 to $100 for the workgroup's whole life), each sent to the daemon only when you change it.

@@ -41,6 +41,8 @@ import {
 import { useProfile } from '../../../src/hooks/useSubject';
 import { useEndpoint } from '../../../src/lib/EndpointContext';
 import { AppearanceSheet } from '../../../src/features/sheets/AppearanceSheet';
+import { FallbacksSheet } from '../../../src/features/sheets/FallbacksSheet';
+import { FALLBACK_KEY, addFallback, fallbackCandidates, fallbackList, hasFallbackModels } from '../../../../common/fallbackModels.mjs';
 import {
   BudgetSheet,
   CleanupSheet,
@@ -249,6 +251,14 @@ export default function ProfileSettings() {
       : call('host.config.unset_field', { profile: id, key })
     ).then(() => refreshSettings());
 
+  const fallbacks = fallbackList(profile);
+  const showFallbacks = hasFallbackModels(profile)
+    && ((profile.models ?? []).length > 0 || (profile.provider_ollama ?? []).length > 0 || fallbacks.length > 0);
+  const canAddFallback = fallbackCandidates(profile.models, fallbacks, profile.model).length > 0
+    || (profile.provider_ollama ?? []).length > 0;
+  const saveFallbacks = (next) =>
+    call('host.config.set_field', { profile: id, key: FALLBACK_KEY, value: next }).then(() => refreshSettings());
+
   const setVoice = (voiceId) =>
     call('host.voice.set_voice', { profile: id, voice_id: voiceId }).then(() => refreshSettings());
   const toggleAutoRead = () =>
@@ -432,6 +442,17 @@ export default function ProfileSettings() {
                 helper="image inspection via read_image"
                 value={profile.vision_model ? modelLabel(profile.vision_model) : 'main model'}
                 onPress={() => setSheet('vision')}
+              />
+            </>
+          ) : null}
+          {showFallbacks ? (
+            <>
+              <RowSeparator />
+              <Row
+                label="Fallbacks"
+                helper="tried in order when the main model's provider fails"
+                value={fallbacks.length ? String(fallbacks.length) : 'none'}
+                onPress={() => setSheet('fallbacks')}
               />
             </>
           ) : null}
@@ -865,6 +886,31 @@ export default function ProfileSettings() {
         openrouterModels={(profile.providers?.openrouter?.models) ?? []}
         ollamaNames={(profile.provider_ollama ?? []).map((o) => o.name)}
         onSave={(value) => saveField('tools.read_image.model', value)}
+      />
+      <FallbacksSheet
+        open={sheet === 'fallbacks'}
+        onClose={() => setSheet(null)}
+        profileName={profile.name}
+        list={fallbacks}
+        onSave={saveFallbacks}
+        onAdd={() => setSheet('fallbackAdd')}
+        canAdd={canAddFallback}
+      />
+      <ModelSheet
+        open={sheet === 'fallbackAdd'}
+        onClose={() => setSheet('fallbacks')}
+        profileName={profile.name}
+        accent={accent}
+        title="Fallback model"
+        subtitle={`@${profile.name} · added at the end of the list`}
+        primaryLabel="Add"
+        exclude={[profile.model, ...fallbacks]}
+        initialValue=""
+        profileModels={profile.models ?? []}
+        providerKeys={profile.provider_keys ?? []}
+        openrouterModels={(profile.providers?.openrouter?.models) ?? []}
+        ollamaNames={(profile.provider_ollama ?? []).map((o) => o.name)}
+        onSave={(value) => saveFallbacks(addFallback(fallbacks, value, profile.model))}
       />
       <CleanupSheet
         open={sheet === 'cleanup'}

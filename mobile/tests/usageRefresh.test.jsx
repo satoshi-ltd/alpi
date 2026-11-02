@@ -140,6 +140,7 @@ vi.mock('../src/components/Row', () => ({
 
 vi.mock('../src/features/sheets/AppearanceSheet', () => ({ AppearanceSheet: () => null }));
 vi.mock('../src/features/sheets/EditBudgetSheet', () => ({ EditBudgetSheet: () => null }));
+vi.mock('../src/features/sheets/FallbacksSheet', () => ({ FallbacksSheet: () => null }));
 vi.mock('../src/features/sheets/ProfileFieldSheets', () => ({
   BudgetSheet: () => null,
   CleanupSheet: () => null,

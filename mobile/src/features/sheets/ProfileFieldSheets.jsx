@@ -204,6 +204,8 @@ export function ModelSheet({
   subtitle = null,
   allowClear = false,
   clearHelper = 'tier unset — everything falls back to the profile model',
+  exclude = null,
+  primaryLabel = null,
 }) {
   const { colors, fonts, fontSizes } = useTheme();
   const toast = useToast();
@@ -248,7 +250,7 @@ export function ModelSheet({
       const src = sources[s];
       for (let i = 0; i < src.length; i += 1) {
         const m = src[i];
-        if (!m || seen.has(m)) continue;
+        if (!m || seen.has(m) || exclude?.includes(m)) continue;
         seen.add(m);
         const k = providerKeyOf(m, ollamaServers);
         if (!acc[k]) acc[k] = [];
@@ -256,7 +258,7 @@ export function ModelSheet({
       }
     }
     return acc;
-  }, [profileModels, ollama.data, ollamaServers]);
+  }, [profileModels, ollama.data, ollamaServers, exclude]);
 
   // ollama/* first (local before cloud) matches desktop ProviderPickerForm order.
   const KNOWN_ORDER = ['anthropic', 'openai', 'openrouter', 'gemini'];
@@ -283,7 +285,7 @@ export function ModelSheet({
       title={title}
       subtitle={subtitle ?? `@${profileName ?? ''} · default model`}
       primaryAction={{
-        label: allowClear ? 'Save' : 'Set default',
+        label: primaryLabel ?? (allowClear ? 'Save' : 'Set default'),
         onPress: save,
         disabled: allowClear ? false : !picked,
         loading: saving,

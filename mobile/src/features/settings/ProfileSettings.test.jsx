@@ -13,6 +13,8 @@ const h = vi.hoisted(() => ({
   visionSheetProps: null,
   modelSheetProps: null,
   appearanceSheetProps: null,
+  fallbackAddProps: null,
+  fallbacksSheetProps: null,
 }));
 
 vi.mock('expo-router', () => ({
@@ -121,11 +123,19 @@ vi.mock('../../features/sheets/ProfileFieldSheets', () => ({
   ModelSheet: (props) => {
     if (props.title === 'Vision model') h.visionSheetProps = props;
     if (!props.title) h.modelSheetProps = props;
+    if (props.title === 'Fallback model') h.fallbackAddProps = props;
     return null;
   },
   ReasoningEffortSheet: () => null,
   VoiceSheet: () => null,
   WorkspaceSheet: () => null,
+}));
+
+vi.mock('../../features/sheets/FallbacksSheet', () => ({
+  FallbacksSheet: (props) => {
+    h.fallbacksSheetProps = props;
+    return null;
+  },
 }));
 
 const ProfileSettings = (await import('../../../app/profile/[id]/settings.jsx')).default;
@@ -151,6 +161,8 @@ beforeEach(() => {
   h.visionSheetProps = null;
   h.modelSheetProps = null;
   h.appearanceSheetProps = null;
+  h.fallbackAddProps = null;
+  h.fallbacksSheetProps = null;
 });
 
 describe('ProfileSettings snapshot first paint', () => {
@@ -319,6 +331,7 @@ describe('ProfileSettings routing tiers', () => {
     expect(scope.queryByText('Fast model')).toBeNull();
     expect(scope.queryByText('Deep model')).toBeNull();
     expect(scope.queryByText('Vision model')).toBeNull();
+    expect(scope.queryByText('Fallbacks')).toBeNull();
   });
 });
 
@@ -357,6 +370,81 @@ describe('ProfileSettings vision model', () => {
       profile: 'doc',
       key: 'tools.read_image.model',
       value: 'openrouter/deepseek/vision-next',
+    });
+  });
+});
+
+describe('ProfileSettings fallback models', () => {
+  const daemon = (detail) => vi.fn(async (method) => {
+    if (method === 'host.profile.summaries') return { profiles: [{ name: 'doc', counts: {} }] };
+    if (method === 'host.settings.profile_snapshot') {
+      return {
+        detail: { name: 'doc', model: 'openrouter/main', models: ['openrouter/main', 'anthropic/sonnet', 'openai/gpt-x'], ...detail },
+        usage: { days: [] },
+        schedules: { jobs: [] },
+        workgroups: { workgroups: [] },
+        email: { accounts: [] },
+        storage: { storage: [] },
+      };
+    }
+    if (method === 'host.config.set_field') return { ok: true };
+    if (method === 'host.profile.attention') return { memory: [], skills: [], schedules: [], counts: {}, total: 0 };
+    throw new Error(`unexpected ${method}`);
+  });
+
+  it('hides the row when the daemon does not send the list', async () => {
+    const { container } = render(<ProfileSettings />, { wrapper: wrapper(daemon({})) });
+    const scope = within(container);
+    await waitFor(() => expect(scope.getByText('Model')).toBeTruthy());
+    expect(scope.queryByText('Fallbacks')).toBeNull();
+  });
+
+  it('hides the row when the profile has no models and no fallbacks', async () => {
+    const { container } = render(<ProfileSettings />, { wrapper: wrapper(daemon({ models: [], fallback_models: [] })) });
+    const scope = within(container);
+    await waitFor(() => expect(scope.getByText('Model')).toBeTruthy());
+    expect(scope.queryByText('Fallbacks')).toBeNull();
+  });
+
+  it('leaves the promoted main model out and offers no Add once every model is listed', async () => {
+    const call = daemon({ model: 'openai/gpt-x', fallback_models: ['anthropic/sonnet', 'openai/gpt-x', 'openrouter/main'] });
+    const { container } = render(<ProfileSettings />, { wrapper: wrapper(call) });
+    await waitFor(() => expect(within(container).getByText('Fallbacks')).toBeTruthy());
+    expect(h.fallbacksSheetProps.list).toEqual(['anthropic/sonnet', 'openrouter/main']);
+    expect(h.fallbacksSheetProps.canAdd).toBe(false);
+  });
+
+  it('shows the row for a profile whose only models come from Ollama', async () => {
+    const call = daemon({ models: [], provider_ollama: [{ name: 'local', url: 'http://127.0.0.1:11434' }], fallback_models: [] });
+    const { container } = render(<ProfileSettings />, { wrapper: wrapper(call) });
+    await waitFor(() => expect(within(container).getByText('Fallbacks')).toBeTruthy());
+  });
+
+  it('reads none for an empty list', async () => {
+    const { container } = render(<ProfileSettings />, { wrapper: wrapper(daemon({ fallback_models: [] })) });
+    const scope = within(container);
+    await waitFor(() => expect(scope.getByText('Fallbacks')).toBeTruthy());
+    expect(scope.getByText('none')).toBeTruthy();
+  });
+
+  it('adds from the model sheet without the main model and saves the ordered list', async () => {
+    const call = daemon({ fallback_models: ['anthropic/sonnet'] });
+    const { container } = render(<ProfileSettings />, { wrapper: wrapper(call) });
+    const scope = within(container);
+    await waitFor(() => expect(scope.getByText('Fallbacks')).toBeTruthy());
+    expect(h.fallbacksSheetProps.list).toEqual(['anthropic/sonnet']);
+    expect(h.fallbackAddProps.exclude).toEqual(['openrouter/main', 'anthropic/sonnet']);
+    await h.fallbackAddProps.onSave('openai/gpt-x');
+    expect(call).toHaveBeenCalledWith('host.config.set_field', {
+      profile: 'doc',
+      key: 'fallback_models',
+      value: ['anthropic/sonnet', 'openai/gpt-x'],
+    });
+    await h.fallbacksSheetProps.onSave([]);
+    expect(call).toHaveBeenCalledWith('host.config.set_field', {
+      profile: 'doc',
+      key: 'fallback_models',
+      value: [],
     });
   });
 });
