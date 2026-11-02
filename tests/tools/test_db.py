@@ -11,11 +11,13 @@ import json
 from pathlib import Path
 
 import pytest
+import yaml
 
 from alpi.tools.db import (
-    MAX_DB_BYTES,
+    DEFAULT_MAX_DB_MB,
     MAX_ROWS_PER_QUERY,
     Db,
+    max_db_mb,
 )
 from alpi.tools.skill import Skill
 
@@ -185,21 +187,175 @@ def test_query_row_cap_blocks_runaway_results(
     assert "more than 5" in r.error
 
 
-def test_quota_blocks_when_db_too_large(
+def _set_quota(home: Path, value) -> None:
+    path = home / "config.yaml"
+    data = (yaml.safe_load(path.read_text()) if path.exists() else None) or {}
+    data.setdefault("tools", {})["db"] = {"max_mb": value}
+    path.write_text(yaml.safe_dump(data))
+
+
+def _db_path(home: Path) -> Path:
+    return home / "skills" / "personal" / "whoop-tracker" / "state" / "db.sqlite"
+
+
+def _fill_to_quota(skill: str) -> None:
+    assert _exec(skill, "CREATE TABLE t (id INTEGER PRIMARY KEY, v BLOB)").ok
+    for _ in range(200):
+        r = _exec(skill, "INSERT INTO t (v) VALUES (randomblob(3000))")
+        if not r.ok:
+            return
+    raise AssertionError("the quota never stopped a write")
+
+
+def test_a_write_past_the_quota_fails_and_names_the_setting(isolated_home: Path, whoop_skill: str) -> None:
+    _set_quota(isolated_home, 0.25)
+    _fill_to_quota(whoop_skill)
+
+    r = _exec(whoop_skill, "INSERT INTO t (v) VALUES (randomblob(3000))")
+
+    assert not r.ok
+    assert "quota" in r.error and "tools.db.max_mb" in r.error and "0.25 MiB" in r.error and "DELETE" in r.error
+    assert _db_path(isolated_home).stat().st_size <= 0.25 * 1024 * 1024
+
+
+def test_at_the_quota_reads_and_deletes_still_work_and_freed_pages_are_reused(
+    isolated_home: Path, whoop_skill: str,
+) -> None:
+    _set_quota(isolated_home, 0.25)
+    _fill_to_quota(whoop_skill)
+    count = _query(whoop_skill, "SELECT count(*) AS n FROM t")[0]["n"]
+
+    assert _exec(whoop_skill, "DELETE FROM t WHERE id % 2 = 0").ok
+    assert _exec(whoop_skill, "INSERT INTO t (v) VALUES (randomblob(3000))").ok
+    assert _exec(whoop_skill, "VACUUM").ok
+    assert _query(whoop_skill, "SELECT count(*) AS n FROM t")[0]["n"] == count - count // 2 + 1
+
+
+def test_one_exec_cannot_overshoot_the_quota(isolated_home: Path, whoop_skill: str) -> None:
+    _set_quota(isolated_home, 0.25)
+    assert _exec(whoop_skill, "CREATE TABLE t (v BLOB)").ok
+
+    r = _exec(whoop_skill, "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 1000) "
+                           "INSERT INTO t SELECT randomblob(4000) FROM n")
+
+    assert not r.ok
+    assert "quota" in r.error and "split it" in r.error and "DELETE" not in r.error
+    assert _db_path(isolated_home).stat().st_size <= 0.25 * 1024 * 1024
+    assert _query(whoop_skill, "SELECT count(*) AS n FROM t") == [{"n": 0}]
+
+
+def test_a_temp_table_is_held_to_the_same_quota(isolated_home: Path, whoop_skill: str) -> None:
+    _set_quota(isolated_home, 0.25)
+
+    r = _exec(whoop_skill, "CREATE TEMP TABLE big AS WITH RECURSIVE n(i) AS "
+                           "(SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 1000) SELECT randomblob(4000) FROM n")
+
+    assert not r.ok
+    assert "tools.db.max_mb" in r.error
+
+
+def test_a_full_disk_is_not_reported_as_the_quota(
     isolated_home: Path, whoop_skill: str, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Create a DB by writing once, then squeeze the quota below its size.
-    db = Db()
-    db.run(action="exec", skill=whoop_skill, sql="CREATE TABLE t (x TEXT)")
-    db.run(
-        action="exec", skill=whoop_skill,
-        sql="INSERT INTO t VALUES (?)", params=["x" * 100],
-    )
-    # Squeeze the quota.
-    monkeypatch.setattr("alpi.tools.db.MAX_DB_BYTES", 10)
-    r = db.run(action="query", skill=whoop_skill, sql="SELECT * FROM t")
+    import shutil
+    _set_quota(isolated_home, 0.25)
+    _fill_to_quota(whoop_skill)
+    monkeypatch.setattr("alpi.tools.db.shutil.disk_usage", lambda _p: shutil._ntuple_diskusage(1, 1, 4096))
+
+    r = _exec(whoop_skill, "INSERT INTO t (v) VALUES (randomblob(3000))")
+
     assert not r.ok
-    assert "quota" in r.error
+    assert "disk holding db.sqlite has only 0 MiB free" in r.error
+
+
+def test_an_unreadable_disk_falls_back_to_the_sqlite_message(
+    isolated_home: Path, whoop_skill: str, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_quota(isolated_home, 0.25)
+    _fill_to_quota(whoop_skill)
+
+    def boom(_p):
+        raise OSError("gone")
+    monkeypatch.setattr("alpi.tools.db.shutil.disk_usage", boom)
+
+    r = _exec(whoop_skill, "INSERT INTO t (v) VALUES (randomblob(3000))")
+
+    assert not r.ok
+    assert r.error == "sqlite: database or disk is full"
+
+
+def test_a_file_already_over_the_quota_still_answers_reads_and_shrinks(
+    isolated_home: Path, whoop_skill: str,
+) -> None:
+    assert _exec(whoop_skill, "CREATE TABLE t (id INTEGER PRIMARY KEY, v BLOB)").ok
+    for _ in range(40):
+        assert _exec(whoop_skill, "INSERT INTO t (v) VALUES (randomblob(3000))").ok
+    _set_quota(isolated_home, 0.01)
+
+    assert _query(whoop_skill, "SELECT count(*) AS n FROM t") == [{"n": 40}]
+    grow = _exec(whoop_skill, "INSERT INTO t (v) VALUES (randomblob(30000))")
+    assert not grow.ok and "quota" in grow.error
+    assert _exec(whoop_skill, "DELETE FROM t").ok
+    assert _exec(whoop_skill, "VACUUM").ok
+    assert _db_path(isolated_home).stat().st_size < 40 * 3000
+
+
+def test_the_quota_pragmas_cannot_be_changed_through_the_tool(isolated_home: Path, whoop_skill: str) -> None:
+    _set_quota(isolated_home, 0.25)
+    assert _exec(whoop_skill, "CREATE TABLE t (v BLOB)").ok
+
+    for sql in ("PRAGMA max_page_count = 4294967294", "PRAGMA main.MAX_PAGE_COUNT = 99999999",
+                "PRAGMA page_size = 65536", "CREATE TABLE u (x); PRAGMA max_page_count = 99999999;"):
+        r = _exec(whoop_skill, sql)
+        assert not r.ok, sql
+        assert "quota" in r.error, sql
+    assert _query(whoop_skill, "PRAGMA max_page_count") == [{"max_page_count": 0.25 * 1024 * 1024 // 4096}]
+    assert "u" not in _tables(whoop_skill)
+
+
+def test_a_script_hitting_the_quota_applies_none_of_its_statements(isolated_home: Path, whoop_skill: str) -> None:
+    _set_quota(isolated_home, 0.25)
+    assert _exec(whoop_skill, "CREATE TABLE t (v BLOB)").ok
+
+    r = _exec(whoop_skill, "CREATE TABLE marker (x); "
+                           "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 1000) "
+                           "INSERT INTO t SELECT randomblob(4000) FROM n;")
+
+    assert not r.ok
+    assert "tools.db.max_mb" in r.error
+    assert "marker" not in _tables(whoop_skill)
+
+
+def test_the_quota_defaults_to_100_mib_and_reads_the_profile_config(isolated_home: Path) -> None:
+    assert max_db_mb() == DEFAULT_MAX_DB_MB == 100
+    _set_quota(isolated_home, 256)
+    assert max_db_mb() == 256
+    _set_quota(isolated_home, 0)
+    assert max_db_mb() == 0
+    for bad in (-1, True, "lots", None, float("inf"), [1]):
+        _set_quota(isolated_home, bad)
+        assert max_db_mb() == DEFAULT_MAX_DB_MB, bad
+
+
+def test_a_bad_unrelated_key_does_not_reset_the_quota(isolated_home: Path) -> None:
+    _set_quota(isolated_home, 500)
+    path = isolated_home / "config.yaml"
+    data = yaml.safe_load(path.read_text())
+    data["tools"]["max_steps_per_turn"] = "abc"
+    path.write_text(yaml.safe_dump(data))
+
+    assert max_db_mb() == 500
+
+
+def test_a_zero_quota_lets_the_file_grow(isolated_home: Path, whoop_skill: str) -> None:
+    _set_quota(isolated_home, 0)
+    assert _exec(whoop_skill, "CREATE TABLE t (v BLOB)").ok
+
+    r = _exec(whoop_skill, "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 100) "
+                           "INSERT INTO t SELECT randomblob(4000) FROM n")
+
+    assert r.ok, r.error
+    assert _query(whoop_skill, "PRAGMA max_page_count")[0]["max_page_count"] > 1_000_000
 
 
 def test_db_file_lands_under_skill_state(
@@ -218,8 +374,7 @@ def test_db_file_lands_under_skill_state(
 
 
 def test_constants_are_documented_values() -> None:
-    # Guard against accidental relax of quotas in a refactor.
-    assert MAX_DB_BYTES == 50 * 1024 * 1024
+    assert DEFAULT_MAX_DB_MB == 100
     assert MAX_ROWS_PER_QUERY == 10_000
 
 
@@ -532,15 +687,8 @@ def test_a_single_pragma_still_runs_outside_a_transaction(isolated_home: Path, w
     assert json.loads(r.output.split("returned: ", 1)[1]) == [{"journal_mode": "wal"}]
 
 
-def test_a_script_keeps_the_per_skill_scope_and_quota(
-    isolated_home: Path, whoop_skill: str, monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_a_script_keeps_the_per_skill_scope(isolated_home: Path, whoop_skill: str) -> None:
     Skill().run(action="create", name="other-skill", category="personal",
                 description="Sibling", body="## When to use\nNever.\n")
     assert _exec(whoop_skill, "CREATE TABLE a (x); CREATE TABLE b (y);").ok
     assert "a" not in _tables("other-skill")
-
-    monkeypatch.setattr("alpi.tools.db.MAX_DB_BYTES", 10)
-    r = _exec(whoop_skill, "CREATE TABLE c (x); CREATE TABLE d (y);")
-    assert not r.ok
-    assert "quota" in r.error

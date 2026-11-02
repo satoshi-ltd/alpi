@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.17.45 — 2026-11-02 — a skill database's size quota is a setting, and reaching it no longer locks the agent out
+
+- The `db` tool's per-skill size quota is now `tools.db.max_mb` in the profile's `config.yaml` (default 100 MiB, up from a fixed 50 MB; `0` removes it).
+- At the quota only writes that would grow the file fail; reads, `DELETE` and `VACUUM` keep working, so the agent can prune its own data. The error names the limit and the setting.
+- SQLite now enforces the quota during the write, so one statement inserting many rows can no longer push the file far past it, and the tool refuses `PRAGMA` assignments that would lift it.
+- Why: a skill that prunes its own cache every night could still reach the fixed limit, and at the limit the tool refused every call, including the deletes it asked for.
+
 ## v0.17.44 — 2026-10-29 — a knowledge search runs only on its query
 
 - `knowledge(action="search")` no longer guesses its terms from `topic` or `name` when `query` is empty: the call is refused with the form to resend.

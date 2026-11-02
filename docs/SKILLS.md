@@ -303,8 +303,19 @@ own database and no other; a plain `VACUUM` still compacts it.
 
 **Quotas (enforced):**
 
-- 50 MB max file size — prune with `DELETE` or run
-  `skill(action='reset_state', name=…)` to nuke and start over.
+- File size per skill, `tools.db.max_mb` in the profile's
+  `config.yaml` (default 100 MiB, `0` = no quota, re-read on every
+  call). SQLite enforces it (`PRAGMA max_page_count`), so a write that
+  would grow the file past it fails as a whole — even one statement
+  inserting many rows, or a temporary table past the same size —
+  while reads, `DELETE` and `VACUUM` keep
+  working: prune, let SQLite reuse the freed pages, `VACUUM` to shrink
+  the file, or raise the setting. The tool refuses
+  `PRAGMA max_page_count` / `page_size` assignments so the quota
+  cannot be lifted from SQL. A file already past the quota (lowered
+  setting, or a skill script writing directly) keeps answering reads
+  and cannot grow. The quota gates only the `db` tool: a skill's own
+  scripts open the file directly and are not limited.
 - 10 000 rows max per `query` result — tighten with `WHERE` /
   `LIMIT`.
 - 5 s busy / lock timeout at the SQLite level.

@@ -23,6 +23,7 @@ DOCUMENTED_BUT_PARSED_ELSEWHERE = {
     "tools.web_search.max_per_turn",  # alpi/tools/web_search.py::_max_per_turn
     "tools.web_search.backends",  # alpi/tools/web_search.py::_backends
     "tools.research.max_usd",  # alpi/tools/research.py::max_usd
+    "tools.db.max_mb",  # alpi/tools/db.py::max_db_mb
     "alp.max_active_workgroups",  # alpi/alp/pipeline_queue.py::limit_origin reads raw YAML so absence stays absence
     "model_reasoning.effort",
     "memory.review_interval",

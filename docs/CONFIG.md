@@ -88,6 +88,7 @@ Three options:
 | `tools.web_search.backends` | `[duckduckgo, yahoo, brave]` | list of `ddgs` text engines, in the order `web_search` asks them; names the installed `ddgs` does not ship are dropped, and an empty or unusable list means the default | next search |
 | `tools.browser.allow_local` | `false` | bool — let the `browser` tool navigate **loopback** only (`127.0.0.1`, `::1`, and hostnames that resolve to loopback such as `localhost`). RFC1918 / CGNAT / Tailscale stay blocked even when this is on; the exemption is loopback-only, matching `_guards._is_loopback`. Off blocks every local target; on is for hitting a local dev server you trust. | next turn |
 | `tools.budget.per_result_chars` | `100_000` | int (-1 = unlimited) | next turn |
+| `tools.db.max_mb` | `100` | number (MiB) — per-skill size quota of the `db` tool's SQLite file; `0` removes it, a negative or non-numeric value keeps the default. See [SKILLS.md](SKILLS.md#persistent-state--sqlite-via-the-db-tool) | next call |
 | `tools.research.max_usd` | `1.0` | number — USD one `research` call may spend, a whole `tasks` batch included; `0` removes the cap, a negative or non-numeric value keeps the default | next call |
 | `tools.tts.voice` | `"en-US-AriaNeural"` | Edge TTS voice id | next turn |
 | `tools.tts.rate` | `""` | string (`"+10%"`, `"-20%"`) — speed | next turn |

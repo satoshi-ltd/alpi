@@ -95,6 +95,7 @@ RAW_READ_KEYS = {
     "tools.web_search.max_per_turn",
     "tools.web_search.backends",
     "tools.research.max_usd",
+    "tools.db.max_mb",
 }
 
 

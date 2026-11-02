@@ -94,6 +94,8 @@ db(action="query", skill="whoop-tracker",
 
 `exec` without `params` runs several `;`-separated statements in one transaction (all or none; the error names the failing statement); with `params` it takes exactly one. A script with its own `BEGIN`/`COMMIT`/`ROLLBACK`/`SAVEPOINT`/`RELEASE` is refused by the SQLite authorizer, not by matching text. `RETURNING` rows (or a `SELECT` sent as `exec`) come back under `returned:`, drained in batches and capped at 10 000 shown. Attaching or writing another database file (`ATTACH '<file>'`, `VACUUM INTO '<file>'`) is refused on every action, including targets computed at run time or bound as a parameter (the authorizer allows only the anonymous `""` target), so a skill reaches only its own database; plain `VACUUM` (whose scratch database is anonymous) still works.
 
+Size quota per skill database: `tools.db.max_mb` in the profile's `config.yaml` (default 100 MiB, `0` = none, read on every call). SQLite enforces it (`PRAGMA max_page_count`), so a write that would grow the file past it (or a temporary table past the same size) fails whole while reads, `DELETE` and `VACUUM` still work; assigning `PRAGMA max_page_count` / `page_size` through the tool is refused. A write larger than the room left: split it. At the quota: delete rows the skill no longer needs (freed pages are reused), `VACUUM` to shrink, or ask the owner to raise the setting. A skill's own scripts open the file directly and are not limited by it.
+
 ## Anti-patterns
 
 - Generic keywords (`run`, `fetch`, `do`, `data`).

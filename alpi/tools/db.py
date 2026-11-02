@@ -4,20 +4,37 @@ from __future__ import annotations
 
 import contextlib
 import json
+import math
 import re
+import shutil
 import sqlite3
 from pathlib import Path
+
+import yaml
 
 from alpi.home import get_home
 from alpi.tools.base import Tool, ToolResult
 
 
-MAX_DB_BYTES = 50 * 1024 * 1024
+DEFAULT_MAX_DB_MB = 100
+MIB = 1024 * 1024
 MAX_ROWS_PER_QUERY = 10_000
 SQLITE_BUSY_TIMEOUT_S = 5.0
 _FETCH_BATCH = 500
 _COMMENTS = re.compile(r"--[^\n]*|/\*.*?\*/", re.S)
 _TRANSACTION_CONTROL = {sqlite3.SQLITE_TRANSACTION, sqlite3.SQLITE_SAVEPOINT}
+_QUOTA_PRAGMAS = {"max_page_count", "page_size"}
+
+
+def max_db_mb() -> float:
+    try:
+        data = yaml.safe_load((get_home() / "config.yaml").read_text()) or {}
+        value = ((data.get("tools") or {}).get("db") or {}).get("max_mb", DEFAULT_MAX_DB_MB)
+    except Exception:  # noqa: BLE001
+        return DEFAULT_MAX_DB_MB
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+        return DEFAULT_MAX_DB_MB
+    return value
 
 
 def _resolve_db(skill_name: str) -> tuple[Path, str | None]:
@@ -33,16 +50,38 @@ def _resolve_db(skill_name: str) -> tuple[Path, str | None]:
     return state_dir / "db.sqlite", None
 
 
-def _check_quota(path: Path) -> str | None:
-    if not path.exists():
-        return None
-    size = path.stat().st_size
-    if size >= MAX_DB_BYTES:
+def _apply_quota(conn: sqlite3.Connection, max_mb: float) -> None:
+    if not max_mb:
+        return
+    for schema in ("main", "temp"):
+        page_size = conn.execute(f"PRAGMA {schema}.page_size").fetchone()[0]
+        # SQLite never lowers max_page_count below the current size, so an oversized file keeps reads and deletes working.
+        conn.execute(f"PRAGMA {schema}.max_page_count = {max(1, int(max_mb * MIB) // page_size)}")
+
+
+def _quota_error(path: Path, max_mb: float) -> str:
+    try:
+        size = path.stat().st_size if path.exists() else 0
+        free = shutil.disk_usage(path.parent).free
+    except OSError:
+        return "sqlite: database or disk is full"
+    quota = max_mb * MIB
+    if free < quota:
         return (
-            f"db.sqlite at {size:,} bytes exceeds the {MAX_DB_BYTES:,}-byte "
-            "quota — prune rows or reset the skill state"
+            f"sqlite: database or disk is full — the disk holding db.sqlite has only {free / MIB:.0f} MiB free, "
+            f"below this skill's {max_mb:g} MiB quota (tools.db.max_mb); free space on the host or DELETE rows"
         )
-    return None
+    head = f"db.sqlite is {size / MIB:.1f} MiB and this profile's per-skill quota is {max_mb:g} MiB (tools.db.max_mb), so the write was not applied."
+    if size < quota * 0.9:
+        return (
+            f"{head} This one write is larger than the room left: split it into smaller writes, "
+            "or ask the owner to raise tools.db.max_mb in the profile's config.yaml."
+        )
+    return (
+        f"{head} DELETE rows the skill no longer needs (freed pages are reused) and VACUUM to "
+        "shrink the file, or ask the owner to raise tools.db.max_mb in the profile's config.yaml. "
+        "Reads still work."
+    )
 
 
 def _statements(sql: str) -> list[str]:
@@ -64,9 +103,13 @@ class _Guard:
         self.in_script = False
         self.denied: int | None = None
 
-    def __call__(self, action: int, target: str | None, *_rest) -> int:
+    def __call__(self, action: int, target: str | None, value: str | None, *_rest) -> int:
         # Only VACUUM's anonymous scratch database ("") passes; None means a parameter or expression whose file is unknown here.
-        if (action == sqlite3.SQLITE_ATTACH and target != "") or (self.in_script and action in _TRANSACTION_CONTROL):
+        if (
+            (action == sqlite3.SQLITE_ATTACH and target != "")
+            or (self.in_script and action in _TRANSACTION_CONTROL)
+            or (action == sqlite3.SQLITE_PRAGMA and value is not None and (target or "").lower() in _QUOTA_PRAGMAS)
+        ):
             self.denied = action
             return sqlite3.SQLITE_DENY
         return sqlite3.SQLITE_OK
@@ -137,9 +180,11 @@ class Db(Tool):
         "the first time a skill writes. Idempotent — safe to run on every "
         "invocation.\n"
         "\n"
-        "Quotas: 50 MB file, 10 000 rows max per query result, 5 s "
-        "busy timeout. Scope is per-skill: one skill cannot touch "
-        "another skill's DB.\n"
+        "Quotas: file size per skill set by the profile "
+        "(tools.db.max_mb, default 100 MiB; at the quota writes that grow "
+        "the file fail, reads and DELETE still work), 10 000 rows max per "
+        "query result, 5 s busy timeout. Scope is per-skill: one skill "
+        "cannot touch another skill's DB.\n"
         "\n"
         "Wipe state via ``skill(action='reset_state', name=…)`` — "
         "removes ``state/`` including the SQLite file. Use when a "
@@ -182,9 +227,7 @@ class Db(Tool):
         path, err = _resolve_db(skill)
         if err:
             return ToolResult(ok=False, output="", error=err)
-        quota_err = _check_quota(path)
-        if quota_err:
-            return ToolResult(ok=False, output="", error=quota_err)
+        max_mb = max_db_mb()
 
         param_tuple = tuple(params or [])
         statements = _statements(sql) if action == "exec" else []
@@ -203,6 +246,7 @@ class Db(Tool):
                 sqlite3.connect(str(path), timeout=SQLITE_BUSY_TIMEOUT_S),
             ) as conn:
                 conn.row_factory = sqlite3.Row
+                _apply_quota(conn, max_mb)
                 conn.set_authorizer(guard)
                 if action == "query":
                     cur = conn.execute(sql, param_tuple)
@@ -235,6 +279,13 @@ class Db(Tool):
                         "database file (ATTACH '<file>', VACUUM INTO '<file>') is not allowed"
                     ),
                 )
+            if guard.denied == sqlite3.SQLITE_PRAGMA:
+                return ToolResult(
+                    ok=False, output="",
+                    error="db sets this database's size quota itself; PRAGMA max_page_count / page_size cannot be changed through it",
+                )
+            if sqlite3.SQLITE_FULL in (getattr(e, "sqlite_errorcode", None), getattr(e.__cause__, "sqlite_errorcode", None)) and max_mb:
+                return ToolResult(ok=False, output="", error=_quota_error(path, max_mb))
             if isinstance(e, sqlite3.OperationalError):
                 return ToolResult(ok=False, output="", error=f"sqlite operational error: {e}")
             if isinstance(e, sqlite3.IntegrityError):
