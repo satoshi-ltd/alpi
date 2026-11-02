@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 afterEach(cleanup);
 
 const h = vi.hoisted(() => ({
+  dismiss: vi.fn(),
   push: vi.fn(),
   back: vi.fn(),
   call: vi.fn(async () => ({})),
@@ -52,7 +53,9 @@ vi.mock('react-native', () => {
         children,
       ),
     Platform: { OS: 'ios', select: (s) => s?.ios ?? s?.default },
-    Keyboard: { addListener: () => ({ remove: () => {} }) },
+    AppState: { addEventListener: () => ({ remove: () => {} }), currentState: 'active' },
+    Dimensions: { get: () => ({ height: 852, width: 393 }), addEventListener: () => ({ remove: () => {} }) },
+    Keyboard: { addListener: () => ({ remove: () => {} }), dismiss: h.dismiss },
     StyleSheet: { create: (s) => s },
   };
 });
@@ -217,6 +220,13 @@ describe('Workgroup header menu', () => {
     render(<WorkgroupChat />);
     openMenu();
     expect(sheet().getAttribute('data-sheet')).toBe('alpha');
+  });
+
+  it('closes the composer keyboard before the menu sheet opens over it', () => {
+    render(<WorkgroupChat />);
+    h.dismiss.mockClear();
+    openMenu();
+    expect(h.dismiss).toHaveBeenCalled();
   });
 
   it('carries the workgroup actions with the workgroup noun', () => {

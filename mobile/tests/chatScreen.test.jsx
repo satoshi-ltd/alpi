@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 afterEach(cleanup);
 
 const h = vi.hoisted(() => ({
+  dismiss: vi.fn(),
   push: vi.fn(),
   back: vi.fn(),
   call: vi.fn(async () => ({})),
@@ -48,7 +49,9 @@ vi.mock('react-native', () => {
         children,
       ),
     Platform: { OS: 'ios', select: (s) => s?.ios ?? s?.default },
-    Keyboard: { addListener: () => ({ remove: () => {} }) },
+    AppState: { addEventListener: () => ({ remove: () => {} }), currentState: 'active' },
+    Dimensions: { get: () => ({ height: 852, width: 393 }), addEventListener: () => ({ remove: () => {} }) },
+    Keyboard: { addListener: () => ({ remove: () => {} }), dismiss: h.dismiss },
     StyleSheet: { create: (s) => s },
   };
 });
@@ -221,6 +224,13 @@ beforeEach(() => {
 });
 
 describe('Profile chat header menu', () => {
+  it('closes the composer keyboard before the menu sheet opens over it', () => {
+    render(<ProfileChat />);
+    h.dismiss.mockClear();
+    openMenu();
+    expect(h.dismiss).toHaveBeenCalled();
+  });
+
   it('opens a sheet instead of navigating to settings', () => {
     render(<ProfileChat />);
     expect(sheet()).toBeNull();

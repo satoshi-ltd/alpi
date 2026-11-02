@@ -9,7 +9,7 @@ vi.mock('react-native', () => ({
     React.createElement('div', { 'data-style': JSON.stringify(style) }, children),
   Text: ({ children, style }) =>
     React.createElement('span', { 'data-style': JSON.stringify(style) }, children),
-  Keyboard: { addListener: () => ({ remove: () => {} }) },
+  Keyboard: { addListener: () => ({ remove: () => {} }), dismiss: () => {} },
   StyleSheet: { create: (s) => s },
 }));
 vi.mock('../../components/Button', () => ({ Button: () => null }));

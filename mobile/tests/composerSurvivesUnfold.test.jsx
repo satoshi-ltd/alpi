@@ -32,8 +32,9 @@ vi.mock('react-native', () => {
     KeyboardAvoidingView: ({ children }) => React.createElement('div', {}, children),
     ScrollView: ({ children }) => React.createElement('div', {}, children),
     Platform: { OS: 'ios', select: (s) => s?.ios ?? s?.default },
-    Keyboard: { addListener: () => ({ remove: () => {} }) },
-    Dimensions: { get: () => ({ height: 852, width: 393 }) },
+    AppState: { addEventListener: () => ({ remove: () => {} }), currentState: 'active' },
+    Keyboard: { addListener: () => ({ remove: () => {} }), dismiss: () => {} },
+    Dimensions: { get: () => ({ height: 852, width: 393 }), addEventListener: () => ({ remove: () => {} }) },
     StyleSheet: { create: (s) => s },
   };
 });

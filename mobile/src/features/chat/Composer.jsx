@@ -1,7 +1,8 @@
 import { contrastText } from "../../../../common/color.mjs";
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
-import Animated, { useAnimatedKeyboard, useAnimatedStyle } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+import { useKeyboardInset } from '../../hooks/useKeyboardInset';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { lineHeights, radii, space, typography } from '../../theme/tokens';
 
@@ -101,10 +102,10 @@ export function Composer({
 }) {
   const { colors, fonts , fontSizes} = useTheme();
   const insets = useSafeAreaInsets();
-  const keyboard = useAnimatedKeyboard();
+  const keyboard = useKeyboardInset();
   const bottomInset = insets.bottom;
   const rideKeyboard = useAnimatedStyle(() => ({
-    paddingBottom: Math.max(COMPOSER_PAD_Y, bottomInset - keyboard.height.value),
+    paddingBottom: Math.max(COMPOSER_PAD_Y, bottomInset - keyboard.value),
   }));
   const [text, setText] = useState(initialText);
   const [focused, setFocused] = useState(false);

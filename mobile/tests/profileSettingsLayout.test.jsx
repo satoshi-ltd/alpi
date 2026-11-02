@@ -9,7 +9,7 @@ const h = vi.hoisted(() => ({ options: [], mounts: 0, role: 'admin' }));
 vi.mock('react-native', () => ({
   View: ({ children }) => React.createElement('div', {}, children),
   Platform: { OS: 'ios', select: (sel) => sel?.ios ?? sel?.default },
-  Keyboard: { addListener: () => ({ remove: () => {} }) },
+  Keyboard: { addListener: () => ({ remove: () => {} }), dismiss: () => {} },
   StyleSheet: { create: (s) => s },
 }));
 

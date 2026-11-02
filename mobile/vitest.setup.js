@@ -5,6 +5,8 @@ vi.mock("react-native", () => ({
   Platform: { OS: "ios", select: (sel) => sel?.ios ?? sel?.default },
   AppState: { addEventListener: () => ({ remove: () => {} }), currentState: "active" },
   Linking: { openURL: vi.fn(async () => true) },
+  Keyboard: { addListener: () => ({ remove: () => {} }), dismiss: () => {} },
+  Dimensions: { get: () => ({ height: 852, width: 393 }), addEventListener: () => ({ remove: () => {} }) },
 }));
 
 // react-native-svg ships untranspiled — importing Icon is a parse error without this

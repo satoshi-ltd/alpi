@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 afterEach(cleanup);
 
@@ -37,6 +37,9 @@ vi.mock('react-native', () => {
     Text,
     Pressable,
     TextInput,
+    AppState: { addEventListener: () => ({ remove: () => {} }), currentState: 'active' },
+    Platform: { OS: 'ios', select: (s) => s?.ios ?? s?.default },
+    Dimensions: { get: () => ({ height: 852, width: 393 }), addEventListener: () => ({ remove: () => {} }) },
     Keyboard: {
       addListener: (event, fn) => {
         h.listeners[event] = fn;
@@ -211,6 +214,21 @@ describe('composer text and keyboard', () => {
     keyboard.keyboardHeight = 300;
     render(<Composer onSend={() => {}} />);
     expect(bottomPad()).toBe(COMPOSER_PAD_Y);
+  });
+});
+
+describe('keyboard that moved without animating', () => {
+  it('sits on the home indicator again when the keyboard hides without an animation', () => {
+    const bottomPad = () =>
+      [...document.querySelectorAll('div[data-style]')].map((d) => JSON.parse(d.getAttribute('data-style'))).find((st) => st.paddingTop === COMPOSER_PAD_Y).paddingBottom;
+    keyboard.keyboardHeight = 300;
+    keyboard.keyboardState = 2;
+    const { rerender } = render(<Composer onSend={() => {}} />);
+    expect(bottomPad()).toBe(COMPOSER_PAD_Y);
+    act(() => h.listeners.keyboardDidHide());
+    rerender(<Composer onSend={() => {}} />);
+    expect(bottomPad()).toBe(34);
+    keyboard.keyboardState = 0;
   });
 });
 

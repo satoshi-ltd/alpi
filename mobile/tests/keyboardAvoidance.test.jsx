@@ -1,6 +1,8 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 
 const ROOT = join(import.meta.dirname, '..');
 
@@ -22,8 +24,8 @@ describe('keyboard avoidance', () => {
 
   it('pads by the keyboard frame on the UI thread, so the pane rides it instead of jumping after it lands', () => {
     const pane = readFileSync(join(ROOT, 'src/components/KeyboardPane.jsx'), 'utf8');
-    expect(pane).toMatch(/useAnimatedKeyboard\(\)/);
-    expect(pane).toMatch(/paddingBottom: keyboard\.height\.value/);
+    expect(pane).toMatch(/useKeyboardInset\(\)/);
+    expect(pane).toMatch(/paddingBottom: inset\.value/);
     expect(pane).not.toMatch(/KeyboardAvoidingView/);
     expect(pane).not.toMatch(/Keyboard\.addListener/);
     for (const file of screens) {

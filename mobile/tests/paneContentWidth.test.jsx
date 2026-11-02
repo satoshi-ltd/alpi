@@ -31,7 +31,7 @@ vi.mock('react-native', () => {
     FlatList,
     KeyboardAvoidingView: ({ children }) => React.createElement('div', { 'data-kav': 'true' }, children),
     Platform: { OS: 'ios', select: (sel) => sel?.ios ?? sel?.default },
-    Keyboard: { addListener: () => ({ remove: () => {} }) },
+    Keyboard: { addListener: () => ({ remove: () => {} }), dismiss: () => {} },
     StyleSheet: { create: (s) => s },
   };
 });

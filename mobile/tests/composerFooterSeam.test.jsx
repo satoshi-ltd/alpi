@@ -38,7 +38,9 @@ vi.mock('react-native', () => {
     Pressable,
     TextInput,
     Platform: { OS: 'ios', select: (s) => s?.ios ?? s?.default },
-    Keyboard: { addListener: () => ({ remove: () => {} }) },
+    AppState: { addEventListener: () => ({ remove: () => {} }), currentState: 'active' },
+    Dimensions: { get: () => ({ height: 852, width: 393 }), addEventListener: () => ({ remove: () => {} }) },
+    Keyboard: { addListener: () => ({ remove: () => {} }), dismiss: () => {} },
     StyleSheet: { create: (s) => s },
   };
 });
@@ -140,7 +142,7 @@ describe('composer and sidebar footer seam', () => {
   it('reads one constant instead of two hand-tuned numbers', () => {
     const composer = source('src/features/chat/Composer.jsx');
     expect(composer).toMatch(/Math\.max\(COMPOSER_PAD_Y, insets\.bottom\)/);
-    expect(composer).toMatch(/Math\.max\(COMPOSER_PAD_Y, bottomInset - keyboard\.height\.value\)/);
+    expect(composer).toMatch(/Math\.max\(COMPOSER_PAD_Y, bottomInset - keyboard\.value\)/);
     expect(composer).not.toMatch(/Math\.max\(10/);
     expect(composer).not.toMatch(/: 44,/);
     expect(source('src/features/shell/ShellFooter.jsx')).toMatch(/height: CHROME_H/);

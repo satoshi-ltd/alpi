@@ -1,10 +1,11 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 afterEach(cleanup);
 
 const h = vi.hoisted(() => ({
+  dismiss: vi.fn(),
   params: { id: 'doc' },
   handlers: {},
   events: [],
@@ -62,7 +63,9 @@ vi.mock('react-native', () => {
     FlatList: ({ data }) => React.createElement('div', { 'data-list': String(data.length) }),
     KeyboardAvoidingView: ({ children }) => React.createElement('div', {}, children),
     Platform: { OS: 'ios', select: (s) => s?.ios ?? s?.default },
-    Keyboard: { addListener: () => ({ remove: () => {} }) },
+    AppState: { addEventListener: () => ({ remove: () => {} }), currentState: 'active' },
+    Dimensions: { get: () => ({ height: 852, width: 393 }), addEventListener: () => ({ remove: () => {} }) },
+    Keyboard: { addListener: () => ({ remove: () => {} }), dismiss: h.dismiss },
     StyleSheet: { create: (s) => s },
   };
 });
@@ -202,6 +205,14 @@ describe('profile thread with nothing to load', () => {
     await settle();
     expect(hasText('Start a new thread')).toBe(true);
     expect(skeleton()).toBeNull();
+  });
+
+  it('closes the keyboard on a tap in the empty thread, where no list can be dragged', async () => {
+    render(<ProfileChat />);
+    await settle();
+    h.dismiss.mockClear();
+    fireEvent.click(screen.getByText('Start a new thread').closest('button'));
+    expect(h.dismiss).toHaveBeenCalled();
   });
 
   it('never latches the skeleton when the seeded session belongs to another connection', async () => {

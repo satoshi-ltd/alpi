@@ -1,7 +1,7 @@
 import React from 'react';
 import * as RN from 'react-native';
 
-export const state = { reducedMotion: false, keyboardHeight: 0, timings: [], hold: false, pending: [] };
+export const state = { reducedMotion: false, keyboardHeight: 0, keyboardState: 0, timings: [], hold: false, pending: [] };
 
 const flat = (style) => Object.assign({}, ...[style].flat(Infinity).filter(Boolean));
 
@@ -47,7 +47,10 @@ export const FadeOut = builder('FadeOut');
 export const Easing = { bezier: () => 'bezier', inOut: (e) => e, ease: 'ease', linear: 'linear' };
 export const ReduceMotion = { System: 'system', Always: 'always', Never: 'never' };
 export const useReducedMotion = () => state.reducedMotion;
-export const useAnimatedKeyboard = () => ({ height: { value: state.keyboardHeight }, state: { value: 0 } });
+export const KeyboardState = { UNKNOWN: 0, OPENING: 1, OPEN: 2, CLOSING: 3, CLOSED: 4 };
+const keyboardState = { get value() { return state.keyboardState; } };
+export const useAnimatedKeyboard = () => ({ height: { value: state.keyboardHeight }, state: keyboardState });
+export const useAnimatedReaction = (prepare, react) => react(prepare());
 export const useAnimatedStyle = (fn) => fn();
 export const useSharedValue = (initial) => React.useRef({ value: initial }).current;
 export const useDerivedValue = (fn) => ({ value: fn() });

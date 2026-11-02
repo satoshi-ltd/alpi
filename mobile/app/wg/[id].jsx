@@ -22,6 +22,8 @@ import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
 import { Composer } from '../../src/features/chat/Composer';
 import { FALLBACK_ACCENT, WORKGROUP_FOLD } from '../../../common/folds.mjs';
 import { EmptyThread } from '../../src/features/chat/EmptyThread';
+import { KeyboardDismissArea } from '../../src/components/KeyboardDismissArea';
+import { useDismissKeyboard } from '../../src/hooks/useDismissKeyboard';
 import { JumpToLatest, JUMP_THRESHOLD } from '../../src/features/chat/JumpToLatest';
 import { LoadFailed } from '../../src/components/LoadFailed';
 import { MarkerCard } from '../../src/features/chat/MarkerCard';
@@ -211,19 +213,21 @@ const WgList = forwardRef(function WgList(
   );
 
   if (hydrating && messages.length === 0) {
-    return <ChatSkeleton kind="workgroup" accent={accent} />;
+    return <KeyboardDismissArea><ChatSkeleton kind="workgroup" accent={accent} /></KeyboardDismissArea>;
   }
   if (messages.length === 0 && loadError) {
-    return <LoadFailed label="this workgroup" error={loadError} onRetry={onRetryLoad} />;
+    return <KeyboardDismissArea><LoadFailed label="this workgroup" error={loadError} onRetry={onRetryLoad} /></KeyboardDismissArea>;
   }
   if (messages.length === 0) {
     return (
-      <EmptyThread
-        heading={EMPTY.posts.title}
-        detail={postsHint(hubLabel)}
-        accent={accent}
-        fold={WORKGROUP_FOLD}
-      />
+      <KeyboardDismissArea>
+        <EmptyThread
+          heading={EMPTY.posts.title}
+          detail={postsHint(hubLabel)}
+          accent={accent}
+          fold={WORKGROUP_FOLD}
+        />
+      </KeyboardDismissArea>
     );
   }
 
@@ -479,6 +483,7 @@ function WorkgroupChatInner() {
   const [tasksOpen, setTasksOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState(null);
+  useDismissKeyboard(menuOpen || tasksOpen || !!actionTarget);
   const listApiRef = useRef(null);
 
   const accentFor = useCallback(

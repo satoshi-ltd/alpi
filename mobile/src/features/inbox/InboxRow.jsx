@@ -1,5 +1,5 @@
 import { memo, useCallback, useMemo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
 import { lineHeights, mobile, radii, space } from '../../theme/tokens';
 
 import { FALLBACK_ACCENT } from '../../../../common/folds.mjs';
@@ -67,7 +67,10 @@ export const InboxRow = memo(function InboxRow({ item, onPress, onLongPress, sel
     item.ts,
   ].filter(Boolean).join(', ');
 
-  const handlePress = useCallback(() => onPress?.(item), [onPress, item]);
+  const handlePress = useCallback(() => {
+    Keyboard.dismiss();
+    onPress?.(item);
+  }, [onPress, item]);
   const handleLongPress = useCallback(() => onLongPress?.(item), [onLongPress, item]);
 
   const rowStyle = useCallback(

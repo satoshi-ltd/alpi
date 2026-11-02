@@ -9,6 +9,7 @@ const h = vi.hoisted(() => ({
   call: vi.fn(async () => ({ profiles: [] })),
   toast: vi.fn(),
   seed: vi.fn(),
+  dismiss: vi.fn(),
   canAdmin: true,
   flat: (style) => {
     const resolved = typeof style === 'function' ? style({ pressed: false }) : style;
@@ -42,7 +43,7 @@ vi.mock('react-native', () => {
       },
       children,
     );
-  return { View, Text, Pressable, StyleSheet: { create: (s) => s } };
+  return { View, Text, Pressable, Keyboard: { dismiss: h.dismiss }, StyleSheet: { create: (s) => s } };
 });
 
 vi.mock('../../theme/ThemeContext', async () => {
@@ -574,6 +575,15 @@ describe('InboxRow press contract', () => {
     const { container } = sidebarRow({ item: WORKGROUP, onPress });
     fireEvent.click(pressable(container));
     expect(onPress).toHaveBeenCalledWith(WORKGROUP);
+  });
+
+  it('closes the keyboard a search left open before it opens the row', () => {
+    h.dismiss.mockClear();
+    let dismissedFirst = null;
+    const onPress = vi.fn(() => { dismissedFirst = h.dismiss.mock.calls.length === 1; });
+    const { container } = sidebarRow({ item: WORKGROUP, onPress });
+    fireEvent.click(pressable(container));
+    expect(dismissedFirst).toBe(true);
   });
 });
 

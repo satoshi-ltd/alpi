@@ -31,7 +31,7 @@ vi.mock('react-native', () => {
     });
   const ScrollView = ({ children }) => React.createElement('div', {}, children);
   const Modal = ({ children, visible }) => (visible ? React.createElement('div', {}, children) : null);
-  return { Keyboard: { addListener: () => ({ remove: () => {} }) }, Modal, Pressable, ScrollView, StyleSheet: { create: (s) => s }, Text, TextInput, View, useWindowDimensions: () => ({ width: 390, height: 844 }) };
+  return { Keyboard: { addListener: () => ({ remove: () => {} }), dismiss: () => {} }, Modal, Pressable, ScrollView, StyleSheet: { create: (s) => s }, Text, TextInput, View, useWindowDimensions: () => ({ width: 390, height: 844 }) };
 });
 
 vi.mock('react-native-reanimated', () => ({

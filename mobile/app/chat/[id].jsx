@@ -35,6 +35,8 @@ import { profileLabel } from '../../src/lib/profileName';
 import { mergeStreamingTurn, isInterruptedTurn, isLastTurnInFlight, consumeAutoRead, routedModelFor, baselineModelFor, turnFrontier, turnLandedSince, reasoningStreams } from '../../src/features/chat/chatTurns';
 import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
 import { EmptyThread } from '../../src/features/chat/EmptyThread';
+import { KeyboardDismissArea } from '../../src/components/KeyboardDismissArea';
+import { useDismissKeyboard } from '../../src/hooks/useDismissKeyboard';
 import { JumpToLatest, JUMP_THRESHOLD } from '../../src/features/chat/JumpToLatest';
 import { LoadFailed } from '../../src/components/LoadFailed';
 import { askUserNoAnswerTag } from '../../src/features/chat/askUserAnswer';
@@ -266,19 +268,21 @@ function ChatList({ turns, pendingTurn, hydrating, profileName, model, accent, f
   );
 
   if (hydrating && full.length === 0) {
-    return <ChatSkeleton kind="profile" accent={accent} />;
+    return <KeyboardDismissArea><ChatSkeleton kind="profile" accent={accent} /></KeyboardDismissArea>;
   }
   if (full.length === 0 && loadError) {
-    return <LoadFailed label="this conversation" error={loadError} onRetry={onRetryLoad} />;
+    return <KeyboardDismissArea><LoadFailed label="this conversation" error={loadError} onRetry={onRetryLoad} /></KeyboardDismissArea>;
   }
   if (full.length === 0) {
     return (
-      <EmptyThread
-        heading="Start a new thread"
-        detail={modelLabel(model)}
-        accent={accent}
-        fold={fold}
-      />
+      <KeyboardDismissArea>
+        <EmptyThread
+          heading="Start a new thread"
+          detail={modelLabel(model)}
+          accent={accent}
+          fold={fold}
+        />
+      </KeyboardDismissArea>
     );
   }
 
@@ -498,6 +502,7 @@ function ProfileChatInner() {
   const [voiceCfg, setVoiceCfg] = useState({ voiceId: null, autoRead: false });
   const [detail, setDetail] = useState(null);
   const [modelSheetOpen, setModelSheetOpen] = useState(false);
+  useDismissKeyboard(menuOpen || sessionsOpen || modelSheetOpen || !!actionTarget);
   const loadVoiceCfg = useCallback(() => {
     if (!id) return;
     call('host.profile.detail', { profile: id })

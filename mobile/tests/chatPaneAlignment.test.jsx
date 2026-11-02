@@ -33,7 +33,9 @@ vi.mock('react-native', () => {
     ScrollView,
     TextInput,
     Platform: { OS: 'ios', select: (s) => s?.ios ?? s?.default },
-    Keyboard: { addListener: () => ({ remove: () => {} }) },
+    AppState: { addEventListener: () => ({ remove: () => {} }), currentState: 'active' },
+    Dimensions: { get: () => ({ height: 852, width: 393 }), addEventListener: () => ({ remove: () => {} }) },
+    Keyboard: { addListener: () => ({ remove: () => {} }), dismiss: () => {} },
     StyleSheet: { create: (s) => s },
   };
 });

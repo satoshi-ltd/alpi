@@ -75,7 +75,7 @@ vi.mock('react-native', () => {
     SectionList,
     RefreshControl: () => null,
     AppState: { addEventListener: () => ({ remove: () => {} }) },
-    Keyboard: { addListener: () => ({ remove: () => {} }) },
+    Keyboard: { addListener: () => ({ remove: () => {} }), dismiss: () => {} },
     StyleSheet: { create: (s) => s },
   };
 });

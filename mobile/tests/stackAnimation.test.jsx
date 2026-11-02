@@ -17,8 +17,9 @@ vi.mock('../src/lib/reduceMotion', () => ({ useReduceMotion: () => h.reduceMotio
 vi.mock('react-native', () => ({
   View: ({ children }) => React.createElement('div', {}, children),
   Platform: { OS: 'ios', select: (sel) => sel?.ios ?? sel?.default },
-  Keyboard: { addListener: () => ({ remove: () => {} }) },
+  Keyboard: { addListener: () => ({ remove: () => {} }), dismiss: () => {} },
   StyleSheet: { create: (s) => s },
+  BackHandler: { addEventListener: () => ({ remove: () => {} }) },
   useWindowDimensions: () => h.window,
 }));
 

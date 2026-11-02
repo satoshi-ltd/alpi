@@ -14,6 +14,15 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.9.5 — 2026-11-02 — the keyboard and back behave on a foldable
+
+- The composer sits on the keyboard after a fold or unfold, a sheet opening over it or a return from the background, instead of hiding under the keyboard or floating over a gap where the keyboard was.
+- Opening the chat or workgroup menu, the sessions picker, the model chip or a message's actions closes the keyboard first.
+- A tap on an empty or loading thread closes the keyboard, and so does picking a chat while the roster search is open.
+- After folding to one pane, Android's back button returns to the list (or to the screen above a nested one) instead of closing the app.
+- Why: on Android a keyboard that appears or disappears without its animation left the old height behind.
+  Requires alpi 0.17.28.
+
 ## v0.9.4 — 2026-10-27 — white inputs
 
 - Every input, the composer included, now rests on the raised surface (white in light) with a hairline edge instead of a grey well.

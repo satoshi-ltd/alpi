@@ -23,6 +23,7 @@ import { ToastProvider, useToast } from '../src/components/Toast';
 import { ApprovalSheet } from '../src/features/approval/ApprovalSheet';
 import { ClarificationSheet } from '../src/features/clarification/ClarificationSheet';
 import { useNotificationTapRouter } from '../src/features/aln/deeplink';
+import { SystemBack } from '../src/hooks/useBack';
 import { NotificationBridge } from '../src/features/aln/NotificationBridge';
 import { PaneShell } from '../src/features/shell/PaneShell';
 import { EventsProvider } from '../src/hooks/useEvents';
@@ -120,6 +121,7 @@ function Routes() {
       <AppBootstrap>
         <PaneShell>
           <NotificationBridge />
+          <SystemBack twoPane={twoPane} />
           <Stack screenOptions={screenOptions} />
           <ApprovalSheet />
           <ClarificationSheet />

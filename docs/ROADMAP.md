@@ -182,7 +182,67 @@ _None._
   list shows its warning and recovers, and pipeline state can appear while transcript loading is
   pending. Use a creator-approved run; no agent launches, installs or daemon restarts are implied.
 
+- **MOB.KEYBOARD-VERIFY** — The keyboard and back behave on a foldable
+  `verify · mobile · creator · normal`
+  note: mobile 0.9.5 shipped the keyboard height, keyboard dismissal and system back fixes.
+  accept: on an installed build on a foldable Android phone: fold and unfold with the keyboard open in a chat,
+  open a sheet from the focused composer, background and resume; the composer sits on the keyboard each time
+  and no gap remains when it closes; after folding, system back returns to the list.
+
 ## Proposed
+
+### Client review 2026-11-02
+
+- **DESK.SETTINGS-LEAVE** — Leaving Settings by any route asks before dropping an unsaved bio or briefing
+  `bug · desktop · agent · normal`
+  note: only ⌘N, Activity and Notifications check `hasDirtySettings`; ⌘, (close), "Open chat", switching
+  target in SettingsNav, ⌘1–9, the tray "Open", the menu "Settings…" and a connection switch (the detail key
+  carries the connection) drop the draft silently. The menu's `CmdOrCtrl+,` emits `nav:"settings"`, which only
+  opens, so ⌘, may never close Settings although the shortcuts sheet says it does (confirm by hand).
+  accept: one `leaveSettings()` guard serves every exit, nav events and connection switch included; a test per
+  route fails without it.
+
+- **DESK.PLATFORM-KEYS** — Shortcuts use the platform's modifier
+  `bug · desktop · agent · normal`
+  note: `useWindowChrome.js:59` treats Ctrl as ⌘ on macOS in the capture phase, so Ctrl+K/N/F/O/1–9 in the
+  composer trigger app shortcuts instead of editing text (same in `useTranscriptSearch.js:44`,
+  `ManageSessionsModal.jsx:198`); `lib/shortcuts.js` shows ⌘ on Windows and Linux, which the release builds.
+  accept: macOS matches `metaKey` only, Windows/Linux `ctrlKey`; labels say Ctrl off macOS; tests per platform.
+
+- **MOB.INK4-TEXT** — Readable text on the phone meets contrast
+  `bug · mobile · agent · normal`
+  note: 27 `<Text>` use `ink4` (1.82:1 light, 2.22:1 dark), e.g. the version in `SettingsBody.jsx:229`, empty
+  states and sheet metadata; desktop never uses `--ink-4` for text.
+  accept: those move to `ink3`; `inkContract.test.js` fails on `ink4` as a text colour.
+
+- **MOB.A11Y-TOGGLES** — Toggles and rows announce their role and state with 44pt targets
+  `bug · mobile · agent · normal`
+  note: ALP scope chips in `peers/new.jsx` and `peers/accept.jsx` (duplicated loop) are ~28pt with no role or
+  checked state; "Remove account" in `email/[aid].jsx:89` is hand-made text; several list rows lack a role.
+  accept: one shared scope toggle with checkbox role and state at ≥44pt; rows carry `button` role; tests assert
+  role, state and hit size.
+
+- **MOB.DIRTY-FORMS** — Every phone form warns before back drops what was typed
+  `bug · mobile · agent · normal`
+  note: `providers/[key]`, `mcp/new`, `email/new`, `peers/new` and `peers/accept` skip `useDirtyBack`, so a
+  pasted API key is lost on back; identity, briefing and memory already warn.
+  accept: those forms use `useDirtyBack`; a test per form fails without it.
+
+- **COMMON.RELATIVE-TIME** — Both clients write the same relative time
+  `chore · common · agent · low`
+  note: desktop floors ("5m"), mobile rounds ("5m ago") and ALN health says "5 min ago"; one event can read 2h
+  on desktop and 3h on the phone.
+  accept: one `common/time.mjs` formatter used by both clients, with shared tests.
+
+- **DESK.SIDEBAR-MENU-KEYS** — The sidebar's context actions are reachable by keyboard
+  `feature · desktop · agent · low`
+  note: pause and "New session with…" exist only on right-click; member devices get no workgroup menu.
+  accept: the menu opens from the keyboard on a focused row; test.
+
+- **MOB.BACK-FALLBACK** — Profile subscreens without history go back to profile settings
+  `bug · mobile · agent · low`
+  note: `backFallback` (`lib/panes.js:118-128`) sends identity, memory, email and other indexes to `/chat/X`.
+  accept: they fall back to `/profile/X/settings`; test.
 
 ### Found while fixing CI.CLIENTS-RED
 
