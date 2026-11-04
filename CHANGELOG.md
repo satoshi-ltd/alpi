@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.17.50 — 2026-11-04 — memory attention only for the capped files, from 95 %
+
+- A profile's "needs you" list and its memory warning now cover only USER.md and MEMORY.md, the two files with an enforced write cap, from 95 % of the cap instead of 90 %.
+- AGENT.md is no longer flagged: its 8,000-character budget is advisory, so a longer persona was reported as "over its limit" on every daemon that carried one. Its percentage stays in the TUI `/memory` panel and in the apps' Memory view.
+- A flagged file stays listed until it drops under 90 %, and crossing its cap while listed files nothing new, so a memory that hovers around the threshold or the cap files one warning per episode.
+
 ## v0.17.49 — 2026-11-02 — the agent describes the paged PDF export
 
 - The agent's own reference now says a desktop PDF export has a header and a numbered footer on every page, while the phone keeps one footer at the end, so it no longer promises the phone a footer on every page.

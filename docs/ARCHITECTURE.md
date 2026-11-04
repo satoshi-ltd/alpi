@@ -1252,16 +1252,18 @@ queries those stores, not ``host.events.history``.
     `cfg_budget` into the record callsite.
 
 `host.profile.attention` (admin) answers what needs the owner in one profile
-without opening each panel: `memory` (files at 90 % of their limit or over
-it: `file`, `used`, `limit`, `pct`, `over`), `skills` (a skill that fails
+without opening each panel: `memory` (USER.md or MEMORY.md at 95 % of its
+limit or over it, and kept listed until it drops under 90 %; AGENT.md has no
+enforced limit and is never listed: `file`, `used`, `limit`, `pct`, `over`), `skills` (a skill that fails
 lint, or is inactive because what it requires is missing: `name`, `category`,
 `problem` = `lint|missing`, `message`), `schedules` (a job whose last run
 failed and is not paused: `id`, `title`, `message`, `at`, `last_ok_at`), plus
 `counts` and `total`. `alpi/attention.py` computes it; the scheduler's tick and
 `host.profile.memory_write` reconcile it against `<home>/attention.json`, emit
 `attention.changed` when the set changes and file one `warning` output for each
-memory or skill item the first time it is flagged (again only after it was
-resolved and broke again). A failed job already files its own `error` row.
+memory or skill item the first time it is flagged, and again only after it
+was resolved (a memory file under 90 %) and broke again; a listed file that
+crosses its cap changes `over` and emits `attention.changed`, not a warning. A failed job already files its own `error` row.
 `alpi profile show` and the TUI `/status` print the same list.
 
 Adding a new verb: create the handler in the matching `host/*.py`

@@ -47,17 +47,89 @@ def test_a_healthy_profile_has_nothing_flagged(tmp_home_no_env: Path) -> None:
     assert data["counts"] == {"memory": 0, "skills": 0, "schedules": 0}
 
 
-def test_memory_is_flagged_over_the_limit_and_from_ninety_percent(tmp_home_no_env: Path) -> None:
-    _memory(tmp_home_no_env, "USER.md", mem_mod.USER_CHAR_LIMIT * 90 // 100)
+def test_memory_is_flagged_over_the_limit_and_from_ninety_five_percent(tmp_home_no_env: Path) -> None:
+    _memory(tmp_home_no_env, "USER.md", mem_mod.USER_CHAR_LIMIT * 95 // 100)
     _memory(tmp_home_no_env, "MEMORY.md", mem_mod.MEMORY_CHAR_LIMIT + 10)
-    _memory(tmp_home_no_env, "AGENT.md", mem_mod.AGENT_CHAR_LIMIT * 89 // 100)
 
     flagged = {i["file"]: i for i in attention.collect(tmp_home_no_env)["memory"]}
 
     assert set(flagged) == {"USER.md", "MEMORY.md"}
     assert flagged["MEMORY.md"]["over"] is True
     assert flagged["USER.md"]["over"] is False
-    assert flagged["USER.md"]["pct"] == 90
+    assert flagged["USER.md"]["pct"] == 95
+
+
+def test_memory_below_ninety_five_percent_is_not_flagged(tmp_home_no_env: Path) -> None:
+    _memory(tmp_home_no_env, "USER.md", mem_mod.USER_CHAR_LIMIT * 94 // 100)
+    _memory(tmp_home_no_env, "MEMORY.md", mem_mod.MEMORY_CHAR_LIMIT * 90 // 100)
+
+    assert attention.collect(tmp_home_no_env)["memory"] == []
+
+
+def test_the_persona_file_is_never_flagged_however_long(tmp_home_no_env: Path, emitted) -> None:
+    _memory(tmp_home_no_env, "AGENT.md", mem_mod.AGENT_CHAR_LIMIT * 4)
+
+    attention.reconcile(tmp_home_no_env)
+
+    assert attention.collect(tmp_home_no_env)["memory"] == []
+    assert [r for r in outputs.list_outputs(tmp_home_no_env) if r.get("type") == "warning"] == []
+
+
+@pytest.mark.parametrize("name", ["USER.md", "MEMORY.md"])
+def test_a_flagged_memory_stays_flagged_until_it_drops_under_ninety_percent(tmp_home_no_env: Path, emitted, name: str) -> None:
+    limit = {"USER.md": mem_mod.USER_CHAR_LIMIT, "MEMORY.md": mem_mod.MEMORY_CHAR_LIMIT}[name]
+    _memory(tmp_home_no_env, name, limit * 96 // 100)
+    attention.reconcile(tmp_home_no_env)
+    _memory(tmp_home_no_env, name, limit * 92 // 100)
+    attention.reconcile(tmp_home_no_env)
+
+    assert [i["file"] for i in attention.collect(tmp_home_no_env)["memory"]] == [name]
+    assert [k for k, _ in emitted].count("attention.changed") == 1
+
+    _memory(tmp_home_no_env, name, limit * 89 // 100)
+    attention.reconcile(tmp_home_no_env)
+    _memory(tmp_home_no_env, name, limit * 92 // 100)
+    attention.reconcile(tmp_home_no_env)
+
+    assert attention.collect(tmp_home_no_env)["memory"] == []
+    assert [k for k, _ in emitted].count("attention.changed") == 2
+    assert len([r for r in outputs.list_outputs(tmp_home_no_env) if r.get("type") == "warning"]) == 1
+
+
+def test_a_memory_trimmed_back_under_its_cap_stays_listed_without_a_second_warning(tmp_home_no_env: Path, emitted) -> None:
+    _memory(tmp_home_no_env, "MEMORY.md", mem_mod.MEMORY_CHAR_LIMIT + 100)
+    attention.reconcile(tmp_home_no_env)
+    _memory(tmp_home_no_env, "MEMORY.md", mem_mod.MEMORY_CHAR_LIMIT * 92 // 100)
+    attention.reconcile(tmp_home_no_env)
+
+    listed = attention.collect(tmp_home_no_env)["memory"]
+    assert [(i["file"], i["over"]) for i in listed] == [("MEMORY.md", False)]
+    warnings = [r for r in outputs.list_outputs(tmp_home_no_env) if r.get("type") == "warning"]
+    assert [w["title"] for w in warnings] == ["Memory over its limit: MEMORY.md"]
+    assert [k for k, _ in emitted].count("attention.changed") == 2
+
+
+def test_a_memory_hovering_around_its_cap_files_one_warning(tmp_home_no_env: Path, emitted) -> None:
+    for size in (96, 101, 97, 101, 97):
+        _memory(tmp_home_no_env, "MEMORY.md", mem_mod.MEMORY_CHAR_LIMIT * size // 100)
+        attention.reconcile(tmp_home_no_env)
+
+    warnings = [r["title"] for r in outputs.list_outputs(tmp_home_no_env) if r.get("type") == "warning"]
+    assert warnings == ["Memory nearly full: MEMORY.md"]
+    assert [k for k, _ in emitted].count("attention.changed") == 5
+
+
+@pytest.mark.parametrize(("legacy", "size"), [("memory:MEMORY.md:over", 101), ("memory:MEMORY.md:near", 92), ("memory:AGENT.md:over", 92)])
+def test_a_state_written_before_the_suffix_was_dropped_is_read_without_a_repeat_warning(tmp_home_no_env: Path, emitted, legacy: str, size: int) -> None:
+    (tmp_home_no_env / "attention.json").write_text(json.dumps({"keys": [legacy]}))
+    _memory(tmp_home_no_env, "MEMORY.md", mem_mod.MEMORY_CHAR_LIMIT * size // 100)
+
+    attention.reconcile(tmp_home_no_env)
+
+    assert [r for r in outputs.list_outputs(tmp_home_no_env) if r.get("type") == "warning"] == []
+    listed = [i["file"] for i in attention.collect(tmp_home_no_env)["memory"]]
+    assert listed == ([] if legacy.startswith("memory:AGENT.md") else ["MEMORY.md"])
+    assert [k for k, _ in emitted].count("attention.changed") == (1 if legacy.startswith("memory:AGENT.md") else 0)
 
 
 def test_a_skill_that_fails_lint_or_lacks_its_environment_is_flagged(tmp_home_no_env: Path) -> None:
@@ -118,7 +190,7 @@ def test_the_stored_failure_message_is_redacted(monkeypatch, tmp_home_no_env: Pa
 
 
 def test_reconcile_files_one_warning_per_new_item_and_never_repeats_it(tmp_home_no_env: Path, emitted) -> None:
-    _memory(tmp_home_no_env, "AGENT.md", mem_mod.AGENT_CHAR_LIMIT + 100)
+    _memory(tmp_home_no_env, "MEMORY.md", mem_mod.MEMORY_CHAR_LIMIT + 100)
 
     attention.reconcile(tmp_home_no_env)
     attention.reconcile(tmp_home_no_env)
@@ -126,17 +198,17 @@ def test_reconcile_files_one_warning_per_new_item_and_never_repeats_it(tmp_home_
     rows = outputs.list_outputs(tmp_home_no_env) if hasattr(outputs, "list_outputs") else []
     warnings = [r for r in rows if r.get("type") == "warning"]
     assert len(warnings) == 1
-    assert "AGENT.md" in warnings[0]["title"]
+    assert "MEMORY.md" in warnings[0]["title"]
     assert [k for k, _ in emitted].count("attention.changed") == 1
     assert emitted[-1][1]["counts"]["memory"] == 1
 
 
 def test_a_resolved_item_that_breaks_again_files_a_new_warning(tmp_home_no_env: Path, emitted) -> None:
-    _memory(tmp_home_no_env, "AGENT.md", mem_mod.AGENT_CHAR_LIMIT + 100)
+    _memory(tmp_home_no_env, "MEMORY.md", mem_mod.MEMORY_CHAR_LIMIT + 100)
     attention.reconcile(tmp_home_no_env)
-    _memory(tmp_home_no_env, "AGENT.md", 10)
+    _memory(tmp_home_no_env, "MEMORY.md", 10)
     attention.reconcile(tmp_home_no_env)
-    _memory(tmp_home_no_env, "AGENT.md", mem_mod.AGENT_CHAR_LIMIT + 100)
+    _memory(tmp_home_no_env, "MEMORY.md", mem_mod.MEMORY_CHAR_LIMIT + 100)
     attention.reconcile(tmp_home_no_env)
 
     warnings = [r for r in outputs.list_outputs(tmp_home_no_env) if r.get("type") == "warning"]
@@ -155,12 +227,12 @@ def test_a_failed_job_changes_the_event_but_adds_no_second_notification(tmp_home
 
 
 def test_the_lines_say_what_needs_you(tmp_home_no_env: Path) -> None:
-    _memory(tmp_home_no_env, "AGENT.md", mem_mod.AGENT_CHAR_LIMIT + 100)
+    _memory(tmp_home_no_env, "MEMORY.md", mem_mod.MEMORY_CHAR_LIMIT + 100)
     jobs_store.update(tmp_home_no_env, lambda _old: [_job(title="Digest", last_run_status="error", last_run_message="boom")])
 
     text = "\n".join(attention.lines(attention.collect(tmp_home_no_env)))
 
-    assert "AGENT.md over its limit" in text
+    assert "MEMORY.md over its limit" in text
     assert "Digest failed — boom" in text
 
 
@@ -172,11 +244,11 @@ def test_the_verb_and_the_event_are_closed_to_members() -> None:
 def test_the_status_rows_carry_what_needs_you(tmp_home_no_env: Path) -> None:
     from alpi.status import status_rows
 
-    _memory(tmp_home_no_env, "AGENT.md", mem_mod.AGENT_CHAR_LIMIT + 100)
+    _memory(tmp_home_no_env, "MEMORY.md", mem_mod.MEMORY_CHAR_LIMIT + 100)
 
     rows = status_rows(session_id="s", model="m", turns=0, elapsed_seconds=None, input_tokens=0, output_tokens=0, cost_usd=0.0, home=tmp_home_no_env)
 
-    assert any(label == "needs you" and "AGENT.md" in value for label, value in rows)
+    assert any(label == "needs you" and "MEMORY.md" in value for label, value in rows)
 
 
 def test_a_job_takes_a_description_that_updates_and_clears(tmp_home_no_env: Path) -> None:
@@ -229,18 +301,18 @@ def test_profile_show_prints_what_needs_you(tmp_home_no_env: Path) -> None:
 
     from alpi import home as home_mod
 
-    _memory(home_mod.home_for("default"), "AGENT.md", mem_mod.AGENT_CHAR_LIMIT + 100)
+    _memory(home_mod.home_for("default"), "MEMORY.md", mem_mod.MEMORY_CHAR_LIMIT + 100)
 
     result = CliRunner().invoke(main, ["profile", "show"])
 
-    assert "AGENT.md over its limit" in result.output
+    assert "MEMORY.md over its limit" in result.output
 
 
 @pytest.mark.asyncio
 async def test_the_verb_returns_the_collected_sections(tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from alpi.host import device_state, handlers
 
-    _memory(tmp_home_no_env, "AGENT.md", mem_mod.AGENT_CHAR_LIMIT + 100)
+    _memory(tmp_home_no_env, "MEMORY.md", mem_mod.MEMORY_CHAR_LIMIT + 100)
     monkeypatch.setattr(handlers, "_resolve_home", lambda profile: tmp_home_no_env)
     srv = host_server.Server(home=tmp_home_no_env)
     device_state.register(srv)
@@ -248,7 +320,7 @@ async def test_the_verb_returns_the_collected_sections(tmp_home_no_env: Path, mo
     resp = await srv._dispatch({"id": "a", "method": "host.profile.attention", "params": {"profile": "default"}})
 
     assert resp["result"]["counts"]["memory"] == 1
-    assert resp["result"]["memory"][0]["file"] == "AGENT.md"
+    assert resp["result"]["memory"][0]["file"] == "MEMORY.md"
     assert json.dumps(resp["result"])
 
 
@@ -256,7 +328,7 @@ def test_a_skill_that_cannot_be_read_is_flagged_and_does_not_hide_the_rest(tmp_h
     folder = tmp_home_no_env / "skills" / "software" / "garbled"
     folder.mkdir(parents=True)
     (folder / "SKILL.md").write_bytes(b"---\nname: garbled\n\xff\xfe\n---\n")
-    _memory(tmp_home_no_env, "AGENT.md", mem_mod.AGENT_CHAR_LIMIT + 100)
+    _memory(tmp_home_no_env, "MEMORY.md", mem_mod.MEMORY_CHAR_LIMIT + 100)
 
     data = attention.collect(tmp_home_no_env)
 
@@ -277,7 +349,7 @@ def test_a_skill_message_and_a_job_title_are_redacted_and_capped(tmp_home_no_env
 
 
 def test_an_unwritable_state_files_nothing_instead_of_repeating_every_tick(tmp_home_no_env: Path, monkeypatch, emitted) -> None:
-    _memory(tmp_home_no_env, "AGENT.md", mem_mod.AGENT_CHAR_LIMIT + 100)
+    _memory(tmp_home_no_env, "MEMORY.md", mem_mod.MEMORY_CHAR_LIMIT + 100)
     monkeypatch.setattr(attention, "_save_state", lambda home, keys: False)
 
     attention.reconcile(tmp_home_no_env)
@@ -331,7 +403,7 @@ def test_one_unreadable_skill_does_not_break_the_skills_listing(tmp_home_no_env:
 
 
 def test_a_warning_that_cannot_be_filed_is_logged_not_swallowed(tmp_home_no_env: Path, monkeypatch, caplog, emitted) -> None:
-    _memory(tmp_home_no_env, "AGENT.md", mem_mod.AGENT_CHAR_LIMIT + 100)
+    _memory(tmp_home_no_env, "MEMORY.md", mem_mod.MEMORY_CHAR_LIMIT + 100)
 
     def broken(*_args, **_kwargs):
         raise OSError("disk full")
@@ -345,7 +417,7 @@ def test_a_warning_that_cannot_be_filed_is_logged_not_swallowed(tmp_home_no_env:
 
 
 def test_a_warning_that_failed_to_file_is_retried_once_the_write_recovers(tmp_home_no_env: Path, monkeypatch, emitted) -> None:
-    _memory(tmp_home_no_env, "AGENT.md", mem_mod.AGENT_CHAR_LIMIT + 100)
+    _memory(tmp_home_no_env, "MEMORY.md", mem_mod.MEMORY_CHAR_LIMIT + 100)
     real_append = outputs.append
     state = {"fail": True}
 
@@ -364,7 +436,7 @@ def test_a_warning_that_failed_to_file_is_retried_once_the_write_recovers(tmp_ho
 
     warnings = [r for r in outputs.list_outputs(tmp_home_no_env) if r.get("type") == "warning"]
     assert len(warnings) == 1
-    assert "AGENT.md" in warnings[0]["title"]
+    assert "MEMORY.md" in warnings[0]["title"]
 
 
 def test_a_collapsed_warning_that_failed_to_file_retries_every_item_it_covered(tmp_home_no_env: Path, monkeypatch, emitted) -> None:
@@ -391,7 +463,7 @@ def test_a_skill_the_daemon_may_not_read_is_flagged_and_does_not_hide_the_rest(t
     from alpi.tools import skill as skill_mod
 
     _skill(tmp_home_no_env, "locked", "name: locked\ndescription: x\ncategory: software")
-    _memory(tmp_home_no_env, "AGENT.md", mem_mod.AGENT_CHAR_LIMIT + 100)
+    _memory(tmp_home_no_env, "MEMORY.md", mem_mod.MEMORY_CHAR_LIMIT + 100)
     real = skill_mod._frontmatter
 
     def deny(path):

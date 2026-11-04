@@ -9,7 +9,9 @@ from pathlib import Path
 from typing import Any
 
 log = logging.getLogger("alpi.attention")
-NEAR_PCT = 90
+NEAR_PCT = 95
+CLEAR_PCT = 90
+CAPPED_FILES = ("USER.md", "MEMORY.md")
 SECTIONS = ("memory", "skills", "schedules")
 MESSAGE_CAP = 200
 TITLE_CAP = 80
@@ -26,9 +28,13 @@ def _cap(value: Any, cap: int) -> str:
 def _memory(home: Path) -> list[dict[str, Any]]:
     from alpi.memory import MemoryStore
 
+    flagged = _load_state(home) or set()
     items = []
     for name, (used, limit) in MemoryStore(home).usage().items():
-        if limit and used * 100 >= limit * NEAR_PCT:
+        if name not in CAPPED_FILES or not limit:
+            continue
+        floor = CLEAR_PCT if f"memory:{name}" in flagged else NEAR_PCT
+        if used * 100 >= limit * floor:
             items.append({
                 "file": name, "used": used, "limit": limit,
                 "pct": round(used / limit * 100), "over": used > limit,
@@ -93,7 +99,9 @@ def collect(home: Path) -> dict[str, Any]:
 def _keys(data: dict[str, Any]) -> dict[str, bool]:
     keys: dict[str, bool] = {}
     for item in data["memory"]:
-        keys[f"memory:{item['file']}:{'over' if item['over'] else 'near'}"] = True
+        keys[f"memory:{item['file']}"] = True
+        if item["over"]:
+            keys[f"memory:{item['file']}:cap"] = False
     for item in data["skills"]:
         keys[f"skill:{item['category'] or ''}/{item['name']}:{item['problem']}"] = True
     for item in data["schedules"]:
@@ -111,7 +119,17 @@ def _load_state(home: Path) -> set[str] | None:
     except (OSError, ValueError):
         return None
     keys = raw.get("keys") if isinstance(raw, dict) else None
-    return {str(k) for k in keys} if isinstance(keys, list) else None
+    if not isinstance(keys, list):
+        return None
+    loaded = set()
+    for key in map(str, keys):
+        if key.startswith("memory:") and key.endswith(":near"):
+            key = key[:-5]
+        elif key.startswith("memory:") and key.endswith(":over"):
+            loaded.add(key[:-5])
+            key = key[:-5] + ":cap"
+        loaded.add(key)
+    return loaded
 
 
 def _save_state(home: Path, keys: set[str]) -> bool:

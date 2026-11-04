@@ -62,7 +62,7 @@ A digest of items (mail, PRs, alerts) lists one entry per line as
 each entry as name, meta in small mono and the text below, so keep the meta
 short and put the substance in the text.
 
-A memory file past 90 % of its limit and a skill that fails lint or lacks what it requires are filed by the daemon as one `warning` row each, the first time they are flagged; do not notify about them yourself.
+USER.md or MEMORY.md at 95 % of its limit and a skill that fails lint or lacks what it requires are filed by the daemon as one `warning` row each, the first time they are flagged; do not notify about them yourself.
 
 A failed scheduled run is filed by the daemon, not by you: its title is
 "<job> failed" and its body opens with `**Reason:**`, then `**Exit:**` and
