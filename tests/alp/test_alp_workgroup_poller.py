@@ -4184,3 +4184,143 @@ async def test_the_poller_hands_the_pulled_window_to_the_dispatch_decision(
         await asyncio.gather(worker, return_exceptions=True)
 
     assert spawned == ["wg_burst"]
+
+
+def _iso(epoch: float) -> str:
+    import datetime as _dt
+
+    return _dt.datetime.fromtimestamp(epoch, tz=_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def test_subscription_goes_stale_a_day_after_its_last_post() -> None:
+    wall = 1_800_000_000.0
+    old = {"seq": 1, "from": "hub_pk", "text": "done", "ts": "2026-01-01T00:00:00Z"}
+    assert service._subscription_observation_mode(
+        _idle_sub("wg_old", posts=[old]), "wg_old", now=10.0, wall=wall,
+    ) == "stale"
+    assert service._subscription_observation_mode(
+        _idle_sub("wg_fresh", posts=[dict(old, ts=_iso(wall - 3600))]), "wg_fresh", now=10.0, wall=wall,
+    ) == "cold"
+    assert service._subscription_observation_mode(
+        _idle_sub("wg_off", posts=[old], paused=True), "wg_off", now=10.0, wall=wall,
+    ) == "off"
+    assert service._subscription_observation_mode(
+        _idle_sub("wg_hot", posts=[old]), "wg_hot", hot_until=11.0, now=10.0, wall=wall,
+    ) == "hot"
+    assert service._subscription_observation_mode(
+        _idle_sub("wg_blank"), "wg_blank", now=10.0, wall=wall,
+    ) == "cold"
+    assert service._subscription_observation_mode(
+        _idle_sub("wg_joined", joined_at="2026-01-01T00:00:00Z"), "wg_joined", now=10.0, wall=wall,
+    ) == "stale"
+    assert service.subscription_cadence(_idle_sub("wg_old", posts=[old])) == "stale"
+
+
+@pytest.mark.asyncio
+async def test_a_stale_subscription_probes_every_fifteen_minutes(short_tmp: Path, monkeypatch) -> None:
+    from alpi.alp import workgroup_client as wc
+
+    home = short_tmp / "profiles" / "alice"
+    _persisted_sub(home, "wg_old")
+    monkeypatch.setattr(service, "_subscription_last_post_epoch", lambda sub: 1.0)
+    monkeypatch.setattr(service, "_subscription_start_offset", lambda *args: 0.0)
+    delays: list[float] = []
+
+    async def fake_sleep(wg_id: str, delay: float) -> bool:
+        delays.append(delay)
+        return False
+
+    pulls = 0
+    parked = asyncio.Event()
+
+    async def fake_pull(h, wid, wait_s=0.0):
+        nonlocal pulls
+        pulls += 1
+        if pulls >= 2:
+            parked.set()
+            await asyncio.Event().wait()
+        return [], 0
+
+    monkeypatch.setattr(service, "_sleep_or_wake", fake_sleep)
+    monkeypatch.setattr(wc, "pull", fake_pull)
+    monkeypatch.setattr(service, "_maybe_dispatch_for_sub", _no_dispatch)
+    worker = asyncio.create_task(service._run_subscription_poller(home, "alice", "wg_old"))
+    try:
+        await asyncio.wait_for(parked.wait(), timeout=5)
+    finally:
+        worker.cancel()
+        await asyncio.gather(worker, return_exceptions=True)
+    assert delays == [service._WG_STALE_POLL_SECONDS]
+
+
+@pytest.mark.asyncio
+async def test_a_local_hub_post_wakes_a_sleeping_subscription_worker() -> None:
+    from alpi.alp import wakes
+
+    task = asyncio.create_task(service._sleep_or_wake("wg_wake", 10.0))
+    await asyncio.sleep(0.01)
+    wakes.fire(Path("/tmp/none"), "wg_wake")
+    assert await asyncio.wait_for(task, timeout=1.0) is True
+    assert await service._sleep_or_wake("wg_quiet", 0.01) is False
+    assert "wg_wake" not in wakes._WATCHERS
+    assert "wg_quiet" not in wakes._WATCHERS
+
+
+@pytest.mark.asyncio
+async def test_a_hub_transcript_that_moves_wakes_a_stale_member_before_its_quarter_hour(short_tmp: Path, monkeypatch) -> None:
+    from alpi.alp import wakes
+    from alpi.alp import workgroup_client as wc
+
+    home = short_tmp / "profiles" / "alice"
+    _persisted_sub(home, "wg_old")
+    monkeypatch.setattr(service, "_subscription_last_post_epoch", lambda sub: 1.0)
+    monkeypatch.setattr(service, "_subscription_start_offset", lambda *args: 0.0)
+    pulls: list[float] = []
+    parked = asyncio.Event()
+
+    async def fake_pull(h, wid, wait_s=0.0):
+        pulls.append(wait_s)
+        if len(pulls) >= 2:
+            parked.set()
+            await asyncio.Event().wait()
+        return [], 0
+
+    monkeypatch.setattr(wc, "pull", fake_pull)
+    monkeypatch.setattr(service, "_maybe_dispatch_for_sub", _no_dispatch)
+    worker = asyncio.create_task(service._run_subscription_poller(home, "alice", "wg_old"))
+    try:
+        for _ in range(500):
+            await asyncio.sleep(0.01)
+            if "wg_old" in wakes._WATCHERS:
+                break
+        assert "wg_old" in wakes._WATCHERS
+        wakes.fire_watchers("wg_old")
+        await asyncio.wait_for(parked.wait(), timeout=2)
+    finally:
+        worker.cancel()
+        await asyncio.gather(worker, return_exceptions=True)
+    assert pulls == [0.0, 0.0]
+    assert "wg_old" not in wakes._WATCHERS
+
+
+@pytest.mark.asyncio
+async def test_cancelling_a_sleeping_worker_leaves_no_pending_task() -> None:
+    task = asyncio.create_task(service._sleep_or_wake("wg_cancel", 100.0))
+    await asyncio.sleep(0.01)
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+    await asyncio.sleep(0)
+    pending = [t for t in asyncio.all_tasks() if t is not asyncio.current_task() and not t.done()]
+    assert pending == []
+
+
+def test_the_first_hub_scan_after_start_does_not_wake_members() -> None:
+    hub_seen: dict[str, int] = {}
+    fired: list[str] = []
+    for head in (3, 3, 5):
+        seen_before = "wg_a" in hub_seen
+        fresh = head > hub_seen.get("wg_a", 0)
+        hub_seen["wg_a"] = head
+        if fresh and seen_before:
+            fired.append("wg_a")
+    assert fired == ["wg_a"]

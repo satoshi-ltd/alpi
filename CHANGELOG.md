@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.17.52 — 2026-11-06 — a member stops polling a workgroup that went quiet
+
+- A workgroup subscription with no post for a day is probed every 15 minutes instead of every minute, and when the hub runs on the same daemon its scan wakes the member as soon as the transcript moves (a remote hub's member waits for the next sample), so the members of a finished pipeline no longer cost the daemon a pull a minute each (on a Mac with six members and sixty old workgroups that was six pulls a second and a tenth of a core at idle).
+- `alpi workgroup list` marks such a subscription as stale.
+
 ## v0.17.51 — 2026-11-06 — a notification keeps its web links
 
 - A `[text](https://…)` link in a notification body is kept as a link instead of being flattened to its text, and `<https://…>` becomes the bare URL; a link to anything but a web address still becomes its text, and images still become their alt text. The apps from desktop 0.9.14 and mobile 0.9.9 open them in the browser.

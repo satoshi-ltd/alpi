@@ -483,7 +483,15 @@ workgroup state into every engine turn.
 pull (`wait_s`≤25 s), so live workgroups wait concurrently and fresh
 posts return immediately. Idle subscriptions use staggered nonblocking
 samples every 60 s, while paused subscriptions sample every 60 s only
-to observe a remote resume. An empty active pull is reopened at once;
+to observe a remote resume. A subscription whose last post is a day old
+is stale: it samples every 15 min, so a finished pipeline that a member
+never leaves stops costing the daemon a pull a minute. When the hub runs
+on the same daemon, its poller wakes the stale member through
+`alp/wakes.py` as soon as it sees the transcript move (within its own
+5 s to 30 s scan), whoever wrote the post; a member of a remote hub
+waits for its next sample, up to 15 min. Any fresh post returns the
+subscription to the hot and idle cadences, and `alpi workgroup list`
+marks it. An empty active pull is reopened at once;
 transport failures back off exponentially (30 s to 15 min). Local hub
 workgroups use a 5 s transcript-stat probe whose decrypted result is
 cached, so an idle fleet performs no model work and little file I/O

@@ -4390,11 +4390,15 @@ def workgroup_list(ctx: click.Context) -> None:
                 f"{paused}{queue_note}{f'  — {progress}' if progress else ''}"
             )
     if sub:
+        from alpi.service import _WG_STALE_POLL_SECONDS, subscription_cadence
+
         click.echo("member of:")
         for s in sub:
+            cadence = subscription_cadence(s)
+            note = f"  [stale · probed every {int(_WG_STALE_POLL_SECONDS // 60)} min]" if cadence == "stale" else ("  [paused]" if cadence == "off" else "")
             click.echo(
                 f"  {s.wg_id}  {s.name}  via @{s.hub_id}  (seq {s.last_seq})"
-                f"{_pipelines_summary(s.pipelines, s.launch_pipeline)}"
+                f"{_pipelines_summary(s.pipelines, s.launch_pipeline)}{note}"
             )
 
 

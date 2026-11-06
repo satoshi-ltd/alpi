@@ -640,6 +640,9 @@ _WG_HOT_TICK_SECONDS = 5.0
 _WG_LONG_POLL_SECONDS = 25.0
 _WG_IDLE_POLL_SECONDS = 60.0
 _WG_PAUSED_POLL_SECONDS = 60.0
+# A subscription with no post for a day probes rarely; the hub scan on the same daemon wakes it when its transcript moves (alp/wakes.py).
+_WG_STALE_AFTER_SECONDS = 86_400.0
+_WG_STALE_POLL_SECONDS = 900.0
 _HOT_DISPATCH_COOLDOWN_SECONDS = 10
 # A hub answering an empty long poll faster than this ignores wait_s (pre-long-poll build), so the poller must pace itself instead of spinning.
 _WG_FAST_HUB_SECONDS = 1.0
@@ -746,8 +749,27 @@ def _sub_stays_hot(new_posts: list, sub) -> bool:
     return _hub_stays_hot(bool(new_posts), _sub_as_hub(sub), recent)
 
 
+def _subscription_last_post_epoch(sub) -> float:
+    from datetime import datetime, timezone
+
+    stamps = [str(p.get("ts") or "") for p in (getattr(sub, "recent_posts", None) or []) if isinstance(p, dict)]
+    stamps += [str(getattr(sub, "last_dispatch_at", "") or ""), str(getattr(sub, "joined_at", "") or "")]
+    best = 0.0
+    for stamp in stamps:
+        if not stamp:
+            continue
+        try:
+            parsed = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        best = max(best, parsed.timestamp())
+    return best
+
+
 def _subscription_observation_mode(
-    sub, wg_id: str, hot_until: float = 0.0, now: float | None = None,
+    sub, wg_id: str, hot_until: float = 0.0, now: float | None = None, wall: float | None = None,
 ) -> str:
     if getattr(sub, "paused", False):
         return "off"
@@ -758,7 +780,34 @@ def _subscription_observation_mode(
         or _sub_stays_hot([], sub)
     ):
         return "hot"
+    last = _subscription_last_post_epoch(sub)
+    clock = time.time() if wall is None else wall
+    if last and clock - last >= _WG_STALE_AFTER_SECONDS:
+        return "stale"
     return "cold"
+
+
+def subscription_cadence(sub) -> str:
+    return _subscription_observation_mode(sub, str(getattr(sub, "wg_id", "")))
+
+
+async def _sleep_or_wake(wg_id: str, delay: float) -> bool:
+    from alpi.alp import wakes
+
+    loop = asyncio.get_running_loop()
+    event = asyncio.Event()
+    wakes.watch(wg_id, loop, event)
+    waiter = asyncio.ensure_future(event.wait())
+    sleeper = asyncio.ensure_future(asyncio.sleep(delay))
+    try:
+        done, _pending = await asyncio.wait({waiter, sleeper}, return_when=asyncio.FIRST_COMPLETED)
+        return waiter in done
+    finally:
+        wakes.unwatch(wg_id, loop, event)
+        for task in (waiter, sleeper):
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(waiter, sleeper, return_exceptions=True)
 
 
 def _subscription_start_offset(profile: str, wg_id: str, interval: float) -> float:
@@ -905,6 +954,7 @@ async def _run_subscription_poller(home: Path, profile: str, wg_id: str) -> None
         interval = {
             "cold": _WG_IDLE_POLL_SECONDS,
             "off": _WG_PAUSED_POLL_SECONDS,
+            "stale": _WG_STALE_POLL_SECONDS,
         }.get(mode, 0.0)
         if interval:
             delay = (
@@ -912,7 +962,7 @@ async def _run_subscription_poller(home: Path, profile: str, wg_id: str) -> None
                 if first_poll else interval
             )
             if delay:
-                await asyncio.sleep(delay)
+                await _sleep_or_wake(wg_id, delay)
             sub = await _sub_io(sub_mod.get, home, wg_id)
             if sub is None:
                 return
@@ -1072,10 +1122,13 @@ async def _run_workgroup_poller(home: Path, profile: str) -> None:
                         hot_hubs.discard(wid)
                         continue
                     head = int(recent[-1].get("seq", 0))
+                    seen_before = wid in hub_seen
                     fresh = head > hub_seen.get(wid, 0)
                     hub_seen[wid] = head
                     if fresh:
                         hot_until[wid] = now + _WG_HOT_WINDOW_SECONDS
+                        if seen_before:
+                            wakes.fire_watchers(wid)
                     hot = (
                         _wg_is_hot(wid, hot_until, now)
                         or _hub_stays_hot(fresh, wg, recent)

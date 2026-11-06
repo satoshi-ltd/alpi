@@ -351,3 +351,16 @@ def test_list_prints_the_note_of_a_queued_workgroup(short_tmp: Path, monkeypatch
     out = _run(monkeypatch, home, ["workgroup", "list"]).output
 
     assert "[queued media-update #1]  — setup done · media-update next" in out
+
+
+def test_list_marks_a_member_subscription_with_no_post_for_a_day_as_stale(short_tmp: Path, monkeypatch) -> None:
+    from alpi.alp import subscription as sub_mod
+
+    home = short_tmp / "profiles" / "alice"
+    sub_mod.upsert(home, sub_mod.Subscription(
+        wg_id="wg_old", name="old", hub_id="hub", hub_pubkey="hub_pk",
+        sealed_keys=[sub_mod.SealedKey(version=1, sealed="s")], joined_at="2026-01-01T00:00:00Z",
+    ))
+    out = _run(monkeypatch, home, ["workgroup", "list"]).output
+    assert "wg_old  old  via @hub" in out
+    assert "[stale · probed every 15 min]" in out

@@ -629,8 +629,11 @@ readable. These are internal capabilities, not configurable services:
   `link.ask`, `link.cancel`, `link.put_blob` / `link.get_blob`
   **and** every `workgroup.*` verb.
 - **workgroups** — the **poller** (outbound). Holds `workgroup.pull` open
-  for active subscriptions and uses staggered nonblocking probes for idle
-  or paused mirrors, decrypts new posts, and dispatches an autonomous
+  for active subscriptions, uses staggered nonblocking probes for idle
+  or paused mirrors and 15-minute probes for subscriptions with no post
+  in a day (the hub poller on the same daemon wakes them through
+  `alp/wakes.py` when it sees the transcript move; a remote hub's members
+  wait for the next sample), decrypts new posts, and dispatches an autonomous
   agent turn when a post mentions this profile or opens a `#task`.
   Sibling preempt watcher ticks ~6× faster to abort in-flight
   responses when a new `#task` lands. Independent from `alp`
