@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { palettes } from '../theme/tokens';
+import { alpha, palettes } from '../theme/tokens';
+import { wellStates } from '../../../common/well.mjs';
 import { wellStyle } from './well';
 
 describe('a field is a well', () => {
@@ -17,13 +18,14 @@ describe('a field is a well', () => {
     expect(Object.keys(focused).some((key) => key.startsWith('borderBottom'))).toBe(false);
   });
 
-  it.each(['light', 'dark'])('turns grey with no edge only when disabled in %s', (mode) => {
+  it.each(['light', 'dark'])('turns grey with no edge and fades by the shared alpha when disabled in %s, as desktop does', (mode) => {
     const colors = palettes[mode];
-    expect(wellStyle(colors, { disabled: true, focused: true })).toMatchObject({ backgroundColor: colors.field, borderColor: 'transparent', borderWidth: 1 });
+    expect(wellStyle(colors, { disabled: true, focused: true, error: true })).toEqual({ backgroundColor: colors.field, borderRadius: 4, borderWidth: 1, borderColor: 'transparent', opacity: alpha.disabled });
   });
 
-  it('rings an invalid field in the danger text colour', () => {
-    expect(wellStyle(palettes.light, { error: true }).borderColor).toBe(palettes.light.dangerText);
+  it.each(['light', 'dark'])('rings an invalid field in the danger fill in %s, as desktop does', (mode) => {
+    expect(wellStyle(palettes[mode], { error: true }).borderColor).toBe(palettes[mode][wellStates.error.ring]);
+    expect(wellStates.error.ring).toBe('danger');
   });
 });
 

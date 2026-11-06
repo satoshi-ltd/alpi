@@ -13,7 +13,7 @@ vi.mock('react-native', () => {
 vi.mock('./Eyebrow', () => ({ Eyebrow: ({ children }) => React.createElement('label', null, children) }));
 vi.mock('../theme/ThemeContext', () => ({
   useTheme: () => ({
-    colors: { field: '#eee', bgPane: '#fff', bgElev: '#fefefe', edge: '#8c8c8c', line2: '#ddd', ink: '#000', ink2: '#222', ink3: '#666', dangerText: '#b73737' },
+    colors: { field: '#eee', bgPane: '#fff', bgElev: '#fefefe', edge: '#8c8c8c', line2: '#ddd', ink: '#000', ink2: '#222', ink3: '#666', danger: '#c14545', dangerText: '#b73737' },
     fonts: { mono: 'mono', sans: { regular: 'sans' } },
     fontSizes: { xs: 11, sm: 12, lg: 16 },
     mobile: { inputH: 44 },
@@ -23,12 +23,12 @@ vi.mock('../theme/ThemeContext', () => ({
 import { Field } from './Field';
 
 describe('Field', () => {
-  it('greys a read-only field with no edge and keeps an editable one on the raised surface', () => {
+  it('greys a read-only field with no edge and fades it by the shared alpha', () => {
     const well = (container) => JSON.parse([...container.querySelectorAll('[data-style]')].find((n) => n.getAttribute('data-style').includes('borderColor')).getAttribute('data-style'));
     const { container, rerender } = render(<Field value="a" onChangeText={() => {}} />);
     expect(well(container)).toMatchObject({ backgroundColor: '#fefefe', borderColor: '#ddd' });
     rerender(<Field value="a" onChangeText={() => {}} editable={false} />);
-    expect(well(container)).toMatchObject({ backgroundColor: '#eee', borderColor: 'transparent' });
+    expect(well(container)).toMatchObject({ backgroundColor: '#eee', borderColor: 'transparent', opacity: 0.45 });
   });
 
   it('shows the error in place of the helper and tints the border', () => {
@@ -36,7 +36,7 @@ describe('Field', () => {
     expect(screen.getByRole('alert').textContent).toBe('Enter a number, or leave it empty');
     expect(screen.queryByText('a number')).toBeNull();
     const box = [...container.querySelectorAll('[data-style]')].find((n) => n.getAttribute('data-style').includes('borderColor'));
-    expect(JSON.parse(box.getAttribute('data-style')).borderColor).toBe('#b73737');
+    expect(JSON.parse(box.getAttribute('data-style')).borderColor).toBe('#c14545');
   });
 
   it('draws the error and the helper at 12 pt in the regular sans face', () => {

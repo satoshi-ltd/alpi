@@ -43,7 +43,7 @@ def button(label, variant="ghost", size="md", icon=None, icon_only=False):
                 f'background: {bg}; cursor: pointer; flex-shrink: 0">{ic(icon, 14 if size == "sm" else 16, fg)}</button>')
     i = ic(icon, 14, fg) if icon else ""
     return (f'<button style="display: inline-flex; align-items: center; gap: 8px; height: {h}px; padding: 0 {padx}px; border: 0; border-radius: 4px; '
-            f'background: {bg}; color: {fg}; font-family: Geist, sans-serif; font-weight: 500; font-size: {fs}px; line-height: 1; cursor: pointer; white-space: nowrap">{i}{label}</button>')
+            f'background: {bg}; color: {fg}; font-family: Geist, sans-serif; font-weight: {600 if variant in ("primary", "secondary", "danger") else 500}; font-size: {fs}px; line-height: 1; cursor: pointer; white-space: nowrap">{i}{label}</button>')
 
 
 MODIFIERS = "⌘⇧⌥⌃"

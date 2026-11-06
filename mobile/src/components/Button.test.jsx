@@ -1,4 +1,5 @@
-import { buttonHeights, buttonVariants } from '../../../common/button.mjs';
+import { buttonHeights, buttonLabelWeight, buttonPressed, buttonStates, buttonVariants } from '../../../common/button.mjs';
+import { alpha } from '../../../common/tokens.mjs';
 import { mixHex } from '../../../common/color.mjs';
 import { buttonStateCases } from '../../../common/button.fixtures.mjs';
 import React from 'react';
@@ -15,7 +16,7 @@ vi.mock('react-native', () => ({
 }));
 vi.mock('./Spinner', () => ({ Spinner: ({ color, size }) => <span data-testid="spinner" data-color={color} data-size={size ?? ''} /> }));
 vi.mock('../theme/ThemeContext', () => ({ useTheme: () => ({
-  colors: { ink: '#111', ink2: '#333', ink4: '#aaa', bgPane: '#fff', field: '#eee', danger: '#c14545', dangerText: '#b73737', onDanger: '#ffffff', hover: '#ddd', selected: '#ccc', line2: '#bbb' },
+  colors: { ink: '#111', ink2: '#333', ink4: '#aaa', bgPane: '#fff', field: '#eee', danger: '#c14545', dangerText: '#b73737', onDanger: '#ffffff', hover: '#ddd', selected: '#ccc', line: '#ddd', line2: '#bbb' },
   fonts: { sans: { medium: 'medium', semibold: 'semibold' } }, fontSizes: { sm: 12, md: 14, lg: 15, xl: 18 },
 }) }));
 import { Button } from './Button';
@@ -70,13 +71,40 @@ describe('Button shared contract', () => {
     expect(Button.touchHeight('bogus')).toBe(buttonHeights.lg.mobile);
   });
 
-  it('retains label layout while loading so the button does not shrink', () => {
+  it('keeps its label visible beside the spinner while loading, as on desktop', () => {
     const { rerender } = render(<Button title="Save connection" fullWidth />);
     const before = screen.getByRole('button').dataset.style;
     rerender(<Button title="Save connection" fullWidth loading />);
     expect(screen.getByRole('button').dataset.style).toBe(before);
-    expect(JSON.parse(screen.getByText('Save connection').dataset.labelStyle).opacity).toBe(0);
+    expect(JSON.parse(screen.getByText('Save connection').dataset.labelStyle).opacity).toBeUndefined();
     expect(screen.getByTestId('spinner')).toBeTruthy();
+  });
+
+  it.each(buttonVariants)('presses the %s variant with the shared mix', (variant) => {
+    const palette = { ink: '#111', danger: '#c14545', bgPane: '#fff', line: '#ddd' };
+    const recipe = buttonPressed[variant];
+    const expected = recipe.token ? palette[recipe.token] : mixHex(palette[recipe.from], recipe.amount, recipe.toward === 'black' ? '#000000' : palette.bgPane);
+    render(<Button title="Go" variant={variant} />);
+    expect(JSON.parse(screen.getByRole('button').dataset.pressedStyle).backgroundColor).toBe(expected);
+  });
+
+  it.each([[false], [true]])('does not fade a loading button (disabled=%s), as desktop does', (disabled) => {
+    render(<Button title="Go" loading disabled={disabled} />);
+    expect(JSON.parse(screen.getByRole('button').dataset.style).opacity).toBeUndefined();
+    expect(buttonStates.loadingFades).toBe(false);
+  });
+
+  it('fades a disabled button by the shared alpha and keeps its colours', () => {
+    render(<Button title="Go" variant="primary" disabled />);
+    const style = JSON.parse(screen.getByRole('button').dataset.style);
+    expect(style.opacity).toBe(alpha.disabled);
+    expect(style.backgroundColor).toBe('#111');
+    expect(JSON.parse(screen.getByText('Go').dataset.labelStyle).color).toBe('#fff');
+  });
+
+  it.each(buttonVariants)('labels the %s variant with the shared weight', (variant) => {
+    render(<Button title="Go" variant={variant} />);
+    expect(JSON.parse(screen.getByText('Go').dataset.labelStyle).fontFamily).toBe(buttonLabelWeight[variant]);
   });
 
   it('waits with the shared ink arc in the label colour at its own size', () => {
@@ -118,7 +146,7 @@ describe('Button as a paper sheet', () => {
 
   it('darkens a pressed danger or custom-accent button instead of lightening it', () => {
     render(<Button title="Go" variant="danger" />);
-    expect(JSON.parse(screen.getByRole('button').dataset.pressedStyle).backgroundColor).toBe(mixHex('#c14545', 0.82, '#000000'));
+    expect(JSON.parse(screen.getByRole('button').dataset.pressedStyle).backgroundColor).toBe(mixHex('#c14545', buttonPressed.danger.amount, '#000000'));
     cleanup();
     render(<Button title="Go" accent="#f0b447" />);
     expect(JSON.parse(screen.getByRole('button').dataset.pressedStyle).backgroundColor).toBe(mixHex('#f0b447', 0.82, '#000000'));

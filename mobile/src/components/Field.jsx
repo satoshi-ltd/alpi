@@ -4,6 +4,7 @@ import { radii, space, lineHeights } from '../theme/tokens';
 import { Eyebrow } from './Eyebrow';
 import { useTheme } from '../theme/ThemeContext';
 import { useWell } from './well';
+import { wellStates } from '../../../common/well.mjs';
 
 export function FieldLabel({ children }) {
   return <Eyebrow>{children}</Eyebrow>;
@@ -60,18 +61,18 @@ export function Field({
             fontFamily: mono ? fonts.mono : fonts.sans.regular,
             fontSize: mono ? fontSizes.sm : fontSizes.lg,
             lineHeight: (mono ? fontSizes.sm : fontSizes.lg) * lineHeights.normal,
-            color: editable ? colors.ink : colors.ink2,
+            color: colors.ink,
             textAlignVertical: multiline ? 'top' : 'center',
           }}
         />
         {rightSlot}
       </View>
       {error ? (
-        <Text accessibilityRole="alert" style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.dangerText }}>
+        <Text accessibilityRole="alert" style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors[wellStates.note.error] }}>
           {error}
         </Text>
       ) : helper ? (
-        <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}>
+        <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors[wellStates.note.helper] }}>
           {helper}
         </Text>
       ) : null}

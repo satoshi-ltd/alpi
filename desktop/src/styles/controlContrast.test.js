@@ -37,6 +37,6 @@ describe("control boundaries", () => {
   it("rings an invalid field in danger, focused or not", () => {
     const css = read("styles/design-system.css");
     expect(css).toMatch(/\.ds-field\[aria-invalid="true"\][^{]*\{\s*box-shadow:\s*inset 0 0 0 1px var\(--c-danger\);/);
-    expect(css).toMatch(/\.ds-field\[aria-invalid="true"\]:focus/);
+    expect(css).toMatch(/\.ds-field\[aria-invalid="true"\]:not\(:disabled\):focus/);
   });
 });

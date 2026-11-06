@@ -359,10 +359,9 @@ def m_button(title, variant="secondary", size="sm", accent=None, disabled=False)
         bg, fg, fw = "transparent", DANGER, 500
     else:
         bg, fg, fw = "rgba(20,20,20,0.06)", "#141414", 600
-    if disabled:
-        bg, fg = ("transparent" if variant in ("ghost", "danger-ghost") else FIELD), "#b4b4b4"
+    fade = "opacity: 0.45; " if disabled else ""
     return (
-        f'<button style="min-height: {h}px; padding: 6px {padx}px; border: 0; border-radius: 4px; background: {bg}; '
+        f'<button style="{fade}min-height: {h}px; padding: 6px {padx}px; border: 0; border-radius: 4px; background: {bg}; '
         f'color: {fg}; font-family: Geist, sans-serif; font-weight: {fw}; font-size: {fs}px; cursor: pointer">{title}</button>'
     )
 

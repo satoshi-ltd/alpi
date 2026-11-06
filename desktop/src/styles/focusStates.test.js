@@ -73,7 +73,7 @@ describe("state matrix", () => {
     const css = read("primitives/Button.module.css");
     expect(css).toMatch(/\.ghost:not\(:disabled\):hover/);
     expect(css).toMatch(/\.ghost:not\(:disabled\):active/);
-    expect(find(css, ".button:disabled")).toMatch(/opacity:\s*var\(--alpha-disabled\)/);
+    expect(find(css, ".button:disabled:not(.loading)")).toMatch(/opacity:\s*var\(--alpha-disabled\)/);
   });
 
   it.each([".ds-iconbtn", ".ds-alink", ".ds-sb-row"])("gives %s an :active fill", (selector) => {

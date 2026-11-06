@@ -14,6 +14,13 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.9.10 — 2026-11-06 — buttons and fields look and behave the same on both apps
+
+- A pressed button changes by the same mix as on desktop, and a disabled one fades to 45 % keeping its colours instead of turning grey.
+- A button that is working shows its label beside the spinner, as on desktop.
+- A field in error is ringed in the danger red, as on desktop.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.9.9 — 2026-11-06 — links in a notification open in the browser
 
 - A markdown link or a bare URL in a notification body is a link that opens in the browser; a URL inside code stays code. Needs alpi ≥ 0.17.51 for markdown links (older daemons keep only the bare URL).

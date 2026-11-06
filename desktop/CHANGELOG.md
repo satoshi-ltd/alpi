@@ -11,6 +11,13 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.9.15 — 2026-11-06 — buttons and fields look and behave the same on both apps
+
+- Filled buttons (primary, secondary, danger) now use the semibold label, as on the phone, and a danger-ghost button gives press feedback.
+- A button that is working keeps its label at full strength beside the spinner instead of fading.
+- A field can show a helper or an error line under it, linked to the field for screen readers (ready for the forms that need it).
+- Needs alpi ≥ 0.17.0.
+
 ## v0.9.14 — 2026-11-06 — links in a notification open in the browser
 
 - A markdown link or a bare URL in a notification body is a link that opens in the system browser; a job that reports listings, tickets or documents can hand you something to open. A URL inside code stays code.

@@ -2016,8 +2016,13 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   `#202020`). Every input, the composer included, is one well: it rests on `bgElev`
   with a 1 px `line2` edge (`--well`, `--well-edge`; mobile `wellStyle`), focus keeps
   the fill and darkens only the edge to `edge`, at 3:1 (`--well-ring`), an invalid one rings
-  in danger, and grey `field` with no edge means disabled or read-only
-  (`--well-off`); a composer that is only sending stays on the raised surface. Scales: spacing 4/8/12/16/24/32 (`spaceScale`, `--sp-*`), control
+  in the danger fill, and a disabled or read-only one turns the grey `field` with no edge
+  (`--well-off`) and fades to `alpha.disabled`, except the paused composer, which only dims its
+  controls, and a disabled field shows no error ring; `common/well.mjs` names these states for
+  mobile, and desktop's CSS carries the same values. A desktop `Field` carries an optional helper or error line linked by `aria-describedby`.
+  Buttons follow `common/button.mjs`: filled variants semibold and ghost ones medium
+  (`buttonLabelWeight`), one pressed mix per variant (`buttonPressed`), disabled by
+  `alpha.disabled`, and a loading button keeps its label beside the spinner and does not fade. Scales: spacing 4/8/12/16/24/32 (`spaceScale`, `--sp-*`), control
   heights 24/28/32/40 (`controlHeight`, `--ctl-*`), type 11/13/15/18/22/28 at
   weights 400/500/600 (`typeLadder`, `fontWeights`), dots 6/8 (`dotScale`; every desktop status dot is `--dot-md`, 8 px, centred in a 16 px lane, so it lands on whole pixels); the
   legacy `--space-1` to `--space-11`, `--ctrl-*` (but the 18 px chip and 48 px hero button heights), `--fs-*` and `--shadow-edge` are gone; the 1, 2 and 3 px micro spaces stay. There is

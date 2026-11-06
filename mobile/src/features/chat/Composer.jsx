@@ -15,6 +15,7 @@ import { canComposerSend } from './composerSend';
 import { MentionPopover } from './MentionPopover';
 import { validateTaskShape } from './parseMarkers';
 import { wellStyle } from '../../components/well';
+import { wellStates } from '../../../../common/well.mjs';
 
 const HAIRLINE = 0.5;
 const CTRL_H = 36;
@@ -192,7 +193,8 @@ export function Composer({
       >
         <View
           style={{
-            ...wellStyle(colors, { focused, disabled }),
+            ...wellStyle(colors, { focused: focused && !disabled }),
+            ...(disabled ? { backgroundColor: colors[wellStates.disabled.surface], borderColor: wellStates.disabled.edge } : {}),
             paddingTop: space.s6,
             paddingHorizontal: space.s7,
             paddingBottom: space.s4,
