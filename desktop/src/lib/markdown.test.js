@@ -41,6 +41,18 @@ describe("renderMarkdown code blocks", () => {
   });
 });
 
+describe("renderMarkdown links", () => {
+  it("keeps a web link as an anchor and drops a script href", async () => {
+    const { renderMarkdown } = await import("./markdown.js");
+    expect(renderMarkdown("see [the ad](https://example.com/a?b=1)")).toContain('<a href="https://example.com/a?b=1">the ad</a>');
+    expect(renderMarkdown("[x](javascript:alert(1))")).not.toContain("javascript:");
+    for (const href of ["/settings", "settings", "//evil.com/x", "tel:+34600", "sms:+34600", "tauri://localhost/x"]) {
+      expect(renderMarkdown(`[x](${href})`)).not.toContain("href=");
+    }
+    expect(renderMarkdown("[m](mailto:a@b.c)")).toContain('href="mailto:a@b.c"');
+  });
+});
+
 describe("renderMarkdown sanitization", () => {
   it("strips scripts and event handlers", () => {
     const html = renderMarkdown("<script>alert(1)</script>\n\n<img src=x onerror=alert(1)>");

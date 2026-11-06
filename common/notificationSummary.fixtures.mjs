@@ -10,6 +10,7 @@ export const SUMMARY_CASES = [
   ["Volume held at 1,743 chats, nine percent under yesterday and the lowest day in eight. The complaint alert is a base effect of the small sample. Bookings converted at 1.2 percent, half of last week, so checkout needs a look today.", "Volume held at 1,743 chats, nine percent under yesterday and the lowest day in eight. The complaint alert is a base effect of the small sample."],
   ["A single very long sentence without any full stop that keeps going across the whole width of the notification because the agent never paused to breathe or to split its thought into two parts at all, ever, really", "A single very long sentence without any full stop that keeps going across the whole width of the notification because the agent never paused to breathe or to split its thought into two parts at all…"],
   ["🔴 Checkout down 2%\n🚀 Deploy ok", "🔴 Checkout down 2%"],
+  ["See <https://x.io/y> now and [the ad](https://x.io/z).", "See https://x.io/y now and the ad."],
   ["Here is the list:", "Here is the list…"],
   ["See [the PR](https://x.example) and `npm test`.", "See the PR and npm test."],
   ["| a | b |\n| --- | --- |\n| 1 | 2 |\n\nAll good.", "All good."],

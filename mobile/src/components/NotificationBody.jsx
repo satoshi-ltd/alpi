@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Linking, Pressable, ScrollView, Text, View } from 'react-native';
 
 import { Chart } from './Chart';
 import { Eyebrow } from './Eyebrow';
@@ -94,6 +94,18 @@ function Inline({ text, theme }) {
           {' '}
           {seg.v}
           {' '}
+        </Text>
+      );
+    }
+    if (seg.t === 'link') {
+      return (
+        <Text
+          key={i}
+          accessibilityRole="link"
+          onPress={() => Linking.openURL(seg.href).catch(() => {})}
+          style={{ color: theme.colors.ink, textDecorationLine: 'underline' }}
+        >
+          {seg.v}
         </Text>
       );
     }

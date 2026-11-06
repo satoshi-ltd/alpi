@@ -44,6 +44,7 @@ becomes a poor summary: pass `summary` instead. Banners and pushes for
 | Subheading | `**Label:** rest…` / `**Label**` / `### Sub` | scannable subsection head (≤32 chars, ≤5 words); a longer bold or `###` line renders as a bold paragraph |
 | Paragraph | plain text | the body |
 | Emphasis | `**bold**`, `*italic*`, `` `code` `` | inline only |
+| Link | `[text](https://…)` or a bare `https://…` | something the owner opens: a listing, a ticket, a document; the apps open it in the browser. Put a bare URL on its own line and never inside bold, where it stays text |
 | List | `- item` / `1. item` | bullets / ranked points |
 | Quote | `> text` | a quoted line |
 | Table | `\| a \| b \|` + `\| --- \|` | small comparison (channel × metric); scrolls if wide |
@@ -121,7 +122,7 @@ notification, or the job's page on an older daemon.
 
 - `####+` deep headings → capped at two levels (heading + subheading)
 - images → stripped (alt text kept); describe in prose
-- `[text](url)` → just the text (deep-links ride the notification header)
+- `[text](url)` with a non-web target (a path, a `tauri://` or `mailto:` link) → just the text; `<https://…>` → the bare URL
 - `---`, raw HTML → removed / stripped
 - nested lists → flattened to one level
 - every emoji except 🔴🟡🟢 → stripped

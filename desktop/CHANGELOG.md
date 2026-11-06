@@ -11,6 +11,11 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.9.14 — 2026-11-06 — links in a notification open in the browser
+
+- A markdown link or a bare URL in a notification body is a link that opens in the system browser; a job that reports listings, tickets or documents can hand you something to open. A URL inside code stays code.
+- Every external link in the app, chat replies included, opens in the system browser instead of navigating the window. Needs alpi ≥ 0.17.51 for markdown links in notifications (older daemons keep only the bare URL).
+
 ## v0.9.13 — 2026-11-02 — an exported PDF has a header and a page number on every page
 
 - Every page of an exported PDF opens with a header (the alpi mark, the profile, the server and the title) and closes with a footer (the profile, the date and page n / m); they replace the meta line above the title and the single footer at the end.

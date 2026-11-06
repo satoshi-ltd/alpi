@@ -1,6 +1,6 @@
 # alpi roadmap
 
-Updated 2026-11-02. Current versions live in the changelogs. The Queue runs top to bottom; the creator
+Updated 2026-11-06. Current versions live in the changelogs. The Queue runs top to bottom; the creator
 approves the next tasks from Proposed.
 
 This is the task pool. [ARCHITECTURE.md](ARCHITECTURE.md) owns current state and
@@ -192,6 +192,14 @@ _None._
   profile, server, title) and the footer (profile, date, n / m), the total matches the page count, no paragraph line, chart, table row or code line is cut or clipped,
   split table pieces keep their column widths, and no blank page appears. Repeat once on Windows (WebView2) and
   Linux (WebKitGTK).
+
+- **MOB.LINK-VERIFY** — A link inside a selectable paragraph opens on iOS and Android
+  `verify · mobile · creator · normal`
+  note: mobile 0.9.9 renders a notification link as a pressable `Text` nested in a `selectable` one; Android has a
+  history of the parent swallowing the child's tap, and jsdom cannot prove it.
+  accept: on an installed build on iOS and on Android, open a notification whose body has a bare URL and a markdown
+  link inside a paragraph: a tap opens the browser, a long-press still selects text, the link stays readable at the
+  largest text size and with reduce motion on.
 
 - **MOB.KEYBOARD-VERIFY** — The keyboard and back behave on a foldable
   `verify · mobile · creator · normal`

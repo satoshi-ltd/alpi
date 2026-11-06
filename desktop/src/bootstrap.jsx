@@ -9,11 +9,13 @@ import ErrorBoundary from "./primitives/ErrorBoundary.jsx";
 import { NotificationProvider } from "./primitives/Notification.jsx";
 import { applyStored as applyStoredTheme } from "./lib/theme.js";
 import { installZoomShortcuts } from "./lib/zoom.js";
+import { installExternalLinkGuard } from "./lib/openExternal.js";
 import { readCrash } from "./lib/crashLog.js";
 
 export function bootstrap() {
   applyStoredTheme();
   installZoomShortcuts();
+  installExternalLinkGuard();
 
   const root = document.getElementById("root");
   if (!root) throw new Error("Missing desktop root element");

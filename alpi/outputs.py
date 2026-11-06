@@ -67,12 +67,18 @@ _HEADING_RE = re.compile(r"^\s*(#{1,6})\s+(.*?)\s*$")
 _HR_RE = re.compile(r"^\s*([-*_])\1{2,}\s*$")
 _QUOTE_RE = re.compile(r"^\s*>\s?(.*)$")
 _LIST_RE = re.compile(r"^\s*([-*•]|[0-9]+[.)])\s+(.*)$")
-_LINK_RE = re.compile(r"!?\[([^\]]*)\]\([^)]*\)")
+_IMAGE_RE = re.compile(r"!\[([^\]]*)\]\([^)]*\)")
+_WEB_LINK_RE = re.compile(r"\[([^\]]*)\]\((https?://[^)\s]+)(?:\s+(?:\"[^\"]*\"|'[^']*'))?\s*\)")
+_LINK_RE = re.compile(r"\[([^\]]*)\]\((?!https?://)[^)]*\)")
+_AUTOLINK_RE = re.compile(r"<(https?://[^>\s]+)>")
 _HTML_RE = re.compile(r"</?[A-Za-z][^>]*>")
 
 
-def _normalize_inline(s: str) -> str:
+def _normalize_inline(s: str, keep_links: bool = False) -> str:
+    s = _AUTOLINK_RE.sub(lambda m: m.group(1), s)
     s = _HTML_RE.sub("", s)
+    s = _IMAGE_RE.sub(lambda m: m.group(1), s)
+    s = _WEB_LINK_RE.sub(lambda m: (f"[{m.group(1)}]({m.group(2)})" if m.group(1).strip() else m.group(2)) if keep_links else (m.group(1) or m.group(2)), s)
     s = _LINK_RE.sub(lambda m: m.group(1), s)
     return s
 
@@ -306,13 +312,13 @@ def _normalize_prose(lines: list[str]) -> str:
             continue
         quote = _QUOTE_RE.match(line)
         if quote:
-            out.append(f"> {_normalize_inline(quote.group(1)).strip()}")
+            out.append(f"> {_normalize_inline(quote.group(1), keep_links=True).strip()}")
             continue
         item = _LIST_RE.match(line)
         if item:
-            out.append(f"{item.group(1)} {_normalize_inline(item.group(2)).strip()}")
+            out.append(f"{item.group(1)} {_normalize_inline(item.group(2), keep_links=True).strip()}")
         else:
-            out.append(_normalize_inline(line))
+            out.append(_normalize_inline(line, keep_links=True))
     return sanitize_emoji("\n".join(out))
 
 

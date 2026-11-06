@@ -64,7 +64,12 @@ def test_normalize_body_downgrades_disallowed_markdown() -> None:
     assert n("# Resumen") == "## Resumen"
     assert n("## Anomalías:") == "## Anomalías"
     assert n("#### Deep") == "### Deep"
-    assert n("see [docs](https://x) now") == "see docs now"
+    assert n("see [docs](https://x) now") == "see [docs](https://x) now"
+    assert n("see [docs](https://x \"t\") now") == "see [docs](https://x) now"
+    assert n("see [docs](https://x 't' ) now") == "see [docs](https://x) now"
+    assert n("see [](https://x) now") == "see https://x now"
+    assert n("see [docs](/local) now") == "see docs now"
+    assert n("see <https://x/y> now") == "see https://x/y now"
     assert n("![chart](https://x/c.png)") == "chart"
     assert n("a\n---\nb") == "a\nb"
     assert n("text <b>bold</b> tag") == "text bold tag"
@@ -91,7 +96,7 @@ def test_normalize_title_strips_links_and_emoji() -> None:
 
 def test_append_normalizes_body_markdown(home: Path) -> None:
     out = _append(home, body="# Daily\n\nsee [here](https://x)\n---\n- item")
-    assert out["body"] == "## Daily\n\nsee here\n- item"
+    assert out["body"] == "## Daily\n\nsee [here](https://x)\n- item"
 
 
 def test_read_normalizes_legacy_rows(home: Path) -> None:

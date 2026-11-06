@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.17.51 — 2026-11-06 — a notification keeps its web links
+
+- A `[text](https://…)` link in a notification body is kept as a link instead of being flattened to its text, and `<https://…>` becomes the bare URL; a link to anything but a web address still becomes its text, and images still become their alt text. The apps from desktop 0.9.14 and mobile 0.9.9 open them in the browser.
+
 ## v0.17.50 — 2026-11-04 — memory attention only for the capped files, from 95 %
 
 - A profile's "needs you" list and its memory warning now cover only USER.md and MEMORY.md, the two files with an enforced write cap, from 95 % of the cap instead of 90 %.

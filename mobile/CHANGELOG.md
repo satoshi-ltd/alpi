@@ -14,6 +14,10 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.9.9 — 2026-11-06 — links in a notification open in the browser
+
+- A markdown link or a bare URL in a notification body is a link that opens in the browser; a URL inside code stays code. Needs alpi ≥ 0.17.51 for markdown links (older daemons keep only the bare URL).
+
 ## v0.9.8 — 2026-11-02 — fallback models are set and ordered from the app
 
 - A profile's Overview has a Fallbacks row under the vision model: how many models are tried when the main model's provider fails, or none.

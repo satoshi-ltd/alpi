@@ -2,6 +2,19 @@ import { describe, expect, it } from 'vitest';
 
 import { inlineSegments, parseNotificationBody } from '../../../common/notificationBody.mjs';
 
+describe('inlineSegments links', () => {
+  it('yields a link for a markdown link and for a bare URL, leaving trailing punctuation out of the href', () => {
+    expect(inlineSegments('ver [el anuncio](https://x.io/a?b=1) ya')).toEqual([
+      { t: 'text', v: 'ver ' },
+      { t: 'link', v: 'el anuncio', href: 'https://x.io/a?b=1' },
+      { t: 'text', v: ' ya' },
+    ]);
+    expect(inlineSegments('https://x.io/b/123.')).toEqual([{ t: 'link', v: 'https://x.io/b/123', href: 'https://x.io/b/123' }, { t: 'text', v: '.' }]);
+    expect(inlineSegments('"https://x.io/q"')).toEqual([{ t: 'text', v: '"' }, { t: 'link', v: 'https://x.io/q', href: 'https://x.io/q' }, { t: 'text', v: '"' }]);
+    expect(inlineSegments('`https://x.io/c`')).toEqual([{ t: 'code', v: 'https://x.io/c' }]);
+  });
+});
+
 describe('parseNotificationBody labels and paragraphs', () => {
   it('treats a whole-line bold phrase as a standalone label', () => {
     expect(parseNotificationBody('**Verdict**')).toEqual([{ kind: 'label', label: 'Verdict' }]);

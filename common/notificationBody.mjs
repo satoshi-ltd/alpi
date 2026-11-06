@@ -13,7 +13,7 @@ const ORDERED = /^\s*(\d+)[.)]\s+(.*)$/;
 const STANDALONE_LABEL = /^\*\*\s*([^*]+?)\s*\*\*$/;
 const INLINE_LABEL_COLON_IN = /^\*\*\s*([^*]+?)\s*:\s*\*\*\s+(\S.*)$/;
 const INLINE_LABEL_COLON_OUT = /^\*\*\s*([^*]+?)\s*\*\*\s*:\s+(\S.*)$/;
-const INLINE_MD = /(`([^`]+?)`|\*\*([^*]+?)\*\*|\*([^*]+?)\*)/g;
+const INLINE_MD = /(`([^`]+?)`|\*\*([^*]+?)\*\*|\*([^*]+?)\*|\[([^\]]+?)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>()]*[^\s<>()*_~.,;:!?'")\]]))/g;
 const SEP_CELL = /^:?-+:?$/;
 const ENTRY = /^\*\*([^*]+?)\*\*\s*(.*)$/;
 const ENTRY_META_WORDS = 4;
@@ -185,7 +185,9 @@ export function inlineSegments(text) {
     if (m.index > last) segs.push({ t: "text", v: text.slice(last, m.index) });
     if (m[2] != null) segs.push({ t: "code", v: m[2] });
     else if (m[3] != null) segs.push({ t: "bold", v: m[3] });
-    else segs.push({ t: "italic", v: m[4] });
+    else if (m[4] != null) segs.push({ t: "italic", v: m[4] });
+    else if (m[5] != null) segs.push({ t: "link", v: m[5], href: m[6] });
+    else segs.push({ t: "link", v: m[7], href: m[7] });
     last = INLINE_MD.lastIndex;
   }
   if (last < text.length) segs.push({ t: "text", v: text.slice(last) });

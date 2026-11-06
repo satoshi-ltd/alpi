@@ -231,6 +231,13 @@ ol.list .marker {
 .bold { font-weight: var(--fw-semibold); color: var(--ink); }
 .strong { font-weight: var(--fw-semibold); color: var(--ink); }
 .italic { font-style: italic; }
+.link {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
 
 .code {
   font-family: var(--font-mono);

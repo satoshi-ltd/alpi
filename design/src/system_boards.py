@@ -122,7 +122,7 @@ def tokens_board():
 
 
 def notification_reader(w, size=13, mobile=False):
-    entries = (("Ana Ruiz", "ana@example.com", "Can we move Friday’s review to Monday?"), ("Bob Lee", "bob@acme.io", "Invoice 0412 is attached"), ("Carmen", "", "Thanks, all set"))
+    entries = (("Ana Ruiz", "ana@example.com", "Can we move Friday’s review to Monday?"), ("Bob Lee", "bob@acme.io", f'Invoice 0412 is attached · <a href="#" style="color: {INK}; text-decoration: underline; text-underline-offset: 2px">open the invoice</a>'), ("Carmen", "", "Thanks, all set"))
     rows = "".join(f'<div style="display: flex; flex-direction: column; gap: 2px; padding: 8px 0; box-shadow: {"inset 0 -0.5px 0 rgba(20,20,20,0.07)" if i < len(entries) - 1 else "none"}">'
                    f'<span style="display: flex; align-items: baseline; gap: 8px"><span style="font-size: {size}px; font-weight: 600; color: {INK}">{n}</span>'
                    f'<span style="font-family: {MONO}; font-size: 11px; color: {INK3}">{m}</span></span><span style="font-size: {size}px; line-height: 1.45; color: {INK2}">{t}</span></div>'

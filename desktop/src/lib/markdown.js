@@ -71,7 +71,13 @@ marked.use({
   },
 });
 
+const EXTERNAL_HREF = /^(https?:|mailto:)/i;
+
 DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+  if (node.nodeName === "A") {
+    if (!EXTERNAL_HREF.test(node.getAttribute("href") || "")) node.removeAttribute("href");
+    return;
+  }
   if (node.nodeName !== "IMG") return;
   const src = node.getAttribute("src") || "";
   node.removeAttribute("src");
@@ -88,9 +94,9 @@ const PURIFY_OPTS = {
     "ul", "ol", "li",
     "blockquote", "hr",
     "table", "thead", "tbody", "tr", "th", "td",
-    "div", "span", "img", "figure", "figcaption", "button",
+    "div", "span", "img", "figure", "figcaption", "button", "a",
   ],
-  ALLOWED_ATTR: ["class", "align", "src", "alt", "data-src", "type", "aria-label"],
+  ALLOWED_ATTR: ["class", "align", "src", "alt", "data-src", "type", "aria-label", "href"],
 };
 
 let charts = [];

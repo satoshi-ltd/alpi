@@ -68,6 +68,7 @@ function inline(text) {
     if (s.t === "bold") return `<strong>${v}</strong>`;
     if (s.t === "italic") return `<em>${v}</em>`;
     if (s.t === "code") return `<code>${v}</code>`;
+    if (s.t === "link") return `<a href="${escapeHtml(s.href)}">${v}</a>`;
     return v;
   }).join("");
 }

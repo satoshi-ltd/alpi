@@ -9,6 +9,7 @@ const ALLOWED_EMOJI = new Set([0x1f534, 0x1f7e1, 0x1f7e2]);
 const EMOJI_RANGES = [[0x1f300, 0x1faff], [0x1f1e6, 0x1f1ff], [0x2600, 0x27bf], [0x2b00, 0x2bff], [0xfe00, 0xfe0f]];
 const EMOJI_SINGLES = new Set([0x200d, 0x20e3]);
 
+const AUTOLINK = /<(https?:\/\/[^>\s]+)>/g;
 const HTML = /<\/?[A-Za-z][^>]*>/g;
 const LINK = /!?\[([^\]]*)\]\([^)]*\)/g;
 const CODE_SPAN = /`[^`]*`/g;
@@ -58,6 +59,7 @@ export function plainInline(text) {
   return String(text ?? "")
     .replace(/\u0000/g, "")
     .replace(CODE_SPAN, hold)
+    .replace(AUTOLINK, "$1")
     .replace(HTML, "")
     .replace(LINK, "$1")
     .replace(URL, hold)

@@ -133,6 +133,18 @@ describe("inlineSegments", () => {
   it("returns a single text segment when there is no markup", () => {
     expect(inlineSegments("plain text")).toEqual([{ t: "text", v: "plain text" }]);
   });
+
+  it("yields a link for a markdown link and for a bare URL, leaving trailing punctuation out of the href", () => {
+    expect(inlineSegments("ver [el anuncio](https://x.io/a?b=1) ya")).toEqual([
+      { t: "text", v: "ver " },
+      { t: "link", v: "el anuncio", href: "https://x.io/a?b=1" },
+      { t: "text", v: " ya" },
+    ]);
+    expect(inlineSegments("https://x.io/b/123.")).toEqual([{ t: "link", v: "https://x.io/b/123", href: "https://x.io/b/123" }, { t: "text", v: "." }]);
+    expect(inlineSegments("\"https://x.io/q\"")).toEqual([{ t: "text", v: "\"" }, { t: "link", v: "https://x.io/q", href: "https://x.io/q" }, { t: "text", v: "\"" }]);
+    expect(inlineSegments("(https://x.io/p)")).toEqual([{ t: "text", v: "(" }, { t: "link", v: "https://x.io/p", href: "https://x.io/p" }, { t: "text", v: ")" }]);
+    expect(inlineSegments("`https://x.io/c`")).toEqual([{ t: "code", v: "https://x.io/c" }]);
+  });
 });
 
 describe("real-world corpus", () => {

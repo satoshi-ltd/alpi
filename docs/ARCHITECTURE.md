@@ -1801,6 +1801,13 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   label is longer than 8 characters or there are more than 8 and no value is negative; the TUI and `alpi outputs show` draw a
   sparkline or block bars. An invalid block, and every block on an older client, stays a code block;
   banners and inbox rows never show charts, since the summary derivation skips code.
+- **A link in a notification body opens outside the app.** The daemon keeps `[text](https://…)` and bare URLs when
+  it normalises a body (`alpi/outputs.py`: `<https://…>` becomes the bare URL, a link to anything but http(s) becomes
+  its text). `inlineSegments` in `common/notificationBody.mjs` yields a `link` segment for both forms (closing
+  punctuation and quotes stay text, a URL inside code stays code, a URL inside bold is text); desktop draws it as an
+  anchor that the opener plugin sends to the system browser through the one guard every external anchor in the
+  window goes through (`desktop/src/lib/openExternal.js`; the chat sanitizer keeps `<a href>` for web links), and the
+  phone as a pressable text that calls `Linking.openURL`. The Markdown and PDF exports keep it as an anchor.
 - **Any agent message downloads as Markdown or exports to a PDF, charts included.** The same two actions sit on a
   notification (desktop More menu, phone overflow), on an assistant reply and on a workgroup post (a Download menu
   in the desktop footer, the phone's long-press sheet). `common/messageExport.mjs` is the one renderer: it turns

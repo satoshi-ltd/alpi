@@ -13,6 +13,8 @@
     "process:default",
     "global-shortcut:default",
     "notification:default",
+    "opener:allow-open-url",
+    "opener:allow-default-urls",
     "core:webview:allow-set-webview-zoom",
     "core:webview:allow-print"
   ]

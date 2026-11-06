@@ -3,6 +3,7 @@ import Eyebrow from "../primitives/Eyebrow.jsx";
 import Icon from "../primitives/Icon.jsx";
 import { chartSvg } from "../../../common/chartSpec.mjs";
 import { errorParts, failedTitle, inlineSegments, parseNotificationBody } from "../../../common/notificationBody.mjs";
+import { onExternalClick } from "../lib/openExternal.js";
 import styles from "./NotificationBody.module.css";
 
 function Inline({ text }) {
@@ -10,6 +11,7 @@ function Inline({ text }) {
     if (s.t === "bold") return <strong key={i} className={styles.bold}>{s.v}</strong>;
     if (s.t === "italic") return <em key={i} className={styles.italic}>{s.v}</em>;
     if (s.t === "code") return <code key={i} className={styles.code}>{s.v}</code>;
+    if (s.t === "link") return <a key={i} href={s.href} className={styles.link} data-external-handled="" onClick={(e) => onExternalClick(e, s.href)}>{s.v}</a>;
     return <Fragment key={i}>{s.v}</Fragment>;
   });
 }
