@@ -118,7 +118,7 @@ export default function ChatPane({
 
   useEffect(() => {
     setModelOverride(null);
-  }, [connectionId, sessionKey, activeProfile?.model]);
+  }, [connectionId, sessionKey, activeProfile?.model, canManageProfileSurfaces]);
 
   useEffect(() => {
     setStopping(false);
@@ -219,7 +219,8 @@ export default function ChatPane({
   const notify = useNotify();
   const onTogglePause =
     onTogglePauseProfile && activeProfile ? () => onTogglePauseProfile(activeProfile) : null;
-  const effectiveModel = pickEffectiveModel(modelOverride, activeProfile?.model);
+  const sessionModelOverride = canManageProfileSurfaces ? modelOverride : null;
+  const effectiveModel = pickEffectiveModel(sessionModelOverride, activeProfile?.model);
   const contextWindow = useContextWindow(activeProfile?.name, effectiveModel, connectionId);
   const liveCtxTokens = pendingTurn?.ctxTokens ?? null;
 
@@ -372,8 +373,9 @@ export default function ChatPane({
         disabled={daemonOffline || paused}
         daemonOffline={daemonOffline}
         paused={paused}
-        modelOverride={modelOverride}
+        modelOverride={sessionModelOverride}
         onModelChange={setModelOverride}
+        canManageProfileSurfaces={canManageProfileSurfaces}
         rewriteDraft={rewriteDraft}
         onRewriteDraftApplied={onRewriteDraftApplied}
         pendingAttachment={pendingAttachment}

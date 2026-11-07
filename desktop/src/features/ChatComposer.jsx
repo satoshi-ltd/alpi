@@ -32,6 +32,7 @@ export default function ChatComposer({
   minHeight = null,
   connectionId = null,
   onProfileSaved = null,
+  canManageProfileSurfaces = true,
 }) {
   const notify = useNotify();
   const draftKey = activeProfile
@@ -283,7 +284,7 @@ export default function ChatComposer({
           >
             <PaperclipIcon />
           </IconBtn>
-          {activeProfile && (
+          {activeProfile && canManageProfileSurfaces && (
             <ModelPicker
               profile={activeProfile.name}
               models={availableModels}

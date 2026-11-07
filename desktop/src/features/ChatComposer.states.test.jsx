@@ -119,3 +119,16 @@ describe("ChatComposer model and effort", () => {
     expect(screen.queryByRole("radiogroup")).toBeNull();
   });
 });
+
+describe("ChatComposer model picker by role", () => {
+  it("admin: the picker is in the composer", () => {
+    mount();
+    expect(document.querySelector("button[aria-expanded]")).not.toBeNull();
+  });
+
+  it("member: no model or reasoning picker, even with several models to choose from", () => {
+    mount({ canManageProfileSurfaces: false });
+    expect(document.querySelector("button[aria-expanded]")).toBeNull();
+    expect(screen.queryByRole("radiogroup", { name: "Reasoning effort" })).toBeNull();
+  });
+});

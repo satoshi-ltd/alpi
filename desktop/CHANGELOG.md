@@ -11,6 +11,11 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.9.16 — 2026-11-07 — a member chats on the profile's model
+
+- On a member connection the composer shows no model or reasoning-effort picker; the turn runs on the model the admin set, as the header shows. An admin keeps the picker, and a demotion drops an override already picked.
+- Needs alpi ≥ 0.17.0; alpi ≥ 0.17.53 enforces it on the daemon too.
+
 ## v0.9.15 — 2026-11-06 — buttons and fields look and behave the same on both apps
 
 - Filled buttons (primary, secondary, danger) now use the semibold label, as on the phone, and a danger-ghost button gives press feedback.

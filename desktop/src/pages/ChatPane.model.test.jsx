@@ -136,6 +136,56 @@ describe("ChatPane — model override is connection-scoped", () => {
   });
 });
 
+describe("ChatPane — the model override is for admins", () => {
+  const profile = { name: "a", model: "prov/base", models: ["prov/base", "prov/other"] };
+  const sessionData = { turns: [{ user: "hi", assistant: "yo", at: 0 }], last_ctx_tokens: 0 };
+
+  function paneEl(canManageProfileSurfaces) {
+    return (
+      <ChatPane
+        view={{ kind: "profile", profile: "a", sessionId: "s1" }}
+        profiles={[profile]}
+        activeProfile={profile}
+        canManageProfileSurfaces={canManageProfileSurfaces}
+        sessionData={sessionData}
+        onSend={vi.fn()}
+        onRewriteMessage={vi.fn()}
+        onRetryMessage={vi.fn()}
+      />
+    );
+  }
+
+  beforeEach(() => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "ollama_models") return [];
+      if (cmd === "resolve_ctx_window") return 400000;
+      return null;
+    });
+  });
+
+  it("a member connection gets no picker although the profile has several models", async () => {
+    render(paneEl(false));
+    await waitFor(() => expect(screen.getAllByText("base").length).toBeGreaterThan(0));
+    expect(screen.queryByRole("button", { name: /base/ })).toBeNull();
+  });
+
+  it("a demotion drops an override picked while the connection was admin, and a promotion does not bring it back", async () => {
+    const { rerender } = render(paneEl(true));
+    fireEvent.click(screen.getByRole("button", { name: /base/ }));
+    fireEvent.click(screen.getByText("other"));
+    await waitFor(() => expect(screen.getAllByText("other").length).toBeGreaterThan(0));
+
+    rerender(paneEl(false));
+    await waitFor(() => expect(screen.queryByText("other")).toBeNull());
+    expect(screen.getAllByText("base").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /base/ })).toBeNull();
+
+    rerender(paneEl(true));
+    await waitFor(() => expect(screen.getByRole("button", { name: /base/ })).toBeTruthy());
+    expect(screen.queryByText("other")).toBeNull();
+  });
+});
+
 describe("ChatPane — per-turn model badge", () => {
   it("shows the routed model when a turn ran on a different model than the profile", () => {
     invoke.mockImplementation(async () => null);
