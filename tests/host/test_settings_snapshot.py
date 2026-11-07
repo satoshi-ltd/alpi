@@ -148,7 +148,7 @@ def test_member_redaction_strips_admin_sections_and_redacts_detail() -> None:
     out = host_server._redact_payload_by_role("host.settings.profile_snapshot", full)["result"]
 
     assert set(out) == {"detail", "workgroups"}
-    assert out["detail"] == {"models": ["a/b"], "voice_id": "v"}
+    assert out["detail"] == {"voice_id": "v"}
     assert out["workgroups"]["workgroups"][0]["id"] == "w1"
 
 

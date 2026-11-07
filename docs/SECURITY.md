@@ -202,7 +202,10 @@ not reach.
   **Connections carry a role.** `admin` has full control-plane CRUD;
   `member` gets chat, events, read-only views, workgroup post/read and
   deletion of the chats its own connection created, and every sensitive
-  mutation answers `-32001 forbidden`. The local socket is
+  mutation answers `-32001 forbidden`. A member's turn runs on the profile's
+  model (`host.chat.send` refuses a member's `model` override), and the model,
+  its reasoning effort, the budget and the skills are admin settings; a member
+  uses the skills the profile has. The local socket is
   sovereign and always `admin`. What `member` does **not** restrict is the
   agent: a member device can still send chat turns, and a turn can do
   anything the profile's tools can do. Bound agent capability with the OS

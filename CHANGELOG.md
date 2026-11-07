@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.17.53 — 2026-11-07 — a member runs on the profile's model
+
+- A chat turn from a member connection runs on the profile's model: `host.chat.send` refuses a `model` override from a member with `forbidden`, so only an admin picks another model for a turn. The model, its reasoning effort, the budget and the skills stay admin settings, as they were.
+- A member no longer receives the profile's model catalogue: `host.profile.detail` keeps only the voice fields for a member and `host.providers.ollama_models` is admin-only. The desktop app from 0.9.16 hides the composer's model picker for a member; an older desktop finds nothing to offer.
+
 ## v0.17.52 — 2026-11-06 — a member stops polling a workgroup that went quiet
 
 - A workgroup subscription with no post for a day is probed every 15 minutes instead of every minute, and when the hub runs on the same daemon its scan wakes the member as soon as the transcript moves (a remote hub's member waits for the next sample), so the members of a finished pipeline no longer cost the daemon a pull a minute each (on a Mac with six members and sixty old workgroups that was six pulls a second and a tenth of a core at idle).

@@ -875,7 +875,12 @@ Three trust tiers gate every WS call:
   workgroup post/read, voice preview, deleting its own chats
   (`host.sessions.delete` only removes sessions owned by the calling
   connection; any other id answers `not-found`). Admin verbs reject with
-  `-32001 forbidden / "admin role required"`.
+  `-32001 forbidden / "admin role required"`. A member's turn runs on the
+  profile's model: `host.chat.send` answers a `model` override from a member
+  with an `error` frame (`code: forbidden`), and `host.profile.detail` keeps
+  only `voice_id` and `voice_auto_read` for a member (`models` is admin
+  detail, as is `host.providers.ollama_models`), so the model, its reasoning effort, the budget and the skills are
+  changed only by an admin; a member uses the skills the profile has.
 
 The admin set lives in `_ADMIN_METHODS`; the strictly-local set
 in `_LOCAL_ONLY_METHODS` (network admin only — no role unlocks

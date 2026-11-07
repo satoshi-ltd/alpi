@@ -89,6 +89,7 @@ _ADMIN_METHODS = frozenset({
     "host.providers.remove_ollama",
     "host.providers.add_openrouter_model",
     "host.providers.remove_openrouter_model",
+    "host.providers.ollama_models",
     "host.peers.add",
     "host.peers.remove",
     "host.peers.pending_list",
@@ -184,8 +185,8 @@ def _self_service_allowed(method: str, meta: "AuthMeta | None", params: dict[str
     return bool(meta.connection_id) and params.get("connection_id") == meta.connection_id
 
 
-# host.profile.detail leaks Settings-only fields (providers, mcps, peers, sandbox, workspace path…) inside its result blob. Members hit it from ChatPane for `models` + `voice_id`, so we can't gate the whole verb — instead redact the result down to the chat-essential fields when role != admin.
-_MEMBER_DETAIL_KEEP = frozenset({"models", "voice_id", "voice_auto_read"})
+# host.profile.detail leaks Settings-only fields (providers, models, mcps, peers, sandbox, workspace path…) inside its result blob. Members hit it from ChatPane for `voice_id`, so we can't gate the whole verb — instead redact the result down to the chat-essential fields when role != admin.
+_MEMBER_DETAIL_KEEP = frozenset({"voice_id", "voice_auto_read"})
 
 # Sections of host.settings.profile_snapshot whose standalone verb is admin-only — stripped for members so the aggregate never leaks what the per-section RPC would reject.
 _SNAPSHOT_ADMIN_SECTIONS = frozenset({"usage", "schedules", "email", "storage"})

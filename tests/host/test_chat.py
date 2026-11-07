@@ -572,6 +572,48 @@ async def test_data_chat_send_reports_overridden_model(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("role, accepted", (("member", False), ("admin", True)))
+async def test_data_chat_send_model_override_is_admin_only(
+    monkeypatch, short_tmp: Path, role: str, accepted: bool,
+) -> None:
+    home = short_tmp / "h"
+    home.mkdir()
+    load_or_generate(home)
+
+    from alpi import config as cfg_mod
+    monkeypatch.setattr(
+        cfg_mod, "load",
+        lambda h: SimpleNamespace(model="x", model_reasoning=SimpleNamespace(effort="high")),
+    )
+    import alpi.engine
+    monkeypatch.setattr(alpi.engine, "Engine", _FakeEngine)
+    from alpi.host import chat as dc
+    monkeypatch.setattr(dc, "_resolve_home", lambda profile: home)
+    from alpi.host.connection_context import ConnectionContext, use
+
+    frames: list[dict] = []
+
+    async def send_frame(frame: dict) -> None:
+        frames.append(frame)
+
+    with use(ConnectionContext("conn", "dev", "remote", role)):
+        await dc._data_chat_send(
+            {"profile": "default", "text": "hello", "request_id": "r-role", "model": "override-model"},
+            host_server.Server(home=home), send_frame,
+        )
+
+    if accepted:
+        start = next(f for f in frames if f["event"] == "session_start")
+        assert start["model_used"] == "override-model"
+    else:
+        assert frames == [{
+            "event": "error",
+            "text": "only an admin can run a turn on another model",
+            "code": "forbidden",
+        }]
+
+
+@pytest.mark.asyncio
 async def test_data_chat_cancel_interrupts_active_turn(
     monkeypatch, short_tmp: Path,
 ) -> None:

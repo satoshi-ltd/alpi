@@ -180,6 +180,16 @@ async def _data_chat_send(
         })
         return
 
+    if isinstance(model_override, str) and model_override:
+        from alpi.host.connection_context import current
+        if current().role != "admin":
+            await send_frame({
+                "event": "error",
+                "text": "only an admin can run a turn on another model",
+                "code": "forbidden",
+            })
+            return
+
     home = _resolve_home(profile)
     from alpi.home import profile_name as resolved_profile_name
     run_profile = resolved_profile_name(home)

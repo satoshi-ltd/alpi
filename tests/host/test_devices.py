@@ -1453,8 +1453,7 @@ async def test_profile_detail_redacts_settings_fields_for_member(
 
     assert "error" not in sent[0]
     result = sent[0]["result"]
-    assert set(result.keys()) == {"models", "voice_id"}
-    assert result["models"] == ["openrouter/anthropic/claude-3-opus"]
+    assert set(result.keys()) == {"voice_id"}
     assert result["voice_id"] == "shimmer"
 
 
@@ -1489,36 +1488,34 @@ async def test_profile_detail_full_for_admin(short_tmp: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_ollama_models_callable_by_scoped_member(short_tmp: Path) -> None:
-    # Chat needs runtime model switching, so ollama_models is intentionally NOT in _ADMIN_METHODS. Scoped members still go through the per-call scope gate (host.providers.ollama_models takes a `profile` param).
-    row = devices.add(label="phone", role="member", profile_scope=["work"])
+async def test_ollama_models_is_admin_only(short_tmp: Path) -> None:
+    admin = devices.add(label="laptop", role="admin")
+    member = devices.add(label="phone", role="member", profile_scope=["work"])
     srv = host_server.Server(home=short_tmp)
 
     async def handler(_params, _server):
-        return {"models": ["llama3:8b"], "errors": []}
+        return {"models": ["llama3:8b"], "errors": [{"url": "http://ollama.lan:11434", "error": "refused"}]}
 
     srv.register("host.providers.ollama_models", handler)
 
     sent: list[dict] = []
     async def send(p): sent.append(p)
 
-    # In-scope: allowed
-    body_ok = {
-        "id": "ok", "method": "host.providers.ollama_models",
-        "params": {"auth_token": row["token"], "profile": "work"},
+    body_admin = {
+        "id": "admin", "method": "host.providers.ollama_models",
+        "params": {"auth_token": admin["token"], "profile": "work"},
     }
-    await srv._handle_request(json.dumps(body_ok), send, require_token=True)
+    await srv._handle_request(json.dumps(body_admin), send, require_token=True)
     assert "error" not in sent[0]
     assert sent[0]["result"]["models"] == ["llama3:8b"]
 
-    # Out-of-scope: forbidden by HOST.1 gate
-    body_blocked = {
-        "id": "blocked", "method": "host.providers.ollama_models",
-        "params": {"auth_token": row["token"], "profile": "secret"},
+    body_member = {
+        "id": "member", "method": "host.providers.ollama_models",
+        "params": {"auth_token": member["token"], "profile": "work"},
     }
-    await srv._handle_request(json.dumps(body_blocked), send, require_token=True)
+    await srv._handle_request(json.dumps(body_member), send, require_token=True)
     assert sent[1]["error"]["code"] == -32001
-    assert sent[1]["error"]["data"]["detail"] == "profile not in device scope"
+    assert sent[1]["error"]["data"]["detail"] == "admin role required"
 
 
 def test_validate_does_not_wipe_on_read_glitch(short_tmp: Path, monkeypatch) -> None:

@@ -53,8 +53,9 @@ daemon's plaintext listener private behind the reverse proxy.
 ## host.chat.send (streaming; no non-streaming variant exists)
 
 Request `params`: `auth_token`, `profile`, `text` (or `attachments`),
-`request_id` (required, non-empty), optional `session_id`, `model`,
-`attachments`. The top-level JSON-RPC `id` is echoed on every frame —
+`request_id` (required, non-empty), optional `session_id`, `model` (admin
+connections only; a member's override is answered with an `error` frame,
+`code: forbidden`, and the turn does not start), `attachments`. The top-level JSON-RPC `id` is echoed on every frame —
 demux on it; set it equal to `request_id`. For file input, stage with
 `host.attachments.stage` and pass the returned metadata as
 `params.attachments`.

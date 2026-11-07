@@ -122,7 +122,13 @@ Three trust tiers:
   workgroup post/read, voice preview, deleting its own chats
   (`host.sessions.delete` is bound to the calling connection; other ids answer
   `not-found`). Sensitive **host control plane**
-  mutations reject `-32001 forbidden / admin role required`. For a member turn
+  mutations reject `-32001 forbidden / admin role required`. A member's turn
+  runs on the profile's model: `host.chat.send` answers a member's `model`
+  override with an `error` frame (`code: forbidden`), and `host.profile.detail`
+  keeps only `voice_id` and `voice_auto_read` for a member (the model catalogue,
+  `host.providers.ollama_models` included, is admin detail); the model, its
+  reasoning effort, the budget and the skills are admin settings, a member
+  uses the skills the profile has. For a member turn
   the file tools refuse every profile's `host/`, `secrets/`, `gateway/`,
   `cache/`, `logs/`, `outputs/`, `out/`, `sessions/`, `memories/`, `schedule/`,
   `skills/`, `runs/`, `run/`, `mentions/` and `browser/` (read, write and `search` results;
