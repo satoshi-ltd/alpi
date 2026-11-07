@@ -6,7 +6,7 @@ import { useProfileDetail } from "../hooks/useProfileDetail.js";
 import { useSidecarTail } from "../hooks/useSidecarTail.js";
 import Button from "../primitives/Button.jsx";
 import Message from "../primitives/Message.jsx";
-import { useStickyScroll } from "../lib/useStickyScroll.js";
+import { followKey, useStickyScroll } from "../lib/useStickyScroll.js";
 import { useScrollProgress } from "../lib/useScrollProgress.js";
 import { useScrollAnchor } from "../lib/useScrollAnchor.js";
 import { useDelayedFlag } from "../lib/useDelayedFlag.js";
@@ -498,7 +498,11 @@ const Transcript = memo(function Transcript({
   );
   const inlineBlock = <InlineRequests inline={inline} />;
 
-  const scrollRef = useStickyScroll([data, pendingTurn, tailTurn, inline], streamingTurn?.requestId ?? (tailTurn ? `tail:${sessionId}` : null));
+  const followRef = useRef(null);
+  followRef.current = followKey(followRef.current, {
+    scope: `${connectionId ?? "local"}:${profileName}`, sessionId, pendingTurn, lastTurnInFlight,
+  });
+  const scrollRef = useStickyScroll([data, pendingTurn, tailTurn, inline], followRef.current.key, followRef.current.transcript);
   const { farFromBottom, scrollToBottom } = useScrollProgress(scrollRef);
   const search = useTranscriptSearch(scrollRef, searchOpen);
   const closeSearch = () => {

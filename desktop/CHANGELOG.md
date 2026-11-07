@@ -11,6 +11,12 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.9.17 — 2026-11-07 — the transcript stays where you scrolled
+
+- While a reply streams, scrolling up to read or copy earlier messages now holds: the transcript follows the stream only while you are at the bottom, and sending a message is what brings you back to it.
+- Opening a session or starting a new one no longer leaves the transcript glued to the bottom for the rest of the conversation.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.9.16 — 2026-11-07 — a member chats on the profile's model
 
 - On a member connection the composer shows no model or reasoning-effort picker; the turn runs on the model the admin set, as the header shows. An admin keeps the picker, and a demotion drops an override already picked.
