@@ -55,6 +55,7 @@ def _append_dispatch_recheck(text: str) -> str:
 
 
 class WorkgroupPostTool(Tool):
+    call_timeout_exempt = True
     name = "workgroup_post"
     description = (
         "Post a message into a shared ALP workgroup transcript. Use this "

@@ -1128,9 +1128,32 @@ def daemon_status_cmd() -> None:
     backend = info["installed_via"]
     click.echo(f"installed via {backend}" if backend else "not installed")
     profiles = info["profiles"]
+    pauses = _provider_pauses() if info["running"] else {}
     click.echo(f"profiles: {len(profiles)}")
     for name in profiles:
-        click.echo(f"  {name}")
+        pause = pauses.get(name)
+        if pause:
+            import time as _time
+            until = _time.strftime("%H:%M", _time.localtime(float(pause.get("until") or 0)))
+            click.echo(f"  {name}  · provider paused until {until} ({pause.get('code')})")
+        else:
+            click.echo(f"  {name}")
+
+
+def _provider_pauses() -> dict:
+    import asyncio
+
+    from alpi.tui import host_client
+    try:
+        result = asyncio.run(host_client.acall("host.profile.summaries", {}))
+    except Exception:  # noqa: BLE001
+        return {}
+    rows = result.get("profiles") if isinstance(result, dict) else None
+    out: dict = {}
+    for row in rows or []:
+        if isinstance(row, dict) and row.get("provider_pause"):
+            out[str(row.get("name"))] = row["provider_pause"]
+    return out
 
 
 @daemon.command("install")

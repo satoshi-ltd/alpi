@@ -306,6 +306,7 @@ def default_run_timeout() -> int:
 
 
 class Terminal(Tool):
+    call_timeout_exempt = True
     name = "terminal"
     description = (
         "Run shell commands. cwd defaults to your workspace.\n"

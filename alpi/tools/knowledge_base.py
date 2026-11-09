@@ -1397,6 +1397,13 @@ class Knowledge(Tool):
         "bundle, or rebuild the derived SQLite index. Use alpi_knowledge "
         "instead for questions about alpi itself."
     )
+    action_parameters = {
+        "search": frozenset({"query", "k"}),
+        "ingest": frozenset({"name", "source_path", "topic", "path", "apply", "ocr"}),
+        "maintain": frozenset({"source_path", "topic", "path", "apply", "ocr"}),
+        "lint": frozenset({"path"}),
+        "index": frozenset({"path", "force"}),
+    }
     parameters = {
         "type": "object",
         "properties": {

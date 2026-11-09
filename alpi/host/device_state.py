@@ -17,6 +17,7 @@ from alpi.alp import pipeline_queue as _pipeline_queue
 from alpi.alp import workgroup as _wg_workgroup
 from alpi import __version__ as _alpi_version
 from alpi import config as cfg_mod
+from alpi import provider_pause
 from alpi import home as home_mod
 from alpi import palette
 from alpi.host import sessions as host_sessions
@@ -188,6 +189,7 @@ def _profile_summary(row: dict[str, Any]) -> dict[str, Any]:
         "voice_id": cfg.tools.tts.voice,
         "bio": cfg.public_bio or None,
         "paused": cfg.paused,
+        "provider_pause": provider_pause.describe(str(row.get("name") or "")),
         "budget_daily_usd": cfg.budget.get("daily_usd"),
         "budget_used_usd": used_usd,
         "budget_used_tokens": used_tokens,

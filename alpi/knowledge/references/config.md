@@ -42,6 +42,7 @@
 | `tools.db.max_mb` | Per-skill size quota of the `db` tool's SQLite file, in MiB (default 100, `0` = no quota, an invalid value keeps the default); next call. Enforced by SQLite: writes that would grow the file past it fail, reads/`DELETE`/`VACUUM` still work. Only the `db` tool is gated; skill scripts opening the file directly are not. |
 | `tools.research.max_usd` | USD one `research` call may spend, a `tasks` batch included (default 1.0, `0` = no cap, an invalid value keeps the default); takes effect on the next call. The sub-agent stops investigating at 75% of it and keeps the rest for the final report; if that is gone too, or today's spend reaches 90% of `budget.daily_usd` (the rest stays for your own answer), it returns what it gathered plus a truncation note, and a call that cannot start returns an error. Spend is charged after each model call, the research model's and its tools' (`web_extract`), so calls already running finish (overshoot at most one per running worker); a model that reports no cost is bounded only by the depth step ceilings. |
 | `tools.max_parallel_tool_calls` | Maximum concurrent calls in an all-parallel-safe batch (default 4). Mixed or exclusive batches stay serial. |
+| `tools.call_timeout_s` | Seconds one tool call may run (default 600, `0` off), shortened to the turn's soft time budget; past it the call returns a transient failure and the turn continues, the call's side effects may still land. Tools with their own bound (`terminal`, `ask_user`, `peer`, `research`, `delegate`, `workflow`) and `workgroup_post` are exempt. |
 | `tools.execution.backend` | Terminal shell world: `local` (default) or `docker`. Docker preserves absolute workspace/profile paths through bind mounts; background jobs are refused because the containers are ephemeral. Dedicated workers remain host-side. |
 | `tools.execution.docker_image` | Container image for the Docker execution world (default `python:3.12-slim`). |
 | `tools.read_image.model` | Optional model route used by `read_image` and browser screenshot analysis. Empty means the profile model. It does not reroute chat attachments; those stay in the main turn. Configure it under `alpi setup → Routing models` or the Vision model row in the apps. |
@@ -87,6 +88,7 @@ providers:
 | `budget` | Next turn. |
 | `tools.terminal.sandbox` | Next terminal call (member turns and peers without `tools.allow` run only in Linux bubblewrap or the Docker execution backend, and are refused in the Docker runtime and on macOS). |
 | `tools.deny` | Next turn (re-read from disk per turn, same as `budget`). |
+| `tools.call_timeout_s` | Next turn (re-read from disk per turn). |
 | `providers.openrouter.ignore` | Next turn (re-read from disk per turn, same as `tools.deny`). |
 | `tools.max_steps_per_turn` | Next turn. |
 | `tui.*` | Next session (`tui.auto_resume`: next launch). |
@@ -138,7 +140,7 @@ Dangerous classifications are always blocked. Globs do not apply to compound com
 
 ## Tool denylist
 
-`tools.deny` is a per-profile list of tool names hidden from the LLM's schema and refused by the executor as defence in depth. Used to tighten profiles exposed to less-trusted input (e.g. a librarian profile reachable via `link.ask`). Denying `alpi_knowledge` also drops the self-knowledge rule from the system prompt.
+`tools.deny` is a per-profile list of tool names hidden from the LLM's schema and refused by the executor as defence in depth. Used to tighten profiles exposed to less-trusted input (e.g. a librarian profile reachable via `link.ask`). Denying `alpi_knowledge` also drops the self-knowledge rule from the system prompt. A `tool:action` entry (`knowledge:ingest`, `knowledge:*`) denies one action: it leaves the schema's `action` enum, a call to it is refused naming the allowed actions, and a tool with no action left is dropped. A search-only knowledge profile denies `knowledge:ingest`, `knowledge:maintain`, `knowledge:lint` and `knowledge:index`.
 
 ```yaml
 tools:

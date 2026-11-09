@@ -63,6 +63,65 @@ def is_denied(name: str, deny: Iterable[str] | None) -> bool:
     return any(_matches(name, entry) for entry in deny)
 
 
+def denied_actions(name: str, deny: Iterable[str] | None) -> frozenset[str]:
+    """Actions a ``tool:action`` deny entry removes from ``name``; ``tool:*`` denies every action."""
+    out: set[str] = set()
+    for entry in deny or ():
+        tool, sep, action = str(entry).partition(":")
+        if sep and action and _matches(name, tool):
+            out.add(action)
+    return frozenset(out)
+
+
+def denied_schema(
+    schema: dict, deny: Iterable[str] | None,
+    action_parameters: dict[str, frozenset[str]] | None = None,
+) -> dict | None:
+    """The schema with denied actions removed from its ``action`` enum (and the parameters only they read); None when nothing of the tool is left."""
+    name = str((schema.get("function") or {}).get("name") or "")
+    denied = denied_actions(name, deny)
+    if not denied:
+        return schema
+    prop = _action_property(schema)
+    enum = prop.get("enum") if prop is not None else None
+    if not isinstance(enum, list):
+        return None if "*" in denied else schema
+    keep = frozenset() if "*" in denied else frozenset(a for a in enum if a not in denied)
+    if not keep:
+        return None
+    trimmed = _trim_actions(schema, keep)
+    if action_parameters:
+        needed = {p for action in keep for p in action_parameters.get(action, frozenset())}
+        owned = {p for params in action_parameters.values() for p in params}
+        properties = trimmed["function"]["parameters"]["properties"]
+        for param in list(properties):
+            if param in owned and param not in needed:
+                properties.pop(param)
+        required = trimmed["function"]["parameters"].get("required")
+        if isinstance(required, list):
+            trimmed["function"]["parameters"]["required"] = [r for r in required if r in properties]
+    return trimmed
+
+
+def action_denied(name: str, arguments: object, deny: Iterable[str] | None, schema: dict | None = None) -> str | None:
+    """A refusal for a call whose action a ``tool:action`` entry denies, naming what is still allowed."""
+    denied = denied_actions(name, deny)
+    if not denied:
+        return None
+    action = _action(arguments)
+    enum = None
+    if schema is not None:
+        prop = _action_property(schema)
+        enum = prop.get("enum") if prop is not None else None
+    # Tools normalise their action after this gate, so anything not spelled exactly as an allowed value is refused too.
+    allowed = [a for a in (enum or []) if a not in denied] if "*" not in denied else []
+    if "*" not in denied and action not in denied and (not isinstance(enum, list) or action in allowed):
+        return None
+    shown = f"{name}:{action}" if action else name
+    tail = f"; allowed: {', '.join(allowed)}" if allowed else ""
+    return f"tool action denied for this profile: {shown} (tools.deny in config.yaml){tail}"
+
+
 def allowed_actions(name: str) -> frozenset[str] | None:
     policy = _allowed.get()
     if name in _withheld.get():
@@ -108,12 +167,7 @@ def permits(schema: dict, arguments: object = None) -> bool:
     return actions is None or _action(arguments) in actions
 
 
-def allowed_schema(schema: dict) -> dict | None:
-    actions = _restriction(schema)
-    if actions is None:
-        return schema
-    if not actions:
-        return None
+def _trim_actions(schema: dict, actions: frozenset[str]) -> dict:
     trimmed = copy.deepcopy(schema)
     parameters = trimmed["function"]["parameters"]
     prop = parameters["properties"]["action"]
@@ -123,6 +177,15 @@ def allowed_schema(schema: dict) -> dict | None:
     required = list(required) if isinstance(required, list) else []
     parameters["required"] = required if "action" in required else [*required, "action"]
     return trimmed
+
+
+def allowed_schema(schema: dict) -> dict | None:
+    actions = _restriction(schema)
+    if actions is None:
+        return schema
+    if not actions:
+        return None
+    return _trim_actions(schema, actions)
 
 
 def refusal(name: str, arguments: object = None) -> str:

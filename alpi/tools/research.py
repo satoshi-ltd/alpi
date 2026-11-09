@@ -90,6 +90,7 @@ class _CallBudget:
 
 
 class Research(Tool):
+    call_timeout_exempt = True
     name = "research"
     description = (
         "Spawn a read-only sub-agent to investigate a topic and return a "

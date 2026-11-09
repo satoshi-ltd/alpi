@@ -260,7 +260,7 @@ def _check_tools(cfg=None) -> list[Check]:
         registered = {name for name, _, _ in report}
         unknown = [
             name for name in cfg.tools.deny
-            if name not in registered and "__" not in name
+            if name.partition(":")[0] not in registered and "__" not in name
         ]
         if unknown:
             out.append(Check(

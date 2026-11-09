@@ -33,6 +33,10 @@ class Tool(abc.ABC):
     description: ClassVar[str]
     parameters: ClassVar[dict[str, Any]] = {"type": "object", "properties": {}}
     parallel_safe: ClassVar[bool] = False
+    # True for tools that bound their own duration (own timeout, a waiting user, a sub-agent budget): the executor's per-call deadline skips them.
+    call_timeout_exempt: ClassVar[bool] = False
+    # action -> parameters only that action reads; a `tool:action` deny drops the parameters no remaining action needs.
+    action_parameters: ClassVar[dict[str, frozenset[str]]] = {}
 
     @abc.abstractmethod
     def run(self, **kwargs: Any) -> ToolResult: ...

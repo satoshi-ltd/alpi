@@ -93,6 +93,7 @@ def _resolve_tools(toolsets: list[str] | None) -> tuple[set[str], list[str]]:
 
 
 class Delegate(Tool):
+    call_timeout_exempt = True
     name = "delegate"
     description = (
         "Spawn a write-capable sub-agent to complete a focused goal in an "

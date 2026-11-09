@@ -130,6 +130,7 @@ alpi restore ~/vault/alpi.alpi-backup --force
 | Tool sees wrong files | Configured workspace. |
 | Email tool fails | per-account creds in `.env` (`EMAIL__<ID>__PASSWORD`) / `secrets/gmail_tokens/<id>.json`, account config (`alpi setup → Email`), logs. |
 | Scheduled job missing | Daemon/scheduler running for the right profile. |
+| Jobs and workgroup turns skipped for a while | Provider pause: `alpi daemon status` shows `provider paused until … (code)`; the error output "model provider paused" names the cause (credit, key, model). It lifts on the first successful call; chat still works. |
 | Env var missing in script | Skill `requires_env`, profile `.env`, skill opened. |
 | ALP peer fails | Peer identity, socket/TCP reachability, budget, logs. |
 

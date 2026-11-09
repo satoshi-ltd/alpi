@@ -190,3 +190,11 @@ def _reset_session_search_state() -> None:
         session_search.set_current_session_id(None)
     except Exception:
         pass
+
+
+@pytest.fixture(autouse=True)
+def _provider_pause_isolated():
+    from alpi import provider_pause
+    provider_pause.reset()
+    yield
+    provider_pause.reset()

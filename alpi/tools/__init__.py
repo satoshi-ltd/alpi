@@ -108,10 +108,14 @@ def schemas(deny: frozenset[str] | set[str] | None = None) -> list[dict]:
     schemas = sorted(
         (
             schema for schema in (
-                _policy.allowed_schema(cls.schema()) for cls in _current_tools().values()
+                _policy.denied_schema(
+                    _policy.allowed_schema(cls.schema()) or {}, deny,
+                    getattr(cls, "action_parameters", None),
+                ) or None
+                for cls in _current_tools().values()
                 if is_available(cls)[0] and not _policy.is_denied(cls.name, deny)
             )
-            if schema is not None
+            if schema
         ),
         key=_schema_name,
     )
@@ -175,6 +179,9 @@ def _execute_registered(
         )
     if not _policy.permits(cls.schema(), arguments):
         return ToolResult(ok=False, output="", error=_policy.refusal(name, arguments))
+    action_refusal = _policy.action_denied(name, arguments, deny, cls.schema())
+    if action_refusal is not None:
+        return ToolResult(ok=False, output="", error=action_refusal)
     member_refusal = _member_mutation_refusal(name, arguments)
     if member_refusal is not None:
         return member_refusal

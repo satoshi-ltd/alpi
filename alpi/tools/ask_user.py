@@ -59,6 +59,7 @@ def _normalize_choices(
 
 
 class AskUser(Tool):
+    call_timeout_exempt = True
     name = "ask_user"
     description = (
         "Ask the user to pick from a small set of discrete choices "

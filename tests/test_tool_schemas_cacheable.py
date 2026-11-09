@@ -69,3 +69,11 @@ def test_wire_order_is_sorted_and_stable_across_mcp_map_order() -> None:
     assert forward == backward, "MCP insertion order must never reach the wire"
     assert forward == sorted(forward)
     assert "aaa_fake" in forward and "zzz_fake" in forward
+
+
+def test_schema_weight_stays_bounded() -> None:
+    """Every call carries every schema: a description that grows into a manual is paid on each cold prefix. Manuals belong in `alpi_knowledge`."""
+    from alpi.tools.skill import Skill
+    total = sum(len(json.dumps(s)) for s in tools_mod.schemas())
+    assert total <= 70_000, total
+    assert len(Skill.description) <= 3_500, len(Skill.description)

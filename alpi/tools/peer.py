@@ -21,6 +21,7 @@ from alpi.tools.base import Tool, ToolResult
 
 
 class PeerTool(Tool):
+    call_timeout_exempt = True
     name = "peer"
     description = (
         "Ask another alpi peer a question and return its reply. Works "

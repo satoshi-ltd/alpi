@@ -78,8 +78,51 @@ class _TimeNotes:
 
 _PEER_USAGE_MARKER = "\n\n---\ntokens:"
 _ESCALATE_AFTER_FAILURES = 3
+_REPEAT_HINT_AFTER = 3
+_REPEAT_EXHAUST_AFTER = 5
+_FAILURE_KEY_CHARS = 160
 _BUDGET_ESCALATION_GUARD = 0.8
+_DELIVERY_TOOLS = frozenset({"notify", "workgroup_post", "attach_file"})
 _WORKGROUP_FINALIZE_SECONDS = 45.0
+
+
+def _failure_key(name: str, args: dict, error: str) -> str:
+    """Same tool, same arguments, same error: the only repeat that proves the model is not changing anything."""
+    import json
+    try:
+        shown = json.dumps(args or {}, sort_keys=True, ensure_ascii=False, default=str)
+    except Exception:  # noqa: BLE001
+        shown = str(args)
+    return f"{name}|{shown}|" + " ".join((error or "").split())[:_FAILURE_KEY_CHARS]
+
+
+def _identical_run(streak: list[tuple[str, str, str]]) -> int:
+    """Length of the run of identical failures at the end of the streak."""
+    if not streak:
+        return 0
+    key = streak[-1][1]
+    count = 0
+    for _, k, _err in reversed(streak):
+        if k != key:
+            break
+        count += 1
+    return count
+
+
+def _distinct_failures(streak: list[tuple[str, str, str]], count: int) -> bool:
+    recent = streak[-count:]
+    return len(recent) == count and len({k for _, k, _ in recent}) == count
+
+
+def _delivered_by_tool(turn_tools: list) -> bool:
+    for log in turn_tools:
+        if not log.ok:
+            continue
+        if log.name in _DELIVERY_TOOLS:
+            return True
+        if log.name == "email" and str((log.args or {}).get("action") or "") == "send":
+            return True
+    return False
 
 
 def _fallback_continuation(cause: str) -> str:
@@ -436,6 +479,7 @@ class Engine:
             deny=_tool_policy.effective_denies(profile_denies),
             deny_reasons=_dispatch_tool_deny_reasons(profile_denies),
             max_workers=self.cfg.tools.max_parallel_tool_calls,
+            call_timeout_s=self.cfg.tools.call_timeout_s,
         )
         execution_world = build_world(run_context, self.cfg)
         from alpi import runs as runs_mod
@@ -464,6 +508,7 @@ class Engine:
                 pass
             saw_error = saw_error or event.kind == "error"
             saw_final = saw_final or (event.kind == "assistant_done" and event.final)
+            self._note_provider_outcome(run_context.profile, event)
             emit(event)
         home_token = set_active_home(self.home)
         session_token = set_active_session(self.session.id)
@@ -498,6 +543,21 @@ class Engine:
             _end_activity(run_context)
             reset_active_session(session_token)
             reset_active_home(home_token)
+
+    def _note_provider_outcome(self, profile: str, event: AgentEvent) -> None:
+        # In-process state: it matters for chat turns the daemon runs itself; a `--once` child reports through its parent instead.
+        try:
+            from alpi import provider_pause
+            if event.kind == "error" and event.code:
+                opened = provider_pause.record_failure(profile, event.code)
+                if opened is not None:
+                    provider_pause.notify_opened(self.home, profile, opened)
+            elif event.kind == "assistant_done" and event.final:
+                closed = provider_pause.record_success(profile)
+                if closed is not None:
+                    provider_pause.notify_closed(self.home, profile, closed)
+        except Exception:  # noqa: BLE001
+            pass
 
     def _track_activity(self, run_context: Any, user_text: str) -> None:
         try:
@@ -541,6 +601,7 @@ class Engine:
         self.cfg.budget = fresh.budget
         self.cfg.tools.deny = fresh.tools.deny
         self.cfg.tools.max_parallel_tool_calls = fresh.tools.max_parallel_tool_calls
+        self.cfg.tools.call_timeout_s = fresh.tools.call_timeout_s
         self.cfg.tools.execution = fresh.tools.execution
         self.cfg.tools.terminal.allow_network = fresh.tools.terminal.allow_network
         self.cfg.tiers = fresh.tiers
@@ -573,6 +634,10 @@ class Engine:
         turn_started = time.time()
         turn_deadline = _turn_deadline_from_env(time.monotonic())
         turn_budget = _turn_budget_from_env()
+        from alpi.core.tool_executor import current as _current_executor
+        _executor = _current_executor()
+        if _executor is not None:
+            _executor.turn_deadline = turn_deadline
         time_notes = _TimeNotes(turn_budget, time.monotonic()) if turn_budget else None
         turn_tools: list[ToolLog] = []
         turn_produced: list[dict] = []
@@ -739,13 +804,14 @@ class Engine:
             turn_routing.append(f"tier:{route_tier}")
         escalated = False
         consecutive_tool_failures = 0
+        failure_streak: list[tuple[str, str, str]] = []
+        hinted_failures: set[str] = set()
+        exhausted_tools: set[str] = set()
         fallback_queue = list(self.cfg.fallback_models)
         from alpi import prompt_cache as _pc
         call_kwargs.update(_pc.cache_kwargs_for_model(call_kwargs.get("model", ""), call_kwargs.get("api_base")))
         call_kwargs = self._with_affinity(call_kwargs)
         max_steps = self.cfg.tools.max_steps_per_turn
-
-        self._maybe_auto_compact(emit)
 
         # Bind session todos for this turn; reset in finally.
         from alpi.tools import todo as todo_mod
@@ -815,6 +881,8 @@ class Engine:
                     time_note = time_notes.note(time.monotonic())
                     if time_note:
                         self.session.messages.append({"role": "user", "content": time_note})
+                # Every step, not only the first: a long tool loop grows the prompt until the provider rejects it.
+                self._maybe_auto_compact(emit)
                 # step 0 included: auto-compaction may have spent past the cap after the turn-start check.
                 try:
                     ledger.check(self.home, self.cfg.budget)
@@ -1074,9 +1142,17 @@ class Engine:
                         turn_error = f"relay: no valid reply from '{relay_peer}'"
                         emit(AgentEvent(kind="done"))
                         return
-                    if not content.strip() and not turn_produced and not _empty_retry_done:
+                    empty_reply_is_fine = not dispatch_wg_id and (
+                        _delivered_by_tool(turn_tools)
+                        or os.environ.get("ALPI_SILENT_JOB") == "1"
+                    )
+                    if (
+                        not content.strip() and not turn_produced and not _empty_retry_done
+                        and not empty_reply_is_fine
+                    ):
                         _empty_retry_done = True
-                        if not escalated:
+                        # Nobody reads an unattended turn live; only an attended chat earns a stronger model.
+                        if not escalated and os.environ.get("ALPI_PLATFORM") != "cron" and not dispatch_wg_id:
                             routed = self._escalated_route(turn_model, turn_effort, "empty reply")
                             if routed is not None:
                                 call_kwargs, turn_model, turn_effort, note = routed
@@ -1182,6 +1258,7 @@ class Engine:
                 if (
                     not relay_peer and not self.interrupt_requested and len(tool_calls) > 1
                     and all(error is None for _, error in decoded_args)
+                    and not any(tc["name"] in exhausted_tools for tc in tool_calls)
                 ):
                     from alpi.core.tool_executor import ToolCall, current as current_executor
 
@@ -1257,6 +1334,15 @@ class Engine:
                                     ok=False, output="",
                                     error=tool_args.refusal(name, args_error, cut=i == cut_index),
                                 )
+                            elif name in exhausted_tools:
+                                result = ToolResult(
+                                    ok=False, output="",
+                                    error=(
+                                        f"{name} is exhausted for this turn: its last "
+                                        f"{_REPEAT_EXHAUST_AFTER} calls failed the same way. Do not call "
+                                        "it again this turn; take another route or report the blocker."
+                                    ),
+                                )
                             elif relay_peer and relay_declined:
                                 result = ToolResult(
                                     ok=False, output="",
@@ -1321,6 +1407,13 @@ class Engine:
                     consecutive_tool_failures = (
                         0 if result.ok else consecutive_tool_failures + 1
                     )
+                    if result.ok:
+                        failure_streak = []
+                    elif name not in exhausted_tools:
+                        failure_streak.append((
+                            name, _failure_key(name, args, result.error or ""),
+                            " ".join((result.error or "").split())[:_FAILURE_KEY_CHARS],
+                        ))
                     if (
                         result.ok
                         and dispatch_wg_id
@@ -1400,7 +1493,27 @@ class Engine:
                     emit(AgentEvent(kind="done"))
                     return
 
-                if not escalated and consecutive_tool_failures >= _ESCALATE_AFTER_FAILURES:
+                identical = _identical_run(failure_streak)
+                if identical >= _REPEAT_HINT_AFTER:
+                    last_name, key, last_error = failure_streak[-1]
+                    if identical >= _REPEAT_EXHAUST_AFTER:
+                        exhausted_tools.add(last_name)
+                    if key not in hinted_failures:
+                        hinted_failures.add(key)
+                        self.session.messages.append({
+                            "role": "user",
+                            "content": (
+                                f"[engine] The last {identical} calls to {last_name} with the same "
+                                f"arguments failed with the same error: {last_error}. Repeating the "
+                                "call changes nothing: fix what the error names, take another route, "
+                                f"or report the blocker. After {_REPEAT_EXHAUST_AFTER} identical "
+                                "failures the tool is refused for the rest of this turn."
+                            ),
+                        })
+                elif (
+                    not escalated and consecutive_tool_failures >= _ESCALATE_AFTER_FAILURES
+                    and _distinct_failures(failure_streak, _ESCALATE_AFTER_FAILURES)
+                ):
                     routed = self._escalated_route(
                         turn_model, turn_effort,
                         f"{consecutive_tool_failures} consecutive tool failures",

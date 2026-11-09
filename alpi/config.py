@@ -24,6 +24,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "tools": {
         "max_steps_per_turn": 100,
         "max_parallel_tool_calls": 4,
+        "call_timeout_s": 600,
         "deny": [],
         "execution": {"backend": "local", "docker_image": "python:3.12-slim"},
         "web_extract": {"model": ""},
@@ -143,6 +144,8 @@ class AttachmentsToolConfig:
 class ToolsConfig:
     max_steps_per_turn: int = 100  # ceiling on tool-calls per user turn
     max_parallel_tool_calls: int = 4
+    # Seconds one tool call may run before the engine moves on without it; 0 disables. Tools with their own bound are exempt.
+    call_timeout_s: float = 600.0
     # Tool names hidden from the LLM schema AND refused by the executor; unknown names are no-ops so typos are harmless.
     deny: list[str] = field(default_factory=list)
     execution: ExecutionToolConfig = field(default_factory=ExecutionToolConfig)
@@ -290,6 +293,13 @@ def _non_negative_int(value: Any, default: int) -> int:
     return n if n >= 0 else int(default)
 
 
+def _call_timeout(raw: Any) -> float:
+    default = float(DEFAULT_CONFIG["tools"]["call_timeout_s"])
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        return default
+    return max(0.0, float(raw))
+
+
 def _normalize_deny(raw: Any) -> list[str]:
     """Tolerate hand-written ``tools.deny`` shapes: must be a list, items get ``strip()``, duplicates dropped, order preserved. A bare string (``deny: terminal``) collapses to ``[]`` rather than iterating chars."""
     if not isinstance(raw, list):
@@ -367,6 +377,7 @@ def load(home: Path) -> Config:
                 DEFAULT_CONFIG["tools"]["max_parallel_tool_calls"],
             )
         )),
+        call_timeout_s=_call_timeout(tools_raw.get("call_timeout_s")),
         deny=_normalize_deny(tools_raw.get("deny")),
         execution=ExecutionToolConfig(
             backend=(
@@ -617,6 +628,8 @@ def _tools_delta(cfg: Config) -> dict:
         out["max_steps_per_turn"] = cfg.tools.max_steps_per_turn
     if cfg.tools.max_parallel_tool_calls != d["max_parallel_tool_calls"]:
         out["max_parallel_tool_calls"] = cfg.tools.max_parallel_tool_calls
+    if cfg.tools.call_timeout_s != d["call_timeout_s"]:
+        out["call_timeout_s"] = cfg.tools.call_timeout_s
     if cfg.tools.deny:
         out["deny"] = list(cfg.tools.deny)
     execution_out: dict[str, Any] = {}

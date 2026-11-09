@@ -40,6 +40,15 @@ created_at: 2026-04-20
 - `requires_env`, `requires_bins`, `platforms`: always checked; hide inactive skills from prompt/hints and reject execution.
 - `requires_config`: opt-in gate — checked only when the caller passes the raw profile config; `skills_index_block` and `skill(run|test|invoke)` do so, programmatic callers that omit `cfg_raw` skip it.
 
+## Script conventions
+
+- Resolve `secrets/` and `state/` from the script itself, never from `$HOME` or an absolute `~/.alpi/...` path, so the skill finds its data from any profile: `here = Path(__file__).parent.parent; here / "secrets" / "token"; here / "state" / "history.jsonl"`.
+- Prefer the Python stdlib (`urllib.request`, `http.server`, `json`, `threading`, `socketserver`). A third-party library needs a `## Setup` section in `SKILL.md` with the install command.
+- `state/` conventions (not enforced): `.jsonl` for append-only logs, `.json` for snapshots, `.db` for SQLite; describe what lives there under a `## State` section so the agent sees it without reading the scripts.
+- Filenames match `[a-zA-Z0-9][a-zA-Z0-9._-]{0,100}`; every subdirectory is flat.
+- `scripts/run.py` only for deterministic local code. A skill that depends on agent tools or MCP methods (`memory`, `schedule`, `email`, `bitbucket__…`) stays prose-only: `skill(action="run")` returns its `SKILL.md` and the agent calls the real tools. Tools and MCP methods are not importable Python APIs.
+- A scripted skill with `output_schema:` in its frontmatter treats that schema as the contract for stdout; `skill(action="test")` checks it and `invoke` requires it.
+
 ## Secrets and state
 
 | Store | Purpose |

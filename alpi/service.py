@@ -125,6 +125,8 @@ def stop_daemon(root: Path, *, timeout: float = 5.0) -> bool:
 
 def serve_all(root: Path) -> None:
     """Foreground entry point for the central daemon."""
+    from alpi import provider_pause
+    provider_pause.activate()
     from alpi import home as home_mod
 
     _configure_logging_daemon(root)
@@ -3590,6 +3592,23 @@ async def _dispatch_workgroup_turn(
     authority: dict | None = None,
 ) -> None:
     """Spawn a background ``chat --once`` turn for a workgroup."""
+    from alpi import provider_pause
+    pause = provider_pause.paused(profile)
+    if pause is not None:
+        if provider_pause.announce_once(profile, f"wg:{wg_id}"):
+            log.info(
+                "wg poller: %s skipped for %s: provider paused until %s (%s)",
+                wg_id, profile, time.strftime("%H:%M", time.localtime(pause.until)), pause.code,
+            )
+        _restore_dispatch_recovery(
+            home, recovery_kind, wg_id, recovery_seq, recovery_attempt,
+        )
+        _append_turn_event(home, {
+            "ts": _utcnow_iso(), "event": "skipped-provider-paused",
+            "profile": profile, "wg_id": wg_id, "wg_name": wg_name,
+            "reason": reason, "code": pause.code, "until": pause.until,
+        })
+        return
     turn_id = os.urandom(16).hex()
     run_id = os.urandom(16).hex()
     turn_timeout = turn_budget_s or _turn_timeout_for(pipeline)
@@ -3873,6 +3892,8 @@ async def _dispatch_workgroup_turn(
 
     posts_added = [0]
     transient_failure = [False]
+    provider_code = [""]
+    errored = [False]
 
     def _observe_event(line: str) -> None:
         try:
@@ -3881,6 +3902,10 @@ async def _dispatch_workgroup_turn(
             return
         if event.get("transient") is True:
             transient_failure[0] = True
+        if event.get("kind") == "error":
+            errored[0] = True
+            if event.get("code"):
+                provider_code[0] = str(event.get("code"))
         if (
             event.get("kind") == "tool_end"
             and event.get("name") == "workgroup_post"
@@ -4021,11 +4046,31 @@ async def _dispatch_workgroup_turn(
         _restore_dispatch_recovery(
             home, recovery_kind, wg_id, recovery_seq, recovery_attempt,
         )
+    _note_workgroup_provider_outcome(
+        home, profile, code=provider_code[0],
+        succeeded=(rc == 0 and not errored[0] and not (timed_out or preempted or cancelled)),
+    )
     if member_responded_seq is not None and _should_advance_cursor(
         rc, posts_added[0], preempted, timed_out, cancelled,
         require_delivery=pipeline,
     ):
         _advance_member_cursor(home, wg_id, int(member_responded_seq))
+
+
+def _note_workgroup_provider_outcome(home: Path, profile: str, *, code: str, succeeded: bool) -> None:
+    from alpi import provider_pause
+    if code:
+        opened = provider_pause.record_failure(profile, code)
+        if opened is not None:
+            provider_pause.notify_opened(home, profile, opened)
+        if code not in provider_pause.ACCOUNT_CODES | provider_pause.TRANSPORT_CODES:
+            provider_pause.release_probe(profile)
+    elif succeeded:
+        closed = provider_pause.record_success(profile)
+        if closed is not None:
+            provider_pause.notify_closed(home, profile, closed)
+    else:
+        provider_pause.release_probe(profile)
 
 
 async def _finalize_workgroup_run(

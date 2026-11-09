@@ -457,6 +457,16 @@ def proc_starttime(pid: int) -> str | None:
         return None
 
 
+# path -> (mtime_ns, size, status): a closed journal never changes, so the sweep stats it instead of reopening it.
+_journal_status_cache: dict[str, tuple[int, int, str]] = {}
+_journal_cache_lock = threading.Lock()
+
+
+def invalidate_journal_cache() -> None:
+    with _journal_cache_lock:
+        _journal_status_cache.clear()
+
+
 def running_journals(home: Path, now: float) -> list[tuple[dict, dict, int, float]]:
     """Every journal still marked running, with its start data, pid and seconds since its last event."""
     out: list[tuple[dict, dict, int, float]] = []
@@ -467,14 +477,29 @@ def running_journals(home: Path, now: float) -> list[tuple[dict, dict, int, floa
         paths = list(directory.glob("*.jsonl"))
     except OSError:
         return out
+    seen: set[str] = set()
     for path in paths:
         if path.is_symlink():
+            continue
+        key = str(path)
+        seen.add(key)
+        try:
+            st = path.stat()
+        except OSError:
+            continue
+        stamp = (st.st_mtime_ns, st.st_size)
+        with _journal_cache_lock:
+            cached = _journal_status_cache.get(key)
+        if cached is not None and cached[:2] == stamp and cached[2] != "running":
             continue
         try:
             row = summary(home, path.stem)
         except (OSError, ValueError):
             continue
-        if row.get("status") != "running":
+        status = str(row.get("status") or "running")
+        with _journal_cache_lock:
+            _journal_status_cache[key] = (stamp[0], stamp[1], status)
+        if status != "running":
             continue
         try:
             first = _first_record(path) or {}
@@ -484,6 +509,9 @@ def running_journals(home: Path, now: float) -> list[tuple[dict, dict, int, floa
         except (OSError, TypeError, ValueError):
             continue
         out.append((row, started, pid, age))
+    with _journal_cache_lock:
+        for key in [k for k in _journal_status_cache if k.startswith(str(directory)) and k not in seen]:
+            _journal_status_cache.pop(key, None)
     return out
 
 

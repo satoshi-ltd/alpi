@@ -64,10 +64,15 @@ def _failing_tools(n: int):
 def _patch_failing_execute(monkeypatch):
     from alpi.tools.base import ToolResult
 
-    monkeypatch.setattr(
-        "alpi.tools.execute",
-        lambda name, args, deny=frozenset(): ToolResult(ok=False, output="", error="boom"),
-    )
+    # Distinct errors: a repeated identical error earns a hint instead of an escalation.
+    calls = {"n": 0}
+
+    def _fail(name, args, deny=frozenset(), deny_reasons=None):
+        calls["n"] += 1
+        return ToolResult(ok=False, output="", error=f"boom {calls['n']}")
+
+    monkeypatch.setattr("alpi.tools.execute", _fail)
+    monkeypatch.setattr("alpi.tools._execute_registered", _fail)
 
 
 def test_plain_turn_records_model_on_turn(monkeypatch, tmp_path: Path) -> None:

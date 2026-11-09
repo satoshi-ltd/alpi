@@ -244,6 +244,13 @@ Output attachments (MM.2):
   attachment fetch is scoped to profile home/workspace/temp roots.
 - Long tool loops: `tools.max_steps_per_turn` always bounds model iterations;
   the default is 100 for every provider and budget configuration.
+- `[engine] The last N tool calls … failed with the same error`: change the
+  arguments the error names or take another route; after five identical
+  failures the tool is refused for the rest of the turn.
+- `<tool> did not finish within Ns`: the per-call deadline (`tools.call_timeout_s`)
+  passed; the call may still have taken effect, so check before repeating it.
+- `tool action denied for this profile: knowledge:ingest … allowed: search`:
+  the profile denies that action in `tools.deny`; use an allowed one.
 
 ## Related topics
 

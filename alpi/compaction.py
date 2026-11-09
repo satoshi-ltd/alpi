@@ -1,9 +1,9 @@
 """Automatic context compaction for long-running sessions.
 
-Triggered preemptively by the engine before each LLM round-trip when the
-prompt would exceed a fraction of the model's context window. Preserves
-the system prefix and the most recent turns intact, summarizes the
-middle, and as a cheaper first pass truncates oversized tool outputs.
+The engine checks the trigger before every model call of a turn, so a long
+tool loop compacts mid-turn. Preserves the system prefix and the most recent
+messages intact, summarizes the middle, and as cheaper first passes truncates
+oversized tool outputs and prunes the tool outputs already behind the tail.
 """
 
 from __future__ import annotations
@@ -41,6 +41,11 @@ TOOL_TRUNCATE_MIN_CHARS = 32_000
 # When we truncate a tool message we keep this many chars at head + tail.
 TOOL_TRUNCATE_KEEP_HEAD_CHARS = 8_000
 TOOL_TRUNCATE_KEEP_TAIL_CHARS = 4_000
+
+# Mid-turn prune of tool outputs already behind the kept tail: cheaper than a summary and runs only past the trigger.
+TOOL_PRUNE_MIN_CHARS = 4_000
+TOOL_PRUNE_KEEP_HEAD_CHARS = 1_500
+TOOL_PRUNE_KEEP_TAIL_CHARS = 500
 
 # Floor for the summary's output budget: even on tiny windows we never
 # squeeze the summarizer below this.
@@ -192,6 +197,65 @@ def _truncate_oversized_tools(messages: list[dict]) -> int:
     return count
 
 
+def _tail_start(body: list[dict], keep_tail: int) -> int:
+    """Index where the kept tail begins; moved back so the tail never opens on a tool reply whose call is behind the cut."""
+    start = len(body) - keep_tail
+    first = start
+    while 0 < first < len(body) and body[first].get("role") == "tool":
+        first -= 1
+    if first < start and body[first].get("role") == "assistant" and body[first].get("tool_calls"):
+        return first
+    return start
+
+
+def _head_end(body: list[dict], keep_head: int) -> int:
+    """Index where the head anchor ends; moved forward past the tool replies of a batch the cut would split."""
+    end = min(max(0, keep_head), len(body))
+    if end == 0:
+        return 0
+    last = body[end - 1]
+    if last.get("role") == "tool" or (last.get("role") == "assistant" and last.get("tool_calls")):
+        while end < len(body) and body[end].get("role") == "tool":
+            end += 1
+    return end
+
+
+def _only_a_stale_summary(middle: list[dict]) -> bool:
+    """A middle made of the previous summary plus a little new text is not worth another model call; size decides, not count."""
+    rest = [m for m in middle if not str(m.get("content") or "").startswith("[auto-compacted summary]")]
+    return (
+        len(rest) < len(middle)
+        and estimate_messages_tokens(rest) < 2 * MIN_SUMMARY_OUTPUT_TOKENS
+    )
+
+
+def _prune_stale_tool_outputs(messages: list[dict], keep_tail: int) -> int:
+    """Shrink tool outputs behind the kept tail to head + … + tail. Returns the count pruned."""
+    n = len(messages)
+    system_end = 0
+    while system_end < n and messages[system_end].get("role") == "system":
+        system_end += 1
+    body = messages[system_end:]
+    if len(body) <= max(0, keep_tail):
+        return 0
+    cutoff = system_end + _tail_start(body, max(0, keep_tail))
+    count = 0
+    for msg in messages[:cutoff]:
+        if msg.get("role") != "tool":
+            continue
+        content = msg.get("content")
+        if not isinstance(content, str) or len(content) <= TOOL_PRUNE_MIN_CHARS:
+            continue
+        head = content[:TOOL_PRUNE_KEEP_HEAD_CHARS]
+        tail = content[-TOOL_PRUNE_KEEP_TAIL_CHARS:]
+        dropped = len(content) - len(head) - len(tail)
+        msg["content"] = (
+            f"{head}\n\n[... {dropped} chars elided by auto-compact ...]\n\n{tail}"
+        )
+        count += 1
+    return count
+
+
 def _partition(
     messages: list[dict],
     keep_head: int,
@@ -201,9 +265,11 @@ def _partition(
 
     ``system_prefix`` is every leading system message. After it, the
     first ``keep_head`` non-system messages become ``head_anchor`` and the
-    last ``keep_tail`` non-system messages become ``tail``. Any system
-    messages interleaved in the middle stay in ``middle`` so the
-    summarizer can fold them into the briefing if they matter.
+    last ``keep_tail`` non-system messages become ``tail``, extended back
+    to the assistant message whose tool calls the tail's leading tool
+    replies answer. Any system messages interleaved in the middle stay in
+    ``middle`` so the summarizer can fold them into the briefing if they
+    matter.
     """
     n = len(messages)
     system_end = 0
@@ -221,32 +287,34 @@ def _partition(
         # Nothing to compact — head + tail already covers the body.
         return system_prefix, body, [], []
 
-    head_anchor = body[:keep_head]
-    tail = body[-keep_tail:] if keep_tail else []
-    middle = body[keep_head:len(body) - keep_tail]
+    tail_start = _tail_start(body, keep_tail) if keep_tail else len(body)
+    head_end = _head_end(body, keep_head)
+    if tail_start <= head_end:
+        return system_prefix, body, [], []
+    head_anchor = body[:head_end]
+    tail = body[tail_start:]
+    middle = body[head_end:tail_start]
     return system_prefix, head_anchor, middle, tail
 
 
 def _coalesce_tail_tool_calls(tail: list[dict]) -> list[dict]:
-    """If the tail starts with a ``tool`` reply whose matching ``assistant``
-    tool_calls message is in the dropped middle, prepend a minimal stub
-    so the LLM doesn't see a dangling tool result.
+    """If the tail starts with ``tool`` replies whose matching ``assistant``
+    tool_calls message is in the dropped middle, prepend one stub naming
+    every leading reply so the LLM never sees a dangling tool result.
     """
-    if not tail:
+    if not tail or tail[0].get("role") != "tool":
         return tail
-    if tail[0].get("role") != "tool":
-        return tail
-    tool_call_id = tail[0].get("tool_call_id") or ""
-    stub_name = (tail[0].get("name") or "tool")
-    stub = {
-        "role": "assistant",
-        "content": None,
-        "tool_calls": [{
-            "id": tool_call_id or f"compacted-{stub_name}",
+    calls = []
+    for msg in tail:
+        if msg.get("role") != "tool":
+            break
+        name = msg.get("name") or "tool"
+        calls.append({
+            "id": msg.get("tool_call_id") or f"compacted-{name}-{len(calls)}",
             "type": "function",
-            "function": {"name": stub_name, "arguments": "{}"},
-        }],
-    }
+            "function": {"name": name, "arguments": "{}"},
+        })
+    stub = {"role": "assistant", "content": None, "tool_calls": calls}
     return [stub] + tail
 
 
@@ -328,9 +396,11 @@ def compact(
     The pipeline:
     1. Truncate oversized tool outputs in-place (cheap first pass).
     2. Unless ``force=True``, stop when below ``trigger_ratio``.
-    3. Partition into system + head + middle + tail.
-    4. Flatten the middle into a transcript and call ``summarize``.
-    5. If the summarizer returns a non-empty result, splice it in.
+    3. Prune tool outputs behind the tail; stop if that alone brings the
+       prompt back under the trigger (no model call spent).
+    4. Partition into system + head + middle + tail.
+    5. Flatten the middle into a transcript and call ``summarize``.
+    6. If the summarizer returns a non-empty result, splice it in.
        Otherwise leave the original middle in place — never destroy
        history because of a provider error.
 
@@ -352,10 +422,20 @@ def compact(
             tokens_after=estimate_messages_tokens(new_messages),
         )
 
+    truncated += _prune_stale_tool_outputs(new_messages, policy.keep_tail)
+    if not force and not should_compact(new_messages, user_text, ctx_window, policy):
+        return new_messages, CompactionResult(
+            fired=False,
+            tool_truncated=truncated,
+            summarized_messages=0,
+            tokens_before=tokens_before,
+            tokens_after=estimate_messages_tokens(new_messages),
+        )
+
     system_prefix, head_anchor, middle, tail = _partition(
         new_messages, policy.keep_head, policy.keep_tail,
     )
-    if not middle:
+    if not middle or (not force and _only_a_stale_summary(middle)):
         # Tail/head already cover the body; nothing else we can do.
         return new_messages, CompactionResult(
             fired=False,
@@ -371,6 +451,19 @@ def compact(
         + estimate_messages_tokens(tail)
         + estimate_tokens(user_text)
     )
+    # Kept part over the trigger and a middle too small to matter: a summary would free almost nothing, so spend nothing on one.
+    if (
+        not force
+        and preserved_tokens > policy.trigger_ratio * ctx_window
+        and estimate_messages_tokens(middle) < 2 * MIN_SUMMARY_OUTPUT_TOKENS
+    ):
+        return new_messages, CompactionResult(
+            fired=False,
+            tool_truncated=truncated,
+            summarized_messages=0,
+            tokens_before=tokens_before,
+            tokens_after=estimate_messages_tokens(new_messages),
+        )
     summary_budget = _summary_max_tokens(ctx_window, preserved_tokens, policy)
     transcript = _flatten_for_summary(middle)
 
@@ -550,6 +643,7 @@ __all__ = [
     "CompactionResult",
     "MIN_SUMMARY_OUTPUT_TOKENS",
     "SUMMARY_PROMPT_OVERHEAD_TOKENS",
+    "TOOL_PRUNE_MIN_CHARS",
     "clip_transcript",
     "compact",
     "emit_candidates_from_summary",

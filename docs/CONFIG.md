@@ -84,7 +84,8 @@ removes the key.
 |---|---|---|---|
 | `tools.max_steps_per_turn` | `100` | int | next turn |
 | `tools.max_parallel_tool_calls` | `4` | int — maximum concurrent calls in an all-parallel-safe tool batch | next turn |
-| `tools.deny` | `[]` | list of tool names | next turn |
+| `tools.call_timeout_s` | `600` | seconds one tool call may run before the engine moves on without it (`0` = off; tools with their own bound are exempt) | next turn |
+| `tools.deny` | `[]` | list of tool names or `tool:action` entries | next turn |
 | `tools.execution.backend` | `"local"` | `local` \| `docker` — terminal shell backend; background jobs are refused in Docker | next turn |
 | `tools.execution.docker_image` | `"python:3.12-slim"` | Docker image used when the execution backend is `docker` | next turn |
 | `tools.web_extract.model` | `""` (use main) | string — a model id, or the literal `fast` / `deep` to reference a tier | next turn |
@@ -137,6 +138,15 @@ Per-tool overrides via `tools.<name>.max_result_chars` — set `-1` on
 `read_file` if you want the LLM to get the whole source deliberately,
 or lower a chatty tool's cap.
 
+`tools.call_timeout_s` bounds one tool call. A call that runs past it returns a
+transient failure to the model and the turn goes on; its thread is left to finish
+or to die with the process, so side effects of the call may still land. When the
+scheduler or a workgroup dispatch gave the turn a soft time budget and more than
+30 s of it remain, the deadline is the smaller of the two; closer to the budget,
+and past it, the plain cap applies. Tools that bound themselves (`terminal`,
+`ask_user`, `peer`, `research`, `delegate`, `workflow`) and `workgroup_post` are
+exempt. `0` disables it.
+
 `tools.max_parallel_tool_calls` only applies when every call in the model's
 batch declares itself parallel-safe. A mutation, terminal call, unknown tool,
 or mixed batch is an exclusive barrier and retains serial ordering. Results
@@ -165,7 +175,18 @@ running. Unknown names are no-ops, so typos are harmless. Denying
 `alpi_knowledge` also drops the self-knowledge rule from the system
 prompt, so the model is never told to call a tool it cannot reach.
 An entry may end in `*` to cover a family — `github__*` denies every
-tool of the `github` MCP server. What one peer's inbound `link.ask` turns
+tool of the `github` MCP server. An entry of the form `tool:action`
+(`knowledge:ingest`, `memory:remove`, `knowledge:*`) denies one action of
+a tool that takes an `action` parameter: the action leaves the schema's
+enum, a call to it is refused naming the actions still allowed, and a
+tool with no action left is dropped like a whole-tool deny. A profile that
+only searches its knowledge lists `knowledge:ingest`, `knowledge:maintain`,
+`knowledge:lint` and `knowledge:index`, and the model then sees only
+`action`, `query` and `k`: a tool that declares which parameters each action
+reads drops the ones no remaining action needs. An `action` spelled outside
+the trimmed enum (another case, extra spaces) is refused as well. A search-only
+profile assumes the default root `<workspace>/knowledge`: `path` goes with the
+write actions. What one peer's inbound `link.ask` turns
 may run on this profile is set the other way round, as the only tools
 allowed, under `tools.allow` in its `peers.yaml` record; see
 [ALP.md → Per-peer tool policy](ALP.md#per-peer-tool-policy).
@@ -347,6 +368,15 @@ any output reaches the consumer. A timeout of `0` disables that watchdog.
 | `runtime.max_retries` | `2` | int | next turn |
 | `runtime.retry_backoff_s` | `1.5` | seconds (base; exponential + jitter) | next turn |
 | `runtime.prefetch` | `""` | `"" \| auto \| all \| off` | next daemon start |
+
+A **provider pause** needs no key: two consecutive account-class failures
+(`insufficient_credit`, `auth`, `model_unavailable`) pause the profile's
+scheduled jobs and workgroup turns for 15 minutes, two transport-class
+failures (`provider_unavailable`, `timeout`) for 5 minutes; the window doubles
+while failures continue (4 h and 1 h caps) and the first successful call lifts
+it. Chat is never blocked. The pause is reported once as an error output and
+`schedule.failed`, its lifting once as an info output, and it shows in
+`alpi daemon status` and in the apps' profile list.
 
 `first_byte_timeout_s` is generous so slow reasoning models aren't killed before
 their first token; bump it for very slow local Ollama or long-thinking models.

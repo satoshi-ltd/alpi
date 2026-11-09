@@ -37,6 +37,8 @@ class JobOutcome:
     run_id: str | None = None
     last_tool: str | None = None
     tool_count: int | None = None
+    # llm_errors class of the failure that ended the run, when the engine reported one; feeds the provider pause.
+    provider_code: str = ""
 
     def __iter__(self):
         # Back-compat tuple unpack `ok, msg, reply = run_job(...)`.
@@ -54,6 +56,7 @@ class ParsedEvents:
     errored: bool = False
     error: str = ""
     error_detail: str = ""
+    error_code: str = ""
 
 
 # How often to wake up and check for due jobs. 30s is fine-grained enough
@@ -500,6 +503,8 @@ def run_job(job: dict, home: Path) -> JobOutcome:
         extra["ALPI_TIER"] = job_tier
     if soft is not None:
         extra["ALPI_TURN_BUDGET_S"] = str(soft)
+    if not notify_user:
+        extra["ALPI_SILENT_JOB"] = "1"
     env = _effective_profile_env(home, extra=extra)
     try:
         proc = subprocess.run(
@@ -538,7 +543,7 @@ def run_job(job: dict, home: Path) -> JobOutcome:
         shown = parsed.error or "no message"
         if parsed.error_detail:
             shown = f"{shown} ({parsed.error_detail})"
-        return JobOutcome(False, f"agent error: {shown}", run_id=run_id)
+        return JobOutcome(False, f"agent error: {shown}", run_id=run_id, provider_code=parsed.error_code)
 
     if parsed.notified_natively:
         # The agent already notified the user (called notify) — don't double-notify the reply.
@@ -564,6 +569,7 @@ def _parse_events(stdout: str) -> ParsedEvents:
     errored = False
     error = ""
     error_detail = ""
+    error_code = ""
     pending: dict[str, list[dict]] = {"notify": []}
     agent_messages: list[dict] = []
     for line in stdout.splitlines():
@@ -591,7 +597,8 @@ def _parse_events(stdout: str) -> ParsedEvents:
             errored = True
             error = (ev.get("text") or "").strip()
             error_detail = (ev.get("detail") or "").strip()
-    return ParsedEvents(notified_natively, reply, agent_messages, errored, error, error_detail)
+            error_code = str(ev.get("code") or "").strip()
+    return ParsedEvents(notified_natively, reply, agent_messages, errored, error, error_detail, error_code)
 
 
 def _emit_agent_messages(home: Path, messages: list[dict], *, job_id: str = "", run_id: str = "") -> None:
@@ -651,6 +658,7 @@ def fire_by_id(home: Path, job_id: str) -> tuple[bool, str]:
         return False, f"no job with id {job_id!r}{hint}"
     log.info("firing job %s ad-hoc (%s)", job_id, target.get("kind", "?"))
     outcome = _run_guarded(target, home)
+    _note_provider_outcome(home, target, outcome)
     log.info("job %s ad-hoc %s — %s", job_id,
              "OK" if outcome.ok else "FAIL", outcome.message)
     stamp_at = _now().isoformat()
@@ -669,6 +677,45 @@ def fire_by_id(home: Path, job_id: str) -> tuple[bool, str]:
 
 
 RAISED_MESSAGE_CAP = 500
+
+
+def _note_provider_outcome(home: Path, job: dict, outcome: JobOutcome) -> None:
+    """Agent runs feed the per-profile provider pause; script jobs never touch the provider."""
+    if job.get("no_agent"):
+        return
+    from alpi import provider_pause
+    from alpi.home import profile_name
+    profile = profile_name(home)
+    if outcome.ok:
+        closed = provider_pause.record_success(profile)
+        if closed is not None:
+            provider_pause.notify_closed(home, profile, closed)
+    elif outcome.provider_code:
+        opened = provider_pause.record_failure(profile, outcome.provider_code)
+        if opened is not None:
+            provider_pause.notify_opened(home, profile, opened)
+        if outcome.provider_code not in provider_pause.ACCOUNT_CODES | provider_pause.TRANSPORT_CODES:
+            provider_pause.release_probe(profile)
+    else:
+        provider_pause.release_probe(profile)
+
+
+def _provider_paused_skip(home: Path, job: dict) -> bool:
+    if job.get("no_agent"):
+        return False
+    from alpi import provider_pause
+    from alpi.home import profile_name
+    profile = profile_name(home)
+    state = provider_pause.paused(profile)
+    if state is None:
+        return False
+    job_id = str(job.get("id", "?"))
+    if provider_pause.announce_once(profile, f"job:{job_id}"):
+        log.info(
+            "job %s skipped: provider paused until %s (%s)",
+            job_id, time.strftime("%H:%M", time.localtime(state.until)), state.code,
+        )
+    return True
 
 
 def _run_guarded(job: dict, home: Path) -> JobOutcome:
@@ -976,10 +1023,14 @@ def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]
             continue
         job = current
         job_id = str(job.get("id", "?"))
+        # Unstamped on purpose: the job stays due and fires on the first tick after the pause lifts.
+        if _provider_paused_skip(home, job):
+            continue
         log.info("firing job %s (%s)", job_id, job.get("kind", "cron"))
         _started = time.time()
         outcome = _run_guarded(job, home)
         _elapsed = time.time() - _started
+        _note_provider_outcome(home, job, outcome)
         # Stamp even on failure to avoid a tight re-fire loop; keep it ahead of the I/O below.
         _stamp({job_id: (str(job.get("kind", "cron")), outcome.ok, outcome.message, job.get("run_at"))})
         stamped = True

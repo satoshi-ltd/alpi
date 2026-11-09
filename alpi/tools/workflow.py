@@ -33,6 +33,7 @@ def _expand(value: Any, results: dict[str, dict[str, Any]]) -> Any:
 
 
 class Workflow(Tool):
+    call_timeout_exempt = True
     name = "workflow"
     description = (
         "Run a small dependency graph of existing tools under the current run's "

@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.18.0 — 2026-11-09 — the harness stops wasting turns
+
+- Context compaction runs before every model call of a turn, not only at its start: a long tool loop prunes the tool outputs it no longer needs and summarizes the rest instead of growing until the provider rejects the prompt, and each pass is recorded in `compaction.jsonl`.
+- The same tool call failing three times in a row gets a correction note instead of a stronger model, and after five identical failures that tool is refused for the rest of the turn; the effort escalation stays for three failures with different causes. A tool call is also bounded by `tools.call_timeout_s` (default 10 minutes) so one hung call no longer eats the whole run.
+- A profile whose provider answers twice in a row with an account error (no credit, bad key, unknown model) or a transport error pauses its scheduled jobs and workgroup turns for 15 or 5 minutes, doubling while it keeps failing and lifting on the first good call, with one notification each way; chat is never paused, and `alpi daemon status` and the profile summary the apps read show the pause.
+- A turn that already delivered through `notify`, `email` or `attach_file`, or a silent scheduled job, may end without text; the "empty reply" retry and escalation now apply only where a reader is waiting for text.
+- `tools.deny` accepts `tool:action` entries (`knowledge:ingest`, `knowledge:*`) that drop single actions from a tool's schema and refuse them, the `skill` tool description moves its manual to `alpi_knowledge`, and the run sweep stats closed journals instead of reopening them every 30 seconds.
+
 ## v0.17.53 — 2026-11-07 — a member runs on the profile's model
 
 - A chat turn from a member connection runs on the profile's model: `host.chat.send` refuses a `model` override from a member with `forbidden`, so only an admin picks another model for a turn. The model, its reasoning effort, the budget and the skills stay admin settings, as they were.
