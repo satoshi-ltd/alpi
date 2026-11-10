@@ -249,7 +249,7 @@ export default function Pair() {
         <View style={firstRunBottom(insets, edge)}>
           <View style={firstRunActions}>
             <Button
-              title={blocked ? 'Open settings' : 'Grant access'}
+              title={blocked ? 'Open settings' : 'Continue'}
               size="hero"
               fullWidth
               onPress={blocked ? () => Linking.openSettings() : requestPermission}

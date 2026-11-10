@@ -14,6 +14,11 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.9.11 — 2026-11-10 — the camera page asks you to continue
+
+- The page shown before the camera permission now has a Continue button instead of Grant access, as App Store review asks; Open settings stays when the system will not ask again, and Paste link stays as the way around the camera.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.9.10 — 2026-11-06 — buttons and fields look and behave the same on both apps
 
 - A pressed button changes by the same mix as on desktop, and a disabled one fades to 45 % keeping its colours instead of turning grey.

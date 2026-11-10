@@ -1727,7 +1727,7 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   Button hero anchored above the safe area, with ghosts under it and never two
   primaries. The welcome adds the link sources under Where do I get a link?;
   the scan screen has one Paste link button; with the camera not allowed the
-  page offers Grant access, or Open settings when the system will not ask
+  page offers Continue, or Open settings when the system will not ask
   again (the permission is read again when the app returns). The paste page
   hides the mark and the sources while the keyboard is open; pairing shows the
   three steps and one wait (the busy mark, no button spinner) and names a

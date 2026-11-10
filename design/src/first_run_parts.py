@@ -402,7 +402,7 @@ def q_scan():
 
 def q_denied(blocked=False):
     top = q_page(*q_head("Pair this phone", sub="Camera permission needed to scan the pairing QR.", fact="camera · not allowed"))
-    return q_screen(top, qb("Open settings" if blocked else "Grant access") + qb("Paste link", "ghost", "lg"))
+    return q_screen(top, qb("Open settings" if blocked else "Continue") + qb("Paste link", "ghost", "lg"))
 
 
 def q_rows(bio_on=False, alerts="undetermined", face_id=True):

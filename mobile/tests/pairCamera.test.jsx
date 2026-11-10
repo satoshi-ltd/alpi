@@ -95,23 +95,23 @@ describe('camera not allowed', () => {
     h.permission = { granted: false, canAskAgain: true, status: 'undetermined' };
   });
 
-  it('is a page on the theme ground with Grant access as the one primary over Paste link', () => {
+  it('is a page on the theme ground with Continue as the one primary over Paste link', () => {
     const { container } = render(<Pair />);
     expect(container.querySelector('[data-camera]')).toBeNull();
     expect(screen.getByText('camera · not allowed')).toBeTruthy();
     expect(screen.getByText('Camera permission needed to scan the pairing QR.')).toBeTruthy();
-    expect(primaries().map((b) => b.textContent)).toEqual(['Grant access']);
-    expect(screen.getByText('Grant access').dataset.size).toBe('hero');
+    expect(primaries().map((b) => b.textContent)).toEqual(['Continue']);
+    expect(screen.getByText('Continue').dataset.size).toBe('hero');
     expect(screen.getByText('Paste link').dataset.variant).toBe('ghost');
     expect(container.innerHTML).not.toContain('"backgroundColor":"#000"');
-    fireEvent.click(screen.getByText('Grant access'));
+    fireEvent.click(screen.getByText('Continue'));
     expect(h.request).toHaveBeenCalledTimes(1);
   });
 
   it('offers Open settings when the system will not ask again, and opens the app settings', () => {
     h.permission = { granted: false, canAskAgain: false, status: 'denied' };
     render(<Pair />);
-    expect(screen.queryByText('Grant access')).toBeNull();
+    expect(screen.queryByText('Continue')).toBeNull();
     expect(primaries().map((b) => b.textContent)).toEqual(['Open settings']);
     fireEvent.click(screen.getByText('Open settings'));
     expect(Linking.openSettings).toHaveBeenCalledTimes(1);
@@ -136,7 +136,7 @@ describe('camera not allowed', () => {
   it('puts the mark on the edge and anchors the actions 16 pt above the safe area', () => {
     const { container } = render(<Pair />);
     expect(container.querySelector('[data-fold]').dataset.size).toBe('72');
-    const bar = screen.getByText('Grant access').parentElement.parentElement;
+    const bar = screen.getByText('Continue').parentElement.parentElement;
     expect(style(bar)).toEqual({ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 50 });
   });
 });
