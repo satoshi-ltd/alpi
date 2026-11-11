@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { modalLayerOpen } from "./useOverlay.js";
 
 export function useWindowChrome({
   viewRef,
@@ -73,6 +74,11 @@ export function useWindowChrome({
         (isSlash && !!onToggleShortcuts) ||
         (key === "s" && !e.shiftKey && canSidebarSearch) ||
         (e.shiftKey && (key === "t" || key === "s" || key === "m" || key === "e" || key === "h" || key === "l" || key === "p" || key === "r" || key === "n" || key === "w"));
+      if (modalLayerOpen() && key !== "k" && !isSlash) {
+        // Claimed but not run: left unhandled, macOS hands ⌘, to the native menu and WebView2 opens its find bar on Ctrl+F.
+        if (isShortcut) e.preventDefault();
+        return;
+      }
       if (paletteOpenRef?.current && isShortcut && key !== "k") {
         onClosePalette?.();
       }

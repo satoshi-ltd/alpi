@@ -58,4 +58,19 @@ describe("useNavListener", () => {
     await Promise.resolve();  // the unlisten chain awaits
     expect(unlisten).toHaveBeenCalled();
   });
+
+  it('payload "settings" from the native menu does nothing while a dialog is open', async () => {
+    const { render } = await import("@testing-library/react");
+    const { createElement } = await import("react");
+    const { default: Modal } = await import("../primitives/Modal.jsx");
+    const setView = vi.fn();
+    renderHook(() => useNavListener(setView));
+    await Promise.resolve();
+    const modal = render(createElement(Modal, { open: true, onClose: vi.fn(), title: "Notifications" }, "body"));
+    act(() => registered({ payload: "settings" }));
+    expect(setView).not.toHaveBeenCalled();
+    modal.unmount();
+    act(() => registered({ payload: "settings" }));
+    expect(setView).toHaveBeenCalledWith({ kind: "settings" });
+  });
 });

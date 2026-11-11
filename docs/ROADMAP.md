@@ -80,18 +80,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-### Desktop
-
-- **DESK.MODAL-SHORTCUTS** — Global shortcuts stay quiet while a modal is open
-  `bug · desktop · agent · high`
-  note: `useWindowChrome.js:56-59` handles ⌘N, ⌘1–9, ⌘,, ⌘F and ⌘⇧P in the capture phase with no check of the
-  overlay stack (`useOverlay.js:3` keeps `layers` private and serves Escape and Tab only), so with Notifications,
-  Create profile, Manage sessions, Tools, Skills, Memory or Schedule open, ⌘N starts a session and ⌘, toggles
-  Settings behind the modal; typing ⌘N in a modal input does the same.
-  accept: `useOverlay` exposes whether a modal layer is open and `onKey` returns early when one is, except ⌘K and
-  ⌘/; a test renders a modal with the chrome hook, sends ⌘N, ⌘,, ⌘1 and ⌘F and asserts nothing fires, and ⌘K still
-  toggles the palette.
-
 ### Mobile
 
 - **WG.MOBILE-SYNC** — The phone reconciles workgroup state after failures and event bursts

@@ -41,11 +41,15 @@ function onKey(event) {
   }
 }
 
+export function modalLayerOpen() {
+  return layers.some((layer) => layer.blocksShortcuts);
+}
+
 export function useInsideOverlay() {
   return useContext(OverlayAncestors).length > 0;
 }
 
-export function useOverlay({ open, onClose, ref, modal = false }) {
+export function useOverlay({ open, onClose, ref, modal = false, blocksShortcuts = modal }) {
   const ancestors = useContext(OverlayAncestors);
   // Capture the opener before child autofocus runs during commit.
   const opener = document.activeElement;
@@ -60,7 +64,7 @@ export function useOverlay({ open, onClose, ref, modal = false }) {
   useLayoutEffect(() => {
     if (!open) return;
     const previous = opener;
-    const layer = { ref, close, modal, ancestors };
+    const layer = { ref, close, modal, blocksShortcuts, ancestors };
     entry.current = layer;
     const descendant = layers.findIndex((item) => item.ancestors.includes(isTop));
     layers.splice(descendant < 0 ? layers.length : descendant, 0, layer);
@@ -79,7 +83,7 @@ export function useOverlay({ open, onClose, ref, modal = false }) {
         }
       }, 0);
     };
-  }, [open, ref, modal, ancestors, isTop]);
+  }, [open, ref, modal, blocksShortcuts, ancestors, isTop]);
 
   return isTop;
 }

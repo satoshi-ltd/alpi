@@ -15,7 +15,8 @@ import { isComposing } from "../lib/composition.js";
 
 export function Scrim({ onClose, children, align = "flex-start", top = 96, dismissable = true }) {
   const ref = useRef(null);
-  const isTop = useOverlay({ open: true, onClose: dismissable ? onClose : undefined, ref, modal: true });
+  // Launcher panels (palette, activity, shortcuts sheet) hand app shortcuts on; a dialog modal swallows them.
+  const isTop = useOverlay({ open: true, onClose: dismissable ? onClose : undefined, ref, modal: true, blocksShortcuts: false });
   return createPortal(
     <OverlayScope overlay={isTop}>
       <div

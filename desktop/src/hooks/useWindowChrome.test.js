@@ -10,12 +10,14 @@ vi.mock("@tauri-apps/api/window", () => ({
 }));
 
 function press(key, options = {}) {
-  window.dispatchEvent(new KeyboardEvent("keydown", {
+  const event = new KeyboardEvent("keydown", {
     key,
     bubbles: true,
     cancelable: true,
     ...options,
-  }));
+  });
+  window.dispatchEvent(event);
+  return event;
 }
 
 function mountWindowChrome(overrides = {}) {
@@ -242,6 +244,60 @@ describe("useWindowChrome on non-US layouts", () => {
     const chrome = mountWindowChrome({ onToggleShortcuts });
     press("-", { metaKey: true, code: "Slash" });
     expect(onToggleShortcuts).toHaveBeenCalledTimes(1);
+    chrome.unmount();
+  });
+});
+
+describe("useWindowChrome while an overlay is open", () => {
+  it("lets ⌘K and ⌘/ through a dialog modal and swallows every other app shortcut", async () => {
+    const { render } = await import("@testing-library/react");
+    const { createElement } = await import("react");
+    const { default: Modal } = await import("../primitives/Modal.jsx");
+    const onOpenSettings = vi.fn();
+    const onJumpToProfile = vi.fn();
+    const onToggleSearch = vi.fn();
+    const onTogglePalette = vi.fn();
+    const onToggleShortcuts = vi.fn();
+    const chrome = mountWindowChrome({
+      viewRef: { current: { kind: "profile" } },
+      onOpenSettings, onJumpToProfile, onToggleSearch, onTogglePalette, onToggleShortcuts,
+    });
+    const modal = render(createElement(Modal, { open: true, onClose: vi.fn(), title: "Notifications" }, "body"));
+
+    press("n", { metaKey: true });
+    expect(press(",", { metaKey: true }).defaultPrevented).toBe(true);
+    press("1", { metaKey: true });
+    expect(press("f", { ctrlKey: true }).defaultPrevented).toBe(true);
+    expect(press("c", { metaKey: true }).defaultPrevented).toBe(false);
+    expect(chrome.onNewSession).not.toHaveBeenCalled();
+    expect(onOpenSettings).not.toHaveBeenCalled();
+    expect(onJumpToProfile).not.toHaveBeenCalled();
+    expect(onToggleSearch).not.toHaveBeenCalled();
+
+    press("k", { metaKey: true });
+    press("/", { metaKey: true });
+    expect(onTogglePalette).toHaveBeenCalledTimes(1);
+    expect(onToggleShortcuts).toHaveBeenCalledTimes(1);
+
+    modal.unmount();
+    press("n", { metaKey: true });
+    expect(chrome.onNewSession).toHaveBeenCalledTimes(1);
+    chrome.unmount();
+  });
+
+  it("keeps shortcuts working over a launcher panel such as the palette", async () => {
+    const { render } = await import("@testing-library/react");
+    const { createElement } = await import("react");
+    const { Scrim } = await import("../primitives/Panels.jsx");
+    const onClosePalette = vi.fn();
+    const chrome = mountWindowChrome({ paletteOpenRef: { current: true }, onClosePalette });
+    const panel = render(createElement(Scrim, { onClose: vi.fn() }, "palette"));
+
+    press("n", { metaKey: true });
+    expect(onClosePalette).toHaveBeenCalledTimes(1);
+    expect(chrome.onNewSession).toHaveBeenCalledTimes(1);
+
+    panel.unmount();
     chrome.unmount();
   });
 });

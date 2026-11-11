@@ -11,6 +11,13 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.9.19 — 2026-11-11 — shortcuts stay quiet behind a dialog
+
+- While a dialog is open (Notifications, Create profile, Manage sessions, Tools, Skills, Memory, Schedule, a confirmation), app shortcuts such as ⌘N, ⌘,, ⌘1–9 or ⌘F, and Settings… from the app menu, no longer act on the window behind it; ⌘K and ⌘/ still open the palette and the shortcuts sheet.
+- Escape closes the dialog; the shortcut that opened it (⌘O for Notifications, ⌘⇧T/S/M/E for the profile browsers) no longer closes or switches it.
+- Over the palette, Activity and the shortcuts sheet, shortcuts keep working as before.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.9.18 — 2026-11-11 — switching daemons always reaches the event stream
 
 - After you switch the active connection, the live event stream and the focus handling follow the new daemon at once, even when a poll was reading the connection list at the moment it was saved; before, they could stay on the previous daemon until the next change.

@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { safeUnlisten } from "../lib/tauri-listen.js";
 import { LANDING_VIEW } from "../lib/landing.js";
+import { modalLayerOpen } from "./useOverlay.js";
 
 export function useNavListener(setView) {
   useEffect(() => {
@@ -9,7 +10,8 @@ export function useNavListener(setView) {
     let unlisten = null;
     listen("nav", (event) => {
       if (event.payload === "settings") {
-        setView({ kind: "settings" });
+        // The native menu's ⌘, arrives here, not through the window shortcuts, so a dialog must gate it too.
+        if (!modalLayerOpen()) setView({ kind: "settings" });
       } else if (event.payload === "home") {
         setView((v) => (v.kind === "settings" ? LANDING_VIEW : v));
       }
