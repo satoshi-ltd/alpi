@@ -147,11 +147,16 @@ export function useInbox() {
     () => quiet(Promise.all([profilesQ.refresh(), wgsQ.refresh()]).then(() => undefined)),
     [profilesQ.refresh, wgsQ.refresh],
   );
+  const invalidate = useCallback(
+    () => quiet(Promise.all([profilesQ.invalidate(), wgsQ.invalidate()]).then(() => undefined)),
+    [profilesQ.invalidate, wgsQ.invalidate],
+  );
 
   return {
     items,
     loading: profilesQ.loading || wgsQ.loading,
     error: profilesQ.error ?? wgsQ.error,
     refresh,
+    invalidate,
   };
 }

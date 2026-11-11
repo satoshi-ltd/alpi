@@ -129,7 +129,7 @@ describe("useProfileSnapshot", () => {
   it("returns cached settings immediately while refreshing in the background", async () => {
     const call = vi.fn()
       .mockResolvedValueOnce({ detail: { name: "doc" }, usage: { days: [] } })
-      .mockResolvedValueOnce({ detail: { name: "doc", model: "openrouter/x" }, usage: { days: [] } });
+      .mockResolvedValue({ detail: { name: "doc", model: "openrouter/x" }, usage: { days: [] } });
 
     function Wrapper({ children }) {
       return (

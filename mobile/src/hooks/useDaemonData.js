@@ -1,6 +1,7 @@
 // Module-level shared cache so refresh() from any consumer propagates to all subscribers.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 
 import { defaultAsAlpaca } from '../../../common/folds.mjs';
 import { useEndpoint } from '../lib/EndpointContext';
@@ -16,14 +17,20 @@ export function _resetDaemonDataCache() {
 function entryFor(key) {
   let entry = cache.get(key);
   if (!entry) {
-    entry = { data: null, loading: false, error: null, inflight: null, listeners: new Set() };
+    entry = { data: null, loading: false, error: null, inflight: null, trailing: null, updatedAt: 0, listeners: new Set() };
     cache.set(key, entry);
   }
   return entry;
 }
 
 function snapshotOf(entry) {
-  return { data: entry.data, loading: entry.loading, error: entry.error };
+  return {
+    data: entry.data,
+    loading: entry.loading,
+    error: entry.error,
+    stale: !!entry.error && entry.data !== null,
+    updatedAt: entry.updatedAt,
+  };
 }
 
 function notify(entry) {
@@ -47,16 +54,60 @@ function isMethodNotFound(error) {
   return error?.code === -32601 || String(error?.message || '').includes('method-not-found');
 }
 
-async function fetchAndStore(key, call, method, params) {
+export const RETRY_BASE_MS = 2000;
+export const RETRY_MAX_MS = 60000;
+export const RETRY_ATTEMPTS = 6;
+
+// Only a lost connection or a refused-for-load socket heals by itself; any answer from the daemon is final.
+function isTransient(error) {
+  return !!error && (error.transport === true || error.code === -32029);
+}
+
+// A plain refresh joins the read in flight; an invalidation (an event) gets one trailing read, since that reply may predate it.
+function fetchAndStore(key, call, method, params, { invalidation = false } = {}) {
+  const entry = entryFor(key);
+  if (entry.inflight) {
+    if (!invalidation) return entry.inflight;
+    if (!entry.trailing) {
+      entry.trailing = entry.inflight.catch(() => {}).then(() => {
+        entry.trailing = null;
+        if (!entry.listeners.size) return entry.data;
+        return startFetch(key, call, method, params);
+      });
+    }
+    return entry.trailing;
+  }
+  return entry.trailing ?? startFetch(key, call, method, params);
+}
+
+function fetchIfIdle(key, call, method, params, minAgeMs = 0) {
+  const entry = entryFor(key);
+  if (entry.inflight || entry.trailing) return;
+  if (entry.error && !isTransient(entry.error)) return;
+  if (minAgeMs && entry.updatedAt && Date.now() - entry.updatedAt < minAgeMs) return;
+  startFetch(key, call, method, params, { background: true }).catch(() => {});
+}
+
+function startFetch(key, call, method, params, { background = false } = {}) {
   const entry = entryFor(key);
   if (entry.inflight) return entry.inflight;
-  entry.loading = true;
-  notify(entry);
-  const promise = call(method, params || {})
+  // A reconcile the user did not ask for must not light the Refreshing indicator every minute.
+  if (!background) {
+    entry.loading = true;
+    notify(entry);
+  }
+  let request;
+  try {
+    request = Promise.resolve(call(method, params || {}));
+  } catch (e) {
+    request = Promise.reject(e);
+  }
+  const promise = request
     .then((result) => {
       entry.data = result;
       entry.loading = false;
       entry.error = null;
+      entry.updatedAt = Date.now();
       return result;
     })
     .catch((e) => {
@@ -76,10 +127,10 @@ async function fetchAndStore(key, call, method, params) {
 }
 
 function initialSnapFor(key) {
-  if (!key) return { data: null, loading: false, error: null };
+  if (!key) return { data: null, loading: false, error: null, stale: false, updatedAt: 0 };
   const entry = entryFor(key);
   if (entry.data !== null) return snapshotOf(entry);
-  return { data: null, loading: true, error: null };
+  return { data: null, loading: true, error: null, stale: false, updatedAt: 0 };
 }
 
 function usePolledCall(method, params, deps, opts = {}) {
@@ -120,7 +171,79 @@ function usePolledCall(method, params, deps, opts = {}) {
     return quiet(fetchAndStore(key, call, method, params));
   }, [key, call, method]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { ...snap, refresh };
+  const invalidateRead = useCallback(() => {
+    if (!key) return Promise.resolve(null);
+    return quiet(fetchAndStore(key, call, method, params, { invalidation: true }));
+  }, [key, call, method]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useKeptCurrent(key, call, method, params, snap.error, opts.reconcileMs);
+
+  return { ...snap, refresh, invalidate: invalidateRead };
+}
+
+// Screens whose tests stub react-native without AppState still render; they just never reconcile.
+function appState() {
+  try {
+    return AppState ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function useKeptCurrent(key, call, method, params, error, reconcileMs) {
+  const [active, setActive] = useState(() => {
+    const state = appState()?.currentState;
+    return state !== 'background' && state !== 'inactive';
+  });
+  const attemptRef = useRef(0);
+  const argsRef = useRef({ call, method, params });
+  argsRef.current = { call, method, params };
+
+  useEffect(() => {
+    const source = appState();
+    if (!reconcileMs || !source?.addEventListener) return undefined;
+    let previous = source.currentState;
+    setActive(previous !== 'background' && previous !== 'inactive');
+    const sub = source.addEventListener('change', (state) => {
+      const now = state === 'active';
+      setActive(now);
+      if (now && key) {
+        const { call: c, method: m, params: p } = argsRef.current;
+        // An inactive blip (Control Center, Face ID, a permission prompt) is not a return from the background.
+        fetchIfIdle(key, c, m, p, previous === 'background' ? 0 : reconcileMs / 2);
+      }
+      previous = state;
+    });
+    return () => sub?.remove?.();
+  }, [key, reconcileMs]);
+
+  useEffect(() => {
+    if (!reconcileMs || !key || !active) return undefined;
+    const timer = setInterval(() => {
+      const { call: c, method: m, params: p } = argsRef.current;
+      fetchIfIdle(key, c, m, p, reconcileMs / 2);
+    }, reconcileMs);
+    return () => clearInterval(timer);
+  }, [key, active, reconcileMs]);
+
+  useEffect(() => {
+    attemptRef.current = 0;
+  }, [key]);
+
+  useEffect(() => {
+    if (!error) {
+      attemptRef.current = 0;
+      return undefined;
+    }
+    if (!reconcileMs || !key || !active || !isTransient(error) || attemptRef.current >= RETRY_ATTEMPTS) return undefined;
+    const delay = Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** attemptRef.current);
+    const timer = setTimeout(() => {
+      attemptRef.current += 1;
+      const { call: c, method: m, params: p } = argsRef.current;
+      fetchIfIdle(key, c, m, p);
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [key, error, active, reconcileMs]);
 }
 
 export function seedCache(endpointId, method, params, data) {
@@ -138,11 +261,14 @@ export function invalidate(endpointId, method, params = {}) {
   entry.data = null;
   entry.error = null;
   entry.inflight = null;
+  entry.trailing = null;
   notify(entry);
 }
 
+export const RECONCILE_MS = 60000;
+
 export function useProfileSummaries() {
-  const inner = usePolledCall('host.profile.summaries', {}, []);
+  const inner = usePolledCall('host.profile.summaries', {}, [], { reconcileMs: RECONCILE_MS });
   const { colors } = useTheme();
   const data = useMemo(() => {
     const profiles = inner.data?.profiles;
@@ -169,7 +295,12 @@ export function useProfileSnapshot(profile) {
 
 // Daemon dedupes by wg_id when called with no profile param.
 export function useWorkgroups(profile = null) {
-  return usePolledCall('host.workgroups.list', profile ? { profile, include_pipeline_status: true } : { include_pipeline_status: true }, [profile]);
+  return usePolledCall(
+    'host.workgroups.list',
+    profile ? { profile, include_pipeline_status: true } : { include_pipeline_status: true },
+    [profile],
+    { reconcileMs: RECONCILE_MS },
+  );
 }
 
 export function useProfilesList() {
@@ -191,7 +322,7 @@ export function useWorkgroupTranscript(profile, wgId) {
     'host.workgroup.transcript',
     profile && wgId ? { profile, wg_id: wgId, tail: true, limit: 200 } : null,
     [profile, wgId],
-    { skipWhen: !profile || !wgId },
+    { skipWhen: !profile || !wgId, reconcileMs: RECONCILE_MS },
   );
 }
 
@@ -201,7 +332,7 @@ export function useWorkgroupTasks(profile, wgId) {
     'host.workgroup.tasks',
     profile && wgId ? { profile, wg_id: wgId } : null,
     [profile, wgId],
-    { skipWhen: !profile || !wgId },
+    { skipWhen: !profile || !wgId, reconcileMs: RECONCILE_MS },
   );
 }
 

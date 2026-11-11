@@ -14,6 +14,13 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.9.12 — 2026-11-11 — busy workgroups stay current on the phone
+
+- The inbox and an open workgroup catch up on their own after the connection drops and comes back, after a workgroup is blocked or changed elsewhere, and after events arrive while a read is still on its way, instead of waiting for the next event or a pull to refresh.
+- A read that fails on a flaky network is retried a few times with growing pauses, and the cached rows stay on screen meanwhile.
+- While the app is in front, the roster and the open workgroup re-check the daemon once a minute; nothing runs in the background, and returning to the app reads them at once.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.9.11 — 2026-11-10 — the camera page asks you to continue
 
 - The page shown before the camera permission now has a Continue button instead of Grant access, as App Store review asks; Open settings stays when the system will not ask again, and Paste link stays as the way around the camera.

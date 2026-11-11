@@ -126,7 +126,7 @@ vi.mock('../src/hooks/useDaemonData', () => ({
 }));
 vi.mock('../src/hooks/useDebouncedCallback', () => ({ useDebouncedCallback: (fn) => fn }));
 vi.mock('../src/hooks/useEvents', () => ({
-  useEventEffect: (_kinds, fn) => { h.eventHandler = fn; },
+  useEventEffect: (kinds, fn) => { h.eventHandler = (ev) => { if (!ev.event || kinds.includes(ev.event)) fn(ev); }; },
 }));
 vi.mock('../src/lib/EndpointContext', () => ({
   useEndpoint: () => ({
@@ -203,5 +203,24 @@ describe('a posted workgroup message never leaves the thread', () => {
     await act(async () => { send(); });
     expect(postTexts()).toEqual(['hola']);
     expect(document.body.textContent).toMatch(/offline/);
+  });
+});
+
+describe('the open workgroup catches up after missed events', () => {
+  it('re-reads transcript and task state on a stream reconnect, a block or a change of its own workgroup only', async () => {
+    render(<WorkgroupChat />);
+    h.refreshTranscript.mockClear();
+    h.refreshTasks.mockClear();
+
+    await act(async () => { h.eventHandler({ event: 'stream.connected', data: {} }); });
+    expect(h.refreshTranscript).toHaveBeenCalledTimes(1);
+    expect(h.refreshTasks).toHaveBeenCalledTimes(1);
+
+    await act(async () => { h.eventHandler({ event: 'wg.blocked', data: { wg_id: 'alpha' } }); });
+    await act(async () => { h.eventHandler({ event: 'workgroup_changed', data: { wg_id: 'alpha' } }); });
+    expect(h.refreshTasks).toHaveBeenCalledTimes(3);
+
+    await act(async () => { h.eventHandler({ event: 'wg.post', data: { wg_id: 'beta' } }); });
+    expect(h.refreshTasks).toHaveBeenCalledTimes(3);
   });
 });

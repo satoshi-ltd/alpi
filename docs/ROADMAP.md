@@ -82,22 +82,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ### Mobile
 
-- **WG.MOBILE-SYNC** — The phone reconciles workgroup state after failures and event bursts
-  `bug · mobile · agent · high`
-  note: `useDaemonData.fetchAndStore` returns an existing in-flight promise without queuing a
-  trailing refresh. `app/index.jsx` omits `wg.task`, `wg.skip` and `stream.connected`; the workgroup
-  page listens only to `wg.post`, `wg.done` and `workgroup_members`. A terminal event during a slow
-  read, or one lost beyond the replay window, can leave cached rows or canonical task state old
-  until another event or manual refresh. Event reconnect already has replay; retain it.
-  accept: cover canonical task/skip/change events and stream reconnection on the inbox and open
-  workgroup; coalesce bursts but perform one trailing read when an invalidation arrives in flight.
-  Retry transient failures with bounded backoff while active and reconcile periodically in the
-  foreground; stop timers in background and on endpoint change. Profiles, tasks and transcripts
-  remain independent, old-endpoint replies never replace the active endpoint's data, and auth
-  failures still clear inaccessible data. Hook/screen tests hold a read pending through the final
-  event, drop events across reconnect, resume the app and recover after multiple timeouts. Expose
-  per-resource stale/error state for the separate `MOB.ROSTER-STALE` interface work.
-
 - **MOB.DEAD-ENDS** — A missing profile, workgroup or connection on the phone shows a way out
   `bug · mobile · agent · high`
   note: `chat/[id].jsx:626-632` renders a header "profile · not found" over an empty body, `:606-615` "Pair this
@@ -189,8 +173,8 @@ _None._
 - **MOB.ROSTER-STALE** — How does a populated phone roster say that its data is old?
   `decision · mobile · creator · normal`
   note: [Roster.jsx](../mobile/src/features/inbox/Roster.jsx) sends request errors only to its empty
-  state; with cached rows and an online daemon, a failed refresh has no visible error. Automatic
-  recovery is tracked separately in `WG.MOBILE-SYNC`.
+  state; with cached rows and an online daemon, a failed refresh has no visible error. Since mobile 0.9.12
+  each read retries itself and exposes `stale` (cached rows plus an error) and `updatedAt` for this treatment.
   accept: approve the stale-data and Retry treatment for an already populated roster, including
   partial profile/workgroup failure, large text and reduced motion. Draw board UI-MOB.ROSTER-STALE;
   its implementation becomes a separate mobile `ui` task and regenerates the design views.
@@ -225,7 +209,7 @@ _None._
 
 - **WG.SYNC-VERIFY** — Busy workgroups stay current on the creator's desktop and phone
   `verify · alpi, desktop, mobile · creator · normal`
-  depends: WG.MOBILE-SYNC, MOB.ROSTER-STALE
+  depends: MOB.ROSTER-STALE
   note: blocked until the mobile UI task resulting from `MOB.ROSTER-STALE` is implemented and
   installed by the creator; replace the decision dependency with that task's ID when it is created.
   accept: on a deployed daemon with multiple active pipelines, compare the roster, canonical phase

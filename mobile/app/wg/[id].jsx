@@ -47,6 +47,7 @@ import {
 } from '../../src/hooks/useDaemonData';
 import { useDebouncedCallback } from '../../src/hooks/useDebouncedCallback';
 import { useEventEffect } from '../../src/hooks/useEvents';
+import { STREAM_CONNECTED } from '../../src/lib/streamEvents';
 import { useEndpoint } from '../../src/lib/EndpointContext';
 import { describeError } from '../../src/lib/rpc';
 import { isForeignConnection } from '../../src/features/aln/deeplink';
@@ -389,11 +390,12 @@ function WorkgroupChatInner() {
   // session_changed excluded — fires on every profile chat turn, would cause wasted wg transcript fetch+decrypt over Tailscale.
   // Coalesced: each refresh re-fetches and decrypts the 200-post tail, so post bursts must collapse into one.
   const refreshTranscript = useDebouncedCallback(() => {
-    transcript.refresh().then(pruneOptimistic).catch(() => {});
-    taskState.refresh();
+    (transcript.invalidate ?? transcript.refresh)().then(pruneOptimistic).catch(() => {});
+    (taskState.invalidate ?? taskState.refresh)();
   }, 400);
-  useEventEffect(['wg.post', 'wg.done', 'workgroup_members'], (ev) => {
-    if (ev.data?.wg_id !== id) return;
+  useEventEffect(['wg.post', 'wg.done', 'wg.blocked', 'workgroup_members', 'workgroup_changed', STREAM_CONNECTED], (ev) => {
+    // A reconnect may have dropped events past the replay window, so it re-reads whatever workgroup is open.
+    if (ev.event !== STREAM_CONNECTED && ev.data?.wg_id !== id) return;
     refreshTranscript();
   });
 

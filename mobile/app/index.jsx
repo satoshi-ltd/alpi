@@ -14,6 +14,7 @@ import { CreateProfileSheet } from '../src/features/sheets/CreateProfileSheet';
 import { CreateWorkgroupSheet } from '../src/features/sheets/CreateWorkgroupSheet';
 import { useDebouncedCallback } from '../src/hooks/useDebouncedCallback';
 import { useEventEffect } from '../src/hooks/useEvents';
+import { STREAM_CONNECTED } from '../src/lib/streamEvents';
 import { useActivity, rowStateFor } from '../src/hooks/useActivity';
 import { useInbox } from '../src/hooks/useInbox';
 import { usePullRefresh } from '../src/hooks/usePullRefresh';
@@ -31,7 +32,7 @@ import { useLaunchRestore } from '../src/features/shell/launchRestore';
 import { NEW_PROFILE, NEW_WORKGROUP, useCreateGate } from '../src/features/shell/useCreateGate';
 import { usePane } from '../src/nav/PaneContext';
 
-function InboxScreen({ items, loading, refresh, error = null }) {
+function InboxScreen({ items, loading, refresh, invalidate = null, error = null }) {
   const { colors } = useTheme();
   const router = useRouter();
   const pathname = usePathname();
@@ -89,12 +90,14 @@ function InboxScreen({ items, loading, refresh, error = null }) {
   const { refreshing, onRefresh } = pull;
 
   // Coalesced: a busy workgroup or a reconnect backfill emits bursts — one summaries+workgroups refresh per beat, not per event.
-  const debouncedRefresh = useDebouncedCallback(refresh, 800);
+  const debouncedRefresh = useDebouncedCallback(invalidate ?? refresh, 800);
   useEventEffect(
     [
       'session_changed',
       'wg.post',
       'wg.done',
+      'wg.blocked',
+      STREAM_CONNECTED,
       'schedule.done',
       'schedule.failed',
       // Cross-device mutations propagate via these events — avoids polling.
@@ -212,7 +215,7 @@ function InboxScreen({ items, loading, refresh, error = null }) {
 
 export default function Index() {
   const { twoPane } = usePane();
-  const { items, loading, refresh, error } = useInbox();
+  const { items, loading, refresh, invalidate, error } = useInbox();
   const { endpoint, probeState } = useEndpoint();
   const initialLoading = useSettledOnce(loading, endpoint?.id);
   useLaunchRestore({ items, twoPane });
@@ -223,5 +226,5 @@ export default function Index() {
     daemonDown: !!endpoint && isDaemonDown(probeState.get(endpoint.id) ?? 'unknown'),
     error,
   });
-  return twoPane ? <HomePane empty={empty} /> : <InboxScreen items={items} loading={loading} refresh={refresh} error={error} />;
+  return twoPane ? <HomePane empty={empty} /> : <InboxScreen items={items} loading={loading} refresh={refresh} invalidate={invalidate} error={error} />;
 }

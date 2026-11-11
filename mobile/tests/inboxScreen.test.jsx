@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, act } from '@testing-library/react';
 
 afterEach(cleanup);
 
@@ -162,9 +162,11 @@ vi.mock('../src/features/shell/HomePane', () => ({ HomePane: ({ empty }) => Reac
 
 vi.mock('../src/components/Toast', () => ({ useToast: () => h.toast }));
 vi.mock('../src/hooks/useDebouncedCallback', () => ({ useDebouncedCallback: (fn) => fn }));
-vi.mock('../src/hooks/useEvents', () => ({ useEventEffect: () => {} }));
+vi.mock('../src/hooks/useEvents', () => ({
+  useEventEffect: (kinds, fn) => { h.inboxEvent = (ev) => { if (kinds.includes(ev.event)) fn(ev); }; },
+}));
 vi.mock('../src/hooks/useInbox', () => ({
-  useInbox: () => ({ items: h.items, loading: !!h.loading, refresh: h.refresh }),
+  useInbox: () => ({ items: h.items, loading: !!h.loading, refresh: h.refresh, invalidate: h.invalidate }),
 }));
 vi.mock('../src/hooks/useActivity', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -582,5 +584,17 @@ describe('phone roster while the daemon is away', () => {
     h.status = 'online';
     rerender(<Index />);
     expect(document.querySelector('[data-offline="true"]')).toBeNull();
+  });
+});
+
+
+describe('Inbox screen catches up after missed events', () => {
+  it('invalidates the roster on a stream reconnect and on a blocked workgroup, not on unrelated events', async () => {
+    h.invalidate = vi.fn(async () => {});
+    render(<Index />);
+    await act(async () => { h.inboxEvent({ event: 'stream.connected', data: {} }); });
+    await act(async () => { h.inboxEvent({ event: 'wg.blocked', data: { wg_id: 'alpha' } }); });
+    await act(async () => { h.inboxEvent({ event: 'memory_changed', data: {} }); });
+    expect(h.invalidate).toHaveBeenCalledTimes(2);
   });
 });
