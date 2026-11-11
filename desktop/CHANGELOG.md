@@ -11,6 +11,11 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.9.20 — 2026-11-11 — shared copy for missing screens
+
+- The shared empty-state copy gains the phone's "not found", "not paired yet" and "from another connection" messages; nothing the desktop app shows changes in this release.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.9.19 — 2026-11-11 — shortcuts stay quiet behind a dialog
 
 - While a dialog is open (Notifications, Create profile, Manage sessions, Tools, Skills, Memory, Schedule, a confirmation), app shortcuts such as ⌘N, ⌘,, ⌘1–9 or ⌘F, and Settings… from the app menu, no longer act on the window behind it; ⌘K and ⌘/ still open the palette and the shortcuts sheet.
