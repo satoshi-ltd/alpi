@@ -2218,3 +2218,159 @@ async def test_an_abnormal_drop_before_the_first_frame_counts_against_its_source
         assert server._ws_auth_failures.exceeded("127.0.0.1")
     finally:
         await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_a_refused_request_names_where_it_came_from(short_tmp: Path, monkeypatch, caplog) -> None:
+    import logging
+
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    try:
+        with caplog.at_level(logging.WARNING, logger="alpi.host.server"):
+            async with websockets.connect(url) as ws:
+                await ws.send(json.dumps({"id": "x", "method": "rpc.discover", "params": {}}))
+                await ws.recv()
+        lines = [r.getMessage() for r in caplog.records]
+        assert "host websocket refused: no token sent [rpc.discover] (from=127.0.0.1)" in lines, lines
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_a_rate_limited_source_is_logged_once_a_minute(short_tmp: Path, monkeypatch, caplog) -> None:
+    import logging
+
+    from alpi.alp.rate_limit import RateLimiter
+
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    server._ws_auth_failures = RateLimiter(default_per_minute=1)
+    server._ws_auth_failures.admit("127.0.0.1", None)
+    try:
+        with caplog.at_level(logging.WARNING, logger="alpi.host.server"):
+            for _ in range(5):
+                async with websockets.connect(url) as ws:
+                    with pytest.raises(websockets.ConnectionClosed):
+                        await ws.recv()
+        refused = [r.getMessage() for r in caplog.records if "websocket refused" in r.getMessage()]
+        assert refused == ["host websocket refused: source rate-limited after authentication failures (from=127.0.0.1)"]
+    finally:
+        await server.stop()
+
+
+def test_an_untrusted_forwarded_for_is_shown_sanitised_but_never_keys_the_limits() -> None:
+    import ipaddress
+
+    class Headers(dict):
+        pass
+
+    class Ws:
+        remote_address = ("10.5.0.20", 4000)
+        request = type("R", (), {"headers": Headers({"X-Forwarded-For": "203.0.113.5\n<script>, 10.0.0.1"})})()
+
+    source = host_server._ws_source(Ws())
+    assert source == "10.5.0.20"
+    assert host_server._ws_origin(Ws(), source) == "10.5.0.20"
+    Ws.request.headers["X-Forwarded-For"] = "203.0.113.5, 10.0.0.1"
+    assert host_server._ws_origin(Ws(), source) == "10.5.0.20 forwarded-for=203.0.113.5,10.0.0.1"
+    trusted = (ipaddress.ip_network("10.5.0.0/16"),)
+    assert host_server._ws_origin(Ws(), "203.0.113.5", trusted) == "203.0.113.5"
+
+
+@pytest.mark.asyncio
+async def test_a_client_cannot_forge_a_log_line_through_the_method(short_tmp: Path, monkeypatch, caplog) -> None:
+    import logging
+
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    forged = "x, from=8.8.8.8)\n2026-11-11 10:00:00,000 WARNING alpi.host.server host auth-failed: invalid token (from=9.9.9.9)\x1b[2K"
+    try:
+        with caplog.at_level(logging.WARNING, logger="alpi.host.server"):
+            async with websockets.connect(url) as ws:
+                await ws.send(json.dumps({"id": "x", "method": forged, "params": {}}))
+                await ws.recv()
+        lines = [r.getMessage() for r in caplog.records]
+        assert "host websocket refused: no token sent [?] (from=127.0.0.1)" in lines, lines
+        assert not any("\n" in line or "\x1b" in line or "8.8.8.8" in line for line in lines)
+    finally:
+        await server.stop()
+
+
+def test_a_rotating_forwarded_for_header_cannot_bypass_the_once_a_minute_line(short_tmp: Path, caplog) -> None:
+    import logging
+
+    server = host_server.Server(home=short_tmp)
+    with caplog.at_level(logging.WARNING, logger="alpi.host.server"):
+        for n in range(50):
+            server._log_rejection("source rate-limited after authentication failures", "127.0.0.1", f"127.0.0.1 forwarded-for=10.0.{n}.1")
+    assert len([r for r in caplog.records if "websocket refused" in r.getMessage()]) == 1
+
+
+def test_refusal_lines_are_capped_across_all_sources(short_tmp: Path, caplog, monkeypatch) -> None:
+    import logging
+
+    clock = [1000.0]
+    monkeypatch.setattr(host_server.time, "monotonic", lambda: clock[0])
+    server = host_server.Server(home=short_tmp)
+    with caplog.at_level(logging.WARNING, logger="alpi.host.server"):
+        for n in range(host_server._REJECTION_LOG_PER_MINUTE + 50):
+            server._log_rejection("no token sent", f"198.51.{n // 250}.{n % 250}", "x")
+        clock[0] += 61
+        server._log_rejection("no token sent", "203.0.113.9", "203.0.113.9")
+    messages = [r.getMessage() for r in caplog.records]
+    assert sum("no token sent" in m for m in messages) == host_server._REJECTION_LOG_PER_MINUTE + 1
+    assert any(m.startswith("host websocket refused: 50 more refusals were not logged in the minute from ") for m in messages)
+
+
+@pytest.mark.asyncio
+async def test_the_shared_preauth_cap_does_not_blame_the_caller(short_tmp: Path, monkeypatch, caplog) -> None:
+    import logging
+
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    server._ws_max_preauth = 1
+    server._ws_preauth["198.51.100.7"] = 1
+    try:
+        with caplog.at_level(logging.WARNING, logger="alpi.host.server"):
+            ws = await websockets.connect(url)
+            with pytest.raises(websockets.ConnectionClosed):
+                await asyncio.wait_for(ws.recv(), timeout=2)
+        assert any("daemon-wide unauthenticated socket limit reached" in r.getMessage() for r in caplog.records)
+    finally:
+        await server.stop()
+
+
+
+@pytest.mark.parametrize("header", [
+    "fe80::1%x) host websocket refused: invalid token [host.ping] (from=198.51.100.7",
+    "fe80::1%eth0",
+    "203.0.113.5, fe80::1%\udc85",
+])
+def test_a_scope_id_in_forwarded_for_never_reaches_the_log_or_the_limits(header: str) -> None:
+    import ipaddress
+
+    class Ws:
+        remote_address = ("203.0.113.9", 4000)
+        request = type("R", (), {"headers": {"X-Forwarded-For": header}})()
+
+    assert host_server._ws_origin(Ws(), "203.0.113.9") == "203.0.113.9"
+    trusted = (ipaddress.ip_network("203.0.113.9/32"),)
+    key = host_server._ws_source(Ws(), trusted)
+    assert "%" not in key and "(" not in key
+
+
+@pytest.mark.asyncio
+async def test_a_large_first_frame_with_a_disabled_token_is_logged_as_such(short_tmp: Path, monkeypatch, caplog) -> None:
+    import logging
+
+    from alpi.host import connections
+
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    row, device = connections.create_connection("Javi")
+    connections.update_connection(row["id"], status="disabled")
+    padding = "x" * (host_server._PREAUTH_PARSE_CHARS + 10)
+    try:
+        with caplog.at_level(logging.WARNING, logger="alpi.host.server"):
+            async with websockets.connect(url) as ws:
+                await ws.send(_ws_request(device["token"], "big", value=padding))
+                await ws.recv()
+        assert any(r.getMessage().startswith("host websocket refused: connection disabled") for r in caplog.records)
+    finally:
+        await server.stop()

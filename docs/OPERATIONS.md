@@ -92,6 +92,29 @@ a cold or rewritten prefix. `prefix_shapes.json` stores only bounded hashes and
 may be removed when resetting diagnostics; deleting it does not affect chats or
 provider caching.
 
+### Watching for refused access
+
+A refused request on the WebSocket host plane leaves a `WARNING` line in
+`service.log` of the form `host websocket refused: <reason> [<method>] (from=<origin>)`.
+Reasons: `no token sent`, `invalid token`, `connection disabled`, `source rate-limited
+after authentication failures`, `device rate-limited after authentication failures`,
+`too many unauthenticated sockets from this source`, `daemon-wide unauthenticated
+socket limit reached`, `daemon at its connection limit`, `no request before the
+authentication timeout`, `dropped before authenticating`, `unreadable first frame`,
+`first frame is not a request`, `large first frame without one usable token` and
+`pairing code refused`. `[<method>]` appears for token refusals and is the requested
+method reduced to an identifier (`?` when it is anything else), so a client cannot
+forge a line. `from=` starts with the source the limits use (an IPv6 address by its
+/64); only that first address is trustworthy. Behind a reverse proxy that is not
+listed in `ALPI_HOST_WS_TRUSTED_PROXIES` it is the proxy, followed by the client's
+`forwarded-for=…` when that header holds only plain IP addresses (no IPv6 scope
+id), shown for reading only.
+Each reason is logged at most once a minute per source and at most 120 refusals a
+minute in all, with one line counting what was left out (written with the next
+refusal after that minute), so a flood cannot rotate
+the log. Admin actions by paired devices, allowed or refused, are in
+`logs/admin-audit.jsonl`.
+
 ## Daemon — one process per machine, every profile inside
 
 alpi runs a single daemon process — the launchd job `com.alpi.daemon` on

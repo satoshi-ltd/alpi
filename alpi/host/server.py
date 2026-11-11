@@ -326,6 +326,8 @@ class Server:
         self._ws_policy_replies: dict[ServerConnection, float] = {}
         self._ws_metrics = WebSocketMetrics()
         self._ws_preauth: dict[str, int] = defaultdict(int)
+        self._rejections_logged: dict[tuple[str, str], float] = {}
+        self._rejection_window: list[float] = [0.0, 0, 0.0]
         self._ws_max_preauth = int(_env_number(
             "ALPI_HOST_WS_MAX_PREAUTH", WS_MAX_PREAUTH, minimum=1, maximum=10_000,
         ))
@@ -600,18 +602,25 @@ class Server:
 
         if len(self._ws_connections) >= self._ws_max_connections:
             self._ws_metrics.handshakes_rejected += 1
+            source = _ws_source(ws, self._ws_trusted_proxies)
+            self._log_rejection("daemon at its connection limit", source, _ws_origin(ws, source, self._ws_trusted_proxies))
             await ws.close(code=1013, reason="WebSocket capacity reached")
             return
         source = _ws_source(ws, self._ws_trusted_proxies)
+        origin = _ws_origin(ws, source, self._ws_trusted_proxies)
         if self._ws_auth_failures.exceeded(source):
             self._ws_metrics.auth_rate_limited += 1
+            self._log_rejection("source rate-limited after authentication failures", source, origin)
             await ws.close(code=1013, reason=WS_CLOSE_REASON_RATE_LIMITED)
             return
-        if (
-            sum(self._ws_preauth.values()) >= self._ws_max_preauth
-            or self._ws_preauth[source] >= self._ws_max_preauth_per_source
-        ):
+        source_full = self._ws_preauth[source] >= self._ws_max_preauth_per_source
+        if source_full or sum(self._ws_preauth.values()) >= self._ws_max_preauth:
             self._ws_metrics.preauth_rejected += 1
+            self._log_rejection(
+                "too many unauthenticated sockets from this source" if source_full
+                else "daemon-wide unauthenticated socket limit reached",
+                source, origin,
+            )
             if not self._ws_preauth[source]:
                 self._ws_preauth.pop(source, None)
             await ws.close(code=1013, reason="WebSocket capacity reached")
@@ -632,6 +641,7 @@ class Server:
             except asyncio.TimeoutError:
                 self._ws_metrics.auth_timeouts += 1
                 self._ws_auth_failures.admit(source, None)
+                self._log_rejection("no request before the authentication timeout", source, origin)
                 await ws.close(code=1008, reason="Authentication timeout")
                 return
             preauth = self._release_preauth(source, preauth)
@@ -647,11 +657,13 @@ class Server:
                 await self._handle_request(pairing_request, observed_send, bootstrap=True)
                 if any((payload.get("error") or {}).get("code") == _PAIRING_REJECTED for payload in outcome):
                     self._ws_auth_failures.admit(source, None)
+                    self._log_rejection("pairing code refused", source, origin)
                 await ws.close(code=1000, reason="Pairing exchange complete")
                 return
-            authenticated = await self._authenticate_websocket_message(message, send, source=source)
+            authenticated = await self._authenticate_websocket_message(message, send, source=source, origin=origin, log_key=source)
             if authenticated is _DEVICE_THROTTLED:
                 self._ws_metrics.auth_rate_limited += 1
+                self._log_rejection("device rate-limited after authentication failures", source, origin)
                 await ws.close(code=1013, reason=WS_CLOSE_REASON_RATE_LIMITED)
                 return
             if authenticated is None:
@@ -672,7 +684,7 @@ class Server:
                 return
             await dispatch(line, body, meta)
             async for message in ws:
-                authenticated = await self._authenticate_websocket_message(message, send)
+                authenticated = await self._authenticate_websocket_message(message, send, origin=origin, log_key=source)
                 if authenticated is None:
                     await ws.close(code=1008, reason="Authentication failed")
                     return
@@ -693,12 +705,36 @@ class Server:
         except websockets.ConnectionClosed as closed:
             if preauth and not _clean_close(closed):
                 self._ws_auth_failures.admit(source, None)
+                self._log_rejection("dropped before authenticating", source, origin)
             return
         except Exception:  # noqa: BLE001
             log.exception("host websocket connection crashed")
         finally:
             self._release_preauth(source, preauth)
             self._unregister_websocket(ws)
+
+    def _log_rejection(self, kind: str, source: str, origin: str, detail: str = "") -> None:
+        now = time.monotonic()
+        key = (kind, source)
+        # Keyed on the real source, never on a client header, and capped overall: a flood must not rotate service.log.
+        if now - self._rejections_logged.get(key, -_REJECTION_LOG_EVERY_S) < _REJECTION_LOG_EVERY_S:
+            return
+        if now - self._rejection_window[0] >= _REJECTION_LOG_EVERY_S:
+            if self._rejection_window[1] > _REJECTION_LOG_PER_MINUTE:
+                log.warning(
+                    "host websocket refused: %d more refusals were not logged in the minute from %s",
+                    self._rejection_window[1] - _REJECTION_LOG_PER_MINUTE,
+                    time.strftime("%H:%M:%S", time.gmtime(self._rejection_window[2])),
+                )
+            self._rejection_window = [now, 0, time.time()]
+        self._rejection_window[1] += 1
+        if self._rejection_window[1] > _REJECTION_LOG_PER_MINUTE:
+            return
+        if len(self._rejections_logged) >= _REJECTION_LOG_KEYS:
+            self._rejections_logged.clear()
+        self._rejections_logged[key] = now
+        suffix = f" [{_loggable(detail)}]" if detail else ""
+        log.warning("host websocket refused: %s%s (from=%s)", kind, suffix, origin)
 
     def _release_preauth(self, source: str, held: bool) -> bool:
         if held:
@@ -710,10 +746,12 @@ class Server:
         return False
 
     async def _authenticate_websocket_message(
-        self, message: str | bytes, send: SendCoro, *, source: str | None = None,
+        self, message: str | bytes, send: SendCoro, *, source: str | None = None, origin: str = "",
+        log_key: str = "",
     ) -> tuple[str, dict[str, Any], "AuthMeta"] | None | object:
         body: Any = None
         meta: AuthMeta | None = None
+        raw_token = ""
         try:
             line = message if isinstance(message, str) else message.decode("utf-8")
             if source is not None and len(line) > _PREAUTH_PARSE_CHARS:
@@ -721,9 +759,11 @@ class Server:
                 if token is None:
                     self._ws_metrics.auth_failures += 1
                     self._ws_auth_failures.admit(source, None)
+                    self._log_rejection("large first frame without one usable token", log_key, origin)
                     await send({"id": None, "error": {"code": -32000, "message": "auth-failed"}})
                     return None
-                meta = await asyncio.to_thread(_check_token_meta, {"params": {"auth_token": token}})
+                raw_token = token
+                meta = await asyncio.to_thread(_check_token_meta, {"params": {"auth_token": token}}, True)
                 if not meta.valid:
                     body = {"id": None}
             if body is None:
@@ -732,6 +772,7 @@ class Server:
             self._ws_metrics.protocol_failures += 1
             if source is not None:
                 self._ws_auth_failures.admit(source, None)
+                self._log_rejection("unreadable first frame", log_key, origin)
             await send({
                 "id": None,
                 "error": {"code": -32700, "message": "parse-error"},
@@ -741,14 +782,22 @@ class Server:
             self._ws_metrics.protocol_failures += 1
             if source is not None:
                 self._ws_auth_failures.admit(source, None)
+                self._log_rejection("first frame is not a request", log_key, origin)
             await send({
                 "id": None,
                 "error": {"code": -32600, "message": "invalid-request"},
             })
             return None
         if meta is None or meta.valid:
-            meta = await asyncio.to_thread(_check_token_meta, body)
+            meta = await asyncio.to_thread(_check_token_meta, body, True)
         if not meta.valid:
+            params = body.get("params") if isinstance(body.get("params"), dict) else {}
+            kind = (
+                "no token sent" if not (params.get("auth_token") or raw_token)
+                else "connection disabled" if meta.reason == "connection-disabled"
+                else "invalid token"
+            )
+            self._log_rejection(kind, log_key, origin, str(body.get("method") or "?"))
             device_key = f"{meta.connection_id}|{meta.device_id}" if meta.device_id else None
             if source is not None and device_key is not None:
                 if self._ws_device_failures.exceeded(device_key):
@@ -1322,8 +1371,38 @@ def _ws_source_key(peer_host: str | None, forwarded_for: str | None, trusted: _N
         except ValueError:
             return _source_bucket(peer)
         if not _in_networks(str(ip), trusted):
-            return _source_bucket(str(ip))
+            return _source_bucket(str(ip)) if "%" not in hop else _source_bucket(peer)
     return _source_bucket(peer)
+
+
+_REJECTION_LOG_EVERY_S = 60.0
+_REJECTION_LOG_PER_MINUTE = 120
+_REJECTION_LOG_KEYS = 4096
+_LOGGABLE = re.compile(r"[A-Za-z0-9._-]{1,64}")
+
+
+def _ws_origin(ws: ServerConnection, source: str, trusted: _Networks = ()) -> str:
+    # For the log only: an untrusted X-Forwarded-For is shown, never used to key limits.
+    if trusted:
+        return source
+    headers = getattr(getattr(ws, "request", None), "headers", None)
+    try:
+        forwarded = headers.get("X-Forwarded-For") if headers is not None else None
+    except Exception:  # noqa: BLE001
+        forwarded = None
+    if not forwarded:
+        return source
+    hops = []
+    for hop in str(forwarded)[:200].split(","):
+        hop = hop.strip()
+        # An IPv6 scope id is free text that ip_address() keeps verbatim.
+        if "%" in hop or not hop.isascii():
+            return source
+        try:
+            hops.append(str(ipaddress.ip_address(hop)))
+        except ValueError:
+            return source
+    return f"{source} forwarded-for={','.join(hops[:4])}" if hops else source
 
 
 def _ws_source(ws: ServerConnection, trusted: _Networks = ()) -> str:
@@ -1610,7 +1689,13 @@ def _preauth_pairing_request(message: str | bytes) -> str | None:
     return line
 
 
-def _check_token_meta(body: dict[str, Any]) -> AuthMeta:
+def _loggable(value: Any) -> str:
+    # Anything a client sends is reduced to an identifier before it reaches a log line, so it cannot forge one.
+    text = str(value)
+    return text if _LOGGABLE.fullmatch(text) else "?"
+
+
+def _check_token_meta(body: dict[str, Any], quiet: bool = False) -> AuthMeta:
     from alpi.host import connections as connections_mod
 
     params = body.get("params") or {}
@@ -1625,14 +1710,16 @@ def _check_token_meta(body: dict[str, Any]) -> AuthMeta:
             return AuthMeta(True, role, scope, f"legacy_{token[-8:]}", f"legacy_{token[-8:]}")
         auth = connections_mod.AuthResult(False)
     if not auth.valid:
-        if not token:
-            log.warning("host auth-failed: no token sent (method=%s)", method)
+        if quiet:
+            pass
+        elif not token:
+            log.warning("host auth-failed: no token sent (method=%s)", _loggable(method))
         elif auth.reason == "connection-disabled":
-            log.warning("host auth-failed: connection disabled (method=%s)", method)
+            log.warning("host auth-failed: connection disabled (method=%s)", _loggable(method))
         else:
             log.warning(
                 "host auth-failed: invalid token (len=%d, method=%s)",
-                len(token), method,
+                len(token), _loggable(method),
             )
         return AuthMeta(
             False,

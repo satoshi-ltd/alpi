@@ -222,7 +222,12 @@ authenticates. A failure that names a device (a
 revoked token answers `auth-failed` with reason `device-revoked`; expired and
 disabled keep theirs) counts against that device with the same limit and
 closes it the same way (the client sees the 1013 block, not the reason), without spending the address budget, and is recorded in
-the audit trail. It is a temporary block on that
+the audit trail. A refused request also leaves a `service.log` WARNING
+`host websocket refused: <reason> [<method>] (from=<origin>)`: the method is reduced
+to an identifier (`?` otherwise) so a client cannot forge a line, only the first
+address after `from=` is trustworthy (behind an untrusted proxy a `forwarded-for=…`
+of IP addresses follows, for reading only), and lines are capped at one per reason
+and source a minute and 120 a minute in all. It is a temporary block on that
 source address, shown by the clients as `rate-limited` — never as a rejected
 token or an offline daemon: credentials and caches survive, one attempt is made
 per minute, and another socket of the same connection that keeps streaming still

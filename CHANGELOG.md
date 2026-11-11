@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.18.9 — 2026-11-11 — refused access says where it came from
+
+- Every refused request on the remote host plane (no token, a wrong or disabled token, a source or device blocked after failures, too many unauthenticated sockets, a silent or garbled socket, a refused pairing code) is logged in `service.log` with the address it came from, so a review of the log can tell a probe from a misconfigured device.
+- Behind a reverse proxy that is not trusted, the line also shows the client address the proxy reported, for reading only; the limits still key on the proxy.
+- What a client sends never reaches the log as written: the requested method is reduced to a plain name, so a request cannot forge or split a log line.
+- Refusals are logged at most once a minute per reason and address and 120 a minute in all, with a line counting the rest, so a flood cannot push the rest of the log out.
+
 ## v0.18.8 — 2026-11-11 — terminal finds the toolchains a profile installs
 
 - `tools.terminal.env` in a profile's `config.yaml` adds variables to every `terminal` command, so a JDK or Maven installed in the data volume is found by `java` and `mvn` without editing the image; `PATH` entries are put in front of the existing PATH, also inside the Docker world.
