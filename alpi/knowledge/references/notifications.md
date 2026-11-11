@@ -116,7 +116,11 @@ failed job's schedule) when the banner came from the connection that is open. A
 banner from another connection never switches the app or opens anything that
 way; open it from the sidebar, the menu bar or Notifications. On the phone,
 tapping a banner opens what it announced. A failed job opens its failure
-notification, or the job's page on an older daemon.
+notification, or the job's page on an older daemon. From mobile 0.9.13, a banner
+from a daemon that is not the active one opens a "From another connection" page
+with Switch connection, and a link to a profile, workgroup, connection, provider
+or tool that no longer exists says it was not found and offers Back to inbox (or
+Retry when the phone could not reach the daemon).
 
 ## Auto-simplified (don't bother — it is downgraded for you)
 

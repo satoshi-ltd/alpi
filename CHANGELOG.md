@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.18.6 — 2026-11-11 — the agent knows the phone's way out of a missing page
+
+- The agent's own reference now says what the phone (from mobile 0.9.13) shows when a notification comes from another connection or a link points at something that no longer exists, so it can tell you to switch connection or go back to the inbox instead of guessing.
+
 ## v0.18.5 — 2026-11-11 — the agent knows how the phone keeps workgroups current
 
 - The agent's own reference now explains how the phone app (from mobile 0.9.12) keeps the roster and an open workgroup current: what makes it re-read, how it retries on a flaky network and what it does in the background, so it no longer answers that only the desktop recovers on its own.
