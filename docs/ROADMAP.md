@@ -1,6 +1,6 @@
 # alpi roadmap
 
-Updated 2026-11-06. Current versions live in the changelogs. The Queue runs top to bottom; the creator
+Updated 2026-11-11. Current versions live in the changelogs. The Queue runs top to bottom; the creator
 approves the next tasks from Proposed.
 
 This is the task pool. [ARCHITECTURE.md](ARCHITECTURE.md) owns current state and
@@ -64,10 +64,16 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 - **Stabilize the current lines first.** Queue keeps the approved scope and console fixes ahead of new
   capabilities. Proposed reliability work below addresses mobile synchronization and recipe validation;
   it needs approval before entering Queue. A new feature does not hold up an independently releasable fix.
-- **Candidate for alpi 0.18.0: bounded pipeline repetition.** `WG.REPEAT` is the proposed feature boundary,
-  with `WG.RECIPE-KEYS` as its prerequisite. The goal is to finish a sequence of work without an external
-  script triggering every run, with finite limits and restart-safe progress. Approval of this roadmap
-  cleanup does not approve implementing the feature.
+- **alpi 0.18 is the harness and stability line, and it is closed for now.** 0.18.0 shipped mid-turn
+  compaction, repeated-failure hints, the provider pause, the delivered-empty-reply rule, action-level
+  `tools.deny`, the tool-call deadline and the journal sweep cache; 0.18.1 added what the first day of fleet
+  ledgers asked for (engine notes in the journal, the same-error hint, one copy of each tool output, the
+  ledger kept by age). `HARN.018-VERIFY` reads the ledgers again; another harness patch needs evidence from it.
+- **Candidate for alpi 0.19.0: bounded pipeline repetition.** `WG.REPEAT` is the proposed feature boundary,
+  with `WG.RECIPE-KEYS` as its prerequisite, and it waits for the separate workgroup analysis (retry storms,
+  `stale-round` waste) that only the creator's Mac can show. The goal is to finish a sequence of work without
+  an external script triggering every run, with finite limits and restart-safe progress. Approval of this
+  roadmap cleanup does not approve implementing the feature.
 - **The clients keep their own versions.** Desktop and mobile release only when their shipped code changes;
   they do not inherit the daemon's minor number. Any new pipeline state needs an optional host field,
   console parity and compatibility tests before clients consume it.
@@ -76,7 +82,38 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-### Approved fixes, then the terminal capability
+### Daemon first: the config bug, the public host plane, the 0.19 prerequisite
+
+- **CFG.SET-INTEGERS** — `host.config.set_field` stores numeric settings as numbers
+  `bug · alpi · agent · high`
+  note: found on 2026-11-06 setting the retention windows on the creator's Mac: `_coerce_config_value`
+  (`alpi/host/device_state.py:1145`) turns every key it does not list into a string, so
+  `retention.runs_days: 14` lands as `'14'`, and `docs/CONFIG.md` says a quoted number disables the window. The
+  call answers success and nothing is ever swept; every other numeric key outside its short list
+  (`tools.*` limits, workgroup timeouts, …) has the same silent failure.
+  accept: the coercion takes the type from the config schema (int, float, bool, list) for every settable key and
+  refuses a value that does not parse with `invalid-params`; a test sets `retention.runs_days` to `14` and to
+  `"14"` and reads back the integer 14, and `"abc"` is refused; the apps and `alpi setup` keep working.
+
+- **SEC.HOST-LOCAL-ONLY** — A remote admin cannot rebind or restart the daemon, and pre-auth sockets are bounded
+  `bug · alpi · agent · normal`
+  note: report HOST-1 to HOST-4.
+  accept: `host.config.set_field`/`unset_field` normalise the key (empty segments rejected) before the
+  local-only check, so `host.allow_public_bind.` and `.network.host` are refused under `require_token=True`;
+  `host.daemon.restart` and `host.daemon.update` are local-only; remote callers get fixed error detail with no
+  paths; the first frame of an unauthenticated socket is capped near 64 KB and pre-auth timeouts count in the
+  per-origin limiter. Console parity unchanged.
+
+- **WG.RECIPE-KEYS** — An unsupported pipeline-step option never disappears silently
+  `bug · alpi · agent · normal`
+  note: `validate_pipeline_steps` copies known keys and drops the rest, so a misspelt gate or a
+  future `repeat` rule can turn into a successful recipe load without the requested behavior.
+  accept: recipe/workgroup validation rejects unknown step options with the phase and option name;
+  all currently supported keys keep their behavior and legacy valid recipes still load. Tests
+  cover a misspelling, unsupported `repeat`, every accepted key and CLI recipe loading. Document
+  the supported grammar and minimum version in WORKGROUPS and the packaged workgroups reference.
+
+### Desktop
 
 - **DESK.ACTIVE-CACHE** — The desktop's cached active connection cannot go stale during a save
   `bug · desktop · agent · normal`
@@ -85,6 +122,56 @@ defect, so a helper is extracted only when it removes evidenced duplication.
   the event stream keeps the old connection and focus activations are held for it.
   accept: the cache is set to the saved `active_id` after a successful rename; a test with a reader racing a
   save (an injectable hook between write and rename) sees the new id afterwards.
+
+- **DESK.MODAL-SHORTCUTS** — Global shortcuts stay quiet while a modal is open
+  `bug · desktop · agent · high`
+  note: `useWindowChrome.js:56-59` handles ⌘N, ⌘1–9, ⌘,, ⌘F and ⌘⇧P in the capture phase with no check of the
+  overlay stack (`useOverlay.js:3` keeps `layers` private and serves Escape and Tab only), so with Notifications,
+  Create profile, Manage sessions, Tools, Skills, Memory or Schedule open, ⌘N starts a session and ⌘, toggles
+  Settings behind the modal; typing ⌘N in a modal input does the same.
+  accept: `useOverlay` exposes whether a modal layer is open and `onKey` returns early when one is, except ⌘K and
+  ⌘/; a test renders a modal with the chrome hook, sends ⌘N, ⌘,, ⌘1 and ⌘F and asserts nothing fires, and ⌘K still
+  toggles the palette.
+
+### Mobile
+
+- **WG.MOBILE-SYNC** — The phone reconciles workgroup state after failures and event bursts
+  `bug · mobile · agent · high`
+  note: `useDaemonData.fetchAndStore` returns an existing in-flight promise without queuing a
+  trailing refresh. `app/index.jsx` omits `wg.task`, `wg.skip` and `stream.connected`; the workgroup
+  page listens only to `wg.post`, `wg.done` and `workgroup_members`. A terminal event during a slow
+  read, or one lost beyond the replay window, can leave cached rows or canonical task state old
+  until another event or manual refresh. Event reconnect already has replay; retain it.
+  accept: cover canonical task/skip/change events and stream reconnection on the inbox and open
+  workgroup; coalesce bursts but perform one trailing read when an invalidation arrives in flight.
+  Retry transient failures with bounded backoff while active and reconcile periodically in the
+  foreground; stop timers in background and on endpoint change. Profiles, tasks and transcripts
+  remain independent, old-endpoint replies never replace the active endpoint's data, and auth
+  failures still clear inaccessible data. Hook/screen tests hold a read pending through the final
+  event, drop events across reconnect, resume the app and recover after multiple timeouts. Expose
+  per-resource stale/error state for the separate `MOB.ROSTER-STALE` interface work.
+
+- **MOB.DEAD-ENDS** — A missing profile, workgroup or connection on the phone shows a way out
+  `bug · mobile · agent · high`
+  note: `chat/[id].jsx:626-632` renders a header "profile · not found" over an empty body, `:606-615` "Pair this
+  phone to a daemon first." with no button, `:365-376` and `wg/[id].jsx:315-326` "came from a connection that
+  isn't active" with no way to switch; `wg/[id].jsx:540-566`, `wg/[id]/settings.jsx:116-122`,
+  `profile/[id]/settings.jsx:208-214`, `connections/[id].jsx:114-121`, `providers/[key].jsx:62-68` and
+  `brain/ToolDetail.jsx:43-48` are the same dead end after an expired deep link or a delete from another device.
+  accept: every one of those states renders `EmptyState` (`alert`) with its copy in `common/emptyCopy.mjs` and one
+  action: back to the inbox, open pairing, or open `ConnectionSheet`; in two panes the action replaces to the pane
+  root; a render test per route with a null row finds the alert and its button, and the `!endpoint` case navigates
+  to `/pair`.
+
+- **SEC.MOBILE-TRUST** — The phone trusts only what pairing established
+  `bug · mobile · alpi · agent · high`
+  note: report MOB-1 to MOB-5 and CLIENT-1. The device check and the EAS build are the creator's.
+  accept: `deep_link` accepts only an allow-list of internal relative routes; ALN state keys use the local
+  connection id and `device_id` comes only from pairing; links require a single-use `pairing_token` and an
+  explicit host confirmation; keychain items are `THIS_DEVICE_ONLY`; frames, deltas and notification payloads
+  are capped. `deepLinkFor` with an external URL returns `'/'`.
+
+### Then the terminal capability
 
 - **TERM.3** — Profile environment for `terminal`
   `feature · alpi · agent · low`
@@ -102,6 +189,7 @@ defect, so a helper is extracted only when it removes evidenced duplication.
   sandbox, the Docker backend's explicit forwarding list, invalid values and
   protected variables. The map is listed in the takes-effect table of
   [CONFIG.md](CONFIG.md#tools) and in the packaged config reference.
+
 
 ## In progress
 
@@ -168,7 +256,26 @@ _None._
   has been run on every deployed daemon and `alpi doctor` reports no credential
   findings on each.
 
+- **OPS-RETENTION** — Run journals and sessions have a retention window on every daemon
+  `deploy · alpi · creator · normal`
+  depends: CFG.SET-INTEGERS
+  note: the daemons keep every run journal forever unless a profile sets `retention`; the busiest fleet holds
+  about 2 GB of them. Setting it over the host API stores a string until `CFG.SET-INTEGERS` ships; editing
+  `config.yaml` by hand works today.
+  accept: every deployed daemon has `retention.runs_days` and `retention.sessions_days` at the creator's chosen
+  values (root config, or per profile where they differ) and the next daily sweep removes the older journals.
+
 ### Verification
+
+- **HARN.018-VERIFY** — The 0.18 line does what it shipped for on the deployed daemons
+  `verify · alpi · creator · normal`
+  note: on 2026-11-10, a day after 0.18.0, the fleet had no run error, no compaction (largest prompt a quarter
+  of the window) and no provider pause; the daemons whose turns are longest had not run yet, and 0.18.1 was
+  deployed on 2026-11-11.
+  accept: after at least three days on 0.18.1, from the run journals and ledgers of the deployed daemons: the
+  count of each `agent.engine_note` per profile, the escalation rate against 0.18.0, the journal bytes per run
+  against 0.18.0, whether the longest-turn profiles compacted mid-turn without a provider rejection, and
+  whether a provider pause opened and closed with one notification each way. Anything off becomes a `bug`.
 
 - **WG.SYNC-VERIFY** — Busy workgroups stay current on the creator's desktop and phone
   `verify · alpi, desktop, mobile · creator · normal`
@@ -209,6 +316,162 @@ _None._
   and no gap remains when it closes; after folding, system back returns to the list.
 
 ## Proposed
+
+### Client review 2026-11-05
+
+Purely visual parts of this review are boards on the design kit's Proposals page: DS.SEGMENTED, DS.FLOATING,
+DS.BANNERS, DS.METER and DS.STATUS-CHIPS.
+
+- **DESK.WORKGROUP-GONE** — The open workgroup falls back to the list when it leaves the roster
+  `bug · desktop · agent · normal`
+  note: `App.jsx:1514` renders the workgroup view only while `activeWorkgroup` resolves; the profile view has a
+  guard back to the landing (`App.jsx:1315`), the workgroup view has none, and `onWorkgroupGone` fires only from a
+  fetch 404 inside the component that is already unmounted. Delete the open workgroup from the console or another
+  client and `<main>` shows only the banners.
+  accept: when the roster answered, no connection switch is in flight and the view's workgroup is missing, the view
+  becomes the workgroups list with a notice like `profile_delete`; a test rerenders App without the workgroup and
+  asserts the list.
+
+- **DESK.EXIT-MOTION** — Panels, the palette and browse shells leave with the modal's fade
+  `feature · desktop · agent · normal`
+  note: `Modal.jsx:30-48` runs `--dur-exit`/`--ease-exit` with a fallback timer; the palette (`Panels.jsx:322`),
+  Activity (`ActivityPanel.jsx:185`), the shortcuts sheet, the connection panel, `BrowseShell` and the Scrim
+  unmount instantly, so Escape cuts to the page on one family and fades on the other. Menus (Popover, Dropdown,
+  ContextMenu) stay instant. No new look: the same tokens, already collapsed by the reduced-motion rule.
+  accept: `Scrim`, `PanelShell` and `BrowseShell` keep the closing children until `animationend` or the fallback,
+  with the Modal's classes; tests like Modal's assert the element is still present with `data-closing` after
+  `open=false` and gone after the event.
+
+- **DESK.FILTERS** — One filter control for Notifications, Activity, Workgroups and Sessions
+  `chore · desktop · agent · normal`
+  note: the same "All / Needs you / …" row is four implementations: `NotificationsModal.jsx:449-465` (buttons with
+  `aria-pressed`), `ActivityPanel.jsx:84-114` (`radiogroup` with arrow keys), `WorkgroupsView.jsx:160-171`
+  (`.ds-seg`, no arrow keys) and `ManageSessionsModal.jsx:299-309` (`Chip` with no pressed state, so a screen
+  reader cannot tell which is on). No new look: the shipped `.ds-seg` with Activity's semantics.
+  accept: one primitive with `radiogroup`/`radio`, roving focus and Arrow/Home/End, used by the four sites with
+  their counts; a test per site asserts `role="radio"` and `aria-checked`.
+
+- **COMMON.MOTION-TOKENS** — Desktop runs on the shared motion names and pulses like the phone
+  `chore · desktop · design · agent · normal`
+  note: `tokens.css:145-156` mirrors `motionTokens` as `--dur-fast`, `--dur-pulse` and `--pulse-low` but no
+  stylesheet uses them; every loop runs on `--dur-loop: 1.4s` with floors of 0.35, 0.45, 0.55 and 0.4
+  (`design-system.css:668,686`, `Icon.module.css:20`, `Fold.module.css:14`) while the phone pulses at 1600 ms to
+  0.4 through `lib/pulse.js`; the skeleton breathes 0.55↔1 here and 0.4↔1 there; the spinner turns at 0.9 s here
+  and 0.8 s there. Literal durations in `Sidebar.module.css:80-109`, `SkillsModal.module.css:199`,
+  `StreamingMarkdown.module.css:2` and `design-system.css:704,789`; `Popover.jsx:66` and `Tip.jsx:70` set z-index
+  numbers beside `--z-*`; `AppearancePicker.module.css:51` draws an edge in a literal rgba that vanishes on dark
+  swatches. The kit's Motion board documents the split (`system_boards.py:285,302`) instead of one rule.
+  accept: the legacy ladder maps onto the shared names (`--dur-1`→fast, `--dur-2`→enter, loops and the skeleton
+  → `--dur-pulse` at `--pulse-low`, spin from `BUSY_WAVE_S/2` as mobile); no `[0-9]+(ms|s)` literal outside
+  `tokens.css`; `motion.test.js` asserts the shared names on every infinite animation and `tokenParity.test.js`
+  asserts `--dur-pulse` equals `motionTokens.pulse`; the two z-index literals and the picker edge use tokens; the
+  Motion board shows one pulse row.
+
+- **COMMON.EMPTY-STATES** — Desktop writes "nothing matches" and "could not load" the way the phone does
+  `chore · desktop · common · agent · normal`
+  note: `common/emptyCopy.mjs:35` defines `matches` but only Notifications uses it; the sidebar
+  (`Sidebar.jsx:617`), the palette (`Panels.jsx:349`), Settings search (`SettingsNav.jsx:131`), the workgroups
+  list (`WorkgroupsView.jsx:224`) and Settings' "No selection" / "Admin access required" (`Settings.jsx:103,106`)
+  each write and size their own, and the last two offer no action. `LoadFailed.jsx:19` prints `String(error)`,
+  the daemon's raw text, where the phone passes `plainError` and draws the failure as an `EmptyState`. "Nothing
+  needs you / running / upcoming" lives as literals in `ActivityPanel.jsx:18-21` and `activityFeed.js:8-11`.
+  accept: every no-match and no-selection state reads from `EMPTY` with the notifications list's two-line shape
+  and an action where there is one; desktop `LoadFailed` passes the error through `plainError` and uses the
+  empty-state anatomy; the activity strings move to `emptyCopy.mjs`; a copy test asserts no literal "match" or
+  "needs you" string outside `common/`; `LoadFailed.test.jsx` with a `plainError` fixture never shows the raw
+  error.
+
+- **MOB.LIST-REFRESH** — Providers and Peers refresh by pull and load before they say "not set"
+  `bug · mobile · agent · normal`
+  note: `providers/index.jsx:53` and `peers/index.jsx:67` are plain `ScrollView`s without `refreshControl` while
+  Email, MCP, Memory, Skills, Tools and Schedule have one; Providers ignores `loading` and `error` from
+  `useProfile` (`:22`), so a slow network shows "No Ollama instance" and every key as "not set" for a moment;
+  Peers has no error state.
+  accept: both use `usePullRefresh` with `RefreshControl`; Providers shows `ListSkeleton` while loading with no
+  profile and `LoadFailed` with Retry on error; a test with `loading: true, profile: null` finds no "not set"; a
+  test releases the refresh control and asserts `refresh` was called.
+
+- **MOB.REDUCE-MOTION** — Every mobile transition honours reduce motion
+  `bug · mobile · agent · normal`
+  note: `ConfirmDialog.jsx:85-97` scales and fades with `withTiming` and never reads `useReduceMotion`, so each
+  delete confirmation and the discard dialog of `useDirtyBack` zoom while every sheet appears still;
+  `TextPrompt.jsx:41` and `RichText.jsx:50` use the native `animationType="fade"` outside `motionTokens`;
+  `panes.js:136-139` returns `slide_from_right` on a phone whatever `reduceMotion` is (`panes.test.js:93` fixes
+  it) and `profile/[id]/_layout.jsx:13` uses `stackAnimation` without it.
+  accept: `ConfirmDialog` passes `duration: 0` under reduce motion like `useSheetGesture`; `TextPrompt` and
+  `RichText` use `animationType="none"` with the presence hook; `paneAnimation(false, true)` is `fade` or `none`
+  and the profile layout consumes it; tests mock `useReduceMotion` and assert each.
+
+- **MOB.SHIPPED-PARTS** — Hand-written rows, banners, meters and empty states use the shipped components
+  `chore · mobile · agent · normal`
+  note: `email/index.jsx:62-86`, `mcp/index.jsx:88-114` and `wg/[id]/member.jsx:83-108` draw their own
+  `Pressable` rows (no chevron, no composed label, no stacked mode under 360 pt, a literal `marginLeft: 52`
+  separator) where Peers uses `Row`; `wg/[id].jsx:660-668` draws the "Blocked at #slug" band as a `View` with its
+  own padding and no `alert` role two lines above a `Banner kind="warning"`; `wg/[id]/settings.jsx:221-244` has
+  no `SyncBar` and `:328-330` a hand-made budget bar where the profile uses `Meter` (`progressbar` with a value);
+  `skill-file.jsx:42-46` "Could not open" without Retry, `NotificationPage.jsx:242-250`, `SkillDetail.jsx:69-74`,
+  `JobDetail.jsx:171-173`, `MemoryDetail.jsx:100-105` and the sheets write their own empties;
+  `chat/[id].jsx:322-358` `NeedsSetup` is a private empty state; `MemberCard.jsx:57` fixes the crease at 18 while
+  the headers scale with `fontSizes`. No new look: each becomes the shipped component.
+  accept: those sites use `Row`, `Banner`, `SyncBar`, `Meter`, `EmptyState` and `LoadFailed` (with Retry where a
+  refresh exists) and the member crease follows `fontSizes.lg`; render tests find the composed row labels, the
+  `alert` banner, the `progressbar` value and the Retry button; `design/` regenerated.
+
+- **DESK.A11Y-FOCUS** — Hidden controls appear on keyboard focus and rows are not buttons inside buttons
+  `bug · desktop · agent · low`
+  note: `Sidebar.module.css:98-116` reveals the pin only on `:hover`, so Tab lands on an invisible button on every
+  row; tooltips reveal only on `:hover` (`design-system.css:402-406`, `Tip.jsx:57-58`), so icon-only buttons have
+  no visible label from the keyboard; `Panels.jsx:116-128` makes a connection row `role="button"` with a rename
+  input and Rename/Forget buttons inside it.
+  accept: `:focus-within` reveals the pin and tooltips, `TipEscape` listens to focus and blur, and the connection
+  row's clickable part is a real button with the actions as siblings; style tests assert the selectors and a
+  render test finds three separate buttons with none nested.
+
+- **DESK.DELETE-WORKGROUP** — "Delete workgroup…" opens the confirmation
+  `bug · desktop · agent · low`
+  note: `Sidebar.jsx:437-442` styles the item as danger but only opens the workgroup's settings, the same as "Open
+  settings"; the profile item passes `intent: "delete"` and `ProfileDetail.jsx:618` opens its confirm from it,
+  while `WorkgroupDetail.jsx:666-684` owns a `ConfirmDelete` that receives no intent.
+  accept: the workgroup target carries `intent: "delete"`, `Settings.jsx` forwards it and `WorkgroupDetail` opens
+  `ConfirmDelete` on arrival; a test clicks the item and finds the confirm.
+
+- **COMMON.COPY-TERMS** — One vocabulary for the daemon's state, work in progress and toasts
+  `chore · desktop · mobile · common · agent · low`
+  note: the phone names one state four ways at once: "Daemon unreachable. Reconnecting…" (`DaemonBanner.jsx:7`),
+  "offline · retrying…" (`ConnHeader.jsx:13`), "Daemon unreachable — sending paused" (`Composer.jsx:81`) and the
+  roster's empty copy (`Roster.jsx:115`); toast titles start lowercase in `chat/[id].jsx:713`,
+  `wg/[id].jsx:601,614` and `wg/[id]/settings.jsx:155,164` against 48 capitalised ones. Desktop says "thinking…"
+  on a row whose chip says "working" (`Sidebar.jsx:864,755`, `ChatSkeletons.jsx:23`), labels the reasoning block
+  "Thinking…" (`Reasoning.jsx:34`), tells a desktop user to "tap" (`Sidebar.jsx:841`, `SoundWave.jsx:20`) and
+  explains a paused profile in the banner, the placeholder and the send tooltip (`ChatPane.jsx:326-329`,
+  `ChatComposer.jsx:221-230`) although 0.9.0 settled on the banner alone.
+  accept: the daemon state word and verb come from one `common` module both clients consume; toast titles are
+  capitalised; desktop uses "working…", "Reasoning…" and no "tap"; the composer placeholder of a paused profile is
+  the normal one; copy tests on both sides assert the literals are gone.
+
+- **MOB.HAPTICS** — Refresh, the menu switch and the roster long-press give the same feedback as their siblings
+  `chore · mobile · agent · low`
+  note: `outputs.jsx:97-100` rolls its own refresh without `usePullRefresh`, so no `selection()` and no "Refresh
+  failed" toast; `ActionSheet.jsx:143-146` flips a switch action without the `Toggle` haptic; `InboxRow.jsx:74`
+  opens the context sheet on long-press without the haptic `Bubble.jsx:31` gives.
+  accept: the three sites use the shared hooks; tests with `lib/haptics` mocked assert one call each and the
+  failure toast on a rejected refresh.
+
+- **MOB.TYPE-WEIGHTS** — The phone marks unread with semibold, like desktop and the type scale
+  `chore · mobile · agent · low`
+  note: `common/tokens.mjs:46-50` has 400, 500 and 600; `mobile/src/theme/tokens.js:54` adds a 700 face used by
+  `InboxRow.jsx:88`, `TasksSheet.jsx:27,31`, `ClarificationSheet.jsx:92` and `ApprovalSheet.jsx:86`, while
+  desktop's unread row is semibold (`design-system.css:775`) and its type census forbids 700.
+  accept: `fonts.sans.bold` is gone and those sites use `semibold`; a test like `inkContract` asserts no
+  `sans.bold` under `src/` or `app/`.
+
+- **MOB.BIOMETRIC-ROUTE** — The unreachable biometric screen is removed
+  `chore · mobile · agent · low`
+  note: nothing navigates to `app/biometric.jsx` (only `panes.js:61` and a test name it); Settings and the paired
+  screen already carry the `Toggle` inline, and the page draws its own switch (`biometric.jsx:90-102`) that would
+  not match the app's.
+  accept: the route, its `FULL_BLEED` entry and its test references are deleted; a route test fails on any file
+  under `app/` that nothing pushes, replaces or links, except `index`, `_layout` and `+native-intent`.
 
 ### Client review 2026-11-02
 
@@ -261,30 +524,7 @@ _None._
   accept: both timers check the latest committed `loading` (a ref set in a layout effect) before changing state;
   two tests fire each captured timer callback after the rerender that flips `loading` and fail without the fix.
 
-### Alexandra evaluation 2026-10-30
-
-- **KB.SEARCH-ONLY** — A profile that only searches its knowledge is offered only `search`, `query` and `k`
-  `feature · alpi · agent · normal`
-  note: in two batteries of real questions on the EC2 (deepseek-v4.1-flash), 19% and then 9% of `knowledge` search
-  calls arrived with no `query` but with the ingest arguments `apply`, `ocr`, `path`, `name` or `topic` that the tool
-  schema advertises; those answers cost about twice as much and took three times as long. Alexandra's persona already
-  forbids those arguments and reads the knowledge only. A profile can deny `ingest`, `maintain`, `lint` and `index`
-  (for example `tools.deny: ["knowledge:ingest", …]` or a `knowledge.actions` list).
-  accept: with the write actions denied, the schema sent to the model lists only `action` (enum `search`), `query` and
-  `k`, and a call to a denied action is refused with the allowed form; a profile without the setting keeps today's
-  schema; docs/CONFIG.md and the matching knowledge reference describe the setting; console parity in `alpi setup` or
-  config docs.
-
 ### Security audit 2026-10-28
-
-- **SEC.HOST-LOCAL-ONLY** — A remote admin cannot rebind or restart the daemon, and pre-auth sockets are bounded
-  `bug · alpi · agent · normal`
-  note: report HOST-1 to HOST-4.
-  accept: `host.config.set_field`/`unset_field` normalise the key (empty segments rejected) before the
-  local-only check, so `host.allow_public_bind.` and `.network.host` are refused under `require_token=True`;
-  `host.daemon.restart` and `host.daemon.update` are local-only; remote callers get fixed error detail with no
-  paths; the first frame of an unauthenticated socket is capped near 64 KB and pre-auth timeouts count in the
-  per-origin limiter. Console parity unchanged.
 
 - **SEC.BROWSER-PIN** — The browser connects to the IP its guard verified
   `bug · alpi · agent · normal`
@@ -300,14 +540,6 @@ _None._
   `EnvelopeError` for malformed fields; `_append_marker` takes the transcript lock; continuation requests need an
   existing part; a Noise identity that does not match the envelope sender is cut before dispatch. A stub hub
   returning `../x` and `..\x` is a test.
-
-- **SEC.MOBILE-TRUST** — The phone trusts only what pairing established
-  `bug · mobile · alpi · agent · high`
-  note: report MOB-1 to MOB-5 and CLIENT-1. The device check and the EAS build are the creator's.
-  accept: `deep_link` accepts only an allow-list of internal relative routes; ALN state keys use the local
-  connection id and `device_id` comes only from pairing; links require a single-use `pairing_token` and an
-  explicit host confirmation; keychain items are `THIS_DEVICE_ONLY`; frames, deltas and notification payloads
-  are capped. `deepLinkFor` with an external URL returns `'/'`.
 
 - **SEC.REPO-GOVERNANCE** — GitHub controls for the release chain
   `chore · alpi · creator · high`
@@ -341,31 +573,6 @@ _None._
 
 ### Reliability before another feature
 
-- **WG.MOBILE-SYNC** — The phone reconciles workgroup state after failures and event bursts
-  `bug · mobile · agent · high`
-  note: `useDaemonData.fetchAndStore` returns an existing in-flight promise without queuing a
-  trailing refresh. `app/index.jsx` omits `wg.task`, `wg.skip` and `stream.connected`; the workgroup
-  page listens only to `wg.post`, `wg.done` and `workgroup_members`. A terminal event during a slow
-  read, or one lost beyond the replay window, can leave cached rows or canonical task state old
-  until another event or manual refresh. Event reconnect already has replay; retain it.
-  accept: cover canonical task/skip/change events and stream reconnection on the inbox and open
-  workgroup; coalesce bursts but perform one trailing read when an invalidation arrives in flight.
-  Retry transient failures with bounded backoff while active and reconcile periodically in the
-  foreground; stop timers in background and on endpoint change. Profiles, tasks and transcripts
-  remain independent, old-endpoint replies never replace the active endpoint's data, and auth
-  failures still clear inaccessible data. Hook/screen tests hold a read pending through the final
-  event, drop events across reconnect, resume the app and recover after multiple timeouts. Expose
-  per-resource stale/error state for the separate `MOB.ROSTER-STALE` interface work.
-
-- **WG.RECIPE-KEYS** — An unsupported pipeline-step option never disappears silently
-  `bug · alpi · agent · normal`
-  note: `validate_pipeline_steps` copies known keys and drops the rest, so a misspelt gate or a
-  future `repeat` rule can turn into a successful recipe load without the requested behavior.
-  accept: recipe/workgroup validation rejects unknown step options with the phase and option name;
-  all currently supported keys keep their behavior and legacy valid recipes still load. Tests
-  cover a misspelling, unsupported `repeat`, every accepted key and CLI recipe loading. Document
-  the supported grammar and minimum version in WORKGROUPS and the packaged workgroups reference.
-
 - **FRAME.2** — Other writers still encode agent text with `ensure_ascii=False` and raise on a lone surrogate
   `bug · alpi · agent · normal`
   note: found while reviewing FRAME.1, which scrubs the host's Unix and WebSocket frames and the inbox, run ledger,
@@ -379,6 +586,37 @@ _None._
   accept: each site either scrubs or is shown not to receive agent or tool text; a post carrying a lone surrogate
   reaches a peer with a valid signature, and a `--once` turn whose tool output holds one prints its events; tests
   drive the ALP client and server, the CLI line and a provider-bound message.
+
+### Harness, demand-gated
+
+- **RUNS.JOURNAL-FIELDS** — A journal event stores only the fields it uses
+  `chore · alpi · agent · low`
+  note: `runs.record_agent_event` writes the whole `AgentEvent` dataclass, so every `agent.*` line carries some
+  fifteen empty fields (`text`, `args`, `output`, `tokens_in`, …) beside the two or three it means.
+  promote when: `HARN.018-VERIFY` shows journals still dominated by event overhead, or disk becomes a concern.
+  accept: default-valued fields are omitted on write and restored by `runs.read`, so `alpi runs show`,
+  `host.run.read` and the scheduler's journal diagnosis see the same events; a test compares the bytes of a
+  journal before and after and reads both back equal.
+
+- **HARN.COMPACT-BATCH** — A parallel batch larger than the compaction trigger is recorded
+  `bug · alpi · agent · low`
+  note: when the tail of the turn is one parallel batch whose replies exceed the trigger by themselves,
+  compaction cannot split it, does nothing and writes no line to `compaction.jsonl`; the next request carries
+  the whole batch. Also `should_compact` estimates from characters over `session.messages`, without the system
+  prompt or the tool schemas, and undercounts numeric and JSON content by up to half.
+  promote when: a deployed profile's prompt passes half of its context window, or a provider rejects one.
+  accept: the skipped pass is recorded with its reason; the trigger uses the previous step's measured input
+  tokens plus an estimate of what was added; tests cover the oversized batch and a JSON-heavy turn.
+
+- **HARN.REASONING-FAMILIES** — The model's reasoning survives a tool call on Anthropic and Gemini
+  `feature · alpi · agent · low`
+  note: `engine.py` re-sends `reasoning_content` on the assistant message only for DeepSeek models; Anthropic
+  needs its signed thinking blocks and Gemini its thought signatures returned with the tool call, so with those
+  families through OpenRouter the thinking between tool calls is dropped (lower quality on long turns, or a 400).
+  Unverifiable without a live profile on one of those families: every fleet profile runs DeepSeek today.
+  promote when: a profile is configured on an Anthropic or Gemini model.
+  accept: the blocks the provider returned are echoed unchanged on the assistant message for every family that
+  returned them; a fake-provider test for each shape; a live `pytest --llm` case on the family that promoted it.
 
 ### Next minor candidate — bounded pipeline repetition
 
