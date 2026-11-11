@@ -8,7 +8,7 @@ import { useEndpoint } from '../../lib/EndpointContext';
 import { call as rpcCall } from '../../lib/rpc';
 import { loadConnections } from '../../lib/store';
 import { dismissRequestNotifications } from './dismiss';
-import { APPROVAL_ACTIONS, requestDomain } from './kinds';
+import { APPROVAL_ACTIONS, internalLink, requestDomain } from './kinds';
 
 export function isForeignConnection(activeId, connectionId) {
   return !!connectionId && !!activeId && connectionId !== activeId;
@@ -20,7 +20,7 @@ export function isRootLink(link) {
 
 export function routeFromResponse(response) {
   const data = response?.notification?.request?.content?.data || {};
-  const link = typeof data.link === 'string' && data.link ? data.link : '/';
+  const link = internalLink(data.link);
   const connectionId = typeof data.connectionId === 'string' ? data.connectionId : '';
   return { link, connectionId };
 }

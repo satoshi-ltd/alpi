@@ -14,6 +14,14 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.9.14 — 2026-11-11 — the phone trusts only what pairing established
+
+- Tapping a notification opens only one of the app's own pages; a link a daemon puts in a notification that points anywhere else (a website, a phone number, the pairing page) opens the inbox instead.
+- An `alpi://` pairing link must carry a one-time pairing code; a link with a device token is refused (paste the pairing JSON instead), and a link opened from outside the app shows the daemon's address and asks you to confirm before pairing.
+- Device tokens, notification state and used pairing codes stay on this phone: after updating they move to keychain items that a device backup does not carry to another phone, and Android backup is off. Installing an older build afterwards asks you to pair again.
+- A daemon can no longer make the app hold unbounded data: an oversized message is discarded unread, a streaming reply stops at 2 MB, tool output kept for a turn is capped, and notifications are kept short.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.9.13 — 2026-11-11 — a missing profile, workgroup or connection shows a way out
 
 - Opening a profile, workgroup, connection, provider or tool that no longer exists (deleted from another device, or an old link) now says so and offers Back to inbox, instead of an empty screen.

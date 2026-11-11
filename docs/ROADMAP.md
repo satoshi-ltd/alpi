@@ -82,14 +82,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ### Mobile
 
-- **SEC.MOBILE-TRUST** — The phone trusts only what pairing established
-  `bug · mobile · alpi · agent · high`
-  note: report MOB-1 to MOB-5 and CLIENT-1. The device check and the EAS build are the creator's.
-  accept: `deep_link` accepts only an allow-list of internal relative routes; ALN state keys use the local
-  connection id and `device_id` comes only from pairing; links require a single-use `pairing_token` and an
-  explicit host confirmation; keychain items are `THIS_DEVICE_ONLY`; frames, deltas and notification payloads
-  are capped. `deepLinkFor` with an external URL returns `'/'`.
-
 ### Then the terminal capability
 
 - **TERM.3** — Profile environment for `terminal`
@@ -483,7 +475,6 @@ DS.BANNERS, DS.METER and DS.STATUS-CHIPS.
 
 - **SEC.HARDENING-BATCH** — Desktop, client and supply-chain minors
   `chore · alpi · desktop · agent · low`
-  depends: SEC.MOBILE-TRUST
   note: report DESK-1 to DESK-4, CLIENT-2, MOB-6, SUPPLY-3 and the nits, taken in batches. Left from SEC.REDACT:
   the ALP workgroup transcript (`alp/workgroup.py::_append_transcript`) is written unredacted, and
   `alp/turns.jsonl` does not rotate.
@@ -514,6 +505,20 @@ DS.BANNERS, DS.METER and DS.STATUS-CHIPS.
   disappears from the picker; only `alpi workgroup recipes` and "Import recipe…" name the reason.
   accept: the picker lists each refused recipe as disabled with the daemon's reason; an older daemon without
   `invalid_recipes` shows nothing extra; a component test renders one valid and one refused recipe.
+
+### Found while shipping mobile 0.9.14
+
+- **SEC.MOBILE-IDENTITY** — A daemon cannot pass itself off as another one on the phone
+  `bug · mobile · alpi · agent · high`
+  note: left from SEC.MOBILE-TRUST (audit MOB-2). `connection.deviceId` holds the phone's own device id from
+  the pairing exchange until the first probe overwrites it with the daemon's id from `host.version`; that daemon
+  id keys the notification state (`aln/state.js`), groups routes for the background poll
+  (`backgroundTask.js`) and names OS notifications (`notify.js`). A daemon the user paired can claim another
+  daemon's id and suppress its notifications, approvals included. Keying by local connection id alone breaks
+  the dedupe of two routes to one daemon (duplicate notifications), and any id a daemon reports can be forged.
+  accept: a design the creator approves (for example a daemon public key pinned at pairing and proven on each
+  probe) that keeps one notification per event across routes of the same daemon and makes a second daemon
+  unable to share that state; tests for a lying daemon and for two honest routes.
 
 ### Harness, demand-gated
 

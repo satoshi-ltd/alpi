@@ -102,28 +102,47 @@ export function formatNotification(event, connection) {
 }
 
 
+const SEGMENT = "[A-Za-z0-9_][A-Za-z0-9._~%-]{0,255}";
+// Only these in-app pages may be opened from a daemon's link: no scheme, host, query or dot segment.
+const INTERNAL_ROUTES = [
+  new RegExp(`^/outputs/${SEGMENT}/${SEGMENT}$`),
+  new RegExp(`^/chat/${SEGMENT}$`),
+  new RegExp(`^/wg/${SEGMENT}$`),
+  new RegExp(`^/profile/${SEGMENT}/(settings|schedule)$`),
+  new RegExp(`^/profile/${SEGMENT}/schedule/${SEGMENT}$`),
+  /^\/(outputs|activity)?$/,
+];
+
+export function internalLink(link, fallback = '/') {
+  if (typeof link !== 'string') return fallback;
+  return INTERNAL_ROUTES.some((route) => route.test(link)) ? link : fallback;
+}
+
 export function deepLinkFor(event, _connection) {
   const kind = event?.event;
   const data = event?.data || {};
   switch (kind) {
-    case 'agent.message':
-      if (typeof data.deep_link === 'string' && data.deep_link) {
-        return data.deep_link;
-      }
-      return data.profile ? `/chat/${data.profile}` : '/';
+    case 'agent.message': {
+      const fallback = data.profile ? internalLink(`/chat/${data.profile}`) : '/';
+      return data.deep_link ? internalLink(data.deep_link, fallback) : fallback;
+    }
     case 'wg.done':
-      return data.wg_id ? `/wg/${data.wg_id}` : '/';
+      return data.wg_id ? internalLink(`/wg/${data.wg_id}`) : '/';
     case 'approval.request':
     case 'clarification.request':
       return '/';
-    case 'schedule.failed':
-      if (typeof data.deep_link === 'string' && data.deep_link) {
-        return data.deep_link;
+    case 'schedule.failed': {
+      let fallback = '/';
+      if (data.profile) {
+        const schedule = internalLink(`/profile/${data.profile}/schedule`);
+        fallback = data.job_id
+          ? internalLink(`/profile/${data.profile}/schedule/${encodeURIComponent(data.job_id)}`, schedule)
+          : schedule;
       }
-      if (!data.profile) return '/';
-      return data.job_id ? `/profile/${data.profile}/schedule/${encodeURIComponent(data.job_id)}` : `/profile/${data.profile}/schedule`;
+      return data.deep_link ? internalLink(data.deep_link, fallback) : fallback;
+    }
     case 'budget.threshold':
-      return data.profile ? `/profile/${data.profile}/settings` : '/';
+      return data.profile ? internalLink(`/profile/${data.profile}/settings`) : '/';
     default:
       return '/';
   }

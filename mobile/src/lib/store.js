@@ -1,18 +1,12 @@
 import * as SecureStore from 'expo-secure-store';
+
+import { deviceOnlyOpts, readMovedItem } from './secureOpts';
 import { endpointUrl } from './endpoint.js';
 
-const KEY = 'alpi.connections';
+const KEY = 'alpi.connections.v2';
+const LEGACY_CONNECTIONS_KEY = 'alpi.connections';
 // Wiped on clearAll() so an old build's leftover token does not linger after unpair. Never read/migrated.
 const LEGACY_ENDPOINT_KEY = 'alpi.endpoint';
-
-function secureOpts() {
-  try {
-    if (SecureStore.AFTER_FIRST_UNLOCK !== undefined) {
-      return { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK };
-    }
-  } catch { /* */ }
-  return {};
-}
 
 function genId() {
   return `c-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -47,13 +41,13 @@ function normalizeConnection(c) {
 }
 
 async function readRaw() {
-  const raw = await SecureStore.getItemAsync(KEY);
+  const raw = await readMovedItem(KEY, LEGACY_CONNECTIONS_KEY);
   if (!raw) return null;
   try { return JSON.parse(raw); } catch { return null; }
 }
 
 async function writeRaw(state) {
-  await SecureStore.setItemAsync(KEY, JSON.stringify(state), secureOpts());
+  await SecureStore.setItemAsync(KEY, JSON.stringify(state), deviceOnlyOpts());
 }
 
 let writes = Promise.resolve();
@@ -212,6 +206,7 @@ export function setActiveConnection(id) {
 export function clearAll() {
   return mutate(async () => {
     await SecureStore.deleteItemAsync(KEY);
+    await SecureStore.deleteItemAsync(LEGACY_CONNECTIONS_KEY);
     await SecureStore.deleteItemAsync(LEGACY_ENDPOINT_KEY);
   });
 }

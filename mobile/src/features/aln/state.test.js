@@ -30,8 +30,8 @@ import {
 
 describe('stateKey', () => {
   it('namespaces per connection so two daemons stay independent', () => {
-    expect(stateKey('a')).toBe('aln.state.a');
-    expect(stateKey('b')).toBe('aln.state.b');
+    expect(stateKey('a')).toBe('aln.state.v2.a');
+    expect(stateKey('b')).toBe('aln.state.v2.b');
     expect(stateKey('a')).not.toBe(stateKey('b'));
   });
 
@@ -93,7 +93,7 @@ describe('loadState', () => {
   });
 
   it('coerces malformed persisted data to defaults', async () => {
-    store.set('aln.state.bad', 'this is not json');
+    store.set('aln.state.v2.bad', 'this is not json');
     const s = await loadState('bad');
     expect(s.afterSeq).toBe(0);
     expect(s.seenIds).toEqual([]);
@@ -181,6 +181,7 @@ describe('mutateState serialization', () => {
     release();
     await Promise.all([inFlight, forget]);
 
+    expect(store.has('aln.state.v2.c1')).toBe(false);
     expect(store.has('aln.state.c1')).toBe(false);
   });
 

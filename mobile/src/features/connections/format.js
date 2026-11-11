@@ -56,7 +56,6 @@ export function pairingLink(payload, endpointUrl) {
     url,
     name: payload?.pairing_name || payload?.label || 'Alpi',
     pairing_token: payload?.pairing_token || '',
-    token: payload?.pairing_token ? '' : payload?.token || '',
     connection_id: payload?.connection_id || '',
   });
 }

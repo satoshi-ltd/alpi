@@ -1,6 +1,9 @@
 import * as SecureStore from 'expo-secure-store';
 
-const KEY_PREFIX = 'aln.state.';
+import { deviceOnlyOpts, readMovedItem } from '../../lib/secureOpts';
+
+const KEY_PREFIX = 'aln.state.v2.';
+const LEGACY_KEY_PREFIX = 'aln.state.';
 const FLAG_PREFIX = 'aln.flag.';
 const SEEN_CAP = 500;
 
@@ -18,22 +21,17 @@ export function eventId(event) {
   return `${kind}:${seq}`;
 }
 
-function secureOpts() {
-  try {
-    if (SecureStore.AFTER_FIRST_UNLOCK !== undefined) {
-      return { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK };
-    }
-  } catch { /* */ }
-  return {};
-}
-
 export function stateKey(connectionId) {
   return `${KEY_PREFIX}${String(connectionId).replace(/[^\w.-]/g, '_')}`;
 }
 
+function legacyStateKey(connectionId) {
+  return `${LEGACY_KEY_PREFIX}${String(connectionId).replace(/[^\w.-]/g, '_')}`;
+}
+
 export async function loadState(connectionId) {
   try {
-    const raw = await SecureStore.getItemAsync(stateKey(connectionId));
+    const raw = await readMovedItem(stateKey(connectionId), legacyStateKey(connectionId));
     if (!raw) return defaultState();
     const parsed = JSON.parse(raw);
     const out = normalize(parsed);
@@ -49,13 +47,16 @@ export async function saveState(connectionId, state) {
   await SecureStore.setItemAsync(
     stateKey(connectionId),
     JSON.stringify(normalize(state)),
-    secureOpts(),
+    deviceOnlyOpts(),
   );
 }
 
 export async function clearState(connectionId) {
   // Through the lock, or an in-flight delivery's save resurrects the record after an unpair.
-  await withStateLock(connectionId, () => SecureStore.deleteItemAsync(stateKey(connectionId)));
+  await withStateLock(connectionId, async () => {
+    await SecureStore.deleteItemAsync(stateKey(connectionId));
+    await SecureStore.deleteItemAsync(legacyStateKey(connectionId));
+  });
 }
 
 // The live bridge and the background poll share one record per daemon; interleaved load-modify-save would drop whichever field the loser read before the winner wrote.
@@ -91,7 +92,7 @@ export async function loadFlag(name, fallback = null) {
 
 export async function saveFlag(name, value) {
   try {
-    await SecureStore.setItemAsync(`${FLAG_PREFIX}${name}`, JSON.stringify(value), secureOpts());
+    await SecureStore.setItemAsync(`${FLAG_PREFIX}${name}`, JSON.stringify(value), deviceOnlyOpts());
   } catch { /* */ }
 }
 

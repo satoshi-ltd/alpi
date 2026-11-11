@@ -28,6 +28,8 @@ export function transportError(code, message) {
 }
 
 export const AUTH_FAILED = -32000;
+// The largest honest frame is an attachment fetch: 20 MiB as base64 plus its envelope.
+export const MAX_FRAME_CHARS = 32 * 1024 * 1024;
 export const TOO_MANY_CONNECTIONS = -32029;
 const TOO_MANY_RETRY_MS = 1500;
 
@@ -201,6 +203,10 @@ function ensureEntry(endpoint) {
     if (entry.closed) return;
     entry.lastSeen = Date.now();
     let body;
+    if (typeof event.data === 'string' && event.data.length > MAX_FRAME_CHARS) {
+      dropSocket(new RpcError(-32700, 'response frame too large'));
+      return;
+    }
     try {
       body = JSON.parse(typeof event.data === 'string' ? event.data : '');
     } catch {
@@ -415,6 +421,10 @@ function openStream(endpoint, method, params, handlers) {
   ws.onmessage = (event) => {
     if (closed) return;
     let body;
+    if (typeof event.data === 'string' && event.data.length > MAX_FRAME_CHARS) {
+      fail(new RpcError(-32700, 'stream frame too large'));
+      return;
+    }
     try {
       body = JSON.parse(typeof event.data === 'string' ? event.data : '');
     } catch {

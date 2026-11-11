@@ -132,3 +132,14 @@ describe('actionable approvals', () => {
     expect(question.body).toBe('Which one?');
   });
 });
+
+
+describe('fireForEvent keeps the OS payload small', () => {
+  it('copies only the request id of the event, never the whole daemon payload', async () => {
+    const ev = { event: 'approval.request', seq: 3, data: { request_id: 'r-1', command: 'x'.repeat(500_000), profile: 'doc' } };
+    await fireForEvent(ev, { id: 'c1', name: 'home' });
+    const payload = hoisted.scheduleMock.mock.calls.at(-1)[0];
+    expect(payload.content.data.rawData).toEqual({ request_id: 'r-1' });
+    expect(JSON.stringify(payload.content).length).toBeLessThan(6000);
+  });
+});

@@ -11,6 +11,14 @@ const { h } = vi.hoisted(() => ({
 vi.mock('react-native', () => import('./mocks/firstRun.js'));
 vi.mock('../src/theme/ThemeContext', () => import('./mocks/firstRun.js'));
 vi.mock('../src/components/Button', () => import('./mocks/firstRun.js'));
+vi.mock('../src/components/ConfirmDialog', async () => {
+  const React = await import('react');
+  return {
+    ConfirmDialog: ({ open, body, confirmLabel, onConfirm }) => (open
+      ? React.createElement('div', { 'data-confirm': body }, React.createElement('button', { type: 'button', onClick: onConfirm }, `Confirm ${confirmLabel}`))
+      : null),
+  };
+});
 vi.mock('../src/components/Fold', () => import('./mocks/firstRun.js'));
 vi.mock('../src/components/Busy', () => import('./mocks/firstRun.js'));
 vi.mock('../src/components/Icon', () => import('./mocks/firstRun.js'));
@@ -86,6 +94,9 @@ describe('Pair screen marks a used link as spent', () => {
     render(<Pair />);
     await waitFor(() => expect(document.querySelector('input').value).toMatch(/^alpi:\/\/device/));
     fireEvent.click(screen.getByText('Pair'));
+    expect(h.remember).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-confirm]').getAttribute('data-confirm')).toMatch(/ws:\/\//);
+    fireEvent.click(screen.getByText('Confirm Pair'));
     await waitFor(() => expect(h.remember).toHaveBeenCalledWith('tok-1'));
   });
 
@@ -96,6 +107,8 @@ describe('Pair screen marks a used link as spent', () => {
     render(<Pair />);
     await waitFor(() => expect(document.querySelector('input').value).not.toBe(''));
     fireEvent.click(screen.getByText('Pair'));
+    const confirm = screen.queryByText('Confirm Pair');
+    if (confirm) fireEvent.click(confirm);
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(h.remember).not.toHaveBeenCalled();
   });

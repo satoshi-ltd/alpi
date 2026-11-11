@@ -13,6 +13,29 @@ function nextRequestId() {
 const STALL_THRESHOLD_MS = 15000;
 const STALL_POLL_INTERVAL_MS = 2500;
 
+export const MAX_STREAMED_CHARS = 2 * 1024 * 1024;
+// The daemon caps a tool output it streams at 4,000 characters; anything longer is not one this app asked for.
+export const MAX_TOOL_FIELD_CHARS = 64 * 1024;
+export const MAX_TURN_TOOLS = 2000;
+
+function capped(current, more) {
+  const next = current + (typeof more === 'string' ? more : '');
+  return next.length > MAX_STREAMED_CHARS ? next.slice(0, MAX_STREAMED_CHARS) : next;
+}
+
+function clip(value, limit = MAX_TOOL_FIELD_CHARS) {
+  return typeof value === 'string' && value.length > limit ? value.slice(0, limit) : value;
+}
+
+function clipArgs(args) {
+  if (args == null || typeof args === 'string') return clip(args);
+  try {
+    return JSON.stringify(args).length > MAX_TOOL_FIELD_CHARS ? { truncated: true } : args;
+  } catch {
+    return { truncated: true };
+  }
+}
+
 export function useChatSend({ profile, sessionId, onCompleted }) {
   const { call, callStream } = useEndpoint();
   const [pendingTurn, setPendingTurn] = useState(null);
@@ -73,8 +96,8 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
     reasoningBufRef.current = '';
     writeTurn((cur) => {
       const next = { ...cur };
-      if (chunk) next.assistant = (cur.assistant ?? '') + chunk;
-      if (rchunk) next.reasoning = (cur.reasoning ?? '') + rchunk;
+      if (chunk) next.assistant = capped(cur.assistant ?? '', chunk);
+      if (rchunk) next.reasoning = capped(cur.reasoning ?? '', rchunk);
       if (chunk) next.reasoningOpen = false;
       else if (rchunk) next.reasoningOpen = true;
       return next;
@@ -171,12 +194,12 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
           return;
         }
         if (event === 'assistant_delta') {
-          deltaBufRef.current += frame.text ?? '';
+          deltaBufRef.current = capped(deltaBufRef.current, frame.text);
           if (rafRef.current == null) {
             rafRef.current = requestAnimationFrame(flushDeltas);
           }
         } else if (event === 'reasoning_delta') {
-          reasoningBufRef.current += frame.text ?? '';
+          reasoningBufRef.current = capped(reasoningBufRef.current, frame.text);
           if (rafRef.current == null) {
             rafRef.current = requestAnimationFrame(flushDeltas);
           }
@@ -196,20 +219,20 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
             const next = {
               tool_id: frame.tool_id ?? frame.name,
               name: frame.name,
-              args: frame.args ?? frame.preview,
+              args: clipArgs(frame.args ?? frame.preview),
               ok: null,
               at: Number.isFinite(frame.started_at) ? frame.started_at : Number.isFinite(ts) ? ts : Date.now() / 1000,
             };
-            if (segment) next.reasoning = segment;
+            if (segment) next.reasoning = clip(segment, MAX_STREAMED_CHARS);
             if (existing >= 0) tools[existing] = { ...tools[existing], ...next };
-            else tools.push(next);
+            else if (tools.length < MAX_TURN_TOOLS) tools.push(next);
             return { ...cur, tools, reasoning: '', assistant: '', reasoningOpen: false };
           });
         } else if (event === 'tool_state') {
           writeTurn((cur) => {
             const tools = (cur.tools ?? []).map((t) =>
               t.tool_id === frame.tool_id
-                ? { ...t, ok: frame.ok ?? t.ok, text: frame.text }
+                ? { ...t, ok: frame.ok ?? t.ok, text: clip(frame.text) }
                 : t,
             );
             return { ...cur, tools };
@@ -222,7 +245,7 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
                 ? {
                     ...t,
                     ok: frame.ok ?? true,
-                    output: frame.output,
+                    output: clip(frame.output),
                     duration_s: Number.isFinite(frame.duration_s) ? frame.duration_s : Math.max(0, endTs - (t.at ?? endTs)),
                   }
                 : t,
@@ -235,10 +258,10 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
           const seconds = Number(frame.seconds);
           writeTurn((cur) => ({
             ...cur,
-            reasoning: `${cur.reasoning ?? ''}${pendingReasoning}`,
+            reasoning: capped(cur.reasoning ?? '', pendingReasoning),
             reasoned_s: (cur.reasoned_s ?? 0) + (Number.isFinite(seconds) && seconds > 0 ? seconds : 0),
             reasoning_spans: [
-              ...(cur.reasoning_spans ?? []),
+              ...(cur.reasoning_spans ?? []).slice(-(MAX_TURN_TOOLS - 1)),
               { seconds: Number.isFinite(seconds) && seconds > 0 ? seconds : 0, before_tool: (cur.tools ?? []).length },
             ],
             reasoningOpen: false,
@@ -246,7 +269,7 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
         } else if (event === 'reply') {
           deltaBufRef.current = '';
           reasoningBufRef.current = '';
-          writeTurn((cur) => ({ ...cur, assistant: frame.text ?? cur.assistant ?? '' }));
+          writeTurn((cur) => ({ ...cur, assistant: typeof frame.text === 'string' ? clip(frame.text, MAX_STREAMED_CHARS) : cur.assistant ?? '' }));
         }
       };
 

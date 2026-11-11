@@ -5,6 +5,9 @@ import { resetReadState } from './readState';
 // alpi.endpoint is the legacy single-endpoint key; loadConnections no longer migrates it, but signOut still wipes it so an old build's leftover token does not linger in SecureStore.
 const KEYS = [
   'alpi.connections',
+  'alpi.connections.v2',
+  'alpi.spent-pairings.v1',
+  'alpi.spent-pairings.v2',
   'alpi.endpoint',
   'alpi.pinned',
   'alpi.biometric',

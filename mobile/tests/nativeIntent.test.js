@@ -65,7 +65,7 @@ describe('pairingLinkFromParams', () => {
   });
 
   it('accepts the legacy host/port form', () => {
-    const link = pairingLinkFromParams({ host: '10.0.0.4', port: '49200', token: 'tok' });
+    const link = pairingLinkFromParams({ host: '10.0.0.4', port: '49200', pairing_token: 'tok' });
     expect(new URL(link).searchParams.get('host')).toBe('10.0.0.4');
   });
 

@@ -204,3 +204,14 @@ describe('isRootLink', () => {
     expect(isRootLink('/outputs/vera/abc')).toBe(false);
   });
 });
+
+
+describe('routeFromResponse re-checks the stored link on tap', () => {
+  it('drops an external or query-carrying link saved in an older notification', async () => {
+    const { routeFromResponse } = await import('./deeplink');
+    const response = (link) => ({ notification: { request: { content: { data: { link, connectionId: 'c1' } } } } });
+    expect(routeFromResponse(response('https://evil.example/')).link).toBe('/');
+    expect(routeFromResponse(response('/pair?token=X')).link).toBe('/');
+    expect(routeFromResponse(response('/chat/doc')).link).toBe('/chat/doc');
+  });
+});

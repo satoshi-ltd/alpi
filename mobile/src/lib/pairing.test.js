@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { PairingError, exchangePairing, pairingLinkFact, parsePairing } from './pairing.js';
+import { PairingError, exchangePairing, pairingLinkFact, pairingLinkFromParams, parsePairing } from './pairing.js';
 
 describe('parsePairing', () => {
   it('accepts the URL payload without a version marker', () => {
@@ -12,15 +12,30 @@ describe('parsePairing', () => {
   });
 
   it('keeps legacy host and port pairing links compatible', () => {
-    expect(parsePairing('alpi://device?host=100.64.0.1&port=49200&name=Old&token=secret'))
+    expect(parsePairing('alpi://device?host=100.64.0.1&port=49200&name=Old&pairing_token=grant'))
       .toEqual({
-        name: 'Old', url: 'ws://100.64.0.1:49200', token: 'secret', kind: 'remote',
+        name: 'Old', url: 'ws://100.64.0.1:49200', pairingToken: 'grant', kind: 'remote',
       });
+  });
+
+  it('refuses a link that carries a device token instead of a one-time grant', () => {
+    for (const link of [
+      'alpi://device?host=100.64.0.1&port=49200&name=Old&token=secret',
+      'alpi://device?url=wss%3A%2F%2Fevil.example.com&token=attacker',
+    ]) {
+      expect(() => parsePairing(link)).toThrow(/one-time pairing code only/);
+    }
+    expect(parsePairing(JSON.stringify({ u: 'wss://client.example.com', t: 'secret' }))).toMatchObject({ token: 'secret' });
+  });
+
+  it('never builds a routed link from a device token', () => {
+    expect(pairingLinkFromParams({ url: 'wss://evil.example.com', token: 'attacker' })).toBe('');
+    expect(pairingLinkFromParams({ url: 'wss://client.example.com', pairing_token: 'g' })).toContain('pairing_token=g');
   });
 
   it('preserves the stable server connection id from links and QR payloads', () => {
     expect(parsePairing(
-      'alpi://device?url=wss%3A%2F%2Fclient.example.com&name=Client&token=secret&connection_id=conn-1',
+      'alpi://device?url=wss%3A%2F%2Fclient.example.com&name=Client&pairing_token=grant&connection_id=conn-1',
     )).toMatchObject({ connectionId: 'conn-1' });
     expect(parsePairing(JSON.stringify({
       u: 'wss://client.example.com', n: 'Client', t: 'secret', c: 'conn-1',

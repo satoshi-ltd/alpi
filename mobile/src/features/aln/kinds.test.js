@@ -176,3 +176,40 @@ describe('POLL_KINDS', () => {
     for (const kind of INBOX_KINDS) expect(NOTIFIABLE_KINDS).not.toContain(kind);
   });
 });
+
+
+describe('deepLinkFor never hands a daemon-chosen address to the router', () => {
+  it.each([
+    'https://evil.example/',
+    '//evil.example/x',
+    'tel:+15555550100',
+    'intent://scan#Intent;end',
+    'file:///etc/hosts',
+    '/pair?url=ws%3A%2F%2Fattacker&token=X',
+    '/profile/doc/settings?intent=delete',
+    '/outputs/doc/../../pair',
+    '/chat/doc/../../pair',
+    'javascript:alert(1)',
+  ])('falls back to the in-app page for %s', (link) => {
+    expect(deepLinkFor({ event: 'agent.message', data: { deep_link: link } })).toBe('/');
+    expect(deepLinkFor({ event: 'agent.message', data: { deep_link: link, profile: 'doc' } })).toBe('/chat/doc');
+    expect(deepLinkFor({ event: 'schedule.failed', data: { deep_link: link } })).toBe('/');
+  });
+
+  it('keeps the links the daemon really sends', () => {
+    expect(deepLinkFor({ event: 'agent.message', data: { deep_link: '/outputs/abby/9f2c1e' } })).toBe('/outputs/abby/9f2c1e');
+    expect(deepLinkFor({ event: 'schedule.failed', data: { deep_link: '/outputs/vera/abc-1' } })).toBe('/outputs/vera/abc-1');
+  });
+
+  it('refuses a profile or workgroup name that would build a path elsewhere', () => {
+    expect(deepLinkFor({ event: 'wg.done', data: { wg_id: '../pair' } })).toBe('/');
+    expect(deepLinkFor({ event: 'budget.threshold', data: { profile: 'x/../../pair' } })).toBe('/');
+  });
+});
+
+
+describe('a failed job whose id cannot be a page still opens its schedule', () => {
+  it('falls back to the profile schedule, not the inbox', () => {
+    expect(deepLinkFor({ event: 'schedule.failed', data: { profile: 'vera', job_id: '.hidden' } })).toBe('/profile/vera/schedule');
+  });
+});

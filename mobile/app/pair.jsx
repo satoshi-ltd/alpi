@@ -29,6 +29,7 @@ import { useWell } from '../src/components/well';
 import { useFirstRunLayout, useKeyboardOpen } from '../src/hooks/useFirstRunLayout';
 import { useEndpoint } from '../src/lib/EndpointContext';
 import { exchangePairing, pairingLinkFact, pairingLinkFromParams, parsePairing } from '../src/lib/pairing';
+import { ConfirmDialog } from '../src/components/ConfirmDialog';
 import { RATE_LIMITED_STATUS } from '../src/lib/rateLimit';
 import { isSpentPairing, rememberSpentPairing } from '../src/lib/spentPairings';
 import { probe } from '../src/lib/probe';
@@ -58,6 +59,7 @@ export default function Pair() {
   const [busy, setBusy] = useState(false);
   const [current, setCurrent] = useState(null);
   const [failure, setFailure] = useState(null);
+  const [confirmHost, setConfirmHost] = useState(null);
   const [permission, requestPermission, getPermission] = useCameraPermissions();
   const darkTheme = useMemo(() => ({ ...theme, mode: 'dark', colors: palettes.dark }), [theme]);
 
@@ -116,6 +118,14 @@ export default function Pair() {
       editLink('');
       fieldRef.current?.focus?.();
     } else if (text.trim()) {
+      // A link that arrived from outside the app names a daemon the user never typed; they confirm it before the grant is spent.
+      if (routedLink && text === routedLink) {
+        const fact = pairingLinkFact(text);
+        if (fact) {
+          setConfirmHost(fact);
+          return;
+        }
+      }
       tryPair(text);
     }
   };
@@ -342,6 +352,21 @@ export default function Pair() {
           </View>
         )}
       </KeyboardPane>
+      {confirmHost ? (
+        <ConfirmDialog
+          open
+          onClose={() => setConfirmHost(null)}
+          title="Pair with this daemon?"
+          body={`This link was opened from outside the app. Pair only if you created it: ${confirmHost}`}
+          typed={false}
+          tone="neutral"
+          confirmLabel="Pair"
+          onConfirm={() => {
+            setConfirmHost(null);
+            tryPair(text);
+          }}
+        />
+      ) : null}
     </View>
   );
 }

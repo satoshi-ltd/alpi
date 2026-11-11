@@ -723,6 +723,29 @@ await test('detaching during the wait cancels the retry', async () => {
   assert.deepStrictEqual(errors, []);
 });
 
+
+await test('a frame larger than any honest reply is dropped before it is parsed', async () => {
+  _resetPoolForTests();
+  nextWs = null;
+  const { MAX_FRAME_CHARS } = await import('../src/lib/rpc.js');
+  const pending = call(endpoint, 'host.echo', {});
+  const ws = nextWs;
+  ws.open();
+  const parse = JSON.parse;
+  let parsedHuge = false;
+  JSON.parse = (text, ...rest) => {
+    if (typeof text === 'string' && text.length > MAX_FRAME_CHARS) parsedHuge = true;
+    return parse(text, ...rest);
+  };
+  try {
+    ws.onmessage({ data: 'x'.repeat(MAX_FRAME_CHARS + 1) });
+  } finally {
+    JSON.parse = parse;
+  }
+  await assert.rejects(pending, /too large/);
+  assert.strictEqual(parsedHuge, false);
+});
+
 if (failed > 0) {
   console.error(`\n${failed} failed, ${passed} passed`);
   process.exit(1);

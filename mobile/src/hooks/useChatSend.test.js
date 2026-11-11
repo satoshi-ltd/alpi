@@ -227,6 +227,39 @@ describe("useChatSend.send", () => {
     expect(result.current.pendingTurn.assistant).toBe("second answer");
   });
 
+  it("never lets a streaming reply grow past its cap", async () => {
+    const { MAX_STREAMED_CHARS } = await import("./useChatSend.js");
+    const { result } = renderHook(() => useChatSend({ profile: "doc" }));
+    act(() => result.current.send("hola"));
+    act(() => lastStreamHandlers.onFrame({ event: "session_start", session_id: "sess-1" }));
+    const chunk = "x".repeat(Math.ceil(MAX_STREAMED_CHARS / 3));
+    for (let i = 0; i < 5; i++) {
+      act(() => lastStreamHandlers.onFrame({ event: "assistant_delta", text: chunk }));
+      act(() => lastStreamHandlers.onFrame({ event: "reasoning_delta", text: chunk }));
+      await act(async () => { await new Promise((r) => setTimeout(r, 5)); });
+    }
+    expect(result.current.pendingTurn.assistant.length).toBe(MAX_STREAMED_CHARS);
+    expect(result.current.pendingTurn.reasoning.length).toBeLessThanOrEqual(MAX_STREAMED_CHARS);
+  });
+
+  it("caps every tool field a daemon streams into one turn", async () => {
+    const { MAX_TOOL_FIELD_CHARS, MAX_TURN_TOOLS } = await import("./useChatSend.js");
+    const { result } = renderHook(() => useChatSend({ profile: "doc" }));
+    act(() => result.current.send("hola"));
+    const huge = "y".repeat(MAX_TOOL_FIELD_CHARS * 3);
+    act(() => lastStreamHandlers.onFrame({ event: "tool_start", tool_id: "t0", name: "read_file", args: { path: huge } }));
+    act(() => lastStreamHandlers.onFrame({ event: "tool_state", tool_id: "t0", text: huge }));
+    act(() => lastStreamHandlers.onFrame({ event: "tool_end", tool_id: "t0", ok: true, output: huge }));
+    const tool = result.current.pendingTurn.tools[0];
+    expect(tool.output.length).toBe(MAX_TOOL_FIELD_CHARS);
+    expect(tool.text.length).toBe(MAX_TOOL_FIELD_CHARS);
+    expect(tool.args).toEqual({ truncated: true });
+    act(() => {
+      for (let i = 1; i <= MAX_TURN_TOOLS + 50; i++) lastStreamHandlers.onFrame({ event: "tool_start", tool_id: `t${i}`, name: "x" });
+    });
+    expect(result.current.pendingTurn.tools.length).toBe(MAX_TURN_TOOLS);
+  });
+
   it("a throttled stream close shows the rate-limit notice on the turn and never resends it", async () => {
     const { RpcError, RATE_LIMITED, RATE_LIMITED_MESSAGE } = await import("../lib/rpc.js");
     const { result } = renderHook(() => useChatSend({ profile: "doc" }));

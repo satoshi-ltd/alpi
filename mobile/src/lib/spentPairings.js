@@ -1,6 +1,9 @@
 import * as SecureStore from 'expo-secure-store';
 
-const STORAGE_KEY = 'alpi.spent-pairings.v1';
+import { deviceOnlyOpts, readMovedItem } from './secureOpts';
+
+const STORAGE_KEY = 'alpi.spent-pairings.v2';
+const LEGACY_KEY = 'alpi.spent-pairings.v1';
 const KEEP = 10;
 
 let spent = null;
@@ -9,7 +12,7 @@ async function load() {
   if (spent) return spent;
   let list = [];
   try {
-    const raw = await SecureStore.getItemAsync(STORAGE_KEY);
+    const raw = await readMovedItem(STORAGE_KEY, LEGACY_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
     if (Array.isArray(parsed)) list = parsed.filter((t) => typeof t === 'string');
   } catch {
@@ -26,7 +29,7 @@ export async function rememberSpentPairing(token) {
   const recent = [...known].slice(-KEEP);
   spent = new Set(recent);
   try {
-    await SecureStore.setItemAsync(STORAGE_KEY, JSON.stringify(recent));
+    await SecureStore.setItemAsync(STORAGE_KEY, JSON.stringify(recent), deviceOnlyOpts());
   } catch {
     return;
   }

@@ -2,7 +2,7 @@ import { normalizeEndpointUrl } from './endpoint.js';
 
 export class PairingError extends Error {}
 
-const LINK_PARAMS = ['url', 'host', 'port', 'token', 'pairing_token', 'name', 'connection_id'];
+const LINK_PARAMS = ['url', 'host', 'port', 'pairing_token', 'name', 'connection_id'];
 
 export function pairingLinkFromParams(params) {
   const query = new URLSearchParams();
@@ -11,7 +11,7 @@ export function pairingLinkFromParams(params) {
     if (typeof value === 'string' && value) query.set(key, value);
   }
   if (!query.get('url') && !(query.get('host') && query.get('port'))) return '';
-  if (!query.get('token') && !query.get('pairing_token')) return '';
+  if (!query.get('pairing_token')) return '';
   return `alpi://device?${query.toString()}`;
 }
 
@@ -63,10 +63,13 @@ function parseUri(uri) {
   }
   const legacyHost = params.get('host');
   const legacyPort = Number(params.get('port'));
-  const token = params.get('token');
   const pairingToken = params.get('pairing_token');
   const candidate = params.get('url') || (legacyHost && legacyPort ? `ws://${legacyHost}:${legacyPort}` : '');
-  if (!candidate || (!token && !pairingToken)) {
+  // Any app or web page can hand the phone an alpi:// link, so a link may only carry a one-time grant, never a device token.
+  if (params.get('token') && !pairingToken) {
+    throw new PairingError('alpi:// links carry a one-time pairing code only; paste the pairing JSON to use a device token');
+  }
+  if (!candidate || !pairingToken) {
     throw new PairingError('alpi:// link missing URL or pairing credential');
   }
   try {
@@ -74,9 +77,7 @@ function parseUri(uri) {
     const name = params.get('name') ?? new URL(url).hostname;
     const connectionId = params.get('connection_id') || params.get('c') || '';
     return {
-      name, url, kind: 'remote',
-      ...(token ? { token } : {}),
-      ...(pairingToken ? { pairingToken } : {}),
+      name, url, kind: 'remote', pairingToken,
       ...(connectionId ? { connectionId } : {}),
     };
   } catch (error) {

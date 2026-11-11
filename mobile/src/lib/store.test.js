@@ -12,7 +12,7 @@ beforeEach(() => {
   vi.resetModules();
 });
 
-const KEY = "alpi.connections";
+const KEY = "alpi.connections.v2";
 
 function validConn(over = {}) {
   return {

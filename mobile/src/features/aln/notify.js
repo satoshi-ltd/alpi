@@ -70,7 +70,11 @@ export function notificationIdFor(event, connection) {
 let _forcedCount = 0;
 
 export async function fireForEvent(event, connection, { force = false } = {}) {
-  const { title, body } = formatNotification(event, connection);
+  const formatted = formatNotification(event, connection);
+  // Android refuses an oversized notification, and a refused one would hold the cursor behind that event.
+  const title = String(formatted.title ?? '').slice(0, 200);
+  const body = String(formatted.body ?? '').slice(0, 4000);
+  const requestId = typeof event?.data?.request_id === 'string' ? event.data.request_id.slice(0, 200) : '';
   const link = deepLinkFor(event, connection);
   // A counter, not a clock: two forced fires inside one millisecond would otherwise share an id and replace each other.
   const identifier = force
@@ -89,8 +93,8 @@ export async function fireForEvent(event, connection, { force = false } = {}) {
           connectionId: connection?.id || '',
           eventId: `${event?.event || ''}:${event?.seq ?? ''}`,
           kind: event?.event || '',
-          requestId: event?.data?.request_id || '',
-          rawData: event?.data || {},
+          requestId,
+          rawData: requestId ? { request_id: requestId } : {},
         },
       },
       trigger: null,

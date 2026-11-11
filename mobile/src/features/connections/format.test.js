@@ -63,10 +63,8 @@ describe('pairingLink', () => {
     expect(new URL(pairingLink(payload, 'ws://10.0.0.2:49200')).searchParams.get('url')).toBe('ws://10.0.0.2:49200');
   });
 
-  it('carries a device token when the payload has no grant', () => {
-    const link = new URL(pairingLink({ url: 'ws://h:1', token: 'dev', label: 'x' }));
-    expect(link.searchParams.get('token')).toBe('dev');
-    expect(link.searchParams.get('pairing_token')).toBeNull();
+  it('builds no link from a device token, since phones only accept a one-time grant in a link', () => {
+    expect(pairingLink({ url: 'ws://h:1', token: 'dev', label: 'x' })).toBe('');
   });
 
   it('is empty without an endpoint or credential', () => {

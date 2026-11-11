@@ -96,4 +96,12 @@ describe('useCachedImage', () => {
     await waitFor(() => expect(result.current.uri).toBeNull());
     expect(call).not.toHaveBeenCalled();
   });
+
+  it('refuses an image larger than an attachment can be', async () => {
+    const { MAX_FILE_BYTES } = await import('../lib/attachments');
+    const call = vi.fn().mockResolvedValue({ data_base64: 'A'.repeat(Math.ceil(MAX_FILE_BYTES / 3) * 4 + 4), mime: 'image/png' });
+    const { result } = renderHook(() => useCachedImage(call, { id: 'c-A' }, 'default', '/huge.png'));
+    await waitFor(() => expect(result.current.err).toBe('empty response'));
+    expect(result.current.uri).toBeNull();
+  });
 });
