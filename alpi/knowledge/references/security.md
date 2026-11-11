@@ -102,7 +102,16 @@ it atomically, creates one permanent device credential and records the client
 metadata; unused grants expire after ten minutes. Setup/Desktop can query or
 cancel pending grants. The exchange is restricted to a dedicated bootstrap
 context, and terminal metadata is kept for seven days with a 50-row cap per
-connection. Desktop and Mobile still read legacy `token=` links. Older clients
+connection. Desktop still reads legacy `token=` links; from mobile 0.9.14 the
+phone accepts an `alpi://` link only with a one-time `pairing_token` (a device
+`token` is accepted only in pasted pairing JSON) and asks the user to confirm the
+daemon's address before spending a grant that arrived from outside the app. The
+phone also opens only its own pages from a notification (a daemon's `deep_link`
+must be one of its in-app routes, without a query), moves device tokens,
+notification state and spent grants into this-device-only keychain items (new
+keys, so updated phones migrate) with Android backup off, and caps what a daemon
+can make it keep (frames over 32 MiB discarded unparsed, 2 MiB of streamed reply
+text, 64 KiB per tool field, attachment-sized images, short notifications). Older clients
 cannot consume new grants; upgrade them before generating a new QR. Older QRs
 already contain permanent device tokens, remain valid after a daemon upgrade
 and must be revoked through their device row if they were exposed.

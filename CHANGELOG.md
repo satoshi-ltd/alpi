@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.18.7 — 2026-11-11 — the agent knows what the phone trusts
+
+- The agent's own security reference now says what the phone (from mobile 0.9.14) accepts from a daemon: pairing links with a one-time code only, a confirmed address for links opened from outside the app, notification taps that open only the app's own pages, device-only keychain storage and size limits.
+
 ## v0.18.6 — 2026-11-11 — the agent knows the phone's way out of a missing page
 
 - The agent's own reference now says what the phone (from mobile 0.9.13) shows when a notification comes from another connection or a link points at something that no longer exists, so it can tell you to switch connection or go back to the inbox instead of guessing.

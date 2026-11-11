@@ -192,7 +192,12 @@ not reach.
   store is not a credential. Devices can be revoked independently, may
   expire after `host.token_ttl_days` of inactivity, and authentication
   failures are throttled per source address, or per device when the failed
-  token names one; a socket that stays silent, drops abnormally or sends
+  token names one. The phone (from mobile 0.9.14) takes an `alpi://` pairing
+  link only with a one-time grant, confirms the daemon's address before
+  spending one that arrived from outside the app, opens only its own pages
+  from a notification, moves tokens into this-device-only keychain items with
+  Android backup off, and caps what it keeps from frames, streamed text, tool
+  output, images and notifications; a socket that stays silent, drops abnormally or sends
   garbage before authenticating counts against its source too (a public IPv6
   source is its /64), sockets still waiting for their first frame are
   capped daemon-wide and per source, and a large first frame is decoded
