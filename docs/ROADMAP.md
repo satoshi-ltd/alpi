@@ -62,16 +62,14 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 ## Release direction
 
 - **Stabilize the current lines first.** Queue keeps the approved scope and console fixes ahead of new
-  capabilities. Proposed reliability work below addresses mobile synchronization and recipe validation;
-  it needs approval before entering Queue. A new feature does not hold up an independently releasable fix.
+  capabilities. A new feature does not hold up an independently releasable fix.
 - **alpi 0.18 is the harness and stability line, and it is closed for now.** 0.18.0 shipped mid-turn
   compaction, repeated-failure hints, the provider pause, the delivered-empty-reply rule, action-level
   `tools.deny`, the tool-call deadline and the journal sweep cache; 0.18.1 added what the first day of fleet
   ledgers asked for (engine notes in the journal, the same-error hint, one copy of each tool output, the
   ledger kept by age). `HARN.018-VERIFY` reads the ledgers again; another harness patch needs evidence from it.
 - **Candidate for alpi 0.19.0: bounded pipeline repetition.** `WG.REPEAT` is the proposed feature boundary,
-  with `WG.RECIPE-KEYS` as its prerequisite, and it waits for the separate workgroup analysis (retry storms,
-  `stale-round` waste) that only the creator's Mac can show. The goal is to finish a sequence of work without
+  and it waits for the separate workgroup analysis (retry storms, `stale-round` waste) that only the creator's Mac can show. The goal is to finish a sequence of work without
   an external script triggering every run, with finite limits and restart-safe progress. Approval of this
   roadmap cleanup does not approve implementing the feature.
 - **The clients keep their own versions.** Desktop and mobile release only when their shipped code changes;
@@ -81,17 +79,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
   a mobile device check belong in Needs creator. Existing synchronization fixes are not reopened here.
 
 ## Queue
-
-### Daemon first: the config bug, the public host plane, the 0.19 prerequisite
-
-- **WG.RECIPE-KEYS** — An unsupported pipeline-step option never disappears silently
-  `bug · alpi · agent · normal`
-  note: `validate_pipeline_steps` copies known keys and drops the rest, so a misspelt gate or a
-  future `repeat` rule can turn into a successful recipe load without the requested behavior.
-  accept: recipe/workgroup validation rejects unknown step options with the phase and option name;
-  all currently supported keys keep their behavior and legacy valid recipes still load. Tests
-  cover a misspelling, unsupported `repeat`, every accepted key and CLI recipe loading. Document
-  the supported grammar and minimum version in WORKGROUPS and the packaged workgroups reference.
 
 ### Desktop
 
@@ -566,6 +553,16 @@ DS.BANNERS, DS.METER and DS.STATUS-CHIPS.
   reaches a peer with a valid signature, and a `--once` turn whose tool output holds one prints its events; tests
   drive the ALP client and server, the CLI line and a provider-bound message.
 
+### Found while shipping alpi 0.18.4
+
+- **DESK.RECIPES-INVALID** — The desktop's saved-recipe list says which recipes it left out and why
+  `bug · desktop · agent · low`
+  note: `CreateWorkgroupModal.jsx` keeps only `recipes` from `host.workgroup.recipes.list` and drops
+  `invalid_recipes`, so a saved recipe the daemon refuses (from alpi 0.18.4, an unsupported step option) just
+  disappears from the picker; only `alpi workgroup recipes` and "Import recipe…" name the reason.
+  accept: the picker lists each refused recipe as disabled with the daemon's reason; an older daemon without
+  `invalid_recipes` shows nothing extra; a component test renders one valid and one refused recipe.
+
 ### Harness, demand-gated
 
 - **RUNS.JOURNAL-FIELDS** — A journal event stores only the fields it uses
@@ -601,7 +598,6 @@ DS.BANNERS, DS.METER and DS.STATUS-CHIPS.
 
 - **WG.REPEAT** — A pipeline repeats itself until a command reports the work finished
   `feature · alpi · agent · normal`
-  depends: WG.RECIPE-KEYS
   note: repeated pipeline triggers currently need an operator or an external polling script.
   `repeat: {until: {argv, cwd}, max_runs}` on a pipeline's first step is a candidate design,
   not a supported recipe field. Keep the implementation inside the existing admission, gate

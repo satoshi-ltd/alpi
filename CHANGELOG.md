@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.18.4 — 2026-11-11 — a recipe never loses a step option silently
+
+- A workgroup recipe whose pipeline step carries an option alpi does not support (a misspelt `gate`, a `repeat` rule this version does not have, an unknown key inside `gate` or `prepare`) is refused with the phase and the option name, instead of loading without it.
+- `alpi workgroup recipes` lists such a saved recipe as ignored and says which option, `alpi workgroup launch` and importing the file in the desktop app give the same message; after updating, run `alpi workgroup recipes` to see whether a saved recipe is now refused (the desktop's saved-recipe list leaves it out).
+- Why: a dropped option let a recipe launch without the gate or rule its author wrote, with nothing to show it was missing.
+
 ## v0.18.3 — 2026-11-11 — the remote host plane closes its loopholes
 
 - Network settings (ports, the public-bind switch, advertised routes and the bind address) can no longer be changed from a paired device by writing the key with a stray dot or space; a config key with an empty or padded part is refused everywhere.

@@ -133,6 +133,14 @@ launch: setup
 - Order lives in the chain and nowhere else. A `pipeline_steps` entry
   that declares `next` is rejected, naming the source of truth:
   `pipeline_steps['content'].next is derived from pipelines['setup']`.
+- A step takes exactly these options: `owner` (required), `task`,
+  `turn_budget_s` (60–3600), `gate` (`argv`, `cwd`, `repair: owner|hub`),
+  `prepare` (`argv`, `cwd`; first phase only) and `paths` (needs a `gate`).
+  Any other option, at the step or inside `gate`/`prepare`, is rejected
+  with the phase and the option name (`pipeline_steps['intake'] has
+  unsupported option 'repeat'`), so a misspelt gate or a feature this
+  daemon does not have never loads as a recipe that silently lacks it.
+  This holds from alpi 0.18.4; older daemons dropped unknown options.
 - A chain may run again for every later delivery; each run starts
   fresh (see *Pipeline runs*).
 - The chain is chosen from the LATEST close alone. A `#done` whose

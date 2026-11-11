@@ -609,3 +609,38 @@ def test_project_exclude_rejects_control_characters(value):
     recipe_text = VALID + f"  exclude: [{json.dumps(value)}]\n"
     with pytest.raises(recipes.RecipeError, match="project.exclude"):
         recipes.parse_recipe(recipe_text, "x")
+
+
+@pytest.mark.parametrize("fragment, needle", [
+    ('gaet: { argv: [npm, run, intake-check] }', "pipeline_steps['intake'] has unsupported option 'gaet'"),
+    ('ownr: scout', "pipeline_steps['intake'] has unsupported option 'ownr'"),
+    ('repeat: { until: { argv: [npm, run, done] }, max_runs: 3 }', "pipeline_steps['intake'] has unsupported option 'repeat'"),
+    ('gate: { argv: [npm, run, intake-check], timeout: 30 }', "pipeline_steps['intake'].gate has unsupported option 'timeout'"),
+    ('prepare: { argv: [npm, run, media], repair: hub }', "pipeline_steps['intake'].prepare has unsupported option 'repair'"),
+])
+def test_an_unsupported_pipeline_step_option_is_refused_with_phase_and_name(fragment, needle) -> None:
+    text = VALID.replace(
+        'gate: { argv: [npm, run, intake-check], cwd: "projects/{slug}" }', fragment,
+    )
+    with pytest.raises(recipes.RecipeError) as raised:
+        recipes.parse_recipe(text, "hotel")
+    assert needle in str(raised.value)
+
+
+def test_every_supported_pipeline_step_option_still_loads() -> None:
+    text = VALID.replace(
+        'intake: { owner: scout, task: "do {slug}", gate: { argv: [npm, run, intake-check], cwd: "projects/{slug}" } }',
+        'intake: { owner: scout, task: "do {slug}", turn_budget_s: 600, paths: ["src/**"], '
+        'prepare: { argv: [npm, run, media], cwd: "projects/{slug}" }, '
+        'gate: { argv: [npm, run, intake-check], cwd: "projects/{slug}", repair: hub } }',
+    )
+    step = recipes.parse_recipe(text, "hotel").pipeline_steps["intake"]
+    assert set(step) == {"owner", "task", "turn_budget_s", "paths", "prepare", "gate"}
+    assert step["gate"]["repair"] == "hub"
+
+
+def test_a_saved_recipe_with_a_misspelt_step_option_is_not_listed(tmp_path) -> None:
+    saved = tmp_path / "hotel.yaml"
+    saved.write_text(VALID.replace("content: { owner: quill }", "content: { owner: quill, taks: write }"))
+    with pytest.raises(recipes.RecipeError, match="unsupported option 'taks'"):
+        recipes.load_recipe(saved)

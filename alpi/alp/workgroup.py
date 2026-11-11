@@ -1378,6 +1378,18 @@ def _steps_without_next(raw: Any) -> dict[str, dict]:
     }
 
 
+PIPELINE_STEP_KEYS = ("owner", "task", "turn_budget_s", "gate", "prepare", "paths")
+PIPELINE_COMMAND_KEYS = {"gate": ("argv", "cwd", "repair"), "prepare": ("argv", "cwd")}
+
+
+def _reject_unknown_options(where: str, raw: dict, allowed: tuple[str, ...]) -> None:
+    unknown = sorted(str(k) for k in raw if k not in allowed)
+    if unknown:
+        raise ValueError(
+            f"{where} has unsupported option {unknown[0]!r}; supported: {', '.join(allowed)}"
+        )
+
+
 def validate_pipeline_steps(
     pipelines: dict[str, tuple[str, ...]] | None, pipeline_steps: Any,
 ) -> dict[str, dict]:
@@ -1400,6 +1412,9 @@ def validate_pipeline_steps(
             )
         if not isinstance(raw, dict):
             raise ValueError(f"pipeline_steps[{phase!r}] must be a mapping")
+        _reject_unknown_options(
+            f"pipeline_steps[{phase!r}]", {k: v for k, v in raw.items() if k != "next"}, PIPELINE_STEP_KEYS,
+        )
         owner = str(raw.get("owner") or "").strip()
         if not owner:
             raise ValueError(f"pipeline_steps[{phase!r}] missing 'owner'")
@@ -1429,6 +1444,7 @@ def validate_pipeline_steps(
         if gate is not None:
             if not isinstance(gate, dict):
                 raise ValueError(f"pipeline_steps[{phase!r}].gate must be a mapping")
+            _reject_unknown_options(f"pipeline_steps[{phase!r}].gate", gate, PIPELINE_COMMAND_KEYS["gate"])
             argv = gate.get("argv")
             if not isinstance(argv, list) or not argv or not all(isinstance(a, str) and a for a in argv):
                 raise ValueError(f"pipeline_steps[{phase!r}].gate.argv must be a non-empty list of strings")
@@ -1452,6 +1468,7 @@ def validate_pipeline_steps(
                 )
             if not isinstance(prepare, dict):
                 raise ValueError(f"pipeline_steps[{phase!r}].prepare must be a mapping")
+            _reject_unknown_options(f"pipeline_steps[{phase!r}].prepare", prepare, PIPELINE_COMMAND_KEYS["prepare"])
             argv = prepare.get("argv")
             if not isinstance(argv, list) or not argv or not all(isinstance(a, str) and a for a in argv):
                 raise ValueError(f"pipeline_steps[{phase!r}].prepare.argv must be a non-empty list of strings")

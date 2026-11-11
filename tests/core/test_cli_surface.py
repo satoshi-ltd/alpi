@@ -263,3 +263,18 @@ def test_workgroup_launch_does_not_repeat_mutation_after_rpc_timeout(tmp_path, m
     assert calls[0][0] == "host.workgroup.launch_recipe"
     assert calls[0][1]["profile"] == "default"
     assert calls[0][2]["timeout"] >= 6 * host_recipes._CLONE_TIMEOUT
+
+
+def test_workgroup_recipes_names_an_unsupported_step_option(tmp_path, monkeypatch) -> None:
+    recipes = tmp_path / "recipes"
+    recipes.mkdir()
+    (recipes / "loop.yaml").write_text(
+        "hub: mira\nname: Loop\npipelines:\n  build: [build]\n"
+        "pipeline_steps:\n  build: { owner: scout, repeat: { max_runs: 3 } }\n"
+    )
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
+    monkeypatch.setattr(cli, "_bootstrap", lambda _home: None)
+    result = CliRunner().invoke(cli.main, ["workgroup", "recipes"])
+    assert result.exit_code == 0
+    assert "saved recipe 'loop' ignored" in result.output
+    assert "unsupported option 'repeat'" in result.output
