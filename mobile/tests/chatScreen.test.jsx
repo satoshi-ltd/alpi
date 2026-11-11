@@ -7,6 +7,8 @@ afterEach(cleanup);
 const h = vi.hoisted(() => ({
   dismiss: vi.fn(),
   push: vi.fn(),
+  replace: vi.fn(),
+  noEndpoint: false,
   back: vi.fn(),
   call: vi.fn(async () => ({})),
   refreshSummaries: vi.fn(async () => {}),
@@ -21,6 +23,7 @@ const h = vi.hoisted(() => ({
   att: null,
 }));
 
+vi.mock('../src/features/sheets/ConnectionSheet', () => ({ ConnectionSheet: () => null }));
 vi.mock('../src/hooks/useAttention', () => ({ useAttention: () => ({ att: h.att, refresh: () => {} }) }));
 vi.mock('react-native', () => {
   const View = ({ children, style, accessibilityLabel, ...p }) =>
@@ -58,7 +61,7 @@ vi.mock('react-native', () => {
 
 vi.mock('expo-router', () => ({
   usePathname: () => '/chat/doc',
-  useRouter: () => ({ push: h.push, back: h.back, canGoBack: () => true }),
+  useRouter: () => ({ push: h.push, back: h.back, replace: h.replace, canGoBack: () => true }),
   useLocalSearchParams: () => h.params,
 }));
 
@@ -107,7 +110,7 @@ vi.mock('../src/components/Banner', () => ({
   Banner: ({ kind, children, action, onAction }) =>
     React.createElement('div', { 'data-banner': kind }, children, action ? React.createElement('button', { type: 'button', 'data-banner-action': action, onClick: onAction }) : null),
 }));
-vi.mock('../src/components/Button', () => ({ Button: ({ title }) => React.createElement('button', { type: 'button' }, title) }));
+vi.mock('../src/components/Button', () => ({ Button: ({ title, onPress }) => React.createElement('button', { type: 'button', onClick: onPress }, title) }));
 vi.mock('../src/components/Diamond', () => ({ Diamond: () => React.createElement('span', { 'data-diamond': 'true' }) }));
 vi.mock('../src/components/Fold', () => ({ Fold: ({ fold, color, size, outlined }) => React.createElement('span', { 'data-fold': fold ?? 'diamond', 'data-color': color, 'data-size': size, 'data-outlined': String(!!outlined) }) }));
 vi.mock('../src/components/Icon', () => ({ Icon: ({ name }) => React.createElement('span', { 'data-icon': name }) }));
@@ -176,7 +179,7 @@ vi.mock('../src/hooks/useSessionTranscript', () => ({
 }));
 vi.mock('../src/lib/EndpointContext', () => ({
   useEndpoint: () => ({
-    endpoint: { id: 'c1', name: 'casa', url: 'http://casa' },
+    endpoint: h.noEndpoint ? null : { id: 'c1', name: 'casa', url: 'http://casa' },
     activeId: 'c1',
     call: h.call,
     probeState: new Map([['c1', h.status]]),
@@ -187,6 +190,7 @@ vi.mock('../src/lib/readState', () => ({ markProfileRead: vi.fn() }));
 
 import { DAEMON_STATUS_BANNERS } from '../src/components/DaemonBanner';
 import ProfileChat from '../app/chat/[id].jsx';
+import { EMPTY } from '../../common/emptyCopy.mjs';
 import { PaneContext } from '../src/nav/PaneContext';
 
 const READY = {
@@ -591,5 +595,27 @@ describe('Reply from a notification', () => {
     const { container } = render(<ProfileChat />);
     expect(container.querySelector('[data-composer]').getAttribute('data-initial')).toBe('');
     expect(h.sessionIds.at(-1)).toBe('s-latest');
+  });
+});
+
+
+describe('Profile chat dead ends show a way out', () => {
+  it('offers the way back to the inbox when the profile is gone', () => {
+    h.profile = null;
+    render(<ProfileChat />);
+    expect(screen.getByText(EMPTY.missingProfile.title)).toBeTruthy();
+    fireEvent.click(screen.getByText('Back to inbox'));
+    expect(h.replace).toHaveBeenCalledWith('/');
+  });
+
+  it('sends an unpaired phone to pairing', () => {
+    h.noEndpoint = true;
+    try {
+      render(<ProfileChat />);
+      fireEvent.click(screen.getByText('Pair this phone'));
+      expect(h.push).toHaveBeenCalledWith('/pair');
+    } finally {
+      h.noEndpoint = false;
+    }
   });
 });

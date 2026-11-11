@@ -1,5 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
+import { DeadEnd } from '../../../../src/components/DeadEnd';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { KeyboardPane } from '../../../../src/components/KeyboardPane';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -63,6 +64,7 @@ export default function ProviderKey() {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
         <ScreenHeader title="Unknown provider" onBack={goBack} />
+        <DeadEnd copy="missingProvider" />
       </SafeAreaView>
     );
   }

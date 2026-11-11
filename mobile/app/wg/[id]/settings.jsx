@@ -1,6 +1,7 @@
 // wg.members is a count; roster from host.workgroup.members → [{pubkey, bio, voice, joined}]. pubkey → @name via hub.peers + local profiles, else truncated.
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { DeadEnd } from '../../../src/components/DeadEnd';
 import { useEffect, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -68,7 +69,7 @@ function WorkgroupSettings() {
   const { call } = useEndpoint();
   const { colors, fonts, fontSizes } = useTheme();
   const { twoPane } = usePane();
-  const { workgroup: wg, loading, refresh } = useWorkgroup(id);
+  const { workgroup: wg, loading, error: wgError, refresh } = useWorkgroup(id);
   const memberQuery = useWorkgroupMembers(wg?.profile, wg?.id);
   const usage = useWorkgroupUsage(wg?.profile, wg?.id);
   const hasPipelines = orderedPipelines(wg?.pipelines, wg?.launch_pipeline).length > 0;
@@ -117,6 +118,7 @@ function WorkgroupSettings() {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
         <ScreenHeader title={`#${id}`} subtitle="WORKGROUP · NOT FOUND" onBack={goBack} />
+        <DeadEnd copy="missingWorkgroup" error={wgError} onRetry={refresh} label="this workgroup" />
       </SafeAreaView>
     );
   }

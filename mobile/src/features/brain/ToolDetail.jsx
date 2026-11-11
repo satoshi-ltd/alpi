@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { ScrollView, Text, View } from 'react-native';
+import { DeadEnd } from '../../components/DeadEnd';
 import { radii, space } from '../../theme/tokens';
 
 import { Pill } from '../../components/Pill';
@@ -44,6 +45,7 @@ export function ToolDetail({ profile: id, name, embedded = false, onBack }) {
     return (
       <View style={{ flex: 1 }}>
         {embedded ? null : <ScreenHeader title={String(name ?? '')} subtitle="TOOL · NOT FOUND" onBack={onBack} />}
+        <DeadEnd copy="missingTool" error={tools.error} onRetry={tools.refresh} label="this tool" />
       </View>
     );
   }

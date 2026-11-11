@@ -1,5 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { DeadEnd } from '../../src/components/DeadEnd';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { KeyboardPane } from '../../src/components/KeyboardPane';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -311,17 +312,13 @@ function TasksHeaderButton({ tasks, accent, phase, profileOf, onPress }) {
 export default function WorkgroupChat() {
   const { id, connectionId } = useLocalSearchParams();
   const goBack = useBack();
-  const { colors, fonts } = useTheme();
+  const { colors } = useTheme();
   const { activeId } = useEndpoint();
   if (isForeignConnection(activeId, connectionId)) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
         <ChatHeader kind="workgroup" accent={colors.ink3} title={id} meta="other connection" onBack={goBack} />
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.s10 }}>
-          <Text style={{ fontFamily: fonts.sans.regular, color: colors.ink3, textAlign: 'center' }}>
-            This notification came from a connection that isn't active. Switch to it to open this workgroup.
-          </Text>
-        </View>
+        <DeadEnd copy="foreignConnection" action="connection" />
       </SafeAreaView>
     );
   }
@@ -543,9 +540,7 @@ function WorkgroupChatInner() {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
         <ChatHeader kind="workgroup" accent={colors.ink3} title={id} meta="not paired" onBack={goBack} />
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ fontFamily: fonts.sans.regular, color: colors.ink3 }}>Pair this phone to a daemon first.</Text>
-        </View>
+        <DeadEnd copy="unpaired" action="pair" />
       </SafeAreaView>
     );
   }
@@ -563,6 +558,7 @@ function WorkgroupChatInner() {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
         <ChatHeader kind="workgroup" accent={colors.ink3} title={id} meta="workgroup · not found" onBack={goBack} />
+        <DeadEnd copy="missingWorkgroup" error={wgs.error} onRetry={wgs.refresh} label="this workgroup" />
       </SafeAreaView>
     );
   }

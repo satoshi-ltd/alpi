@@ -1,5 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { DeadEnd } from '../../src/components/DeadEnd';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { KeyboardPane } from '../../src/components/KeyboardPane';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -360,17 +361,13 @@ function NeedsSetup({ name, accent, fold, state, onSetupProvider, onPickModel })
 export default function ProfileChat() {
   const { id, connectionId, sid, fresh } = useLocalSearchParams();
   const goBack = useBack();
-  const { colors, fonts } = useTheme();
+  const { colors } = useTheme();
   const { activeId } = useEndpoint();
   if (isForeignConnection(activeId, connectionId)) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
         <ChatHeader kind="profile" accent={colors.ink3} title={`@${profileLabel(id)}`} meta="other connection" onBack={goBack} />
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.s10 }}>
-          <Text style={{ fontFamily: fonts.sans.regular, color: colors.ink3, textAlign: 'center' }}>
-            This notification came from a connection that isn't active. Switch to it to open this chat.
-          </Text>
-        </View>
+        <DeadEnd copy="foreignConnection" action="connection" />
       </SafeAreaView>
     );
   }
@@ -607,9 +604,7 @@ function ProfileChatInner() {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
         <ChatHeader kind="profile" accent={colors.ink3} title={`@${profileLabel(id)}`} meta="not paired" onBack={goBack} />
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ fontFamily: fonts.sans.regular, color: colors.ink3 }}>Pair this phone to a daemon first.</Text>
-        </View>
+        <DeadEnd copy="unpaired" action="pair" />
       </SafeAreaView>
     );
   }
@@ -627,6 +622,7 @@ function ProfileChatInner() {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
         <ChatHeader kind="profile" accent={colors.ink3} title={`@${profileLabel(id)}`} meta="profile · not found" onBack={goBack} />
+        <DeadEnd copy="missingProfile" error={summaries.error} onRetry={summaries.refresh} label="this profile" />
       </SafeAreaView>
     );
   }

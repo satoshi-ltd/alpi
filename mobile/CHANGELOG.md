@@ -14,6 +14,12 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.9.13 — 2026-11-11 — a missing profile, workgroup or connection shows a way out
+
+- Opening a profile, workgroup, connection, provider or tool that no longer exists (deleted from another device, or an old link) now says so and offers Back to inbox, instead of an empty screen.
+- A chat or workgroup opened before the phone is paired offers Pair this phone, and a notification from a daemon that is not the active one offers Switch connection.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.9.12 — 2026-11-11 — busy workgroups stay current on the phone
 
 - The inbox and an open workgroup catch up on their own after the connection drops and comes back, after a workgroup is blocked or changed elsewhere, and after events arrive while a read is still on its way, instead of waiting for the next event or a pull to refresh.

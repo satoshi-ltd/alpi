@@ -18,6 +18,7 @@ const h = vi.hoisted(() => ({
 
 const sheet = vi.hoisted(() => ({ props: null }));
 
+vi.mock('../src/features/sheets/ConnectionSheet', () => ({ ConnectionSheet: () => null }));
 vi.mock('react-native', () => {
   const View = ({ children, style, accessibilityLabel, ...p }) =>
     React.createElement(

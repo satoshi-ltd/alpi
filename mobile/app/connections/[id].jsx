@@ -1,5 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
+import { DeadEnd } from '../../src/components/DeadEnd';
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { radii, space } from '../../src/theme/tokens';
@@ -115,7 +116,10 @@ function ConnectionDetail() {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
         <ScreenHeader title="Connection" subtitle={summary.loading || opening ? <SubtitleSkeleton /> : 'NOT FOUND'} onBack={goBack} />
-        <Busy fill visible={opening} label="Opening the connection" />
+        {opening ? <Busy fill visible label="Opening the connection" /> : null}
+        {!opening && !summary.loading ? (
+          <DeadEnd copy="missingConnection" error={summary.error} onRetry={summary.refresh} label="this connection" />
+        ) : null}
       </SafeAreaView>
     );
   }

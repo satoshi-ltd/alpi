@@ -7,6 +7,7 @@ afterEach(cleanup);
 const h = vi.hoisted(() => ({
   dismiss: vi.fn(),
   push: vi.fn(),
+  replace: vi.fn(),
   back: vi.fn(),
   call: vi.fn(async () => ({})),
   refreshWgs: vi.fn(async () => {}),
@@ -25,6 +26,7 @@ const h = vi.hoisted(() => ({
   },
 }));
 
+vi.mock('../src/features/sheets/ConnectionSheet', () => ({ ConnectionSheet: () => null }));
 vi.mock('react-native', () => {
   const View = ({ children, style, accessibilityLabel, ...p }) =>
     React.createElement(
@@ -62,7 +64,7 @@ vi.mock('react-native', () => {
 
 vi.mock('expo-router', () => ({
   usePathname: () => '/wg/alpha',
-  useRouter: () => ({ push: h.push, back: h.back, canGoBack: () => true }),
+  useRouter: () => ({ push: h.push, back: h.back, replace: h.replace, canGoBack: () => true }),
   useLocalSearchParams: () => ({ id: 'alpha' }),
 }));
 
@@ -162,6 +164,7 @@ vi.mock('../src/lib/readAloud', () => ({ enqueueReadAloud: vi.fn() }));
 vi.mock('../src/lib/readState', () => ({ markWorkgroupRead: vi.fn() }));
 
 import { DAEMON_STATUS_BANNERS } from '../src/components/DaemonBanner';
+import { EMPTY } from '../../common/emptyCopy.mjs';
 import WorkgroupChat from '../app/wg/[id].jsx';
 import { PaneContext } from '../src/nav/PaneContext';
 
@@ -453,8 +456,8 @@ describe('Workgroup task-state staleness', () => {
 });
 
 describe('Workgroup dead-end screens', () => {
-  const FOREIGN = /This notification came from a connection that isn't active/;
-  const UNPAIRED = 'Pair this phone to a daemon first.';
+  const FOREIGN = EMPTY.foreignConnection.hint;
+  const UNPAIRED = EMPTY.unpaired.hint;
 
   function unfamilied(container) {
     return [...container.querySelectorAll('span')]
@@ -467,12 +470,23 @@ describe('Workgroup dead-end screens', () => {
     h.foreign = true;
     render(<WorkgroupChat />);
     expect(fontOf(FOREIGN)).toBe('r');
+    expect(screen.getByText('Switch connection')).toBeTruthy();
   });
 
-  it('renders the unpaired notice in the app sans face too', () => {
+  it('sends an unpaired phone to pairing', () => {
     h.endpoint = null;
     render(<WorkgroupChat />);
     expect(fontOf(UNPAIRED)).toBe('r');
+    fireEvent.click(screen.getByText('Pair this phone'));
+    expect(h.push).toHaveBeenCalledWith('/pair');
+  });
+
+  it('offers the way back to the inbox when the workgroup is gone', () => {
+    h.wg = null;
+    render(<WorkgroupChat />);
+    expect(screen.getByText(EMPTY.missingWorkgroup.title)).toBeTruthy();
+    fireEvent.click(screen.getByText('Back to inbox'));
+    expect(h.replace).toHaveBeenCalledWith('/');
   });
 
   it('leaves no copy on either dead end outside the text-size scale', () => {

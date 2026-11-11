@@ -17,6 +17,7 @@ const h = vi.hoisted(() => ({
   fallbacksSheetProps: null,
 }));
 
+vi.mock('../sheets/ConnectionSheet', () => ({ ConnectionSheet: () => null }));
 vi.mock('expo-router', () => ({
   useLocalSearchParams: () => h.params,
   usePathname: () => '/profile/doc/settings',

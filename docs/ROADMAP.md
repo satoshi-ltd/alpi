@@ -82,18 +82,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ### Mobile
 
-- **MOB.DEAD-ENDS** — A missing profile, workgroup or connection on the phone shows a way out
-  `bug · mobile · agent · high`
-  note: `chat/[id].jsx:626-632` renders a header "profile · not found" over an empty body, `:606-615` "Pair this
-  phone to a daemon first." with no button, `:365-376` and `wg/[id].jsx:315-326` "came from a connection that
-  isn't active" with no way to switch; `wg/[id].jsx:540-566`, `wg/[id]/settings.jsx:116-122`,
-  `profile/[id]/settings.jsx:208-214`, `connections/[id].jsx:114-121`, `providers/[key].jsx:62-68` and
-  `brain/ToolDetail.jsx:43-48` are the same dead end after an expired deep link or a delete from another device.
-  accept: every one of those states renders `EmptyState` (`alert`) with its copy in `common/emptyCopy.mjs` and one
-  action: back to the inbox, open pairing, or open `ConnectionSheet`; in two panes the action replaces to the pane
-  root; a render test per route with a null row finds the alert and its button, and the `!endpoint` case navigates
-  to `/pair`.
-
 - **SEC.MOBILE-TRUST** — The phone trusts only what pairing established
   `bug · mobile · alpi · agent · high`
   note: report MOB-1 to MOB-5 and CLIENT-1. The device check and the EAS build are the creator's.

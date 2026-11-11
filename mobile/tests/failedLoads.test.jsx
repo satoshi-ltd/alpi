@@ -11,6 +11,7 @@ const h = vi.hoisted(() => ({
   call: vi.fn(),
 }));
 
+vi.mock('../src/features/sheets/ConnectionSheet', () => ({ ConnectionSheet: () => null }));
 vi.mock('react-native', () => {
   const R = require('react');
   const host = (tag) => ({ children, onPress, accessibilityRole, accessibilityLabel, style, hitSlop, android_ripple, numberOfLines, ...rest }) =>

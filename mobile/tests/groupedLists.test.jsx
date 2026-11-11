@@ -6,6 +6,7 @@ afterEach(cleanup);
 
 const h = vi.hoisted(() => ({ tools: null, profile: null }));
 
+vi.mock('../src/features/sheets/ConnectionSheet', () => ({ ConnectionSheet: () => null }));
 vi.mock('react-native', () => {
   const R = require('react');
   const host = (tag) => ({ children, onPress, accessibilityRole, accessibilityLabel }) =>

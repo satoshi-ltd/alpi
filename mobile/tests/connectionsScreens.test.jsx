@@ -98,7 +98,7 @@ vi.mock('../src/components/ConfirmDialog', () => ({
 }));
 vi.mock('../src/hooks/useBack', () => ({ useBack: () => vi.fn() }));
 vi.mock('../src/hooks/useDaemonData', () => ({
-  useConnectionsSummary: () => ({ data: h.summary, loading: h.loading, error: null, refresh: h.refresh }),
+  useConnectionsSummary: () => ({ data: h.summary, loading: h.loading, error: h.summaryError ?? null, refresh: h.refresh }),
   useProfileSummaries: () => ({ data: { profiles: [{ name: 'doc' }, { name: 'abby' }] }, loading: false, refresh: vi.fn() }),
 }));
 vi.mock('../src/lib/EndpointContext', () => ({
@@ -318,5 +318,33 @@ describe('connections page waiting on the daemon', () => {
     expect(screen.getByText('Support')).toBeTruthy();
     tick(1000);
     expect(screen.queryByText('Reaching the daemon')).toBeNull();
+  });
+});
+
+
+describe('connection detail for a deleted connection', () => {
+  it('offers the way back to the inbox once the summary has loaded without it', () => {
+    h.params = { id: 'conn_gone' };
+    render(<ConnectionRoute />);
+    expect(screen.getByText('Connection not found')).toBeTruthy();
+    fireEvent.click(screen.getByText('Back to inbox'));
+    expect(h.replace).toHaveBeenCalledWith('/');
+  });
+});
+
+
+describe('connection detail when the summary failed to load', () => {
+  it('offers Retry rather than saying the connection was deleted', () => {
+    h.params = { id: 'conn_gone' };
+    const saved = h.summaryError;
+    h.summaryError = { message: 'request timed out after 15000ms' };
+    try {
+      render(<ConnectionRoute />);
+      expect(screen.queryByText('Connection not found')).toBeNull();
+      fireEvent.click(screen.getByText('Retry'));
+      expect(h.refresh).toHaveBeenCalled();
+    } finally {
+      h.summaryError = saved;
+    }
   });
 });

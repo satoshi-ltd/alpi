@@ -1,5 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
+import { DeadEnd } from '../../../src/components/DeadEnd';
 import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../../src/theme/tokens';
@@ -133,7 +134,7 @@ export default function ProfileSettings() {
   const { twoPane } = usePane();
   const snap = useProfileSnapshot(id);
   const detailPre = sectionData(snap.data?.detail);
-  const { profile: baseProfile, loading, refresh, refreshDetail } = useProfile(id, { skipDetail: !snap.unsupported });
+  const { profile: baseProfile, loading, error: profileError, refresh, refreshDetail } = useProfile(id, { skipDetail: !snap.unsupported });
   const profile = detailPre ? { ...(baseProfile || {}), ...detailPre } : baseProfile;
   const emailAccounts = useEmailAccounts(id, { skipWhen: !needsFallback(snap, 'email') });
   const schedule = useScheduleList(id, { skipWhen: !needsFallback(snap, 'schedules') });
@@ -209,6 +210,7 @@ export default function ProfileSettings() {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
         <ScreenHeader title={`@${profileLabel(id)}`} subtitle="PROFILE · NOT FOUND" onBack={goBack} />
+        <DeadEnd copy="missingProfile" error={profileError} onRetry={refresh} label="this profile" />
       </SafeAreaView>
     );
   }

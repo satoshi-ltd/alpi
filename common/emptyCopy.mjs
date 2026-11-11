@@ -36,6 +36,13 @@ export const EMPTY = {
   briefing: { title: "No briefing yet", hint: "" },
   accounts: { title: "No accounts yet", hint: "" },
   matches: { title: "No matches", hint: "Try a different query, or clear it." },
+  missingProfile: { title: "Profile not found", hint: "It was deleted or renamed, is not shared with this device, or the link is out of date." },
+  missingWorkgroup: { title: "Workgroup not found", hint: "It was removed or left, or the link is out of date." },
+  missingConnection: { title: "Connection not found", hint: "It was deleted from another device, or the link is out of date." },
+  missingProvider: { title: "Provider not found", hint: "This phone does not know this provider, or the link is out of date." },
+  missingTool: { title: "Tool not found", hint: "The daemon no longer exposes this tool to the profile." },
+  unpaired: { title: "Not paired yet", hint: "Pair this phone with a daemon to open its profiles and workgroups." },
+  foreignConnection: { title: "From another connection", hint: "This came from a daemon that is not the active one, so switch to that daemon to open it." },
 };
 
 export function emptyLine(key) {

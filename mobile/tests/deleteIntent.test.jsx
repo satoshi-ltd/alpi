@@ -18,6 +18,7 @@ const h = vi.hoisted(() => ({
 
 const sheet = vi.hoisted(() => ({ props: null }));
 
+vi.mock('../src/features/sheets/ConnectionSheet', () => ({ ConnectionSheet: () => null }));
 vi.mock('react-native', () => {
   const View = ({ children, style, accessibilityLabel, ...p }) =>
     React.createElement(
@@ -347,5 +348,26 @@ describe('workgroup members', () => {
     expect(labels).toEqual(['Copy public key', 'Remove from workgroup…']);
     h.members = [];
     h.profiles = {};
+  });
+});
+
+
+describe('settings for something that no longer exists', () => {
+  it('a missing profile offers the way back to the inbox', () => {
+    h.params = { id: 'ghost' };
+    h.profiles = {};
+    render(<ProfileSettings />);
+    expect(screen.getByText('Profile not found')).toBeTruthy();
+    fireEvent.click(screen.getByText('Back to inbox'));
+    expect(h.replace).toHaveBeenCalledWith('/');
+  });
+
+  it('a missing workgroup offers the way back to the inbox', () => {
+    h.params = { id: 'ghost' };
+    h.wg = null;
+    render(<WorkgroupSettings />);
+    expect(screen.getByText('Workgroup not found')).toBeTruthy();
+    fireEvent.click(screen.getByText('Back to inbox'));
+    expect(h.replace).toHaveBeenCalledWith('/');
   });
 });
