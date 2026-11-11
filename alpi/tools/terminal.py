@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import shlex
+import shutil
 import re
 import signal
 import subprocess
@@ -36,6 +38,16 @@ _SAFE_ENV_KEYS = (
 )
 
 
+def _profile_env() -> tuple[dict[str, str], str]:
+    try:
+        from alpi import config as cfg_mod
+        configured = dict(cfg_mod.load(get_home()).tools.terminal.env)
+    except Exception:  # noqa: BLE001
+        return {}, ""
+    extra_path = configured.pop("PATH", "")
+    return configured, extra_path
+
+
 def _build_subprocess_env() -> dict[str, str]:
     from alpi.home import effective_profile_env
     from alpi.tools import _state
@@ -48,9 +60,18 @@ def _build_subprocess_env() -> dict[str, str]:
         if key.startswith("LC_") and key not in out:
             out[key] = parent[key]
     # Intentional: an active skill's *declared* env reaches ad-hoc terminal so prose-mode skills (no scripts/run.py) can run their CLI steps; scoped to declared keys, not all secrets.
-    for key in () if _is_member() else _state.get_active_skills_env():
+    skill_keys = () if _is_member() else tuple(_state.get_active_skills_env())
+    for key in skill_keys:
         if key in parent and key not in out:
             out[key] = parent[key]
+    # Owner settings: a member's fenced turn does not get them, and a skill's declared value wins over a same-named one.
+    profile_env, extra_path = ({}, "") if _is_member() else _profile_env()
+    out.update({key: value for key, value in profile_env.items() if key not in skill_keys})
+    from alpi.core.execution_world import current as current_world
+    host_world = current_world()
+    # In the Docker world this env belongs to the host's docker CLI, whose helpers are found by PATH; the image gets PATH from the command prefix.
+    if extra_path and (host_world is None or host_world.backend == "local"):
+        out["PATH"] = f"{extra_path}{os.pathsep}{out['PATH']}" if out.get("PATH") else extra_path
     out["ALPI_HOME"] = str(get_home())
     from alpi import authority
     out.update(authority.environ())
@@ -180,9 +201,13 @@ def _resolve_popen_args(
                 if any(_overlaps(form, root) for root in hidden):
                     raise SandboxUnavailable(_MEMBER_INSIDE_HOME.format(what=what, path=path))
     if world is not None and world.backend != "local":
+        profile_env, extra_path = ({}, "") if member_root is not None else _profile_env()
+        if extra_path:
+            # The image has its own PATH; the forwarded host PATH may point at nothing inside it.
+            command = f"PATH={shlex.quote(extra_path)}:\"$PATH\"; export PATH; {command}"
         return world.command(
             command, Path(cwd or _default_cwd()).resolve(),
-            _SAFE_ENV_KEYS + ("ALPI_HOME", "ALPI_WORKSPACE", "WORKSPACE", authority.ENV),
+            _SAFE_ENV_KEYS + ("ALPI_HOME", "ALPI_WORKSPACE", "WORKSPACE", authority.ENV) + tuple(sorted(profile_env)),
             container_name=docker_container_name, write_rules=write_rules,
             member=member_root is not None,
         )
@@ -229,12 +254,25 @@ def _docker_container_name() -> str | None:
     return f"alpi-{uuid.uuid4().hex}"
 
 
+def _pinned(args: list[str] | str) -> list[str] | str:
+    # The child's PATH carries the profile's tools.terminal.env; the launcher (sandbox-exec, bwrap, docker) is found with the daemon's.
+    if isinstance(args, list) and args and "/" not in args[0]:
+        resolved = shutil.which(args[0])
+        if resolved is None:
+            raise SandboxUnavailable(f"{args[0]} is not installed")
+        return [resolved, *args[1:]]
+    return args
+
+
 def _remove_docker_container(container_name: str | None, env: dict[str, str]) -> None:
     if container_name is None or not re.fullmatch(r"alpi-[a-f0-9]{32}", container_name):
         return
+    docker = shutil.which("docker")
+    if docker is None:
+        return
     try:
         subprocess.run(
-            ["docker", "rm", "-f", container_name],
+            [docker, "rm", "-f", container_name],
             capture_output=True, timeout=10, env=env,
         )
     except (OSError, subprocess.SubprocessError):
@@ -389,9 +427,9 @@ class Terminal(Tool):
                 error=f"refused ({decision.severity.value}): {decision.reason}",
             )
         try:
-            popen_args = fenced_args if fenced_args is not None else _resolve_popen_args(
+            popen_args = _pinned(fenced_args if fenced_args is not None else _resolve_popen_args(
                 command, effective_cwd, docker_container_name=docker_container_name,
-            )
+            ))
         except (SandboxUnavailable, RuntimeError) as e:
             return ToolResult(ok=False, output="", error=str(e))
         use_shell = isinstance(popen_args, str)
@@ -490,7 +528,7 @@ class Terminal(Tool):
                 error=f"refused ({decision.severity.value}): {decision.reason}",
             )
         try:
-            popen_args = fenced_args if fenced_args is not None else _resolve_popen_args(command, effective_cwd)
+            popen_args = _pinned(fenced_args if fenced_args is not None else _resolve_popen_args(command, effective_cwd))
         except SandboxUnavailable as e:
             return ToolResult(ok=False, output="", error=str(e))
         use_shell = isinstance(popen_args, str)

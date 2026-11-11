@@ -105,6 +105,7 @@ removes the key.
 | `tools.terminal.sandbox` | `false` | bool | next turn |
 | `tools.terminal.allow_network` | `false` | bool | next turn |
 | `tools.terminal.approval.allowlist` | `[]` | list of pattern descriptions and/or command globs (see below) | next turn |
+| `tools.terminal.env` | `{}` | map of variable name to plain string (see below) | next command |
 | `tools.browser.vision` | `false` | bool | next turn |
 | `tools.web_search.max_per_turn` | `25` | int | next turn |
 | `tools.web_search.backends` | `[duckduckgo, yahoo, brave]` | list of `ddgs` text engines, in the order `web_search` asks them; names the installed `ddgs` does not ship are dropped, and an empty or unusable list means the default | next search |
@@ -173,6 +174,34 @@ this backend so a detached container cannot outlive its run. The `local` backend
 and continues to compose with `tools.terminal.sandbox` as before. Dedicated
 workers such as skill scripts and speech transcription remain host-side; this
 setting is not a whole-agent filesystem sandbox.
+
+`tools.terminal.env` adds variables to every `terminal` command of the profile,
+foreground or background, local, sandboxed or in the Docker world, for example
+a toolchain installed in the volume:
+
+```yaml
+tools:
+  terminal:
+    env:
+      JAVA_HOME: /data/toolchains/jdk
+      PATH: /data/toolchains/jdk/bin:/data/toolchains/maven/bin
+```
+
+`PATH` is prepended to the PATH the command already has (inside the image for
+the Docker world), never a replacement. Values are taken literally: no `$VAR`
+expansion and no `.env` keys, so put secrets in a skill's declared env instead.
+Names must be plain variable names. Refused: `ALPI_*`, `LD_*`, `DYLD_*` and
+`DOCKER_*` (they would reach the sandbox or Docker launcher itself), `HOME`,
+`USER`, `LOGNAME`, `SHELL`, `PWD`, `TMPDIR`, `WORKSPACE`, `IFS`, `BASH_ENV`, `ENV`,
+`PROMPT_COMMAND`, a `PATH` with an empty or relative entry, and any value that is
+not a single-line string of at most 4,096 characters (quote numbers in YAML).
+Refused entries are logged once, skipped and kept in the file; at most 64 entries
+apply. The sandbox and Docker launchers are always found with the daemon's own
+PATH. A member device's turn does not get the map, and a skill's declared env
+wins over a same-named entry. The sandbox, the approval allowlist and the command
+checks are unchanged, so `env` and `printenv` are still refused as environment
+dumps. Only `terminal` reads it; skill scripts keep their own environment. Set it
+in `config.yaml`; `host.config.set_field` does not edit this map.
 
 Precedence: `tools.<name>.max_result_chars` (if set) → `tools.budget.per_result_chars` → hardcoded `100_000`.
 

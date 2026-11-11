@@ -140,7 +140,7 @@ def test_terminal_timeout_force_removes_docker_container(
     assert not result.ok and "Timed out" in (result.error or "")
     container_name = calls[0][calls[0].index("--name") + 1]
     assert re.fullmatch(r"alpi-[a-f0-9]{32}", container_name)
-    assert calls[-1] == ["docker", "rm", "-f", container_name]
+    assert calls[-1][1:] == ["rm", "-f", container_name] and calls[-1][0].endswith("docker")
 
 
 def test_docker_world_keeps_search_out_of_host_subprocesses(tmp_path: Path, monkeypatch) -> None:

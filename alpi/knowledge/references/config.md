@@ -123,6 +123,10 @@ Email is multi-account: a profile holds N accounts (any mix of IMAP and Gmail), 
 
 These are constants, not config knobs: memory char limits, low-confidence expiry, dedup threshold, and compaction ratios.
 
+## Terminal environment
+
+`tools.terminal.env` (map of NAME: plain string) adds variables to every `terminal` command, foreground or background, local, sandboxed or Docker; takes effect on the next command. `PATH` is prepended to the existing PATH (inside the image for Docker), never replaces it. Values are literal (no `$VAR` expansion, no `.env` keys: secrets belong in a skill's declared env). Refused and skipped (logged once, kept in the file): `ALPI_*`, `LD_*`, `DYLD_*`, `DOCKER_*`, `HOME`, `USER`, `LOGNAME`, `SHELL`, `PWD`, `TMPDIR`, `WORKSPACE`, `IFS`, `BASH_ENV`, `ENV`, `PROMPT_COMMAND`, a PATH with empty or relative entries, non-identifier names, non-strings (quote numbers), multi-line or >4,096-char values; at most 64 entries. Member turns do not get it; a skill's declared env wins over a same-named entry; sandbox/Docker launchers are resolved with the daemon's PATH. Edit `config.yaml` (not `host.config.set_field`). Typical use: a JDK/Maven in the volume (`JAVA_HOME`, `PATH: /data/toolchains/jdk/bin`). It does not change the sandbox or approvals, and `env`/`printenv` stay refused as environment dumps. Skill scripts do not read it.
+
 ## Terminal approval allowlist
 
 `tools.terminal.approval.allowlist` skips prompts for approved command globs or severity-category descriptions.

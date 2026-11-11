@@ -80,27 +80,7 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-### Mobile
-
-### Then the terminal capability
-
-- **TERM.3** — Profile environment for `terminal`
-  `feature · alpi · agent · low`
-  note: a skill toolchain installed in the volume (JDK and Maven under
-  `/data/toolchains`) is exported only to the skill runner's own subprocesses;
-  [terminal.py](../alpi/tools/terminal.py) builds its environment itself and the
-  sandbox refuses discovery as `dangerous pattern: dump environment`.
-  accept: a `tools.terminal.env` map of plain strings in the profile config is
-  applied on top of the environment the tool builds, with `PATH` prepended to the
-  backend's own PATH (not a host PATH absent from the image); no secret
-  expansion, no `.env` keys, internal execution/ownership markers cannot be
-  overridden, sandbox and allowlist unchanged. A profile with the map runs
-  `java -version` through `terminal` and finds the volume JDK; a profile without
-  it is byte-for-byte unchanged. Tests cover foreground, background, the native
-  sandbox, the Docker backend's explicit forwarding list, invalid values and
-  protected variables. The map is listed in the takes-effect table of
-  [CONFIG.md](CONFIG.md#tools) and in the packaged config reference.
-
+_Empty: the creator approves the next tasks from Proposed._
 
 ## In progress
 

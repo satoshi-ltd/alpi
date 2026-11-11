@@ -273,6 +273,12 @@ is intentional: prose-mode skills (no `scripts/run.py`) instruct the agent to
 run their CLI steps via `terminal`, which need those vars. Residual exposure:
 while a skill is active, a permitted command (e.g. `python -c`) can read that
 skill's declared vars; it is scoped to the declared keys, not all secrets.
+An owner (not member) turn also gets the profile's `tools.terminal.env` map,
+plain values from `config.yaml` (never `.env`); a skill's declared value wins over
+a same-named entry. Its PATH entries are prepended to the command's PATH, but the
+sandbox and Docker launchers are resolved with the daemon's own PATH, and names
+that would steer the launcher or the shell (`ALPI_*`, `LD_*`, `DYLD_*`,
+`DOCKER_*`, `BASH_ENV`, `ENV`, `IFS`, …) or relative PATH entries are refused.
 
 ## Inline image reads
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -11,6 +12,8 @@ import yaml
 
 from alpi import yamlfast
 from alpi.secrets_io import safe_write_secret
+
+log = logging.getLogger("alpi.config")
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "model": "",
@@ -34,6 +37,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "sandbox": False,
             "allow_network": False,
             "approval": {"allowlist": []},
+            "env": {},
         },
         "tts": {
             "voice": "en-US-AriaNeural",
@@ -113,6 +117,55 @@ class TerminalToolConfig:
     sandbox: bool = False
     allow_network: bool = False
     approval: ApprovalConfig = field(default_factory=ApprovalConfig)
+    env: dict[str, str] = field(default_factory=dict)
+
+
+TERMINAL_ENV_MAX = 64
+TERMINAL_ENV_VALUE_MAX = 4096
+# Names terminal sets itself to say who runs and where; a profile setting must never forge them.
+TERMINAL_ENV_PROTECTED = frozenset({"HOME", "USER", "LOGNAME", "SHELL", "PWD", "TMPDIR", "WORKSPACE", "IFS", "BASH_ENV", "ENV", "PROMPT_COMMAND"})
+# Loader and container-client variables would reach the sandbox or Docker launcher itself, not only the command.
+TERMINAL_ENV_PROTECTED_PREFIXES = ("ALPI_", "LD_", "DYLD_", "DOCKER_")
+
+
+def terminal_env_problem(key: Any, value: Any) -> str:
+    if not isinstance(key, str) or not key or not (key[0].isalpha() or key[0] == "_") or not all(c.isalnum() or c == "_" for c in key) or not key.isascii():
+        return f"tools.terminal.env key {key!r} is not a variable name"
+    if key.startswith(TERMINAL_ENV_PROTECTED_PREFIXES) or key in TERMINAL_ENV_PROTECTED:
+        return f"tools.terminal.env cannot set {key}"
+    if not isinstance(value, str):
+        return f"tools.terminal.env.{key} must be a plain string"
+    if len(value) > TERMINAL_ENV_VALUE_MAX or "\x00" in value or "\n" in value or "\r" in value:
+        return f"tools.terminal.env.{key} is too long or spans lines"
+    if key == "PATH" and any(not part or not part.startswith("/") for part in value.split(":")):
+        return "tools.terminal.env.PATH entries must be absolute directories (no empty or relative entry)"
+    return ""
+
+
+_TERMINAL_ENV_WARNED: set[str] = set()
+
+
+def _warn_terminal_env(where: str, problem: str) -> None:
+    key = f"{where}|{problem}"
+    if key not in _TERMINAL_ENV_WARNED:
+        _TERMINAL_ENV_WARNED.add(key)
+        log.warning("%s: %s; ignored", where, problem)
+
+
+def _terminal_env(raw: Any, where: str = "config.yaml") -> dict[str, str]:
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, str] = {}
+    for key, value in raw.items():
+        problem = terminal_env_problem(key, value)
+        if problem:
+            _warn_terminal_env(where, problem)
+            continue
+        if len(out) >= TERMINAL_ENV_MAX:
+            _warn_terminal_env(where, f"tools.terminal.env holds more than {TERMINAL_ENV_MAX} entries; the rest")
+            break
+        out[key] = value
+    return out
 
 
 @dataclass
@@ -396,6 +449,7 @@ def load(home: Path) -> Config:
         terminal=TerminalToolConfig(
             sandbox=bool(terminal_raw.get("sandbox", False)),
             allow_network=bool(terminal_raw.get("allow_network", False)),
+            env=_terminal_env(terminal_raw.get("env"), str(home / "config.yaml")),
             approval=ApprovalConfig(
                 allowlist=[
                     str(x) for x in (
@@ -654,6 +708,12 @@ def _tools_delta(cfg: Config) -> dict:
         term_out["allow_network"] = cfg.tools.terminal.allow_network
     if cfg.tools.terminal.approval.allowlist:
         term_out["approval"] = {"allowlist": list(cfg.tools.terminal.approval.allowlist)}
+    raw_env = ((cfg.raw.get("tools") or {}).get("terminal") or {}).get("env") if isinstance(cfg.raw, dict) else None
+    # A refused entry stays in the file for the user to fix; saving another setting must not delete it.
+    if isinstance(raw_env, dict) and raw_env:
+        term_out["env"] = dict(raw_env)
+    elif cfg.tools.terminal.env:
+        term_out["env"] = dict(cfg.tools.terminal.env)
     if term_out:
         out["terminal"] = term_out
     browser_out: dict[str, Any] = {}

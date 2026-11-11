@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.18.8 — 2026-11-11 — terminal finds the toolchains a profile installs
+
+- `tools.terminal.env` in a profile's `config.yaml` adds variables to every `terminal` command, so a JDK or Maven installed in the data volume is found by `java` and `mvn` without editing the image; `PATH` entries are put in front of the existing PATH, also inside the Docker world.
+- Values are taken literally; names alpi sets itself or that would steer the sandbox, Docker or the shell (`ALPI_*`, `LD_*`, `DOCKER_*`, `HOME`, `TMPDIR`, …) and relative `PATH` entries are refused with a log line, a member device's turn does not get the map, and the sandbox and Docker launchers are always the daemon's own.
+
 ## v0.18.7 — 2026-11-11 — the agent knows what the phone trusts
 
 - The agent's own security reference now says what the phone (from mobile 0.9.14) accepts from a daemon: pairing links with a one-time code only, a confirmed address for links opened from outside the app, notification taps that open only the app's own pages, device-only keychain storage and size limits.
