@@ -11,6 +11,11 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.9.18 — 2026-11-11 — switching daemons always reaches the event stream
+
+- After you switch the active connection, the live event stream and the focus handling follow the new daemon at once, even when a poll was reading the connection list at the moment it was saved; before, they could stay on the previous daemon until the next change.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.9.17 — 2026-11-07 — the transcript stays where you scrolled
 
 - While a reply streams, scrolling up to read or copy earlier messages now holds: the transcript follows the stream only while you are at the bottom, and sending a message is what brings you back to it.

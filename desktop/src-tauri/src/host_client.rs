@@ -921,8 +921,31 @@ fn open_private(path: &std::path::Path) -> std::io::Result<fs::File> {
         .open(path)
 }
 
+#[cfg(test)]
+fn save_hook() -> &'static Mutex<Option<Box<dyn Fn() + Send>>> {
+    static HOOK: OnceLock<Mutex<Option<Box<dyn Fn() + Send>>>> = OnceLock::new();
+    HOOK.get_or_init(|| Mutex::new(None))
+}
+
 fn save_connections(state: &ConnectionsState) -> Result<(), String> {
     invalidate_active_id_cache();
+    let saved = write_connections(state);
+    match &saved {
+        Ok(()) => store_active_id_cache(effective_active_id(state)),
+        Err(_) => invalidate_active_id_cache(),
+    }
+    saved
+}
+
+fn effective_active_id(state: &ConnectionsState) -> String {
+    if state.connections.iter().any(|c| c.id() == state.active_id && !c.is_revoked()) {
+        state.active_id.clone()
+    } else {
+        LOCAL_ID.to_string()
+    }
+}
+
+fn write_connections(state: &ConnectionsState) -> Result<(), String> {
     let dir = connections_dir()?;
     fs::create_dir_all(&dir).map_err(|e| format!("create {}: {e}", dir.display()))?;
     let path = connections_path()?;
@@ -934,6 +957,12 @@ fn save_connections(state: &ConnectionsState) -> Result<(), String> {
     f.write_all(text.as_bytes())
         .map_err(|e| format!("write {}: {e}", tmp.display()))?;
     f.flush().ok();
+    #[cfg(test)]
+    if let Ok(hook) = save_hook().lock() {
+        if let Some(hook) = hook.as_ref() {
+            hook();
+        }
+    }
     fs::rename(&tmp, &path).map_err(|e| format!("rename {}: {e}", path.display()))
 }
 
@@ -1182,28 +1211,54 @@ pub fn clear_connection_revoked(id: &str) {
     });
 }
 
-fn active_id_cache() -> &'static Mutex<Option<String>> {
-    static CACHE: OnceLock<Mutex<Option<String>>> = OnceLock::new();
-    CACHE.get_or_init(|| Mutex::new(None))
+// Every save moves the generation, so a load that started before a save is never stored after it.
+struct ActiveIdCache {
+    generation: u64,
+    id: Option<String>,
+}
+
+fn active_id_cache() -> &'static Mutex<ActiveIdCache> {
+    static CACHE: OnceLock<Mutex<ActiveIdCache>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(ActiveIdCache { generation: 0, id: None }))
 }
 
 // Cached in memory — hot path on every daemon event frame.
 pub fn active_connection_id() -> String {
-    if let Ok(guard) = active_id_cache().lock() {
-        if let Some(id) = guard.as_ref() {
-            return id.clone();
+    let generation = match cached_active_id() {
+        Ok(id) => return id,
+        Err(generation) => generation,
+    };
+    let id = load_connections().active_id;
+    store_loaded_active_id(generation, &id);
+    id
+}
+
+fn cached_active_id() -> Result<String, Option<u64>> {
+    match active_id_cache().lock() {
+        Ok(guard) => guard.id.clone().ok_or(Some(guard.generation)),
+        Err(_) => Err(None),
+    }
+}
+
+fn store_loaded_active_id(generation: Option<u64>, id: &str) {
+    if let Ok(mut guard) = active_id_cache().lock() {
+        if Some(guard.generation) == generation {
+            guard.id = Some(id.to_string());
         }
     }
-    let id = load_connections().active_id;
+}
+
+fn store_active_id_cache(id: String) {
     if let Ok(mut guard) = active_id_cache().lock() {
-        *guard = Some(id.clone());
+        guard.generation = guard.generation.wrapping_add(1);
+        guard.id = Some(id);
     }
-    id
 }
 
 fn invalidate_active_id_cache() {
     if let Ok(mut guard) = active_id_cache().lock() {
-        *guard = None;
+        guard.generation = guard.generation.wrapping_add(1);
+        guard.id = None;
     }
 }
 
@@ -3062,6 +3117,62 @@ mod tests {
         );
 
         *config_dir_override().lock().unwrap() = None;
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_reader_racing_a_save_never_keeps_the_previous_active_id() {
+        let _fs = TEST_FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!("alpi-active-cache-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        *config_dir_override().lock().unwrap() = Some(dir.clone());
+        let remote = |id: &str| HostConnection::Remote {
+            id: id.to_string(),
+            name: id.to_string(),
+            host: "wss://client.example.com".to_string(),
+            port: 0,
+            token: "secret".to_string(),
+            revoked: false,
+            device_id: None,
+            last_connected: None,
+            last_role: None,
+        };
+        let mut state = ConnectionsState {
+            active_id: "old".to_string(),
+            connections: vec![remote("old"), remote("new")],
+        };
+        save_connections(&state).unwrap();
+        assert_eq!(active_connection_id(), "old");
+
+        let hooked = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let ran = hooked.clone();
+        *save_hook().lock().unwrap() = Some(Box::new(move || {
+            ran.store(true, std::sync::atomic::Ordering::SeqCst);
+            let seen = std::thread::spawn(active_connection_id).join().unwrap();
+            assert_eq!(seen, "old", "between write and rename the file still names the old connection");
+        }));
+        state.active_id = "new".to_string();
+        save_connections(&state).unwrap();
+        *save_hook().lock().unwrap() = None;
+
+        assert!(hooked.load(std::sync::atomic::Ordering::SeqCst));
+        assert_eq!(active_connection_id(), "new");
+
+        invalidate_active_id_cache();
+        let generation = cached_active_id().unwrap_err();
+        let stale = load_connections().active_id;
+        state.active_id = "old".to_string();
+        save_connections(&state).unwrap();
+        store_loaded_active_id(generation, &stale);
+        assert_eq!(active_connection_id(), "old", "a load that began before the save must not land after it");
+
+        state.active_id = "gone".to_string();
+        save_connections(&state).unwrap();
+        assert_eq!(active_connection_id(), LOCAL_ID);
+
+        *config_dir_override().lock().unwrap() = None;
+        invalidate_active_id_cache();
         let _ = std::fs::remove_dir_all(&dir);
     }
 
