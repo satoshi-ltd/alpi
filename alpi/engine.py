@@ -81,6 +81,10 @@ _ESCALATE_AFTER_FAILURES = 3
 _REPEAT_HINT_AFTER = 3
 _REPEAT_EXHAUST_AFTER = 5
 _FAILURE_KEY_CHARS = 160
+# Their error is an exit status, not a cause: three different commands failing alike say nothing about the arguments.
+_GENERIC_ERROR_TOOLS = frozenset({"terminal"})
+# Past this many the hint did not help, so the escalation below is allowed to fire.
+_SAME_ERROR_ESCALATE_AFTER = 5
 _BUDGET_ESCALATION_GUARD = 0.8
 _DELIVERY_TOOLS = frozenset({"notify", "workgroup_post", "attach_file"})
 _WORKGROUP_FINALIZE_SECONDS = 45.0
@@ -94,6 +98,18 @@ def _failure_key(name: str, args: dict, error: str) -> str:
     except Exception:  # noqa: BLE001
         shown = str(args)
     return f"{name}|{shown}|" + " ".join((error or "").split())[:_FAILURE_KEY_CHARS]
+
+
+def _same_error_run(streak: list[tuple[str, str, str]]) -> int:
+    if not streak:
+        return 0
+    name, _key, error = streak[-1]
+    count = 0
+    for n, _k, e in reversed(streak):
+        if n != name or e != error:
+            break
+        count += 1
+    return count
 
 
 def _identical_run(streak: list[tuple[str, str, str]]) -> int:
@@ -198,7 +214,7 @@ def _profile_name(home: Path) -> str:
 
 @dataclass
 class AgentEvent:
-    kind: str                      # 'user' | 'reasoning_delta' | 'reasoning_done' | 'assistant_delta' | 'model_state' | 'assistant_done' | 'tool_start' | 'tool_state' | 'tool_end' | 'usage' | 'routing' | 'error' | 'done' | 'interrupted' | 'auto_compact'
+    kind: str                      # 'user' | 'reasoning_delta' | 'reasoning_done' | 'assistant_delta' | 'model_state' | 'assistant_done' | 'tool_start' | 'tool_state' | 'tool_end' | 'usage' | 'routing' | 'error' | 'done' | 'interrupted' | 'auto_compact' | 'engine_note'
     text: str = ""
     name: str = ""                 # tool name for tool_* events
     args: dict = field(default_factory=dict)
@@ -880,7 +896,7 @@ class Engine:
                 if time_notes is not None:
                     time_note = time_notes.note(time.monotonic())
                     if time_note:
-                        self.session.messages.append({"role": "user", "content": time_note})
+                        self._engine_note(emit, time_note)
                 # Every step, not only the first: a long tool loop grows the prompt until the provider rejects it.
                 self._maybe_auto_compact(emit)
                 # step 0 included: auto-compaction may have spent past the cap after the turn-start check.
@@ -1104,33 +1120,27 @@ class Engine:
                             f"({t['status']})"
                             for t in open_items
                         )
-                        self.session.messages.append({
-                            "role": "user",
-                            "content": (
-                                "[engine] You returned without tool_calls but "
-                                f"these todos are still open ({len(open_items)}): "
-                                f"{summary}. Either continue with the next "
-                                "tool_call, or `todo(action='complete')` each "
-                                "outstanding item (or `todo(action='clear')` "
-                                "the whole list) before your final reply. This "
-                                f"continuation consumed one of your remaining "
-                                f"{remaining} steps."
-                            ),
-                        })
+                        self._engine_note(emit, (
+                            "[engine] You returned without tool_calls but "
+                            f"these todos are still open ({len(open_items)}): "
+                            f"{summary}. Either continue with the next "
+                            "tool_call, or `todo(action='complete')` each "
+                            "outstanding item (or `todo(action='clear')` "
+                            "the whole list) before your final reply. This "
+                            f"continuation consumed one of your remaining "
+                            f"{remaining} steps."
+                        ))
                         continue
                     if relay_peer and not relay_consulted:
                         if not relay_retry_done:
                             relay_retry_done = True
                             remaining = max_steps - step_idx - 1
-                            self.session.messages.append({
-                                "role": "user",
-                                "content": (
-                                    f"[engine] You must consult peer '{relay_peer}' before "
-                                    f"answering. Call peer(peer_id='{relay_peer}', prompt=...) now "
-                                    "and base your reply only on what it returns. This consumed "
-                                    f"one of your remaining {remaining} steps."
-                                ),
-                            })
+                            self._engine_note(emit, (
+                                f"[engine] You must consult peer '{relay_peer}' before "
+                                f"answering. Call peer(peer_id='{relay_peer}', prompt=...) now "
+                                "and base your reply only on what it returns. This consumed "
+                                f"one of your remaining {remaining} steps."
+                            ))
                             continue
                         content = _relay_fallback(relay_peer)
                         if dispatch_wg_id:
@@ -1176,7 +1186,7 @@ class Engine:
                                 "so briefly. This consumed one of your remaining "
                                 f"{remaining} steps."
                             )
-                        self.session.messages.append({"role": "user", "content": nudge})
+                        self._engine_note(emit, nudge)
                         continue
                     if (
                         dispatch_wg_id
@@ -1494,22 +1504,38 @@ class Engine:
                     return
 
                 identical = _identical_run(failure_streak)
+                same_error = _same_error_run(failure_streak)
+                error_key = f"{failure_streak[-1][0]}|*|{failure_streak[-1][2]}" if failure_streak else ""
                 if identical >= _REPEAT_HINT_AFTER:
                     last_name, key, last_error = failure_streak[-1]
                     if identical >= _REPEAT_EXHAUST_AFTER:
                         exhausted_tools.add(last_name)
                     if key not in hinted_failures:
                         hinted_failures.add(key)
-                        self.session.messages.append({
-                            "role": "user",
-                            "content": (
-                                f"[engine] The last {identical} calls to {last_name} with the same "
-                                f"arguments failed with the same error: {last_error}. Repeating the "
-                                "call changes nothing: fix what the error names, take another route, "
-                                f"or report the blocker. After {_REPEAT_EXHAUST_AFTER} identical "
-                                "failures the tool is refused for the rest of this turn."
-                            ),
-                        })
+                        self._engine_note(emit, (
+                            f"[engine] The last {identical} calls to {last_name} with the same "
+                            f"arguments failed with the same error: {last_error}. Repeating the "
+                            "call changes nothing: fix what the error names, take another route, "
+                            f"or report the blocker. After {_REPEAT_EXHAUST_AFTER} identical "
+                            "failures the tool is refused for the rest of this turn."
+                        ))
+                elif (
+                    same_error >= _REPEAT_HINT_AFTER
+                    # A parallel batch can jump past the escalation mark in one step; the note still goes first.
+                    and (same_error < _SAME_ERROR_ESCALATE_AFTER or error_key not in hinted_failures)
+                    and failure_streak[-1][2]
+                    and failure_streak[-1][0] not in _GENERIC_ERROR_TOOLS
+                ):
+                    last_name, _key, last_error = failure_streak[-1]
+                    if error_key not in hinted_failures:
+                        hinted_failures.add(error_key)
+                        self._engine_note(emit, (
+                            f"[engine] The last {same_error} calls to {last_name} failed with the "
+                            f"same error although the arguments changed: {last_error}. Read what "
+                            "the error names before trying another variation: if it is not about "
+                            "the arguments you are changing, fix that, take another route, or "
+                            "report the blocker."
+                        ))
                 elif (
                     not escalated and consecutive_tool_failures >= _ESCALATE_AFTER_FAILURES
                     and _distinct_failures(failure_streak, _ESCALATE_AFTER_FAILURES)
@@ -1638,6 +1664,7 @@ class Engine:
                     "role": "user",
                     "content": wrap_instruction,
                 }]
+                emit(AgentEvent(kind="engine_note", text=wrap_instruction))
                 wrap_text: list[str] = []
                 wrap_final: dict = {}
                 self._turn_prefix_reasons.add("wrap_up")
@@ -1895,6 +1922,10 @@ class Engine:
             )
         except Exception:  # noqa: BLE001
             pass
+
+    def _engine_note(self, emit: EventSink, text: str) -> None:
+        self.session.messages.append({"role": "user", "content": text})
+        emit(AgentEvent(kind="engine_note", text=text))
 
     def _escalated_route(
         self, current_model: str, current_effort: str, reason: str,

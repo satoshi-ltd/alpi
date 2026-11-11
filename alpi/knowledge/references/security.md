@@ -304,7 +304,7 @@ no tamper-evident or external compliance sink. What is recorded:
   `alp/turns.jsonl` are redacted the same way and kept 0600; redaction knows
   API keys, JWTs, `Bearer`, Google OAuth, GitHub/GitLab/Groq tokens, cookies
   and PEM/PGP private keys, but not a secret split across streamed deltas.
-- **Run ledger** (`logs/runs.jsonl`) — append-only, rolling ~1000 runs:
+- **Run ledger** (`logs/runs.jsonl`) — append-only, rolling about 14 days (the newest 1,000 runs stay whatever their age; about 10,000 at most):
   outcome, elapsed, exit code, backend, last tool, raw cache counts, bounded
   request-shape diagnosis, `peer_id` for workgroup runs, and the cost trail:
   `usd`, `cost_source`, the served `provider` and the provider's

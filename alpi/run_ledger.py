@@ -17,7 +17,15 @@ try:
 except ImportError:  # pragma: no cover
     fcntl = None
 
+# The newest MAX_RUNS rows always stay; beyond them a row lives KEEP_DAYS, and MAX_ROWS bounds a profile that runs all day.
 MAX_RUNS = 1000
+KEEP_DAYS = 14
+MAX_ROWS = 10_000
+# Hysteresis: a record appends one line and the trimming rewrite runs once per this many rows or this much age, not per record.
+TRIM_SLACK_ROWS = 250
+_TRIM_SLACK_S = 86400.0
+# Below this size the file cannot hold MAX_RUNS rows, so the row count is not even taken.
+COUNT_MIN_BYTES = 256 * 1024
 # Holds the eight generation ids the engine keeps per turn without cutting one in half.
 MAX_ID_FIELD_CHARS = 400
 TAIL_CAP = 280
@@ -187,11 +195,10 @@ def record(
         )
         path = store_path(home)
         with _lock, _interproc_lock(path):
-            rows = _read_all(path)
-            rows.append(asdict(rec))
-            if len(rows) > MAX_RUNS:
-                rows = rows[-MAX_RUNS:]
-            _atomic_rewrite(path, rows)
+            _append_row(path, asdict(rec))
+            now = time.time()
+            if _needs_trim(path, now):
+                _atomic_rewrite(path, _trimmed(_read_all(path), now))
     except Exception:  # noqa: BLE001
         pass
 
@@ -256,7 +263,7 @@ def _read_all(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError:
         return []
     out: list[dict[str, Any]] = []
@@ -271,6 +278,70 @@ def _read_all(path: Path) -> list[dict[str, Any]]:
         if isinstance(obj, dict) and obj.get("kind"):
             out.append(obj)
     return out
+
+
+def _append_row(path: Path, row: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    line = scrub_surrogates(json.dumps(row, ensure_ascii=False)) + "\n"
+    # A crash can leave a line without its newline; closing it keeps the new row parseable.
+    try:
+        with path.open("rb") as existing:
+            existing.seek(-1, os.SEEK_END)
+            if existing.read(1) != b"\n":
+                line = "\n" + line
+    except OSError:
+        pass
+    fd = os.open(str(path), os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    with os.fdopen(fd, "a", encoding="utf-8") as f:
+        f.write(line)
+
+
+def _row_count(path: Path) -> int:
+    count = 0
+    with path.open("rb") as f:
+        while chunk := f.read(1 << 20):
+            count += chunk.count(b"\n")
+    return count
+
+
+def _first_at(path: Path) -> float | None:
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            return float(json.loads(f.readline()).get("at"))
+    except (OSError, ValueError, TypeError, AttributeError):
+        return None
+
+
+def _needs_trim(path: Path, now: float) -> bool:
+    try:
+        if path.stat().st_size <= COUNT_MIN_BYTES:
+            return False
+        rows = _row_count(path)
+    except OSError:
+        return False
+    if rows > MAX_ROWS + TRIM_SLACK_ROWS:
+        return True
+    if rows <= MAX_RUNS + TRIM_SLACK_ROWS:
+        return False
+    first = _first_at(path)
+    return first is None or first < now - KEEP_DAYS * 86400.0 - _TRIM_SLACK_S
+
+
+def _trimmed(rows: list[dict[str, Any]], now: float) -> list[dict[str, Any]]:
+    cutoff = now - KEEP_DAYS * 86400.0
+    keep = len(rows)
+    for index, row in enumerate(rows):
+        try:
+            fresh = float(row.get("at") or 0.0) >= cutoff
+        except (TypeError, ValueError):
+            fresh = False
+        if fresh:
+            keep = len(rows) - index
+            break
+    else:
+        keep = 0
+    keep = min(MAX_ROWS, max(MAX_RUNS, keep))
+    return rows[-keep:]
 
 
 def _atomic_rewrite(path: Path, items: Iterable[dict[str, Any]]) -> None:
@@ -293,6 +364,6 @@ def _atomic_rewrite(path: Path, items: Iterable[dict[str, Any]]) -> None:
 
 
 __all__ = [
-    "MAX_RUNS", "OUTCOMES", "KINDS", "SLOW_THRESHOLDS",
+    "KEEP_DAYS", "MAX_ROWS", "MAX_RUNS", "OUTCOMES", "KINDS", "SLOW_THRESHOLDS",
     "RunRecord", "record", "read", "summarize", "store_path",
 ]

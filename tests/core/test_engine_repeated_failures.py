@@ -272,3 +272,99 @@ def test_a_workgroup_turn_is_still_nudged_after_a_working_post(monkeypatch, tmp_
     assert len(calls) >= 3
     assert any("empty reply" in str(m.get("content")) for m in calls[2])
     assert not [e for e in events if e.kind == "routing"]
+
+
+def _varying(i: int, name: str = "search") -> dict:
+    return {"id": f"t{i}", "name": name, "arguments": f'{{"pattern": "q{i}"}}'}
+
+
+def test_one_error_under_changing_arguments_hints_first_and_escalates_only_if_it_goes_on(monkeypatch, tmp_path: Path) -> None:
+    engine = _make_engine(monkeypatch, tmp_path)
+    executed = _tools(monkeypatch, lambda name, n: ToolResult(ok=False, output="", error="pass_token_required: include the passToken"))
+
+    def script(i):
+        if i < 6:
+            return _final("", tool_calls=[_varying(i)])
+        return _final("blocked")
+
+    calls = _stream(monkeypatch, script)
+    events: list = []
+    engine.run_turn("go", emit=events.append)
+    assert executed == ["search"] * 6
+    assert not _hints(calls[2])
+    hints = _hints(calls[6])
+    assert len(hints) == 1
+    assert "although the arguments changed" in hints[0] and "pass_token_required" in hints[0]
+    order = [e.kind for e in events if e.kind in ("engine_note", "routing")]
+    assert order == ["engine_note", "routing"]
+    assert "5 consecutive tool failures" in [e for e in events if e.kind == "routing"][0].text
+
+
+def test_four_same_error_failures_hint_without_escalating(monkeypatch, tmp_path: Path) -> None:
+    engine = _make_engine(monkeypatch, tmp_path)
+    _tools(monkeypatch, lambda name, n: ToolResult(ok=n > 4, output="fine" if n > 4 else "", error="" if n > 4 else "old_string not found"))
+
+    def script(i):
+        if i < 5:
+            return _final("", tool_calls=[_varying(i, "edit_file")])
+        return _final("done")
+
+    _stream(monkeypatch, script)
+    events: list = []
+    engine.run_turn("go", emit=events.append)
+    assert [e.kind for e in events if e.kind in ("engine_note", "routing")] == ["engine_note"]
+
+
+def test_an_empty_error_gets_no_same_error_hint(monkeypatch, tmp_path: Path) -> None:
+    engine = _make_engine(monkeypatch, tmp_path)
+    _tools(monkeypatch, lambda name, n: ToolResult(ok=False, output="", error=""))
+
+    def script(i):
+        if i < 3:
+            return _final("", tool_calls=[_varying(i)])
+        return _final("done")
+
+    calls = _stream(monkeypatch, script)
+    events: list = []
+    engine.run_turn("go", emit=events.append)
+    assert not any(_hints(c) for c in calls)
+    assert len([e for e in events if e.kind == "routing"]) == 1
+
+
+def test_a_parallel_batch_past_the_escalation_mark_still_gets_the_note_first(monkeypatch, tmp_path: Path) -> None:
+    engine = _make_engine(monkeypatch, tmp_path)
+    _tools(monkeypatch, lambda name, n: ToolResult(ok=False, output="", error="pass_token_required"))
+
+    def script(i):
+        if i == 0:
+            return _final("", tool_calls=[_varying(n) for n in range(5)])
+        if i == 1:
+            return _final("", tool_calls=[_varying(9)])
+        return _final("blocked")
+
+    _stream(monkeypatch, script)
+    events: list = []
+    engine.run_turn("go", emit=events.append)
+    assert [e.kind for e in events if e.kind in ("engine_note", "routing")] == ["engine_note", "routing"]
+
+
+def test_every_engine_note_is_emitted_as_an_event(monkeypatch, tmp_path: Path) -> None:
+    engine = _make_engine(monkeypatch, tmp_path)
+    _tools(monkeypatch, lambda name, n: ToolResult(ok=False, output="", error="boom"))
+
+    def script(i):
+        if i < 3:
+            return _final("", tool_calls=[_call(i, "search")])
+        if i == 3:
+            return _final("")
+        return _final("answer")
+
+    calls = _stream(monkeypatch, script)
+    events: list = []
+    engine.run_turn("go", emit=events.append)
+    notes = [e.text for e in events if e.kind == "engine_note"]
+    assert len(notes) == 2
+    assert "[engine] The last 3 calls to search" in notes[0]
+    assert "empty reply" in notes[1]
+    injected = [str(m["content"]) for m in calls[-1] if m.get("role") == "user" and str(m.get("content")).startswith("[engine]")]
+    assert injected == notes

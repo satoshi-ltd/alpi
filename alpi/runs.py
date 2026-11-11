@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
@@ -27,6 +28,10 @@ _locks_guard = threading.Lock()
 _seq: dict[str, int] = {}
 _active: dict[tuple[str, str], tuple[str, Any]] = {}
 _active_lock = threading.Lock()
+# tool.finished already holds a tool's output: the agent.tool_end that follows stores its seq as output_seq, and read() puts the text back.
+_finished_outputs: dict[str, dict[str, int]] = {}
+_OUTPUT_REF_MIN_CHARS = 256
+_OUTPUT_REF_KEEP = 64
 _SAFE_RUN_ID = re.compile(r"^[A-Za-z0-9_-]+$")
 # Streaming transport only: every assistant_done is kept (final=True marks the deliverable) and the reconnect replay is the sessions sidecar.
 _TRANSIENT_KINDS = frozenset({"reasoning_delta", "assistant_delta"})
@@ -146,6 +151,8 @@ def append(home: Path, run_id: str, kind: str, data: dict[str, Any] | None = Non
             handle.write(encoded + "\n")
             handle.flush()
         _seq[str(path)] = seq
+        if kind == "tool.finished" and isinstance(data, dict):
+            _remember_output(run_id, data, record["data"], seq)
         return record
 
 
@@ -193,6 +200,22 @@ def unregister_active(context: RunContext) -> None:
         _active.pop((context.profile, context.run_id), None)
 
 
+def _output_digest(output: str) -> str:
+    return hashlib.sha1(output.encode("utf-8", errors="replace")).hexdigest()
+
+
+def _remember_output(run_id: str, raw: dict[str, Any], stored: dict[str, Any], seq: int) -> None:
+    output = raw.get("output")
+    if not isinstance(output, str) or len(output) < _OUTPUT_REF_MIN_CHARS:
+        return
+    if not isinstance(stored.get("output"), str):
+        return
+    seen = _finished_outputs.setdefault(run_id, {})
+    seen[_output_digest(output)] = seq
+    while len(seen) > _OUTPUT_REF_KEEP:
+        seen.pop(next(iter(seen)))
+
+
 def active(profile: str, run_id: str) -> tuple[str, Any] | None:
     with _active_lock:
         return _active.get((profile, run_id))
@@ -205,6 +228,7 @@ def active_ids(profile: str) -> set[str]:
 
 def finish(context: RunContext, outcome: str) -> None:
     _last_model_state.pop(context.run_id, None)
+    _finished_outputs.pop(context.run_id, None)
     path = run_path(context.home, context.run_id)
     forget_children(context.home, context.run_id)
     try:
@@ -696,6 +720,11 @@ def record_agent_event(context: RunContext, event: Any) -> None:
             return
     if kind in {"tool_start", "tool_end"} and isinstance(data.get("args"), dict):
         data["args"] = persisted_tool_arguments(str(data.get("name") or ""), data["args"])
+    if kind == "tool_end" and isinstance(data.get("output"), str):
+        ref = _finished_outputs.get(context.run_id, {}).get(_output_digest(data["output"]))
+        if ref is not None:
+            data["output"] = ""
+            data["output_seq"] = ref
     append(context.home, context.run_id, f"agent.{kind}", data)
     if kind == "model_state":
         _last_model_state[context.run_id] = snapshot
@@ -707,6 +736,7 @@ def read(home: Path, run_id: str, *, after_seq: int = -1, limit: int = 1000) -> 
         raise FileNotFoundError(run_id)
     rows = []
     next_seq = after_seq
+    outputs: dict[int, str] = {}
     with path.open("r", encoding="utf-8") as handle:
         for line in handle:
             try:
@@ -719,6 +749,13 @@ def read(home: Path, run_id: str, *, after_seq: int = -1, limit: int = 1000) -> 
                 seq = int(row.get("seq", -1))
             except (TypeError, ValueError):
                 continue
+            data = row.get("data")
+            if isinstance(data, dict):
+                if row.get("kind") == "tool.finished" and isinstance(data.get("output"), str):
+                    outputs[seq] = data["output"]
+                elif "output_seq" in data and seq > after_seq:
+                    ref = data.pop("output_seq")
+                    data["output"] = outputs.get(ref, "") if isinstance(ref, int) else ""
             if seq <= after_seq:
                 continue
             rows.append(row)

@@ -1027,3 +1027,42 @@ def test_a_verifiable_group_is_cleared_before_its_marked_leader_is_reaped(
                 pass
         if leader.poll() is None:
             leader.wait(timeout=5)
+
+
+def test_a_tool_output_is_stored_once_and_read_back_on_both_events(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    runs.start(context)
+    big = "line of tool output\n" * 40
+    runs.append(tmp_path, context.run_id, "tool.finished", {"name": "read_file", "ok": True, "output": big, "error": None})
+    runs.record_agent_event(context, AgentEvent(kind="tool_end", name="read_file", output=big, tool_id="t1"))
+    runs.append(tmp_path, context.run_id, "tool.finished", {"name": "search", "ok": True, "output": "tiny", "error": None})
+    runs.record_agent_event(context, AgentEvent(kind="tool_end", name="search", output="tiny", tool_id="t2"))
+    runs.record_agent_event(context, AgentEvent(kind="tool_end", name="skill", output=big + "changed", tool_id="t3"))
+
+    raw = runs.run_path(tmp_path, context.run_id).read_text()
+    assert raw.count("line of tool output") == 40 * 2
+    assert raw.count('"tiny"') == 2
+
+    events = runs.read(tmp_path, context.run_id)["events"]
+    ends = [e["data"] for e in events if e["kind"] == "agent.tool_end"]
+    assert [d["output"] for d in ends] == [big, "tiny", big + "changed"]
+    assert all("output_seq" not in d for d in ends)
+
+    finished_seq = next(e["seq"] for e in events if e["kind"] == "tool.finished")
+    later = runs.read(tmp_path, context.run_id, after_seq=finished_seq)["events"]
+    assert later[0]["kind"] == "agent.tool_end" and later[0]["data"]["output"] == big
+
+    runs.finish(context, "completed")
+    assert context.run_id not in runs._finished_outputs
+
+
+def test_an_output_the_journal_truncated_is_not_referenced(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    runs.start(context)
+    huge = "\x01" * 11_000
+    runs.append(tmp_path, context.run_id, "tool.finished", {"name": "read_file", "ok": True, "output": huge, "error": None})
+    runs.record_agent_event(context, AgentEvent(kind="tool_end", name="read_file", output=huge, tool_id="t1"))
+    raw = runs.run_path(tmp_path, context.run_id).read_text()
+    assert "output_seq" not in raw
+    end = [e for e in runs.read(tmp_path, context.run_id)["events"] if e["kind"] == "agent.tool_end"][0]["data"]
+    assert end.get("truncated") is True

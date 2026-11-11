@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.18.1 — 2026-11-11 — the run journal says what the engine did, in less space
+
+- Every note the engine adds to a turn (a repeated-failure hint, a time check, an empty-reply or open-todo nudge, the wrap-up instruction) is kept in the run journal as `agent.engine_note`, so `alpi runs show` tells how often each one fired.
+- A tool that fails three times in a row with the same error while the arguments change first gets one note pointing at what the error names, and a stronger model only if it fails twice more; `terminal` keeps the previous behaviour because its error is only an exit status.
+- A run journal stores each tool output once instead of twice, about a third less disk on tool-heavy profiles; `alpi runs show` and the apps read the same events as before.
+- The run ledger (`logs/runs.jsonl`) keeps about 14 days instead of the last 1,000 runs (never fewer than 1,000, about 10,000 at most), and a finished run appends one line instead of rewriting the file.
+
 ## v0.18.0 — 2026-11-09 — the harness stops wasting turns
 
 - Context compaction runs before every model call of a turn, not only at its start: a long tool loop prunes the tool outputs it no longer needs and summarizes the rest instead of growing until the provider rejects the prompt, and each pass is recorded in `compaction.jsonl`.

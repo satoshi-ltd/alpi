@@ -557,8 +557,8 @@ today:
   (`# NOW`, workgroup context, skill hint, relay state). Secret-shape
   redaction (see Layer 1) runs before write.
   Persistent — pruned only by explicit `host.sessions.delete`.
-- **Run ledger** (`logs/runs.jsonl`). Append-only, rolling ~1000
-  records. One line per run (agent / scheduled / workgroup / terminal)
+- **Run ledger** (`logs/runs.jsonl`). Append-only, rolling about 14 days (the
+  newest 1,000 records stay whatever their age; about 10,000 at most). One line per run (agent / scheduled / workgroup / terminal)
   with outcome, elapsed, exit code, backend, last tool, tool count, raw cache
   counts, a bounded request-shape diagnosis, and — for workgroup runs — the
   `peer_id`. The closest thing to an execution audit log.

@@ -92,15 +92,92 @@ def test_output_tail_is_capped_and_flattened(home: Path) -> None:
     assert "\n" not in tail
 
 
-def test_cap_holds_at_max_runs(home: Path) -> None:
+def test_old_rows_are_trimmed_to_the_newest_max_runs(home: Path, monkeypatch) -> None:
+    monkeypatch.setattr(run_ledger, "TRIM_SLACK_ROWS", 0)
+    monkeypatch.setattr(run_ledger, "COUNT_MIN_BYTES", 0)
     for i in range(run_ledger.MAX_RUNS + 25):
         run_ledger.record(home, kind="agent", outcome="ok", elapsed_s=0.1, at=float(i))
     lines = run_ledger.store_path(home).read_text().splitlines()
     assert len(lines) == run_ledger.MAX_RUNS
-    # Oldest dropped, newest kept.
     ats = [json.loads(line)["at"] for line in lines]
     assert ats[0] == 25.0
     assert ats[-1] == float(run_ledger.MAX_RUNS + 24)
+
+
+def test_rows_inside_the_window_outlive_max_runs(home: Path, monkeypatch) -> None:
+    import time as _time
+
+    monkeypatch.setattr(run_ledger, "TRIM_SLACK_ROWS", 0)
+    monkeypatch.setattr(run_ledger, "COUNT_MIN_BYTES", 0)
+    monkeypatch.setattr(run_ledger, "MAX_RUNS", 5)
+    now = _time.time()
+    day = 86400.0
+    for age in (40, 30, 20, 16):
+        run_ledger.record(home, kind="agent", outcome="ok", elapsed_s=0.1, at=now - age * day)
+    for i in range(12):
+        run_ledger.record(home, kind="agent", outcome="ok", elapsed_s=0.1, at=now - 3600 + i)
+    ats = [r["at"] for r in run_ledger.read(home, limit=0)]
+    assert len(ats) == 12
+    assert min(ats) >= now - run_ledger.KEEP_DAYS * day
+
+
+def test_a_busy_ledger_stops_at_max_rows(home: Path, monkeypatch) -> None:
+    import time as _time
+
+    monkeypatch.setattr(run_ledger, "TRIM_SLACK_ROWS", 2)
+    monkeypatch.setattr(run_ledger, "COUNT_MIN_BYTES", 0)
+    monkeypatch.setattr(run_ledger, "MAX_RUNS", 3)
+    monkeypatch.setattr(run_ledger, "MAX_ROWS", 8)
+    now = _time.time()
+    for i in range(20):
+        run_ledger.record(home, kind="agent", outcome="ok", elapsed_s=0.1, at=now + i)
+    ats = [r["at"] for r in run_ledger.read(home, limit=0)]
+    assert 8 <= len(ats) <= 10 and max(ats) == now + 19
+
+
+def test_a_record_appends_without_rewriting_a_small_ledger(home: Path, monkeypatch) -> None:
+    rewrites: list[int] = []
+    original = run_ledger._atomic_rewrite
+    monkeypatch.setattr(run_ledger, "_atomic_rewrite", lambda path, rows: (rewrites.append(1), original(path, rows))[1])
+    for i in range(30):
+        run_ledger.record(home, kind="agent", outcome="ok", elapsed_s=0.1, at=float(i))
+    assert not rewrites
+    assert len(run_ledger.read(home, limit=0)) == 30
+    assert run_ledger.store_path(home).stat().st_mode & 0o777 == 0o600
+
+
+def test_default_limits_bound_old_and_fresh_rows(home: Path) -> None:
+    import time as _time
+
+    path = run_ledger.store_path(home)
+    path.parent.mkdir(parents=True)
+    now = _time.time()
+    old = [{"at": now - 200 * 86400 + i, "kind": "agent", "outcome": "ok", "pad": "x" * 300} for i in range(1400)]
+    path.write_text("".join(json.dumps(r) + "\n" for r in old))
+    run_ledger.record(home, kind="agent", outcome="ok", elapsed_s=0.1)
+    assert len(run_ledger.read(home, limit=0)) == run_ledger.MAX_RUNS
+
+    fresh = [{"at": now - 60 + i / 1000, "kind": "agent", "outcome": "ok", "pad": "x" * 300} for i in range(10_300)]
+    path.write_text("".join(json.dumps(r) + "\n" for r in fresh))
+    run_ledger.record(home, kind="agent", outcome="ok", elapsed_s=0.1)
+    assert len(run_ledger.read(home, limit=0)) == run_ledger.MAX_ROWS
+
+
+def test_a_torn_last_line_does_not_swallow_the_next_record(home: Path) -> None:
+    run_ledger.record(home, kind="agent", outcome="ok", elapsed_s=0.1, at=1.0)
+    path = run_ledger.store_path(home)
+    with path.open("a") as f:
+        f.write('{"at": 2.0, "kind": "ag')
+    run_ledger.record(home, kind="agent", outcome="ok", elapsed_s=0.1, at=3.0)
+    assert [r["at"] for r in run_ledger.read(home, limit=0)] == [3.0, 1.0]
+
+
+def test_a_line_torn_inside_a_character_does_not_blind_the_ledger(home: Path) -> None:
+    run_ledger.record(home, kind="agent", outcome="ok", elapsed_s=0.1, at=1.0)
+    with run_ledger.store_path(home).open("ab") as f:
+        f.write(b'{"at": 2.0, "output_tail": "caf\xc3')
+    run_ledger.record(home, kind="agent", outcome="ok", elapsed_s=0.1, at=3.0)
+    assert [r["at"] for r in run_ledger.read(home, limit=0)] == [3.0, 1.0]
 
 
 def test_limit_caps_read_count(home: Path) -> None:

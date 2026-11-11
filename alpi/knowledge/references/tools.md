@@ -247,6 +247,10 @@ Output attachments (MM.2):
 - `[engine] The last N tool calls … failed with the same error`: change the
   arguments the error names or take another route; after five identical
   failures the tool is refused for the rest of the turn.
+- `[engine] The last N calls to <tool> failed with the same error although the
+  arguments changed`: read what the error names before another variation; if
+  it is not about the arguments (a missing token, a permission, a
+  precondition), fix that or report the blocker.
 - `<tool> did not finish within Ns`: the per-call deadline (`tools.call_timeout_s`)
   passed; the call may still have taken effect, so check before repeating it.
 - `tool action denied for this profile: knowledge:ingest … allowed: search`:
