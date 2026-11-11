@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.18.5 — 2026-11-11 — the agent knows how the phone keeps workgroups current
+
+- The agent's own reference now explains how the phone app (from mobile 0.9.12) keeps the roster and an open workgroup current: what makes it re-read, how it retries on a flaky network and what it does in the background, so it no longer answers that only the desktop recovers on its own.
+- It also no longer mentions task and skip events that the daemon never sends.
+
 ## v0.18.4 — 2026-11-11 — a recipe never loses a step option silently
 
 - A workgroup recipe whose pipeline step carries an option alpi does not support (a misspelt `gate`, a `repeat` rule this version does not have, an unknown key inside `gate` or `prepare`) is refused with the phase and the option name, instead of loading without it.

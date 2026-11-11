@@ -1077,9 +1077,22 @@ Verb namespaces in current shape:
   Retries back off through 1.5, 5, 15, 30 and 60 seconds, then keep the 60-second ceiling until
   recovery. Reloads run one at a time per connection, coalescing events during a pending read into
   one follow-up refresh; replies from a previous connection or switch are ignored. Online desktop
-  windows also reconcile every minute while visible. Terminal task events (`wg.done`, `wg.task`,
-  `wg.skip`) request a coalesced roster refresh for pipeline state and spend; ordinary `wg.post`
-  frames only touch recency, avoiding a full-list request per post.
+  windows also reconcile every minute while visible. Terminal task events (`wg.done`, `wg.blocked`)
+  request a coalesced roster refresh for pipeline state and spend; ordinary `wg.post`
+  frames only touch recency, avoiding a full-list request per post. The daemon emits no separate
+  task or skip event: those posts arrive as `wg.post`.
+  The phone keeps the same reads current per resource (profile summaries, the workgroups list, an
+  open workgroup's transcript and its task fold), each in its own cache entry keyed by connection,
+  so a reply from a previous connection never lands in the active one. A plain refresh (mount,
+  focus, pull) joins the read in flight; an event (`wg.post`, `wg.done`, `wg.blocked`,
+  `workgroup_changed`, `workgroup_members`, or the stream's reconnect) invalidates, which adds at
+  most one read after the one in flight. A read that fails in transport (timeout, dropped socket,
+  `too-many-connections`) retries after 2, 4, 8, 16, 32 and 60 seconds while the app is in front;
+  any answer from the daemon is final and stops retries and reconciliation for that screen. In the
+  foreground those four reads re-check every minute without showing the loading state; nothing
+  runs in the background, and a return from the background reads at once (an inactive blip does
+  not). Each read exposes `stale` (cached rows plus an error) and `updatedAt`. An auth failure
+  still clears the cached rows.
 
 - **CLI workgroup mutations notify through the daemon.** `workgroup launch` and
   `workgroup remove` use the existing host verbs when its socket exists, so the daemon emits

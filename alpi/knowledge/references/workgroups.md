@@ -86,3 +86,11 @@ follow-up for events received while it is pending. Old-connection replies are ig
 Terminal task events refresh pipeline state and spend; ordinary posts update recency.
 Both desktop roster RPCs have a 60-second deadline. A connected daemon does not imply
 that every displayed roster field is current: heed the stale-data warning.
+
+The phone (from mobile 0.9.12) keeps the roster and an open workgroup current on its own:
+events (`wg.post`, `wg.done`, `wg.blocked`, `workgroup_changed`, `workgroup_members`, a stream
+reconnect) re-read them, with at most one extra read when one is already on its way; transport
+failures retry after 2–60 s while the app is in front; the four reads re-check every minute in the
+foreground and once on returning from the background. A daemon answer that is an error (an unknown
+workgroup, a refusal) is not retried. There are no `wg.task` or `wg.skip` events; task and skip
+posts arrive as `wg.post`.
