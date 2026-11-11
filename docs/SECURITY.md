@@ -192,7 +192,13 @@ not reach.
   store is not a credential. Devices can be revoked independently, may
   expire after `host.token_ttl_days` of inactivity, and authentication
   failures are throttled per source address, or per device when the failed
-  token names one. The daemon never binds a
+  token names one; a socket that stays silent, drops abnormally or sends
+  garbage before authenticating counts against its source too (a public IPv6
+  source is its /64), sockets still waiting for their first frame are
+  capped daemon-wide and per source, and a large first frame is decoded
+  only after its token authenticates. A remote caller never receives the
+  text of an internal error, on a reply or a stream, and file errors carry
+  no daemon path. The daemon never binds a
   public IP unless `host.allow_public_bind` says so, warns on `0.0.0.0`
   binds, and accepts plaintext `ws://` routes only for private IP literals
   — hostnames require certificate-validated `wss://` behind a TLS
@@ -206,7 +212,12 @@ not reach.
   model (`host.chat.send` refuses a member's `model` override), and the model,
   its reasoning effort, the budget and the skills are admin settings; a member
   uses the skills the profile has. The local socket is
-  sovereign and always `admin`. What `member` does **not** restrict is the
+  sovereign and always `admin`; network settings (`host.tcp_port`,
+  `alp.tcp_port`, `host.allow_public_bind`, `host.endpoints`, `network.host`
+  and their parent blocks) are set only there, and a config key with an
+  empty or padded segment is refused on every transport. A remote admin can
+  restart and update the daemon (`host.daemon.restart`, `host.daemon.update`),
+  which the apps offer in Settings. What `member` does **not** restrict is the
   agent: a member device can still send chat turns, and a turn can do
   anything the profile's tools can do. Bound agent capability with the OS
   sandbox and a dedicated profile, not with the device role. Profiles in one

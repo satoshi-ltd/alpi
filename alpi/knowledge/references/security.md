@@ -8,7 +8,11 @@
 - Paired devices carry a `role` (`admin`/`member`) and optional
   `profile_scope`; dispatcher blocks sensitive verbs from members and
   out-of-scope profiles from scoped members (detail below). Network admin
-  is local-only over the Unix socket.
+  is local-only over the Unix socket: the bind, ports, public-bind switch,
+  endpoints and `network.host` (and their parent blocks) cannot be set over
+  WebSocket, and a dotted key with an empty or padded part is refused. A
+  remote admin can still restart and update the daemon. Remote callers never
+  get internal error text or daemon file paths.
 - Trust: direct user input is trusted; web/email/PDF/tool content is
   untrusted data. Safety = always-on app guards + approval gates + tool
   schemas + secret scoping + profile boundaries + optional OS sandbox.
@@ -199,7 +203,13 @@ obtains certificates. Caddy still forwards every RPC to Alpi's normal
 per-device authentication. The listener throttles authentication failures per
 source address (default 10 per minute, `ALPI_HOST_WS_AUTH_FAILURES_PER_MINUTE`):
 over budget, a source's new sockets close with 1013 and the reason
-`auth-rate-limited` before any token is read. A failure that names a device (a
+`auth-rate-limited` before any token is read. A socket that stays silent until
+the auth timeout, drops abnormally before its first frame or sends a non-object
+first frame spends that budget too (a clean close does not), a public IPv6
+source is its /64, sockets waiting for their first frame are capped
+(`ALPI_HOST_WS_MAX_PREAUTH` 16, `ALPI_HOST_WS_MAX_PREAUTH_PER_SOURCE` 8), and a
+first frame over 64 KB is decoded only after the token in its raw text
+authenticates. A failure that names a device (a
 revoked token answers `auth-failed` with reason `device-revoked`; expired and
 disabled keep theirs) counts against that device with the same limit and
 closes it the same way (the client sees the 1013 block, not the reason), without spending the address budget, and is recorded in

@@ -1839,7 +1839,10 @@ async def test_the_default_profile_always_wears_the_alpaca_and_the_theme_accent(
             "id": key, "method": "host.config.set_field",
             "params": {"profile": "default", "key": key, "value": value},
         })
-        assert resp["error"]["code"] == -32602 and "alpaca" in resp["error"]["data"]["detail"]
+        detail = resp["error"]["data"]["detail"]
+        malformed = ".." in key or key.endswith(".")
+        assert resp["error"]["code"] == -32602
+        assert ("empty or padded" if malformed else "alpaca") in detail
     unset = await srv._dispatch({
         "id": "u", "method": "host.config.unset_field", "params": {"profile": "default", "key": "tui.fold"},
     })
@@ -1984,3 +1987,39 @@ async def test_set_field_stores_each_setting_with_its_schema_type(
             assert resp["error"]["message"] == "invalid-params", (key, value)
             assert key in resp["error"]["data"]["detail"], (key, value)
     assert (home / "config.yaml").read_text() == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("key", ["host.allow_public_bind.", ".network.host", "host..tcp_port", " model", "model ", ""])
+@pytest.mark.parametrize("method", ["host.config.set_field", "host.config.unset_field"])
+async def test_config_keys_with_empty_or_padded_parts_are_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, method: str, key: str,
+) -> None:
+    home = _bootstrap(tmp_path / "h")
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+    before = (home / "config.yaml").read_text()
+    resp = await srv._dispatch({
+        "id": "k", "method": method,
+        "params": {"profile": "default", "key": key, "value": "true"},
+    })
+    assert resp["error"]["message"] == "invalid-params"
+    assert (home / "config.yaml").read_text() == before
+
+
+@pytest.mark.asyncio
+async def test_read_file_not_found_never_names_the_daemon_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path / "h")
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    monkeypatch.setattr(host_device_state, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+    resp = await srv._dispatch({
+        "id": "f", "method": "host.profile.read_file",
+        "params": {"profile": "default", "rel_path": "memories/NOPE.md"},
+    })
+    assert resp["error"]["message"] == "not-found"
+    assert str(tmp_path) not in json.dumps(resp)

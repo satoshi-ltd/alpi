@@ -84,15 +84,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ### Daemon first: the config bug, the public host plane, the 0.19 prerequisite
 
-- **SEC.HOST-LOCAL-ONLY** — A remote admin cannot rebind or restart the daemon, and pre-auth sockets are bounded
-  `bug · alpi · agent · normal`
-  note: report HOST-1 to HOST-4.
-  accept: `host.config.set_field`/`unset_field` normalise the key (empty segments rejected) before the
-  local-only check, so `host.allow_public_bind.` and `.network.host` are refused under `require_token=True`;
-  `host.daemon.restart` and `host.daemon.update` are local-only; remote callers get fixed error detail with no
-  paths; the first frame of an unauthenticated socket is capped near 64 KB and pre-auth timeouts count in the
-  per-origin limiter. Console parity unchanged.
-
 - **WG.RECIPE-KEYS** — An unsupported pipeline-step option never disappears silently
   `bug · alpi · agent · normal`
   note: `validate_pipeline_steps` copies known keys and drops the rest, so a misspelt gate or a

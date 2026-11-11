@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import json
+import re
 import logging
 import os
 import time
@@ -29,6 +30,9 @@ WS_CLOSE_TIMEOUT_SECONDS = 1.0
 WS_REVOCATION_RETRY_SECONDS = 5.0
 WS_MAX_CONNECTIONS = 128
 WS_MAX_CONNECTIONS_PER_DEVICE = 8
+# Sockets still waiting for their first frame: each may hold a full-size message before its token is checked.
+WS_MAX_PREAUTH = 16
+WS_MAX_PREAUTH_PER_SOURCE = 8
 WS_MAX_RPCS_PER_DEVICE = 8
 WS_MAX_QUEUE = (16, 4)
 WS_PROBE_TIMEOUT_SECONDS = 2.0
@@ -65,7 +69,7 @@ def _max_message_bytes() -> int:
     from alpi.attachments import MAX_FILE_BYTES
     return MAX_FILE_BYTES * 4 // 3 + 64 * 1024
 
-# Reserved for the local Unix socket — even an admin remote device cannot rebind the network or restart the daemon.
+# Reserved for the local Unix socket — even an admin remote device cannot rebind the network; restart and update stay open to remote admins by design.
 _LOCAL_ONLY_METHODS = frozenset({
     "host.chat.delegate",
     "host.network.status",
@@ -80,6 +84,27 @@ _LOCAL_ONLY_CONFIG_KEYS = frozenset({
     "host.endpoints",
     "network.host",
 })
+
+def _without_internal_detail(send: SendCoro) -> SendCoro:
+    # Handlers copy exception text into internal-error detail in many places; a remote caller must see none of it.
+    async def stripped(payload: dict[str, Any]) -> None:
+        error = payload.get("error") if isinstance(payload, dict) else None
+        if isinstance(error, dict) and error.get("code") == -32603 and "data" in error:
+            payload = {**payload, "error": {k: v for k, v in error.items() if k != "data"}}
+        await send(payload)
+    return stripped
+
+
+def _touches_local_only_config(key: str) -> bool:
+    # The handler refuses empty segments, but the gate must not depend on that: compare the normalised key and its parents.
+    normalised = ".".join(part.strip() for part in key.split(".") if part.strip())
+    if not normalised:
+        return False
+    return any(
+        protected == normalised or protected.startswith(normalised + ".")
+        for protected in _LOCAL_ONLY_CONFIG_KEYS
+    )
+
 
 # Require ``role == "admin"`` when called over WS. Local socket bypasses (see ``devices.validate_and_lookup_role`` for the empty-store bootstrap).
 _ADMIN_METHODS = frozenset({
@@ -263,9 +288,14 @@ class WebSocketMetrics:
     revoked_connections: int = 0
     stale_connections_evicted: int = 0
     pairing_exchange_attempts: int = 0
+    preauth_rejected: int = 0
 
 
 _DEVICE_THROTTLED = object()
+# A first frame above this is decoded only after the token found in its raw text authenticates, so no object graph is built for strangers.
+_PREAUTH_PARSE_CHARS = 64 * 1024
+_PAIRING_MAX_CHARS = 64 * 1024
+_RAW_AUTH_TOKEN = re.compile(r'"auth_token"\s*:\s*"([A-Za-z0-9_\-.~+/=]{1,512})"')
 
 
 class Server:
@@ -295,6 +325,13 @@ class Server:
         self._ws_rpc_counts: dict[tuple[str, str], int] = {}
         self._ws_policy_replies: dict[ServerConnection, float] = {}
         self._ws_metrics = WebSocketMetrics()
+        self._ws_preauth: dict[str, int] = defaultdict(int)
+        self._ws_max_preauth = int(_env_number(
+            "ALPI_HOST_WS_MAX_PREAUTH", WS_MAX_PREAUTH, minimum=1, maximum=10_000,
+        ))
+        self._ws_max_preauth_per_source = int(_env_number(
+            "ALPI_HOST_WS_MAX_PREAUTH_PER_SOURCE", WS_MAX_PREAUTH_PER_SOURCE, minimum=1, maximum=10_000,
+        ))
         self._ws_auth_timeout = float(_env_number(
             "ALPI_HOST_WS_AUTH_TIMEOUT", WS_AUTH_TIMEOUT_SECONDS,
             minimum=1.0, maximum=120.0,
@@ -488,6 +525,9 @@ class Server:
             "authenticated_connections": len(self._ws_identities),
             "active_devices": len(self._ws_by_device),
             "connection_limit": self._ws_max_connections,
+            "preauth_limit": self._ws_max_preauth,
+            "preauth_per_source_limit": self._ws_max_preauth_per_source,
+            "preauth_rejected": metrics.preauth_rejected,
             "connections_per_device_limit": self._ws_max_connections_per_device,
             "rpcs_per_device_limit": self._ws_max_rpcs_per_device,
             "auth_failures_per_minute_limit": self._ws_auth_failure_limit,
@@ -567,6 +607,15 @@ class Server:
             self._ws_metrics.auth_rate_limited += 1
             await ws.close(code=1013, reason=WS_CLOSE_REASON_RATE_LIMITED)
             return
+        if (
+            sum(self._ws_preauth.values()) >= self._ws_max_preauth
+            or self._ws_preauth[source] >= self._ws_max_preauth_per_source
+        ):
+            self._ws_metrics.preauth_rejected += 1
+            if not self._ws_preauth[source]:
+                self._ws_preauth.pop(source, None)
+            await ws.close(code=1013, reason="WebSocket capacity reached")
+            return
         self._ws_connections.add(ws)
         task = asyncio.current_task()
         if task is not None:
@@ -575,13 +624,17 @@ class Server:
             self._ws_metrics.peak_connections,
             len(self._ws_connections),
         )
+        preauth = True
+        self._ws_preauth[source] += 1
         try:
             try:
                 message = await asyncio.wait_for(ws.recv(), timeout=self._ws_auth_timeout)
             except asyncio.TimeoutError:
                 self._ws_metrics.auth_timeouts += 1
+                self._ws_auth_failures.admit(source, None)
                 await ws.close(code=1008, reason="Authentication timeout")
                 return
+            preauth = self._release_preauth(source, preauth)
             pairing_request = _preauth_pairing_request(message)
             if pairing_request is not None:
                 self._ws_metrics.pairing_exchange_attempts += 1
@@ -637,21 +690,48 @@ class Server:
                     await ws.close(code=1008, reason="Socket identity changed")
                     return
                 await dispatch(line, body, meta)
-        except websockets.ConnectionClosed:
+        except websockets.ConnectionClosed as closed:
+            if preauth and not _clean_close(closed):
+                self._ws_auth_failures.admit(source, None)
             return
         except Exception:  # noqa: BLE001
             log.exception("host websocket connection crashed")
         finally:
+            self._release_preauth(source, preauth)
             self._unregister_websocket(ws)
+
+    def _release_preauth(self, source: str, held: bool) -> bool:
+        if held:
+            remaining = self._ws_preauth.get(source, 0) - 1
+            if remaining > 0:
+                self._ws_preauth[source] = remaining
+            else:
+                self._ws_preauth.pop(source, None)
+        return False
 
     async def _authenticate_websocket_message(
         self, message: str | bytes, send: SendCoro, *, source: str | None = None,
     ) -> tuple[str, dict[str, Any], "AuthMeta"] | None | object:
+        body: Any = None
+        meta: AuthMeta | None = None
         try:
             line = message if isinstance(message, str) else message.decode("utf-8")
-            body = json.loads(line)
-        except (UnicodeDecodeError, json.JSONDecodeError):
+            if source is not None and len(line) > _PREAUTH_PARSE_CHARS:
+                token = _raw_auth_token(line)
+                if token is None:
+                    self._ws_metrics.auth_failures += 1
+                    self._ws_auth_failures.admit(source, None)
+                    await send({"id": None, "error": {"code": -32000, "message": "auth-failed"}})
+                    return None
+                meta = await asyncio.to_thread(_check_token_meta, {"params": {"auth_token": token}})
+                if not meta.valid:
+                    body = {"id": None}
+            if body is None:
+                body = json.loads(line)
+        except (UnicodeDecodeError, ValueError, RecursionError):
             self._ws_metrics.protocol_failures += 1
+            if source is not None:
+                self._ws_auth_failures.admit(source, None)
             await send({
                 "id": None,
                 "error": {"code": -32700, "message": "parse-error"},
@@ -659,12 +739,15 @@ class Server:
             return None
         if not isinstance(body, dict):
             self._ws_metrics.protocol_failures += 1
+            if source is not None:
+                self._ws_auth_failures.admit(source, None)
             await send({
                 "id": None,
                 "error": {"code": -32600, "message": "invalid-request"},
             })
             return None
-        meta = await asyncio.to_thread(_check_token_meta, body)
+        if meta is None or meta.valid:
+            meta = await asyncio.to_thread(_check_token_meta, body)
         if not meta.valid:
             device_key = f"{meta.connection_id}|{meta.device_id}" if meta.device_id else None
             if source is not None and device_key is not None:
@@ -864,9 +947,11 @@ class Server:
     ) -> None:
         try:
             body = json.loads(line)
-        except json.JSONDecodeError:
+        except (ValueError, RecursionError):
             log.debug("malformed JSON on host transport; dropping")
             return
+        if require_token:
+            send = _without_internal_detail(send)
         # Unix socket is the source of trust; treat as admin-equivalent.
         role = "admin"
         profile_scope: list[str] = []
@@ -960,7 +1045,7 @@ class Server:
             return
         if require_token and method in ("host.config.set_field", "host.config.unset_field"):
             params = body.get("params") if isinstance(body.get("params"), dict) else {}
-            if str(params.get("key") or "") in _LOCAL_ONLY_CONFIG_KEYS:
+            if _touches_local_only_config(str(params.get("key") or "")):
                 log.warning("host forbidden: config key %r is local-only", params.get("key"))
                 from alpi.host import admin_audit
                 await asyncio.to_thread(
@@ -1088,7 +1173,7 @@ class Server:
                 if method in self.stream_handlers:
                     await self._dispatch_stream(body, delivery)
                     return
-                response = await self._dispatch(body, expose_internal_errors=not bootstrap)
+                response = await self._dispatch(body, expose_internal_errors=not (bootstrap or require_token))
                 from alpi.host import admin_audit
                 if admin_audit.is_audited(method):
                     await asyncio.to_thread(
@@ -1211,19 +1296,34 @@ def _in_networks(addr: str, networks: _Networks) -> bool:
     return any(ip in net for net in networks)
 
 
+def _source_bucket(address: str) -> str:
+    # One IPv6 subscriber holds a whole /64; keying by full address would give each rotation a fresh budget.
+    try:
+        ip = ipaddress.ip_address(address)
+    except ValueError:
+        return address
+    if ip.version == 4:
+        return str(ip)
+    if ip.ipv4_mapped is not None:
+        return str(ip.ipv4_mapped)
+    if not ip.is_global:
+        return str(ip)
+    return str(ipaddress.ip_network(f"{ip}/64", strict=False))
+
+
 def _ws_source_key(peer_host: str | None, forwarded_for: str | None, trusted: _Networks = ()) -> str:
     peer = str(peer_host or "").strip() or "unknown"
     if not forwarded_for or not _in_networks(peer, trusted):
-        return peer
+        return _source_bucket(peer)
     # Walk right to left past the proxies we trust; the first other hop is the client. Any unparsable hop means the header is not ours to trust.
     for hop in reversed([hop.strip() for hop in forwarded_for.split(",")]):
         try:
             ip = ipaddress.ip_address(hop)
         except ValueError:
-            return peer
+            return _source_bucket(peer)
         if not _in_networks(str(ip), trusted):
-            return str(ip)
-    return peer
+            return _source_bucket(str(ip))
+    return _source_bucket(peer)
 
 
 def _ws_source(ws: ServerConnection, trusted: _Networks = ()) -> str:
@@ -1486,11 +1586,24 @@ class AuthMeta:
         yield self.scope
 
 
+def _clean_close(closed: websockets.ConnectionClosed) -> bool:
+    frame = closed.rcvd
+    return frame is not None and frame.code in (1000, 1001)
+
+
+def _raw_auth_token(line: str) -> str | None:
+    matches = _RAW_AUTH_TOKEN.finditer(line)
+    first = next(matches, None)
+    return first.group(1) if first is not None and next(matches, None) is None else None
+
+
 def _preauth_pairing_request(message: str | bytes) -> str | None:
+    if len(message) > _PAIRING_MAX_CHARS:
+        return None
     try:
         line = message if isinstance(message, str) else message.decode("utf-8")
         body = json.loads(line)
-    except (UnicodeDecodeError, json.JSONDecodeError):
+    except (UnicodeDecodeError, ValueError, RecursionError):
         return None
     if not isinstance(body, dict) or body.get("method") != "host.connections.exchange_pairing":
         return None

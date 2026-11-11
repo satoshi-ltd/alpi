@@ -146,6 +146,15 @@ def _admin():
         "host.allow_public_bind",
         "host.endpoints",
         "network.host",
+        "host.allow_public_bind.",
+        ".network.host",
+        "host..tcp_port",
+        "alp.tcp_port.",
+        " host.allow_public_bind",
+        "host. allow_public_bind",
+        "host",
+        "network",
+        "alp",
     ],
 )
 async def test_config_field_local_only_key_blocked_over_remote(
@@ -418,3 +427,58 @@ async def test_self_service_gate_keeps_denying_everything_else(
     assert reached == 0
     assert reply["error"]["message"] == "forbidden"
     assert reply["error"]["data"]["detail"] == "admin role required"
+
+
+@pytest.mark.asyncio
+async def test_a_remote_caller_never_sees_the_text_of_a_crash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(host_server, "_check_token_meta", _admin())
+    srv = host_server.Server(home=tmp_path)
+
+    async def crash(_params, _server):
+        raise OSError(f"[Errno 2] No such file: {tmp_path}/secret/path")
+
+    srv.register("host.ping", crash)
+    remote: list[dict] = []
+    local: list[dict] = []
+
+    async def send_remote(p):
+        remote.append(p)
+
+    async def send_local(p):
+        local.append(p)
+
+    body = {"id": "r", "method": "host.ping", "params": {"auth_token": "t"}}
+    await srv._handle_request(json.dumps(body), send_remote, require_token=True)
+    await srv._handle_request(json.dumps(body), send_local)
+    assert remote[0]["error"]["message"] == "internal-error"
+    assert "data" not in remote[0]["error"]
+    assert str(tmp_path) in local[0]["error"]["data"]["detail"]
+
+
+@pytest.mark.asyncio
+async def test_a_remote_stream_never_carries_the_text_of_a_crash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(host_server, "_check_token_meta", _admin())
+    srv = host_server.Server(home=tmp_path)
+
+    async def crash(_params, _server, _send):
+        raise OSError(f"No such file: {tmp_path}/secret")
+
+    srv.register_stream("host.events.subscribe", crash)
+    sent: list[dict] = []
+
+    async def send(p):
+        sent.append(p)
+
+    body = {"id": "s", "method": "host.events.subscribe", "params": {"auth_token": "t"}}
+    await srv._handle_request(json.dumps(body), send, require_token=True)
+    assert sent[-1]["error"]["message"] == "internal-error"
+    assert str(tmp_path) not in json.dumps(sent)
+
+
+@pytest.mark.parametrize("key", ["alp.max_active_workgroups", "alp.link_idle_timeout_s", "tools.deny", "tui.fold", "hostname"])
+def test_sibling_keys_of_local_only_settings_stay_open_remotely(key: str) -> None:
+    assert not host_server._touches_local_only_config(key)

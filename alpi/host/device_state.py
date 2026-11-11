@@ -342,9 +342,9 @@ async def _profile_read_file(
     abs_path = home / rel_path
     try:
         real = abs_path.resolve(strict=True)
-    except OSError as e:
+    except OSError:
         raise host_server.HandlerError(
-            -32004, "not-found", data={"detail": str(e)},
+            -32004, "not-found", data={"detail": "file not found"},
         ) from None
     home_real = home.resolve()
     if home_real not in (real, *real.parents):
@@ -606,7 +606,7 @@ async def _config_set_field(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
     home = _resolve_home(str(params.get("profile") or ""))
-    key = str(params.get("key") or "")
+    key = _config_key(params)
     _reject_removed_config_key(key)
     if key == "host.endpoints":
         raise host_server.HandlerError(
@@ -696,7 +696,7 @@ async def _config_unset_field(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
     home = _resolve_home(str(params.get("profile") or ""))
-    key = str(params.get("key") or "")
+    key = _config_key(params)
     _reject_removed_config_key(key)
     _reject_locked_appearance(str(params.get("profile") or ""), key)
     data = _load_user_yaml(home)
@@ -709,6 +709,17 @@ async def _config_unset_field(
     if key == "alp.max_active_workgroups":
         _emit_inherited_cap_changed(home)
     return {"ok": True}
+
+
+def _config_key(params: dict[str, Any]) -> str:
+    key = str(params.get("key") or "")
+    parts = key.split(".")
+    if not key or any(not part or part != part.strip() for part in parts):
+        raise host_server.HandlerError(
+            -32602, "invalid-params",
+            data={"detail": "key must be dotted names with no empty or padded part"},
+        )
+    return key
 
 
 def _reject_removed_config_key(key: str) -> None:

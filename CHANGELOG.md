@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.18.3 — 2026-11-11 — the remote host plane closes its loopholes
+
+- Network settings (ports, the public-bind switch, advertised routes and the bind address) can no longer be changed from a paired device by writing the key with a stray dot or space; a config key with an empty or padded part is refused everywhere.
+- A paired device never receives the text of an internal error, on a reply or a live stream, or a path on the daemon's disk.
+- Sockets that have not authenticated yet are capped (16 in all, 8 per address, a public IPv6 network counting as one address), one that stays silent, drops or sends garbage counts against its address like a wrong token, and a large first message is read only once its token checks out, so unpaired clients cannot fill the daemon's connection slots or stall it.
+- Remote admins keep restart and update from the apps; the security notes now say so.
+
 ## v0.18.2 — 2026-11-11 — numeric settings set from the apps are stored as numbers
 
 - A setting changed from the apps, `alpi setup` or the host API is stored with its type: a retention window, a tool limit or a timeout saved as `14` or `"14"` lands as the number 14, and a switch as `true` or `false`.

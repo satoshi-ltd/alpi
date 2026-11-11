@@ -5,6 +5,7 @@ Loopback / unspecified are always refused."""
 
 from __future__ import annotations
 
+import asyncio
 import json
 import shutil
 import tempfile
@@ -793,6 +794,11 @@ def test_ws_source_key_trusts_forwarded_for_only_from_configured_proxies() -> No
     assert key("127.0.0.1", "127.0.0.1", proxy) == "127.0.0.1"
     assert key("8.8.8.8", "203.0.113.5", proxy) == "8.8.8.8"
     assert key(None, None, proxy) == "unknown"
+    assert key("2a01:4f8:1:2::5", None) == key("2a01:4f8:1:2:ffff::9", None) == "2a01:4f8:1:2::/64"
+    assert key("2a01:4f8:1:3::5", None) != key("2a01:4f8:1:2::5", None)
+    assert key("fd7a:115c:a1e0::4301:1", None) != key("fd7a:115c:a1e0::9999:2", None)
+    assert key("fe80::1", None) == "fe80::1"
+    assert key("::ffff:203.0.113.5", None) == "203.0.113.5"
     assert host_server._parse_networks("127.0.0.1, 10.0.0.0/8 ,bogus") == (
         ipaddress.ip_network("127.0.0.1/32"), ipaddress.ip_network("10.0.0.0/8"),
     )
@@ -2004,3 +2010,211 @@ async def test_connection_revocation_does_not_cancel_calling_handler(short_tmp: 
         return await server.close_connection_websockets("connection")
 
     assert await revoke_self() == 1
+
+
+@pytest.mark.asyncio
+async def test_sockets_waiting_for_their_first_frame_are_capped_per_source(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    server._ws_max_preauth_per_source = 1
+    try:
+        first = await websockets.connect(url)
+        second = await websockets.connect(url)
+        with pytest.raises(websockets.ConnectionClosed):
+            await asyncio.wait_for(second.recv(), timeout=2)
+        assert second.close_code == 1013
+        assert server.websocket_status()["preauth_rejected"] == 1
+        await first.close()
+        for _ in range(50):
+            if not server._ws_preauth:
+                break
+            await asyncio.sleep(0.02)
+        assert not server._ws_preauth
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_a_silent_socket_counts_against_its_source(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.alp.rate_limit import RateLimiter
+
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    server._ws_auth_timeout = 0.05
+    server._ws_auth_failures = RateLimiter(default_per_minute=1)
+    try:
+        async with websockets.connect(url) as ws:
+            with pytest.raises(websockets.ConnectionClosedError):
+                await ws.recv()
+        async with websockets.connect(url) as ws:
+            with pytest.raises(websockets.ConnectionClosedError):
+                await ws.recv()
+            assert ws.close_code == 1013
+        assert server.websocket_status()["auth_rate_limited"] == 1
+        assert not server._ws_preauth
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_the_daemon_wide_preauth_cap_holds_across_sources(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    server._ws_max_preauth = 1
+    server._ws_preauth["198.51.100.7"] = 1
+    try:
+        ws = await websockets.connect(url)
+        with pytest.raises(websockets.ConnectionClosed):
+            await asyncio.wait_for(ws.recv(), timeout=2)
+        assert ws.close_code == 1013
+        assert server.websocket_status()["preauth_rejected"] == 1
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("frame", ["not json", "[1, 2]", "[" * 30_000 + "]" * 30_000, "[" * 200_000 + "]" * 200_000])
+async def test_a_garbage_first_frame_counts_against_its_source(
+    short_tmp: Path, monkeypatch, frame: str,
+) -> None:
+    from alpi.alp.rate_limit import RateLimiter
+
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    server._ws_auth_failures = RateLimiter(default_per_minute=1)
+    try:
+        async with websockets.connect(url, max_size=None) as ws:
+            await ws.send(frame)
+            with pytest.raises(websockets.ConnectionClosed):
+                while True:
+                    await ws.recv()
+        async with websockets.connect(url) as ws:
+            with pytest.raises(websockets.ConnectionClosed):
+                await ws.recv()
+            assert ws.close_code == 1013
+        assert not server._ws_preauth
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_a_clean_close_before_the_first_frame_costs_nothing(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.alp.rate_limit import RateLimiter
+
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    server._ws_auth_failures = RateLimiter(default_per_minute=1)
+    try:
+        for _ in range(3):
+            ws = await websockets.connect(url)
+            await ws.close()
+        for _ in range(50):
+            if not server._ws_preauth:
+                break
+            await asyncio.sleep(0.02)
+        assert not server._ws_auth_failures.exceeded("127.0.0.1")
+        assert not server._ws_preauth
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_a_large_first_frame_is_parsed_only_after_its_token_authenticates(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.host import connections
+
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    _, device = connections.create_connection("Javi")
+    parsed: list[int] = []
+    original = host_server.json.loads
+
+    def counting_loads(text, *a, **kw):
+        if len(text) > host_server._PREAUTH_PARSE_CHARS:
+            parsed.append(len(text))
+        return original(text, *a, **kw)
+
+    monkeypatch.setattr(host_server.json, "loads", counting_loads)
+    padding = "x" * (host_server._PREAUTH_PARSE_CHARS + 10)
+    try:
+        for token in ("not-a-real-token", None):
+            params = {"value": padding, **({"auth_token": token} if token else {})}
+            async with websockets.connect(url) as ws:
+                await ws.send(json.dumps({"id": "big", "method": "host.ping", "params": params}))
+                reply = json.loads(await ws.recv())
+                assert reply["error"]["message"] == "auth-failed"
+        assert parsed == []
+        async with websockets.connect(url) as ws:
+            await ws.send(_ws_request(device["token"], "ok", value=padding))
+            assert json.loads(await ws.recv())["result"] == {"pong": padding}
+        assert parsed
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_a_large_first_frame_from_a_disabled_connection_keeps_its_reason(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.host import connections
+
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    row, device = connections.create_connection("Javi")
+    connections.update_connection(row["id"], status="disabled")
+    padding = "x" * (host_server._PREAUTH_PARSE_CHARS + 10)
+    try:
+        async with websockets.connect(url) as ws:
+            await ws.send(_ws_request(device["token"], "big", value=padding))
+            reply = json.loads(await ws.recv())
+        assert reply["error"]["message"] == "auth-failed"
+        assert reply["error"]["data"]["reason"] == "connection-disabled"
+        assert not server._ws_auth_failures.exceeded("127.0.0.1")
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_a_large_first_frame_is_authorised_by_the_token_it_actually_carries(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.host import connections
+
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    _, device = connections.create_connection("Javi")
+    padding = "x" * (host_server._PREAUTH_PARSE_CHARS + 10)
+    good = device["token"]
+    frames = [
+        '{"id":"a","method":"host.ping","params":{"auth_token":"%s","auth_token":"%s","v":"%s"}}' % (good, good, padding),
+        '{"id":"b","method":"host.ping","params":{"v":"%s"},"x":{"auth_token":"%s"}}' % (padding, good),
+    ]
+    try:
+        for frame in frames:
+            async with websockets.connect(url) as ws:
+                await ws.send(frame)
+                reply = json.loads(await ws.recv())
+                assert reply["error"]["message"] == "auth-failed"
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_an_abnormal_drop_before_the_first_frame_counts_against_its_source(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.alp.rate_limit import RateLimiter
+
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    server._ws_auth_failures = RateLimiter(default_per_minute=1)
+    try:
+        ws = await websockets.connect(url)
+        ws.transport.abort()
+        for _ in range(50):
+            if server._ws_auth_failures.exceeded("127.0.0.1"):
+                break
+            await asyncio.sleep(0.02)
+        assert server._ws_auth_failures.exceeded("127.0.0.1")
+    finally:
+        await server.stop()
