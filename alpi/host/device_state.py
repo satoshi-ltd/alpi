@@ -1144,11 +1144,136 @@ def _coerce_fallback_models(value: Any) -> list[str]:
     return cfg_mod._normalize_fallbacks(value)
 
 
+# Settable keys that live in a free-form dict of the Config dataclass rather than a typed field or DEFAULT_CONFIG.
+_DICT_FIELD_TYPES: dict[str, type] = {
+    "tools.web_search.max_per_turn": int,
+    "tools.web_search.backends": list,
+    "tools.budget.per_result_chars": int,
+    "tools.db.max_mb": float,
+    "tools.research.max_usd": float,
+    "providers.openrouter.models": list,
+    "providers.openrouter.ignore": list,
+    "host.allow_public_bind": bool,
+    "alp.link_max_duration_s": int,
+    "host.device_name": str,
+    "network.host": str,
+    "host.token_ttl_days": float,
+}
+_LIST_OF_TEXT = frozenset({"tools.web_search.backends", "providers.openrouter.models", "providers.openrouter.ignore"})
+# The loader also takes a single slug for these, so a bare word is one item rather than broken JSON.
+_LIST_FROM_WORD = frozenset({"providers.openrouter.ignore"})
+_MAX_SETTING_NUMBER = 10**12
+_ASCII_INT = re.compile(r"[+-]?[0-9]+")
+
+
+class _TextList(list):
+    pass
+
+
+def _schema_type(key: str) -> type | None:
+    import dataclasses
+    import typing
+
+    parts = [p for p in key.split(".") if p]
+    if not parts:
+        return None
+    node: Any = cfg_mod.Config
+    for index, part in enumerate(parts):
+        if not dataclasses.is_dataclass(node):
+            break
+        hints = typing.get_type_hints(node)
+        if part not in hints:
+            break
+        hint = hints[part]
+        origin = typing.get_origin(hint) or hint
+        if index == len(parts) - 1:
+            if origin is list and typing.get_args(hint) == (str,):
+                return _TextList
+            if origin in (bool, int, float, str, list):
+                return origin
+            return None
+        node = hint
+    if key in _LIST_OF_TEXT:
+        return _TextList
+    if key in _DICT_FIELD_TYPES:
+        return _DICT_FIELD_TYPES[key]
+    if len(parts) == 3 and parts[0] == "tools" and parts[2] == "max_result_chars":
+        return int
+    default: Any = cfg_mod.DEFAULT_CONFIG
+    for part in parts:
+        if not isinstance(default, dict) or part not in default:
+            return None
+        default = default[part]
+    for kind in (bool, int, float, str, list):
+        if type(default) is kind:
+            return kind
+    return None
+
+
+def _invalid_value(key: str, expected: str) -> host_server.HandlerError:
+    return host_server.HandlerError(
+        -32602, "invalid-params", data={"detail": f"{key} must be {expected}"},
+    )
+
+
+def _typed_config_value(key: str, kind: type, value: Any) -> Any:
+    import math
+
+    if kind is bool:
+        if isinstance(value, bool):
+            return value
+        text = str(value).strip().lower()
+        if text in ("true", "false"):
+            return text == "true"
+        raise _invalid_value(key, "true or false")
+    if kind is int:
+        if isinstance(value, bool):
+            raise _invalid_value(key, "a whole number")
+        if isinstance(value, float) and value.is_integer():
+            value = int(value)
+        if not isinstance(value, int):
+            text = str(value).strip()
+            if not _ASCII_INT.fullmatch(text):
+                raise _invalid_value(key, "a whole number")
+            value = int(text)
+        if not 0 <= value <= _MAX_SETTING_NUMBER:
+            raise _invalid_value(key, "a whole number from 0")
+        return value
+    if kind is float:
+        if isinstance(value, bool):
+            raise _invalid_value(key, "a number")
+        try:
+            number = float(value) if isinstance(value, (int, float)) else float(str(value).strip())
+        except (TypeError, ValueError, OverflowError):
+            raise _invalid_value(key, "a number") from None
+        if not math.isfinite(number) or not 0 <= number <= _MAX_SETTING_NUMBER:
+            raise _invalid_value(key, "a number from 0")
+        return int(number) if number.is_integer() else number
+    if kind is list or kind is _TextList:
+        if isinstance(value, str):
+            text = value.strip()
+            if key in _LIST_FROM_WORD and text and not text.startswith("["):
+                value = [text]
+            else:
+                try:
+                    value = json.loads(text) if text else []
+                except (ValueError, RecursionError):
+                    raise _invalid_value(key, "a list") from None
+        if not isinstance(value, list):
+            raise _invalid_value(key, "a list")
+        if kind is _TextList and not all(isinstance(item, str) for item in value):
+            raise _invalid_value(key, "a list of text")
+        return value
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return "" if value is None else str(value)
+
+
 def _coerce_config_value(key: str, value: Any) -> Any:
     if key == "fallback_models":
         return _coerce_fallback_models(value)
     if key in {"alp.tcp_port", "host.tcp_port"}:
-        return int(value)
+        return _typed_config_value(key, int, value)
     if key == "alp.max_active_workgroups":
         try:
             parsed = int(str(value).strip())
@@ -1161,7 +1286,7 @@ def _coerce_config_value(key: str, value: Any) -> Any:
             )
         return parsed
     if key in {"budget.daily_usd"}:
-        return float(value)
+        return _typed_config_value(key, float, value)
     if key == "tui.fold":
         fold = str(value or "").strip().lower()
         if fold not in palette.FOLDS:
@@ -1170,6 +1295,9 @@ def _coerce_config_value(key: str, value: Any) -> Any:
                 data={"detail": f"tui.fold must be one of {', '.join(palette.FOLDS)}"},
             )
         return fold
+    kind = _schema_type(key)
+    if kind is not None:
+        return _typed_config_value(key, kind, value)
     if str(value).lower() == "true":
         return True
     if str(value).lower() == "false":

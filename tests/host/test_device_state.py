@@ -1914,3 +1914,73 @@ def test_roster_reads_bypass_saturated_default_executor_and_preserve_scope(monke
             await running
 
     asyncio.run(check())
+
+
+@pytest.mark.asyncio
+async def test_set_field_stores_each_setting_with_its_schema_type(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import yaml
+
+    home = _bootstrap(tmp_path / "h")
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    async def _set(key, value):
+        return await srv._dispatch({
+            "id": f"t-{key}-{value!r}",
+            "method": "host.config.set_field",
+            "params": {"profile": "default", "key": key, "value": value},
+        })
+
+    def _stored(*path):
+        node = yaml.safe_load((home / "config.yaml").read_text())
+        for part in path:
+            node = node[part]
+        return node
+
+    for value in (14, "14", " 14 "):
+        assert (await _set("retention.runs_days", value))["result"]["ok"] is True
+        assert _stored("retention", "runs_days") == 14
+        assert cfg_mod.load(home).retention.runs_days == 14
+
+    accepted = {
+        ("tools", "max_steps_per_turn"): ("60", 60),
+        ("tools", "call_timeout_s"): ("90.5", 90.5),
+        ("tools", "db", "max_mb"): ("250", 250),
+        ("tools", "terminal", "sandbox"): ("true", True),
+        ("tools", "browser", "vision"): ("FALSE", False),
+        ("runtime", "max_retries"): ("3", 3),
+        ("alp", "working_after_s"): ("45", 45),
+        ("tools", "deny"): ('["knowledge:ingest"]', ["knowledge:ingest"]),
+        ("tools", "tts", "voice"): ("true", "true"),
+        ("model",): ("1234", "1234"),
+        ("host", "token_ttl_days"): ("30", 30),
+        ("tools", "web_search", "max_result_chars"): ("8000", 8000),
+        ("providers", "openrouter", "ignore"): ("together", ["together"]),
+        ("tools", "terminal", "approval", "allowlist"): ('["git status"]', ["git status"]),
+    }
+    for path, (sent, expected) in accepted.items():
+        assert (await _set(".".join(path), sent))["result"]["ok"] is True, path
+        assert _stored(*path) == expected, path
+        assert type(_stored(*path)) is type(expected), path
+
+    refused = {
+        "retention.runs_days": ["abc", "1.5", True, "", "-5", "1_000", "\u0661\u0664", "9" * 400],
+        "tools.call_timeout_s": ["soon", "nan", "inf", "-3"],
+        "tools.web_search.max_result_chars": ["abc"],
+        "host.token_ttl_days": ["forever"],
+        "paused": ["yes", "1"],
+        "tools.deny": ["not json", '{"a": 1}', "[1, 2]"],
+        "alp.tcp_port": ["port"],
+        "budget.daily_usd": ["lots"],
+    }
+    before = (home / "config.yaml").read_text()
+    for key, values in refused.items():
+        for value in values:
+            resp = await _set(key, value)
+            assert resp["error"]["code"] == -32602, (key, value)
+            assert resp["error"]["message"] == "invalid-params", (key, value)
+            assert key in resp["error"]["data"]["detail"], (key, value)
+    assert (home / "config.yaml").read_text() == before

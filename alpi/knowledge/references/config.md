@@ -6,6 +6,7 @@
 - Say whether daemon/service restart is needed.
 - Secrets go in profile `.env`, not `config.yaml` or skill files.
 - Each profile has its own config and `.env`.
+- `host.config.set_field` (apps, `alpi setup`) stores each typed key with its type: `"14"` becomes the integer 14, `"90.5"` a number (never negative), `true`/`false` booleans, JSON text a list; a value that does not parse is refused with `invalid-params` and nothing is written. Keys with no fixed type (the `email` and `mcp` blocks) still store text, so a quoted number there or in a hand-edited YAML is possible.
 
 ## Locations
 

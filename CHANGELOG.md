@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.18.2 — 2026-11-11 — numeric settings set from the apps are stored as numbers
+
+- A setting changed from the apps, `alpi setup` or the host API is stored with its type: a retention window, a tool limit or a timeout saved as `14` or `"14"` lands as the number 14, and a switch as `true` or `false`.
+- A value that does not fit its setting (a word for a number, `yes` for a switch, text for a list) is refused with a message naming the setting, and the config file is left unchanged.
+- Why: a retention window set from the apps was stored as text, which disables it, so nothing was ever swept while the change reported success.
+
 ## v0.18.1 — 2026-11-11 — the run journal says what the engine did, in less space
 
 - Every note the engine adds to a turn (a repeated-failure hint, a time check, an empty-reply or open-todo nudge, the wrap-up instruction) is kept in the run journal as `agent.engine_note`, so `alpi runs show` tells how often each one fired.

@@ -84,17 +84,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ### Daemon first: the config bug, the public host plane, the 0.19 prerequisite
 
-- **CFG.SET-INTEGERS** — `host.config.set_field` stores numeric settings as numbers
-  `bug · alpi · agent · high`
-  note: found on 2026-11-06 setting the retention windows on the creator's Mac: `_coerce_config_value`
-  (`alpi/host/device_state.py:1145`) turns every key it does not list into a string, so
-  `retention.runs_days: 14` lands as `'14'`, and `docs/CONFIG.md` says a quoted number disables the window. The
-  call answers success and nothing is ever swept; every other numeric key outside its short list
-  (`tools.*` limits, workgroup timeouts, …) has the same silent failure.
-  accept: the coercion takes the type from the config schema (int, float, bool, list) for every settable key and
-  refuses a value that does not parse with `invalid-params`; a test sets `retention.runs_days` to `14` and to
-  `"14"` and reads back the integer 14, and `"abc"` is refused; the apps and `alpi setup` keep working.
-
 - **SEC.HOST-LOCAL-ONLY** — A remote admin cannot rebind or restart the daemon, and pre-auth sockets are bounded
   `bug · alpi · agent · normal`
   note: report HOST-1 to HOST-4.
@@ -258,10 +247,9 @@ _None._
 
 - **OPS-RETENTION** — Run journals and sessions have a retention window on every daemon
   `deploy · alpi · creator · normal`
-  depends: CFG.SET-INTEGERS
   note: the daemons keep every run journal forever unless a profile sets `retention`; the busiest fleet holds
-  about 2 GB of them. Setting it over the host API stores a string until `CFG.SET-INTEGERS` ships; editing
-  `config.yaml` by hand works today.
+  about 2 GB of them. From alpi 0.18.2 the apps and `alpi setup` store the window as a number; earlier
+  daemons need a hand edit of `config.yaml`.
   accept: every deployed daemon has `retention.runs_days` and `retention.sessions_days` at the creator's chosen
   values (root config, or per profile where they differ) and the next daily sweep removes the older journals.
 

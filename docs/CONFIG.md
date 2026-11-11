@@ -4,6 +4,18 @@ alpi's settings live in `~/.alpi/config.yaml` (or
 `~/.alpi/profiles/<name>/config.yaml` for non-default profiles). This
 page lists every knob, its default, and what it controls.
 
+## Setting a key over the host API
+
+`host.config.set_field` stores a value with the type this page lists for its
+key: an integer key takes `14` or `"14"` and stores `14`, a number key takes
+`"90.5"` (numbers are never negative), a boolean key takes `true`/`false` in
+any case, a list key takes a list or its JSON text (a list of names takes only
+text items; `providers.openrouter.ignore` also takes one bare slug), and a text
+key keeps the text as given (`"true"` stays the string). A value that does not
+parse as that type is refused with `-32602 invalid-params` naming the key, and
+nothing is written. A key that has no fixed type (for example the `email` and
+`mcp` blocks) keeps the text, with `true`/`false` stored as booleans.
+
 ## What ships in the YAML
 
 On first install alpi only writes the sections you're likely to tweak
@@ -438,6 +450,8 @@ own fixed thresholds.
 
 Windows must be non-negative YAML integers. Invalid values (including booleans,
 fractions and quoted numbers) disable that window rather than enabling deletion.
+`host.config.set_field` (the apps, `alpi setup`) stores `14` and `"14"` as the
+integer 14, so only a hand edit can leave a quoted window.
 
 The sweep removes finished run journals in `runs/` and idle sessions in
 `sessions/` whose last activity is older than the window. It never touches
