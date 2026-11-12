@@ -80,7 +80,25 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-_Empty: the creator approves the next tasks from Proposed._
+- **NAV.FOOTER** — The footer holds destinations only: Settings, Notifications and Activity
+  `ui · mobile, desktop · agent · normal`
+  accept: board NAV.FOOTER.
+
+- **DS.SEGMENTED** — The selected segment is drawn in ink on the phone, as on desktop
+  `ui · mobile · agent · normal`
+  accept: board DS.SEGMENTED.
+
+- **DS.FLOATING** — Floating surfaces on the phone sit on the elevated step with a 1 px edge
+  `ui · mobile · agent · normal`
+  accept: board DS.FLOATING.
+
+- **DS.METER** — Desktop's meter uses the visible track and the accent fill
+  `ui · desktop · agent · normal`
+  accept: board DS.METER.
+
+- **DS.STATUS-CHIPS** — One chip rule on both clients: 24 px, 8 px dot, mono label, warn untinted
+  `ui · common, desktop, mobile · agent · normal`
+  accept: board DS.STATUS-CHIPS.
 
 ## In progress
 
@@ -209,8 +227,7 @@ _None._
 
 ### Client review 2026-11-05
 
-Purely visual parts of this review are boards on the design kit's Proposals page: DS.SEGMENTED, DS.FLOATING,
-DS.BANNERS, DS.METER and DS.STATUS-CHIPS.
+The purely visual part of this review still open is board DS.BANNERS on the design kit's Proposals page.
 
 - **DESK.WORKGROUP-GONE** — The open workgroup falls back to the list when it leaves the roster
   `bug · desktop · agent · normal`

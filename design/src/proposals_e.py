@@ -1,1 +1,0 @@
-PROPOSALS_E = []

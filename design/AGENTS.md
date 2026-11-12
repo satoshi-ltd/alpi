@@ -11,7 +11,7 @@ this file is the whole contract of the kit.
 - `design/src/` is the source, one module per family of boards: `build.py` (page shell and nav), `gen.py` (canvas index, mobile screens),
   `system_boards.py`, `desktop_boards.py`, `desktop_overlays.py`, `desktop_tray.py` (the tray popover and the tray icon views, the icons read from the shipped PNGs under `desktop/src-tauri/icons/tray/`), `conversation_boards.py`, `mobile_overlays.py`,
   `brand_boards.py` and `folds.py` (the Brand tab), `panel_kit.py` (the drawing helpers of the profile window and phone panels, one place for the views and the proposals),
-  `profile_panel_studies.py` (the Desktop and Mobile panel views, drawn from the shipped panels), `mobile_state_studies.py` (the empty, error and offline states of the phone), `onboarding_studies.py` and `first_run_parts.py` (the first-run views of both clients, the welcome, pairing, paired and first-profile screens, and the drawing helpers the proposals reuse), `mobile_attention_studies.py` (the drawings of the schedule job pages, the roster band, the chat menu, the settings jump and the fold's two-pane schedule and notifications, drawn from the mobile components) and `proposals.py` (the proposal boards). Never edit a generated file by hand.
+  `profile_panel_studies.py` (the Desktop and Mobile panel views, drawn from the shipped panels), `mobile_state_studies.py` (the empty, error and offline states of the phone), `onboarding_studies.py` and `first_run_parts.py` (the first-run views of both clients, the welcome, pairing, paired and first-profile screens, and the drawing helpers the proposals reuse), `mobile_attention_studies.py` (the drawings of the schedule job pages, the roster band, the chat menu, the settings jump and the fold's two-pane schedule and notifications, drawn from the mobile components), `proposals.py` (the Proposals page frame) and `proposal_boards.py` (the proposal boards, each mobile row drawable in a fixed light and dark palette). Never edit a generated file by hand.
 - `design/drift.py` runs the build and exits 1 naming every file it had to regenerate; `scripts/validate.py` runs it as the
   `design` step. `scripts/` holds no design file.
 - `design/README.md` is the human note; this file owns the contract.
@@ -31,7 +31,7 @@ this file is the whole contract of the kit.
 ## Proposals
 
 The Proposals page holds purely visual ideas, only while they are proposals; it shows an empty state when there are none.
-Each idea is one board, an entry of `PROPOSALS` in `design/src/proposals.py`, with these fields:
+Each idea is one board, an entry of `PROPOSALS` in `design/src/proposal_boards.py`, with these fields:
 
 - `id` — stable, never reused; the ROADMAP task takes the same ID.
 - `client` — `desktop`, `mobile`, `site`, or `mobile · desktop` for a feature both clients share.

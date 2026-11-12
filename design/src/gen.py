@@ -608,7 +608,7 @@ def m_conn_header(ring="#f6f6f6", collapse=True, bg="#f6f6f6", selected=False, s
 </div>"""
 
 
-def m_shell_footer(ring="#f6f6f6", border=False, icons_only=False):
+def m_shell_footer(ring="#f6f6f6", border=False, icons_only=False, theme_entry=True):
     top = "border-top: 0.5px solid rgba(20,20,20,0.07);" if border else ""
     wrap = '<span style="position: relative; display: inline-flex">'
     caption = lambda label: "" if icons_only else f'<span style="font-weight: 500; font-size: 11px; line-height: 1.2; color: #454545; white-space: nowrap">{label}</span>'
@@ -619,7 +619,7 @@ def m_shell_footer(ring="#f6f6f6", border=False, icons_only=False):
     activity = wrap + mi("role:activity", 16, "#454545") + m_bell_dot() + "</span>"
     version = f'<span style="flex: 1; min-width: 0; display: flex; justify-content: flex-end; padding-right: 14px; font-family: {MONO}; font-size: 11px; color: #6b6b6b; white-space: nowrap">{app_version("mobile")}</span>' if icons_only else ""
     return (f'<div style="height: 44px; padding: 0 12px; display: flex; align-items: center; {top}">'
-            f'{entry(mi("role:settings", 16, "#454545"), "Settings", "Settings")}{entry(bell, "Notifications", "Notifications · 1 unread")}{entry(activity, "Activity", "Activity · 2 need you")}{entry(theme, "System", "Theme: System. Switch to Light")}{version}'
+            f'{entry(mi("role:settings", 16, "#454545"), "Settings", "Settings")}{entry(bell, "Notifications", "Notifications · 1 unread")}{entry(activity, "Activity", "Activity · 2 need you")}{entry(theme, "System", "Theme: System. Switch to Light") if theme_entry else ""}{version}'
             f'</div>')
 
 

@@ -90,18 +90,18 @@ def footer_button(label, icon, color=None):
     return (f'<button aria-label="{label}" style="width: 24px; height: 24px; border: 0; border-radius: 4px; background: transparent; display: inline-flex; align-items: center; justify-content: center; padding: 0; cursor: pointer">{ic(icon, 14, color or INK2)}</button>')
 
 
-def footer_icons(theme="system"):
+def footer_icons(theme="system", theme_entry=True):
     icon = {"system": "sun-moon", "light": "sun", "dark": "moon"}[theme]
     label = {"system": "System", "light": "Light", "dark": "Dark"}
     return (badged("role:notifications", "Notifications · 1 unread · ⌘O", 1, 24)
-            + badged("role:activity", "Activity · 2 need you · ⌘J", 2, 24) + footer_button(f"Theme: {label[theme]}", icon))
+            + badged("role:activity", "Activity · 2 need you · ⌘J", 2, 24) + (footer_button(f"Theme: {label[theme]}", icon) if theme_entry else ""))
 
 
-def sidebar_footer(version, update=False, width=None):
+def sidebar_footer(version, update=False, width=None, theme_entry=True):
     w = f"width: {width}px; " if width else ""
     color = "#217a45" if update else INK3
     return (f'<div style="{w}box-sizing: border-box; display: flex; align-items: center; gap: 4px; padding: 12px 14px; border-top: 0.5px solid {LINE}">'
-            f'{footer_button("Settings", "role:settings", INK)}{footer_icons()}'
+            f'{footer_button("Settings", "role:settings", INK)}{footer_icons(theme_entry=theme_entry)}'
             f'<span style="flex: 1 1 0; min-width: 0; display: flex; justify-content: flex-end; padding-right: 5px; font-family: {MONO}; font-size: 11px; line-height: 24px; color: {color}; white-space: nowrap">{version}</span></div>')
 
 
