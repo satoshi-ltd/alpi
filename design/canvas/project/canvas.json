@@ -639,14 +639,6 @@
    "h": 1040,
    "title": "Proposals \u00b7 ds.banners \u00b7 warnings carry the alert glyph on both clients and the memory alert is tinted on the phone",
    "page": "proposals"
-  },
-  "Proposals-ID.PROFILE-MARK.dc.html": {
-   "x": 0,
-   "y": 3920,
-   "w": 1280,
-   "h": 7600,
-   "title": "Proposals \u00b7 id.profile-mark \u00b7 a family of marks with eyes: twelve shapes, one accent palette, and eyes that animate the state",
-   "page": "proposals"
   }
  },
  "order": [
@@ -725,8 +717,7 @@
   "Brand-Palette.dc.html",
   "Brand-Motion.dc.html",
   "Proposals-DS.FLOATING.dc.html",
-  "Proposals-DS.BANNERS.dc.html",
-  "Proposals-ID.PROFILE-MARK.dc.html"
+  "Proposals-DS.BANNERS.dc.html"
  ],
  "notes": {
   "s-Foundations": {
@@ -1061,14 +1052,6 @@
    "x": 0,
    "y": 2417,
    "text": "DS.BANNERS \u00b7 Warnings carry the alert glyph on both clients and the memory alert is tinted on the phone",
-   "kind": "title1",
-   "maxW": 2600,
-   "page": "proposals"
-  },
-  "p-ID.PROFILE-MARK \u00b7 A family of marks with eyes: twelve shapes, one accent palette, and eyes that animate the state": {
-   "x": 0,
-   "y": 3697,
-   "text": "ID.PROFILE-MARK \u00b7 A family of marks with eyes: twelve shapes, one accent palette, and eyes that animate the state",
    "kind": "title1",
    "maxW": 2600,
    "page": "proposals"
