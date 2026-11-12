@@ -80,10 +80,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **DS.FLOATING** — Floating surfaces on the phone sit on the elevated step with a 1 px edge
-  `ui · mobile · agent · normal`
-  accept: board DS.FLOATING.
-
 - **DS.METER** — Desktop's meter uses the visible track and the accent fill
   `ui · desktop · agent · normal`
   accept: board DS.METER.
@@ -99,6 +95,18 @@ _None._
 ## Needs creator
 
 ### Decisions
+
+- **FLOAT.D1** — How the phone's floating surfaces step up in dark
+  `decision · mobile · creator · normal`
+  note: moving sheets, dialogs, prompts and toasts to `bgElev` (#202020 in dark, board DS.FLOATING) leaves
+  everything inside them without a step: wells already fill with `bgElev` (#202020 on #202020, only a
+  1.6:1 edge), and `field` blocks (#1f1f1f: tool-detail code, the typed-confirm chip, the approval command,
+  the pairing link) read 1.01:1. Desktop leaves its wells on `bg-elev` inside modals (1.5:1 accepted by `uxTokens.test.js:101`) and
+  recesses only the approval command to `bgInput`. The board's edge (`ink4` / `line2`,
+  2.07:1 / 1.6:1) is also below the phone's own 3:1 rule in `tokens.test.js`, which desktop relaxes to 2:1 / 1.5:1.
+  accept: decide (1) whether wells and field blocks inside a floating surface recess to `bgPane` in dark, and
+  (2) the edge: keep 0.5 pt `ink3` (3:1) or take desktop's 1 px `ink4` / `line2` and relax the phone test.
+  Then DS.FLOATING returns to Queue with that spec.
 
 - **SCOPE.D1** — Does `session_scope: device` bind an admin connection?
   `decision · alpi · creator · high`
