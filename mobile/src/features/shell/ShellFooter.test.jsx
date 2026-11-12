@@ -42,8 +42,6 @@ vi.mock('../../theme/ThemeContext', () => ({
     fontSizes: { xs: 11, sm: 12 },
     chromeScale: 1.3,
     fontScale: h.fontScale,
-    pref: h.pref,
-    setMode: h.setMode,
   }),
 }));
 
@@ -251,36 +249,16 @@ describe('ShellFooter labels', () => {
     for (const word of ['Settings', 'Notifications', 'Activity']) expect(screen.getByText(word)).toBeTruthy();
   });
 
-  it('cycles the theme through setMode, shows the mode and announces it', () => {
-    h.setMode = vi.fn();
-    h.pref = 'system';
-    const { rerender } = render(<ShellFooter onSettingsPress={() => {}} />);
-    const entry = () => screen.getByLabelText(/^Theme:/);
-    expect(entry().getAttribute('aria-label')).toBe('Theme: System. Switch to Light');
-    expect(entry().querySelector('[data-icon]').getAttribute('data-icon')).toBe('sun-moon');
-    fireEvent.click(entry());
-    expect(h.setMode).toHaveBeenLastCalledWith('light');
-    h.pref = 'light';
-    rerender(<ShellFooter onSettingsPress={() => {}} />);
-    expect(entry().querySelector('[data-icon]').getAttribute('data-icon')).toBe('sun');
-    expect(screen.getByText('Light')).toBeTruthy();
-    fireEvent.click(entry());
-    expect(h.setMode).toHaveBeenLastCalledWith('dark');
-    h.pref = 'dark';
-    rerender(<ShellFooter onSettingsPress={() => {}} />);
-    expect(entry().querySelector('[data-icon]').getAttribute('data-icon')).toBe('moon');
-    fireEvent.click(entry());
-    expect(h.setMode).toHaveBeenLastCalledWith('system');
+  it('holds destinations only: Settings, Notifications and Activity, and no theme entry', () => {
+    render(<ShellFooter unread={1} needsYou={1} onNotificationsPress={() => {}} onSettingsPress={() => {}} onActivityPress={() => {}} />);
+    expect(screen.getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Settings', 'Notifications · 1 unread', 'Activity · 1 need you']);
+    expect(screen.queryByLabelText(/^Theme/)).toBeNull();
+    for (const icon of ['sun-moon', 'sun', 'moon']) expect(document.querySelector(`[data-icon="${icon}"]`)).toBeNull();
   });
 
-  it('keeps the theme entry on the two-pane layout too', () => {
-    h.pref = 'dark';
-    render(
-      <PaneContext.Provider value={{ twoPane: true, side: 'list', sidebarOpen: true, toggleSidebar() {} }}>
-        <ShellFooter onSettingsPress={() => {}} />
-      </PaneContext.Provider>,
-    );
-    expect(screen.getByLabelText(/^Theme: Dark/).getAttribute('hitSlop')).toBeTruthy();
+  it('shows a member Settings and Activity only', () => {
+    render(<ShellFooter onNotificationsPress={null} onSettingsPress={() => {}} onActivityPress={() => {}} />);
+    expect(screen.getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Settings', 'Activity']);
   });
 });
 
@@ -300,7 +278,7 @@ describe('ShellFooter two panes', () => {
     expect(settings().textContent).toBe('');
     expect(bell(1).querySelector('[testID="dot-anchor"]')).toBeTruthy();
     expect(screen.getByLabelText('Activity · 2 need you').querySelector('[testID="dot-anchor"]')).toBeTruthy();
-    for (const entry of [settings(), bell(1), screen.getByLabelText('Activity · 2 need you'), screen.getByLabelText(/^Theme:/)]) {
+    for (const entry of [settings(), bell(1), screen.getByLabelText('Activity · 2 need you')]) {
       expect(Number(entry.getAttribute('hitSlop')) * 2 + 36).toBe(mobile.tap);
     }
   });
@@ -325,7 +303,7 @@ describe('ShellFooter two panes', () => {
     expect(box.paddingRight).toBe((mobile.tap - 16) / 2);
   });
 
-  it.each([280, 300])('fits four 44 pt targets and the version at %i pt, even at the largest text size', (width) => {
+  it.each([280, 300])('fits three 44 pt targets and the version at %i pt, even at the largest text size', (width) => {
     h.fontScale = 1.3;
     h.layout = null;
     render(
@@ -335,7 +313,7 @@ describe('ShellFooter two panes', () => {
     );
     act(() => h.layout({ nativeEvent: { layout: { width, height: 44 } } }));
     expect(screen.getByText('0.9.0')).toBeTruthy();
-    expect(width - 2 * space.s5 - 4 * mobile.tap).toBeGreaterThanOrEqual(0.6 * 11 * 1.3 * 5 + 14 + space.s5);
+    expect(width - 2 * space.s5 - 3 * mobile.tap).toBeGreaterThanOrEqual(0.6 * 11 * 1.3 * 5 + 14 + space.s5);
     h.fontScale = 1;
   });
 
@@ -346,7 +324,7 @@ describe('ShellFooter two panes', () => {
         <ShellFooter {...FULL} />
       </PaneContext.Provider>,
     );
-    act(() => h.layout({ nativeEvent: { layout: { width: 240, height: 44 } } }));
+    act(() => h.layout({ nativeEvent: { layout: { width: 200, height: 44 } } }));
     expect(screen.queryByText('0.9.0')).toBeNull();
     expect(settings()).toBeTruthy();
   });
@@ -368,16 +346,16 @@ describe('ShellFooter label room', () => {
     return view;
   };
   const labelsShown = () => screen.queryByText('Notifications') !== null;
-  const slot = (width, entries = 4) => (width - 2 * space.s5) / entries;
+  const slot = (width, entries = 3) => (width - 2 * space.s5) / entries;
   const label = (fontSize, scale) => NOTIFICATIONS_W_AT_11 * ((fontSize * scale) / 11);
 
   afterEach(() => {
     h.fontScale = 1;
   });
 
-  it('keeps no inner inset and shares the full width between the four entries', () => {
+  it('keeps no inner inset and shares the full width between the three entries', () => {
     expect(ENTRY_INSET_X).toBe(0);
-    expect(slot(360)).toBe(84);
+    expect(slot(360)).toBe(112);
     expect(slot(360)).toBeGreaterThanOrEqual(label(11, 1.3));
     expect(slot(390)).toBeGreaterThanOrEqual(label(11, 1.3));
   });
@@ -388,22 +366,22 @@ describe('ShellFooter label room', () => {
     expect(labelsShown()).toBe(true);
   });
 
-  it('keeps the labels at 360, 390 and 430 pt at the largest text size', () => {
+  it('keeps the labels from 320 to 430 pt at the largest text size', () => {
     h.fontScale = 1.3;
-    for (const width of [360, 390, 430]) {
+    for (const width of [320, 360, 390, 430]) {
       mountAt(width);
       expect(labelsShown()).toBe(true);
       cleanup();
     }
   });
 
-  it('drops the labels at 320 pt at the largest text size and keeps every accessibility label and 44 pt target', () => {
+  it('drops the labels only when the slot is too narrow, keeping every accessibility label and 44 pt target', () => {
     h.fontScale = 1.3;
-    mountAt(320);
-    expect(slot(320)).toBeLessThan(label(11, 1.3) + LABEL_ROOM);
+    mountAt(240);
+    expect(slot(240)).toBeLessThan(label(11, 1.3) + LABEL_ROOM);
     expect(labelsShown()).toBe(false);
     expect(screen.queryByText('Settings')).toBeNull();
-    for (const entry of [settings(), bell(), screen.getByLabelText('Activity'), screen.getByLabelText(/^Theme:/)]) {
+    for (const entry of [settings(), bell(), screen.getByLabelText('Activity')]) {
       expect(Number(entry.getAttribute('hitSlop')) * 2 + 36).toBe(mobile.tap);
     }
   });
@@ -413,12 +391,12 @@ describe('ShellFooter label room', () => {
     expect(labelsShown()).toBe(true);
   });
 
-  it('measures the footer itself, so the 280 pt fold sidebar drops labels only when they would not fit', () => {
-    mountAt(280);
+  it('measures the footer itself, so a 240 pt footer drops labels only when they would not fit', () => {
+    mountAt(240);
     expect(labelsShown()).toBe(true);
     cleanup();
     h.fontScale = 1.3;
-    mountAt(280);
+    mountAt(240);
     expect(labelsShown()).toBe(false);
   });
 

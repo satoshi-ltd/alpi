@@ -14,6 +14,12 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.9.15 — 2026-11-12 — the footer holds destinations only
+
+- The footer is Settings, Notifications and Activity; the theme entry is gone (the theme stays in Settings → Appearance), so a stray tap no longer switches the whole app.
+- With three entries the labels stay visible at 320 pt even at the largest text size.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.9.14 — 2026-11-11 — the phone trusts only what pairing established
 
 - Tapping a notification opens only one of the app's own pages; a link a daemon puts in a notification that points anywhere else (a website, a phone number, the pairing page) opens the inbox instead.

@@ -11,6 +11,11 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.9.21 — 2026-11-12 — the footer holds destinations only
+
+- The sidebar footer drops its theme button and keeps Settings, notifications, Activity and the version. The theme stays in the default profile's settings and in the palette's Switch theme.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.9.20 — 2026-11-11 — shared copy for missing screens
 
 - The shared empty-state copy gains the phone's "not found", "not paired yet" and "from another connection" messages; nothing the desktop app shows changes in this release.

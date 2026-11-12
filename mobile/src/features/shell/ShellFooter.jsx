@@ -6,7 +6,6 @@ import { Pressable, Text, View } from 'react-native';
 import { dotShape } from '../../components/dotShape';
 import { Icon } from '../../components/Icon';
 import { CHROME_H } from '../../lib/panes';
-import { THEME_ORDER, nextThemePref } from '../../lib/nextThemePref';
 import { usePane } from '../../nav/PaneContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { mobile, radii, space } from '../../theme/tokens';
@@ -23,9 +22,6 @@ const VERSION_EM = 0.6;
 const VERSION_ROOM = space.s5;
 const ICON_INK_INSET = (mobile.tap - 16) / 2;
 
-const THEME_ICON = { system: 'sun-moon', light: 'sun', dark: 'moon' };
-const THEME_LABEL = { system: 'System', light: 'Light', dark: 'Dark' };
-
 const DOT_OFFSET = space.s1;
 
 function DotAnchor({ show, color }) {
@@ -40,9 +36,8 @@ function DotAnchor({ show, color }) {
 }
 
 export function ShellFooter({ unread = 0, onNotificationsPress, onSettingsPress, needsYou = 0, onActivityPress }) {
-  const { colors, fonts, fontSizes, chromeScale, fontScale = 1, pref, setMode } = useTheme();
+  const { colors, fonts, fontSizes, chromeScale, fontScale = 1 } = useTheme();
   const [width, setWidth] = useState(null);
-  const themePref = THEME_ORDER.includes(pref) ? pref : 'system';
   const { twoPane } = usePane();
   const entryStyle = ({ pressed }) => ({
     ...(twoPane ? { width: mobile.tap } : { flex: 1 }),
@@ -56,7 +51,7 @@ export function ShellFooter({ unread = 0, onNotificationsPress, onSettingsPress,
     borderRadius: radii.xs,
     backgroundColor: pressed ? colors.selected : 'transparent',
   });
-  const entries = 2 + (onNotificationsPress ? 1 : 0) + (onActivityPress ? 1 : 0);
+  const entries = 1 + (onNotificationsPress ? 1 : 0) + (onActivityPress ? 1 : 0);
   const slotWidth = width === null ? Infinity : (width - 2 * space.s5) / entries;
   const labelWidth = LABEL_EM * fontSizes.xs * Math.min(fontScale, chromeScale ?? Infinity);
   const versionWidth = VERSION_EM * fontSizes.xs * Math.min(fontScale, chromeScale ?? Infinity) * APP_VERSION.length;
@@ -121,20 +116,6 @@ export function ShellFooter({ unread = 0, onNotificationsPress, onSettingsPress,
           ) : null}
         </Pressable>
       ) : null}
-      <Pressable
-        onPress={() => setMode?.(nextThemePref(themePref))}
-        style={entryStyle}
-        hitSlop={ENTRY_SLOP}
-        accessibilityRole="button"
-        accessibilityLabel={`Theme: ${THEME_LABEL[themePref]}. Switch to ${THEME_LABEL[nextThemePref(themePref)]}`}
-      >
-        <Icon name={THEME_ICON[themePref]} size="md" color={colors.ink2} />
-        {showLabels ? (
-          <Text maxFontSizeMultiplier={chromeScale} numberOfLines={1} style={entryLabel}>
-            {THEME_LABEL[themePref]}
-          </Text>
-        ) : null}
-      </Pressable>
       {showVersion ? (
         <View style={{ flex: 1, minWidth: 0, alignItems: 'flex-end', paddingRight: ICON_INK_INSET }}>
           <Text

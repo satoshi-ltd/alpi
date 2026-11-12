@@ -4,7 +4,6 @@ import VersionButton from "./VersionButton.jsx";
 import { ActionLink, SidebarRow, SectionLabel, ContextMenu } from "../primitives/index.js";
 import { WORKGROUP_FOLD } from "../../../common/folds.mjs";
 import { shortcutKeys } from "../lib/shortcuts.js";
-import { cycleTheme, nextTheme, useTheme } from "../lib/theme.js";
 import {
   Button,
   IconBtn,
@@ -695,28 +694,8 @@ function SidebarFooter({
       {onOpenActivity && (
         <ActivityButton needsYou={activityNeedsYou} onClick={onOpenActivity} />
       )}
-      <ThemeButton />
       <VersionButton />
     </div>
-  );
-}
-
-const THEME_LABEL = { system: "System", light: "Light", dark: "Dark" };
-const THEME_ICON = { system: "sun-moon", light: "sun", dark: "moon" };
-
-function ThemeButton() {
-  const theme = useTheme();
-  return (
-    <Tip text={`Theme: ${THEME_LABEL[theme]} · click for ${THEME_LABEL[nextTheme(theme)]}`} side="up-l">
-      <IconBtn
-        size="sm"
-        className={styles.footerIcon}
-        aria-label={`Theme: ${THEME_LABEL[theme]}`}
-        onClick={() => cycleTheme()}
-      >
-        <Icon name={THEME_ICON[theme]} size="sm" />
-      </IconBtn>
-    </Tip>
   );
 }
 

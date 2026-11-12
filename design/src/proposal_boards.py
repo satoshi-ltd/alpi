@@ -1,7 +1,7 @@
 import re
 
-from desktop_boards import DANGER, HOVER, INK, INK2, INK3, LINE, LINE2, MONO, PANE, SELECTED, SIDE, banner_bar, button, chip, ic as dic, row, seg, section, sidebar_footer
-from gen import DOC_ACCENT, FLOAT_EDGE, app_version, m_banner, m_confirm_dialog, m_count_badge, m_group, m_row, m_segmented, m_shell_footer, m_toast, meter as m_meter, mi, pill
+from desktop_boards import DANGER, HOVER, INK, INK2, INK3, LINE, LINE2, MONO, PANE, SELECTED, banner_bar, button, chip, ic as dic, row, seg, section
+from gen import DOC_ACCENT, FLOAT_EDGE, m_banner, m_confirm_dialog, m_count_badge, m_group, m_row, m_segmented, m_toast, meter as m_meter, mi, pill
 from mobile_overlays import backdrop
 from panel_kit import alert_banner, phone_banner
 
@@ -254,55 +254,7 @@ def chips_proposed_mobile():
     return phone_panel(inner, 150)
 
 
-def phone_bottom(footer, h=120):
-    rows = m_row("doc", "Pulled the last three lipid panels", chevron=False, sep=False)
-    return phone(f'<div style="height: 100%; display: flex; flex-direction: column; justify-content: flex-end; background: #f6f6f6">{m_group(rows)}<div style="height: 12px"></div>{footer}</div>', h)
-
-
-def fold_sidebar_bottom(footer):
-    return stage(f'<div style="height: 100%; display: flex; flex-direction: column; justify-content: flex-end; border-right: 0.5px solid {LINE}">{footer}</div>', 280, 56, bg=SIDE)
-
-
-def footer_mobile(theme_entry):
-    return stack(labelled("Phone · owner", phone_bottom(m_shell_footer(border=True, theme_entry=theme_entry))),
-                 labelled("Fold · sidebar, icons and version", fold_sidebar_bottom(m_shell_footer(icons_only=True, theme_entry=theme_entry))), gap=16)
-
-
-def footer_now_mobile():
-    return footer_mobile(True)
-
-
-def footer_proposed_mobile():
-    return stack(footer_mobile(False), caption("Theme stays in Settings → Appearance, the segmented control it already has. A member sees Settings and Activity."), gap=12)
-
-
-def footer_desktop(theme_entry):
-    return stage(f'<div style="height: 100%; display: flex; flex-direction: column; justify-content: flex-end">{sidebar_footer(app_version("desktop"), theme_entry=theme_entry)}</div>', 248, 60, bg=SIDE)
-
-
-def footer_now_desktop():
-    return labelled("Sidebar footer", footer_desktop(True))
-
-
-def footer_proposed_desktop():
-    return stack(labelled("Sidebar footer", footer_desktop(False)), caption("Theme stays in the default profile's settings and in the palette's Switch theme."), gap=12)
-
-
 PROPOSALS = [
-    dict(
-        id="NAV.FOOTER", client="mobile · desktop", area="Shell footer",
-        title="The footer holds destinations only: Settings, Notifications and Activity",
-        why=("The phone's footer is its tab bar: four equal slots with labels (<code>ShellFooter.jsx:42-150</code>), and the fourth is a theme cycle, a preference that Settings already owns as a segmented control (<code>SettingsBody.jsx:191</code>). "
-             "It takes a quarter of the bar, it changes the whole app on a stray tap and it is the only entry that does not open a place. Desktop repeats it beside its bell (<code>Sidebar.jsx:698,703-721</code>); there the theme also lives in the command palette's Switch theme (<code>useCommands.js:243-249</code>) and in the default profile's settings (<code>ProfileDetail.jsx:415-419</code>), so a member, who has no Settings on desktop, keeps the palette. "
-             "Nothing else earns the slot: search and the connection live in the header, New profile and New workgroup in the roster, schedules and runs in Activity. "
-             "The proposal drops the theme entry on both clients and keeps the three destinations, each with more room for its label; the fold keeps the version beside them."),
-        mobile=(footer_now_mobile, footer_proposed_mobile),
-        desktop=(footer_now_desktop, footer_proposed_desktop),
-        accept=("<code>ShellFooter.test.jsx</code> asserts the footer renders exactly Settings, Notifications (owner) and Activity, no theme entry, and that labels show at 320 pt at the largest chrome text size, where four entries hid them; "
-                "desktop's <code>Sidebar.activity.test.jsx</code> asserts no theme button in the footer and the palette keeps Switch theme; the phone's <code>nextThemePref</code> and desktop's <code>nextTheme</code> go with their only callers; "
-                "<code>m_shell_footer</code> and <code>sidebar_footer</code> in the kit drop the theme entry and the Mobile, Desktop and System tabs are regenerated."),
-        h=1050,
-    ),
     dict(
         id="DS.SEGMENTED", client="mobile", area="Segmented control",
         title="The selected segment is drawn in ink on the phone, as on desktop",

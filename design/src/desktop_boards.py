@@ -90,18 +90,16 @@ def footer_button(label, icon, color=None):
     return (f'<button aria-label="{label}" style="width: 24px; height: 24px; border: 0; border-radius: 4px; background: transparent; display: inline-flex; align-items: center; justify-content: center; padding: 0; cursor: pointer">{ic(icon, 14, color or INK2)}</button>')
 
 
-def footer_icons(theme="system", theme_entry=True):
-    icon = {"system": "sun-moon", "light": "sun", "dark": "moon"}[theme]
-    label = {"system": "System", "light": "Light", "dark": "Dark"}
+def footer_icons():
     return (badged("role:notifications", "Notifications · 1 unread · ⌘O", 1, 24)
-            + badged("role:activity", "Activity · 2 need you · ⌘J", 2, 24) + (footer_button(f"Theme: {label[theme]}", icon) if theme_entry else ""))
+            + badged("role:activity", "Activity · 2 need you · ⌘J", 2, 24))
 
 
-def sidebar_footer(version, update=False, width=None, theme_entry=True):
+def sidebar_footer(version, update=False, width=None):
     w = f"width: {width}px; " if width else ""
     color = "#217a45" if update else INK3
     return (f'<div style="{w}box-sizing: border-box; display: flex; align-items: center; gap: 4px; padding: 12px 14px; border-top: 0.5px solid {LINE}">'
-            f'{footer_button("Settings", "role:settings", INK)}{footer_icons(theme_entry=theme_entry)}'
+            f'{footer_button("Settings", "role:settings", INK)}{footer_icons()}'
             f'<span style="flex: 1 1 0; min-width: 0; display: flex; justify-content: flex-end; padding-right: 5px; font-family: {MONO}; font-size: 11px; line-height: 24px; color: {color}; white-space: nowrap">{version}</span></div>')
 
 
@@ -597,14 +595,14 @@ def desktop_app_settings():
     panel = a_panel(VIEW, 500)
     zoom = palette("zoom", [("View", [palette_row("", "Zoom in", hint="⌘+", selected=True, hit="Zoom"), palette_row("", "Zoom out", hint="⌘-", hit="Zoom"), palette_row("", "Reset zoom", hint="⌘0", hit="zoom")])], w=460)
     body = f"""<div style="padding: 40px; display: flex; flex-direction: column; gap: 28px; box-sizing: border-box">
-<div style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 22px; font-weight: 600; letter-spacing: -0.018em; line-height: 1.3">Desktop has no settings page</span><span style="font-size: 13px; color: {INK3}; max-width: 720px; line-height: 1.5">Updates, notifications, Activity and the theme button live in the one sidebar footer; the default profile’s settings carry the same System / Light / Dark control, and text size is a command in the palette (window zoom). Mobile groups the equivalents plus pairing and biometrics under one Settings screen.</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 22px; font-weight: 600; letter-spacing: -0.018em; line-height: 1.3">Desktop has no settings page</span><span style="font-size: 13px; color: {INK3}; max-width: 720px; line-height: 1.5">Updates, notifications and Activity live in the one sidebar footer; the default profile’s settings carry the System / Light / Dark control, and text size is a command in the palette (window zoom). Mobile groups the equivalents plus pairing and biometrics under one Settings screen.</span></div>
 <div style="display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap">
-{card("Sidebar footer · Settings (icon, ⌘,), Notifications (⌘O, a danger dot when unread), Activity (⌘J, a danger dot when something needs you), Theme (cycles System / Light / Dark), version, in every view · version turns green when an update exists", footer, 248)}
+{card("Sidebar footer · Settings (icon, ⌘,), Notifications (⌘O, a danger dot when unread), Activity (⌘J, a danger dot when something needs you), version, in every view · version turns green when an update exists", footer, 248)}
 {card("Default profile · appearance is read-only: always the alpaca in the brand accent", locked_row, 360)}
 {card("Version popover · from the footer version, the alpaca and wordmark in crease type · a small float", popover, 220, False)}
 </div>
 {card("Notifications · from the bell or ⌘O: a Needs you group, All / Needs you / Unread carrying the counts, an ink dot for unread and the level Chip; rows read @handle · connection · time over the title and a two-line summary; the reader’s meta bar holds Reply, Mark unread and ••• above the title, the summary and the body; ↑↓ ⏎ R ⌫ ? on one line, ? opens the rest", panel, 1200)}
-<div style="display: flex; flex-direction: column; gap: 12px"><span style="font-size: 12px; color: {INK3}">Command palette · the View group carries zoom, Preferences carries Switch theme (the footer theme button cycles the same three)</span>{zoom}</div>
+<div style="display: flex; flex-direction: column; gap: 12px"><span style="font-size: 12px; color: {INK3}">Command palette · the View group carries zoom, Preferences carries Switch theme (cycles System / Light / Dark; the one theme control a member has)</span>{zoom}</div>
 </div>"""
     return page("Desktop · app-level settings", 1280, 1250, body, bg=BG)
 

@@ -22,8 +22,6 @@ vi.mock("../lib/updater.js", () => ({
 }));
 
 import Sidebar from "./Sidebar.jsx";
-import { ThemeField } from "./settings/fields/ThemeField.jsx";
-import { getTheme, setTheme } from "../lib/theme.js";
 
 const TS = Math.floor(Date.now() / 1000) - 300;
 
@@ -86,35 +84,35 @@ describe("Sidebar footer fit", () => {
     return { settings, footer: settings.closest("div[class*='footer']") };
   };
 
-  it("keeps all five items in order, with the Settings label visible", () => {
+  it("holds destinations only: Settings, notifications, Activity and the version, no theme button", () => {
     const { footer } = mountFooter();
     const buttons = [...footer.querySelectorAll("button")].map((b) => b.getAttribute("aria-label") ?? b.textContent);
     expect(buttons[0]).toBe("Settings");
     expect(buttons[1]).toMatch(/^Notifications/);
     expect(buttons[2]).toMatch(/^Activity/);
-    expect(buttons[3]).toMatch(/^Theme: /);
-    expect(buttons[4]).toMatch(/^v?\d|^v/);
-    expect(buttons).toHaveLength(5);
+    expect(buttons[3]).toMatch(/^v?\d|^v/);
+    expect(buttons).toHaveLength(4);
+    expect(screen.queryByRole("button", { name: /^Theme/ })).toBeNull();
     expect(footer.textContent).toContain("Settings");
   });
 
   it("draws Settings with its label and bell and activity as sm icon buttons with 24 px targets", () => {
     const { settings } = mountFooter();
-    const four = [settings, ...[/^Notifications/, /^Activity/, /^Theme/].map((name) => screen.getByRole("button", { name }))];
-    for (const btn of four) {
+    const three = [settings, ...[/^Notifications/, /^Activity/].map((name) => screen.getByRole("button", { name }))];
+    for (const btn of three) {
       expect(btn.className).toMatch(/_sm_|\bsm\b/);
       expect(btn.querySelector("svg").getAttribute("width")).toBe("14");
     }
     expect(read("Sidebar.module.css")).toMatch(/\.footer :global\(\.ds-tip\) \.footerIcon \{\s*width: var\(--ctl-24\);/);
   });
 
-  it("keeps one footer variant in settings mode, with the theme button and no palette button", () => {
+  it("keeps one footer variant in settings mode, with no theme or palette button", () => {
     render(<Sidebar {...BASE} view={{ kind: "settings" }} onOpenSettings={() => {}} onOpenNotifications={() => {}} onOpenActivity={() => {}} />);
     const settings = screen.getByRole("button", { name: "Settings" });
     expect(settings).toHaveAttribute("aria-current", "page");
     expect(settings.textContent).toBe("");
     expect(screen.queryByText("Command…")).toBeNull();
-    expect(screen.getByRole("button", { name: /^Theme/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Theme/ })).toBeNull();
     const css = read("Sidebar.module.css");
     expect(css).toMatch(/\.footerButton \{[^}]*color: var\(--ink\)/);
     expect(css).not.toMatch(/footerSettings/);
@@ -242,35 +240,10 @@ describe("Sidebar footer badges", () => {
   });
 });
 
-describe("Sidebar theme button", () => {
-  const mount = () => render(<Sidebar {...BASE} onOpenSettings={() => {}} />);
-
-  it("labels each preference, cycles system to light to dark and applies it", () => {
-    setTheme("system");
-    mount();
-    fireEvent.click(screen.getByRole("button", { name: "Theme: System" }));
-    expect(getTheme()).toBe("light");
-    expect(document.documentElement.getAttribute("data-mode")).toBe("light");
-    const light = screen.getByRole("button", { name: "Theme: Light" });
-    expect(light.querySelector("svg").getAttribute("data-icon")).toBe("sun");
-    fireEvent.click(light);
-    expect(getTheme()).toBe("dark");
-    expect(document.documentElement.getAttribute("data-mode")).toBe("dark");
-    const dark = screen.getByRole("button", { name: "Theme: Dark" });
-    expect(dark.querySelector("svg").getAttribute("data-icon")).toBe("moon");
-    fireEvent.click(dark);
-    expect(getTheme()).toBe("system");
-    expect(document.documentElement.hasAttribute("data-mode")).toBe(false);
-    expect(screen.getByRole("button", { name: "Theme: System" }).querySelector("svg").getAttribute("data-icon")).toBe("sun-moon");
-  });
-
-  it("stays in sync with the settings theme field", () => {
-    setTheme("system");
-    mount();
-    render(<ThemeField />);
-    fireEvent.click(screen.getByRole("button", { name: "Dark" }));
-    expect(screen.getByRole("button", { name: "Theme: Dark" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Theme: Dark" }));
-    expect(screen.getByRole("button", { name: "System" })).toHaveAttribute("aria-pressed", "true");
+describe("Sidebar theme", () => {
+  it("keeps the palette's cycle and no footer cycle helper", async () => {
+    const theme = await import("../lib/theme.js");
+    expect(theme.nextTheme).toBeUndefined();
+    expect(typeof theme.cycleTheme).toBe("function");
   });
 });

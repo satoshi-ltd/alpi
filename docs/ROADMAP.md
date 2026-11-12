@@ -80,10 +80,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **NAV.FOOTER** — The footer holds destinations only: Settings, Notifications and Activity
-  `ui · mobile, desktop · agent · normal`
-  accept: board NAV.FOOTER.
-
 - **DS.SEGMENTED** — The selected segment is drawn in ink on the phone, as on desktop
   `ui · mobile · agent · normal`
   accept: board DS.SEGMENTED.
