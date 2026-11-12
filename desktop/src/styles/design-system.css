@@ -305,13 +305,13 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
   position: relative;
   height: 3px;
   border-radius: var(--r-pill);
-  background: var(--line);
+  background: var(--line-2);
   overflow: hidden;
 }
 .ds-bar > i, .bar > i {
   position: absolute;
   inset: 0;
-  background: var(--c, var(--ink-2));
+  background: var(--c, var(--accent));
   border-radius: inherit;
   display: block;
   width: 0%;
@@ -335,7 +335,7 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
   width: 56px;
   height: 5px;
   border-radius: var(--r-pill);
-  background: var(--line);
+  background: var(--line-2);
   position: relative;
   overflow: hidden;
 }

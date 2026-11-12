@@ -175,7 +175,7 @@ def mono12(text, color=INK2):
 
 def meterchip(value, tail, pct, color=ALPI_ACCENT):
     drawn = pct >= 0.01
-    bar = (f'<span role="progressbar" aria-label="{value}{tail}" style="width: 56px; height: 5px; border-radius: 999px; background: {LINE}; overflow: hidden; display: inline-block"><span style="display: block; width: {pct * 100}%; height: 100%; background: {color}"></span></span>') if drawn else ""
+    bar = (f'<span role="progressbar" aria-label="{value}{tail}" style="width: 56px; height: 5px; border-radius: 999px; background: {LINE2}; overflow: hidden; display: inline-block"><span style="display: block; width: {pct * 100}%; height: 100%; background: {color}"></span></span>') if drawn else ""
     return (f'<span style="display: inline-flex; align-items: center; gap: 8px"><span style="font-family: {MONO}; font-size: 11px; color: {INK2}">{value}<span style="color: {INK3}">{tail}</span></span>'
             f'{bar}<span style="font-family: {MONO}; font-size: 11px; color: {INK3}">{f"{round(pct * 100)}%" if drawn else "—"}</span></span>')
 
@@ -445,7 +445,7 @@ def desktop_wg_settings():
             row("waits for members", mono12("10 min, then the round goes on")),
             row("id", mono12("wg_4f2a…9c1e") + button("Copy", "ghost", "sm")),
         ]))
-        + section("Budget", "workgroup spend cap", row("used", f'<div style="flex: 1; display: flex; flex-direction: column; gap: 10px"><div style="display: flex; align-items: baseline; gap: 10px"><span style="font-size: 28px; font-weight: 600; letter-spacing: -0.018em; line-height: 1">$0.40</span><span style="font-family: {MONO}; font-size: 12px; color: {INK3}">of <span style="color: {INK2}">$5.00</span> · 8%</span><span style="flex: 1"></span>{selectish("Edit cap")}</div><div style="height: 6px; border-radius: 4px; background: {LINE}; overflow: hidden"><div style="width: 8%; height: 100%; background: {ALPI_ACCENT}"></div></div></div>', align_top=True))
+        + section("Budget", "workgroup spend cap", row("used", f'<div style="flex: 1; display: flex; flex-direction: column; gap: 10px"><div style="display: flex; align-items: baseline; gap: 10px"><span style="font-size: 28px; font-weight: 600; letter-spacing: -0.018em; line-height: 1">$0.40</span><span style="font-family: {MONO}; font-size: 12px; color: {INK3}">of <span style="color: {INK2}">$5.00</span> · 8%</span><span style="flex: 1"></span>{selectish("Edit cap")}</div><div style="height: 6px; border-radius: 4px; background: {LINE2}; overflow: hidden"><div style="width: 8%; height: 100%; background: {ALPI_ACCENT}"></div></div></div>', align_top=True))
         + section("Usage", "last 14 days", usage_chart(ALPI_ACCENT, "$0.00", "12K", "310", None, None, "bars by cost · 14-day total $0.40 · 0.9M in / 22K out"))
         + section("Briefing", "what this workgroup decides", row("brief", f'<div style="flex: 1; display: flex; flex-direction: column; gap: 8px">{textarea("Weekly digest of lab results for the household; doc leads, alpi formats, yuri translates.", rows=4)}<div style="display: flex; max-width: 520px"><span style="flex: 1"></span>{button("Draft", "ghost", "sm")}</div></div>', align_top=True))
         + section("Pipelines", "declared by the recipe · read-only", '<div style="flex: 1; display: flex; flex-direction: column">' + "".join(pipeline_block(k, c, RUN if k == LAUNCH else None, pad="12px 0") for k, c in PIPELINES) + '</div>')

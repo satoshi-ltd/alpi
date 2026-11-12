@@ -1,7 +1,7 @@
 import re
 
-from desktop_boards import DANGER, HOVER, INK, INK2, INK3, LINE, LINE2, MONO, PANE, SELECTED, banner_bar, button, chip, ic as dic, row, section
-from gen import DOC_ACCENT, FLOAT_EDGE, m_banner, m_confirm_dialog, m_count_badge, m_group, m_row, m_toast, meter as m_meter, mi, pill
+from desktop_boards import DANGER, HOVER, INK, INK2, INK3, LINE, MONO, PANE, banner_bar, button, chip, ic as dic
+from gen import FLOAT_EDGE, m_banner, m_confirm_dialog, m_count_badge, m_toast, mi, pill
 from mobile_overlays import backdrop
 from panel_kit import alert_banner, phone_banner
 
@@ -146,30 +146,6 @@ def banners_proposed_desktop():
     return desk_panel(inner, h=250)
 
 
-def d_meter(value, tail, pct, track, fill):
-    return (f'<span style="display: inline-flex; align-items: center; gap: 8px"><span style="font-family: {MONO}; font-size: 11px; color: {INK2}">{value}<span style="color: {INK3}">{tail}</span></span>'
-            f'<span role="progressbar" aria-label="{value}{tail}" style="width: 56px; height: 5px; border-radius: 999px; background: {track}; overflow: hidden; display: inline-block"><span style="display: block; width: {pct * 100}%; height: 100%; background: {fill}"></span></span>'
-            f'<span style="font-family: {MONO}; font-size: 11px; color: {INK3}">{round(pct * 100)}%</span></span>')
-
-
-def meter_desktop(track, fill):
-    rows = row("budget", d_meter("$0.42", "/$1.00", 0.42, track, fill)) + row("memory", d_meter("4,800", "/5,000", 0.96, track, fill))
-    return desk_panel(section("Overview", "", rows, first=True), h=170)
-
-
-def meter_now_desktop():
-    return meter_desktop(LINE, INK2)
-
-
-def meter_proposed_desktop():
-    return meter_desktop(LINE2, DOC_ACCENT)
-
-
-def meter_now_mobile():
-    rows = m_row("Budget", "today", control=m_meter("$0.42", "/$1.00", 0.42), chevron=False) + m_row("Memory", "MEMORY.md", control=m_meter("4,800", "/5,000", 0.96), chevron=False, sep=False)
-    return phone(f'<div style="padding-top: 16px; background: {PANE}; height: 100%; box-sizing: border-box">{m_group(rows)}</div>', 180)
-
-
 def d_pill(text, warn=False):
     bg = f"color-mix(in srgb, {WARNING} 16%, {PANE})" if warn else HOVER
     dot = f'<span style="width: 8px; height: 8px; border-radius: 999px; background: {WARNING if warn else "#3fb37a"}"></span>'
@@ -250,16 +226,6 @@ PROPOSALS = [
         accept=("<code>Banner.test.jsx</code> on desktop asserts the alert glyph for danger and warning and the dot otherwise; <code>AlertBanner.test.jsx</code> on the phone asserts the background is the danger mix at 10 %, the ring <code>ink4</code> and the icon <code>dangerText</code>; "
                 "<code>banner_bar</code> and <code>phone_banner</code> in the kit draw the same."),
         h=1040,
-    ),
-    dict(
-        id="DS.METER", client="desktop", area="Budget and memory meters",
-        title="Desktop's meter uses the visible track and the accent fill the phone and the kit already draw",
-        why=("The phone's Meter runs on a <code>line2</code> track with the accent fill (<code>Meter.jsx:44,53</code>) and the kit draws desktop the same way (<code>desktop_boards.py:178-182</code>), but desktop's <code>.ds-meter</code> paints a <code>--line</code> track at 7 % ink with an ink-2 fill (<code>design-system.css:311,331-335</code>, <code>Bar.jsx:10</code>): "
-             "the same budget reads as grey on almost nothing on the Mac and as a clear bar on the phone. The proposal moves desktop to the <code>--line-2</code> track and the accent fill by default, so the kit stops lying about it."),
-        mobile=(meter_now_mobile, None),
-        desktop=(meter_now_desktop, meter_proposed_desktop),
-        accept=("a desktop style test asserts <code>.ds-meter .bar</code> uses <code>--line-2</code> and <code>.ds-bar &gt; i</code> defaults to <code>--accent</code>; <code>MeterChip.test.jsx</code> renders the accent; the System tab's meter row is regenerated and matches."),
-        h=910,
     ),
     dict(
         id="DS.STATUS-CHIPS", client="mobile · desktop", area="State chips and count badges",

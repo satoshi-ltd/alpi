@@ -53,7 +53,7 @@ def dot(color, size=8, ring=False):
 def meter(value, tail, pct, color=BRAND, percent=True):
     drawn = pct >= 0.01
     p = mono(f"{round(pct * 100)}%" if drawn else "—", 11) if percent else ""
-    bar = (f'<span style="width: 56px; height: 5px; border-radius: 999px; background: {LINE}; overflow: hidden; display: inline-block"><span style="display: block; width: {pct * 100}%; height: 100%; background: {color}"></span></span>') if drawn else ""
+    bar = (f'<span style="width: 56px; height: 5px; border-radius: 999px; background: {LINE2}; overflow: hidden; display: inline-block"><span style="display: block; width: {pct * 100}%; height: 100%; background: {color}"></span></span>') if drawn else ""
     return f'<span style="display: inline-flex; align-items: center; gap: 8px">{mono(value, 11, INK2)}{mono(tail, 11)}{bar}{p}</span>'
 
 

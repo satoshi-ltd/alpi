@@ -15,6 +15,14 @@ describe("MeterChip", () => {
     expect(container.querySelector("[role='progressbar']")).not.toBeNull();
     expect(container.querySelector(".pct")).toHaveTextContent("2%");
   });
+
+  it("fills with the colour it is given and leaves the default to the stylesheet's accent", () => {
+    const { container, rerender } = render(<MeterChip value="9K" pct={0.5} color="#3899e2" />);
+    const fill = () => container.querySelector("[role='progressbar'] > i");
+    expect(fill().style.background).toBe("rgb(56, 153, 226)");
+    rerender(<MeterChip value="9K" pct={0.5} />);
+    expect(fill().style.background).toBe("");
+  });
 });
 
 describe("EmptyState action", () => {

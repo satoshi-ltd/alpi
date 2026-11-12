@@ -80,10 +80,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **DS.METER** — Desktop's meter uses the visible track and the accent fill
-  `ui · desktop · agent · normal`
-  accept: board DS.METER.
-
 - **DS.STATUS-CHIPS** — One chip rule on both clients: 24 px, 8 px dot, mono label, warn untinted
   `ui · common, desktop, mobile · agent · normal`
   accept: board DS.STATUS-CHIPS.

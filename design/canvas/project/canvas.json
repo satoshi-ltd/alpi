@@ -640,17 +640,9 @@
    "title": "Proposals \u00b7 ds.banners \u00b7 warnings carry the alert glyph on both clients and the memory alert is tinted on the phone",
    "page": "proposals"
   },
-  "Proposals-DS.METER.dc.html": {
-   "x": 0,
-   "y": 3920,
-   "w": 1280,
-   "h": 910,
-   "title": "Proposals \u00b7 ds.meter \u00b7 desktop's meter uses the visible track and the accent fill the phone and the kit already draw",
-   "page": "proposals"
-  },
   "Proposals-DS.STATUS-CHIPS.dc.html": {
    "x": 0,
-   "y": 5070,
+   "y": 3920,
    "w": 1280,
    "h": 1000,
    "title": "Proposals \u00b7 ds.status-chips \u00b7 one chip rule on both clients: 24 px, 8 px dot, mono label, warn untinted",
@@ -734,7 +726,6 @@
   "Brand-Motion.dc.html",
   "Proposals-DS.FLOATING.dc.html",
   "Proposals-DS.BANNERS.dc.html",
-  "Proposals-DS.METER.dc.html",
   "Proposals-DS.STATUS-CHIPS.dc.html"
  ],
  "notes": {
@@ -1074,17 +1065,9 @@
    "maxW": 2600,
    "page": "proposals"
   },
-  "p-DS.METER \u00b7 Desktop's meter uses the visible track and the accent fill the phone and the kit already draw": {
-   "x": 0,
-   "y": 3697,
-   "text": "DS.METER \u00b7 Desktop's meter uses the visible track and the accent fill the phone and the kit already draw",
-   "kind": "title1",
-   "maxW": 2600,
-   "page": "proposals"
-  },
   "p-DS.STATUS-CHIPS \u00b7 One chip rule on both clients: 24 px, 8 px dot, mono label, warn untinted": {
    "x": 0,
-   "y": 4847,
+   "y": 3697,
    "text": "DS.STATUS-CHIPS \u00b7 One chip rule on both clients: 24 px, 8 px dot, mono label, warn untinted",
    "kind": "title1",
    "maxW": 2600,

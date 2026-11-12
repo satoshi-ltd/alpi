@@ -11,6 +11,11 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.9.22 — 2026-11-12 — meters you can read
+
+- Budget and context meters, and the workgroup budget bar, draw on a visible track, as on the phone; a nearly full budget no longer reads as a bar on almost nothing. A meter given no colour fills with the accent.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.9.21 — 2026-11-12 — the footer holds destinations only
 
 - The sidebar footer drops its theme button and keeps Settings, notifications, Activity and the version. The theme stays in the default profile's settings and in the palette's Switch theme.
