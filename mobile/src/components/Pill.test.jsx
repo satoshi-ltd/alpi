@@ -5,14 +5,14 @@ import { cleanup, render } from '@testing-library/react';
 afterEach(cleanup);
 
 vi.mock('react-native', () => ({
-  View: ({ children, style }) => React.createElement('div', { 'data-bg': style?.backgroundColor, 'data-w': style?.width }, children),
-  Text: ({ children, style }) => React.createElement('span', { 'data-fg': style?.color }, children),
+  View: ({ children, style }) => React.createElement('div', { 'data-bg': style?.backgroundColor, 'data-w': style?.width, 'data-h': style?.minHeight }, children),
+  Text: ({ children, style }) => React.createElement('span', { 'data-fg': style?.color, 'data-size': style?.fontSize, 'data-font': style?.fontFamily }, children),
 }));
 vi.mock('../theme/ThemeContext', () => ({
   useTheme: () => ({
     colors: { hover: 'HOVER', ink: 'INK', ink2: 'INK2', ink3: 'INK3', success: '#00aa00', successText: 'GREEN', danger: '#aa0000', dangerText: 'RED', warning: '#ff8800', warningText: 'ORANGE' },
     fonts: { monoMedium: 'm' },
-    fontSizes: { sm: 12 },
+    fontSizes: { xs: 11, sm: 12 },
   }),
 }));
 vi.mock('./groupTone', () => ({ useGroundTone: () => '#ffffff' }));
@@ -26,6 +26,17 @@ const parts = (container) => {
 };
 
 describe('Pill', () => {
+  it('keeps the desktop Chip metrics: 24 pt tall, an 8 pt dot and the 11 pt mono label', async () => {
+    const { dotScale } = await import('../theme/tokens');
+    const { container } = render(<Pill tone="on">running</Pill>);
+    const [pill, ...rest] = container.querySelectorAll('div');
+    expect(pill.getAttribute('data-h')).toBe('24');
+    expect(rest.find((el) => el.getAttribute('data-w')).getAttribute('data-w')).toBe(String(dotScale.md));
+    const label = container.querySelector('span');
+    expect(label.getAttribute('data-size')).toBe('11');
+    expect(label.getAttribute('data-font')).toBe('m');
+  });
+
   it('draws warn like the desktop Chip: neutral ground, ink text, a warning dot', () => {
     const { container } = render(<Pill tone="warn">warning</Pill>);
     expect(parts(container)).toEqual({ bg: 'HOVER', fg: 'INK', dot: '#ff8800' });

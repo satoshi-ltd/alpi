@@ -27,20 +27,20 @@ export function Pill({ tone, children, off = false }) {
       style={{
         flexDirection: 'row',
         alignItems: 'center',
-        gap: space.s2,
-        minHeight: 22,
+        gap: space.s3,
+        minHeight: 24,
         paddingHorizontal: space.s3,
         borderRadius: radii.tag,
         backgroundColor: bg,
         opacity: off ? alpha.muted : 1,
       }}
     >
-      {dot ? <View style={{ ...dotShape('sm'), backgroundColor: dot }} /> : null}
+      {dot ? <View style={{ ...dotShape('md'), backgroundColor: dot }} /> : null}
       <Text
         style={{
           fontFamily: fonts.monoMedium,
-          fontSize: fontSizes.sm,
-          lineHeight: fontSizes.sm * lineHeights.cozy,
+          fontSize: fontSizes.xs,
+          lineHeight: fontSizes.xs * lineHeights.cozy,
           color: fg,
         }}
       >

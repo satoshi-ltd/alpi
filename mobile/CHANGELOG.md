@@ -14,6 +14,11 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.9.17 — 2026-11-12 — one chip rule
+
+- State pills match desktop's chip: 24 pt tall, an 8 pt dot and an 11 pt mono label; the count badge is mono semibold, as on desktop.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.9.16 — 2026-11-12 — the selected segment reads in dark
 
 - The Theme and Text size selectors in Settings fill the chosen option with the text colour and draw its label in the background tone, as on desktop; in dark mode the choice no longer melts into the card.

@@ -11,6 +11,7 @@ import {
   spaceExtra,
   typography as sharedTypography,
 } from '../../../common/tokens.mjs';
+import { countBadgeSpec } from '../../../common/countBadge.mjs';
 
 export {
   alpha,
@@ -73,7 +74,7 @@ export const iconSizes = { xs: iconSizesAllowed.mobile[0], md: iconSizesAllowed.
 export const iconStrokeFor = sharedIconStrokeFor;
 
 // fixed-size chrome: deliberately outside the user/OS text scale so digits never clip the pill
-export const countBadge = { size: 18, border: 1.5, fontSize: fontSizes.xs, radius: sharedRadii.xs };
+export const countBadge = { size: countBadgeSpec.size.mobile, border: 1.5, fontSize: fontSizes.xs, radius: sharedRadii.xs };
 
 export const space = { ...sharedSpace, ...spaceExtra.mobile };
 

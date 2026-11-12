@@ -1,12 +1,12 @@
 import { Text, View } from 'react-native';
 
-import { badgeCount } from '../../../common/countBadge.mjs';
+import { badgeCount, countBadgeSpec } from '../../../common/countBadge.mjs';
 import { countBadge, space } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeContext';
 
 export function countBadgeText(fonts, color) {
   return {
-    fontFamily: fonts.sans.semibold,
+    fontFamily: fonts.monoSemibold,
     fontSize: countBadge.fontSize,
     lineHeight: countBadge.fontSize,
     includeFontPadding: false,
@@ -22,8 +22,8 @@ export function CountBadge({ count, label, tone }) {
       accessible={label ? true : undefined}
       accessibilityLabel={label}
       style={{
-        minWidth: countBadge.size,
-        height: countBadge.size,
+        minWidth: countBadgeSpec.size.mobile,
+        height: countBadgeSpec.size.mobile,
         paddingHorizontal: space.s1,
         flexDirection: 'row',
         borderRadius: countBadge.radius,

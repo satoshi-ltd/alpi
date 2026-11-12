@@ -12,6 +12,7 @@ vi.mock('react-native', () => ({
   Text: ({ children, style, allowFontScaling, maxFontSizeMultiplier, numberOfLines }) =>
     React.createElement('span', {
       'data-size': style?.fontSize,
+      'data-font': style?.fontFamily,
       'data-lh': style?.lineHeight,
       'data-scaling': String(allowFontScaling),
       'data-max-mult': maxFontSizeMultiplier,
@@ -24,17 +25,28 @@ vi.mock('../theme/ThemeContext', async () => {
   return {
     useTheme: () => ({
       colors: { danger: '#c14545', warning: '#e08a3c', onDanger: '#fff' },
-      fonts: { sans: { semibold: 's' } },
+      fonts: { sans: { semibold: 's' }, monoSemibold: 'mono-600' },
       fontSizes: scaleFontSizes(h.scale),
       chromeScale: 1,
     }),
   };
 });
 
+import { countBadgeSpec } from '../../../common/countBadge.mjs';
 import { countBadge } from '../theme/tokens';
 import { CountBadge } from './CountBadge';
 
 describe('CountBadge', () => {
+  it('draws the shared badge spec: mono 600 at its 18 pt size', () => {
+    h.scale = 1;
+    render(<CountBadge count={3} />);
+    const text = screen.getByText('3');
+    expect(countBadgeSpec).toMatchObject({ family: 'mono', weight: 600 });
+    expect(text.getAttribute('data-font')).toBe('mono-600');
+    expect(Number(text.parentElement.getAttribute('data-h'))).toBe(countBadgeSpec.size.mobile);
+    expect(Number(text.parentElement.getAttribute('data-min-w'))).toBe(countBadgeSpec.size.mobile);
+  });
+
   it.each([1, 1.3])('keeps the digits inside the pill at text scale %s', (scale) => {
     h.scale = scale;
     render(<CountBadge count={7} />);
