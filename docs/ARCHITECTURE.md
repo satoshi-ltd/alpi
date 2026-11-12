@@ -2083,7 +2083,8 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   Phone layout: `Row` always reserves a 16 pt trailing lane; fold settings use the
   phone's grouped `RowGroup` cards in a content column of at most 560
   (`settingsContentStyle`); detail screens share one 22 pt title
-  (`components/detailTitle.js`); `CountBadge` is 18 pt; the fold sheet has no
+  (`components/detailTitle.js`); the count badge is mono 600 at 18 pt on the phone and 14 px on
+  desktop (`common/countBadge.mjs`); state pills follow desktop's `Chip` (24, an 8 dot, the 11 mono label); the fold sheet has no
   grabber and `ActionSheet` takes an `anchor` to open as a 280 pt popover; first
   run follows `lib/firstRun.js` (columns of at most 480, left-aligned on one edge); a notification
   row keeps a fixed trailing time column with the level pill before the title;

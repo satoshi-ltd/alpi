@@ -66,9 +66,9 @@ DESIGN_TO_SHARED = {
 
 def _load_shared():
     script = (
-        "const [{ICONS}, {ICON_ROLES}] = await Promise.all(["
-        f"import({json.dumps(os.path.join(COMMON, 'iconPaths.mjs'))}), import({json.dumps(os.path.join(COMMON, 'iconRoles.mjs'))})]);"
-        "process.stdout.write(JSON.stringify({icons: ICONS, roles: ICON_ROLES}));"
+        "const [{ICONS}, {ICON_ROLES}, {countBadgeSpec}] = await Promise.all(["
+        f"import({json.dumps(os.path.join(COMMON, 'iconPaths.mjs'))}), import({json.dumps(os.path.join(COMMON, 'iconRoles.mjs'))}), import({json.dumps(os.path.join(COMMON, 'countBadge.mjs'))})]);"
+        "process.stdout.write(JSON.stringify({icons: ICONS, roles: ICON_ROLES, badge: countBadgeSpec}));"
     )
     try:
         out = subprocess.run(["node", "--input-type=module", "-e", script], capture_output=True, text=True, check=True)
@@ -78,6 +78,7 @@ def _load_shared():
 
 
 _SHARED = _load_shared()
+BADGE = _SHARED["badge"]
 SHARED_ICONS, ICON_ROLES = _SHARED["icons"], _SHARED["roles"]
 
 
@@ -289,9 +290,9 @@ def pill(text, on=False, tone="off"):
         "neutral": (PILL_TONE, "#454545", "", 1),
         "off": (PILL_TONE, "#454545", "#6b6b6b", 0.55),
     }[tone]
-    lead = f'<span style="width: 6px; height: 6px; border-radius: 999px; background: {dot}"></span>' if dot else ""
-    return (f'<span style="display: inline-flex; align-items: center; gap: 6px; min-height: 22px; padding: 0 8px; box-sizing: border-box; border-radius: 2px; background: {bg}; opacity: {opacity}; '
-            f'font-family: {MONO}; font-weight: 500; font-size: 12px; line-height: 1.3; color: {fg}">{lead}{text}</span>')
+    lead = f'<span style="width: 8px; height: 8px; border-radius: 999px; background: {dot}"></span>' if dot else ""
+    return (f'<span style="display: inline-flex; align-items: center; gap: 8px; min-height: 24px; padding: 0 8px; box-sizing: border-box; border-radius: 2px; background: {bg}; opacity: {opacity}; '
+            f'font-family: {MONO}; font-weight: 500; font-size: 11px; line-height: 1.3; color: {fg}">{lead}{text}</span>')
 
 
 def m_wide_section(title, kicker="", first=False):
@@ -499,8 +500,9 @@ def m_row_state(state, phases=None, profile=None):
 def m_count_badge(n, tone="danger", ring=None):
     bg = "#e08a3c" if tone == "warning" else "#c14545"
     fg = "#141414" if tone == "warning" else "#ffffff"
-    return (f'<span style="position: absolute; left: 100%; bottom: 100%; margin: 0 0 -8px -8px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 4px; background: {bg}; '
-            f'color: {fg}; font-weight: 600; font-size: 11px; line-height: 18px; text-align: center; box-sizing: border-box; white-space: nowrap">{n}</span>')
+    size = BADGE["size"]["mobile"]
+    return (f'<span style="position: absolute; left: 100%; bottom: 100%; margin: 0 0 -8px -8px; min-width: {size}px; height: {size}px; padding: 0 4px; border-radius: 4px; background: {bg}; '
+            f'color: {fg}; font-family: {MONO}; font-weight: {BADGE["weight"]}; font-size: 11px; line-height: {size}px; text-align: center; box-sizing: border-box; white-space: nowrap">{n}</span>')
 
 
 def m_bell_dot():

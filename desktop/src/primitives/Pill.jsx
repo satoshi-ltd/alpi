@@ -1,17 +1,7 @@
-export default function Pill({ state, children, className = "", style }) {
-  const stateClass =
-    state === "on"
-      ? "is-on"
-      : state === "err"
-        ? "is-err"
-        : state === "warn"
-          ? "is-warn"
-          : state === "off"
-            ? "is-off"
-            : "";
-  return (
-    <span className={`ds-pill ${stateClass} ${className}`.trim()} style={style}>
-      {children}
-    </span>
-  );
+import Chip from "./Chip.jsx";
+
+const STATE = { on: "on", err: "error", warn: "warn", off: "off" };
+
+export default function Pill({ state, children }) {
+  return <Chip state={STATE[state]}>{children}</Chip>;
 }

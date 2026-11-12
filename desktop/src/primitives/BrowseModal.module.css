@@ -234,15 +234,16 @@
 
 .flag {
   display: inline-block;
-  min-width: 14px;
-  height: 14px;
+  min-width: var(--badge-size);
+  height: var(--badge-size);
   padding: 0 var(--sp-4);
   box-sizing: border-box;
   border-radius: var(--r-xs);
   background: var(--c-danger);
   color: var(--on-danger);
   font-family: var(--font-mono);
+  font-weight: 600;
   font-size: var(--text-meta);
-  line-height: 14px;
+  line-height: var(--badge-size);
   text-align: center;
 }

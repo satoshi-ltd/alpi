@@ -11,6 +11,11 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.9.23 — 2026-11-12 — one chip rule
+
+- State pills (a peer online, auto-read on) are drawn by the same chip as every other state, with its dot; the count badge is mono semibold at the shared badge size.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.9.22 — 2026-11-12 — meters you can read
 
 - Budget and context meters, and the workgroup budget bar, draw on a visible track, as on the phone; a nearly full budget no longer reads as a bar on almost nothing. A meter given no colour fills with the accent.

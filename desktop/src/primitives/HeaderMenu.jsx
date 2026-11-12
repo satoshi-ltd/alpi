@@ -49,7 +49,7 @@ export default function HeaderMenu({
             <button type="button" role="menuitemcheckbox" aria-checked={autoRead} className={menuRowClass()} onClick={() => onToggleAutoRead()}>
               <Icon name="volume" size="md" className={styles.icon} />
               <span className={styles.label}>Auto-read replies</span>
-              <Pill state={autoRead ? "on" : "off"} className={styles.statePill}>{autoRead ? "on" : "off"}</Pill>
+              <Pill state={autoRead ? "on" : "off"}>{autoRead ? "on" : "off"}</Pill>
             </button>
           )}
           {(onOpenSkills || onOpenMemory || onOpenTools || onOpenSchedule) && <MenuSeparator />}

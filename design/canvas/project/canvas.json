@@ -639,14 +639,6 @@
    "h": 1040,
    "title": "Proposals \u00b7 ds.banners \u00b7 warnings carry the alert glyph on both clients and the memory alert is tinted on the phone",
    "page": "proposals"
-  },
-  "Proposals-DS.STATUS-CHIPS.dc.html": {
-   "x": 0,
-   "y": 3920,
-   "w": 1280,
-   "h": 1000,
-   "title": "Proposals \u00b7 ds.status-chips \u00b7 one chip rule on both clients: 24 px, 8 px dot, mono label, warn untinted",
-   "page": "proposals"
   }
  },
  "order": [
@@ -725,8 +717,7 @@
   "Brand-Palette.dc.html",
   "Brand-Motion.dc.html",
   "Proposals-DS.FLOATING.dc.html",
-  "Proposals-DS.BANNERS.dc.html",
-  "Proposals-DS.STATUS-CHIPS.dc.html"
+  "Proposals-DS.BANNERS.dc.html"
  ],
  "notes": {
   "s-Foundations": {
@@ -1061,14 +1052,6 @@
    "x": 0,
    "y": 2417,
    "text": "DS.BANNERS \u00b7 Warnings carry the alert glyph on both clients and the memory alert is tinted on the phone",
-   "kind": "title1",
-   "maxW": 2600,
-   "page": "proposals"
-  },
-  "p-DS.STATUS-CHIPS \u00b7 One chip rule on both clients: 24 px, 8 px dot, mono label, warn untinted": {
-   "x": 0,
-   "y": 3697,
-   "text": "DS.STATUS-CHIPS \u00b7 One chip rule on both clients: 24 px, 8 px dot, mono label, warn untinted",
    "kind": "title1",
    "maxW": 2600,
    "page": "proposals"

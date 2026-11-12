@@ -407,6 +407,19 @@ def test_kit_banner_and_badge_follow_the_paper_direction():
         assert all(int(px) <= 4 for px in re.findall(r"border-radius:\s*(\d+)px", html))
 
 
+def test_kit_count_badges_read_the_shared_badge_spec():
+    kit = _panel_kit()
+    script = f"const m = await import({json.dumps(str(REPO / 'common' / 'countBadge.mjs'))}); process.stdout.write(JSON.stringify(m.countBadgeSpec));"
+    spec = json.loads(subprocess.run(["node", "--input-type=module", "-e", script], capture_output=True, text=True, check=True).stdout)
+    import gen
+
+    assert spec["family"] == "mono"
+    weight = f"font-weight: {spec['weight']}"
+    for html, size in ((gen.m_count_badge(3), spec["size"]["mobile"]), (kit.attention_value(1, "5"), spec["size"]["mobile"]), (kit.flag_badge(2), spec["size"]["desktop"])):
+        assert weight in html and "Geist Mono" in html
+        assert f"min-width: {size}px" in html
+
+
 def test_kit_badge_uses_the_danger_fill_and_on_danger_pair_in_both_themes(tmp_path):
     kit = _panel_kit()
     tokens = (REPO / "desktop" / "src" / "styles" / "tokens.css").read_text()

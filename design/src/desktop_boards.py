@@ -125,7 +125,7 @@ def alink(label, icon=None, danger=False):
 def chip(text, state="plain", size="md", clickable=False):
     h = 24 if size == "md" else 18
     fs = 11
-    dot = 12 if size == "md" else 8
+    dot = 8
     bg, fg, dotc, op = HOVER, INK2, None, 1
     if state == "on":
         bg, fg, dotc = mix("#3fb37a", 0.16), "#217a45", "#3fb37a"

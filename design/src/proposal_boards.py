@@ -1,7 +1,7 @@
 import re
 
-from desktop_boards import DANGER, HOVER, INK, INK2, INK3, LINE, MONO, PANE, banner_bar, button, chip, ic as dic
-from gen import FLOAT_EDGE, m_banner, m_confirm_dialog, m_count_badge, m_toast, mi, pill
+from desktop_boards import DANGER, INK, INK2, INK3, LINE, MONO, PANE, banner_bar, button, ic as dic
+from gen import FLOAT_EDGE, m_banner, m_confirm_dialog, m_toast, mi
 from mobile_overlays import backdrop
 from panel_kit import alert_banner, phone_banner
 
@@ -146,61 +146,6 @@ def banners_proposed_desktop():
     return desk_panel(inner, h=250)
 
 
-def d_pill(text, warn=False):
-    bg = f"color-mix(in srgb, {WARNING} 16%, {PANE})" if warn else HOVER
-    dot = f'<span style="width: 8px; height: 8px; border-radius: 999px; background: {WARNING if warn else "#3fb37a"}"></span>'
-    return (f'<span style="display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border-radius: 2px; background: {bg}; '
-            f'font-family: {MONO}; font-size: 11px; color: {INK}">{dot}{text}</span>')
-
-
-def d_status_pill(text, color):
-    return (f'<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 2px; background: {HOVER}; '
-            f'font-family: {MONO}; font-size: 11px; color: {INK2}"><span style="width: 6px; height: 6px; border-radius: 999px; background: {color}"></span>{text}</span>')
-
-
-def d_flag(value, mono=True):
-    return (f'<span style="display: inline-block; min-width: 14px; height: 14px; padding: 0 4px; box-sizing: border-box; border-radius: 4px; background: {DANGER_FILL}; '
-            f'font-family: {MONO if mono else "Geist, sans-serif"}; font-size: 11px; font-weight: 600; line-height: 14px; text-align: center; color: #ffffff">{value}</span>')
-
-
-def chips_now_desktop():
-    inner = stack(labelled("Chip", hrow(chip("running", "on"), chip("needs you", "warn"), chip("paused", "off"), chip("failed", "error"))),
-                  labelled("ds-pill", hrow(d_pill("running"), d_pill("needs you", warn=True))),
-                  labelled("StatusPill", hrow(d_status_pill("running", "#3fb37a"), d_status_pill("needs you", WARNING))),
-                  labelled("Count badge", hrow(d_flag("3"))), gap=16)
-    return desk_panel(inner, h=250)
-
-
-def chips_proposed_desktop():
-    inner = stack(labelled("Chip · the one family", hrow(chip("running", "on"), chip("needs you", "warn"), chip("paused", "off"), chip("failed", "error"))),
-                  labelled("Count badge · --badge-size 14, mono", hrow(d_flag("3"))),
-                  caption("ds-pill and StatusPill render through Chip: 24 px, 8 px dot, warn untinted."), gap=16)
-    return desk_panel(inner, h=150)
-
-
-def m_pill2(text, tone):
-    bg, fg, dot = {"success": ("rgba(63,179,122,0.16)", "#217a45", "#3fb37a"), "warning": (HOVER, INK, WARNING), "off": (HOVER, INK2, INK3), "danger": ("rgba(193,69,69,0.16)", DANGER, DANGER_FILL)}[tone]
-    return (f'<span style="display: inline-flex; align-items: center; gap: 8px; min-height: 24px; padding: 0 8px; box-sizing: border-box; border-radius: 2px; background: {bg}; opacity: {0.55 if tone == "off" else 1}; '
-            f'font-family: {MONO}; font-weight: 500; font-size: 11px; line-height: 1.3; color: {fg}"><span style="width: 8px; height: 8px; border-radius: 999px; background: {dot}"></span>{text}</span>')
-
-
-def m_badge_block(badge):
-    return f'<span style="align-self: flex-start; position: relative; display: inline-flex; margin: 10px 14px 0 0">{mi("bell", 20, INK2)}{badge}</span>'
-
-
-def chips_now_mobile():
-    inner = stack(labelled("Pill · 22 pt, 6 pt dot, mono 12", hrow(pill("running", on=True), pill("needs you", tone="warning"), pill("paused"), pill("failed", tone="danger"))),
-                  labelled("Count badge · 18 pt, sans 600", m_badge_block(m_count_badge(3))), gap=20)
-    return phone_panel(inner, 150)
-
-
-def chips_proposed_mobile():
-    badge = m_count_badge(3).replace("font-weight: 600;", f"font-family: {MONO}; font-weight: 600;")
-    inner = stack(labelled("Pill · 24 pt, 8 pt dot, mono 11", hrow(m_pill2("running", "success"), m_pill2("needs you", "warning"), m_pill2("paused", "off"), m_pill2("failed", "danger"))),
-                  labelled("Count badge · 18 pt, mono 600", m_badge_block(badge)), gap=20)
-    return phone_panel(inner, 150)
-
-
 PROPOSALS = [
     dict(
         id="DS.FLOATING", client="mobile", area="Sheets, dialogs and toasts",
@@ -226,17 +171,5 @@ PROPOSALS = [
         accept=("<code>Banner.test.jsx</code> on desktop asserts the alert glyph for danger and warning and the dot otherwise; <code>AlertBanner.test.jsx</code> on the phone asserts the background is the danger mix at 10 %, the ring <code>ink4</code> and the icon <code>dangerText</code>; "
                 "<code>banner_bar</code> and <code>phone_banner</code> in the kit draw the same."),
         h=1040,
-    ),
-    dict(
-        id="DS.STATUS-CHIPS", client="mobile · desktop", area="State chips and count badges",
-        title="One chip rule on both clients: 24 px, 8 px dot, mono label, warn untinted",
-        why=("Desktop has three state-chip primitives with three rules: <code>Chip</code> (24 px, 8 px dot, warn untinted, tested), <code>.ds-pill</code> (warn tinted 16 %, <code>design-system.css:155</code>) and <code>StatusPill</code> (6 px dot, 4/8 padding, <code>StatusPill.module.css:8-11</code>). "
-             "The phone's <code>Pill</code> says it keeps in step with <code>Chip</code> (<code>Pill.jsx:15</code>) but draws a 6 pt dot at 22 pt with a 12 pt label (<code>:31,38,42</code>). The count badge is 14 px mono on desktop with a <code>--badge-size</code> token nobody reads (<code>BrowseModal.module.css:235-248</code>, <code>tokens.css:104</code>) and 18 pt sans on the phone (<code>CountBadge.jsx:9-11</code>), and the kit draws a third one. "
-             "The proposal makes <code>Chip</code> the rule: desktop's two other primitives render through it, the phone's Pill takes the 8 pt dot, 24 pt and the 11 pt mono label, and <code>common/countBadge.mjs</code> fixes the badge as mono 600 at 14 px / 18 pt."),
-        mobile=(chips_now_mobile, chips_proposed_mobile),
-        desktop=(chips_now_desktop, chips_proposed_desktop),
-        accept=("desktop tests assert <code>.ds-pill</code> and <code>StatusPill</code> define no rules of their own and <code>.flag</code> reads <code>--badge-size</code>; <code>Pill.test.jsx</code> asserts dot <code>dotScale.md</code>, <code>minHeight</code> 24 and the mono 11 label; "
-                "<code>CountBadge.test.jsx</code> and <code>tests/test_design_kit.py</code> read the badge spec from <code>common/countBadge.mjs</code>; the kit's <code>attention_value</code> is regenerated."),
-        h=1000,
     ),
 ]

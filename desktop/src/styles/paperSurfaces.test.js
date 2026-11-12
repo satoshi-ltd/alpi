@@ -214,7 +214,6 @@ describe("paper selection", () => {
   it("cuts chips and status pills as 2 px tags", () => {
     expect(read("styles/tokens.css")).toMatch(/--r-tag:\s*2px;/);
     expect(rule(read("primitives/Chip.module.css"), ".chip")).toMatch(/border-radius:\s*var\(--r-tag\)/);
-    expect(read("primitives/StatusPill.module.css")).toMatch(/border-radius:\s*var\(--r-tag\)/);
   });
 });
 

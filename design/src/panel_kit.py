@@ -1,3 +1,4 @@
+from gen import BADGE
 from notif_studies import MONO, dot, flex, spacer, stack, wrap
 from paper_studies import PAPER, button, text
 from wg_settings_studies import P, crease_name, glyph, mono, obj, section_label
@@ -21,8 +22,9 @@ def count_pill(value):
 
 
 def flag_badge(value):
-    return (f'<span data-part="flag" style="display: inline-block; min-width: 14px; height: 14px; padding: 0 4px; box-sizing: border-box; border-radius: 4px; background: {DANGER_FILL}; '
-            f'font-family: {MONO}; font-size: 11px; line-height: 14px; text-align: center; color: {ON_DANGER}">{value}</span>')
+    size = BADGE["size"]["desktop"]
+    return (f'<span data-part="flag" style="display: inline-block; min-width: {size}px; height: {size}px; padding: 0 4px; box-sizing: border-box; border-radius: 4px; background: {DANGER_FILL}; '
+            f'font-family: {MONO}; font-weight: {BADGE["weight"]}; font-size: 11px; line-height: {size}px; text-align: center; color: {ON_DANGER}">{value}</span>')
 
 
 def tab(label, on=False, count=None, flag=0):
@@ -246,6 +248,7 @@ def phone_status(label, tone="ink"):
 
 
 def attention_value(count, text_):
-    pill = (f'<span style="min-width: 20px; min-height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 4px; background: {DANGER_FILL}; display: inline-flex; align-items: center; '
-            f'justify-content: center; font-family: {MONO}; font-size: 10px; font-weight: 500; color: {ON_DANGER}">{count}</span>')
+    size = BADGE["size"]["mobile"]
+    pill = (f'<span style="min-width: {size}px; min-height: {size}px; padding: 0 4px; box-sizing: border-box; border-radius: 4px; background: {DANGER_FILL}; display: inline-flex; align-items: center; '
+            f'justify-content: center; font-family: {MONO}; font-size: 11px; font-weight: {BADGE["weight"]}; color: {ON_DANGER}">{count}</span>')
     return flex(pill, text(text_, 12, P["ink3"]), gap=6)

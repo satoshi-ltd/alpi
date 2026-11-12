@@ -80,9 +80,7 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **DS.STATUS-CHIPS** — One chip rule on both clients: 24 px, 8 px dot, mono label, warn untinted
-  `ui · common, desktop, mobile · agent · normal`
-  accept: board DS.STATUS-CHIPS.
+_Empty: the creator approves the next tasks from Proposed._
 
 ## In progress
 
