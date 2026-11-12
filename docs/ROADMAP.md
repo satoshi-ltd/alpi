@@ -80,10 +80,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **DS.SEGMENTED** — The selected segment is drawn in ink on the phone, as on desktop
-  `ui · mobile · agent · normal`
-  accept: board DS.SEGMENTED.
-
 - **DS.FLOATING** — Floating surfaces on the phone sit on the elevated step with a 1 px edge
   `ui · mobile · agent · normal`
   accept: board DS.FLOATING.
@@ -512,6 +508,14 @@ The purely visual part of this review still open is board DS.BANNERS on the desi
   accept: a design the creator approves (for example a daemon public key pinned at pairing and proven on each
   probe) that keeps one notification per event across routes of the same daemon and makes a second daemon
   unable to share that state; tests for a lying daemon and for two honest routes.
+
+### Found while shipping mobile 0.9.16
+
+- **MOB.RADIO-CHECKED** — TalkBack announces which segment is chosen
+  `bug · mobile · agent · low`
+  note: `Segmented.jsx` sends `accessibilityState={{ selected: on }}` with `accessibilityRole="radio"`; Android
+  TalkBack reads a radio's state from `checked`, so the chosen theme or text size is not announced.
+  accept: `Segmented.test.jsx` asserts the selected cell carries `accessibilityState.checked: true` and the others `false`.
 
 ### Harness, demand-gated
 

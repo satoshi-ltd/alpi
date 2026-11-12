@@ -1,7 +1,7 @@
 import re
 
-from desktop_boards import DANGER, HOVER, INK, INK2, INK3, LINE, LINE2, MONO, PANE, SELECTED, banner_bar, button, chip, ic as dic, row, seg, section
-from gen import DOC_ACCENT, FLOAT_EDGE, m_banner, m_confirm_dialog, m_count_badge, m_group, m_row, m_segmented, m_toast, meter as m_meter, mi, pill
+from desktop_boards import DANGER, HOVER, INK, INK2, INK3, LINE, LINE2, MONO, PANE, SELECTED, banner_bar, button, chip, ic as dic, row, section
+from gen import DOC_ACCENT, FLOAT_EDGE, m_banner, m_confirm_dialog, m_count_badge, m_group, m_row, m_toast, meter as m_meter, mi, pill
 from mobile_overlays import backdrop
 from panel_kit import alert_banner, phone_banner
 
@@ -17,7 +17,6 @@ DARK = {"SCREEN": "#0b0b0b", "CARD_M": "#151515", "var(--bg-elev, #ffffff)": "#2
 DARK_RE = re.compile("|".join(re.escape(k) for k in sorted(DARK, key=len, reverse=True)))
 WARNING = "#e08a3c"
 DANGER_FILL = "#c14545"
-FILTERS = ("All", "Needs you", "Failing", "Running")
 
 
 def stage(inner, w, h, bg="#f6f6f6"):
@@ -73,34 +72,6 @@ def desk_panel(inner, w=540, h=200):
 
 def phone_panel(inner, h=240):
     return phone(f'<div style="padding: 16px; display: flex; flex-direction: column; gap: 16px; background: {PANE}; height: 100%; box-sizing: border-box">{inner}</div>', h)
-
-
-def m_segmented_ink(options, value):
-    cells = "".join(
-        f'<span role="radio" aria-checked="{"true" if o == value else "false"}" style="flex: 1; min-height: 44px; padding: 0 2px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; '
-        f'background: {INK if o == value else "transparent"}; font-size: 14px; font-weight: {600 if o == value else 400}; color: {"ON_INK" if o == value else INK2}">{o}</span>' for o in options)
-    return f'<div role="radiogroup" style="display: flex; padding: 2px; border-radius: 4px; background: {SELECTED}">{cells}</div>'
-
-
-THEMES = ("System", "Light", "Dark")
-
-
-def settings_card(control):
-    card = (f'<div style="border-radius: 4px; background: CARD_M; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px">'
-            f'<span style="font-size: 15px; color: {INK}">Theme</span>{control}</div>')
-    return phone(f'<div style="padding: 16px; background: SCREEN; height: 100%; box-sizing: border-box">{labelled("Settings · Appearance", card)}</div>', 150)
-
-
-def segmented_now_mobile():
-    return modes(lambda: settings_card(m_segmented(THEMES, "System")))
-
-
-def segmented_proposed_mobile():
-    return modes(lambda: settings_card(m_segmented_ink(THEMES, "System")))
-
-
-def segmented_now_desktop():
-    return desk_panel(labelled("Workgroups", seg(FILTERS, "Needs you")), h=96)
 
 
 def floating_mobile(elevated):
@@ -255,18 +226,6 @@ def chips_proposed_mobile():
 
 
 PROPOSALS = [
-    dict(
-        id="DS.SEGMENTED", client="mobile", area="Segmented control",
-        title="The selected segment is drawn in ink on the phone, as on desktop",
-        why=("Desktop draws the selected segment as an ink block on the selected tone (<code>design-system.css:53-94</code>, fixed by <code>segmented.test.js</code>); "
-             "the phone draws it as a pane-tone card on the hover tone (<code>Segmented.jsx:15,37,45</code>). Its only use is Settings → Appearance (<code>SettingsBody.jsx:191,197</code>), on the RowGroup card: in dark the selected cell is #151515 on a 4 % track over the #151515 card, so the choice all but disappears. "
-             "The proposal takes desktop's contrast rule to the phone: ink fill, pane-tone label, selected-tone track, the same 44 pt cells and radio semantics it has today."),
-        mobile=(segmented_now_mobile, segmented_proposed_mobile),
-        desktop=(segmented_now_desktop, None),
-        accept=("<code>Segmented.test.jsx</code> asserts the selected cell's background is <code>colors.ink</code>, its label <code>colors.bgPane</code> and the track <code>colors.selected</code>; "
-                "<code>m_segmented</code> in the kit draws the same and the Mobile tab is regenerated."),
-        h=1050,
-    ),
     dict(
         id="DS.FLOATING", client="mobile", area="Sheets, dialogs and toasts",
         title="Floating surfaces on the phone sit on the elevated step with a 1 px edge",

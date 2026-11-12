@@ -12,7 +12,7 @@ export function Segmented({ options, value, onChange, label }) {
     <View
       accessibilityRole="radiogroup"
       accessibilityLabel={label}
-      style={{ flexDirection: 'row', padding: INSET, borderRadius: radii.xs, backgroundColor: colors.hover }}
+      style={{ flexDirection: 'row', padding: INSET, borderRadius: radii.xs, backgroundColor: colors.selected }}
     >
       {options.map((option) => {
         const on = option.value === value;
@@ -34,7 +34,7 @@ export function Segmented({ options, value, onChange, label }) {
               alignItems: 'center',
               justifyContent: 'center',
               borderRadius: radii.xs,
-              backgroundColor: on ? colors.bgPane : 'transparent',
+              backgroundColor: on ? colors.ink : 'transparent',
             }}
           >
             <Text
@@ -42,7 +42,7 @@ export function Segmented({ options, value, onChange, label }) {
               adjustsFontSizeToFit
               minimumFontScale={0.75}
               maxFontSizeMultiplier={1.2}
-              style={{ fontFamily: on ? fonts.sans.semibold : fonts.sans.regular, fontSize: fontSizes.md, color: on ? colors.ink : colors.ink2 }}
+              style={{ fontFamily: on ? fonts.sans.semibold : fonts.sans.regular, fontSize: fontSizes.md, color: on ? colors.bgPane : colors.ink2 }}
             >
               {option.label}
             </Text>

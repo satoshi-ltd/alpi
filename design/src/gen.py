@@ -254,8 +254,8 @@ def m_row(label, helper="", value="", chevron=True, control="", danger=False, se
 def m_segmented(options, value):
     cells = "".join(
         f'<span role="radio" aria-checked="{"true" if o == value else "false"}" style="flex: 1; min-height: 44px; padding: 0 2px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; '
-        f'background: {"#ffffff" if o == value else "transparent"}; font-size: 14px; font-weight: {600 if o == value else 400}; color: {"#141414" if o == value else "#454545"}">{o}</span>' for o in options)
-    return f'<div role="radiogroup" style="display: flex; padding: 2px; border-radius: 4px; background: rgba(20,20,20,0.04)">{cells}</div>'
+        f'background: {"#141414" if o == value else "transparent"}; font-size: 14px; font-weight: {600 if o == value else 400}; color: {"#ffffff" if o == value else "#454545"}">{o}</span>' for o in options)
+    return f'<div role="radiogroup" style="display: flex; padding: 2px; border-radius: 4px; background: rgba(20,20,20,0.06)">{cells}</div>'
 
 
 def m_row_below(label, helper, below, sep=True):

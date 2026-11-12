@@ -624,17 +624,9 @@
    "title": "Brand \u00b7 states and motion",
    "page": "brand"
   },
-  "Proposals-DS.SEGMENTED.dc.html": {
-   "x": 0,
-   "y": 240,
-   "w": 1280,
-   "h": 1050,
-   "title": "Proposals \u00b7 ds.segmented \u00b7 the selected segment is drawn in ink on the phone, as on desktop",
-   "page": "proposals"
-  },
   "Proposals-DS.FLOATING.dc.html": {
    "x": 0,
-   "y": 1530,
+   "y": 240,
    "w": 1280,
    "h": 2160,
    "title": "Proposals \u00b7 ds.floating \u00b7 floating surfaces on the phone sit on the elevated step with a 1 px edge",
@@ -642,7 +634,7 @@
   },
   "Proposals-DS.BANNERS.dc.html": {
    "x": 0,
-   "y": 3930,
+   "y": 2640,
    "w": 1280,
    "h": 1040,
    "title": "Proposals \u00b7 ds.banners \u00b7 warnings carry the alert glyph on both clients and the memory alert is tinted on the phone",
@@ -650,7 +642,7 @@
   },
   "Proposals-DS.METER.dc.html": {
    "x": 0,
-   "y": 5210,
+   "y": 3920,
    "w": 1280,
    "h": 910,
    "title": "Proposals \u00b7 ds.meter \u00b7 desktop's meter uses the visible track and the accent fill the phone and the kit already draw",
@@ -658,7 +650,7 @@
   },
   "Proposals-DS.STATUS-CHIPS.dc.html": {
    "x": 0,
-   "y": 6360,
+   "y": 5070,
    "w": 1280,
    "h": 1000,
    "title": "Proposals \u00b7 ds.status-chips \u00b7 one chip rule on both clients: 24 px, 8 px dot, mono label, warn untinted",
@@ -740,7 +732,6 @@
   "Brand-Pairs.dc.html",
   "Brand-Palette.dc.html",
   "Brand-Motion.dc.html",
-  "Proposals-DS.SEGMENTED.dc.html",
   "Proposals-DS.FLOATING.dc.html",
   "Proposals-DS.BANNERS.dc.html",
   "Proposals-DS.METER.dc.html",
@@ -1067,17 +1058,9 @@
    "maxW": 2600,
    "page": "brand"
   },
-  "p-DS.SEGMENTED \u00b7 The selected segment is drawn in ink on the phone, as on desktop": {
-   "x": 0,
-   "y": 17,
-   "text": "DS.SEGMENTED \u00b7 The selected segment is drawn in ink on the phone, as on desktop",
-   "kind": "title1",
-   "maxW": 2600,
-   "page": "proposals"
-  },
   "p-DS.FLOATING \u00b7 Floating surfaces on the phone sit on the elevated step with a 1 px edge": {
    "x": 0,
-   "y": 1307,
+   "y": 17,
    "text": "DS.FLOATING \u00b7 Floating surfaces on the phone sit on the elevated step with a 1 px edge",
    "kind": "title1",
    "maxW": 2600,
@@ -1085,7 +1068,7 @@
   },
   "p-DS.BANNERS \u00b7 Warnings carry the alert glyph on both clients and the memory alert is tinted on the phone": {
    "x": 0,
-   "y": 3707,
+   "y": 2417,
    "text": "DS.BANNERS \u00b7 Warnings carry the alert glyph on both clients and the memory alert is tinted on the phone",
    "kind": "title1",
    "maxW": 2600,
@@ -1093,7 +1076,7 @@
   },
   "p-DS.METER \u00b7 Desktop's meter uses the visible track and the accent fill the phone and the kit already draw": {
    "x": 0,
-   "y": 4987,
+   "y": 3697,
    "text": "DS.METER \u00b7 Desktop's meter uses the visible track and the accent fill the phone and the kit already draw",
    "kind": "title1",
    "maxW": 2600,
@@ -1101,7 +1084,7 @@
   },
   "p-DS.STATUS-CHIPS \u00b7 One chip rule on both clients: 24 px, 8 px dot, mono label, warn untinted": {
    "x": 0,
-   "y": 6137,
+   "y": 4847,
    "text": "DS.STATUS-CHIPS \u00b7 One chip rule on both clients: 24 px, 8 px dot, mono label, warn untinted",
    "kind": "title1",
    "maxW": 2600,

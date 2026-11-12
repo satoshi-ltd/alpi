@@ -12,8 +12,8 @@ const { flat, selection } = vi.hoisted(() => ({
 vi.mock('react-native', () => {
   const View = ({ children, style, accessibilityRole, accessibilityLabel }) =>
     React.createElement('div', { role: accessibilityRole, 'aria-label': accessibilityLabel, 'data-style': JSON.stringify(flat(style)) }, children);
-  const Text = ({ children, numberOfLines, adjustsFontSizeToFit, minimumFontScale, maxFontSizeMultiplier }) =>
-    React.createElement('span', { 'data-lines': numberOfLines, 'data-fit': String(adjustsFontSizeToFit), 'data-min': minimumFontScale, 'data-max': maxFontSizeMultiplier }, children);
+  const Text = ({ children, style, numberOfLines, adjustsFontSizeToFit, minimumFontScale, maxFontSizeMultiplier }) =>
+    React.createElement('span', { 'data-style': JSON.stringify(flat(style)), 'data-lines': numberOfLines, 'data-fit': String(adjustsFontSizeToFit), 'data-min': minimumFontScale, 'data-max': maxFontSizeMultiplier }, children);
   const Pressable = ({ children, onPress, style, accessibilityRole, accessibilityState, accessibilityLabel }) =>
     React.createElement(
       'button',
@@ -25,7 +25,7 @@ vi.mock('react-native', () => {
 vi.mock('../lib/haptics', () => ({ selection }));
 vi.mock('../theme/ThemeContext', () => ({
   useTheme: () => ({
-    colors: { hover: '#eee', bgPane: '#fff', ink: '#000', ink2: '#333' },
+    colors: { hover: '#eee', selected: '#e5e5e5', bgPane: '#fff', ink: '#000', ink2: '#333' },
     fonts: { sans: { regular: 'r', semibold: 's' } },
     fontSizes: { md: 14 },
   }),
@@ -47,6 +47,17 @@ describe('Segmented', () => {
     expect(cells.map((c) => c.getAttribute('aria-checked'))).toEqual(['false', 'true', 'false']);
     for (const cell of cells) expect(JSON.parse(cell.getAttribute('data-style')).minHeight).toBe(44);
     expect(JSON.parse(screen.getByRole('radiogroup').getAttribute('data-style'))).toMatchObject({ borderRadius: 4, padding: 2 });
+  });
+
+  it('draws the selected cell in ink with a pane-tone label on the selected-tone track, as desktop does', () => {
+    render(<Segmented label="Theme" options={OPTIONS} value="light" onChange={() => {}} />);
+    const style = (el) => JSON.parse(el.getAttribute('data-style'));
+    expect(style(screen.getByRole('radiogroup')).backgroundColor).toBe('#e5e5e5');
+    const [system, light] = screen.getAllByRole('radio');
+    expect(style(light).backgroundColor).toBe('#000');
+    expect(style(light.querySelector('span')).color).toBe('#fff');
+    expect(style(system).backgroundColor).toBe('transparent');
+    expect(style(system.querySelector('span')).color).toBe('#333');
   });
 
   it('shrinks and caps label growth instead of clipping, keeping the spoken labels', () => {

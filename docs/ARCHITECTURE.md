@@ -2088,7 +2088,8 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   run follows `lib/firstRun.js` (columns of at most 480, left-aligned on one edge); a notification
   row keeps a fixed trailing time column with the level pill before the title;
   theme (System, Light, Dark) and text size (four steps) are `Segmented` controls
-  in Settings, biometric lock is a `Toggle`, and ConnHeader draws its status
+  in Settings (the selected cell in ink with a pane-tone label on the selected-tone
+  track, as desktop's), biometric lock is a `Toggle`, and ConnHeader draws its status
   dot on the corner of the connection icon (8 pt, 1.5 pt ring in the surface colour) and says
   a word only when not online. The back chevron's ink sits on the 16 pt content edge while its hit area stays
   44 pt (only when it is the first element; no offset after the sidebar toggle), ConnHeader's
