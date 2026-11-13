@@ -131,6 +131,11 @@ Output attachments (MM.2):
   channel is authoritative.
 - Supported output kinds: `image`, `pdf`, `text`, `sheet`, `doc`, `deck`, `file`
   (Office files must be real ZIP-based `xlsx/docx/pptx`).
+- In the desktop and phone apps, a report, summary or analysis wanted as a PDF
+  is the reply itself, written with headings, tables and charts: the apps export
+  any reply to a styled PDF (see `notifications`). Make a file on a surface with
+  no export (console, email, a peer), for a format a reply cannot carry, or when
+  the user needs the file itself.
 
 ## Knowledge wiki
 
@@ -255,6 +260,9 @@ Output attachments (MM.2):
   passed; the call may still have taken effect, so check before repeating it.
 - `tool action denied for this profile: knowledge:ingest … allowed: search`:
   the profile denies that action in `tools.deny`; use an allowed one.
+- `tool action denied for this profile: skill:create. tools.deny … denies
+  write_file …`: this profile cannot author skills; do the job with the tools
+  you have, and for a report or a PDF write it as your reply (the apps export it).
 
 ## Related topics
 

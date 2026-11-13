@@ -145,7 +145,7 @@ Dangerous classifications are always blocked. Globs do not apply to compound com
 
 ## Tool denylist
 
-`tools.deny` is a per-profile list of tool names hidden from the LLM's schema and refused by the executor as defence in depth. Used to tighten profiles exposed to less-trusted input (e.g. a librarian profile reachable via `link.ask`). Denying `alpi_knowledge` also drops the self-knowledge rule from the system prompt. A `tool:action` entry (`knowledge:ingest`, `knowledge:*`) denies one action: it leaves the schema's `action` enum, a call to it is refused naming the allowed actions, and a tool with no action left is dropped. A search-only knowledge profile denies `knowledge:ingest`, `knowledge:maintain`, `knowledge:lint` and `knowledge:index`.
+`tools.deny` is a per-profile list of tool names hidden from the LLM's schema and refused by the executor as defence in depth. Used to tighten profiles exposed to less-trusted input (e.g. a librarian profile reachable via `link.ask`). Denying `alpi_knowledge` also drops the self-knowledge rule from the system prompt. A `tool:action` entry (`knowledge:ingest`, `knowledge:*`) denies one action: it leaves the schema's `action` enum, a call to it is refused naming the allowed actions, and a tool with no action left is dropped. A search-only knowledge profile denies `knowledge:ingest`, `knowledge:maintain`, `knowledge:lint` and `knowledge:index`. Denying `write_file` or `terminal` also denies the `skill` actions that write skill files (`create`, `edit`, `patch`, `add_file`, `remove_file`, `delete`, `reset_state`, `set_meta`): the profile runs the skills its operator installed and cannot author one to get around the deny.
 
 ```yaml
 tools:

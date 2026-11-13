@@ -70,7 +70,13 @@ def _generated_files_line(home: Path) -> str:
         "under a new, descriptive name and `attach_file` it; the app downloads from it, and the "
         "storage cleanup offers files older than about 30 days for deletion. Keep such files out "
         "of the workspace root and out of `/tmp`: the workspace is for the project's own files "
-        "(its code and its documents stay there), and the app cannot download documents from `/tmp`."
+        "(its code and its documents stay there), and the app cannot download documents from `/tmp`. "
+        "In the desktop and phone apps, a report, summary or analysis the user wants as a PDF is "
+        "your reply, not a file: write it with headings, tables and charts and tell them to export "
+        "it (Download → PDF on desktop, the message's long-press menu on the phone), which prints it "
+        "styled by alpi. On the console, by email or to a peer there is no export, so make the file; "
+        "anywhere, make one for a format a reply cannot carry (a spreadsheet, a Word or slide deck, "
+        "an image) or when the user needs the file itself, e.g. to send it on."
     )
 
 

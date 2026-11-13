@@ -13,6 +13,7 @@ from typing import Any
 
 from alpi import skills_usage as _skills_usage
 from alpi.home import get_home
+from alpi.tools._policy import SKILL_AUTHORING_ACTIONS
 from alpi.tools.base import Tool, ToolResult
 from alpi.scan import scan_skill_body
 
@@ -25,10 +26,7 @@ CATEGORIES = {
 
 ALLOWED_SUBDIRS = {"scripts", "references", "assets", "secrets", "state"}
 
-_SCOPED_WRITE_ACTIONS = frozenset({
-    "create", "edit", "patch", "add_file", "remove_file",
-    "delete", "reset_state", "set_meta",
-})
+_SCOPED_WRITE_ACTIONS = SKILL_AUTHORING_ACTIONS
 
 NO_SCAN_SUBDIRS = {"secrets", "state"}
 

@@ -225,7 +225,12 @@ only searches its knowledge lists `knowledge:ingest`, `knowledge:maintain`,
 `knowledge:lint` and `knowledge:index`, and the model then sees only
 `action`, `query` and `k`: a tool that declares which parameters each action
 reads drops the ones no remaining action needs. An `action` spelled outside
-the trimmed enum (another case, extra spaces) is refused as well. A search-only
+the trimmed enum (another case, extra spaces) is refused as well. Denying
+`write_file` or `terminal` also denies the `skill` actions that write skill
+files (`create`, `edit`, `patch`, `add_file`, `remove_file`, `delete`,
+`reset_state`, `set_meta`), because a skill's scripts would write and run code
+past that deny: such a profile runs the skills you install and cannot author
+its own. A search-only
 profile assumes the default root `<workspace>/knowledge`: `path` goes with the
 write actions. What one peer's inbound `link.ask` turns
 may run on this profile is set the other way round, as the only tools

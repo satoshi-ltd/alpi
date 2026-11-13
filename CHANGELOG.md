@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.18.10 — 2026-11-13 — reports are replies you export to PDF
+
+- Asked in the desktop or phone app for a report, summary or analysis as a PDF, the agent now writes it as its reply, with headings, tables and charts, and tells you to export it (Download → PDF on desktop, the long-press menu on the phone), so it prints styled by alpi instead of as a hand-made file.
+- On the console, by email or to a peer, and for what a reply cannot carry (a spreadsheet, a Word or slide deck, an image) or when you need the file itself, the agent still makes the file.
+- A profile whose `tools.deny` has `write_file` or `terminal` can no longer create, edit or add files to skills: it runs the skills you install, and a refused call says why. Before, an agent could author a skill with a script and run it to get around those denies.
+
 ## v0.18.9 — 2026-11-11 — refused access says where it came from
 
 - Every refused request on the remote host plane (no token, a wrong or disabled token, a source or device blocked after failures, too many unauthenticated sockets, a silent or garbled socket, a refused pairing code) is logged in `service.log` with the address it came from, so a review of the log can tell a probe from a misconfigured device.

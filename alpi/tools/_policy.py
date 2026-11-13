@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextvars
+import os
 import copy
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
@@ -48,9 +49,23 @@ def allowed() -> frozenset[str] | None:
     return _allowed.get()
 
 
+SKILL_AUTHORING_ACTIONS = frozenset({
+    "create", "edit", "patch", "add_file", "remove_file", "delete", "reset_state", "set_meta",
+})
+_AUTHORING_GUARDS = ("write_file", "terminal")
+
+
+def _authoring_guard(deny: Iterable[str] | None) -> str | None:
+    return next((tool for tool in _AUTHORING_GUARDS if is_denied(tool, deny)), None)
+
+
 def effective_denies(profile_denies: Iterable[str]) -> frozenset[str]:
     from alpi.tools._paths import dispatch_tool_denies
-    return frozenset(profile_denies) | dispatch_tool_denies()
+    profile_denies = frozenset(profile_denies)
+    denies = profile_denies | dispatch_tool_denies()
+    if _authoring_guard(profile_denies) is None:
+        return denies
+    return denies | {f"skill:{action}" for action in SKILL_AUTHORING_ACTIONS}
 
 
 def _matches(name: str, pattern: str) -> bool:
@@ -119,6 +134,18 @@ def action_denied(name: str, arguments: object, deny: Iterable[str] | None, sche
         return None
     shown = f"{name}:{action}" if action else name
     tail = f"; allowed: {', '.join(allowed)}" if allowed else ""
+    guard = (
+        _authoring_guard(deny)
+        if name == "skill" and action in SKILL_AUTHORING_ACTIONS
+        and os.environ.get("ALPI_WORKGROUP_WRITE_SCOPE") is None
+        else None
+    )
+    if guard is not None:
+        return (
+            f"tool action denied for this profile: {shown}. tools.deny in config.yaml denies {guard}, "
+            "and a skill's files and scripts would write and run code past it, so skills here are "
+            f"installed by the operator, not authored in a turn{tail}"
+        )
     return f"tool action denied for this profile: {shown} (tools.deny in config.yaml){tail}"
 
 

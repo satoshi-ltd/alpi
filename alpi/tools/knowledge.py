@@ -25,7 +25,7 @@ _TOPIC_SUMMARIES: dict[str, str] = {
     "deployments": "launchd on macOS, systemd on Linux, scheduler daemon shape, keep-alive, log paths.",
     "operations": "Day-2 ops — doctor, diagnostics, log rotation, backup, recovery, upgrade workflow.",
     "integrations": "Programmatic access — external code talking to a profile/workgroup as a host-plane client (scoped device token over the host WebSocket), host.chat.send frames, workgroup methods, vs the ALP peer route.",
-    "notifications": "Writing report-grade notify() messages — allowed markdown subset, section labels, 🔴🟡🟢 status, what gets auto-simplified; the daemon normalizes content so author for quality not validity.",
+    "notifications": "Writing report-grade notify() messages — allowed markdown subset, section labels, 🔴🟡🟢 status, what gets auto-simplified; the daemon normalizes content so author for quality not validity. Also how a reply or notification is exported to Markdown or a styled PDF from the apps.",
 }
 
 
