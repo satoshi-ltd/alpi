@@ -67,8 +67,8 @@ describe("providerPills", () => {
 });
 
 describe("FIELD_KEYS", () => {
-  it("saves the origami object beside the accent colour", () => {
-    expect(FIELD_KEYS.fold).toBe("tui.fold");
+  it("saves the shape beside the accent colour", () => {
+    expect(FIELD_KEYS.shape).toBe("tui.shape");
     expect(FIELD_KEYS.accent).toBe("tui.accent");
   });
 });

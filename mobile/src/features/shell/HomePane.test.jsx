@@ -22,7 +22,7 @@ vi.mock('../../theme/ThemeContext', () => ({
 }));
 
 vi.mock('../../components/Fold', () => ({
-  Fold: ({ fold, color, size }) => React.createElement('span', { 'data-mark': fold, 'data-color': color ?? '', 'data-size': size }),
+  Fold: ({ shape, color, size }) => React.createElement('span', { 'data-mark': shape, 'data-color': color ?? '', 'data-size': size }),
 }));
 
 vi.mock('../../components/EmptyState', () => ({
@@ -76,10 +76,10 @@ describe('HomePane', () => {
     }
   });
 
-  it('draws the alpaca fold so it takes the brand ink of the theme', () => {
+  it('draws Twin so it takes the brand ink of the theme', () => {
     const { container } = render(<HomePane />);
     const mark = container.querySelector('[data-mark]');
-    expect(mark.getAttribute('data-mark')).toBe('alpaca');
+    expect(mark.getAttribute('data-mark')).toBe('twin');
     expect(mark.getAttribute('data-color')).toBe('');
     expect(mark.getAttribute('data-size')).toBe('96');
   });

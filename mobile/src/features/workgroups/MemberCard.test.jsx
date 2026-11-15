@@ -9,6 +9,8 @@ vi.mock('react-native', () => {
     ...rest,
     'data-lines': numberOfLines,
     'data-min-h': style?.minHeight,
+    'data-color': style?.color,
+    'data-size': style?.fontSize,
     'aria-label': accessibilityLabel,
   });
   const View = ({ children, ...p }) => React.createElement('div', plain(p), children);
@@ -18,21 +20,20 @@ vi.mock('react-native', () => {
 });
 vi.mock('../../theme/ThemeContext', () => ({
   useTheme: () => ({
-    colors: { ink: '#000', ink2: '#333', ink3: '#666', hover: '#f4f4f4' },
+    colors: { ink: '#000', ink2: '#333', ink3: '#666', hover: '#f4f4f4', bg: '#fff' },
     fonts: { mono: 'm', sans: { regular: 's', semibold: 'sb' } },
-    fontSizes: { xs: 11, sm: 12, md: 14, lg: 15 },
+    fontSizes: { xs: 11, sm: 12, md: 14, lg: 15, xl: 20 },
   }),
 }));
-vi.mock('../../components/Fold', () => ({ Fold: ({ fold }) => React.createElement('i', { 'data-fold': fold }) }));
+vi.mock('../../components/Fold', () => ({ Fold: ({ shape }) => React.createElement('i', { 'data-shape': shape }) }));
 vi.mock('../../components/Icon', () => ({ Icon: ({ name }) => React.createElement('i', { 'data-icon': name }) }));
-vi.mock('../../components/Crease', () => ({ Crease: ({ text }) => React.createElement('b', null, text) }));
 
 import { MemberCard } from './MemberCard';
 
 describe('MemberCard', () => {
-  it('shows the crease name, one bio line that expands, the owned phases and a row menu', () => {
+  it('shows the plain name, one bio line that expands, the owned phases and a row menu', () => {
     const onMore = vi.fn();
-    render(<MemberCard label="@pixel" accent="#2cb3b5" fold="rocket" bio="Builds the site." owns={['setup', 'build']} onMore={onMore} />);
+    render(<MemberCard label="@pixel" accent="#2cb3b5" shape="rocket" bio="Builds the site." owns={['setup', 'build']} onMore={onMore} />);
     expect(screen.getByText('pixel')).toBeTruthy();
     expect(screen.getByText('#setup')).toBeTruthy();
     const bio = screen.getByText('Builds the site.');
@@ -43,13 +44,20 @@ describe('MemberCard', () => {
     expect(onMore).toHaveBeenCalled();
   });
 
+  it('draws the name in the accent colour and the name face', () => {
+    render(<MemberCard label="@pixel" accent="#2cb3b5" shape="rocket" />);
+    const name = screen.getByText('pixel');
+    expect(name.getAttribute('data-color')).not.toBe('#000');
+    expect(name.getAttribute('data-size')).toBe('20');
+  });
+
   it('stands each member at least 64 pt tall so a card holds one rhythm', () => {
     const { container } = render(<MemberCard label="@pixel" />);
     expect(container.firstChild.getAttribute('data-min-h')).toBe('64');
   });
 
   it('says the hub routes every phase instead of owning one', () => {
-    render(<MemberCard label="@mira" accent="#6572e4" fold="crown" isHub owns={[]} />);
+    render(<MemberCard label="@mira" accent="#6572e4" shape="crown" isHub owns={[]} />);
     expect(screen.getByText('hub')).toBeTruthy();
     expect(screen.getByText('none · the hub routes every phase')).toBeTruthy();
     expect(screen.queryByLabelText(/More for/)).toBeNull();

@@ -14,7 +14,7 @@ vi.mock('expo-router', () => ({
 vi.mock('react-native', () => {
   const View = ({ children, style, accessibilityRole, accessibilityLabel, accessible, ...p }) =>
     React.createElement('div', { ...(accessibilityRole === 'header' ? { role: 'heading' } : {}), ...(accessibilityLabel ? { 'aria-label': accessibilityLabel } : {}), 'data-style': JSON.stringify(style), ...p }, children);
-  const Text = ({ children, style, numberOfLines, ...p }) => React.createElement('span', p, children);
+  const Text = ({ children, style, numberOfLines, accessibilityRole, ...p }) => React.createElement('span', { ...(accessibilityRole === 'header' ? { role: 'heading' } : {}), 'data-style': JSON.stringify([style].flat(2).filter(Boolean).reduce((a, b) => ({ ...a, ...b }), {})), ...p }, children);
   const Pressable = ({ children, onPress, hitSlop, style, ...p }) =>
     React.createElement(
       'button',
@@ -36,6 +36,8 @@ vi.mock('../theme/ThemeContext', () => ({
 vi.mock('./Icon', () => ({ Icon: ({ name }) => React.createElement('span', {}, name) }));
 
 import { PaneContext } from '../nav/PaneContext';
+import { nameTone } from '../../../common/name.mjs';
+import { fonts } from '../theme/tokens';
 import { Button } from './Button';
 import { BACK_BLEED, BACK_INK_INSET, CHROME_BTN, PANE_PAD_X, TOGGLE_BLEED } from '../lib/panes';
 import { iconSizes } from '../theme/tokens';
@@ -126,24 +128,32 @@ describe('ScreenHeader right slot', () => {
   });
 });
 
-describe('ScreenHeader crease title', () => {
-  it('sets a profile title in crease type when it carries an accent', () => {
+describe('ScreenHeader name title', () => {
+  const nameOf = () => JSON.parse(screen.getByRole('heading').getAttribute('data-style'));
+
+  it('sets a profile title in the name face, in its accent\'s ink tone, when it carries an accent', () => {
     render(<ScreenHeader title="@doc" accent="#6572e4" />);
-    expect(document.querySelector('text').textContent).toBe('@doc');
-    expect(document.querySelectorAll('linearGradient')).toHaveLength(1);
-    expect(screen.getByRole('heading').getAttribute('aria-label')).toBe('@doc');
+    expect(screen.getByRole('heading').textContent).toBe('@doc');
+    expect(nameOf().fontFamily).toBe(fonts.name);
+    expect(nameOf().color).toBe(nameTone('#6572e4', '#fff'));
   });
 
-  it('sets the crease title at no less than 28 even when the title step is smaller', () => {
+  it('sets a workgroup title in the name face in neutral ink, muted when paused', () => {
+    const { rerender } = render(<ScreenHeader title="alpha" accent="#6572e4" neutral />);
+    expect(nameOf().fontFamily).toBe(fonts.name);
+    expect(nameOf().color).toBe('#000');
+    rerender(<ScreenHeader title="alpha" accent="#6572e4" neutral muted />);
+    expect(nameOf().color).toBe('#666');
+  });
+
+  it('sets the name at no less than 28 even when the title step is smaller', () => {
     render(<ScreenHeader title="@doc" accent="#6572e4" />);
-    expect(Number(document.querySelector('text').getAttribute('font-size'))).toBe(28);
+    expect(nameOf().fontSize).toBe(28);
   });
 
   it('keeps plain Geist titles on screens with no accent', () => {
     render(<ScreenHeader title="Settings" />);
-    expect(screen.getByText('Settings')).toBeTruthy();
-    expect(document.querySelector('text')).toBeNull();
-    expect(document.querySelector('linearGradient')).toBeNull();
+    expect(JSON.parse(screen.getByText('Settings').getAttribute('data-style')).fontFamily).toBe('Geist_600SemiBold');
   });
 });
 
@@ -175,12 +185,12 @@ describe('ScreenHeader back control geometry', () => {
     expect(style.marginLeft).toBe(-(BACK_BLEED + BACK_INK_INSET));
   });
 
-  it('puts the chevron ink on the 16 pt edge: bleed plus the 5.25 pt of glyph padding, the title keeping its x', () => {
+  it('puts the chevron ink on the 16 pt edge: bleed plus the glyph padding of the 20 pt chevron, the title keeping its x', () => {
     render(<ScreenHeader title="Outputs" onBack={() => {}} />);
     const style = JSON.parse(back().getAttribute('data-style'));
-    expect(BACK_INK_INSET).toBe(5.25);
-    expect(style.marginLeft).toBe(-15.25);
-    expect(style.marginRight).toBe(5.25);
+    expect(BACK_INK_INSET).toBeCloseTo(6.5625, 6);
+    expect(style.marginLeft).toBeCloseTo(-(BACK_BLEED + BACK_INK_INSET), 6);
+    expect(style.marginRight).toBeCloseTo(BACK_INK_INSET, 6);
     expect(style.marginLeft + style.marginRight).toBe(-BACK_BLEED);
     expect(style.width).toBe(CHROME_BTN);
   });

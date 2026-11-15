@@ -4,7 +4,8 @@ import Constants from 'expo-constants';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Keyboard, Linking, Platform, ScrollView, Text, TextInput, View } from 'react-native';
-import { ALPACA_FOLD, FOLD_SIZES } from '../../common/folds.mjs';
+import { TWIN_SHAPE } from '../../common/shapes.mjs';
+import { MARK_SIZES } from '../../common/agentMarks.mjs';
 import { LINK_SOURCE_ROWS, PAIRING_STEPS, failedStep, pairingFailure, pairingFailureKind, pairingLinkHost, pairingStepLabel } from '../../common/onboarding.mjs';
 import { KeyboardPane } from '../src/components/KeyboardPane';
 import { palettes, space } from '../src/theme/tokens';
@@ -220,7 +221,7 @@ export default function Pair() {
           <Text accessibilityRole="header" style={{ color: dark.ink, fontFamily: fonts.sans.semibold, fontSize: fontSizes.md }}>
             Pair this phone
           </Text>
-          <Text style={{ color: dark.ink3, fontFamily: fonts.mono, fontSize: fontSizes.xs }}>
+          <Text style={{ color: dark.ink3, fontFamily: fonts.sans.regular, fontSize: fontSizes.xs }}>
             Scan the QR shown on your daemon
           </Text>
         </View>
@@ -249,7 +250,7 @@ export default function Pair() {
         <ScrollView style={{ flex: 1 }} contentContainerStyle={firstRunScroll(insets, edge)}>
           <View style={firstRunColumn}>
             <View style={foldMarkStyle}>
-              <Fold fold={ALPACA_FOLD} size={FOLD_SIZES.hero} />
+              <Fold shape={TWIN_SHAPE} size={MARK_SIZES.hero} />
             </View>
             <Text accessibilityRole="header" style={type.title}>Pair this phone</Text>
             <Text style={type.fact}>camera · not allowed</Text>
@@ -282,7 +283,7 @@ export default function Pair() {
               <Busy visible size={BUSY_MARK_PX} style={busyMarkStyle} />
             ) : (
               <View style={foldMarkStyle}>
-                <Fold fold={ALPACA_FOLD} size={FOLD_SIZES.hero} />
+                <Fold shape={TWIN_SHAPE} size={MARK_SIZES.hero} />
               </View>
             )}
             <Text accessibilityRole="header" style={[type.title, keyboardOpen ? { marginTop: 0 } : null]}>Pair this phone</Text>
@@ -305,7 +306,7 @@ export default function Pair() {
                   autoCorrect={false}
                   style={{
                     minHeight: 64,
-                    fontFamily: fonts.mono,
+                    fontFamily: fonts.sans.regular,
                     fontSize: fontSizes.sm,
                     color: colors.ink,
                     textAlignVertical: 'top',
@@ -325,7 +326,7 @@ export default function Pair() {
               </View>
             ) : (
               <>
-                <View style={{ marginTop: firstRun.tight, marginLeft: -space.s6, alignSelf: 'flex-start' }}>
+                <View style={{ marginTop: firstRun.tight, marginLeft: -space.s8, alignSelf: 'flex-start' }}>
                   <Button title="Paste from clipboard" variant="ghost" size="md" onPress={handlePaste} />
                 </View>
                 {keyboardOpen ? null : (

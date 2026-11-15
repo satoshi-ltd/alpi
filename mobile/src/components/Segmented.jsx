@@ -2,53 +2,66 @@ import { Pressable, Text, View } from 'react-native';
 
 import { selection } from '../lib/haptics';
 import { useTheme } from '../theme/ThemeContext';
-import { mobile, radii } from '../theme/tokens';
+import { mobile, radii, space } from '../theme/tokens';
+import { focusRingStyle, useFocusRing } from './focusRing';
 
-const INSET = 2;
+export const SEGMENT_INSET = space.s1;
+const INSET = SEGMENT_INSET;
 
 export function Segmented({ options, value, onChange, label }) {
-  const { colors, fonts, fontSizes } = useTheme();
+  const { colors } = useTheme();
   return (
     <View
       accessibilityRole="radiogroup"
       accessibilityLabel={label}
-      style={{ flexDirection: 'row', padding: INSET, borderRadius: radii.xs, backgroundColor: colors.selected }}
+      style={{ flexDirection: 'row', gap: 2, padding: INSET, borderRadius: radii.pill, backgroundColor: colors.fill }}
     >
-      {options.map((option) => {
-        const on = option.value === value;
-        return (
-          <Pressable
-            key={option.value}
-            onPress={() => {
-              if (on) return;
-              selection();
-              onChange?.(option.value);
-            }}
-            accessibilityRole="radio"
-            accessibilityState={{ selected: on }}
-            accessibilityLabel={option.label}
-            style={{
-              flex: 1,
-              minHeight: mobile.tap,
-              paddingHorizontal: INSET,
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: radii.xs,
-              backgroundColor: on ? colors.ink : 'transparent',
-            }}
-          >
-            <Text
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.75}
-              maxFontSizeMultiplier={1.2}
-              style={{ fontFamily: on ? fonts.sans.semibold : fonts.sans.regular, fontSize: fontSizes.md, color: on ? colors.bgPane : colors.ink2 }}
-            >
-              {option.label}
-            </Text>
-          </Pressable>
-        );
-      })}
+      {options.map((option) => (
+        <Segment key={option.value} option={option} on={option.value === value} onChange={onChange} />
+      ))}
     </View>
   );
 }
+
+function Segment({ option, on, onChange }) {
+  const { colors, fonts, fontSizes, mode } = useTheme();
+  const [focused, focusHandlers] = useFocusRing();
+  return (
+    <Pressable
+      onPress={() => {
+        if (on) return;
+        selection();
+        onChange?.(option.value);
+      }}
+      accessibilityRole="radio"
+      accessibilityState={{ selected: on }}
+      accessibilityLabel={option.label}
+      {...focusHandlers}
+      style={{
+        flex: 1,
+        minHeight: mobile.tap,
+        paddingHorizontal: space.s4,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: radii.pill,
+        borderWidth: 1,
+        borderColor: on && mode === 'dark' ? colors.line2 : 'transparent',
+        backgroundColor: on ? colors.raised : 'transparent',
+        ...(on ? RAISED_CELL : null),
+        ...focusRingStyle(colors, focused),
+      }}
+    >
+      <Text
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.75}
+        maxFontSizeMultiplier={1.2}
+        style={{ fontFamily: on ? fonts.sans.semibold : fonts.sans.regular, fontSize: fontSizes.md, color: on ? colors.ink : colors.ink2 }}
+      >
+        {option.label}
+      </Text>
+    </Pressable>
+  );
+}
+
+const RAISED_CELL = { shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 3, shadowOffset: { width: 0, height: 1 }, elevation: 1 };

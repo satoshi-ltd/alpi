@@ -32,6 +32,7 @@ ALPI = (
 )
 KNOWLEDGE = ("alpi/knowledge/*", "docs/*")
 CLIENTS = ("desktop/*", "mobile/*", "common/*", "alpi/providers/curated_models.yaml")
+SITE = ("site/*", "common/*", "docs/*", "README.md", "QUICKSTART.md", ".github/workflows/publish-site.yml")
 MOBILE_DEPS = ("mobile/package.json", "mobile/package-lock.json")
 DESIGN = (
     "design/*",
@@ -84,6 +85,8 @@ def plan(paths: list[str], run_all: bool = False) -> list[Step]:
     if on(DESIGN, exclude_tests=True):
         steps.append(Step("design", ("python3", "design/drift.py")))
         steps.append(Step("design-kit", ("uv", "run", "pytest", "-q", "tests/test_design_kit.py")))
+    if on(SITE):
+        steps.append(Step("site", ("node", "--test", "scripts/*.test.mjs"), "site"))
     return steps
 
 

@@ -21,11 +21,11 @@ vi.mock('../theme/ThemeContext', () => ({
   useTheme: () => ({
     colors: { ink: '#000', ink3: '#666', ink4: '#999', danger: '#f00', bgPane: '#fff', selected: '#eee' },
     fonts: {
-      sans: { regular: 'Geist_400Regular' },
+      sans: { regular: 'Geist_400Regular', medium: 'Geist_500Medium' },
       mono: 'GeistMono_400Regular',
       monoMedium: 'GeistMono_500Medium',
     },
-    fontSizes: { xs: 11, md: 14, lg: 15, xl: 18 },
+    fontSizes: { xs: 12, sm: 14, md: 15, lg: 16, xl: 20 },
   }),
 }));
 
@@ -35,15 +35,15 @@ import { Row, SectionHeader } from './Row';
 describe('Row typography', () => {
   it('renders every string in a theme font, chevron included', () => {
     const { container } = render(<Row label="Connections" helper="two paired" value="alpi-casa" onPress={() => {}} />);
-    expect(screen.getByText('Connections').getAttribute('data-font')).toBe('Geist_400Regular');
-    expect(screen.getByText('two paired').getAttribute('data-font')).toBe('GeistMono_500Medium');
+    expect(screen.getByText('Connections').getAttribute('data-font')).toBe('Geist_500Medium');
+    expect(screen.getByText('two paired').getAttribute('data-font')).toBe('Geist_400Regular');
     expect(screen.getByText('alpi-casa').getAttribute('data-font')).toBe('Geist_400Regular');
     expect(container.querySelector('svg').getAttribute('width')).toBe(String(iconSizes.md));
   });
 
-  it('renders the section header in the mono token', () => {
-    render(<SectionHeader>servers</SectionHeader>);
-    expect(screen.getByText('servers').getAttribute('data-font')).toBe('GeistMono_500Medium');
+  it('renders the section header in the sans medium label, never mono', () => {
+    render(<SectionHeader>Servers</SectionHeader>);
+    expect(screen.getByText('Servers').getAttribute('data-font')).toBe('Geist_500Medium');
   });
 });
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { CHART_CASES, FORMAT_CASES } from "../../../common/chartSpec.fixtures.mjs";
-import { chartLayout, chartLegend, chartSvg, describeChart, formatValue, isHorizontal, niceScale, parseChart } from "../../../common/chartSpec.mjs";
+import { BAR_RADIUS, barPath, chartLayout, chartLegend, chartSvg, describeChart, formatValue, isHorizontal, niceScale, parseChart } from "../../../common/chartSpec.mjs";
 import { parseNotificationBody } from "../../../common/notificationBody.mjs";
 import { renderMarkdown } from "./markdown.js";
 
@@ -127,6 +127,25 @@ describe("chart layout", () => {
     const ticks = chartLayout(spec).items.filter((it) => it.k === "tick" && it.anchor === "end").map((it) => it.text);
     expect(ticks.every((t) => !t.includes("requests"))).toBe(true);
     expect(ticks).toContain("3M");
+  });
+
+  it("rounds only the far end of a bar, square at the baseline", () => {
+    expect(barPath({ x: 0, y: 0, w: 20, h: 50, end: "top" })).toBe("M0,50V4A4,4 0 0 1 4,0H16A4,4 0 0 1 20,4V50Z");
+    expect(barPath({ x: 0, y: 0, w: 20, h: 50, end: "bottom" })).toBe("M0,0H20V46A4,4 0 0 1 16,50H4A4,4 0 0 1 0,46Z");
+    expect(barPath({ x: 0, y: 0, w: 50, h: 9, end: "right" })).toBe("M0,0H46A4,4 0 0 1 50,4V5A4,4 0 0 1 46,9H0Z");
+    expect(barPath({ x: 0, y: 0, w: 20, h: 50, end: null })).toBe("M0,0H20V50H0Z");
+    expect(barPath({ x: 0, y: 0, w: 3, h: 50, end: "top" })).toContain("A1.5,1.5");
+    expect(BAR_RADIUS).toBe(4);
+  });
+
+  it("rounds the top of a column, the far end of a negative one and only the last segment of a stack", () => {
+    const bars = (spec) => chartLayout(parseChart(spec)).items.filter((it) => it.k === "bar");
+    expect(bars({ type: "bar", x: ["a", "b"], series: [{ values: [3, -2] }] }).map((b) => b.end)).toEqual(["top", "bottom"]);
+    expect(bars({ type: "bar", stacked: true, x: ["a", "b"], series: [{ values: [3, 1] }, { values: [2, 0] }] }).map((b) => b.end)).toEqual([null, "top", "top"]);
+    expect(bars(TOPICS).every((b) => b.end === "right")).toBe(true);
+    const svg = chartSvg(parseChart({ type: "bar", x: ["a", "b"], series: [{ values: [3, 2] }] }));
+    expect(svg).not.toContain("<rect");
+    expect(svg.match(/<path class="ch-bar ch-s0" d="M[^"]+A4,4 0 0 1 [^"]+Z"\/>/g)).toHaveLength(2);
   });
 
   it("escapes text that reaches the SVG", () => {

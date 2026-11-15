@@ -2,7 +2,6 @@ import { useState, StrictMode } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import AppearancePicker from "./AppearancePicker.jsx";
-import { pairName } from "../../../common/accents.mjs";
 import VersionButton from "../features/VersionButton.jsx";
 
 vi.mock("../lib/updater.js", () => ({
@@ -15,7 +14,7 @@ vi.mock("../lib/updater.js", () => ({
 
 import Modal from "./Modal.jsx";
 
-const APPEARANCE = pairName("shield", "#3899e2");
+const APPEARANCE = "blue bell";
 import BrowseModal from "./BrowseModal.jsx";
 import Dropdown from "./Dropdown.jsx";
 import ContextMenu from "./ContextMenu.jsx";
@@ -57,12 +56,12 @@ describe("overlay interactions", () => {
     const close = vi.fn();
     render(<StrictMode><Modal open title="Parent" onClose={close}>
       {kind === "appearance"
-        ? <AppearancePicker fold="shield" accent="#3899e2" />
+        ? <AppearancePicker shape="bell" accent="#3899e2" />
         : <VersionButton />}
     </Modal></StrictMode>);
     fireEvent.click(screen.getByRole("button", { name: kind === "appearance" ? APPEARANCE : "0.0.0" }));
     const panel = () => kind === "appearance"
-      ? screen.queryByText("Object")
+      ? screen.queryByText("Shape")
       : screen.queryByText("You're up to date");
     expect(panel()).toBeTruthy();
     fireEvent.keyDown(document.activeElement, { key: "Escape" });
@@ -76,7 +75,7 @@ describe("overlay interactions", () => {
     function Scene() {
       const [open, setOpen] = useState(false);
       return <>
-        <AppearancePicker fold="shield" accent="#3899e2" />
+        <AppearancePicker shape="bell" accent="#3899e2" />
         <VersionButton />
         <button onClick={() => setOpen(true)}>Open dialog</button>
         <Modal open={open} title="New dialog" onClose={() => setOpen(false)}>Content</Modal>
@@ -88,11 +87,11 @@ describe("overlay interactions", () => {
     fireEvent.click(screen.getByText("Open dialog"));
     fireEvent.keyDown(document.activeElement, { key: "Escape" });
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(screen.getByText("Object")).toBeTruthy();
+    expect(screen.getByText("Shape")).toBeTruthy();
     expect(screen.getByText("You're up to date")).toBeTruthy();
     fireEvent.keyDown(document.body, { key: "Escape" });
     expect(screen.queryByText("You're up to date")).toBeNull();
-    expect(screen.getByText("Object")).toBeTruthy();
+    expect(screen.getByText("Shape")).toBeTruthy();
   });
 
   it("keeps Tab inside a dialog, skipping disabled controls", () => {

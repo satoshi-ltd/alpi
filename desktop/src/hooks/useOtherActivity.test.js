@@ -30,12 +30,12 @@ describe("useOtherActivity", () => {
   it("carries the fold and accent of each profile of that connection", async () => {
     invoke.mockImplementation((cmd) =>
       cmd === "profile_summaries"
-        ? Promise.resolve([{ name: "sentinel", fold: "diamond", accent: "#123456" }, { name: "default", fold: "default", accent: null }])
+        ? Promise.resolve([{ name: "sentinel", shape: "round", accent: "#123456" }, { name: "default", shape: "default", accent: null }])
         : Promise.resolve({ scheduled: [] }),
     );
     const { result } = renderHook(() => useOtherActivity({ connections: [conn("casa"), conn("mirai")], activeId: "casa" }));
     await waitFor(() => expect(result.current).toHaveLength(1));
-    expect(result.current[0].folds.sentinel).toBe("diamond");
+    expect(result.current[0].shapes.sentinel).toBe("round");
     expect(result.current[0].accents.sentinel).toBe("#123456");
   });
 
@@ -43,7 +43,7 @@ describe("useOtherActivity", () => {
     invoke.mockImplementation((cmd) => (cmd === "profile_summaries" ? Promise.reject(new Error("x")) : Promise.resolve({ scheduled: [{ profile: "p", job_id: "j" }] })));
     const { result } = renderHook(() => useOtherActivity({ connections: [conn("casa"), conn("mirai")], activeId: "casa" }));
     await waitFor(() => expect(result.current).toHaveLength(1));
-    expect(result.current[0].folds).toEqual({});
+    expect(result.current[0].shapes).toEqual({});
   });
 
   it("drops a connection that fails and keeps the others", async () => {

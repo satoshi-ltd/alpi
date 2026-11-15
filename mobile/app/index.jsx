@@ -142,7 +142,7 @@ function InboxScreen({ items, loading, refresh, invalidate = null, error = null 
   const activityEntry = activity.supported ? openActivity : null;
 
   const renderRow = useCallback(
-    ({ item }) => <InboxRow item={item} onPress={openItem} onLongPress={handleLongPress} offline={activeFailed} />,
+    ({ item, tile }) => <InboxRow item={item} tile={tile} onPress={openItem} onLongPress={handleLongPress} offline={activeFailed} />,
     [openItem, handleLongPress, activeFailed],
   );
 

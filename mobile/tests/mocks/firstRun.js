@@ -78,7 +78,7 @@ export const Button = ({ title, onPress, variant = 'primary', size = 'lg', fullW
     'data-loading': String(!!loading),
     'data-dark': String(useTheme().mode === 'dark'),
   }, title);
-export const Fold = ({ size }) => React.createElement('span', { 'data-fold': 'alpaca', 'data-size': size });
+export const Fold = ({ size }) => React.createElement('span', { 'data-shape': 'alpaca', 'data-size': size });
 export const Busy = ({ size, visible, style }) =>
   visible === false ? null : React.createElement('span', { role: 'progressbar', 'data-busy': '', 'data-size': size, 'data-style': styled(style) });
 export const Icon = ({ name }) => React.createElement('i', { 'data-icon': name });

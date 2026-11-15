@@ -1,7 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { space } from '../../theme/tokens';
+import { radii, space } from '../../theme/tokens';
 
 import { AlertBanner } from '../../components/AlertBanner';
 import { useAttention } from '../../hooks/useAttention';
@@ -17,13 +17,55 @@ import { useDirtyBack } from '../../hooks/useDirtyBack';
 import { useMemoryEditor } from '../../hooks/useMemoryEditor';
 import { useTheme } from '../../theme/ThemeContext';
 import { ReaderSkeleton } from '../../components/ReaderSkeleton';
-import { detailTitleStyle } from '../../components/detailTitle';
+import { DetailHead } from '../../components/DetailHead';
+import { FactTable } from '../../components/FactTable';
+import { useEndpoint } from '../../lib/EndpointContext';
+import { memoryShare } from '../../../../common/panelRow.mjs';
+import { memoryWord } from '../../../../common/attention.mjs';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 function entryDate(iso) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
   return m ? `${MONTHS[Number(m[2]) - 1]} ${Number(m[3])}` : String(iso || '');
+}
+
+export function updatedDay(sec) {
+  if (!Number.isFinite(sec) || sec <= 0) return null;
+  const d = new Date(sec * 1000);
+  return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
+}
+
+function useMemoryUsage(profile, name, version) {
+  const { call } = useEndpoint();
+  const [usage, setUsage] = useState(null);
+  useEffect(() => {
+    if (!profile || !name) return undefined;
+    let live = true;
+    call('host.profile.memory_usage', { profile: String(profile) })
+      .then((r) => { if (live) setUsage(r?.files?.[String(name)] ?? null); })
+      .catch(() => { if (live) setUsage(null); });
+    return () => { live = false; };
+  }, [profile, name, version, call]);
+  return usage;
+}
+
+function Usage({ used, limit, over }) {
+  const { colors } = useTheme();
+  const pct = memoryShare(used, limit);
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
+      <View style={{ width: 40, height: 3, borderRadius: radii.pill, backgroundColor: colors.line2 ?? colors.hover, overflow: 'hidden' }}>
+        <View style={{ width: `${Math.min(100, pct)}%`, height: 3, backgroundColor: over ? colors.danger : colors.ink2 }} />
+      </View>
+      <FactNumber over={over}>{`${used.toLocaleString('en-US')} / ${limit.toLocaleString('en-US')} · ${pct}%`}</FactNumber>
+    </View>
+  );
+}
+
+function FactNumber({ children, over }) {
+  const { colors, fonts, fontSizes } = useTheme();
+  return <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, fontVariant: ['tabular-nums'], color: over ? colors.dangerText : colors.ink2 }}>{children}</Text>;
 }
 
 export function MemoryDetail({ profile: id, name, embedded = false, onBack, onDirtyChange, onSaved }) {
@@ -35,6 +77,7 @@ export function MemoryDetail({ profile: id, name, embedded = false, onBack, onDi
   const mem = useMemoryEditor(id, name);
   const { att } = useAttention(id);
   const flag = memoryItem(att, String(name));
+  const usage = useMemoryUsage(id, name, mem.raw);
   const askLeave = useDirtyBack(mem.dirty, onBack ?? (() => {}));
   useEffect(() => {
     onDirtyChange?.(mem.dirty);
@@ -69,7 +112,7 @@ export function MemoryDetail({ profile: id, name, embedded = false, onBack, onDi
   }
 
   const entries = memoryEntries(mem.raw ?? '');
-  const mono = { fontFamily: fonts.mono, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * 1.55, color: colors.ink };
+  const mono = { fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * 1.55, color: colors.ink };
   const iconBtn = (icon, onPress) => (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={icon === 'edit' ? 'Edit' : icon === 'check' ? 'Save' : 'Cancel'} style={styles.iconBtn}>
       <Icon name={icon} size="md" color={colors.ink2} />
@@ -93,13 +136,13 @@ export function MemoryDetail({ profile: id, name, embedded = false, onBack, onDi
       {embedded ? (
         <View style={styles.toolbar}>{right}</View>
       ) : (
-        <PanelHeader profile={id} section="MEMORIES" onBack={askLeave} right={right} />
+        <PanelHeader profile={id} section="Memories" onBack={askLeave} right={right} />
       )}
       {mem.loading ? (
         <ReaderSkeleton label="Loading the memory file" />
       ) : mem.loadError ? (
         <View style={styles.center}>
-          <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.dangerText, textAlign: 'center', padding: space.s8 }}>
+          <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.dangerText, textAlign: 'center', padding: space.s8 }}>
             Couldn't load this file.{'\n'}{mem.loadError}
           </Text>
         </View>
@@ -118,20 +161,27 @@ export function MemoryDetail({ profile: id, name, embedded = false, onBack, onDi
       ) : (
         <ScrollView contentContainerStyle={styles.readBody}>
           {flag ? <AlertBanner {...memoryBanner(flag)} /> : null}
-          <View style={{ gap: space.s1 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: space.s3 }}>
-              <Text accessibilityRole="header" style={detailTitleStyle(theme)}>{file.label}</Text>
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>{String(name)}</Text>
-            </View>
-            <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}>{file.caption(String(id))}</Text>
-          </View>
+          <DetailHead
+            title={file.label}
+            state={flag ? memoryWord(flag) : usage?.over ? 'over' : null}
+            stateTone={flag || usage?.over ? 'danger' : null}
+            id={String(name)}
+          />
+          <FactTable
+            rows={[
+              { label: 'About', value: file.caption(String(id)) || null },
+              { label: 'Usage', block: true, value: memoryShare(usage?.used, usage?.limit) == null ? null : <Usage used={usage.used} limit={usage.limit} over={!!usage.over} /> },
+              { label: 'Entries', value: String(entries.length) },
+              { label: 'Updated', value: updatedDay(usage?.updated_at) },
+            ]}
+          />
           {entries.length === 0 ? (
             <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink3 }}>(empty)</Text>
           ) : entries.map((entry, i) => (
             <View key={i} style={{ gap: space.s2 }}>
               <RichText size={fontSizes.md} color={colors.ink}>{entry.text}</RichText>
               {entryNote(entry, entryDate) ? (
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>{entryNote(entry, entryDate)}</Text>
+                <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>{entryNote(entry, entryDate)}</Text>
               ) : null}
             </View>
           ))}

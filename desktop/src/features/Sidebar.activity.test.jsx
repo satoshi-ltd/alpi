@@ -22,6 +22,8 @@ vi.mock("../lib/updater.js", () => ({
 }));
 
 import Sidebar from "./Sidebar.jsx";
+import { ThemeField } from "./settings/fields/ThemeField.jsx";
+import { getTheme, setTheme } from "../lib/theme.js";
 
 const TS = Math.floor(Date.now() / 1000) - 300;
 
@@ -48,10 +50,13 @@ describe("Sidebar agent states", () => {
     expect(screen.getByRole("button", { name: "builder, needs you" })).toHaveTextContent("needs you");
     expect(screen.getByRole("button", { name: "doc, failed" })).toHaveTextContent("failed");
     const alpi = screen.getByRole("button", { name: "alpi, working" });
-    expect(alpi.querySelector("polygon[class*='cell']")).not.toBeNull();
-    expect(alpi.querySelector("[data-state='working'] span")).toBeNull();
+    expect(alpi.querySelector("[data-shape]").dataset.state).toBe("working");
+    expect(alpi.querySelectorAll("[data-shape] path[data-eye] animate")).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "builder, needs you" }).querySelector("[data-shape]").dataset.state).toBe("needs");
+    expect(screen.getByRole("button", { name: "doc, failed" }).querySelector("[data-shape]").dataset.state).toBe("failed");
     const abby = screen.getByText("abby").closest("button");
-    expect(abby.querySelector("[data-state]")).toBeNull();
+    expect(abby.querySelector("[data-shape]").dataset.state).toBe("done");
+    expect(abby).not.toHaveTextContent(/working|needs you|failed/);
     expect(abby.querySelector(".sb-ts")).not.toBeNull();
   });
 
@@ -76,6 +81,65 @@ describe("Sidebar agent states", () => {
   });
 });
 
+describe("Sidebar marks move only on the selected row", () => {
+  const many = {
+    ...BASE,
+    profiles: [
+      ...BASE.profiles,
+      { name: "eve", model: "a/b", paused: true, latest_session: { updated_at: TS } },
+      { name: "fin", latest_session: { updated_at: TS } },
+    ],
+    workgroups: [
+      { profile: "alpi", id: "crew", name: "launch-crew", mtime: TS },
+      { profile: "doc", id: "ops", name: "ops", mtime: TS },
+    ],
+    rosterState: {
+      profiles: { alpi: "working", builder: "needs-you", doc: "failed" },
+      workgroups: { "alpi/crew": { state: "working", phasesDone: 1, phasesTotal: 3, phase: "a" }, "doc/ops": { state: "working", phasesDone: 2, phasesTotal: 3, phase: "b" } },
+    },
+    pendingProfiles: new Set(["abby"]),
+  };
+  const moving = (el) => el.querySelectorAll("animate, .vt-a, .am-a, [data-live], [data-watch]").length;
+  const rowOf = (name) => screen.getByText(name).closest("button");
+
+  it("keeps every other row on the still form of its real state, without SMIL, CSS loops or gaze, and the selected row never follows the pointer", () => {
+    render(<Sidebar {...many} view={{ kind: "profile", profile: "builder" }} activeMarkState="needs" />);
+    const states = Object.fromEntries(["alpi", "doc", "abby", "eve", "fin"].map((n) => [n, rowOf(n).querySelector("[data-shape]").dataset.state]));
+    expect(states).toEqual({ alpi: "working", doc: "failed", abby: "working", eve: "paused", fin: "needs" });
+    for (const name of ["alpi", "doc", "abby", "eve", "fin", "launch-crew", "ops"]) expect(moving(rowOf(name)), name).toBe(0);
+    const selected = rowOf("builder").querySelector("[data-shape]");
+    expect(selected.dataset.state).toBe("needs");
+    expect(selected.hasAttribute("data-live")).toBe(true);
+    expect(selected.querySelectorAll("animate").length).toBeGreaterThan(0);
+    expect(document.querySelector("[data-watch]")).toBeNull();
+  });
+
+  it("updates the still rows live and moves the motion with the selection", () => {
+    const { rerender } = render(<Sidebar {...many} view={{ kind: "profile", profile: "builder" }} />);
+    rerender(<Sidebar {...many} rosterState={{ ...many.rosterState, profiles: { ...many.rosterState.profiles, alpi: "needs-you" } }} view={{ kind: "profile", profile: "doc" }} />);
+    expect(rowOf("alpi").querySelector("[data-shape]").dataset.state).toBe("needs");
+    expect(moving(rowOf("alpi"))).toBe(0);
+    expect(moving(rowOf("builder"))).toBe(0);
+    expect(rowOf("doc").querySelector("[data-live]")).not.toBeNull();
+    expect(document.querySelector("[data-watch]")).toBeNull();
+  });
+
+  it("reads a sent prompt waiting for output as working, never busy", () => {
+    render(<Sidebar {...many} view={{ kind: "profile", profile: "abby" }} />);
+    expect(rowOf("abby").querySelector("[data-shape]").dataset.state).toBe("working");
+    expect(document.querySelector("[data-state='busy']")).toBeNull();
+  });
+
+  it("draws the selected row in the chat header's state", () => {
+    const { rerender } = render(<Sidebar {...many} view={{ kind: "profile", profile: "abby" }} activeMarkState="done" />);
+    expect(rowOf("abby").querySelector("[data-shape]").dataset.state).toBe("done");
+    rerender(<Sidebar {...many} view={{ kind: "profile", profile: "abby" }} activeMarkState="failed" />);
+    expect(rowOf("abby").querySelector("[data-shape]").dataset.state).toBe("failed");
+    rerender(<Sidebar {...many} view={{ kind: "profile", profile: "eve" }} activeMarkState="paused" />);
+    expect(rowOf("eve").querySelector("[data-shape]").dataset.state).toBe("paused");
+  });
+});
+
 describe("Sidebar footer fit", () => {
   const read = (rel) => readFileSync(join(import.meta.dirname, rel), "utf8");
   const mountFooter = () => {
@@ -84,35 +148,35 @@ describe("Sidebar footer fit", () => {
     return { settings, footer: settings.closest("div[class*='footer']") };
   };
 
-  it("holds destinations only: Settings, notifications, Activity and the version, no theme button", () => {
+  it("keeps all five items in order, with the Settings label visible", () => {
     const { footer } = mountFooter();
     const buttons = [...footer.querySelectorAll("button")].map((b) => b.getAttribute("aria-label") ?? b.textContent);
     expect(buttons[0]).toBe("Settings");
     expect(buttons[1]).toMatch(/^Notifications/);
     expect(buttons[2]).toMatch(/^Activity/);
-    expect(buttons[3]).toMatch(/^v?\d|^v/);
-    expect(buttons).toHaveLength(4);
-    expect(screen.queryByRole("button", { name: /^Theme/ })).toBeNull();
+    expect(buttons[3]).toMatch(/^Theme: /);
+    expect(buttons[4]).toMatch(/^v?\d|^v/);
+    expect(buttons).toHaveLength(5);
     expect(footer.textContent).toContain("Settings");
   });
 
-  it("draws Settings with its label and bell and activity as sm icon buttons with 24 px targets", () => {
+  it("draws Settings with its label and bell and activity as sm icon buttons with 32 px targets", () => {
     const { settings } = mountFooter();
-    const three = [settings, ...[/^Notifications/, /^Activity/].map((name) => screen.getByRole("button", { name }))];
-    for (const btn of three) {
+    const four = [settings, ...[/^Notifications/, /^Activity/, /^Theme/].map((name) => screen.getByRole("button", { name }))];
+    for (const btn of four) {
       expect(btn.className).toMatch(/_sm_|\bsm\b/);
-      expect(btn.querySelector("svg").getAttribute("width")).toBe("14");
+      expect(btn.querySelector("svg").getAttribute("width")).toBe("16");
     }
-    expect(read("Sidebar.module.css")).toMatch(/\.footer :global\(\.ds-tip\) \.footerIcon \{\s*width: var\(--ctl-24\);/);
+    expect(read("Sidebar.module.css")).toMatch(/\.footer :global\(\.ds-tip\) \.footerIcon \{\s*width: var\(--ctl-32\);/);
   });
 
-  it("keeps one footer variant in settings mode, with no theme or palette button", () => {
+  it("keeps one footer variant in settings mode, with the theme button and no palette button", () => {
     render(<Sidebar {...BASE} view={{ kind: "settings" }} onOpenSettings={() => {}} onOpenNotifications={() => {}} onOpenActivity={() => {}} />);
     const settings = screen.getByRole("button", { name: "Settings" });
     expect(settings).toHaveAttribute("aria-current", "page");
     expect(settings.textContent).toBe("");
     expect(screen.queryByText("Command…")).toBeNull();
-    expect(screen.queryByRole("button", { name: /^Theme/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /^Theme/ })).toBeInTheDocument();
     const css = read("Sidebar.module.css");
     expect(css).toMatch(/\.footerButton \{[^}]*color: var\(--ink\)/);
     expect(css).not.toMatch(/footerSettings/);
@@ -126,7 +190,7 @@ describe("Sidebar footer fit", () => {
     expect(glyph(screen.getByRole("button", { name: /^Activity/ }))).toBe(ICON_ROLES.activity);
     const version = read("VersionButton.module.css");
     expect(version).toMatch(/\.root \{[^}]*flex-shrink: 0/);
-    expect(version).toMatch(/\.trigger \{[^}]*font-size: var\(--text-meta\)[^}]*padding: 0 calc\(\(var\(--ctl-24\) - var\(--icon-sm\)\) \/ 2\) 0 0[^}]*color: var\(--ink-3\)/);
+    expect(version).toMatch(/\.trigger \{[^}]*font-size: var\(--text-meta\)[^}]*padding: 0 calc\(\(var\(--ctl-32\) - var\(--icon-sm\)\) \/ 2\) 0 0[^}]*color: var\(--ink-3\)/);
   });
 });
 
@@ -147,10 +211,10 @@ describe("Sidebar footer width", () => {
     expect(settings.className).toMatch(/footerIcon/);
   });
 
-  it("insets Settings and the version by the same 19 px of ink", () => {
+  it("insets Settings and the version by the same 22 px of ink", () => {
     const version = readFileSync(join(import.meta.dirname, "VersionButton.module.css"), "utf8");
-    expect(css).toMatch(/\.footerIcon \{\s*width: var\(--ctl-24\);\s*height: var\(--ctl-24\);/);
-    expect(version.match(/\.trigger \{([^}]+)\}/)[1]).toMatch(/padding: 0 calc\(\(var\(--ctl-24\) - var\(--icon-sm\)\) \/ 2\) 0 0;/);
+    expect(css).toMatch(/\.footerIcon \{\s*width: var\(--ctl-32\);\s*height: var\(--ctl-32\);/);
+    expect(version.match(/\.trigger \{([^}]+)\}/)[1]).toMatch(/padding: 0 calc\(\(var\(--ctl-32\) - var\(--icon-sm\)\) \/ 2\) 0 0;/);
   });
 
   it("keeps the right padding at least 12 px so the version clears the edge", () => {
@@ -240,10 +304,35 @@ describe("Sidebar footer badges", () => {
   });
 });
 
-describe("Sidebar theme", () => {
-  it("keeps the palette's cycle and no footer cycle helper", async () => {
-    const theme = await import("../lib/theme.js");
-    expect(theme.nextTheme).toBeUndefined();
-    expect(typeof theme.cycleTheme).toBe("function");
+describe("Sidebar theme button", () => {
+  const mount = () => render(<Sidebar {...BASE} onOpenSettings={() => {}} />);
+
+  it("labels each preference, cycles system to light to dark and applies it", () => {
+    setTheme("system");
+    mount();
+    fireEvent.click(screen.getByRole("button", { name: "Theme: System" }));
+    expect(getTheme()).toBe("light");
+    expect(document.documentElement.getAttribute("data-mode")).toBe("light");
+    const light = screen.getByRole("button", { name: "Theme: Light" });
+    expect(light.querySelector("svg").getAttribute("data-icon")).toBe("sun");
+    fireEvent.click(light);
+    expect(getTheme()).toBe("dark");
+    expect(document.documentElement.getAttribute("data-mode")).toBe("dark");
+    const dark = screen.getByRole("button", { name: "Theme: Dark" });
+    expect(dark.querySelector("svg").getAttribute("data-icon")).toBe("moon");
+    fireEvent.click(dark);
+    expect(getTheme()).toBe("system");
+    expect(document.documentElement.hasAttribute("data-mode")).toBe(false);
+    expect(screen.getByRole("button", { name: "Theme: System" }).querySelector("svg").getAttribute("data-icon")).toBe("sun-moon");
+  });
+
+  it("stays in sync with the settings theme field", () => {
+    setTheme("system");
+    mount();
+    render(<ThemeField />);
+    fireEvent.click(screen.getByRole("button", { name: "Dark" }));
+    expect(screen.getByRole("button", { name: "Theme: Dark" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Theme: Dark" }));
+    expect(screen.getByRole("button", { name: "System" })).toHaveAttribute("aria-pressed", "true");
   });
 });

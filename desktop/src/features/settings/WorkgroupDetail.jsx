@@ -29,6 +29,7 @@ import { workgroupWaitLabel } from "../../../../common/runLimits.mjs";
 import { useSettingsDirty } from "../../lib/settingsDirty.js";
 import { copyText } from "../../lib/clipboard.js";
 import { chainChips, hasPhaseOwners, orderedPipelines, ownedPhases, pipelineTrigger, runSummary, runSummaryLine, sameName } from "../../../../common/pipelinePhases.mjs";
+import { pipelineRunMark } from "../../../../common/workgroupMarkState.mjs";
 import { settingsMatch, useSectionTitleHit, useSettingsQuery } from "./SettingsNav.jsx";
 
 function renderMemberRow(m, profiles, workgroup, hub, { onRemove, onOpen, notify } = {}) {
@@ -44,7 +45,7 @@ function renderMemberRow(m, profiles, workgroup, hub, { onRemove, onOpen, notify
   return (
     <DsMemberRow
       key={m.pubkey}
-      member={{ id, color: local?.accent || "var(--ink-3)", accent: local?.accent, fold: local?.fold }}
+      member={{ id, color: local?.accent || "var(--ink-3)", accent: local?.accent, shape: local?.shape }}
       isHub={isHub}
       note={bio}
       owns={owns}
@@ -150,7 +151,7 @@ export default function WorkgroupDetail({
   const run = taskState?.pipeline_run ?? null;
   const profileOf = (name) => {
     const p = profiles.find((x) => sameName(x.name, name));
-    return p ? { fold: p.fold, accent: p.accent } : null;
+    return p ? { shape: p.shape, accent: p.accent } : null;
   };
   const members = membersData ?? null;
   const membersFailed = !membersData && !!membersError;
@@ -301,7 +302,7 @@ export default function WorkgroupDetail({
     <>
       <span className={styles.heroMetaGroup}>
         <span className={styles.heroMetaLabel}>hub</span>
-        <Fold fold={hub?.fold} color={hub?.accent || "var(--accent)"} />
+        <Fold shape={hub?.shape} color={hub?.accent || "var(--accent)"} />
         <Mono className={styles.heroMetaValue}>@{profileLabel(hubName)}</Mono>
       </span>
       <span aria-hidden className={styles.heroMetaSep} />
@@ -328,6 +329,7 @@ export default function WorkgroupDetail({
         kind="workgroup"
         id={workgroup.name || workgroup.id}
         accent={hub?.accent || "var(--accent)"}
+        mark={pipelineRunMark({ workgroup, pipelineRun: run })}
         bio={workgroup.briefing}
         meta={heroMeta}
         paused={!!workgroup.paused}
@@ -352,6 +354,7 @@ export default function WorkgroupDetail({
           active={syncing}
           controlled
           label="Fetching latest workgroup settings"
+          color={hub?.accent ?? null}
         />
       </div>
       <div ref={bodyRef} className={styles.body}>
@@ -359,7 +362,7 @@ export default function WorkgroupDetail({
           <Section title="Overview">
             <Row label="hub">
               <span className={styles.inlineRow}>
-                <Fold fold={hub?.fold} color={hub?.accent} />
+                <Fold shape={hub?.shape} color={hub?.accent} />
                 <span className={styles.mono}>@{profileLabel(hubName)}</span>
               </span>
             </Row>
@@ -436,7 +439,7 @@ export default function WorkgroupDetail({
                     ${(workgroup.spent_usd ?? 0).toFixed(2)}
                   </span>
                   {workgroup.budget_usd != null ? (
-                    <Mono className={styles.budgetCap}>
+                    <span className={styles.budgetCap}>
                       of{" "}
                       <span className={`tnum ${styles.budgetCapValue}`}>
                         ${workgroup.budget_usd.toFixed(2)}
@@ -446,9 +449,9 @@ export default function WorkgroupDetail({
                         (workgroup.spent_usd ?? 0) / workgroup.budget_usd * 100,
                       )}
                       %
-                    </Mono>
+                    </span>
                   ) : (
-                    <Mono className={styles.budgetCap}>no cap</Mono>
+                    <span className={styles.budgetCap}>no cap</span>
                   )}
                   <span className={styles.budgetSpacer} />
                   {workgroup.is_hub && (
@@ -577,8 +580,8 @@ export default function WorkgroupDetail({
               <LoadFailed inline label="members" onRetry={reloadMembers} />
             ) : showMembersSkeleton ? (
               <>
-                <Skeleton width="220px" height="22px" radius="var(--r-tag)" delay={0} />
-                <Skeleton width="180px" height="22px" radius="var(--r-tag)" delay={0} />
+                <Skeleton width="220px" height="22px" radius="var(--r-pill)" delay={0} />
+                <Skeleton width="180px" height="22px" radius="var(--r-pill)" delay={0} />
               </>
             ) : members === null ? null : members.filter((m) => m.joined).length === 0 ? (
               <span className={styles.muted}>{emptyLine("members")}</span>
@@ -619,7 +622,7 @@ export default function WorkgroupDetail({
                             <Dropdown.Row
                               key={p.id}
                               caption={shortPubkey(p.pubkey)}
-                              leading={<Fold fold={local?.fold} color={local?.accent} />}
+                              leading={<Fold shape={local?.shape} color={local?.accent} />}
                               onClick={() => {
                                 close();
                                 addMember(p.id, label);

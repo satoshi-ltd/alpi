@@ -4,35 +4,15 @@
   justify-content: center;
   flex-shrink: 0;
 }
-
-.cell {
-  animation: cellRipple var(--dur-loop) ease-in-out infinite;
+.lit {
+  --wg-lit: var(--wg-lit-light);
 }
-
-@keyframes cellRipple {
-  0%, 100% { opacity: 1; }
-  35% { opacity: 0.4; }
+.toned {
+  --mark-body: var(--mark-light);
 }
-
-.alpaca {
-  --alp: var(--alp-l);
-  --alp-t0: var(--alp-l0);
-  --alp-t1: var(--alp-l1);
-  --alp-t2: var(--alp-l2);
-}
-
 @media (prefers-color-scheme: dark) {
-  :global(:root:not([data-mode="light"])) .alpaca {
-    --alp: var(--alp-d);
-    --alp-t0: var(--alp-d0);
-    --alp-t1: var(--alp-d1);
-    --alp-t2: var(--alp-d2);
-  }
+  :global(:root:not([data-mode="light"])) .lit { --wg-lit: var(--wg-lit-dark); }
+  :global(:root:not([data-mode="light"])) .toned { --mark-body: var(--mark-dark); }
 }
-
-:global([data-mode="dark"]) .alpaca {
-  --alp: var(--alp-d);
-  --alp-t0: var(--alp-d0);
-  --alp-t1: var(--alp-d1);
-  --alp-t2: var(--alp-d2);
-}
+:global([data-mode="dark"]) .lit { --wg-lit: var(--wg-lit-dark); }
+:global([data-mode="dark"]) .toned { --mark-body: var(--mark-dark); }

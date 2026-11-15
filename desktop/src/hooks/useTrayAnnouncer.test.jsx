@@ -15,7 +15,7 @@ import { TRAY_ANNOUNCE_DEBOUNCE_MS, reducedSnapshot, useTrayAnnouncer } from "./
 
 const online = { id: "local", kind: "local", status: "online" };
 const EMPTY = { needs_you: [], running: [], scheduled: [] };
-const props = (over = {}) => ({ connection: online, daemon: null, activity: EMPTY, activitySupported: true, member: false, unread: 0, foldByProfile: {}, accentByProfile: {}, ...over });
+const props = (over = {}) => ({ connection: online, daemon: null, activity: EMPTY, activitySupported: true, member: false, unread: 0, shapeByProfile: {}, accentByProfile: {}, ...over });
 const sent = () => invoke.mock.calls.filter(([name]) => name === "tray_announce_state");
 const flush = () => act(async () => { await vi.advanceTimersByTimeAsync(TRAY_ANNOUNCE_DEBOUNCE_MS + 10); });
 

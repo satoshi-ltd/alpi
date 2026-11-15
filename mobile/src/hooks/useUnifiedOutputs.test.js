@@ -8,7 +8,8 @@ vi.mock('../theme/ThemeContext', () => ({ useTheme: () => ({ colors: { accent: '
 
 import { EndpointContext } from '../lib/EndpointContext';
 import { call as rpcCall } from '../lib/rpc';
-import { adminConnectionsOf, connectionsSignature, fetchConnectionOutputs, isMemberOnly, markAllUnifiedRead, mergeOutputs, outputsEmptyState, outputsSubtitle, settledStatuses, useUnifiedOutputs } from './useUnifiedOutputs';
+import { adminConnectionsOf, connectionsSignature, fetchConnectionOutputs, isMemberOnly, markAllUnifiedRead, mergeOutputs, outputsEmptyState, outputsSubtitle, overlayProfileEdits, settledStatuses, useUnifiedOutputs } from './useUnifiedOutputs';
+import { _resetProfileEdits, beginEdit } from '../lib/optimisticProfiles';
 
 const conn = { id: 'c1', name: 'home', ip: '100.0.0.1', port: 8838, token: 't' };
 
@@ -19,6 +20,24 @@ describe('mergeOutputs', () => {
       [{ id: 'b', created_at: 30 }, { id: 'c', created_at: 20 }],
     ]);
     expect(merged.map((r) => r.id)).toEqual(['b', 'c', 'a']);
+  });
+});
+
+describe('overlayProfileEdits', () => {
+  beforeEach(() => _resetProfileEdits());
+
+  it('shows a pending shape and colour on the notifications of that profile and connection only', () => {
+    const rows = [
+      { id: 'a', profile: 'vera', accent: '#f00', shape: 'bell', connectionId: 'c1' },
+      { id: 'b', profile: 'vera', accent: '#f00', shape: 'bell', connectionId: 'c2' },
+      { id: 'c', profile: 'abby', accent: '#0f0', shape: 'pill', connectionId: 'c1' },
+    ];
+    expect(overlayProfileEdits(rows)).toBe(rows);
+    beginEdit('c1', 'vera', { shape: 'heart', accent: '#00f' });
+    const shown = overlayProfileEdits(rows);
+    expect(shown[0]).toMatchObject({ shape: 'heart', accent: '#00f' });
+    expect(shown[1]).toBe(rows[1]);
+    expect(shown[2]).toBe(rows[2]);
   });
 });
 
@@ -55,16 +74,17 @@ describe('fetchConnectionOutputs', () => {
     expect(listCall[2]).toMatchObject({ profile: 'vera', status: 'unread' });
   });
 
-  it('carries each profile fold onto its rows and leaves older daemons undefined', async () => {
+  it('carries each profile shape onto its rows and never reads a fold', async () => {
     const rpc = vi.fn(async (_c, method, params) => {
       if (method === 'host.profile.summaries') {
-        return { profiles: [{ name: 'vera', accent: '#f00', fold: 'shield' }, { name: 'abby', accent: '#0f0' }] };
+        return { profiles: [{ name: 'vera', accent: '#f00', shape: 'bell' }, { name: 'abby', accent: '#0f0' }, { name: 'old', accent: '#00f', fold: 'rocket' }] };
       }
       return { outputs: [{ id: `${params.profile}-1`, created_at: 5 }] };
     });
     const { rows } = await fetchConnectionOutputs(conn, undefined, rpc);
-    expect(rows.find((r) => r.profile === 'vera').fold).toBe('shield');
-    expect(rows.find((r) => r.profile === 'abby').fold).toBeUndefined();
+    expect(rows.find((r) => r.profile === 'vera').shape).toBe('bell');
+    expect(rows.find((r) => r.profile === 'abby').shape).toBeUndefined();
+    expect(rows.find((r) => r.profile === 'old').shape).toBeUndefined();
   });
 
   it('falls back to the default profile when summaries is empty', async () => {
@@ -77,24 +97,24 @@ describe('fetchConnectionOutputs', () => {
     expect(rows[0].profile).toBe('default');
   });
 
-  it('draws the default profile as the alpaca in the accent it is handed', async () => {
+  it('draws the default profile as the brand mark in the accent it is handed', async () => {
     const rpc = vi.fn(async (_c, method, params) => {
       if (method === 'host.profile.summaries') return { profiles: [{ name: 'default', accent: '#f0b447' }, { name: 'vera', accent: '#f00' }] };
       return { outputs: [{ id: `${params.profile}-1`, created_at: 1 }] };
     });
     const { rows } = await fetchConnectionOutputs(conn, undefined, rpc, '#14110c');
     const own = rows.find((r) => r.profile === 'default');
-    expect(own).toMatchObject({ accent: '#14110c', fold: 'alpaca' });
+    expect(own).toMatchObject({ accent: '#14110c', shape: 'twin' });
     expect(rows.find((r) => r.profile === 'vera').accent).toBe('#f00');
   });
 
-  it('draws the empty-summaries fallback as the alpaca too', async () => {
+  it('draws the empty-summaries fallback as the brand mark too', async () => {
     const rpc = vi.fn(async (_c, method) => {
       if (method === 'host.profile.summaries') return { profiles: [] };
       return { outputs: [{ id: 'd1', created_at: 1 }] };
     });
     const { rows } = await fetchConnectionOutputs(conn, undefined, rpc, '#14110c');
-    expect(rows[0]).toMatchObject({ profile: 'default', accent: '#14110c', fold: 'alpaca' });
+    expect(rows[0]).toMatchObject({ profile: 'default', accent: '#14110c', shape: 'twin' });
   });
 
   it('reports ok=false when the daemon is unreachable (summaries throws)', async () => {
@@ -232,7 +252,22 @@ describe('useUnifiedOutputs · unreachable', () => {
     const { result } = renderHook(() => useUnifiedOutputs(), { wrapper: wrap(adminValue(['c1'])) });
 
     await waitFor(() => expect(result.current.rows).toHaveLength(1));
-    expect(result.current.rows[0]).toMatchObject({ accent: '#14110c', fold: 'alpaca' });
+    expect(result.current.rows[0]).toMatchObject({ accent: '#14110c', shape: 'twin' });
+  });
+
+  it('re-paints its rows when a profile edit lands, without a refetch', async () => {
+    _resetProfileEdits();
+    rpcCall.mockImplementation(async (_c, method) => {
+      if (method === 'host.profile.summaries') return { profiles: [{ name: 'vera', accent: '#f00', shape: 'bell' }] };
+      return { outputs: [{ id: 'o1', created_at: 1 }] };
+    });
+    const { result } = renderHook(() => useUnifiedOutputs(), { wrapper: wrap(adminValue(['c1'])) });
+    await waitFor(() => expect(result.current.rows).toHaveLength(1));
+    const calls = rpcCall.mock.calls.length;
+    act(() => { beginEdit('c1', 'vera', { shape: 'heart' }); });
+    expect(result.current.rows[0].shape).toBe('heart');
+    expect(rpcCall.mock.calls.length).toBe(calls);
+    _resetProfileEdits();
   });
 
   it('a reachable daemon with nothing to show is a plain empty inbox', async () => {
@@ -323,19 +358,19 @@ describe('outputsSubtitle', () => {
   it('never reads INBOX ZERO while a daemon is unreachable', () => {
     expect(outputsSubtitle({
       unreachable: true, unreachableCount: 1, connectionCount: 1, unreadCount: 0, hasRows: false,
-    })).toBe('UNREACHABLE');
+    })).toBe('Unreachable');
     expect(outputsSubtitle({
       unreachable: true, unreachableCount: 1, connectionCount: 3, unreadCount: 0, hasRows: false,
-    })).toBe('PARTIAL');
+    })).toBe('Partial');
     expect(outputsSubtitle({
       unreachable: true, unreachableCount: 1, connectionCount: 3, unreadCount: 2, hasRows: true,
-    })).toBe('2 UNREAD · PARTIAL');
+    })).toBe('2 unread · partial');
   });
 
   it('reads INBOX ZERO only when the daemons answered and had nothing', () => {
-    expect(outputsSubtitle({ unreachable: false, unreadCount: 0, hasRows: false })).toBe('INBOX ZERO');
-    expect(outputsSubtitle({ unreachable: false, unreadCount: 2, hasRows: true })).toBe('2 UNREAD');
-    expect(outputsSubtitle({ memberOnly: true, unreachable: true, unreadCount: 0, hasRows: false })).toBe('MEMBER');
+    expect(outputsSubtitle({ unreachable: false, unreadCount: 0, hasRows: false })).toBe('Inbox zero');
+    expect(outputsSubtitle({ unreachable: false, unreadCount: 2, hasRows: true })).toBe('2 unread');
+    expect(outputsSubtitle({ memberOnly: true, unreachable: true, unreadCount: 0, hasRows: false })).toBe('Member');
   });
 });
 

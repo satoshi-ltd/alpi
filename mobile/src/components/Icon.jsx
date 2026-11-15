@@ -15,7 +15,7 @@ export function Icon({ name, size = 'md', color }) {
   if (!def) return null;
   const els = Array.isArray(def) ? def : def.els;
   const vb = (!Array.isArray(def) && def.vb) || '0 0 24 24';
-  const px = size === 'xs' ? iconSizes.xs : iconSizes.md;
+  const px = size === 'xs' ? iconSizes.xs : size === 'lg' ? iconSizes.lg : iconSizes.md;
   const sw = !Array.isArray(def) && def.sw != null ? def.sw : iconStrokeFor(px);
   const filled = !Array.isArray(def) && def.fill === 'currentColor';
   return (

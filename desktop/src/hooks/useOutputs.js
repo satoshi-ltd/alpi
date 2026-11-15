@@ -1,4 +1,4 @@
-import { defaultAsAlpaca } from "../../../common/folds.mjs";
+import { defaultAsTwin } from "../lib/brandMark.js";
 import { isGone } from "../../../common/isGone.mjs";
 import { createUndoBatch } from "../../../common/undoBatch.mjs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -49,7 +49,7 @@ export async function fetchConnectionOutputs(connection, status, previous = null
   let profiles;
   try {
     const res = await invoke("profile_summaries", { connectionId });
-    profiles = (Array.isArray(res) ? res : []).map(defaultAsAlpaca("var(--accent)")).map((p) => ({ name: p.name, accent: p.accent || null, fold: p.fold ?? null, voice_id: p.voice_id ?? null }));
+    profiles = (Array.isArray(res) ? res : []).map(defaultAsTwin("var(--accent)")).map((p) => ({ name: p.name, accent: p.accent || null, shape: p.shape ?? null, voice_id: p.voice_id ?? null }));
   } catch {
     return null;
   }
@@ -76,7 +76,7 @@ export async function fetchConnectionOutputs(connection, status, previous = null
         ...o,
         profile: o.profile || "default",
         accent: p.accent ?? null,
-        fold: p.fold ?? null,
+        shape: p.shape ?? null,
         voice_id: p.voice_id ?? null,
         connectionId,
         connectionName: connection.name,
@@ -97,7 +97,7 @@ export async function fetchConnectionOutputs(connection, status, previous = null
             ...o,
             profile: o.profile || p.name,
             accent: p.accent,
-            fold: p.fold,
+            shape: p.shape,
             voice_id: p.voice_id,
             connectionId,
             connectionName: connection.name,

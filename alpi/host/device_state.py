@@ -19,7 +19,7 @@ from alpi import __version__ as _alpi_version
 from alpi import config as cfg_mod
 from alpi import provider_pause
 from alpi import home as home_mod
-from alpi import palette
+from alpi import appearance, palette
 from alpi.host import sessions as host_sessions
 from alpi.host import server as host_server
 from alpi.host.connection_context import owns_session_row, session_view_key
@@ -185,7 +185,7 @@ def _profile_summary(row: dict[str, Any]) -> dict[str, Any]:
         "installed_via": _installed_via(),
         "model": cfg.model or None,
         "accent": None if default else palette.canonical_accent(cfg.tui.get("accent")),
-        "fold": palette.ALPACA_FOLD if default else palette.resolve_fold(cfg.tui.get("fold")),
+        "shape": palette.TWIN_SHAPE if default else palette.resolve_shape(appearance.stored_shape(cfg.tui)),
         "voice_id": cfg.tools.tts.voice,
         "bio": cfg.public_bio or None,
         "paused": cfg.paused,
@@ -591,8 +591,6 @@ async def _cleanup_apply(
 
 
 def _reject_locked_appearance(profile: str, key: str) -> None:
-    from alpi import appearance
-
     if profile not in ("", "default"):
         return
     path = ".".join(part for part in key.split(".") if part)
@@ -676,6 +674,9 @@ async def _config_set_field(
             data["fallback_models"] = coerced
         else:
             data.pop("fallback_models", None)
+    elif key == "tui.shape":
+        _set_dotted(data, key, coerced)
+        _unset_dotted(data, "tui.fold")
     elif key == "tools.read_image.model":
         model_val = str(coerced or "").strip()
         if model_val:
@@ -701,6 +702,8 @@ async def _config_unset_field(
     _reject_locked_appearance(str(params.get("profile") or ""), key)
     data = _load_user_yaml(home)
     _unset_dotted(data, key)
+    if key == "tui.shape":
+        _unset_dotted(data, "tui.fold")
     _prune_empty_tiers(data)
     if key == "tools.read_image.model":
         _prune_empty_read_image(data)
@@ -723,6 +726,10 @@ def _config_key(params: dict[str, Any]) -> str:
 
 
 def _reject_removed_config_key(key: str) -> None:
+    if key == "tui.fold":
+        raise host_server.HandlerError(
+            -32602, "invalid-params", data={"detail": "tui.fold is not a config key; set tui.shape"},
+        )
     if key == "service" or key.startswith("service."):
         raise host_server.HandlerError(
             -32602,
@@ -904,7 +911,7 @@ def _aggregate_workgroups(
             )
             row["queued_pipeline"] = queue_item.get("pipeline") if queue_item else None
             row["queue_position"] = queue_item.get("position") if queue_item else None
-            if row["pipeline_status"] in {"running", "between"}:
+            if row["pipeline_status"] in _PHASED_PIPELINE:
                 pipeline_phase = _pipeline_phase(home, str(row.get("id") or ""))
                 if pipeline_phase:
                     row["pipeline_phase"] = pipeline_phase
@@ -1298,14 +1305,14 @@ def _coerce_config_value(key: str, value: Any) -> Any:
         return parsed
     if key in {"budget.daily_usd"}:
         return _typed_config_value(key, float, value)
-    if key == "tui.fold":
-        fold = str(value or "").strip().lower()
-        if fold not in palette.FOLDS:
+    if key == "tui.shape":
+        shape = palette.shape_of(value)
+        if shape is None:
             raise host_server.HandlerError(
                 -32602, "invalid-params",
-                data={"detail": f"tui.fold must be one of {', '.join(palette.FOLDS)}"},
+                data={"detail": f"tui.shape must be one of {', '.join(palette.SHAPES)}"},
             )
-        return fold
+        return shape
     kind = _schema_type(key)
     if kind is not None:
         return _typed_config_value(key, kind, value)
@@ -1686,6 +1693,9 @@ def _pipeline_status(home: Path, wg_id: str) -> str | None:
     return str(run.get("status") or "") or None
 
 
+_PHASED_PIPELINE = frozenset({"running", "between", "blocked"})
+
+
 def _pipeline_phase(home: Path, wg_id: str) -> str | None:
     from alpi.host import workgroup as host_workgroup
 
@@ -1760,7 +1770,7 @@ def _hub_workgroups(
                 "queued_pipeline": queue_item.get("pipeline") if queue_item else None,
                 "queue_position": queue_item.get("position") if queue_item else None,
             })
-            if pipeline_status in {"running", "between"}:
+            if pipeline_status in _PHASED_PIPELINE:
                 pipeline_phase = _pipeline_phase(home, path.name)
                 if pipeline_phase:
                     row["pipeline_phase"] = pipeline_phase
@@ -1816,7 +1826,7 @@ def _subscribed_workgroups(
                 else None
             )
             row["pipeline_status"] = pipeline_status
-            if pipeline_status in {"running", "between"}:
+            if pipeline_status in _PHASED_PIPELINE:
                 pipeline_phase = _pipeline_phase(home, sub.wg_id)
                 if pipeline_phase:
                     row["pipeline_phase"] = pipeline_phase

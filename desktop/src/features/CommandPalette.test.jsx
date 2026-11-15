@@ -363,7 +363,7 @@ describe("CommandPalette iconography", () => {
   });
 
 describe("entityGroups workgroup glyph", () => {
-  it("is the honeycomb in the hub's colour, unfolded in grey when paused", () => {
+  it("is the soft honeycomb in neutral ink at rest, never the hub's colour, dashed in grey when paused", () => {
     const [, group] = entityGroups({
       profiles: [{ name: "alpi", accent: "#f0b447" }],
       workgroups: [
@@ -372,11 +372,11 @@ describe("entityGroups workgroup glyph", () => {
       ],
     });
     const [live, paused] = group.items.map((item) => render(item.glyph).container.firstChild);
-    expect(live.dataset.fold).toBe("honeycomb");
-    expect([...live.querySelectorAll("polygon")].map((p) => p.getAttribute("fill"))).toContain("#f0b447");
-    expect(live.querySelector("polygon").getAttribute("fill-opacity")).toBeNull();
-    expect(paused.hasAttribute("data-unfolded")).toBe(true);
-    expect(paused.querySelector("polygon").getAttribute("fill")).toBe("none");
+    expect(live.dataset.shape).toBe("honeycomb");
+    expect([...live.querySelectorAll("[data-cell]")].map((p) => p.getAttribute("fill"))).toEqual(["var(--ink-3)", "var(--ink-3)", "var(--ink-3)"]);
+    expect(live.querySelector("[data-cell]").getAttribute("fill-opacity")).toBeNull();
+    expect(paused.dataset.state).toBe("paused");
+    expect(paused.querySelector("[data-cell] path").getAttribute("fill")).toBe("none");
   });
 });
 });

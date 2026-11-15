@@ -27,7 +27,7 @@ import { useNotify } from "../primitives/Notification.jsx";
 import Markdown from "../primitives/Markdown.jsx";
 import { ACCENT_HEXES } from "../../../common/accents.mjs";
 import ExportMenu from "../features/ExportMenu.jsx";
-import { FOLD_SIZES } from "../../../common/folds.mjs";
+import { MARK_SIZES } from "../../../common/agentMarks.mjs";
 import ProducedImages from "../primitives/ProducedImages.jsx";
 import { setImageRoots } from "../lib/imageRoots.js";
 import { Banner, JumpToLatest, LoadFailed, MessageBubble, ProfileChatHeader } from "../primitives/index.js";
@@ -39,7 +39,6 @@ import {
   Fold,
   IconBtn,
   Kbd,
-  Mono,
   RefreshBar,
   RefreshIcon,
   SpinnerIcon as DSSpinnerIcon,
@@ -71,6 +70,7 @@ export default function ChatPane({
   sessionData,
   sessionSync = null,
   pendingTurn,
+  markState = null,
   onSend,
   onCancel,
   onConfigureProfile,
@@ -215,6 +215,7 @@ export default function ChatPane({
         || (activeProfile.provider_ollama?.length ?? 0) > 0);
 
   const paused = !!activeProfile?.paused;
+  const heroState = paused ? "paused" : markState || "idle";
   const syncVisible = useDelayedFlag(!!sessionSync);
   const notify = useNotify();
   const onTogglePause =
@@ -230,6 +231,7 @@ export default function ChatPane({
         {inProfile && activeProfile && (
           <ProfileChatHeader
             profile={activeProfile}
+            markState={markState}
             sessionData={sessionData}
             model={effectiveModel}
             contextWindow={contextWindow}
@@ -252,7 +254,7 @@ export default function ChatPane({
         <div className={styles.emptyShell}>
           <div className={styles.emptyContent}>
             <div className={styles.emptyMark}>
-              <Fold fold={activeProfile?.fold} color={activeProfile?.accent || "var(--ink-3)"} size={FOLD_SIZES.hero} />
+              <Fold shape={activeProfile?.shape} color={activeProfile?.accent || "var(--ink-3)"} size={MARK_SIZES.hero} state={heroState} watch />
             </div>
             <div className={styles.titleGroup}>
               <h1 className={styles.emptyHeading}>
@@ -289,6 +291,7 @@ export default function ChatPane({
       {inProfile && activeProfile && (
         <ProfileChatHeader
           profile={activeProfile}
+          markState={markState}
           sessionData={sessionData}
           model={effectiveModel}
           contextWindow={contextWindow}
@@ -335,6 +338,7 @@ export default function ChatPane({
           active={refreshBeat > 0 || syncVisible}
           controlled={syncVisible}
           label={syncVisible ? "syncing conversation" : null}
+          color={activeProfile?.accent ?? null}
         />
         <SessionView
           data={sessionData}
@@ -343,8 +347,9 @@ export default function ChatPane({
           profiles={profiles}
           pendingTurn={pendingTurn}
           accent={activeProfile?.accent ?? null}
-          fold={activeProfile?.fold}
+          shape={activeProfile?.shape}
           showEmptyHint={inProfile && view.sessionId == null && !pendingTurn}
+          heroState={heroState}
           profileName={activeProfile?.name ?? null}
           profileModel={activeProfile?.model ?? null}
           voiceId={activeProfile?.voice_id ?? activeDetail?.voice_id ?? null}
@@ -393,8 +398,9 @@ function SessionView({
   profiles,
   pendingTurn,
   accent,
-  fold,
+  shape,
   showEmptyHint,
+  heroState,
   profileName,
   profileModel,
   voiceId,
@@ -418,8 +424,9 @@ function SessionView({
         profiles={profiles}
         pendingTurn={pendingTurn}
         accent={accent}
-        fold={fold}
+        shape={shape}
         showEmptyHint={showEmptyHint}
+        heroState={heroState}
         profileName={profileName}
         profileModel={profileModel}
         voiceId={voiceId}
@@ -445,8 +452,9 @@ const Transcript = memo(function Transcript({
   profiles,
   pendingTurn,
   accent,
-  fold,
+  shape,
   showEmptyHint,
+  heroState,
   profileName,
   profileModel,
   voiceId,
@@ -521,7 +529,7 @@ const Transcript = memo(function Transcript({
   if (showEmptyHint) {
     return (
       <div className={styles.empty}>
-        <Fold fold={fold} color={accent || "var(--accent)"} size={FOLD_SIZES.hero} />
+        <Fold shape={shape} color={accent || "var(--accent)"} size={MARK_SIZES.hero} state={heroState} watch />
         <div className={styles.emptyHeading}>Start a new thread</div>
         {profileModel && (
           <div className={styles.emptyModel}>{profileModel}</div>
@@ -573,7 +581,7 @@ const Transcript = memo(function Transcript({
               baseModel={baseModel}
               profiles={profiles}
               accent={accent}
-              fold={fold}
+              shape={shape}
               profileName={profileName}
               voiceId={voiceId}
               onRewriteMessage={onRewriteMessage}
@@ -587,7 +595,7 @@ const Transcript = memo(function Transcript({
               <PendingTurn
                 turn={streamingTurn}
                 accent={accent}
-                fold={fold}
+                shape={shape}
                 profiles={profiles}
                 fresh={fresh.streamFresh}
                 inline={inlineBlock}
@@ -609,7 +617,7 @@ const HistoryTurns = memo(function HistoryTurns({
   baseModel,
   profiles,
   accent,
-  fold,
+  shape,
   profileName,
   voiceId,
   onRewriteMessage,
@@ -631,7 +639,7 @@ const HistoryTurns = memo(function HistoryTurns({
           baseModel={baseModel}
           profiles={profiles}
           accent={accent}
-          fold={fold}
+          shape={shape}
           profileName={profileName}
           voiceId={voiceId}
           sessionId={sessionId}
@@ -653,7 +661,7 @@ const Turn = memo(function Turn({
   baseModel,
   profiles,
   accent,
-  fold,
+  shape,
   profileName,
   voiceId,
   sessionId,
@@ -745,9 +753,9 @@ const Turn = memo(function Turn({
       )}
       {(process.length > 0 || parts.askUsers.length > 0) && (
         <div className={styles.steps}>
-          {process.length > 0 && <ProcessBlock entries={process} accent={accent} fold={fold} />}
+          {process.length > 0 && <ProcessBlock entries={process} accent={accent} shape={shape} />}
           {parts.askUsers.map((a, i) => (
-            <AskUserAnswer key={`a-${a.tool_id ?? i}`} result={a.result} question={a.question} accent={accent} fold={fold} />
+            <AskUserAnswer key={`a-${a.tool_id ?? i}`} result={a.result} question={a.question} accent={accent} shape={shape} />
           ))}
         </div>
       )}
@@ -756,7 +764,7 @@ const Turn = memo(function Turn({
           peerId={peerTool.args?.peer_id || "peer"}
           reply={turn.assistant}
           accent={accentForPeer(peerTool.args?.peer_id, profiles)}
-          fold={(profiles || []).find((p) => p.name === peerTool.args?.peer_id)?.fold}
+          shape={(profiles || []).find((p) => p.name === peerTool.args?.peer_id)?.shape}
         />
       )}
       {(turn.assistant || turn.output_attachments?.length > 0) && !hideAssistant && !peerTool && (
@@ -855,7 +863,7 @@ function askUserNoAnswerTag(result) {
   return null;
 }
 
-function AskUserAnswer({ result, question, accent, fold }) {
+function AskUserAnswer({ result, question, accent, shape }) {
   const noAnswerTag = askUserNoAnswerTag(result);
   if (noAnswerTag) {
     return (
@@ -870,7 +878,7 @@ function AskUserAnswer({ result, question, accent, fold }) {
   }
   return (
     <div className={styles.askUserAnswer}>
-      <Fold fold={fold} color={accent || undefined} className={styles.askUserFold} />
+      <Fold shape={shape} color={accent || undefined} className={styles.askUserFold} />
       <span className={styles.askUserAnswerLabel}>{result}</span>
     </div>
   );
@@ -896,11 +904,11 @@ function peerReplyFrom(tools) {
   return null;
 }
 
-function PeerReplyCard({ peerId, reply, accent, fold }) {
+function PeerReplyCard({ peerId, reply, accent, shape }) {
   const tint = accent || "var(--accent)";
   const meta = (
     <span className={styles.peerMeta}>
-      <Fold fold={fold} color={tint} />
+      <Fold shape={shape} color={tint} />
       <span className={styles.peerName}>@{peerId}</span>
     </span>
   );
@@ -925,16 +933,16 @@ function InlineRequests({ inline }) {
 
 function TurnFooter({ ts, meta = null, side = "left", rest = false, children }) {
   const time = (
-    <Mono className={`tnum ${styles.footTime}`}>
+    <span className={`tnum ${styles.footTime}`}>
       <RelativeTime ts={ts} />
-    </Mono>
+    </span>
   );
   const timeNode = meta ? <Tip text={meta} side={side === "right" ? "up-r" : "up-l"}>{time}</Tip> : time;
   return (
     <div className={styles.foot} data-side={side}>
-      {side === "right" ? timeNode : null}
-      <span className={`${styles.footActions} ${rest ? styles.footActionsRest : ""}`.trim()}>{children}</span>
       {side === "right" ? null : timeNode}
+      <span className={`${styles.footActions} ${rest ? styles.footActionsRest : ""}`.trim()}>{children}</span>
+      {side === "right" ? timeNode : null}
     </div>
   );
 }
@@ -962,7 +970,7 @@ function turnMeta(turn, baseModel) {
   );
 }
 
-function PendingTurn({ turn, accent, fold, profiles, fresh = false, inline = null }) {
+function PendingTurn({ turn, accent, shape, profiles, fresh = false, inline = null }) {
   const allTools = turn.tools ?? [];
   const parts = turnParts({
     tools: allTools,
@@ -992,10 +1000,10 @@ function PendingTurn({ turn, accent, fold, profiles, fresh = false, inline = nul
       {(process.length > 0 || parts.askUsers.length > 0 || thinking) && (
         <div className={styles.steps}>
           {(process.length > 0 || thinking) && (
-            <ProcessBlock entries={process} accent={accent} fold={fold} thinking={thinking} answered={answered} />
+            <ProcessBlock entries={process} accent={accent} shape={shape} thinking={thinking} answered={answered} />
           )}
           {parts.askUsers.map((a, i) => (
-            <AskUserAnswer key={`a-${a.tool_id ?? i}`} result={a.result} question={a.question} accent={accent} fold={fold} />
+            <AskUserAnswer key={`a-${a.tool_id ?? i}`} result={a.result} question={a.question} accent={accent} shape={shape} />
           ))}
         </div>
       )}
@@ -1004,7 +1012,7 @@ function PendingTurn({ turn, accent, fold, profiles, fresh = false, inline = nul
           peerId={peerTool.args?.peer_id || "peer"}
           reply={turn.assistantPreview}
           accent={accentForPeer(peerTool.args?.peer_id, profiles)}
-          fold={(profiles || []).find((p) => p.name === peerTool.args?.peer_id)?.fold}
+          shape={(profiles || []).find((p) => p.name === peerTool.args?.peer_id)?.shape}
         />
       )}
       {turn.assistantPreview && !peerTool && (

@@ -10,7 +10,7 @@ import { radii, space, tracking } from '../../../src/theme/tokens';
 import { toUsageDays } from '../../../../common/usage.mjs';
 import { ActionSheet } from '../../../src/components/ActionSheet';
 import { Button } from '../../../src/components/Button';
-import { FALLBACK_ACCENT, WORKGROUP_FOLD } from '../../../../common/folds.mjs';
+import { FALLBACK_ACCENT, WORKGROUP_SHAPE } from '../../../../common/shapes.mjs';
 import { Fold } from '../../../src/components/Fold';
 import { Icon } from '../../../src/components/Icon';
 import { Toggle } from '../../../src/components/Toggle';
@@ -26,6 +26,7 @@ import { usePullRefresh } from '../../../src/hooks/usePullRefresh';
 import { useProfileSummaries, useWorkgroupMembers, useWorkgroupTasks, useWorkgroupUsage } from '../../../src/hooks/useDaemonData';
 import { MemberCard } from '../../../src/features/workgroups/MemberCard';
 import { hasPhaseOwners, orderedPipelines, ownedPhases, sameName } from '../../../../common/pipelinePhases.mjs';
+import { pipelineRunMark } from '../../../../common/workgroupMarkState.mjs';
 import { useProfile, useWorkgroup } from '../../../src/hooks/useSubject';
 import { copyText } from '../../../src/lib/clipboard';
 import { useEndpoint } from '../../../src/lib/EndpointContext';
@@ -42,6 +43,7 @@ import { UsageSkeleton } from '../../../src/components/UsageSkeleton';
 import { FadeIn } from '../../../src/components/FadeIn';
 import { useSkeleton } from '../../../src/hooks/useSkeleton';
 import { useReveal } from '../../../src/hooks/useReveal';
+import { code } from '../../../src/theme/code';
 
 
 function shortPubkey(pk) {
@@ -89,11 +91,11 @@ function WorkgroupSettings() {
   const peerByPubkey = useMemo(() => {
     const m = new Map();
     for (const p of (summaries.data?.profiles ?? [])) {
-      if (p.pubkey_b64) m.set(p.pubkey_b64, { name: p.name, ownerKey: p.name, accent: p.accent, fold: p.fold, bio: p.bio, local: true });
+      if (p.pubkey_b64) m.set(p.pubkey_b64, { name: p.name, ownerKey: p.name, accent: p.accent, shape: p.shape, bio: p.bio, local: true });
     }
     for (const peer of (hub?.peers ?? [])) {
       if (peer.pubkey && !m.has(peer.pubkey)) {
-        m.set(peer.pubkey, { name: peer.alias || peer.id, ownerKey: peer.id || null, accent: undefined, fold: undefined, bio: undefined });
+        m.set(peer.pubkey, { name: peer.alias || peer.id, ownerKey: peer.id || null, accent: undefined, shape: undefined, bio: undefined });
       }
     }
     return m;
@@ -117,7 +119,7 @@ function WorkgroupSettings() {
   if (!wg) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ScreenHeader title={`#${id}`} subtitle="WORKGROUP · NOT FOUND" onBack={goBack} />
+        <ScreenHeader title={`#${id}`} subtitle="Workgroup · not found" onBack={goBack} />
         <DeadEnd copy="missingWorkgroup" error={wgError} onRetry={refresh} label="this workgroup" />
       </SafeAreaView>
     );
@@ -129,6 +131,7 @@ function WorkgroupSettings() {
   const used = Number(wg.spent_usd ?? 0);
   const pct = cap > 0 ? (used / cap) * 100 : 0;
   const paused = !!wg.paused;
+  const headerMark = pipelineRunMark({ workgroup: wg, pipelineRun: run });
   const isHub = !!wg.is_hub;
 
   const memberRows = memberQuery.data?.members ?? [];
@@ -138,12 +141,12 @@ function WorkgroupSettings() {
 
   const resolveMember = (pk) => {
     const hit = peerByPubkey.get(pk);
-    if (hit?.name) return { name: hit.name, ownerKey: hit.ownerKey ?? null, label: `@${hit.name}`, accent: hit.accent ?? FALLBACK_ACCENT, fold: hit.fold, bio: hit.bio, local: !!hit.local };
-    return { name: null, ownerKey: null, label: shortPubkey(pk), accent: undefined, fold: undefined, bio: undefined, local: false };
+    if (hit?.name) return { name: hit.name, ownerKey: hit.ownerKey ?? null, label: `@${hit.name}`, accent: hit.accent ?? FALLBACK_ACCENT, shape: hit.shape, bio: hit.bio, local: !!hit.local };
+    return { name: null, ownerKey: null, label: shortPubkey(pk), accent: undefined, shape: undefined, bio: undefined, local: false };
   };
   const profileOf = (name) => {
     const p = (summaries.data?.profiles ?? []).find((x) => sameName(x.name, name));
-    return p ? { fold: p.fold, accent: p.accent } : null;
+    return p ? { shape: p.shape, accent: p.accent } : null;
   };
 
   // pause/resume = hub-only meta.yaml mutation; leave = subscriber ALP message to hub.
@@ -207,7 +210,7 @@ function WorkgroupSettings() {
         <MemberCard
           label={resolved.label}
           accent={isHubMember ? accent : resolved.accent}
-          fold={isHubMember ? hub?.fold : resolved.fold}
+          shape={isHubMember ? hub?.shape : resolved.shape}
           isHub={isHubMember}
           invited={!m.joined}
           bio={m.bio || resolved.bio}
@@ -224,18 +227,20 @@ function WorkgroupSettings() {
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScreenHeader
         title={wg.name ?? wg.id}
-        subtitle={twoPane ? 'SETTINGS' : `WORKGROUP · ${isHub ? 'HUB' : 'MEMBER'}`}
+        subtitle={twoPane ? 'Settings' : `Workgroup · ${isHub ? 'hub' : 'member'}`}
         onBack={goBack}
         accent={accent}
-        leadingGlyph={<Fold fold={WORKGROUP_FOLD} color={accent} size="md" outlined={!!paused} />}
+        neutral
+        muted={!!paused}
+        leadingGlyph={<Fold shape={WORKGROUP_SHAPE} color={accent} size="md" state={headerMark.state} phase={headerMark.phase} seed={wg.id} />}
         meta={
           <>
-            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink2 }}>{`hub @${wg.hub_id}`}</Text>
-            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink2 }}>{`${joined.length} members`}</Text>
-            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: paused ? colors.warningText : colors.successText }}>
+            <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink2 }}>{`hub @${wg.hub_id}`}</Text>
+            <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink2 }}>{`${joined.length} members`}</Text>
+            <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: paused ? colors.warningText : colors.successText }}>
               {paused ? 'paused' : 'active'}
             </Text>
-            <Text numberOfLines={1} style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3, flexShrink: 1 }}>{wg.id}</Text>
+            <Text numberOfLines={1} style={{ ...code(fonts, fontSizes.sm), color: colors.ink3, flexShrink: 1 }}>{wg.id}</Text>
           </>
         }
       />
@@ -250,8 +255,8 @@ function WorkgroupSettings() {
             label="Hub"
             value={
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
-                <Fold fold={hub?.fold} color={accent} />
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink2 }}>
+                <Fold shape={hub?.shape} color={accent} />
+                <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink2 }}>
                   @{wg.hub_id}
                 </Text>
               </View>
@@ -289,7 +294,7 @@ function WorkgroupSettings() {
             value={
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
                 <View style={{ width: 14, height: 14, borderRadius: radii.xs, backgroundColor: accent }} />
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3 }}>
+                <Text style={{ ...code(fonts, fontSizes.sm), color: colors.ink3 }}>
                   {accent}
                 </Text>
               </View>
@@ -315,7 +320,7 @@ function WorkgroupSettings() {
                     >
                       ${used.toFixed(2)}
                     </Text>
-                    <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.md, color: colors.ink3 }}>
+                    <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink3 }}>
                       of <Text style={{ color: colors.ink2 }}>{cap > 0 ? `$${cap.toFixed(2)}/wk` : 'no cap'}</Text>
                       {cap > 0 ? ` · ${Math.round(pct)}%` : ''}
                     </Text>

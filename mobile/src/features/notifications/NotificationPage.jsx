@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { FALLBACK_ACCENT } from '../../../../common/folds.mjs';
+import { FALLBACK_ACCENT } from '../../../../common/shapes.mjs';
 import { notificationParts } from '../../../../common/notificationParts.mjs';
 import { notificationStamp } from '../../../../common/notificationTime.mjs';
 import { notificationKey } from '../../../../common/notificationTriage.mjs';
@@ -47,10 +47,10 @@ function IconButton({ name, label, onPress }) {
       style={({ pressed }) => ({
         width: mobile.iconBtn,
         height: mobile.iconBtn,
-        borderRadius: radii.xs,
+        borderRadius: radii.pill,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: pressed ? colors.selected : 'transparent',
+        backgroundColor: pressed ? colors.pressed : 'transparent',
       })}
     >
       <Icon name={name} size="md" color={colors.ink2} />
@@ -215,7 +215,7 @@ export function NotificationPage({ profile, id, connectionId, embedded = false, 
     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
       {position ? (
         <>
-          <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3, marginRight: space.s2 }}>
+          <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3, marginRight: space.s2 }}>
             {`${position.index + 1} of ${position.total}`}
           </Text>
           {position.prev ? <IconButton name="chevron-up" label="Previous notification" onPress={() => step(position.prev)} /> : null}
@@ -252,11 +252,11 @@ export function NotificationPage({ profile, id, connectionId, embedded = false, 
         <>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: space.s7, gap: space.s5, paddingBottom: space.s10 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2, flexWrap: 'wrap' }}>
-              <Fold fold={summary?.fold} color={accent} size={20} />
-              <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.md, color: colors.ink }}>
+              <Fold shape={summary?.shape} color={accent} size={20} />
+              <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.ink }}>
                 @{profileLabel(row.profile)}
               </Text>
-              <Text style={{ flexShrink: 1, fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
+              <Text style={{ flexShrink: 1, fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>
                 {[connectionName, notificationStamp(row.created_at)].filter(Boolean).map((part) => `· ${part}`).join(' ')}
               </Text>
               {failure ? null : <LevelPill row={row} />}
@@ -277,7 +277,7 @@ export function NotificationPage({ profile, id, connectionId, embedded = false, 
             )}
           </ScrollView>
 
-          <SafeAreaView edges={['bottom']} style={{ backgroundColor: colors.bgSide, borderTopWidth: 0.5, borderTopColor: colors.line2 }}>
+          <SafeAreaView edges={['bottom']} style={{ backgroundColor: colors.bgSide }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.s3, paddingHorizontal: space.s5, paddingVertical: space.s4 }}>
               <Button title="Reply" variant={failure ? 'secondary' : 'primary'} size="lg" onPress={onReply} />
               {canJob && !failure ? <Button title="Open job" variant="secondary" size="lg" onPress={onOpenJob} /> : null}

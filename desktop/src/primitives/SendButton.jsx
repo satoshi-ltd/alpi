@@ -1,7 +1,7 @@
 import { SendIcon, StopIcon, SpinnerIcon } from "./icons.jsx";
 import Tip from "./Tip.jsx";
-import { contrastRatio } from "../../../common/crease.mjs";
-import { BRAND_INK, isHexColour } from "../../../common/folds.mjs";
+import { contrastRatio } from "../../../common/name.mjs";
+import { BRAND_INK, isHexColour } from "../../../common/shapes.mjs";
 
 const LIGHT_FG = "#ffffff";
 
@@ -27,7 +27,7 @@ export default function SendButton({
     ? "var(--ink)"
     : enabled
       ? accent || "var(--accent)"
-      : "var(--line)";
+      : "var(--selected)";
   const fg = enabled || isStop ? foregroundOn(bg) : "var(--ink-3)";
   const btn = (
     <button
@@ -36,9 +36,10 @@ export default function SendButton({
       disabled={isStop ? stopping : !enabled}
       aria-label={isStop ? (stopping ? "Stopping" : "Stop") : "Send"}
       style={{
-        width: "var(--ctl-32)",
-        height: "var(--ctl-32)",
-        borderRadius: "var(--r-xs)",
+        width: "var(--ctl-40)",
+        height: "var(--ctl-40)",
+        borderRadius: "var(--r-pill)",
+        flexShrink: 0,
         border: 0,
         background: bg,
         color: fg,
@@ -46,18 +47,18 @@ export default function SendButton({
         display: "grid",
         placeItems: "center",
         cursor: clickable ? "pointer" : "default",
-        transition: "background var(--dur-1), transform var(--dur-1), opacity var(--dur-1)",
+        transition: "background-color var(--state-out), opacity var(--state-out)",
       }}
       {...rest}
     >
       {isStop ? (
         stopping ? (
-          <SpinnerIcon size="sm" />
+          <SpinnerIcon size="md" />
         ) : (
-          <StopIcon size="sm" />
+          <StopIcon size="md" />
         )
       ) : (
-        <SendIcon size="sm" />
+        <SendIcon size="md" />
       )}
     </button>
   );

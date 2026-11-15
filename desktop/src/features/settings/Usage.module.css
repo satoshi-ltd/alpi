@@ -6,7 +6,6 @@
   display: flex;
   align-items: flex-start;
   padding-bottom: var(--sp-16);
-  border-bottom: 0.5px solid var(--line-2);
 }
 
 .stat {
@@ -15,10 +14,9 @@
 }
 
 .statLabel {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--eyebrow-size);
   letter-spacing: var(--eyebrow-tracking);
-  text-transform: uppercase;
   color: var(--ink-3);
   margin-bottom: var(--sp-8);
 }
@@ -33,7 +31,7 @@
 }
 
 .statValue {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-title);
   font-weight: 500;
   line-height: var(--lh-tight);
@@ -72,7 +70,7 @@
 .bar {
   width: 100%;
   max-width: var(--u-bar-w);
-  border-radius: 3px;
+  border-radius: var(--r-xs);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -110,7 +108,7 @@
 .dayLabel {
   flex: 1;
   text-align: center;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   line-height: var(--lh-tight);
   color: var(--ink-3);
@@ -144,7 +142,7 @@
 }
 
 .totals {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   color: var(--ink-3);
 }
@@ -153,7 +151,7 @@
   display: inline-block;
   width: 9px;
   height: 9px;
-  border-radius: 2px;
+  border-radius: 0;
   flex-shrink: 0;
 }
 
@@ -179,12 +177,12 @@
   min-width: 132px;
   padding: var(--sp-12);
   background: var(--bg-elev);
-  border-radius: var(--r-xs);
+  border-radius: var(--r-surface);
   box-shadow: var(--shadow-edge-sm);
 }
 
 .tipDay {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   color: var(--ink-3);
   margin-bottom: var(--sp-4);
@@ -215,13 +213,13 @@
 .tipTok {
   margin-left: auto;
   padding-left: var(--sp-12);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   color: var(--ink);
 }
 
 .empty {
   margin: var(--sp-16) 0 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   color: var(--ink-3);
 }

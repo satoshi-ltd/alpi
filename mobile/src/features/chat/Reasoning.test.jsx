@@ -30,7 +30,7 @@ vi.mock('../../theme/ThemeContext', async () => {
 });
 
 vi.mock('../../components/Fold', () => ({
-  Fold: ({ fold, color, pulse }) => React.createElement('span', { 'data-fold': fold ?? 'none', 'data-color': color ?? '', 'data-pulse': String(!!pulse) }),
+  Fold: ({ shape, color, pulse }) => React.createElement('span', { 'data-shape': shape ?? 'none', 'data-color': color ?? '', 'data-pulse': String(!!pulse) }),
 }));
 vi.mock('../../components/Icon', () => ({
   Icon: ({ name }) => React.createElement('span', { 'data-icon': name }),
@@ -51,11 +51,11 @@ describe('Reasoning', () => {
     expect(row.getAttribute('data-font')).toBe(fonts.sans.medium);
   });
 
-  it('opens to a mono, relaxed, scrollable body', () => {
+  it('opens to a sans, relaxed, scrollable body: thinking is prose, not machine text', () => {
     render(<Reasoning text={'line one\nline two'} seconds={7} />);
     fireEvent.click(screen.getByText('Thought for 7s').closest('button'));
     const body = screen.getByText('line one');
-    expect(body.getAttribute('data-font')).toBe(fonts.mono);
+    expect(body.getAttribute('data-font')).toBe(fonts.sans.regular);
     expect(Number(body.getAttribute('data-size'))).toBe(fontSizes.sm);
     expect(Number(body.getAttribute('data-lh'))).toBe(fontSizes.sm * lineHeights.relaxed);
     expect(document.querySelector('[data-scroll]')).toBeTruthy();
@@ -83,14 +83,14 @@ describe('Reasoning', () => {
   });
 
   it('leads with the profile object, rippling while it streams and still once it has thought', () => {
-    const { rerender } = render(<Reasoning text={'first\nreading the deploy log'} streaming fold="shield" accent="#3899e2" />);
-    const live = document.querySelector('[data-fold]');
-    expect(live.getAttribute('data-fold')).toBe('shield');
+    const { rerender } = render(<Reasoning text={'first\nreading the deploy log'} streaming shape="shield" accent="#3899e2" />);
+    const live = document.querySelector('[data-shape]');
+    expect(live.getAttribute('data-shape')).toBe('shield');
     expect(live.getAttribute('data-color')).toBe('#3899e2');
     expect(live.getAttribute('data-pulse')).toBe('true');
     expect(screen.getByText('reading the deploy log')).toBeTruthy();
-    rerender(<Reasoning text={'first'} seconds={4} fold="shield" accent="#3899e2" />);
-    expect(document.querySelector('[data-fold]').getAttribute('data-pulse')).toBe('false');
+    rerender(<Reasoning text={'first'} seconds={4} shape="shield" accent="#3899e2" />);
+    expect(document.querySelector('[data-shape]').getAttribute('data-pulse')).toBe('false');
   });
 
   it('collapses on its own when the answer lands', () => {

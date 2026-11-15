@@ -4,7 +4,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 
 vi.mock('../../components/Fold', () => ({ Fold: () => null }));
 vi.mock('../../components/ScreenHeader', () => ({ ScreenHeader: ({ title, subtitle }) => React.createElement('header', {}, `${title}|${subtitle}`) }));
-vi.mock('../../hooks/useSubject', () => ({ useProfile: () => ({ profile: { accent: '#123456', fold: 'diamond' } }) }));
+vi.mock('../../hooks/useSubject', () => ({ useProfile: () => ({ profile: { accent: '#123456', shape: 'round' } }) }));
 
 import { PanelHeader } from './PanelHeader';
 

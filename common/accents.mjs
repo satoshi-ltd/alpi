@@ -1,4 +1,4 @@
-import { normaliseFold, toOklab } from "./folds.mjs";
+import { shapeOf, toOklab } from "./shapes.mjs";
 
 export const ACCENTS = [
   ["amber", "#f0b447"],
@@ -17,9 +17,9 @@ export const ACCENTS = [
 
 export const ACCENT_HEXES = ACCENTS.map(([, hex]) => hex);
 
-export const ACCENT_FOLDS = {
-  amber: "diamond", vermilion: "house", rose: "heart", magenta: "plane", blue: "shield", teal: "rocket",
-  violet: "star", green: "tree", sky: "box", indigo: "crown", lime: "feather", orange: "bulb",
+export const ACCENT_SHAPES = {
+  amber: "round", vermilion: "arch", rose: "heart", magenta: "drop", blue: "bell", teal: "pill",
+  violet: "clover", green: "pebble", sky: "squircle", indigo: "dome", lime: "cloud", orange: "bean",
 };
 
 const GREY_CHROMA = 0.04;
@@ -52,8 +52,8 @@ export function accentName(hex) {
   return ACCENTS.find(([, candidate]) => candidate === swatch)?.[0] ?? null;
 }
 
-export function pairName(fold, hex) {
+export function pairName(shape, hex) {
   const colour = accentName(hex);
-  const id = normaliseFold(fold);
-  return colour ? `${colour} ${id}` : id;
+  const name = shapeOf(shape);
+  return colour ? `${colour} ${name}` : name;
 }

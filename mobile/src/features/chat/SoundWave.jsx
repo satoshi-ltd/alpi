@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet } from 'react-native';
-import { space } from '../../theme/tokens';
+import { radii, space } from '../../theme/tokens';
 import { subscribeReadAloud, clearReadAloud } from '../../lib/readAloud';
 import { PULSE_HALF_MS } from '../../lib/pulse';
 import { useReduceMotion } from '../../lib/reduceMotion';
@@ -45,5 +45,5 @@ export function SoundWave({ accent }) {
 
 const styles = StyleSheet.create({
   wave: { flexDirection: 'row', alignItems: 'center', gap: 2, height: 18, paddingHorizontal: space.s2 },
-  bar: { width: 2.5, borderRadius: 2 },
+  bar: { width: 2.5, borderRadius: radii.pill },
 });

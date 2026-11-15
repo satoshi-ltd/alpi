@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { defaultAsAlpaca } from "../../../common/folds.mjs";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { defaultAsTwin } from "../lib/brandMark.js";
 import { RATE_LIMITED, RATE_LIMITED_RETRY_MS } from "../lib/connection-status.js";
 import { stampLastActive } from "../lib/connection-recency.js";
 import { invoke } from "@tauri-apps/api/core";
@@ -16,6 +16,12 @@ import { invalidateSessionCache } from "../lib/session-cache.js";
 import { invalidateProfileDetailCache } from "./useProfileDetail.js";
 import { purgeConnectionReadState } from "./useReadState.js";
 import { LANDING_VIEW } from "../lib/landing.js";
+import {
+  applyEditsToRows,
+  editClock,
+  releaseLanded,
+  useProfileEdits,
+} from "../lib/optimisticProfiles.js";
 
 const PROFILES_CACHE_PREFIX = "alf:profiles:v1:";
 const WORKGROUPS_CACHE_PREFIX = "alf:workgroups:v1:";
@@ -163,7 +169,7 @@ export function useHostConnections({
         const cachedWs = JSON.parse(
           localStorage.getItem(`${WORKGROUPS_CACHE_PREFIX}${activeId}`) ?? "[]",
         );
-        const ps = Array.isArray(cachedPs) ? cachedPs : [];
+        const ps = Array.isArray(cachedPs) ? cachedPs.map(defaultAsTwin("var(--accent)")) : [];
         const ws = Array.isArray(cachedWs) ? cachedWs : [];
         applyProfilesAndWorkgroups(ps, ws);
       } catch {}
@@ -259,15 +265,17 @@ export function useHostConnections({
         hostConnectionsRef.current?.connections?.find((c) => c.id === activeId)?.status === "online";
       const results = await Promise.allSettled([
         (async () => {
+          const since = editClock();
           let ps = await invoke("profile_summaries", { connectionId: activeId });
           if (activeId === "local" && Array.isArray(ps) && ps.length === 0) {
             const fallback = await invoke("profiles");
             if (Array.isArray(fallback) && fallback.length > 0) ps = fallback;
           }
           if (!canApply()) return;
-          if (Array.isArray(ps)) ps = ps.map(defaultAsAlpaca("var(--accent)"));
+          if (Array.isArray(ps)) ps = ps.map(defaultAsTwin("var(--accent)"));
           setProfiles(ps);
           saveToCache(activeId, ps, undefined);
+          releaseLanded(activeId, since, ps);
           return true;
         })().catch((error) => {
           if (canApply()) setRosterStale(true);
@@ -551,10 +559,16 @@ export function useHostConnections({
     await reload();
   }, [reloadConnections, reload]);
 
+  const editsVersion = useProfileEdits();
+  const shownProfiles = useMemo(
+    () => applyEditsToRows(profiles, hostConnections.active_id),
+    [profiles, hostConnections.active_id, editsVersion],
+  );
+
   return {
     hostConnections,
     hostConnectionsRef,
-    profiles,
+    profiles: shownProfiles,
     setProfiles,
     workgroups,
     dropWorkgroup,

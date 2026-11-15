@@ -11,7 +11,7 @@ import ProfilePanels from "./ProfilePanels.jsx";
 
 globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} };
 
-const OWNER = { name: "lingua", fold: "plane", accent: "#bb2299" };
+const OWNER = { name: "lingua", shape: "drop", accent: "#bb2299" };
 
 beforeEach(() => {
   invoke.mockReset();

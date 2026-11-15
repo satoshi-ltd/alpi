@@ -4,7 +4,7 @@
   right: var(--sp-32);
   z-index: var(--z-searchbar);
   background: var(--bg-elev);
-  border-radius: var(--r-xs);
+  border-radius: var(--r-control);
   box-shadow: var(--shadow-edge-sm);
   padding: var(--sp-8) var(--sp-8) var(--sp-8) var(--sp-16);
   display: flex;
@@ -34,8 +34,8 @@
 }
 
 .iconbtn {
-  width: var(--ctl-28);
-  height: var(--ctl-28);
+  width: var(--ctl-32);
+  height: var(--ctl-32);
 }
 
 .chev {

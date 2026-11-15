@@ -15,8 +15,8 @@ export default function Composer({
   placeholder = "Send a message…",
   sendTitle = "Send (⌘↵)",
   disabledTitle = "Type a message",
+  leading = null,
   leftActions = null,
-  hint = null,
   focusOnOpen = null,
   mentions,
   accent = null,
@@ -180,6 +180,8 @@ export default function Composer({
         onMouseDown={focusOnBlankClick}
       >
         {topBar && <div className={styles.topBar}>{topBar}</div>}
+        <div className={styles.line}>
+        {leading && <div className={styles.leading}>{leading}</div>}
         {isPopoverShown && (
           <div ref={popoverRef} id={popoverId} className={styles.mentionPopover} role="listbox">
             {mentionState.items.length === 0 && (
@@ -215,7 +217,7 @@ export default function Composer({
                   }}
                 >
                   <Fold
-                    fold={item.fold}
+                    shape={item.shape}
                     color={item.accent && !unverified ? item.accent : undefined}
                   />
                   <span className={styles.mentionId}>{item.id}</span>
@@ -258,19 +260,7 @@ export default function Composer({
           aria-controls={isPopoverShown ? popoverId : undefined}
           aria-activedescendant={activeOptionId}
         />
-        {reason && (
-          <div className={styles.reason} role="status">
-            <span className={styles.reasonText}>{reason}</span>
-            {reasonAction && onReasonAction && (
-              <Button variant="secondary" size="sm" onClick={onReasonAction}>
-                {reasonAction}
-              </Button>
-            )}
-          </div>
-        )}
         <div className={styles.row}>
-          {hint && <span className={styles.hint}>{hint}</span>}
-          <span className={styles.spacer} />
           {leftActions}
           {onCancel ? (
             <SendButton
@@ -289,6 +279,17 @@ export default function Composer({
             />
           )}
         </div>
+        </div>
+        {reason && (
+          <div className={styles.reason} role="status">
+            <span className={styles.reasonText}>{reason}</span>
+            {reasonAction && onReasonAction && (
+              <Button variant="secondary" size="sm" onClick={onReasonAction}>
+                {reasonAction}
+              </Button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

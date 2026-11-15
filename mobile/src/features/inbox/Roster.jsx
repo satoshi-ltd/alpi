@@ -1,7 +1,8 @@
 import { useCallback, useMemo } from 'react';
 import { Pressable, RefreshControl, SectionList, Text, TextInput, View } from 'react-native';
 import { mobile, radii, space } from '../../theme/tokens';
-import { ALPACA_FOLD, FOLD_SIZES } from '../../../../common/folds.mjs';
+import { TWIN_SHAPE } from '../../../../common/shapes.mjs';
+import { MARK_SIZES } from '../../../../common/agentMarks.mjs';
 
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
@@ -9,10 +10,9 @@ import { Eyebrow } from '../../components/Eyebrow';
 import { Fold } from '../../components/Fold';
 import { Icon } from '../../components/Icon';
 import { firstRun, firstRunType, foldMarkStyle } from '../../lib/firstRun';
-import { isFirstProfile, rosterIsEmpty, rosterSections, useSettledOnce } from '../../lib/roster';
+import { isFirstProfile, rosterIsEmpty, rosterSections, TILES_KEY, tileSections, useSettledOnce } from '../../lib/roster';
 import { usePane } from '../../nav/PaneContext';
 import { useTheme } from '../../theme/ThemeContext';
-import { SEPARATOR_INSET } from './InboxRow';
 import { InboxSkeleton } from './InboxSkeleton';
 import { memberEmptyCopy, pairedRoleLine } from '../../../../common/onboarding.mjs';
 import { EMPTY } from '../../../../common/emptyCopy.mjs';
@@ -20,10 +20,10 @@ import { plainError } from '../../../../common/plainError.mjs';
 import { useWell } from '../../components/well';
 import { Busy } from '../../components/Busy';
 
-const HAIRLINE = 0.5;
 const CONTENT_PAD_BOTTOM = space.s9;
 
 function rosterKey(item) {
+  if (item.kind === TILES_KEY) return TILES_KEY;
   return `${item.kind}:${item.kind === 'workgroup' ? `${item.profile}/` : ''}${item.id}`;
 }
 
@@ -61,23 +61,24 @@ function SearchField({ query, onQueryChange, gutter }) {
 }
 
 const ADD_BOX = space.s10;
+export const ADD_BLEED = (mobile.tap - ADD_BOX) / 2;
 
 function SectionAdd({ label, onPress }) {
   const { colors } = useTheme();
   return (
     <Pressable
       onPress={onPress}
-      hitSlop={(mobile.tap - ADD_BOX) / 2}
       accessibilityRole="button"
       accessibilityLabel={label}
       style={({ pressed }) => ({
-        width: ADD_BOX,
-        height: ADD_BOX,
-        marginVertical: -space.s2,
-        borderRadius: radii.xs,
+        width: mobile.tap,
+        height: mobile.tap,
+        marginVertical: -space.s2 - ADD_BLEED,
+        marginHorizontal: -ADD_BLEED,
+        borderRadius: radii.pill,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: pressed ? colors.selected : 'transparent',
+        backgroundColor: pressed ? colors.pressed : 'transparent',
       })}
     >
       <Icon name="plus" size="xs" color={colors.ink3} />
@@ -93,7 +94,7 @@ function RosterFirstRun({ device, member, onCreate }) {
     <View style={{ flex: 1, paddingTop: firstRun.top, paddingHorizontal: firstRun.edge, paddingBottom: firstRun.stack }}>
       <View style={{ flex: 1 }}>
         <View style={foldMarkStyle}>
-          <Fold fold={ALPACA_FOLD} size={FOLD_SIZES.hero} />
+          <Fold shape={TWIN_SHAPE} size={MARK_SIZES.hero} />
         </View>
         <Text accessibilityRole="header" style={type.title}>{copy.title}</Text>
         {member ? <Text style={type.fact}>{pairedRoleLine('member', 0)}</Text> : null}
@@ -145,7 +146,7 @@ export function Roster({
   const allSections = useMemo(() => rosterSections(items, query, { keepEmpty }), [items, query, keepEmpty]);
   const initialLoading = useSettledOnce(loading, endpointId);
   const first = isFirstProfile({ empty: rosterIsEmpty(allSections), initialLoading, paired, query, daemonDown, error });
-  const sections = first ? [] : allSections;
+  const sections = useMemo(() => (first ? [] : tileSections(allSections)), [first, allSections]);
   const empty = rosterIsEmpty(sections);
   const placeholder = initialLoading ? <InboxSkeleton label="Loading profiles and workgroups" /> : <RosterEmpty paired={paired} query={query} device={device} canCreate={addActions != null} daemonDown={daemonDown} error={error} onRetry={onRefresh} onCreate={addActions?.profiles?.onPress} first={first} />;
 
@@ -172,21 +173,30 @@ export function Roster({
     [fonts, fontSizes, colors, gutter, addActions],
   );
 
-  const seamAfterFront = sections.length > 1 && sections[0].key === 'front';
+  const seamAfterTiles = sections.length > 1 && sections[0].key === TILES_KEY;
   const renderSectionFooter = useCallback(
     ({ section }) =>
-      section.key === 'front' && seamAfterFront ? (
-        <View testID="front-seam" style={{ height: HAIRLINE, backgroundColor: colors.line2 }} />
+      section.key === TILES_KEY && seamAfterTiles ? (
+        <View testID="front-seam" style={{ height: space.s3 }} />
       ) : null,
-    [seamAfterFront, colors.line2],
+    [seamAfterTiles],
+  );
+
+  const renderItem = useCallback(
+    (info) =>
+      info.item.kind === TILES_KEY ? (
+        <View testID="pinned-tiles" accessibilityRole="list" style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: gutter - space.s2, paddingTop: space.s1, paddingBottom: space.s2 }}>
+          {info.item.items.map((item) => (
+            <View key={rosterKey(item)} style={{ width: '33.3333%' }}>{renderRow({ item, tile: true })}</View>
+          ))}
+        </View>
+      ) : (
+        renderRow(info)
+      ),
+    [renderRow, gutter],
   );
 
   const pull = useCallback(() => onRefresh?.(), [onRefresh]);
-
-  const separator = useCallback(
-    () => <View style={{ height: HAIRLINE, backgroundColor: colors.line, marginLeft: SEPARATOR_INSET }} />,
-    [colors.line],
-  );
 
   return (
     <View style={{ flex: 1 }}>
@@ -197,12 +207,11 @@ export function Roster({
         style={{ flex: 1 }}
         sections={sections}
         keyExtractor={rosterKey}
-        renderItem={renderRow}
+        renderItem={renderItem}
         renderSectionHeader={renderSectionHeader}
         renderSectionFooter={renderSectionFooter}
         stickySectionHeadersEnabled={false}
         keyboardShouldPersistTaps="handled"
-        ItemSeparatorComponent={twoPane ? undefined : separator}
         contentContainerStyle={{ paddingBottom: first ? 0 : CONTENT_PAD_BOTTOM, flexGrow: 1 }}
         refreshControl={
           onRefresh ? (

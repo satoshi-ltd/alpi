@@ -6,7 +6,8 @@ import { CopyIcon } from "../primitives/icons.jsx";
 import StepLadder from "../primitives/StepLadder.jsx";
 import ConnectElsewhere from "../primitives/ConnectElsewhere.jsx";
 import { copyText } from "../lib/clipboard.js";
-import { ALPACA_FOLD, FOLD_SIZES, foldPolygons } from "../../../common/folds.mjs";
+import { TWIN } from "../lib/brandMark.js";
+import { MARK_SIZES, SHAPES } from "../../../common/agentMarks.mjs";
 import { START_COMMAND } from "../../../common/onboarding.mjs";
 import styles from "./Welcome.module.css";
 
@@ -45,27 +46,25 @@ export function markLocalEverOnline() {
 export function FirstRunHint() {
   return (
     <p className={styles.hint}>
-      <Mono>This is alpi on this computer · To use it from a phone: Settings → Connections</Mono>
+      <span>This is alpi on this computer · To use it from a phone: Settings → Connections</span>
     </p>
   );
 }
 
 const INK = (() => {
-  const points = foldPolygons(ALPACA_FOLD, "#808080", FOLD_SIZES.hero).flatMap((facet) => facet.points);
-  const scale = FOLD_SIZES.hero / 100;
-  return {
-    left: Math.min(...points.map(([x]) => x)) * scale,
-    top: Math.min(...points.map(([, y]) => y)) * scale,
-    bottom: (100 - Math.max(...points.map(([, y]) => y))) * scale,
-  };
+  const numbers = SHAPES["alpi-twin"].d.match(/-?[\d.]+/g).map(Number);
+  const xs = numbers.filter((_, i) => i % 2 === 0);
+  const ys = numbers.filter((_, i) => i % 2 === 1);
+  const scale = MARK_SIZES.hero / 100;
+  const px = (v) => Math.max(0, v * scale).toFixed(2);
+  return `-${px(Math.min(...ys))}px 0 -${px(100 - Math.max(...ys))}px -${px(Math.min(...xs))}px`;
 })();
-const MARK_MARGIN = `-${INK.top}px 0 -${INK.bottom}px -${INK.left}px`;
 
 function Mark({ busy = false }) {
   const waiting = useBusyVisible(busy);
   return (
-    <span className={styles.mark} style={{ width: FOLD_SIZES.hero, height: FOLD_SIZES.hero, margin: MARK_MARGIN }} aria-hidden={busy ? "true" : undefined}>
-      {busy && waiting ? <BusyMark size={FOLD_SIZES.hero} /> : <Fold fold={ALPACA_FOLD} size={FOLD_SIZES.hero} />}
+    <span className={styles.mark} style={{ width: MARK_SIZES.hero, height: MARK_SIZES.hero, margin: INK }} aria-hidden={busy ? "true" : undefined}>
+      {busy && waiting ? <BusyMark size={MARK_SIZES.hero} /> : <Fold shape={TWIN} size={MARK_SIZES.hero} />}
     </span>
   );
 }

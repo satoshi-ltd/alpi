@@ -12,7 +12,9 @@ import { useTheme } from '../../theme/ThemeContext';
 import { Busy } from '../../components/Busy';
 import { useBusyVisible } from '../../hooks/useBusyVisible';
 import { SubtitleSkeleton } from '../../components/SubtitleSkeleton';
-import { detailTitleStyle } from '../../components/detailTitle';
+import { DetailHead } from '../../components/DetailHead';
+import { FactTable } from '../../components/FactTable';
+import { code } from '../../theme/code';
 
 function formatType(schema) {
   if (!schema) return '—';
@@ -22,8 +24,7 @@ function formatType(schema) {
 }
 
 export function ToolDetail({ profile: id, name, embedded = false, onBack }) {
-  const theme = useTheme();
-  const { colors, fonts, fontSizes } = theme;
+  const { colors, fonts, fontSizes } = useTheme();
   const tools = useTools(id);
   const tool = useMemo(
     () => (tools.data?.tools ?? []).find((t) => t.name === String(name)) ?? null,
@@ -44,7 +45,7 @@ export function ToolDetail({ profile: id, name, embedded = false, onBack }) {
   if (!tool) {
     return (
       <View style={{ flex: 1 }}>
-        {embedded ? null : <ScreenHeader title={String(name ?? '')} subtitle="TOOL · NOT FOUND" onBack={onBack} />}
+        {embedded ? null : <ScreenHeader title={String(name ?? '')} subtitle="Tool · not found" onBack={onBack} />}
         <DeadEnd copy="missingTool" error={tools.error} onRetry={tools.refresh} label="this tool" />
       </View>
     );
@@ -56,17 +57,19 @@ export function ToolDetail({ profile: id, name, embedded = false, onBack }) {
 
   return (
     <View style={{ flex: 1 }}>
-      {embedded ? null : <PanelHeader profile={id} section={tool.category ? `TOOLS · ${String(tool.category).toUpperCase()}` : 'TOOLS'} onBack={onBack} />}
+      {embedded ? null : <PanelHeader profile={id} section={tool.category ? `Tools · ${String(tool.category)}` : 'Tools'} onBack={onBack} />}
       <ScrollView contentContainerStyle={{ padding: space.s8, gap: space.s6, paddingBottom: space.s10 }}>
-        <Text accessibilityRole="header" style={detailTitleStyle(theme, fonts.monoSemibold ?? fonts.mono)}>{tool.name}</Text>
+        <DetailHead
+          title={tool.name}
+          state={tool.denied ? 'denied' : null}
+          id={tool.name}
+        />
         {tool.denied ? (
           <View
             style={{
               padding: space.s5,
               backgroundColor: `${colors.warning}1f`,
-              borderRadius: radii.xs,
-              borderWidth: 0.5,
-              borderColor: `${colors.warning}66`,
+              borderRadius: radii.surface,
             }}
           >
             <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.warningText, lineHeight: fontSizes.sm * 1.5 }}>
@@ -74,19 +77,12 @@ export function ToolDetail({ profile: id, name, embedded = false, onBack }) {
             </Text>
           </View>
         ) : null}
-        {tool.description ? (
-          <Text
-            style={{
-              fontFamily: fonts.sans.regular,
-              fontSize: fontSizes.md,
-              color: colors.ink2,
-              lineHeight: fontSizes.md * 1.5,
-              opacity: tool.denied ? 0.6 : 1,
-            }}
-          >
-            {tool.description}
-          </Text>
-        ) : null}
+        <FactTable
+          rows={[
+            { label: 'About', value: tool.description || null },
+            { label: 'Category', value: tool.category || null },
+          ]}
+        />
         <Eyebrow style={{ marginTop: space.s3 }}>Parameters</Eyebrow>
         {params.length === 0 ? (
           <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}>
@@ -100,11 +96,11 @@ export function ToolDetail({ profile: id, name, embedded = false, onBack }) {
                 padding: space.s5,
                 gap: space.s2,
                 backgroundColor: colors.field,
-                borderRadius: radii.xs,
+                borderRadius: radii.surface,
               }}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
-                <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.md, color: colors.ink }}>
+                <Text style={{ ...code(fonts, fontSizes.md, 'medium'), color: colors.ink }}>
                   {key}
                 </Text>
                 <Pill>{formatType(schema)}</Pill>

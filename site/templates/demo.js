@@ -299,10 +299,10 @@ $ alpi -p work workgroup join alice wg_stack-decision
         <div class="alpi-term-status" hidden></div>
         <div class="alpi-term-input" hidden></div>
         <div class="alpi-term-foot">
-          <span><button data-act="restart" type="button">↻ restart</button></span>
+          <span><button data-act="restart" type="button">Restart</button></span>
           <span class="nav">
-            <button data-act="prev" type="button">← prev</button>
-            <button data-act="next" type="button">next →</button>
+            <button data-act="prev" type="button">Back</button>
+            <button data-act="next" type="button">Next</button>
           </span>
         </div>
       </div>` +
@@ -315,7 +315,7 @@ $ alpi -p work workgroup join alice wg_stack-decision
         ? `<span class="topinfo">${scene.topbar}</span>`
         : "";
     }
-    const stepLabel = `step ${String(scene.id || idx+1).padStart(2,"0")} · ${escape(scene.title || "")}`;
+    const stepLabel = `Step ${idx+1} · ${escape(scene.title || "")}`;
     return `<span class="step">${stepLabel}</span>`;
   }
   function topbarRight(scene, idx, total){

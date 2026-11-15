@@ -302,7 +302,7 @@ def _hub_row(home: Path, profile: str, wg_id: str) -> dict[str, Any] | None:
     wg = wg_mod.load(home, wg_id)
     row = None
     if wg is not None and wg.meta.pipelines:
-        row = _pipeline_row(home, profile, wg_id, wg.meta.name, hub=True)
+        row = _pipeline_row(home, profile, wg_id, wg.meta.name, hub=True, hub_id=profile)
     with _cache_lock:
         _wg_cache[key] = (tuple(stamp), row)
     return row
@@ -315,7 +315,7 @@ def _member_rows(home: Path, profile: str) -> list[tuple[str, dict[str, Any] | N
     except Exception:  # noqa: BLE001
         return []
     return [
-        (sub.wg_id, _pipeline_row(home, profile, sub.wg_id, sub.name, hub=False))
+        (sub.wg_id, _pipeline_row(home, profile, sub.wg_id, sub.name, hub=False, hub_id=sub.hub_id))
         for sub in subs if sub.pipeline_mode
     ]
 
@@ -325,11 +325,11 @@ def _member_row(home: Path, profile: str, wg_id: str) -> dict[str, Any] | None:
     sub = sub_mod.get(home, wg_id)
     if sub is None or not sub.pipeline_mode:
         return None
-    return _pipeline_row(home, profile, wg_id, sub.name, hub=False)
+    return _pipeline_row(home, profile, wg_id, sub.name, hub=False, hub_id=sub.hub_id)
 
 
 def _pipeline_row(
-    home: Path, profile: str, wg_id: str, name: Any, *, hub: bool,
+    home: Path, profile: str, wg_id: str, name: Any, *, hub: bool, hub_id: Any,
 ) -> dict[str, Any] | None:
     from alpi.host import workgroup as host_workgroup
     try:
@@ -343,6 +343,7 @@ def _pipeline_row(
         "kind": "workgroup",
         "profile": profile,
         "workgroup_id": wg_id,
+        "hub_id": str(hub_id) if hub_id else None,
         "name": name,
         "pipeline": run.get("pipeline"),
         "phase": run.get("current_phase"),

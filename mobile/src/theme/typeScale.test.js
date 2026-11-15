@@ -33,10 +33,10 @@ describe('type scale reach', () => {
     expect(hits(/import\s*\{[^}]*\bfontSizes\b[^}]*\}\s*from\s*'[^']*theme\/tokens'/)).toEqual([]);
   });
 
-  it('never reaches for the sub-11 steps the phone scale drops', () => {
-    expect(hits(/fontSizes(\.(xxs|label)\b|\[['"](xxs|label)['"]\])/)).toEqual([]);
-    expect(fontSizes.xxs).toBeUndefined();
-    expect(fontSizes.label).toBeUndefined();
+  it('reaches only the ladder: every alias sits on one of the six rungs, none under 12', () => {
+    for (const [name, size] of Object.entries(fontSizes)) {
+      expect([12, 14, 15, 16, 20, 28], name).toContain(size);
+    }
   });
 
   it('names every step of the scale in ascending order', () => {
@@ -45,28 +45,27 @@ describe('type scale reach', () => {
   });
 });
 
-describe('the touch shift off desktop body size', () => {
-  it('keeps base in the scale so a desktop --fs-base still ports by name', () => {
-    expect(fontSizes.base).toBe(13);
+describe('one ladder on both clients', () => {
+  it('maps the old names onto the six rungs: meta, small, ui, read, title, display', () => {
+    expect([fontSizes.xs, fontSizes.sm, fontSizes.md, fontSizes.lg, fontSizes.xl, fontSizes.display]).toEqual([12, 14, 15, 16, 20, 28]);
+    expect(fontSizes.base).toBe(fontSizes.md);
+    expect(fontSizes.chat).toBe(fontSizes.lg);
   });
 
-  it('gives base no call site: mobile body text is md, its row titles lg', () => {
+  it('gives base no call site: mobile body text is md', () => {
     expect(hits(/fontSizes(\.base\b|\['base'\]|\["base"\])/)).toEqual([]);
-  });
-
-  it('lands the shifted body tier one or two steps over desktop 13', () => {
-    expect(fontSizes.md).toBe(14);
-    expect(fontSizes.lg).toBe(15);
   });
 });
 
 const LITERAL_TRACKING_LEFT = [];
 
 describe('eyebrows', () => {
-  it('leaves no hand-rolled eyebrow — every uppercase label goes through the primitive', () => {
-    const outsideThePrimitive = hits(/textTransform:\s*'uppercase'/)
-      .filter((hit) => !hit.startsWith('src/components/Eyebrow.jsx'));
-    expect(outsideThePrimitive).toEqual([]);
+  it('uppercases nothing: section labels are sentence case', () => {
+    expect(hits(/textTransform:\s*'uppercase'|\.toUpperCase\(\)\s*\}/)).toEqual([]);
+  });
+
+  it('sets Geist Mono only through the code helper, at 0.92 of its role', () => {
+    expect(hits(/fonts\.mono/).filter((hit) => !hit.startsWith('src/theme/'))).toEqual([]);
   });
 
   it('derives every tracking value from a token instead of a literal em guess', () => {

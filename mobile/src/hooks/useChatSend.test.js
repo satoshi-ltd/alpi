@@ -290,6 +290,7 @@ describe("useChatSend.send", () => {
     await act(async () => { result.current.cancel(); });
     expect(result.current.pendingTurn.assistant).toBe("partial answer");
     expect(result.current.pendingTurn.pending).toBe(false);
+    expect(result.current.pendingTurn.cancelled).toBe(true);
     await act(async () => { release(false); });
     expect(result.current.pendingTurn).toBeNull();
   });

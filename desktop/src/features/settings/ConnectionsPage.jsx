@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { BRAND_INK } from "../../../../common/folds.mjs";
+import { BRAND_INK } from "../../../../common/shapes.mjs";
 import Button from "../../primitives/Button.jsx";
 import ConfirmDelete, { ConfirmDeleteAction } from "../../primitives/ConfirmDelete.jsx";
 import Field from "../../primitives/Field.jsx";
@@ -147,9 +147,9 @@ export default function ConnectionsPage({
     <>
       <span>{totals.paired || 0} paired · {totals.connected || 0} connected</span>
       <span className="sep" aria-hidden />
-      <span>14-day spend <Mono>{usd(totals.cost_14d)}</Mono></span>
+      <span>14-day spend <span>{usd(totals.cost_14d)}</span></span>
       <span className="sep" aria-hidden />
-      <span><Mono>{totals.sessions || 0}</Mono> sessions</span>
+      <span><span>{totals.sessions || 0}</span> sessions</span>
     </>
   );
 
@@ -225,7 +225,7 @@ export default function ConnectionsPage({
                   aria-label="Search connections"
                 />
               </label>
-              <Mono>{visibleRows.length} of {rows.length}</Mono>
+              <span>{visibleRows.length} of {rows.length}</span>
             </div>
           )}
           {!data && !loadError && <SkeletonRows count={3} label="Loading connections" />}
@@ -264,7 +264,7 @@ export default function ConnectionsPage({
                         <Mono>host.sock</Mono>
                       ) : (
                         <span className={styles.identityMeta}>
-                          <Mono>{deviceCount(row)} · {row.role} · {scopeLabel(row)}</Mono>
+                          <span>{deviceCount(row)} · {row.role} · {scopeLabel(row)}</span>
                           {row.status === "disabled" && <Chip size="sm" state="off">disabled</Chip>}
                         </span>
                       )}
@@ -563,7 +563,7 @@ function AuditActivity({ sourceConnectionId, connections }) {
           <div className={styles.auditRows}>
             {visibleEntries.map((entry) => (
               <div key={entry.id} className={styles.auditRow}>
-                <Mono>{auditTime(entry.timestamp)}</Mono>
+                <span>{auditTime(entry.timestamp)}</span>
                 <span className={styles.auditIdentity}>
                   <strong>{auditActor(entry)}</strong>
                   <small>{auditActorMeta(entry)}</small>
@@ -659,7 +659,7 @@ function ConnectionDetail({
               <div key={device.id} className={styles.deviceRow}>
                 <span><strong>{device.name || "Unnamed device"}</strong><small>{device.client} · {device.app_version || "version unknown"}</small></span>
                 <span>
-                  <Mono>{since(device.last_seen)}</Mono>
+                  <span>{since(device.last_seen)}</span>
                   <ConfirmDeleteAction
                     label="Revoke"
                     title={`Revoke ${device.name || "device"}?`}

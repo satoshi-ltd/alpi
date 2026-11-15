@@ -1,5 +1,5 @@
 .glyphSlot {
-  width: 16px;
+  width: var(--icon-lg);
   display: inline-flex;
   justify-content: center;
 }
@@ -17,8 +17,8 @@
 }
 
 .mute {
-  width: 11px;
-  height: 11px;
+  width: var(--icon-sm);
+  height: var(--icon-sm);
   color: var(--ink-3);
   flex-shrink: 0;
 }

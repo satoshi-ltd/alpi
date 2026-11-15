@@ -2,13 +2,15 @@
   display: inline-flex;
   align-items: center;
   gap: var(--sp-8);
-  height: var(--ctl-24);
-  padding: 0 var(--sp-8);
-  border-radius: var(--r-tag);
-  background: var(--hover);
-  color: var(--ink-2);
-  font-size: var(--text-meta);
-  font-family: var(--font-mono);
+  height: var(--ctl-32);
+  padding: 0 var(--sp-12);
+  box-sizing: border-box;
+  border-radius: var(--r-pill);
+  background: var(--fill);
+  color: var(--ink);
+  font-size: var(--text-small);
+  font-weight: var(--fw-medium);
+  font-family: var(--font-sans);
   font-feature-settings: "ss01", "cv11";
   white-space: nowrap;
   border: 0;
@@ -17,9 +19,9 @@
 
 .sm {
   gap: var(--sp-4);
-  padding: var(--sp-4) var(--sp-8);
+  padding: 0 var(--sp-8);
   font-size: var(--text-meta);
-  height: var(--ctrl-2xs);
+  height: 24px;
 }
 
 .sm .dot {
@@ -33,11 +35,17 @@
 
 .clickable {
   cursor: pointer;
-  transition: background var(--dur-1) var(--ease);
+  transition: box-shadow var(--state-out);
 }
 
 .clickable:hover {
-  background: var(--selected);
+  box-shadow: var(--hover-wash);
+  transition: box-shadow var(--state-in);
+}
+
+.clickable:active {
+  box-shadow: var(--pressed-wash);
+  transition: none;
 }
 
 .on {

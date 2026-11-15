@@ -1,27 +1,5 @@
-.header {
+:global(header.ds-chat-header).header {
   position: sticky;
   top: 0;
   z-index: 5;
-}
-
-.topRow {
-  align-items: flex-end;
-}
-
-.titleCol {
-  gap: var(--sp-8);
-  flex: 1;
-  min-width: 0;
-}
-
-:global(.ds-chat-header).header :global(.title-row) {
-  align-items: baseline;
-}
-:global(.ds-chat-header).header :global(.title-row) > :first-child {
-  align-self: center;
-}
-
-.actions {
-  gap: var(--space-tight);
-  flex-shrink: 0;
 }

@@ -32,6 +32,7 @@ vi.mock('expo-router', () => ({
   useRouter: () => ({ canGoBack: () => true }),
 }));
 
+vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) }));
 vi.mock('../components/Glyph', () => ({ Glyph: () => React.createElement('span') }));
 vi.mock('../components/Fold', () => ({ Fold: () => React.createElement('span') }));
 vi.mock('../features/inbox/Pip', () => ({ Pip: () => null }));
@@ -78,29 +79,32 @@ describe('one token per typographic role', () => {
     expect(fontOf('Providers')).toBe('sans-semibold');
   });
 
-  it('sets a row title at lg, the mobile body workhorse', () => {
+  it('sets a settings label at the 15 pt ui rung and its description at 14 pt sans', () => {
     render(<Row label="Connections" value="alpi-casa" helper="two paired" onPress={() => {}} />);
-    expect(sizeOf('Connections')).toBe(fontSizes.lg);
+    expect(sizeOf('Connections')).toBe(15);
+    expect(fontOf('Connections')).toBe('sans-medium');
+    expect(sizeOf('two paired')).toBe(14);
+    expect(fontOf('two paired')).toBe('sans');
   });
 
-  it('sets a body line at md, one step under the row title it sits beside', () => {
+  it('sets a row value at md, the ui rung', () => {
     render(<Row label="Connections" value="alpi-casa" onPress={() => {}} />);
     expect(sizeOf('alpi-casa')).toBe(fontSizes.md);
   });
 
-  it('sets an eyebrow at xs, mono medium, uppercase, on the shared eyebrow tracking', () => {
-    render(<Eyebrow>connection</Eyebrow>);
-    const node = screen.getByText('connection');
-    expect(Number(node.getAttribute('data-size'))).toBe(fontSizes.xs);
-    expect(node.getAttribute('data-font')).toBe('mono-medium');
-    expect(node.getAttribute('data-transform')).toBe('uppercase');
-    expect(Number(node.getAttribute('data-track'))).toBeCloseTo(fontSizes.xs * tracking.eyebrow, 5);
+  it('sets a section label at 14 pt sans medium in sentence case, never uppercase mono or tracked', () => {
+    render(<Eyebrow>Connection</Eyebrow>);
+    const node = screen.getByText('Connection');
+    expect(Number(node.getAttribute('data-size'))).toBe(14);
+    expect(node.getAttribute('data-font')).toBe('sans-medium');
+    expect(node.getAttribute('data-transform')).toBeNull();
+    expect(node.getAttribute('data-track')).toBeNull();
   });
 
-  it('routes every section header through that one eyebrow', () => {
-    render(<SectionHeader>servers</SectionHeader>);
-    expect(sizeOf('servers')).toBe(fontSizes.xs);
-    expect(fontOf('servers')).toBe('mono-medium');
+  it('routes every section header through that one label', () => {
+    render(<SectionHeader>Servers</SectionHeader>);
+    expect(sizeOf('Servers')).toBe(fontSizes.sm);
+    expect(fontOf('Servers')).toBe('sans-medium');
   });
 });
 
@@ -121,13 +125,13 @@ describe('the phone → tablet step', () => {
     expect(Number(screen.getByText('#alpha').getAttribute('data-track'))).toBe(0);
   });
 
-  it('sets the roster name one step smaller on two panes, closer to the desktop sidebar, and keeps the timestamp', () => {
+  it('sets the roster name at the 15 pt ui rung on both panes and keeps the timestamp', () => {
     pane(false, <InboxRow item={ITEM} />);
     const phoneName = sizeOf('scout');
     const phoneTs = sizeOf('4m');
     cleanup();
     pane(true, <InboxRow item={ITEM} />);
-    expect(phoneName).toBe(fontSizes.lg);
+    expect(phoneName).toBe(fontSizes.md);
     expect(sizeOf('scout')).toBe(fontSizes.md);
     expect(sizeOf('4m')).toBe(phoneTs);
   });

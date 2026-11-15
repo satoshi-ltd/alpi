@@ -1,50 +1,62 @@
 import { memo, useCallback, useMemo } from 'react';
 import { Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
-import { lineHeights, mobile, radii, space } from '../../theme/tokens';
+import { lineHeights, mobile, radii, space, status, typeLeading } from '../../theme/tokens';
 
-import { FALLBACK_ACCENT } from '../../../../common/folds.mjs';
+import { FALLBACK_ACCENT } from '../../../../common/shapes.mjs';
+import { MARK_SIZES } from '../../../../common/agentMarks.mjs';
+import { nameColor, nameStyle } from '../../theme/name';
 import { Glyph } from '../../components/Glyph';
+import { sessionMarkKey, useSharedSessionMark } from '../../lib/sessionMark';
 import { usePane } from '../../nav/PaneContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { Pip } from './Pip';
 import { RowState, STATE_TEXT } from './RowState';
 
-export const GLYPH_SLOT = space.s9;
-export const SELECTED_BAR = 3;
-export const selectedFill = (colors) => `${colors.ink}12`;
-export const SEPARATOR_INSET = space.s7 + GLYPH_SLOT + space.s5;
+export const GLYPH_SLOT = MARK_SIZES.list;
+export const ROW_H = 64;
+export const ROW_GUTTER = space.s3;
+const PIP_SIZE = 10;
+const PIP_RING = 2;
+const PIP_BLEED = 2;
 
 const STATIC = StyleSheet.create({
   row: {
-    minHeight: 64,
-    paddingHorizontal: space.s7,
-    paddingVertical: space.s5,
+    minHeight: ROW_H,
+    marginHorizontal: ROW_GUTTER,
+    paddingHorizontal: space.s7 - ROW_GUTTER,
+    borderRadius: radii.control,
+    paddingVertical: space.s3,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.s5,
   },
-  tab: {
-    marginHorizontal: 0,
-    paddingHorizontal: space.s4 + space.s5,
-    borderRadius: 0,
+  tile: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    gap: space.s2,
+    paddingVertical: space.s3,
+    borderRadius: radii.surface - space.s1,
   },
+  tileMark: { width: MARK_SIZES.tile, height: MARK_SIZES.tile },
+  tilePip: { position: 'absolute', top: -PIP_BLEED, right: -PIP_BLEED, width: PIP_SIZE, height: PIP_SIZE, borderRadius: radii.pill, borderWidth: PIP_RING },
   compactRow: {
     minHeight: mobile.tap,
     marginHorizontal: space.s5,
     paddingHorizontal: space.s4,
     paddingVertical: space.s2,
-    borderRadius: radii.xs,
+    borderRadius: radii.control,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.s5,
   },
   glyph: { width: GLYPH_SLOT, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  compactGlyph: { width: MARK_SIZES.row, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   body: { flex: 1, minWidth: 0, flexDirection: 'column', gap: space.s1 },
   meta: { alignItems: 'flex-end', justifyContent: 'center', gap: space.s1, flexShrink: 0 },
   pip: { width: 16, height: 16 },
 });
 
-export const InboxRow = memo(function InboxRow({ item, onPress, onLongPress, selected = false, showState = false, offline = false }) {
+export const InboxRow = memo(function InboxRow({ item, onPress, onLongPress, selected = false, showState = false, offline = false, tile = false }) {
   const { colors, fonts, fontSizes } = useTheme();
   const { twoPane } = usePane();
   const accent = item.accent ?? FALLBACK_ACCENT;
@@ -56,6 +68,8 @@ export const InboxRow = memo(function InboxRow({ item, onPress, onLongPress, sel
   const rowState = offline && liveState?.state === 'working' ? null : liveState;
   const working = !offline && !rowState && showState && item.state === 'working';
   const needsYou = rowState?.state === 'needs-you';
+  const shared = useSharedSessionMark(selected && item.kind !== 'workgroup' ? sessionMarkKey(item.id) : null);
+  const sessionState = offline ? null : shared;
   const label = item.label ?? item.name ?? item.id;
   const spoken = [
     label,
@@ -75,19 +89,18 @@ export const InboxRow = memo(function InboxRow({ item, onPress, onLongPress, sel
 
   const rowStyle = useCallback(
     ({ pressed }) => [
-      twoPane ? STATIC.compactRow : STATIC.row,
-      twoPane && selected ? STATIC.tab : null,
-      { backgroundColor: selected ? selectedFill(colors) : pressed ? colors.selected : 'transparent' },
+      tile ? STATIC.tile : twoPane ? STATIC.compactRow : STATIC.row,
+      { backgroundColor: pressed ? colors.pressed : selected ? colors.selected : 'transparent' },
     ],
-    [twoPane, colors, selected],
+    [tile, twoPane, colors, selected],
   );
 
   const nameVariant = useMemo(() => {
     if (!twoPane) {
       return {
         fontFamily: unread || needsYou ? fonts.sans.bold : fonts.sans.semibold,
-        fontSize: fontSizes.lg,
-        lineHeight: Math.round(fontSizes.lg * lineHeights.cozy),
+        fontSize: fontSizes.md,
+        lineHeight: Math.round(fontSizes.md * typeLeading.ui),
         color: muted ? colors.ink3 : colors.ink,
       };
     }
@@ -98,56 +111,98 @@ export const InboxRow = memo(function InboxRow({ item, onPress, onLongPress, sel
           ? fonts.sans.medium
           : fonts.sans.regular,
       fontSize: fontSizes.md,
-      lineHeight: Math.round(fontSizes.md * lineHeights.cozy),
+      lineHeight: Math.round(fontSizes.md * typeLeading.ui),
       color: muted ? colors.ink3 : unread || selected || needsYou ? colors.ink : colors.ink2,
     };
   }, [twoPane, unread, needsYou, selected, muted, fonts, fontSizes, colors]);
   const previewVariant = useMemo(
     () => ({
-      fontFamily: needsProvider ? fonts.mono : fonts.sans.regular,
-      fontSize: fontSizes.md,
-      lineHeight: Math.round(fontSizes.md * lineHeights.cozy),
+      fontFamily: fonts.sans.regular,
+      fontSize: fontSizes.sm,
+      lineHeight: Math.round(fontSizes.sm * typeLeading.small),
       fontStyle: needsProvider ? 'italic' : 'normal',
-      color: colors.ink3,
+      color: needsProvider ? colors.ink3 : colors.ink2,
     }),
     [needsProvider, fonts, fontSizes, colors],
   );
   const tsVariant = useMemo(
     () => ({
-      fontFamily: unread ? fonts.monoSemibold : fonts.monoMedium,
+      fontFamily: unread ? fonts.sans.semibold : fonts.sans.medium,
       fontSize: fontSizes.xs,
       lineHeight: fontSizes.xs * lineHeights.tight,
-      color: unread ? colors.ink : colors.ink3,
+      color: unread ? colors.ink : selected ? colors.ink2 : colors.ink3,
     }),
-    [unread, fonts, fontSizes, colors],
+    [unread, selected, fonts, fontSizes, colors],
   );
+
+  if (tile) {
+    const pip = needsYou ? status.warning : rowState?.state === 'failed' ? status.danger : unread ? colors.ink : null;
+    return (
+      <Pressable
+        onPress={handlePress}
+        onLongPress={handleLongPress}
+        android_ripple={{ color: colors.pressed }}
+        accessibilityRole="button"
+        accessibilityLabel={spoken}
+        accessibilityState={{ selected }}
+        style={rowStyle}
+      >
+        <View style={STATIC.tileMark}>
+          <Glyph
+            kind={item.kind}
+            color={accent}
+            shape={item.shape}
+            name={item.id}
+            active={selected}
+            state={item.kind === 'workgroup' ? null : sessionState}
+            needsProvider={needsProvider}
+            working={!offline && (item.state === 'working' || rowState?.state === 'working')}
+            paused={!!item.paused}
+            offline={offline}
+            rowState={rowState?.state ?? null}
+            unread={unread}
+            phase={rowState?.phases ?? null}
+            phaseSlug={rowState?.phase ?? null}
+            workgroup={item.raw ?? null}
+            size={MARK_SIZES.tile}
+          />
+          {pip ? <View testID="tile-pip" style={[STATIC.tilePip, { backgroundColor: pip, borderColor: twoPane ? colors.bgSide : colors.bg }]} /> : null}
+        </View>
+        <Text numberOfLines={1} style={[nameStyle(fontSizes.sm, muted ? colors.ink3 : item.kind === 'workgroup' ? colors.ink : nameColor(accent, colors)), { alignSelf: 'stretch', textAlign: 'center' }]}>
+          {label}
+        </Text>
+      </Pressable>
+    );
+  }
 
   return (
     <Pressable
       onPress={handlePress}
       onLongPress={handleLongPress}
-      android_ripple={{ color: colors.hover }}
+      android_ripple={{ color: colors.pressed }}
       accessibilityRole="button"
       accessibilityLabel={spoken}
       accessibilityState={{ selected }}
       style={rowStyle}
     >
-      {selected ? (
-        <View
-          testID="selected-bar"
-          pointerEvents="none"
-          style={{ position: 'absolute', left: 0, top: space.s2, bottom: space.s2, width: SELECTED_BAR, borderTopRightRadius: radii.tag, borderBottomRightRadius: radii.tag, backgroundColor: accent }}
-        />
-      ) : null}
-      <View style={STATIC.glyph}>
+      <View style={twoPane ? STATIC.compactGlyph : STATIC.glyph}>
         <Glyph
           kind={item.kind}
           color={accent}
-          fold={item.fold}
+          shape={item.shape}
+          name={item.id}
+          active={selected}
+          state={item.kind === 'workgroup' ? null : sessionState}
           needsProvider={needsProvider}
           working={!offline && (item.state === 'working' || rowState?.state === 'working')}
           paused={!!item.paused}
           offline={offline}
+          rowState={rowState?.state ?? null}
+          unread={unread}
+          phase={rowState?.phases ?? null}
+          phaseSlug={rowState?.phase ?? null}
+          workgroup={item.raw ?? null}
+          size={twoPane ? MARK_SIZES.row : MARK_SIZES.list}
         />
       </View>
       <View style={STATIC.body}>
@@ -164,7 +219,7 @@ export const InboxRow = memo(function InboxRow({ item, onPress, onLongPress, sel
         <View style={STATIC.meta}>
           {item.ts ? <Text style={tsVariant}>{item.ts}</Text> : null}
           {item.paused && !needsProvider ? (
-            <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.xs, lineHeight: fontSizes.xs * lineHeights.tight, color: colors.ink3 }}>paused</Text>
+            <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.xs, lineHeight: fontSizes.xs * lineHeights.tight, color: colors.ink3 }}>paused</Text>
           ) : null}
           {rowState ? <RowState state={rowState.state} phases={rowState.phases} color={item.accent} /> : null}
           {working ? (

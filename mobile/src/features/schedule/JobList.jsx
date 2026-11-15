@@ -1,9 +1,9 @@
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
-import { mobile, space } from '../../theme/tokens';
+import { RefreshControl, ScrollView, View } from 'react-native';
+import { space } from '../../theme/tokens';
+import { PanelRow } from '../../components/PanelRow';
 
-import { Dot } from '../../components/Dot';
 import { Field } from '../../components/Field';
 import { ListSkeleton } from '../../components/ListSkeleton';
 import { FadeIn } from '../../components/FadeIn';
@@ -12,53 +12,33 @@ import { useReveal } from '../../hooks/useReveal';
 import { EmptyState } from '../../components/EmptyState';
 import { LoadFailed } from '../../components/LoadFailed';
 import { Row, RowGroup, RowSeparator, SectionHeader } from '../../components/Row';
-import { toEpochSeconds, useActivity } from '../../hooks/useActivity';
+import { useActivity } from '../../hooks/useActivity';
 import { useScheduleList } from '../../hooks/useDaemonData';
 import { useEventEffect } from '../../hooks/useEvents';
 import { usePullRefresh } from '../../hooks/usePullRefresh';
-import { clockOf, jobMatches, jobTitle, lastResultLine } from '../../lib/scheduleFormat';
+import { jobMatches, jobTitle } from '../../lib/scheduleFormat';
 import { useTheme } from '../../theme/ThemeContext';
 import { EMPTY } from '../../../../common/emptyCopy.mjs';
 import { jobGroups, nextRunWord } from '../../../../common/attention.mjs';
 import { describeWhen } from '../../../../common/schedule.mjs';
 import { NEW_SCHEDULE_DRAFT, chatWithDraft } from './drafts';
 
-function JobRow({ job, running, startedClock, selected, onOpen }) {
-  const { colors, fonts, fontSizes } = useTheme();
+function JobRow({ job, running, selected, onOpen }) {
   const paused = !!job.paused;
   const failed = !paused && job.last_run_status === 'error' && !running;
   const word = running ? 'running' : nextRunWord(job);
   const description = typeof job.description === 'string' ? job.description.trim() : '';
-  const last = lastResultLine(job, running ? startedClock : null);
   return (
-    <Pressable
+    <PanelRow
+      title={jobTitle(job)}
+      sub={description || null}
+      meta={word || null}
+      metaTone={failed ? 'danger' : null}
+      off={paused}
+      selected={selected}
       onPress={() => onOpen(job.id)}
-      accessibilityRole="button"
       accessibilityLabel={`${jobTitle(job)}, ${describeWhen(job)}${running ? ', running' : paused ? ', paused' : failed ? ', last run failed' : ''}`}
-      android_ripple={{ color: colors.selected }}
-      style={({ pressed }) => ({
-        minHeight: mobile.tap,
-        paddingHorizontal: space.s7,
-        paddingVertical: space.s5,
-        gap: space.s1,
-        justifyContent: 'center',
-        backgroundColor: selected || pressed ? colors.selected : 'transparent',
-      })}
-    >
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s4 }}>
-        <Dot color={failed ? colors.danger : paused ? colors.ink4 : colors.ink} pulse={running} />
-        <Text style={{ flex: 1, fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, color: paused ? colors.ink3 : colors.ink }} numberOfLines={1}>
-          {jobTitle(job)}
-        </Text>
-        {word ? (
-          <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: failed ? colors.dangerText : colors.ink3 }} numberOfLines={1}>{word}</Text>
-        ) : null}
-      </View>
-      {description ? (
-        <Text style={{ marginLeft: space.s6, fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }} numberOfLines={1}>{description}</Text>
-      ) : null}
-      <Text style={{ marginLeft: space.s6, fontFamily: fonts.mono, fontSize: fontSizes.xs, color: failed ? colors.dangerText : colors.ink3 }} numberOfLines={1}>{last}</Text>
-    </Pressable>
+    />
   );
 }
 
@@ -79,10 +59,6 @@ export function JobList({ profile, selectedId = null, onOpen, embedded = false }
   const runningRows = useMemo(() => new Map(
     (activity?.running ?? []).filter((run) => run.profile === profile && run.job_id != null).map((run) => [String(run.job_id), run]),
   ), [activity, profile]);
-  const startedClock = (job) => {
-    const sec = toEpochSeconds(runningRows.get(String(job.id))?.started_at);
-    return sec === null ? null : clockOf(sec);
-  };
   const shown = jobs.filter((job) => jobMatches(job, query, describeWhen(job)));
   const groups = jobGroups(shown);
 
@@ -122,7 +98,6 @@ export function JobList({ profile, selectedId = null, onOpen, embedded = false }
                   <JobRow
                     job={job}
                     running={runningRows.has(String(job.id))}
-                    startedClock={startedClock(job)}
                     selected={String(job.id) === String(selectedId)}
                     onOpen={onOpen}
                   />

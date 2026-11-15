@@ -2,11 +2,11 @@ import { useEffect, useMemo, useRef } from 'react';
 import { Animated, Easing } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
-import { BUSY_LABEL, BUSY_WAVE_S } from '../../../common/busy.mjs';
+import { BUSY_LABEL, BUSY_CYCLE_S } from '../../../common/busy.mjs';
 import { useReduceMotion } from '../lib/reduceMotion';
 import { useTheme } from '../theme/ThemeContext';
 
-export const SPINNER_TURN_MS = (BUSY_WAVE_S * 1000) / 2;
+export const SPINNER_TURN_MS = (BUSY_CYCLE_S * 1000) / 2;
 export const SPINNER_SIZE = 20;
 
 export function Spinner({ size = SPINNER_SIZE, color, label = BUSY_LABEL }) {

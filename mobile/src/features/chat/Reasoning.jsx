@@ -17,7 +17,7 @@ function toLines(text) {
     .filter((s) => s.trim());
 }
 
-export function Reasoning({ text, seconds, timeline, streaming = false, answered = false, edges, accent, fold }) {
+export function Reasoning({ text, seconds, timeline, streaming = false, answered = false, edges, accent, shape }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
     if (answered) setOpen(false);
@@ -28,7 +28,7 @@ export function Reasoning({ text, seconds, timeline, streaming = false, answered
   if (!streaming && !items.length) {
     return (
       <View style={processRowStyle} accessibilityLabel={thoughtLabel(seconds)}>
-        <Mark fold={fold} accent={accent} />
+        <Mark shape={shape} accent={accent} />
         <Thought seconds={seconds} accent={accent} />
       </View>
     );
@@ -43,7 +43,7 @@ export function Reasoning({ text, seconds, timeline, streaming = false, answered
         accessibilityLiveRegion={streaming ? 'polite' : 'none'}
         style={processRowStyle}
       >
-        <Mark fold={fold} accent={accent} working={streaming} />
+        <Mark shape={shape} accent={accent} working={streaming} />
         {streaming ? <Thinking hint={open ? '' : lines[lines.length - 1]} accent={accent} /> : <Thought seconds={seconds} accent={accent} />}
         <Chevron open={open} />
       </Pressable>
@@ -54,10 +54,10 @@ export function Reasoning({ text, seconds, timeline, streaming = false, answered
   );
 }
 
-function Mark({ fold, accent, working = false }) {
+function Mark({ shape, accent, working = false }) {
   return (
     <View style={{ width: PROCESS_LEAD_W, alignItems: 'center' }}>
-      <Fold fold={fold} color={accent} size={PROCESS_LEAD_W} pulse={working} />
+      <Fold shape={shape} color={accent} size={PROCESS_LEAD_W} pulse={working} />
     </View>
   );
 }
@@ -109,8 +109,6 @@ function Body({ items, follow }) {
         maxHeight: height * 0.45,
         marginTop: PROCESS_GAP,
         marginLeft: PROCESS_LEAD_W / 2,
-        borderLeftWidth: 1,
-        borderLeftColor: colors.line,
       }}
       contentContainerStyle={{ paddingLeft: PROCESS_INDENT - PROCESS_LEAD_W / 2 - 1, paddingBottom: space.s1 }}
       nestedScrollEnabled

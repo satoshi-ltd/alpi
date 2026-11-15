@@ -2,8 +2,9 @@ import { usePathname, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { mobile, radii, space } from '../../theme/tokens';
+import { recess } from '../../components/well';
 
-import { FALLBACK_ACCENT } from '../../../../common/folds.mjs';
+import { FALLBACK_ACCENT } from '../../../../common/shapes.mjs';
 import { CAP_CHOICES, DEFAULT_WAIT_SECONDS, WAIT_CHOICES, capLabel, runLimitParams, waitLabel } from '../../../../common/runLimits.mjs';
 import { ActionSheet } from '../../components/ActionSheet';
 import { Fold } from '../../components/Fold';
@@ -18,6 +19,7 @@ import { useEndpoint } from '../../lib/EndpointContext';
 import { openVerb } from '../../lib/panes';
 import { usePane } from '../../nav/PaneContext';
 import { useTheme } from '../../theme/ThemeContext';
+import { code } from '../../theme/code';
 
 const CHIP_H = 32;
 const CHIP_SLOP = (mobile.tap - CHIP_H) / 2;
@@ -111,7 +113,7 @@ export function CreateWorkgroupSheet({ open, onClose }) {
       open={open}
       onClose={onClose}
       title="New workgroup"
-      subtitle={noHubs ? undefined : 'HUB · NAME · MEMBERS'}
+      subtitle={noHubs ? undefined : 'Hub · name · members'}
       primaryAction={
         noHubs ? undefined : { label: 'Create', onPress: create, disabled: !ready, loading: busy }
       }
@@ -139,28 +141,26 @@ export function CreateWorkgroupSheet({ open, onClose }) {
                 flexDirection: 'row',
                 alignItems: 'center',
                 gap: space.s4,
-                backgroundColor: pressed ? colors.selected : colors.field,
-                borderWidth: 0.5,
-                borderColor: colors.line2,
-                borderRadius: radii.xs,
+                backgroundColor: pressed ? colors.pressed : recess(colors),
+                borderRadius: radii.pill,
                 paddingHorizontal: space.s6,
                 minHeight: mobile.tap,
               })}
             >
               {hubSummary ? (
                 <>
-                  <Fold fold={hubSummary.fold} color={hubSummary.accent ?? FALLBACK_ACCENT} />
-                  <Text style={{ flex: 1, fontFamily: fonts.mono, fontSize: fontSizes.md, color: colors.ink }}>
+                  <Fold shape={hubSummary.shape} color={hubSummary.accent ?? FALLBACK_ACCENT} />
+                  <Text style={{ flex: 1, fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink }}>
                     @{hubSummary.name}
                   </Text>
                   {hubSummary.model ? (
-                    <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
+                    <Text style={{ ...code(fonts, fontSizes.xs), color: colors.ink3 }}>
                       {hubSummary.model}
                     </Text>
                   ) : null}
                 </>
               ) : (
-                <Text style={{ flex: 1, fontFamily: fonts.mono, fontSize: fontSizes.md, color: colors.ink3 }}>
+                <Text style={{ flex: 1, fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink3 }}>
                   Pick profile…
                 </Text>
               )}
@@ -204,16 +204,16 @@ export function CreateWorkgroupSheet({ open, onClose }) {
                         gap: space.s2,
                         paddingHorizontal: space.s5,
                         height: CHIP_H,
-                        borderRadius: radii.tag,
+                        borderRadius: radii.pill,
                         backgroundColor: on ? `${peerAccent}33` : colors.hover,
                         borderWidth: on ? 1 : 0,
                         borderColor: on ? peerAccent : 'transparent',
                       }}
                     >
-                      <Fold fold={local?.fold} color={peerAccent} />
+                      <Fold shape={local?.shape} color={peerAccent} />
                       <Text
                         style={{
-                          fontFamily: fonts.mono,
+                          fontFamily: fonts.sans.regular,
                           fontSize: fontSizes.sm,
                           color: on ? colors.ink : colors.ink2,
                         }}
@@ -264,7 +264,7 @@ export function CreateWorkgroupSheet({ open, onClose }) {
         subtitle="workgroup hub"
         actions={eligibleHubs.map((p) => ({
           id: p.name,
-          icon: <Fold fold={p.fold} color={p.accent ?? FALLBACK_ACCENT} size="md" />,
+          icon: <Fold shape={p.shape} color={p.accent ?? FALLBACK_ACCENT} size="md" />,
           label: `@${p.name}`,
           detail: p.model || undefined,
           selected: hub === p.name,

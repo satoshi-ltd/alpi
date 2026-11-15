@@ -32,6 +32,6 @@ describe("one arc for every control", () => {
     }
     expect(chip).toMatch(/\.chip \.spinner\s*\{[^}]*width: var\(--sp-12\);[^}]*height: var\(--sp-12\);/);
     expect(chip).toMatch(/\.chip\.sm \.spinner\s*\{[^}]*width: var\(--sp-8\);[^}]*height: var\(--sp-8\);/);
-    expect(button).toMatch(/\.button \.spinner\s*\{[^}]*width: var\(--sp-12\);[^}]*height: var\(--sp-12\);/);
+    expect(button).toMatch(/\.button \.spinner\s*\{[^}]*width: var\(--icon-sm\);[^}]*height: var\(--icon-sm\);/);
   });
 });

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { FALLBACK_ACCENT } from '../../../common/folds.mjs';
+import { FALLBACK_ACCENT } from '../../../common/shapes.mjs';
 import { useEndpoint } from '../lib/EndpointContext';
 import { profileEmptyState } from '../lib/profileReady';
 import { profileLabel } from '../lib/profileName';
@@ -102,7 +102,7 @@ export function useInbox() {
         name: p.name,
         label: profileLabel(p.name),
         accent: p.accent ?? FALLBACK_ACCENT,
-        fold: p.fold,
+        shape: p.shape,
         needsProvider: blocked,
         emptyState: state,
         preview,

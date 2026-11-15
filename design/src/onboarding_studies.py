@@ -1,10 +1,10 @@
-from brand_boards import black_alpaca
+import marks
 from desktop_boards import MONO
 from first_run_parts import (COPY, PANE, desktop_states, fold_box, fold_first_profile, q_denied, q_first_profile, q_pair, q_paired,
                              q_scan, q_welcome, Q_COL, Q_FOLD_EDGE, Q_FOLD_H, Q_FOLD_W)
 from gen import ic, page
 from notif_studies import VIEW, dot, ell, flex, mark, mono, spacer, stack, wrap
-from paper_studies import PAPER, button, field, note, text
+from paper_studies import PAPER, field, note, text
 
 SKETCH_ZOOM = 1.35
 
@@ -20,10 +20,10 @@ def status_dot(p, state, size=6):
 
 def window(p, side, main, h=232):
     bar = (f'<div style="height: 20px; flex-shrink: 0; display: flex; align-items: center; gap: 5px; padding: 0 9px; background: {p["side"]}; '
-           f'box-shadow: inset 0 -0.5px 0 {p["line"]}">{dot(p["ink4"], 7)}{dot(p["ink4"], 7)}{dot(p["ink4"], 7)}</div>')
+           f'">{dot(p["ink4"], 7)}{dot(p["ink4"], 7)}{dot(p["ink4"], 7)}</div>')
     body = (f'<div style="flex: 1; min-height: 0; display: flex; position: relative">{side}'
             f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: {p["pane"]}">{main}</div></div>')
-    return (f'<div style="height: {h}px; border-radius: 4px; overflow: hidden; background: {p["pane"]}; box-shadow: 0 0 0 1px {p["line2"]}; '
+    return (f'<div style="height: {h}px; border-radius: 20px; overflow: hidden; background: {p["pane"]}; box-shadow: 0 0 0 1px {p["line2"]}; '
             f'display: flex; flex-direction: column">{bar}{body}</div>')
 
 
@@ -31,29 +31,29 @@ def conn_chip(p, name, host, state):
     glyph = f'<span style="position: relative; display: inline-flex">{ic("chip", 12, p["ink2"])}<span style="position: absolute; right: -3px; bottom: -3px; display: inline-flex">{status_dot(p, state, 5)}</span></span>'
     names = stack(text(name, 10.5, p["ink"], 500), ell(host, 8.5, p["ink3"], extra=f"font-family: {MONO}"), gap=1, extra="flex: 1")
     return flex(glyph, names, ic("chev-d", 10, p["ink3"]), gap=7,
-                extra=f"padding: 5px 7px; background: {p['pane']}; border-radius: 4px; box-shadow: 0 0 0 0.5px {p['line2']}")
+                extra=f"padding: 5px 7px; background: {p['pane']}; border-radius: 10px")
 
 
 def srow(p, shape, name, active=False):
-    glyph = black_alpaca(15, p["ink"]) if shape == "alpaca" else mark(shape, 12)
+    glyph = marks.twin(14) if shape == "twin" else mark(shape, 14)
     bg = p["pane"] if active else "transparent"
     return flex(f'<span style="width: 15px; display: inline-flex; justify-content: center">{glyph}</span>', text(name, 10.5, p["ink"] if active else p["ink2"], 500 if active else 400),
-                gap=6, extra=f"height: 22px; padding: 0 6px; border-radius: 4px; background: {bg}")
+                gap=6, extra=f"height: 22px; padding: 0 6px; border-radius: 6px; background: {bg}")
 
 
 def sidebar(p, state, rows=()):
-    head = f'<div style="padding: 8px 8px 4px; font-family: {MONO}; font-size: 8px; letter-spacing: 0.08em; text-transform: uppercase; color: {p["ink3"]}">Connection</div>'
+    head = f'<div style="padding: 8px 8px 4px; font-size: 14px; color: {p["ink3"]}">Connection</div>'
     roster = "".join(srow(p, *r) for r in rows)
-    return (f'<div style="width: 136px; flex-shrink: 0; background: {p["side"]}; box-shadow: inset -0.5px 0 0 {p["line"]}; display: flex; flex-direction: column">'
+    return (f'<div style="width: 136px; flex-shrink: 0; background: {p["side"]}; display: flex; flex-direction: column">'
             f'{head}<div style="padding: 0 8px">{conn_chip(p, "This computer", "host.sock", state)}</div><div style="padding: 8px 4px; display: flex; flex-direction: column; gap: 1px">{roster}</div></div>')
 
 
-ROSTER = (("alpaca", "alpi", True), ("plane", "abby"), ("heart", "doc"), ("house", "etxea"))
+ROSTER = (("twin", "alpi", True), ("drop", "abby"), ("heart", "doc"), ("arch", "etxea"))
 
 
 def chat_head(p):
-    return flex(black_alpaca(16, p["ink"]), text("alpi", 11.5, p["ink"], 600), mono("sonnet-4", 9, p["ink3"]), spacer(), ic("more", 12, p["ink3"]), gap=6,
-                extra=f"padding: 8px 12px; box-shadow: inset 0 -0.5px 0 {p['line']}")
+    return flex(marks.twin(16), text("alpi", 11.5, p["ink"], 600), mono("sonnet-4", 9, p["ink3"]), spacer(), ic("more", 12, p["ink3"]), gap=6,
+                extra="padding: 8px 12px; ")
 
 
 def composer(p, name="alpi"):
@@ -79,8 +79,8 @@ DESKTOP_ONBOARDING_H = 5660
 
 
 def desktop_onboarding():
-    head = ('<div style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 22px; font-weight: 600; letter-spacing: -0.018em; line-height: 1.3">First run</span>'
-            f'<span style="font-size: 13px; color: {VIEW["ink3"]}; max-width: 760px; line-height: 1.5">Before drawing the shell the app asks the machine for its own alpi: running, stopped, absent or unsupported. '
+    head = ('<div style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 20px; font-weight: 600; letter-spacing: -0.018em; line-height: 1.3">First run</span>'
+            f'<span style="font-size: 15px; color: {VIEW["ink3"]}; max-width: 760px; line-height: 1.5">Before drawing the shell the app asks the machine for its own alpi: running, stopped, absent or unsupported. '
             'On a true first run, with the local alpi never having answered on this machine and at most one saved connection, the window is the Welcome alone, with no sidebar. '
             'In every other case the Sidebar stays and the Welcome fills the main pane beside it. Once alpi has answered in a session, a later outage keeps the open view under the reconnecting banner.</span></div>')
     rows = sketch(RUNNING[0], RUNNING[1], d_running(), SKETCH_ZOOM) + "".join(sketch(title, body, drawing) for title, body, drawing in desktop_states())

@@ -1,12 +1,11 @@
 import { useMemo, useState } from "react";
-import { WORKGROUP_FOLD } from "../../../common/folds.mjs";
-import { palettes } from "../../../common/tokens.mjs";
+import { WORKGROUP_SHAPE } from "../../../common/shapes.mjs";
+import { workgroupMark, workgroupStatusLine } from "../../../common/workgroupMarkState.mjs";
+import { MUTED_NAME } from "../lib/nameVars.js";
 import {
   Banner,
   Button,
-  Crease,
   Fold,
-  Mono,
   PlusIcon,
   RelativeTime,
   SearchIcon,
@@ -23,19 +22,18 @@ const FILTERS = [
   { id: "paused", label: "Paused" },
 ];
 
-function workgroupState(workgroup, task, busy) {
+function workgroupState(workgroup, task, busy, mark) {
   if (workgroup.paused) return { id: "paused", label: "Paused" };
   if (workgroup.pipeline_status === "queued") {
     const position = Number(workgroup.queue_position || 0);
     return { id: "queued", label: position ? `Queued · #${position}` : "Queued" };
   }
   if (workgroup.pipeline_status === "blocked") {
-    return { id: "error", label: "Needs attention" };
+    return { id: "needs", label: workgroupStatusLine(mark) ?? "Needs you" };
   }
   if (["running", "between"].includes(workgroup.pipeline_status)) {
-    const phase = workgroup.pipeline_phase
-      || (task?.state === "open" ? task.slug : "");
-    return { id: "active", label: phase ? `Working · ${phase}` : "Working" };
+    if (mark.step) return { id: "active", label: workgroupStatusLine(mark) };
+    return { id: "active", label: task?.state === "open" && task.slug ? `Working · ${task.slug}` : "Working" };
   }
   if (workgroup.pipeline_status === "completed") {
     return { id: "idle", label: "Idle" };
@@ -45,13 +43,19 @@ function workgroupState(workgroup, task, busy) {
   return { id: "idle", label: "Idle" };
 }
 
+function rowState(workgroup, run, task, busy) {
+  const mark = workgroupMark({ workgroup, run, task, busy });
+  return { mark, state: workgroupState(workgroup, task, busy, mark) };
+}
+
 function money(value) {
   return `$${Number(value || 0).toFixed(2)}`;
 }
 
-// Same displayed age → working first, then queued, then the rest; the list still follows recency.
+const URGENT = new Set(["active", "needs", "error"]);
+
 function stateRank(stateId) {
-  return stateId === "active" || stateId === "error" ? 0 : stateId === "queued" ? 1 : 2;
+  return URGENT.has(stateId) ? 0 : stateId === "queued" ? 1 : 2;
 }
 
 export default function WorkgroupsView({
@@ -59,6 +63,7 @@ export default function WorkgroupsView({
   profiles = [],
   taskByWorkgroup = {},
   activityByWorkgroup = {},
+  runByWorkgroup = null,
   onOpenWorkgroup,
   onNewWorkgroup,
   syncing = false,
@@ -80,15 +85,11 @@ export default function WorkgroupsView({
         return {
           workgroup,
           key,
-          state: workgroupState(
-            workgroup,
-            taskByWorkgroup[key],
-            Boolean(activityByWorkgroup[key]),
-          ),
+          ...rowState(workgroup, runByWorkgroup?.[key] ?? null, taskByWorkgroup[key], Boolean(activityByWorkgroup[key])),
         };
       })
       .filter(({ workgroup, state }) => {
-        if (filter === "active" && state.id !== "active" && state.id !== "error") return false;
+        if (filter === "active" && !URGENT.has(state.id)) return false;
         if (filter === "queued" && state.id !== "queued") return false;
         if (filter === "paused" && state.id !== "paused") return false;
         if (!needle) return true;
@@ -105,26 +106,23 @@ export default function WorkgroupsView({
           || Number(left.workgroup.queue_position || 0) - Number(right.workgroup.queue_position || 0)
           || rightTime - leftTime;
       });
-  }, [activityByWorkgroup, filter, query, taskByWorkgroup, workgroups]);
+  }, [activityByWorkgroup, filter, query, runByWorkgroup, taskByWorkgroup, workgroups]);
   const summary = useMemo(() => {
-    const counts = { active: 0, error: 0, idle: 0, queued: 0, paused: 0 };
+    const counts = { active: 0, needs: 0, error: 0, idle: 0, queued: 0, paused: 0 };
     workgroups.forEach((workgroup) => {
       const key = `${workgroup.profile}/${workgroup.id}`;
-      const state = workgroupState(
-        workgroup,
-        taskByWorkgroup[key],
-        Boolean(activityByWorkgroup[key]),
-      );
+      const { state } = rowState(workgroup, runByWorkgroup?.[key] ?? null, taskByWorkgroup[key], Boolean(activityByWorkgroup[key]));
       counts[state.id] += 1;
     });
     return counts;
-  }, [activityByWorkgroup, taskByWorkgroup, workgroups]);
+  }, [activityByWorkgroup, runByWorkgroup, taskByWorkgroup, workgroups]);
   const workgroupLabel = `${workgroups.length} workgroup${workgroups.length === 1 ? "" : "s"}`;
   const activityParts = [
     `${summary.active} working`,
     summary.queued ? `${summary.queued} queued` : null,
     `${summary.idle} idle`,
     summary.paused ? `${summary.paused} paused` : null,
+    summary.needs ? `${summary.needs} need you` : null,
     summary.error ? `${summary.error} need attention` : null,
   ].filter(Boolean);
 
@@ -133,8 +131,8 @@ export default function WorkgroupsView({
       <header className={`ds-chat-header ${styles.header}`} data-drag>
         <div className={styles.titleBlock}>
           <div className="title-row">
-            <Fold fold={WORKGROUP_FOLD} size="md" />
-            <h1><Crease text="Workgroups" accent={palettes.light.ink3} /></h1>
+            <Fold shape={WORKGROUP_SHAPE} size="md" color="var(--accent)" seed="workgroups" />
+            <h1 className="ds-name" style={MUTED_NAME}>Workgroups</h1>
           </div>
           <div className="meta-row">
             <span>{workgroupLabel}</span>
@@ -178,7 +176,7 @@ export default function WorkgroupsView({
                   </button>
                 ))}
               </div>
-              <Mono>{rows.length} of {workgroups.length}</Mono>
+              <span>{rows.length} of {workgroups.length}</span>
             </div>
           </div>
 
@@ -193,7 +191,7 @@ export default function WorkgroupsView({
           )}
 
           <div className={styles.rows}>
-            {rows.map(({ workgroup, key, state }) => {
+            {rows.map(({ workgroup, key, state, mark }) => {
               const accent = accentByProfile[workgroup.hub_id ?? workgroup.profile];
               return (
                 <button
@@ -203,8 +201,8 @@ export default function WorkgroupsView({
                   onClick={() => onOpenWorkgroup?.(workgroup)}
                 >
                   <span className={styles.identity}>
-                    <Fold fold={WORKGROUP_FOLD} color={accent} pulse={state.id === "active"} unfolded={state.id === "paused"} />
-                    <strong>{workgroup.name ?? workgroup.id}</strong>
+                    <Fold shape={WORKGROUP_SHAPE} color={accent} state={mark.state} phase={mark.phase} seed={key} />
+                    <span className="sb-name">{workgroup.name ?? workgroup.id}</span>
                   </span>
                   <span className={styles.statusCell}>
                     <span className={`${styles.status} ${styles[`status_${state.id}`]}`}>
@@ -215,8 +213,8 @@ export default function WorkgroupsView({
                       <span className={styles.statusNote} title={workgroup.pipeline_note}>{workgroup.pipeline_note}</span>
                     )}
                   </span>
-                  <Mono tnum>{workgroup.members ?? 0}</Mono>
-                  <Mono tnum className={styles.spend}>{money(workgroup.spent_usd)}</Mono>
+                  <span className="tnum">{workgroup.members ?? 0}</span>
+                  <span className={"tnum " + styles.spend}>{money(workgroup.spent_usd)}</span>
                   <span className={styles.updated}>
                     {workgroup.mtime ? <RelativeTime ts={workgroup.mtime} /> : "—"}
                   </span>
@@ -232,7 +230,7 @@ export default function WorkgroupsView({
             <SkeletonRows count={3} label="Syncing workgroups" />
           ) : (
             <EmptyState
-              fold={WORKGROUP_FOLD}
+              shape={WORKGROUP_SHAPE}
               heading={EMPTY.workgroups.title}
               subtitle={EMPTY.workgroups.hint}
               action={onNewWorkgroup ? { label: "New workgroup", onClick: onNewWorkgroup } : null}

@@ -36,7 +36,7 @@
    "x": 0,
    "y": 240,
    "w": 1280,
-   "h": 2780,
+   "h": 3760,
    "title": "System \u00b7 tokens",
    "page": "system"
   },
@@ -50,7 +50,7 @@
   },
   "System-DesktopComponents.dc.html": {
    "x": 0,
-   "y": 3260,
+   "y": 4240,
    "w": 1280,
    "h": 4110,
    "title": "Desktop \u00b7 controls and feedback",
@@ -58,7 +58,7 @@
   },
   "System-MobileComponents.dc.html": {
    "x": 1360,
-   "y": 3260,
+   "y": 4240,
    "w": 1280,
    "h": 6180,
    "title": "Mobile \u00b7 controls and feedback",
@@ -66,7 +66,7 @@
   },
   "System-DesktopConversation.dc.html": {
    "x": 0,
-   "y": 9680,
+   "y": 10660,
    "w": 1280,
    "h": 3040,
    "title": "Desktop \u00b7 conversation",
@@ -74,7 +74,7 @@
   },
   "System-MobileConversation.dc.html": {
    "x": 1360,
-   "y": 9680,
+   "y": 10660,
    "w": 1280,
    "h": 2580,
    "title": "Mobile \u00b7 conversation",
@@ -82,7 +82,7 @@
   },
   "System-DesktopWorkgroup.dc.html": {
    "x": 0,
-   "y": 12960,
+   "y": 13940,
    "w": 1280,
    "h": 2260,
    "title": "Desktop \u00b7 workgroups",
@@ -90,7 +90,7 @@
   },
   "System-MobileWorkgroup.dc.html": {
    "x": 1360,
-   "y": 12960,
+   "y": 13940,
    "w": 1280,
    "h": 1560,
    "title": "Mobile \u00b7 workgroups",
@@ -124,13 +124,13 @@
    "x": 0,
    "y": 6800,
    "w": 1280,
-   "h": 4440,
+   "h": 5000,
    "title": "Desktop \u00b7 profile panels",
    "page": "desktop"
   },
   "Desktop-Workgroups.dc.html": {
    "x": 0,
-   "y": 11480,
+   "y": 12040,
    "w": 1280,
    "h": 740,
    "title": "Desktop \u00b7 workgroups",
@@ -138,7 +138,7 @@
   },
   "Desktop-WorkgroupsStale.dc.html": {
    "x": 0,
-   "y": 12460,
+   "y": 13020,
    "w": 1280,
    "h": 740,
    "title": "Desktop \u00b7 workgroups \u00b7 stale",
@@ -146,7 +146,7 @@
   },
   "Desktop-Connections.dc.html": {
    "x": 0,
-   "y": 13440,
+   "y": 14000,
    "w": 1280,
    "h": 850,
    "title": "Desktop \u00b7 connections",
@@ -154,7 +154,7 @@
   },
   "Desktop-AppSettings.dc.html": {
    "x": 0,
-   "y": 14530,
+   "y": 15090,
    "w": 1280,
    "h": 1250,
    "title": "Desktop \u00b7 app settings",
@@ -162,7 +162,7 @@
   },
   "Desktop-FirstRun.dc.html": {
    "x": 0,
-   "y": 16020,
+   "y": 16580,
    "w": 1280,
    "h": 5660,
    "title": "Desktop \u00b7 first run",
@@ -170,7 +170,7 @@
   },
   "Desktop-Overlays.dc.html": {
    "x": 0,
-   "y": 21920,
+   "y": 22480,
    "w": 1280,
    "h": 3380,
    "title": "Desktop \u00b7 overlays",
@@ -178,15 +178,15 @@
   },
   "Desktop-Tray.dc.html": {
    "x": 0,
-   "y": 25540,
+   "y": 26100,
    "w": 1280,
-   "h": 2950,
+   "h": 4400,
    "title": "Desktop \u00b7 tray",
    "page": "desktop"
   },
   "Desktop-TrayIcon.dc.html": {
    "x": 0,
-   "y": 28730,
+   "y": 30740,
    "w": 1280,
    "h": 1590,
    "title": "Desktop \u00b7 tray icon",
@@ -368,6 +368,14 @@
    "title": "Phone \u00b7 chat",
    "page": "mobile"
   },
+  "Phone-ChatDetails.dc.html": {
+   "x": 1402,
+   "y": 6904,
+   "w": 390,
+   "h": 844,
+   "title": "Phone \u00b7 chat, profile details",
+   "page": "mobile"
+  },
   "Fold-Home.dc.html": {
    "x": 0,
    "y": 8028,
@@ -380,7 +388,7 @@
    "x": 0,
    "y": 9152,
    "w": 852,
-   "h": 3740,
+   "h": 3960,
    "title": "Fold \u00b7 profile settings",
    "page": "mobile"
   },
@@ -388,37 +396,37 @@
    "x": 932,
    "y": 9152,
    "w": 390,
-   "h": 3900,
+   "h": 4192,
    "title": "Phone \u00b7 profile settings",
    "page": "mobile"
   },
   "Fold-WorkgroupSettings.dc.html": {
    "x": 0,
-   "y": 13292,
+   "y": 13584,
    "w": 852,
-   "h": 2700,
+   "h": 3310,
    "title": "Fold \u00b7 workgroup settings",
    "page": "mobile"
   },
   "Phone-WorkgroupSettings.dc.html": {
    "x": 932,
-   "y": 13292,
+   "y": 13584,
    "w": 390,
-   "h": 3030,
+   "h": 3788,
    "title": "Phone \u00b7 workgroup settings",
    "page": "mobile"
   },
   "Phone-ProfilePanels.dc.html": {
    "x": 0,
-   "y": 16562,
+   "y": 17612,
    "w": 1280,
-   "h": 6300,
+   "h": 7100,
    "title": "Phone \u00b7 profile panels",
    "page": "mobile"
   },
   "Fold-ConnectionDetail.dc.html": {
    "x": 0,
-   "y": 23102,
+   "y": 24952,
    "w": 852,
    "h": 1300,
    "title": "Fold \u00b7 connection detail",
@@ -426,7 +434,7 @@
   },
   "Phone-Connections.dc.html": {
    "x": 932,
-   "y": 23102,
+   "y": 24952,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 connections",
@@ -434,23 +442,23 @@
   },
   "Phone-ConnectionDetail.dc.html": {
    "x": 1402,
-   "y": 23102,
+   "y": 24952,
    "w": 390,
-   "h": 1160,
+   "h": 1236,
    "title": "Phone \u00b7 connection detail",
    "page": "mobile"
   },
   "Phone-Settings.dc.html": {
    "x": 932,
-   "y": 24642,
+   "y": 26492,
    "w": 390,
-   "h": 1200,
+   "h": 1268,
    "title": "Phone \u00b7 app settings",
    "page": "mobile"
   },
   "Phone-Notifications.dc.html": {
    "x": 932,
-   "y": 26082,
+   "y": 28000,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 notifications, filters and swipe",
@@ -458,7 +466,7 @@
   },
   "Phone-NotificationPage.dc.html": {
    "x": 1402,
-   "y": 26082,
+   "y": 28000,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 notification page, actions at the thumb",
@@ -466,7 +474,7 @@
   },
   "Fold-Activity.dc.html": {
    "x": 0,
-   "y": 27166,
+   "y": 29084,
    "w": 852,
    "h": 940,
    "title": "Fold \u00b7 activity",
@@ -474,7 +482,7 @@
   },
   "Phone-Roster.dc.html": {
    "x": 932,
-   "y": 27166,
+   "y": 29084,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 roster",
@@ -482,7 +490,7 @@
   },
   "Phone-Activity.dc.html": {
    "x": 1402,
-   "y": 27166,
+   "y": 29084,
    "w": 390,
    "h": 940,
    "title": "Phone \u00b7 activity",
@@ -490,7 +498,7 @@
   },
   "Fold-Sheet.dc.html": {
    "x": 0,
-   "y": 28346,
+   "y": 30264,
    "w": 852,
    "h": 884,
    "title": "Fold \u00b7 sheet as a centred dialog",
@@ -498,7 +506,7 @@
   },
   "Phone-Sheet.dc.html": {
    "x": 932,
-   "y": 28346,
+   "y": 30264,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 sheet",
@@ -506,7 +514,7 @@
   },
   "Phone-ActionSheet.dc.html": {
    "x": 1402,
-   "y": 28346,
+   "y": 30264,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 action sheet",
@@ -514,7 +522,7 @@
   },
   "Phone-TypedConfirm.dc.html": {
    "x": 1872,
-   "y": 28346,
+   "y": 30264,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 typed confirm",
@@ -522,7 +530,7 @@
   },
   "Phone-ConnectionSheet.dc.html": {
    "x": 2342,
-   "y": 28346,
+   "y": 30264,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 connection sheet",
@@ -530,7 +538,7 @@
   },
   "Fold-ActionPopover.dc.html": {
    "x": 0,
-   "y": 29470,
+   "y": 31388,
    "w": 852,
    "h": 884,
    "title": "Fold \u00b7 action sheet as a popover under its trigger",
@@ -538,7 +546,7 @@
   },
   "Phone-ToolSheet.dc.html": {
    "x": 932,
-   "y": 30594,
+   "y": 32512,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 tool step sheet",
@@ -546,7 +554,7 @@
   },
   "Phone-SelectText.dc.html": {
    "x": 1402,
-   "y": 30594,
+   "y": 32512,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 select text",
@@ -554,7 +562,7 @@
   },
   "Phone-MessageActions.dc.html": {
    "x": 1872,
-   "y": 30594,
+   "y": 32512,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 message actions",
@@ -562,7 +570,7 @@
   },
   "Phone-FallbacksSheet.dc.html": {
    "x": 2342,
-   "y": 30594,
+   "y": 32512,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 fallback models, reorder and remove",
@@ -570,7 +578,7 @@
   },
   "Fold-Schedule.dc.html": {
    "x": 0,
-   "y": 31678,
+   "y": 33596,
    "w": 1104,
    "h": 620,
    "title": "Fold \u00b7 schedule, list and job side by side",
@@ -578,7 +586,7 @@
   },
   "Fold-Notifications.dc.html": {
    "x": 1180,
-   "y": 31678,
+   "y": 33596,
    "w": 1104,
    "h": 620,
    "title": "Fold \u00b7 notifications, list and reader side by side",
@@ -586,7 +594,7 @@
   },
   "Phone-States.dc.html": {
    "x": 0,
-   "y": 32538,
+   "y": 34456,
    "w": 1280,
    "h": 1460,
    "title": "Phone \u00b7 empty, error and offline states",
@@ -596,48 +604,80 @@
    "x": 0,
    "y": 240,
    "w": 1280,
-   "h": 2180,
-   "title": "Brand \u00b7 logo and mark",
+   "h": 900,
+   "title": "Brand \u00b7 mark",
    "page": "brand"
   },
-  "Brand-Pairs.dc.html": {
+  "Brand-Wordmark.dc.html": {
    "x": 0,
-   "y": 2660,
+   "y": 1380,
    "w": 1280,
-   "h": 1700,
-   "title": "Brand \u00b7 pairs",
+   "h": 630,
+   "title": "Brand \u00b7 wordmark",
    "page": "brand"
   },
-  "Brand-Palette.dc.html": {
+  "Brand-Icon.dc.html": {
    "x": 0,
-   "y": 4600,
+   "y": 2250,
    "w": 1280,
-   "h": 1400,
-   "title": "Brand \u00b7 palette",
+   "h": 670,
+   "title": "Brand \u00b7 app icon",
+   "page": "brand"
+  },
+  "Brand-Family.dc.html": {
+   "x": 0,
+   "y": 3160,
+   "w": 1280,
+   "h": 1055,
+   "title": "Brand \u00b7 family and palette",
+   "page": "brand"
+  },
+  "Brand-Eyes.dc.html": {
+   "x": 0,
+   "y": 4455,
+   "w": 1280,
+   "h": 940,
+   "title": "Brand \u00b7 eyes and states",
    "page": "brand"
   },
   "Brand-Motion.dc.html": {
    "x": 0,
-   "y": 6240,
+   "y": 5635,
    "w": 1280,
-   "h": 1270,
-   "title": "Brand \u00b7 states and motion",
+   "h": 1080,
+   "title": "Brand \u00b7 motion",
    "page": "brand"
   },
-  "Proposals-DS.FLOATING.dc.html": {
+  "Brand-Names.dc.html": {
+   "x": 0,
+   "y": 6955,
+   "w": 1280,
+   "h": 780,
+   "title": "Brand \u00b7 names",
+   "page": "brand"
+  },
+  "Brand-Workgroups.dc.html": {
+   "x": 0,
+   "y": 7975,
+   "w": 1280,
+   "h": 750,
+   "title": "Brand \u00b7 workgroups",
+   "page": "brand"
+  },
+  "Brand-Gate.dc.html": {
+   "x": 0,
+   "y": 8965,
+   "w": 1280,
+   "h": 590,
+   "title": "Brand \u00b7 gate",
+   "page": "brand"
+  },
+  "Proposals-SHAPE.VOLUME.dc.html": {
    "x": 0,
    "y": 240,
    "w": 1280,
-   "h": 2160,
-   "title": "Proposals \u00b7 ds.floating \u00b7 floating surfaces on the phone sit on the elevated step with a 1 px edge",
-   "page": "proposals"
-  },
-  "Proposals-DS.BANNERS.dc.html": {
-   "x": 0,
-   "y": 2640,
-   "w": 1280,
-   "h": 1040,
-   "title": "Proposals \u00b7 ds.banners \u00b7 warnings carry the alert glyph on both clients and the memory alert is tinted on the phone",
+   "h": 3100,
+   "title": "Proposals \u00b7 shape.volume \u00b7 a soft, moving highlight makes the twelve shapes read as 3d solids",
    "page": "proposals"
   }
  },
@@ -684,6 +724,7 @@
   "Fold-FirstProfileFolded.dc.html",
   "Fold-Chat.dc.html",
   "Phone-Chat.dc.html",
+  "Phone-ChatDetails.dc.html",
   "Fold-Home.dc.html",
   "Fold-ProfileSettings.dc.html",
   "Phone-ProfileSettings.dc.html",
@@ -713,11 +754,15 @@
   "Fold-Notifications.dc.html",
   "Phone-States.dc.html",
   "Brand-Mark.dc.html",
-  "Brand-Pairs.dc.html",
-  "Brand-Palette.dc.html",
+  "Brand-Wordmark.dc.html",
+  "Brand-Icon.dc.html",
+  "Brand-Family.dc.html",
+  "Brand-Eyes.dc.html",
   "Brand-Motion.dc.html",
-  "Proposals-DS.FLOATING.dc.html",
-  "Proposals-DS.BANNERS.dc.html"
+  "Brand-Names.dc.html",
+  "Brand-Workgroups.dc.html",
+  "Brand-Gate.dc.html",
+  "Proposals-SHAPE.VOLUME.dc.html"
  ],
  "notes": {
   "s-Foundations": {
@@ -730,7 +775,7 @@
   },
   "s-Controls and feedback": {
    "x": 0,
-   "y": 3037,
+   "y": 4017,
    "text": "Controls and feedback",
    "kind": "title1",
    "maxW": 2600,
@@ -738,7 +783,7 @@
   },
   "s-Conversation": {
    "x": 0,
-   "y": 9457,
+   "y": 10437,
    "text": "Conversation",
    "kind": "title1",
    "maxW": 2600,
@@ -746,7 +791,7 @@
   },
   "s-Workgroups": {
    "x": 0,
-   "y": 12737,
+   "y": 13717,
    "text": "Workgroups",
    "kind": "title1",
    "maxW": 2600,
@@ -786,7 +831,7 @@
   },
   "d-Workgroups": {
    "x": 0,
-   "y": 11257,
+   "y": 11817,
    "text": "Workgroups",
    "kind": "title1",
    "maxW": 2600,
@@ -794,7 +839,7 @@
   },
   "d-Workgroups \u00b7 stale": {
    "x": 0,
-   "y": 12237,
+   "y": 12797,
    "text": "Workgroups \u00b7 stale",
    "kind": "title1",
    "maxW": 2600,
@@ -802,7 +847,7 @@
   },
   "d-Connections": {
    "x": 0,
-   "y": 13217,
+   "y": 13777,
    "text": "Connections",
    "kind": "title1",
    "maxW": 2600,
@@ -810,7 +855,7 @@
   },
   "d-App settings": {
    "x": 0,
-   "y": 14307,
+   "y": 14867,
    "text": "App settings",
    "kind": "title1",
    "maxW": 2600,
@@ -818,7 +863,7 @@
   },
   "d-First run": {
    "x": 0,
-   "y": 15797,
+   "y": 16357,
    "text": "First run",
    "kind": "title1",
    "maxW": 2600,
@@ -826,7 +871,7 @@
   },
   "d-Overlays": {
    "x": 0,
-   "y": 21697,
+   "y": 22257,
    "text": "Overlays",
    "kind": "title1",
    "maxW": 2600,
@@ -834,7 +879,7 @@
   },
   "d-Tray": {
    "x": 0,
-   "y": 25317,
+   "y": 25877,
    "text": "Tray",
    "kind": "title1",
    "maxW": 2600,
@@ -842,7 +887,7 @@
   },
   "d-Tray icon": {
    "x": 0,
-   "y": 28507,
+   "y": 30517,
    "text": "Tray icon",
    "kind": "title1",
    "maxW": 2600,
@@ -922,7 +967,7 @@
   },
   "m-Workgroup settings": {
    "x": 0,
-   "y": 13069,
+   "y": 13361,
    "text": "Workgroup settings",
    "kind": "title1",
    "maxW": 2600,
@@ -930,7 +975,7 @@
   },
   "m-Profile panels": {
    "x": 0,
-   "y": 16339,
+   "y": 17389,
    "text": "Profile panels",
    "kind": "title1",
    "maxW": 2600,
@@ -938,7 +983,7 @@
   },
   "m-Connections": {
    "x": 0,
-   "y": 22879,
+   "y": 24729,
    "text": "Connections",
    "kind": "title1",
    "maxW": 2600,
@@ -946,7 +991,7 @@
   },
   "m-App settings": {
    "x": 0,
-   "y": 24419,
+   "y": 26269,
    "text": "App settings",
    "kind": "title1",
    "maxW": 2600,
@@ -954,7 +999,7 @@
   },
   "m-Notifications": {
    "x": 0,
-   "y": 25859,
+   "y": 27777,
    "text": "Notifications",
    "kind": "title1",
    "maxW": 2600,
@@ -962,7 +1007,7 @@
   },
   "m-Activity": {
    "x": 0,
-   "y": 26943,
+   "y": 28861,
    "text": "Activity",
    "kind": "title1",
    "maxW": 2600,
@@ -970,7 +1015,7 @@
   },
   "m-Overlays": {
    "x": 0,
-   "y": 28123,
+   "y": 30041,
    "text": "Overlays",
    "kind": "title1",
    "maxW": 2600,
@@ -978,7 +1023,7 @@
   },
   "m-Fold overlays": {
    "x": 0,
-   "y": 29247,
+   "y": 31165,
    "text": "Fold overlays",
    "kind": "title1",
    "maxW": 2600,
@@ -986,7 +1031,7 @@
   },
   "m-Sheets": {
    "x": 0,
-   "y": 30371,
+   "y": 32289,
    "text": "Sheets",
    "kind": "title1",
    "maxW": 2600,
@@ -994,7 +1039,7 @@
   },
   "m-Schedule": {
    "x": 0,
-   "y": 31455,
+   "y": 33373,
    "text": "Schedule",
    "kind": "title1",
    "maxW": 2600,
@@ -1002,56 +1047,88 @@
   },
   "m-States": {
    "x": 0,
-   "y": 32315,
+   "y": 34233,
    "text": "States",
    "kind": "title1",
    "maxW": 2600,
    "page": "mobile"
   },
-  "b-Logo and mark": {
+  "b-Mark": {
    "x": 0,
    "y": 17,
-   "text": "Logo and mark",
+   "text": "Mark",
    "kind": "title1",
    "maxW": 2600,
    "page": "brand"
   },
-  "b-Pairs": {
+  "b-Wordmark": {
    "x": 0,
-   "y": 2437,
-   "text": "Pairs",
+   "y": 1157,
+   "text": "Wordmark",
    "kind": "title1",
    "maxW": 2600,
    "page": "brand"
   },
-  "b-Palette": {
+  "b-App icon": {
    "x": 0,
-   "y": 4377,
-   "text": "Palette",
+   "y": 2027,
+   "text": "App icon",
    "kind": "title1",
    "maxW": 2600,
    "page": "brand"
   },
-  "b-States and motion": {
+  "b-Family and palette": {
    "x": 0,
-   "y": 6017,
-   "text": "States and motion",
+   "y": 2937,
+   "text": "Family and palette",
    "kind": "title1",
    "maxW": 2600,
    "page": "brand"
   },
-  "p-DS.FLOATING \u00b7 Floating surfaces on the phone sit on the elevated step with a 1 px edge": {
+  "b-Eyes and states": {
+   "x": 0,
+   "y": 4232,
+   "text": "Eyes and states",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "brand"
+  },
+  "b-Motion": {
+   "x": 0,
+   "y": 5412,
+   "text": "Motion",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "brand"
+  },
+  "b-Names": {
+   "x": 0,
+   "y": 6732,
+   "text": "Names",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "brand"
+  },
+  "b-Workgroups": {
+   "x": 0,
+   "y": 7752,
+   "text": "Workgroups",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "brand"
+  },
+  "b-Gate": {
+   "x": 0,
+   "y": 8742,
+   "text": "Gate",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "brand"
+  },
+  "p-SHAPE.VOLUME \u00b7 A soft, moving highlight makes the twelve shapes read as 3D solids": {
    "x": 0,
    "y": 17,
-   "text": "DS.FLOATING \u00b7 Floating surfaces on the phone sit on the elevated step with a 1 px edge",
-   "kind": "title1",
-   "maxW": 2600,
-   "page": "proposals"
-  },
-  "p-DS.BANNERS \u00b7 Warnings carry the alert glyph on both clients and the memory alert is tinted on the phone": {
-   "x": 0,
-   "y": 2417,
-   "text": "DS.BANNERS \u00b7 Warnings carry the alert glyph on both clients and the memory alert is tinted on the phone",
+   "text": "SHAPE.VOLUME \u00b7 A soft, moving highlight makes the twelve shapes read as 3D solids",
    "kind": "title1",
    "maxW": 2600,
    "page": "proposals"

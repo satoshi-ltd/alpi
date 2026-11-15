@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { subscribeDaemonEvent } from "../lib/daemon-bus.js";
+import { DETAIL_ONLY_FIELDS, editClock, releaseLanded } from "../lib/optimisticProfiles.js";
 
 // Cache-first: transient failures keep the last snapshot; authentication failures drop it.
 const _cache = new Map();
@@ -28,6 +29,7 @@ export function useProfileSnapshot(connectionId, profile, { sections = null } = 
     const request = ++latestRef.current;
     const stale = () => request !== latestRef.current;
     setLoading(true);
+    const since = editClock();
     return invoke("settings_profile_snapshot", {
       profile,
       ...(connectionId ? { connectionId } : {}),
@@ -38,6 +40,10 @@ export function useProfileSnapshot(connectionId, profile, { sections = null } = 
         if (s && typeof s === "object") {
           _cache.set(key, s);
           setSnapshot(s);
+          const detail = s.detail;
+          if (detail && typeof detail === "object" && !detail.error) {
+            releaseLanded(connectionId, since, [{ ...detail, name: profile }], DETAIL_ONLY_FIELDS);
+          }
           setError(null);
         } else {
           // A null snapshot must surface as an error — consumers gate their per-section fallback fetches on it.

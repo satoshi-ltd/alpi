@@ -18,15 +18,15 @@
   gap: var(--sp-8);
   width: calc(100% + 2 * var(--sp-12));
   min-width: 0;
-  height: var(--ctl-24);
+  height: var(--ctl-32);
   margin: 0 calc(-1 * var(--sp-12));
   padding: 0 var(--sp-12);
   border: 0;
-  border-radius: var(--r-xs);
+  border-radius: var(--r-control);
   background: none;
   color: var(--ink-3);
-  font-family: var(--font-mono);
-  font-size: var(--text-meta);
+  font-family: var(--font-sans);
+  font-size: var(--text-small);
   line-height: var(--lh-tight);
   text-align: left;
   cursor: pointer;
@@ -34,7 +34,7 @@
 }
 .head:hover,
 .headOpen { background: var(--hover); }
-.head:focus-visible { outline-offset: calc(var(--focus-outline-offset) * -1); }
+.head:focus-visible { outline-offset: var(--focus-inset); }
 
 .icon { flex: none; }
 .step_running .icon { animation: stepPulse var(--dur-loop, 1.4s) ease-in-out infinite; }
@@ -45,6 +45,8 @@
 
 .name {
   flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--text-mono);
   color: var(--ink-2);
 }
 .step_fail .name { color: var(--c-danger-text); }
@@ -92,7 +94,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-8);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   color: var(--ink-3);
 }
@@ -100,16 +102,15 @@
 .excerpt { color: var(--ink-3); }
 
 .copyBtn {
-  width: var(--ctl-24);
-  height: var(--ctl-24);
+  width: var(--ctl-32);
+  height: var(--ctl-32);
 }
 
 .code {
   max-height: 280px;
   overflow: auto;
-  border: .5px solid var(--line);
-  border-radius: var(--r-xs);
-  background: var(--bg-pane);
+  border-radius: var(--r-surface);
+  background: var(--card);
 }
 
 .output {
@@ -117,11 +118,10 @@
   max-height: 280px;
   overflow: auto;
   padding: var(--sp-12) var(--sp-12);
-  border: .5px solid var(--line);
-  border-radius: var(--r-xs);
-  background: var(--bg-side);
+  border-radius: var(--r-surface);
+  background: var(--card);
   font-family: var(--font-mono);
-  font-size: var(--text-meta);
+  font-size: var(--text-mono);
   line-height: var(--lh-relaxed);
   color: var(--ink-2);
   white-space: pre-wrap;
@@ -130,7 +130,7 @@
 .outputFail { color: var(--c-danger-text); }
 
 .empty {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   color: var(--ink-3);
 }
@@ -141,23 +141,23 @@
   gap: var(--sp-8);
   align-self: stretch;
   width: calc(100% + 2 * var(--sp-12));
-  height: var(--ctl-24);
+  height: var(--ctl-32);
   margin: 0 calc(-1 * var(--sp-12));
   appearance: none;
   background: none;
   border: 0;
-  border-radius: var(--r-xs);
+  border-radius: var(--r-control);
   padding: 0 var(--sp-12);
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: var(--text-meta);
+  font-family: var(--font-sans);
+  font-size: var(--text-small);
   line-height: var(--lh-tight);
   color: var(--ink-3);
   text-align: left;
   transition: background-color var(--dur-1) var(--ease);
 }
 .bucket:hover { background: var(--hover); color: var(--ink-2); }
-.bucket:focus-visible { outline-offset: calc(var(--focus-outline-offset) * -1); }
+.bucket:focus-visible { outline-offset: var(--focus-inset); }
 
 .bucketChev {
   flex: none;

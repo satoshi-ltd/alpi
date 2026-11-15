@@ -81,7 +81,7 @@ function openServer() {
 }
 
 describe('MCP server sheet typography', () => {
-  it('waits for the handshake with the small ink alpaca and its words', () => {
+  it('waits for the handshake with the small ink Twin and its words', () => {
     h.call.mockReturnValue(new Promise(() => {}));
     openServer();
     expect(screen.getByText('Handshaking with the server').getAttribute('data-busy')).toBe('18');

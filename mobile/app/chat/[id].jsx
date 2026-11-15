@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { radii, space, typography } from '../../src/theme/tokens';
 
 import { ActionSheet } from '../../src/components/ActionSheet';
-import { FOLD_SIZES } from '../../../common/folds.mjs';
+import { MARK_SIZES } from '../../../common/agentMarks.mjs';
 import { Button } from '../../src/components/Button';
 import { Banner } from '../../src/components/Banner';
 import { DaemonBanner, isDaemonDown } from '../../src/components/DaemonBanner';
@@ -18,6 +18,7 @@ import { ProcessBlock } from '../../src/features/chat/ProcessBlock';
 import { TURN_GAP } from '../../src/features/chat/processRow';
 import { turnParts } from '../../../common/reasoningSteps.mjs';
 import { ChatHeader, headerMenuActions } from '../../src/features/chat/ChatHeader';
+import { profileHeaderFlag } from '../../src/features/chat/headerFlag';
 import { SoundWave } from '../../src/features/chat/SoundWave';
 import { useBack } from '../../src/hooks/useBack';
 import { enqueueReadAloud } from '../../src/lib/readAloud';
@@ -44,6 +45,8 @@ import { askUserNoAnswerTag } from '../../src/features/chat/askUserAnswer';
 import { Fold } from '../../src/components/Fold';
 import { SessionsSheet } from '../../src/features/sheets/SessionsSheet';
 import { useChatSend } from '../../src/hooks/useChatSend';
+import { profileKey, useActivity } from '../../src/hooks/useActivity';
+import { sessionMarkKey, useSessionMark } from '../../src/lib/sessionMark';
 import { oversizeError, resolveAttachmentMime, stageAttachment } from '../../src/lib/attachments';
 import { useProfileSummaries, useSessionsList } from '../../src/hooks/useDaemonData';
 import { isMissingSession, useSessionTranscript } from '../../src/hooks/useSessionTranscript';
@@ -62,6 +65,7 @@ import { flagCount } from '../../../common/attention.mjs';
 import { Busy } from '../../src/components/Busy';
 import { useBusyVisible } from '../../src/hooks/useBusyVisible';
 import { SubtitleSkeleton } from '../../src/components/SubtitleSkeleton';
+import { code } from '../../src/theme/code';
 
 function relativeTime(ms) {
   if (!ms) return '';
@@ -90,7 +94,7 @@ function PaneColumn({ children }) {
   return <View style={twoPane ? TURN_STYLES.contentColumn : undefined}>{children}</View>;
 }
 
-const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profileModel, accent, fold, colors, fonts, fontSizes, onActionTarget, inFlight = false, last = false }) {
+const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profileModel, accent, shape, colors, fonts, fontSizes, onActionTarget, inFlight = false, last = false }) {
   const ts = turn.at ? relativeTime(turn.at * 1000) : '';
   const answeredTs = turn.ended_at ? relativeTime(turn.ended_at * 1000) : ts;
   const parts = turnParts(turn);
@@ -127,7 +131,7 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profil
         answered={showAssistant}
         showReasoning={!!parts.reasoning || active}
         accent={accent}
-        fold={fold}
+        shape={shape}
       />
       {parts.askUsers.map((a, i) => (
         <AskUserAnswer
@@ -135,7 +139,7 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profil
           result={a.result}
           question={a.question}
           accent={accent}
-          fold={fold}
+          shape={shape}
           colors={colors}
           fonts={fonts}
           fontSizes={fontSizes}
@@ -153,22 +157,22 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profil
         />
       ) : null}
       {showAssistant && routedModel ? (
-        <Text style={[TURN_STYLES.routedModel, { color: colors.ink3, fontFamily: fonts.mono, fontSize: fontSizes.sm }]}>
+        <Text style={[TURN_STYLES.routedModel, { color: colors.ink3, ...code(fonts, fontSizes.sm) }]}>
           ⇢ {routedModel}
         </Text>
       ) : null}
       {isInterruptedTurn(turn) ? (
-        <Text style={[TURN_STYLES.unfinished, { color: colors.ink3, fontFamily: fonts.mono, fontSize: fontSizes.sm }]}>
+        <Text style={[TURN_STYLES.unfinished, { color: colors.ink3, fontFamily: fonts.sans.regular, fontSize: fontSizes.sm }]}>
           Interrupted before final reply
         </Text>
       ) : null}
       {!isInterruptedTurn(turn) && inFlight ? (
-        <Text style={[TURN_STYLES.unfinished, { color: colors.ink3, fontFamily: fonts.mono, fontSize: fontSizes.sm }]}>
+        <Text style={[TURN_STYLES.unfinished, { color: colors.ink3, fontFamily: fonts.sans.regular, fontSize: fontSizes.sm }]}>
           Still working…
         </Text>
       ) : null}
       {turn.error ? (
-        <Text style={[TURN_STYLES.error, { color: colors.dangerText, fontFamily: fonts.mono, fontSize: fontSizes.sm }]}>
+        <Text style={[TURN_STYLES.error, { color: colors.dangerText, fontFamily: fonts.sans.regular, fontSize: fontSizes.sm }]}>
           {turn.error}
         </Text>
       ) : null}
@@ -176,16 +180,14 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profil
   );
 });
 
-function AskUserAnswer({ result, question, accent, fold, colors, fonts, fontSizes }) {
+function AskUserAnswer({ result, question, accent, shape, colors, fonts, fontSizes }) {
   const noAnswerTag = askUserNoAnswerTag(result);
   if (noAnswerTag) {
     return (
       <View style={{ paddingHorizontal: PANE_PAD_X }}>
         <View
           style={{
-            borderRadius: radii.xs,
-            borderWidth: 0.5,
-            borderColor: colors.line,
+            borderRadius: radii.surface,
             paddingHorizontal: space.s5,
             paddingVertical: space.s4,
             gap: space.s2,
@@ -195,8 +197,8 @@ function AskUserAnswer({ result, question, accent, fold, colors, fonts, fontSize
             {question || result}
           </Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
-            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3 }}>∅</Text>
-            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3, letterSpacing: 0.6 }}>
+            <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}>∅</Text>
+            <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}>
               {noAnswerTag}
             </Text>
           </View>
@@ -206,7 +208,7 @@ function AskUserAnswer({ result, question, accent, fold, colors, fonts, fontSize
   }
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3, paddingHorizontal: PANE_PAD_X }}>
-      <Fold fold={fold} color={accent} />
+      <Fold shape={shape} color={accent} />
       <Text
         style={{
           flex: 1,
@@ -221,7 +223,7 @@ function AskUserAnswer({ result, question, accent, fold, colors, fonts, fontSize
   );
 }
 
-function ChatList({ turns, pendingTurn, hydrating, profileName, model, accent, fold, onActionTarget, colors, fonts, fontSizes, turnsBase = 0, hasMoreRemote = false, onLoadOlder, sessionInFlight = false, loadError = null, onRetryLoad }) {
+function ChatList({ turns, pendingTurn, hydrating, profileName, model, accent, shape, markState, onActionTarget, colors, fonts, fontSizes, turnsBase = 0, hasMoreRemote = false, onLoadOlder, sessionInFlight = false, loadError = null, onRetryLoad }) {
   const [pageSize, setPageSize] = useState(INITIAL_PAGE);
   const [farFromLatest, setFarFromLatest] = useState(false);
   const listRef = useRef(null);
@@ -255,7 +257,7 @@ function ChatList({ turns, pendingTurn, hydrating, profileName, model, accent, f
           profileName={profileName}
           profileModel={model}
           accent={accent}
-          fold={fold}
+          shape={shape}
           colors={colors}
           fonts={fonts}
           fontSizes={fontSizes}
@@ -265,7 +267,7 @@ function ChatList({ turns, pendingTurn, hydrating, profileName, model, accent, f
         />
       </EnterOnce>
     ),
-    [profileName, model, accent, fold, colors, fonts, fontSizes, onActionTarget, lastTurnInFlight, lastTurnIndex, reduceMotion, isFresh, markSeen],
+    [profileName, model, accent, shape, colors, fonts, fontSizes, onActionTarget, lastTurnInFlight, lastTurnIndex, reduceMotion, isFresh, markSeen],
   );
 
   if (hydrating && full.length === 0) {
@@ -281,7 +283,8 @@ function ChatList({ turns, pendingTurn, hydrating, profileName, model, accent, f
           heading="Start a new thread"
           detail={modelLabel(model)}
           accent={accent}
-          fold={fold}
+          shape={shape}
+          state={markState}
         />
       </KeyboardDismissArea>
     );
@@ -320,13 +323,13 @@ function ChatList({ turns, pendingTurn, hydrating, profileName, model, accent, f
   );
 }
 
-function NeedsSetup({ name, accent, fold, state, onSetupProvider, onPickModel }) {
+function NeedsSetup({ name, accent, shape, state, paused = false, onSetupProvider, onPickModel }) {
   const { colors, fonts, fontSizes, lineHeights } = useTheme();
   const isModel = state === 'needs-model';
   const action = isModel ? onPickModel : onSetupProvider;
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.s10, gap: space.s6 }}>
-      <Fold fold={fold} color={accent} size={FOLD_SIZES.hero} />
+      <Fold shape={shape} color={accent} size={MARK_SIZES.hero} state={paused ? 'paused' : 'needs'} />
       <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.xl, color: colors.ink, marginTop: space.s3 }}>
         @{profileLabel(name)} needs {isModel ? 'a model' : 'a provider'}
       </Text>
@@ -486,6 +489,19 @@ function ProfileChatInner() {
       toast({ title: 'Answer saved, not shown', message: 'The transcript did not load — refresh from the ··· menu.', duration: 2600 });
       return false;
     },
+  });
+
+  const { states: activityStates } = useActivity();
+  const headerMark = useSessionMark({
+    key: sessionMarkKey(id),
+    scope: `${endpoint?.id ?? ''}:${id}`,
+    session: sessionId,
+    paused: !!profile?.paused,
+    offline: daemonDown,
+    working: isStreaming || sessionInFlight,
+    needs: activityStates?.get(profileKey(id))?.state === 'needs-you',
+    error: !!pendingTurn?.error && !pendingTurn?.pending,
+    cancelled: !!pendingTurn?.cancelled,
   });
 
   const refreshSession = useDebouncedCallback(() => {
@@ -650,7 +666,7 @@ function ProfileChatInner() {
               {shownModel ? (
                 <Text
                   numberOfLines={1}
-                  style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink2 }}
+                  style={{ ...code(fonts, fontSizes.sm), color: colors.ink2 }}
                 >
                   {shownModel}
                 </Text>
@@ -680,6 +696,24 @@ function ProfileChatInner() {
             </>
           );
 
+  const hasDetails = !!shownModel || (ctxWindow && ctxWindow > 0) || budgetCap > 0;
+  const headerDetails = !hasDetails ? null : {
+    model: shownModel,
+    modelId: profile.model || null,
+    context: ctxWindow && ctxWindow > 0 ? { value: fmtTokens(ctxUsed), tail: `/${fmtTokens(ctxWindow)}`, pct: ctxUsed / ctxWindow } : null,
+    cost: budgetCap > 0 ? { value: `$${budgetUsed.toFixed(2)}`, tail: `/$${budgetCap.toFixed(2)}`, pct: budgetUsed / budgetCap } : null,
+  };
+
+  const headerFlag = profileHeaderFlag({
+    ctxPct: ctxWindow && ctxWindow > 0 ? ctxUsed / ctxWindow : 0,
+    budgetPct: budgetCap > 0 ? budgetUsed / budgetCap : 0,
+    paused: !!profile.paused,
+  });
+  const menuSubtitle = [
+    profile.model || 'Profile',
+    ctxWindow && ctxWindow > 0 ? `${Math.round(Math.min(1, Math.max(0, ctxUsed / ctxWindow)) * 100)}% context` : null,
+    budgetCap > 0 ? `$${budgetUsed.toFixed(2)} of $${budgetCap.toFixed(2)} today` : null,
+  ].filter(Boolean).join(' · ');
   const turns = sessionData?.turns ?? [];
   const paused = !!profile.paused;
   const chipLabel = canAdmin ? modelChipLabel(profile.model, detail?.model_reasoning_effort) : '';
@@ -724,11 +758,14 @@ function ProfileChatInner() {
       <ChatHeader
         kind="profile"
         accent={accent}
-        creased
+        named
         paused={!!paused}
-        fold={profile.fold}
+        mark={{ state: headerMark }}
+        shape={profile.shape}
         title={profileLabel(profile.name)}
         meta={headerMeta}
+        details={emptyState === 'ready' ? headerDetails : null}
+        flag={headerFlag}
         onBack={goBack}
         onMore={(anchor) => {
           setMenuAnchor(anchor ?? null);
@@ -749,8 +786,9 @@ function ProfileChatInner() {
         <NeedsSetup
           name={profile.name}
           accent={accent}
-          fold={profile.fold}
+          shape={profile.shape}
           state={emptyState}
+          paused={!!paused}
           onSetupProvider={canAdmin ? () => router.push(`/profile/${profile.name}/providers`) : null}
           onPickModel={canAdmin ? () => router.push(`/profile/${profile.name}/settings`) : null}
         />
@@ -763,7 +801,8 @@ function ProfileChatInner() {
             profileName={profile.name}
             model={baselineModelFor(sessionData, profile.model)}
             accent={accent}
-            fold={profile.fold}
+            shape={profile.shape}
+            markState={headerMark}
             onActionTarget={setActionTarget}
             colors={colors}
             fonts={fonts}
@@ -800,7 +839,7 @@ function ProfileChatInner() {
         anchor={menuAnchor}
         onClose={() => setMenuOpen(false)}
         title={`@${profileLabel(profile.name)}`}
-        subtitle="PROFILE"
+        subtitle={menuSubtitle}
         actions={menuActions}
       />
       {canAdmin ? (

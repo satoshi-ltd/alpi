@@ -18,6 +18,7 @@ vi.mock('../../theme/ThemeContext', () => ({
   useTheme: () => ({ colors: { bg: '#fff', ink: '#000', ink2: '#333', ink3: '#666', dangerText: '#b00' }, fonts: { sans: { regular: 'r', semibold: 's' }, mono: 'm' }, fontSizes: { xs: 11, sm: 12, md: 14, xl: 18 } }),
 }));
 vi.mock('../../components/AlertBanner', () => ({ AlertBanner: () => null }));
+vi.mock('../../lib/EndpointContext', () => ({ useEndpoint: () => ({ call: async () => ({ files: {} }) }) }));
 vi.mock('../../hooks/useAttention', () => ({ useAttention: () => ({ att: {} }) }));
 vi.mock('../../components/Icon', () => ({ Icon: () => null }));
 vi.mock('../../components/KeyboardPane', () => ({ KeyboardPane: ({ children }) => React.createElement('div', null, children) }));

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { radii, space } from '../../theme/tokens';
+import { radii, space, alpha } from '../../theme/tokens';
 
 import { Icon } from '../../components/Icon';
 import { PickerRow } from '../../components/PickerRow';
@@ -10,6 +10,7 @@ import { useToast } from '../../components/Toast';
 import { modelLabel } from '../../lib/modelLabel';
 import { useTheme } from '../../theme/ThemeContext';
 import { FALLBACK_HINT, MAX_FALLBACKS, moveFallback, removeFallback } from '../../../../common/fallbackModels.mjs';
+import { code } from '../../theme/code';
 
 const TARGET = 44;
 
@@ -27,9 +28,9 @@ function ActionIcon({ name, label, disabled, onPress }) {
         height: TARGET,
         alignItems: 'center',
         justifyContent: 'center',
-        borderRadius: radii.xs,
-        opacity: disabled ? 0.35 : 1,
-        backgroundColor: pressed ? colors.selected : 'transparent',
+        borderRadius: radii.pill,
+        opacity: disabled ? alpha.disabled : 1,
+        backgroundColor: pressed ? colors.pressed : 'transparent',
       })}
     >
       <Icon name={name} color={colors.ink2} />
@@ -86,7 +87,7 @@ export function FallbacksSheet({ open, onClose, profileName, list, onSave, onAdd
                   <Text numberOfLines={1} style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.ink }}>
                     {`${i + 1} · ${name}`}
                   </Text>
-                  <Text numberOfLines={1} style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
+                  <Text numberOfLines={1} style={{ ...code(fonts, fontSizes.xs), color: colors.ink3 }}>
                     {model}
                   </Text>
                 </View>

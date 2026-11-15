@@ -53,7 +53,6 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "show_tokens": True,
         "show_reasoning": True,
         "accent": "#f0b447",
-        "fold": "diamond",
         "theme": "dark",
         "auto_resume": False,
     },
@@ -402,6 +401,19 @@ def _deep_merge(defaults: dict, user: dict | None) -> dict:
     return merged
 
 
+def translate_shape(home: Path, user_data: Any) -> Any:
+    tui = user_data.get("tui") if isinstance(user_data, dict) else None
+    if not isinstance(tui, dict) or "fold" not in tui:
+        return user_data
+    from alpi import palette
+
+    if home.parent.name != "profiles":
+        shape = palette.TWIN_SHAPE
+    else:
+        shape = palette.shape_of(tui.get("shape")) or palette.legacy_shape(tui.get("fold")) or palette.DEFAULT_SHAPE
+    return {**user_data, "tui": {**{k: v for k, v in tui.items() if k != "fold"}, "shape": shape}}
+
+
 def load(home: Path) -> Config:
     """Read ``<home>/config.yaml`` only. ``<home>/.env`` is NOT loaded into ``os.environ`` — daemon supervises many profiles, so per-profile secrets are pulled on demand via ``home.read_profile_env`` (see ``resolve_model``)."""
     cfg_path = home / "config.yaml"
@@ -409,6 +421,7 @@ def load(home: Path) -> Config:
     user_data: dict[str, Any] = {}
     if cfg_path.exists():
         user_data = yaml.safe_load(cfg_path.read_text()) or {}
+        user_data = translate_shape(home, user_data)
     data = _deep_merge(DEFAULT_CONFIG, user_data)
 
     tools_raw = data.get("tools") or {}

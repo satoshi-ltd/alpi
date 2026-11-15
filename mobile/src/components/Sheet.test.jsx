@@ -78,7 +78,7 @@ vi.mock('./useSheetGesture', () => ({
 
 vi.mock('../theme/ThemeContext', () => ({
   useTheme: () => ({
-    colors: { bgPane: '#fff', ink: '#000', ink3: '#666', ink4: '#999', selected: '#eee' },
+    colors: { bgPane: '#fff', bgElev: '#f9f9f9', ink: '#000', ink3: '#666', ink4: '#999', selected: '#eee' },
     fonts: { sans: { medium: 'Geist_500Medium', semibold: 'Geist_600SemiBold' }, mono: 'GeistMono_400Regular' },
     fontSizes: scaleFontSizes(h.textScale ?? 1),
     shadow: { base: {} },
@@ -143,9 +143,9 @@ describe('Sheet wide form', () => {
     const { container } = renderSheet();
     expect(sheetStyleOf(container)).toEqual({
       maxHeight: '88%',
-      backgroundColor: '#fff',
-      borderTopLeftRadius: radii.xs,
-      borderTopRightRadius: radii.xs,
+      backgroundColor: '#f9f9f9',
+      borderTopLeftRadius: radii.sheet,
+      borderTopRightRadius: radii.sheet,
       overflow: 'hidden',
     });
   });
@@ -154,10 +154,10 @@ describe('Sheet wide form', () => {
     const { container } = renderInTwoPane();
     expect(sheetStyleOf(container)).toEqual({
       maxHeight: '88%',
-      backgroundColor: '#fff',
-      borderTopLeftRadius: radii.xs,
-      borderTopRightRadius: radii.xs,
-      borderRadius: radii.xs,
+      backgroundColor: '#f9f9f9',
+      borderTopLeftRadius: radii.sheet,
+      borderTopRightRadius: radii.sheet,
+      borderRadius: radii.sheet,
       overflow: 'hidden',
       alignSelf: 'center',
       width: '100%',
@@ -325,11 +325,11 @@ describe('dialog title role', () => {
   it('uses the same title size and scales it with the text preference', () => {
     const { rerender } = render(<Sheet open onClose={() => {}} title="Preferences" />);
     const titleStyle = () => JSON.parse(screen.getByText('Preferences').getAttribute('data-text-style'));
-    expect(titleStyle().fontSize).toBe(18);
-    expect(titleStyle().lineHeight).toBeCloseTo(23.4);
+    expect(titleStyle().fontSize).toBe(20);
+    expect(titleStyle().lineHeight).toBeCloseTo(26);
     h.textScale = 1.3;
     rerender(<Sheet open onClose={() => {}} title="Preferences" />);
-    expect(titleStyle().fontSize).toBe(23);
-    expect(titleStyle().lineHeight).toBeCloseTo(29.9);
+    expect(titleStyle().fontSize).toBe(26);
+    expect(titleStyle().lineHeight).toBeCloseTo(33.8);
   });
 });

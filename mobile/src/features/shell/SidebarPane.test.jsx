@@ -287,14 +287,15 @@ describe('SidebarPane connection identity', () => {
 describe('SidebarPane front door on the Fold', () => {
   const HOST = { kind: 'profile', id: 'default', name: 'default', label: 'alpi', preview: 'quiet', ts: '1w', paused: true, raw: { name: 'default', is_default: true } };
 
-  it('draws the default profile first, above Pinned, even paused and with a stale pin', () => {
+  it('draws the default profile as the first tile, before the pinned ones, even paused and with a stale pin', () => {
     h.items = [...ITEMS, HOST];
     h.pinnedProfiles = ['default', 'agora'];
     render(<SidebarPane />);
     const keys = [...document.querySelectorAll('[data-item]')].map((el) => el.getAttribute('data-item'));
-    expect(keys).toEqual(['profile:default', 'profile:agora', 'profile:doc', 'workgroup:doc/alpha']);
+    expect(keys).toEqual(['tiles', 'profile:doc', 'workgroup:doc/alpha']);
     const text = screen.getByTestId('list').textContent;
-    expect(text.indexOf('alpi')).toBeLessThan(text.indexOf('PINNED'));
+    expect(text.indexOf('alpi')).toBeLessThan(text.indexOf('agora'));
+    expect(text.indexOf('agora')).toBeLessThan(text.indexOf('Profiles'));
   });
 });
 
@@ -302,7 +303,7 @@ describe('SidebarPane selection', () => {
   it('lights the row that sidebarSelection(pathname) points at', () => {
     h.pathname = '/chat/agora';
     render(<SidebarPane />);
-    expect(row('agora').getAttribute('data-bg')).toMatch(/12$/);
+    expect(row('agora').getAttribute('data-bg')).toBe('#eaeaea');
     expect(row('doc').getAttribute('data-bg')).toBe('transparent');
     expect(row('alpha').getAttribute('data-bg')).toBe('transparent');
   });
@@ -311,14 +312,14 @@ describe('SidebarPane selection', () => {
     h.pathname = '/wg/alpha';
     h.items = [...ITEMS, { kind: 'profile', id: 'alpha', name: 'alpha', label: 'alpha', preview: 'p', ts: '3m' }];
     render(<SidebarPane />);
-    expect(itemRow('workgroup:doc/alpha').getAttribute('data-bg')).toMatch(/12$/);
+    expect(itemRow('workgroup:doc/alpha').getAttribute('data-bg')).toBe('#eaeaea');
     expect(itemRow('profile:alpha').getAttribute('data-bg')).toBe('transparent');
   });
 
   it('keeps the row lit while a drilled screen of that subject is open', () => {
     h.pathname = '/profile/doc/settings';
     render(<SidebarPane />);
-    expect(row('doc').getAttribute('data-bg')).toMatch(/12$/);
+    expect(row('doc').getAttribute('data-bg')).toBe('#eaeaea');
   });
 
   it('lights nothing on a list-only path', () => {
@@ -436,9 +437,9 @@ describe('SidebarPane creation', () => {
   it('gives an admin a + on the profiles and workgroups headings only', () => {
     h.pinnedProfiles = ['doc'];
     render(<SidebarPane />);
-    expect(header('PROFILES').querySelector('[aria-label="New profile"]')).toBeTruthy();
-    expect(header('WORKGROUPS').querySelector('[aria-label="New workgroup"]')).toBeTruthy();
-    expect(header('PINNED').querySelector('button')).toBeNull();
+    expect(header('Profiles').querySelector('[aria-label="New profile"]')).toBeTruthy();
+    expect(header('Workgroups').querySelector('[aria-label="New workgroup"]')).toBeTruthy();
+    expect(screen.queryByText('Pinned')).toBeNull();
   });
 
   it('gives a non-admin no + at all', () => {
@@ -673,5 +674,15 @@ describe('Sidebar daemon health', () => {
     h.status = 'offline';
     render(<SidebarPane />);
     expect(document.querySelector('[data-banner]')).toBeNull();
+  });
+});
+
+describe('SidebarPane surface', () => {
+  it('tints the fold sidebar with bgSide and draws no rule against the page', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const source = readFileSync(join(import.meta.dirname, 'SidebarPane.jsx'), 'utf8');
+    expect(source).toMatch(/backgroundColor: colors\.bgSide/);
+    expect(source).not.toMatch(/borderRight(Width|Color)/);
   });
 });

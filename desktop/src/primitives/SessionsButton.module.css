@@ -16,7 +16,6 @@
   width: 100%;
   padding: var(--sp-12) var(--sp-16);
   border: 0;
-  border-bottom: 0.5px solid var(--line);
   background: transparent;
   cursor: pointer;
   text-align: left;
@@ -61,7 +60,7 @@
 .row {
   width: 100%;
   padding: var(--sp-8) var(--sp-12);
-  border-radius: var(--r-xs);
+  border-radius: var(--r-control);
   gap: var(--sp-8);
   background: transparent;
   text-align: left;
@@ -93,7 +92,6 @@
   justify-content: space-between;
   gap: var(--sp-8);
   padding: var(--sp-12) var(--sp-16);
-  border-top: 0.5px solid var(--line);
 }
 
 .popCount {

@@ -30,18 +30,6 @@
   margin: 0;
 }
 
-.error {
-  padding: var(--sp-12);
-  border-radius: var(--r-xs);
-  background: color-mix(in srgb, var(--c-danger) 10%, transparent);
-  border: .5px solid color-mix(in srgb, var(--c-danger) 24%, transparent);
-  color: var(--c-danger-text);
-  font-family: var(--font-sans);
-  font-size: var(--text-meta);
-  -webkit-user-select: text;
-  user-select: text;
-}
-
 .pipeline {
   display: flex;
   align-items: center;
@@ -49,7 +37,6 @@
   gap: var(--sp-8);
   padding: var(--sp-8) var(--pane-pad-x);
   font-size: var(--text-meta);
-  border-bottom: .5px solid var(--line);
   -webkit-user-select: none;
   user-select: none;
 }
@@ -86,7 +73,7 @@
 
 .phaseNote {
   opacity: 0.7;
-  font-size: 0.92em;
+  font-size: max(var(--text-meta), 0.92em);
 }
 
 .phaseTask {
@@ -147,7 +134,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--sp-8);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--eyebrow-size);
   font-weight: var(--fw-semibold);
   letter-spacing: var(--eyebrow-tracking);
@@ -203,11 +190,10 @@
   display: inline-flex;
   align-items: center;
   gap: var(--sp-8);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--eyebrow-size);
   font-weight: var(--fw-semibold);
   letter-spacing: var(--eyebrow-tracking);
-  text-transform: uppercase;
   color: var(--ink-2);
 }
 
@@ -244,11 +230,10 @@
 }
 
 .skipLabel {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--eyebrow-size);
   font-weight: var(--fw-semibold);
   letter-spacing: var(--eyebrow-tracking);
-  text-transform: uppercase;
   color: var(--c-warning-text);
 }
 
@@ -265,11 +250,10 @@
 }
 
 .doneLabel {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--eyebrow-size);
   font-weight: var(--fw-semibold);
   letter-spacing: var(--eyebrow-tracking);
-  text-transform: uppercase;
   color: var(--ink-2);
 }
 
@@ -305,8 +289,8 @@
 }
 
 .footerBtn {
-  width: var(--ctl-28);
-  height: var(--ctl-28);
+  width: var(--ctl-32);
+  height: var(--ctl-32);
 }
 
 .footerTime {

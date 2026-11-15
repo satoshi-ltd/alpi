@@ -11,12 +11,14 @@ REPO = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(HERE, "src"))
 
 import gen  # noqa: E402
+import marks  # noqa: E402
+import marks_export  # noqa: E402
 from desktop_boards import DESKTOP  # noqa: E402
 
 FONT_LINK = '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">'
 FAVICON_SOURCE = os.path.join(REPO, "site", "assets", "alpi-favicon.svg")
 PAGES = (
-    ("brand.html", "brand", "Brand", "Brand", "The identity as it ships: the mark and its wordmark, the twelve pairs, the palette and the states. A profile is a sheet of paper and its fold is its personality."),
+    ("brand.html", "brand", "Brand", "Brand", "The identity as it ships: Twin and the wordmark, the app icon, the twelve shapes and their palette, the eyes and the states, names, workgroups and the gate every mark passes."),
     ("index.html", "system", "System", "Design system", "One token file feeds both clients. Colour, type, space, radius and every primitive of desktop and mobile, drawn from the values that ship."),
     ("desktop.html", "desktop", "Desktop", "Desktop", "Tauri client, 1280 wide. Every screen as the code paints it, with the sidebar it shares."),
     ("mobile.html", "mobile", "Mobile", "Phone and Fold", "Expo client. The phone keeps its own grammar; a fold or tablet renders the desktop layout at scale."),
@@ -34,11 +36,12 @@ THEMED = (
     ("rgba(20,20,20,0.07)", "var(--line)"),
     ("rgba(20,20,20,0.14)", "var(--line-2)"),
     ("rgba(20,20,20,0.04)", "var(--hover)"),
-    ("rgba(20,20,20,0.06)", "var(--selected)"),
+    ("rgba(20,20,20,0.08)", "var(--selected)"),
     ("#ffffff", "var(--bg-pane)"),
     ("#f0f0f0", "var(--bg)"),
     ("#f6f6f6", "var(--bg-side)"),
-    ("#f2f2f2", "var(--bg-side)"),
+    ("#f2f2f2", "var(--fill)"),
+    ("rgba(20,20,20,0.12)", "var(--pressed)"),
     ("#141414", "var(--ink)"),
     ("#454545", "var(--ink-2)"),
     ("#6b6b6b", "var(--ink-3)"),
@@ -49,6 +52,7 @@ THEMED = (
     ("#b73737", "var(--c-danger-text)"),
     ("#c14545", "var(--c-danger)"),
     ("#fffffe", "var(--on-danger)"),
+    ("#fffffd", "var(--mark-eye)"),
     ("#b3470e", "var(--c-warning-text)"),
 )
 APP_THEMED = (
@@ -97,14 +101,14 @@ def shell(current, heading, intro, sections, versions):
 </head>
 <body class="kit">
 <header class="kit-header">
-<div class="brand-lockup"><img class="logo-light" src="../site/assets/alpi-black.svg" alt=""><img class="logo-dark" src="../site/assets/alpi-white.svg" alt="">alpi</div>
+<div class="brand-lockup">{marks.twin(22, still=True)}alpi</div>
 <nav aria-label="Design kit">{nav}</nav>
 <span class="kit-version">desktop {versions["desktop"]} · mobile {versions["mobile"]}</span>
 <div class="kit-seg" role="group" aria-label="Theme"><button type="button" data-kit-theme="light">Light</button><button type="button" data-kit-theme="dark">Dark</button></div>
 </header>
 <main class="kit-main">
 <section class="kit-intro"><h1>{heading}</h1><p>{intro}</p>
-<div class="kit-facts"><span>sources common/tokens.mjs · desktop/src/styles · mobile/src/theme</span><span>type Geist · Geist Mono</span><span>icons Lucide · 1.75 stroke</span><span>regenerate python3 design/build.py</span></div></section>
+<div class="kit-facts"><span>sources common/tokens.mjs · desktop/src/styles · mobile/src/theme</span><span>type Geist · Geist Mono</span><span>icons Lucide · 1.5 stroke</span><span>regenerate python3 design/build.py</span></div></section>
 {body}
 </main>
 </body>
@@ -160,5 +164,7 @@ def build(out):
 
 if __name__ == "__main__":
     target = sys.argv[sys.argv.index("--out") + 1] if "--out" in sys.argv else HERE
+    if target == HERE:
+        marks_export.write()
     for page in build(target):
         print(page)

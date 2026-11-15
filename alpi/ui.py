@@ -71,10 +71,11 @@ def _crest(home: Path | None, reserve: int = 0) -> Text | None:
         from alpi import config as config_mod
         from alpi import home as home_mod
         resolved = home or home_mod.get_home()
-        fold, accent = fold_art.identity(resolved, config_mod.load(resolved).tui)
+        tui = config_mod.load(resolved).tui
+        shape, accent = fold_art.identity(resolved, tui)
     except Exception:  # noqa: BLE001
         return None
-    return fold_art.art(fold, accent, rows=fold_art.BANNER_ROWS)
+    return fold_art.art(shape, fold_art.body_colour(accent, tui), rows=fold_art.BANNER_ROWS, eye=palette.eye_ink(tui))
 
 
 def _print_header(line: str, hint: str, home: Path | None, art: bool, reserve: int = 0) -> None:

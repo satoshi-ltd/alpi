@@ -3,7 +3,7 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--sp-16) var(--sp-12) var(--sp-8);
-  min-height: var(--ctl-24);
+  min-height: var(--ctl-32);
 }
 
 .label {

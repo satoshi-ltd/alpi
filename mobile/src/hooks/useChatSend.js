@@ -121,7 +121,7 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
       watchdogTimerRef.current = null;
     }
     if (!active) return;
-    writeTurn((cur) => (cur ? { ...cur, pending: false } : cur));
+    writeTurn((cur) => (cur ? { ...cur, pending: false, cancelled: true } : cur));
     let ret;
     try {
       ret = onCompletedRef.current?.({

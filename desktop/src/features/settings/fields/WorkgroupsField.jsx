@@ -52,7 +52,7 @@ export function WorkgroupsField({
   const showSkeleton = useSkeleton(loading && groups.length === 0);
 
   if (groups.length === 0) {
-    return showSkeleton ? <Skeleton width="112px" height="22px" radius="var(--r-tag)" delay={0} label="Loading workgroups" /> : null;
+    return showSkeleton ? <Skeleton width="112px" height="22px" radius="var(--r-pill)" delay={0} label="Loading workgroups" /> : null;
   }
 
   const hubCount = groups.filter((g) => g.is_hub).length;

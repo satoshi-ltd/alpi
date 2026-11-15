@@ -4,6 +4,7 @@ import { radii, space, lineHeights } from '../theme/tokens';
 import { Eyebrow } from './Eyebrow';
 import { useTheme } from '../theme/ThemeContext';
 import { useWell } from './well';
+import { code } from '../theme/code';
 import { wellStates } from '../../../common/well.mjs';
 
 export function FieldLabel({ children }) {
@@ -58,9 +59,8 @@ export function Field({
             flex: 1,
             paddingTop: 0,
             paddingBottom: 0,
-            fontFamily: mono ? fonts.mono : fonts.sans.regular,
-            fontSize: mono ? fontSizes.sm : fontSizes.lg,
-            lineHeight: (mono ? fontSizes.sm : fontSizes.lg) * lineHeights.normal,
+            ...(mono ? code(fonts, fontSizes.md) : { fontFamily: fonts.sans.regular, fontSize: fontSizes.md }),
+            lineHeight: Math.round(fontSizes.md * lineHeights.normal),
             color: colors.ink,
             textAlignVertical: multiline ? 'top' : 'center',
           }}

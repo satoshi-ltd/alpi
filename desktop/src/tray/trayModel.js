@@ -1,5 +1,5 @@
 import { pluralize } from "../../../common/pluralize.mjs";
-import { formatNextFire, relativeTime } from "../lib/time.js";
+import { daysAhead, formatDay, formatSoon, relativeTime } from "../lib/time.js";
 
 export const MAX_NEEDS_ROWS = 4;
 export const MAX_RUNNING_ROWS = 4;
@@ -7,6 +7,7 @@ export const MAX_NEXT_ROWS = 3;
 export const ROW_BUDGET = 5;
 const NEEDS_FULL = 3;
 const NEXT_WITH_RUNNING = 2;
+const SOON_MS = 6 * 3600000;
 const NOT_ONLINE = ["offline", "starting", "connecting"];
 export const TRAY_STATES = ["quiet", "needs", "running", "failing", "offline", "starting", "connecting", "online"];
 
@@ -28,11 +29,6 @@ function distinct(rows) {
   return [...new Set((rows ?? []).map((r) => r.label || r.profile).filter(Boolean))];
 }
 
-function enumerate(names) {
-  if (names.length <= 1) return names[0] ?? "";
-  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
-}
-
 function breakdown(needs) {
   const parts = [];
   const approvals = count(needs.approvals);
@@ -42,55 +38,56 @@ function breakdown(needs) {
   return parts.join(", ");
 }
 
-function aside(snapshot) {
-  const parts = [];
-  const running = count(snapshot.running?.count);
-  const next = count(snapshot.next?.total ?? snapshot.next?.rows?.length);
-  if (running) parts.push(`${running} running`);
-  if (next) parts.push(`${next} coming up`);
-  return parts;
-}
-
-function needsHeading(snapshot) {
-  const needs = snapshot.needs;
-  const n = count(needs.total);
-  const first = needs.rows?.[0];
-  if (n === 1) {
-    const rest = aside(snapshot);
-    if (!first) return { title: "1 thing needs you", sub: breakdown(needs) };
-    const fallback = [first.kind === "question" ? "Has a question" : "Waiting for an approval", first.source].filter(Boolean).join(" · ");
-    return { title: `${capital(first.label || first.profile || "Something")} needs you`, sub: rest.length ? rest.join(" · ") : fallback };
+function nextIn(snapshot, nowMs) {
+  const at = snapshot.next?.rows?.[0]?.at;
+  const ms = at ? Date.parse(at) : NaN;
+  if (Number.isNaN(ms)) return "";
+  if (ms - nowMs < SOON_MS) {
+    const soon = formatSoon(at, nowMs);
+    return soon === "now" ? "next due now" : `next ${soon}`;
   }
-  const names = distinct(needs.rows);
-  const title = `${n} things need you`;
-  if (names.length === 1) return { title, sub: [names[0], breakdown(needs)].filter(Boolean).join(" · ") };
-  if (names.length > 3) return { title, sub: `${names.slice(0, 2).join(", ")} and ${names.length - 2} more` };
-  return { title, sub: names.length ? enumerate(names) : breakdown(needs) };
+  const days = daysAhead(ms, nowMs);
+  if (days <= 0) return `next at ${formatSoon(at, nowMs)}`;
+  return days === 1 ? "next tomorrow" : `next ${formatDay(ms, days)}`;
 }
 
-function runningHeading(snapshot, nowMs) {
+function summary(snapshot, nowMs) {
+  const when = nextIn(snapshot, nowMs);
+  if (snapshot.state === "needs") {
+    const running = count(snapshot.running?.count);
+    const lead = running ? `${running} running` : breakdown(snapshot.needs);
+    return [lead, when].filter(Boolean).join(" · ") || "Open alpi to review";
+  }
+  if (when) return `Nothing needs you · ${when}`;
+  if (snapshot.member || snapshot.next === undefined) return "Nothing needs you";
+  return "Nothing needs you, nothing scheduled";
+}
+
+function needsTitle(snapshot) {
+  const n = count(snapshot.needs.total);
+  const first = snapshot.needs.rows?.[0];
+  if (n === 1) return first ? `${capital(first.label || first.profile || "Something")} needs you` : "1 needs you";
+  return `${n} need you`;
+}
+
+function runningTitle(snapshot) {
   const running = snapshot.running;
   const n = count(running.count);
   const names = (running.rows ?? []).length >= n ? distinct(running.rows) : [];
-  const rest = aside({ next: snapshot.next });
-  const single = n === 1 && running.rows?.[0] ? elapsed(running.rows[0].ts, nowMs) : "";
-  const sub = [single, ...rest].filter(Boolean).join(" · ") || "Working now";
-  if (names.length === 1) return { title: `${capital(names[0])} is working`, sub };
-  if (names.length === 2) return { title: `${capital(names[0])} and ${names[1]} are working`, sub };
-  return { title: `${n} running`, sub };
+  if (names.length === 1) return `${capital(names[0])} is working`;
+  return `${n} working`;
 }
 
-function failingSub(failing) {
+function failingWho(failing) {
   const names = failing.profiles ?? [];
   const extra = count(failing.profileCount) - names.length;
-  let who = names[0] ?? "";
-  if (names.length === 2 && extra <= 0) who = `${names[0]} and ${names[1]}`;
-  else if (names.length >= 2) who = `${names.join(", ")} and ${extra > 0 ? extra : 1} more`;
-  return who ? `${who} · last 24 h` : "Last 24 h";
+  if (names.length === 2 && extra <= 0) return `${names[0]} and ${names[1]}`;
+  if (names.length >= 2) return `${names.join(", ")} and ${extra > 0 ? extra : 1} more`;
+  return names[0] ?? "";
 }
 
 function offlineCopy(offline) {
-  if (offline?.canStart) return { title: "alpi is installed but not running", sub: "Start it on this computer." };
+  if (offline?.canStart) return { title: "alpi isn’t running", sub: "It is installed on this computer." };
   if (offline?.absent) return { title: "alpi isn’t installed", sub: "Open alpi to set it up." };
   if (offline?.local) return { title: "alpi isn’t running", sub: "Open alpi to see why." };
   return { title: "Can’t reach alpi", sub: "Check the connection in alpi." };
@@ -98,20 +95,23 @@ function offlineCopy(offline) {
 
 function heading(snapshot, nowMs) {
   const { state } = snapshot;
-  const failing = snapshot.failing ?? {};
-  if (state === "needs") return needsHeading(snapshot);
-  if (state === "failing") {
-    const n = count(failing.jobs);
-    return { title: `${n} ${n === 1 ? "job is" : "jobs are"} failing`, sub: failingSub(failing) };
-  }
-  if (state === "running") return runningHeading(snapshot, nowMs);
   if (state === "offline") return offlineCopy(snapshot.offline);
   if (state === "starting") return { title: "Starting alpi…", sub: "Waiting for the daemon" };
-  if (state === "online") return { title: "alpi", sub: "online" };
   if (state === "connecting") return { title: "Connecting…", sub: "Waiting for the daemon" };
-  if (snapshot.next?.rows?.length) return { title: "All quiet", sub: "Coming up" };
-  if (snapshot.member || snapshot.next === undefined) return { title: "All quiet", sub: "Nothing needs you · online" };
-  return { title: "All quiet", sub: "Nothing scheduled" };
+  if (state === "online") return { title: "alpi", sub: "online" };
+  const sub = summary(snapshot, nowMs);
+  if (state === "needs") return { title: needsTitle(snapshot), sub };
+  if (state === "failing") {
+    const n = count(snapshot.failing.jobs);
+    return { title: `${n} ${n === 1 ? "job" : "jobs"} failing`, sub };
+  }
+  if (state === "running") return { title: runningTitle(snapshot), sub };
+  return { title: "All quiet", sub };
+}
+
+function fit(total, cap, space) {
+  const shown = Math.min(cap, space);
+  return Math.max(0, total > shown ? Math.min(cap, space - 1) : shown);
 }
 
 function elapsed(ts, nowMs) {
@@ -119,48 +119,66 @@ function elapsed(ts, nowMs) {
   return rel === "now" ? "<1m" : rel;
 }
 
-function ago(ts, nowMs) {
-  const rel = relativeTime(ts, nowMs);
-  if (!rel) return "";
-  return rel === "now" ? "just now" : `${rel} ago`;
+function who(r) {
+  return { name: r.label || r.profile || "", connection: r.source || null };
 }
 
 function row(r, nowMs) {
   const kind = r.kind === "question" ? "question" : "approval";
-  const parts = [r.label, r.source, kind, ago(r.ts, nowMs)].filter(Boolean);
   return {
     key: r.id,
     kind,
     title: r.title || (kind === "question" ? "has a question" : "wants to run a command"),
-    sub: parts.join(" · "),
+    ...who(r),
+    meta: [kind, relativeTime(r.ts, nowMs)].filter(Boolean).join(" · "),
     profile: r.profile ?? null,
-    fold: r.fold ?? null,
+    shape: r.shape ?? null,
     accent: r.accent ?? null,
     deeplink: r.deeplink ?? null,
   };
 }
 
 function nextRow(r, nowMs) {
-  const label = r.label || r.profile || "";
+  const { name, connection } = who(r);
   return {
     key: r.id,
-    title: r.title || label,
-    sub: [label, r.source].filter(Boolean).join(" · "),
-    when: formatNextFire(r.at, nowMs),
-    fold: r.fold ?? null,
+    title: r.title || name,
+    name,
+    connection,
+    when: formatSoon(r.at, nowMs),
+    shape: r.shape ?? null,
     accent: r.accent ?? null,
     deeplink: r.deeplink ?? null,
   };
 }
 
+function dayOf(at, nowMs) {
+  const ms = Date.parse(at);
+  if (Number.isNaN(ms)) return "Later today";
+  const days = daysAhead(ms, nowMs);
+  return days <= 0 ? "Later today" : formatDay(ms, days);
+}
+
+function groupByDay(source, nowMs) {
+  const groups = [];
+  for (const r of source) {
+    const day = dayOf(r.at, nowMs);
+    const last = groups[groups.length - 1];
+    if (last && last.day === day) last.rows.push(nextRow(r, nowMs));
+    else groups.push({ day, rows: [nextRow(r, nowMs)] });
+  }
+  return groups;
+}
+
 function runRow(r, nowMs) {
-  const label = r.label || r.profile || "";
+  const { name, connection } = who(r);
   return {
     key: r.id,
-    title: r.title || label,
-    sub: [label, r.source, "running"].filter(Boolean).join(" · "),
+    title: r.title || name,
+    name,
+    connection,
     elapsed: elapsed(r.ts, nowMs),
-    fold: r.fold ?? null,
+    shape: r.shape ?? null,
     accent: r.accent ?? null,
     deeplink: r.deeplink ?? null,
   };
@@ -180,36 +198,32 @@ export function trayModel(snapshot, nowMs = Date.now()) {
   const { title, sub } = heading(view, nowMs);
   const online = !NOT_ONLINE.includes(state);
   const needs = view.needs;
-  const rows = online ? (needs.rows ?? []).slice(0, MAX_NEEDS_ROWS).map((r) => row(r, nowMs)) : [];
-  const more = online ? Math.max(0, count(needs.total) - rows.length) : 0;
   const counts = [];
   const failingJobs = count(view.failing.jobs);
   const runningCount = count(view.running.count);
-  if (online && failingJobs > 0) {
-    const p = count(view.failing.profileCount);
-    counts.push({
-      key: "failing",
-      icon: "triangle-alert",
-      label: "Failing jobs",
-      value: p > 0 ? `${failingJobs} in ${p} ${pluralize(p, "profile")}` : String(failingJobs),
-      danger: true,
-    });
-  }
+  const failing = online && failingJobs > 0
+    ? { title: `${failingJobs} ${failingJobs === 1 ? "job" : "jobs"} failed in 24 h`, detail: failingWho(view.failing) }
+    : null;
+  const needsTotal = count(needs.total);
+  const needsRows = online ? needs.rows ?? [] : [];
+  const rows = needsRows.slice(0, fit(Math.max(needsTotal, needsRows.length), MAX_NEEDS_ROWS, ROW_BUDGET - (failing ? 1 : 0))).map((r) => row(r, nowMs));
+  const more = rows.length > 0 ? Math.max(0, needsTotal - rows.length) : 0;
+  if (online && needsTotal > 0 && rows.length === 0) counts.push({ key: "needs", icon: "clock", label: "Needs you", value: String(needsTotal), danger: false });
   const needsFull = rows.length >= NEEDS_FULL;
-  const budget = ROW_BUDGET - rows.length - (failingJobs > 0 ? 1 : 0);
-  const runs = online && !needsFull ? (view.running.rows ?? []).slice(0, Math.max(0, Math.min(MAX_RUNNING_ROWS, budget))).map((r) => runRow(r, nowMs)) : [];
+  let budget = ROW_BUDGET - rows.length - (more > 0 ? 1 : 0) - (failing ? 1 : 0);
+  const runRows = online && !needsFull ? view.running.rows ?? [] : [];
+  const runs = runRows.slice(0, fit(Math.max(runningCount, runRows.length), MAX_RUNNING_ROWS, budget)).map((r) => runRow(r, nowMs));
   const runsMore = runs.length > 0 ? Math.max(0, runningCount - runs.length) : 0;
+  budget -= runs.length + (runsMore > 0 ? 1 : 0);
   if (online && runningCount > 0 && runs.length === 0) counts.push({ key: "running", icon: "activity", label: "Running", value: String(runningCount), danger: false });
   const update = s.update
     ? { text: s.update.version ? `alpi ${s.update.version} is ready` : "An update is ready", busy: Boolean(s.update.busy) }
     : null;
   const unread = count(s.unread);
-  const nextCap = Math.min(runs.length > 0 ? NEXT_WITH_RUNNING : MAX_NEXT_ROWS, budget - runs.length);
-  const nextRows = online && !needsFull && s.next?.rows ? s.next.rows.slice(0, Math.max(0, nextCap)).map((r) => nextRow(r, nowMs)) : [];
-  const sections = [rows, runs, nextRows, counts].filter((list) => list.length > 0).length;
+  const nextCap = Math.min(runs.length > 0 ? NEXT_WITH_RUNNING : MAX_NEXT_ROWS, budget);
+  const nextRows = online && !needsFull && s.next?.rows ? s.next.rows.slice(0, Math.max(0, nextCap)) : [];
   return {
-    nextRows,
-    labels: sections > 1,
+    nextGroups: groupByDay(nextRows, nowMs),
     state,
     title,
     sub,
@@ -218,6 +232,7 @@ export function trayModel(snapshot, nowMs = Date.now()) {
     runs,
     runsMore,
     counts,
+    failing,
     busy: state === "starting" ? "Start requested" : null,
     start: state === "offline" && Boolean(s.offline?.canStart),
     update,

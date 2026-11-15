@@ -9,8 +9,8 @@ const STATE_WORD = { current: "running", skipped: "skipped", blocked: "blocked" 
 function Mark({ name, profileOf, pulse }) {
   if (!name) return null;
   const profile = profileOf?.(name);
-  if (!profile) return <Fold fold="diamond" size={12} unfolded />;
-  return <Fold fold={profile.fold} color={profile.accent} size={12} pulse={pulse} />;
+  if (!profile) return <Fold shape="diamond" size={12} unfolded />;
+  return <Fold shape={profile.shape} color={profile.accent} size={12} pulse={pulse} />;
 }
 
 function ChipBody({ chip, profileOf }) {
@@ -89,7 +89,7 @@ export function PipelinePlaceholder({ count, label }) {
       {Array.from({ length: n }, (_, i) => (
         <Fragment key={i}>
           <span className={styles.ghost} data-phase-placeholder="" aria-hidden>
-            <Skeleton width={`${GHOST_WIDTHS[i]}px`} height="22px" radius="var(--r-tag)" delay={0} />
+            <Skeleton width={`${GHOST_WIDTHS[i]}px`} height="22px" radius="var(--r-pill)" delay={0} />
           </span>
           {i < n - 1 && <span className={styles.arrow} aria-hidden>→</span>}
         </Fragment>

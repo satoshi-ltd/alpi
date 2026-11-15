@@ -16,10 +16,10 @@ describe("surface ladder", () => {
   it("writes the direction per mode and the palettes obey it", () => {
     expect(ladderDirection).toEqual({ light: "descends", dark: "ascends" });
     expect(luminance(palettes.light.card)).toBeLessThan(luminance(palettes.light.bgPane));
-    expect(luminance(palettes.light.field)).toBeLessThan(luminance(palettes.light.card));
+    expect(palettes.light.field).toBe(palettes.light.card);
     expect(luminance(palettes.dark.bgElev)).toBeGreaterThan(luminance(palettes.dark.bgPane));
-    expect(luminance(palettes.dark.field)).toBeGreaterThan(luminance(palettes.dark.card));
-    expect(TOKENS).toMatch(/Ladder: light surfaces descend/);
+    expect(palettes.dark.field).toBe(palettes.dark.card);
+    expect(luminance(palettes.dark.card)).toBeGreaterThan(luminance(palettes.dark.bgPane));
   });
 
   it("mirrors the card, field and elev values in tokens.css for both modes", () => {
@@ -29,9 +29,10 @@ describe("surface ladder", () => {
     expect(declared("bg-elev")).toEqual([palettes.light.bgElev, palettes.dark.bgElev, palettes.dark.bgElev]);
   });
 
-  it("draws every well on the elevated surface, keeps that fill on focus and leaves the field tone to disabled wells", () => {
-    expect(TOKENS).toMatch(/--well:\s*var\(--bg-elev\);/);
-    expect(TOKENS).toMatch(/--well-focus:\s*var\(--bg-elev\);/);
+  it("draws a well on the fill in both modes; keeps it on focus and leaves field to disabled wells", () => {
+    expect(rule(TOKENS, ":root")).toMatch(/--well:\s*var\(--card\);/);
+    expect(TOKENS).not.toMatch(/--well:\s*var\(--bg-elev\);/);
+    expect(TOKENS).toMatch(/--well-focus:\s*var\(--well\);/);
     expect(TOKENS).toMatch(/--well-off:\s*var\(--field\);/);
   });
 

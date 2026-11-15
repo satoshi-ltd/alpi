@@ -19,10 +19,10 @@ function Tile({ label, value, big = false, metrics, index, end = false }) {
   return (
     <View data-tile="" style={{ flex: 1, minWidth: 0, gap: space.s2, alignItems: end ? 'flex-end' : 'flex-start' }}>
       <Slot height={metrics.label}>
-        <SkeletonBar width={label} height={BONE} radius={radii.tag} delay={delay} />
+        <SkeletonBar width={label} height={BONE} radius={radii.xs} delay={delay} />
       </Slot>
       <Slot height={big ? metrics.today : metrics.mono}>
-        <SkeletonBar width={value} height={big ? 22 : 14} radius={radii.tag} delay={delay} />
+        <SkeletonBar width={value} height={big ? 22 : 14} radius={radii.xs} delay={delay} />
       </Slot>
     </View>
   );
@@ -35,7 +35,7 @@ export function UsageSkeleton() {
   const narrow = tilesW > 0 && tilesW < NARROW_TILES_W;
   return (
     <View accessible accessibilityRole="progressbar" accessibilityLabel="Loading usage" data-skeleton="usage" data-narrow={String(narrow)}>
-      <View onLayout={(e) => setTilesW(e.nativeEvent.layout.width)} style={{ paddingBottom: space.s6, borderBottomWidth: 0.5, borderBottomColor: colors.line2 }}>
+      <View onLayout={(e) => setTilesW(e.nativeEvent.layout.width)} style={{ paddingBottom: space.s6 }}>
         {narrow ? (
           <>
             <View data-row="" style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
@@ -60,21 +60,21 @@ export function UsageSkeleton() {
         <View data-bars="" style={{ height: CHART_H, flexDirection: 'row', alignItems: 'flex-end', gap: space.s1 }}>
           {BAR_SHAPES.map((shape, i) => (
             <View key={i} style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-end' }}>
-              <SkeletonBar width="100%" height={Math.round(CHART_H * shape)} radius={3} delay={i * STAGGER_MS} style={{ maxWidth: 20 }} />
+              <SkeletonBar width="100%" height={Math.round(CHART_H * shape)} radius={radii.xs} delay={i * STAGGER_MS} style={{ maxWidth: 20 }} />
             </View>
           ))}
         </View>
         <View data-days="" style={{ flexDirection: 'row', gap: space.s1, marginTop: space.s3 }}>
           {Array.from({ length: DAYS }, (_, i) => (
             <View key={i} style={{ flex: 1, height: metrics.dayLabel, alignItems: 'center', justifyContent: 'center' }}>
-              <SkeletonBar width={8} height={6} radius={radii.tag} delay={i * STAGGER_MS} />
+              <SkeletonBar width={8} height={6} radius={radii.xs} delay={i * STAGGER_MS} />
             </View>
           ))}
         </View>
       </View>
       <View data-legend="" style={{ height: metrics.legend, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: space.s6 }}>
-        <SkeletonBar width={96} height={BONE} radius={radii.tag} />
-        <SkeletonBar width={150} height={BONE} radius={radii.tag} delay={STAGGER_MS} />
+        <SkeletonBar width={96} height={BONE} radius={radii.xs} />
+        <SkeletonBar width={150} height={BONE} radius={radii.xs} delay={STAGGER_MS} />
       </View>
     </View>
   );

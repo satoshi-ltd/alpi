@@ -37,6 +37,8 @@ vi.mock('react-native', () => {
     Text,
     Pressable,
     TextInput,
+    Modal: ({ children, visible }) => (visible ? React.createElement('div', { 'data-modal': '' }, children) : null),
+    useWindowDimensions: () => ({ height: 852, width: 393 }),
     Platform: { OS: 'ios', select: (s) => s?.ios ?? s?.default },
     AppState: { addEventListener: () => ({ remove: () => {} }), currentState: 'active' },
     Dimensions: { get: () => ({ height: 852, width: 393 }), addEventListener: () => ({ remove: () => {} }) },
@@ -73,7 +75,7 @@ vi.mock('../src/features/chat/MentionPopover', () => ({ MentionPopover: () => nu
 import { CHROME_H, COMPOSER_CTRL, COMPOSER_PAD_Y, PANE_PAD_X, tapSlop } from '../src/lib/panes';
 import * as tokens from '../src/theme/tokens';
 import { mobile, space } from '../src/theme/tokens';
-import { Composer, composerPlaceholder } from '../src/features/chat/Composer';
+import { COMPOSER_BTN, COMPOSER_H, Composer, composerPlaceholder } from '../src/features/chat/Composer';
 import { ShellFooter } from '../src/features/shell/ShellFooter';
 import { PaneContext } from '../src/nav/PaneContext';
 
@@ -87,15 +89,12 @@ function composerRow() {
 }
 
 function card(container) {
-  return [...container.querySelectorAll('div')].find((el) => styleOf(el).borderRadius !== undefined);
+  return [...container.querySelectorAll('div')].find((el) => styleOf(el).minHeight === COMPOSER_H);
 }
 
 function restingHeight(row) {
   const outer = styleOf(row);
-  const c = styleOf(card(row.ownerDocument.body));
-  const ctrl = Math.max(...[...row.querySelectorAll('button')].map((b) => (styleOf(b).minHeight ?? styleOf(b).height ?? 0)), 0);
-  const line = Math.round(tokens.fontSizes[tokens.typography.chat.size] * 1.5);
-  return outer.paddingTop + c.paddingTop + line + c.gap + ctrl + c.paddingBottom + outer.paddingBottom;
+  return outer.paddingTop + COMPOSER_H + outer.paddingBottom;
 }
 
 function footerHeight() {
@@ -113,30 +112,25 @@ describe('composer and sidebar footer seam', () => {
     h.bottom = 0;
   });
 
-  it('stacks the controls under the text like desktop, so the field owns the full card width', () => {
+  it('lays +, the input and send in one row inside the pill, the input taking the rest', () => {
     const { container } = render(<Composer placeholder="Message @doc…" onPickAttachment={() => {}} />);
     const c = card(container);
-    expect(styleOf(c).flexDirection).toBeUndefined();
-    const input = container.querySelector('[data-input]');
-    expect(styleOf(input).flex).toBeUndefined();
-    const row = [...c.querySelectorAll('div')].find((el) => styleOf(el).flexDirection === 'row');
-    expect(row.contains(screen.getByLabelText('Attach file'))).toBe(true);
-    expect(row.contains(screen.getByLabelText('Send'))).toBe(true);
+    expect(styleOf(c).flexDirection).toBe('row');
+    expect(styleOf(container.querySelector('[data-input]')).flex).toBe(1);
+    expect(c.contains(screen.getByLabelText('Attach file'))).toBe(true);
+    expect(c.contains(screen.getByLabelText('Send'))).toBe(true);
   });
 
-  it('drops the footer rule in two-pane, so nothing invites the eye to compare the two heights', () => {
-    const inPane = (twoPane) => {
+  it('draws no footer rule in either pane mode: the phone draws no hairlines', () => {
+    for (const twoPane of [true, false]) {
       const { container } = render(
         <PaneContext.Provider value={{ twoPane, side: 'list' }}>
           <ShellFooter onSettingsPress={() => {}} />
         </PaneContext.Provider>,
       );
-      const width = styleOf(container.firstChild).borderTopWidth;
+      expect(styleOf(container.firstChild).borderTopWidth).toBeUndefined();
       cleanup();
-      return width;
-    };
-    expect(inPane(true)).toBe(0);
-    expect(inPane(false)).toBeGreaterThan(0);
+    }
   });
 
   it('reads one constant instead of two hand-tuned numbers', () => {
@@ -156,19 +150,14 @@ describe('composer and sidebar footer seam', () => {
 });
 
 describe('composer controls', () => {
-  it('keeps 44pt of touch on every shrunken control', () => {
+  it('keeps 44pt of touch on both round controls', () => {
     render(<Composer placeholder="Message @doc…" onPickAttachment={() => {}} />);
-    const attach = screen.getByLabelText('Attach file');
-    const slop = JSON.parse(attach.getAttribute('data-hitslop'));
-    const box = styleOf(attach);
-    const pad = typeof slop === 'number' ? { left: slop, right: slop, top: slop, bottom: slop } : slop;
-    expect(box.minWidth + pad.left + pad.right).toBeGreaterThanOrEqual(mobile.tap);
-    expect(box.minHeight + pad.top + pad.bottom).toBeGreaterThanOrEqual(mobile.tap);
-
-    const send = screen.getByLabelText('Send');
-    const sendSlop = Number(JSON.parse(send.getAttribute('data-hitslop')));
-    expect(styleOf(send).minHeight + sendSlop * 2).toBeGreaterThanOrEqual(mobile.tap);
-    expect(sendSlop).toBe(tapSlop(styleOf(send).minHeight));
+    for (const label of ['Attach file', 'Send']) {
+      const el = screen.getByLabelText(label);
+      const slop = Number(JSON.parse(el.getAttribute('data-hitslop')));
+      expect(styleOf(el).height + slop * 2).toBeGreaterThanOrEqual(mobile.tap);
+      expect(slop).toBe(tapSlop(COMPOSER_BTN));
+    }
     expect(screen.queryByLabelText('Voice message')).toBeNull();
   });
 
@@ -187,58 +176,50 @@ describe('composer controls', () => {
     render(<Composer placeholder="Message @doc…" onPickAttachment={() => {}} onStop={() => {}} />);
     const button = screen.getByLabelText('Send');
     expect(button.disabled).toBe(true);
-    expect(button.querySelector('[data-icon="send"]')).not.toBeNull();
+    expect(button.querySelector('[data-icon="arrow-up"]')).not.toBeNull();
   });
 
-  it('shrinks the attach box and its glyph so the field is not shoved over', () => {
-    render(<Composer placeholder="Message @doc…" onPickAttachment={() => {}} />);
-    const attach = screen.getByLabelText('Attach file');
-    expect(styleOf(attach).minWidth).toBe(36);
-    expect(styleOf(attach).minWidth).toBeLessThan(mobile.tap);
-    expect(attach.querySelector('[data-icon="paperclip"]').getAttribute('data-size')).toBe('md');
-  });
-
-  it('spends less room between the pane gutter and the placeholder', () => {
+  it('starts the placeholder close to the pane gutter', () => {
     const { container } = render(<Composer placeholder="Message @doc…" onPickAttachment={() => {}} />);
     const row = [...container.querySelectorAll('div')].find((el) => styleOf(el).paddingTop === COMPOSER_PAD_Y);
-    const textStart = styleOf(row).paddingHorizontal + styleOf(card(container)).paddingHorizontal;
     expect(styleOf(row).paddingHorizontal).toBe(PANE_PAD_X);
-    expect(textStart).toBeLessThan(PANE_PAD_X + mobile.tap + space.s3);
+    expect(styleOf(card(container)).padding + COMPOSER_BTN).toBeLessThan(mobile.tap + space.s3);
   });
 });
 
-describe('composer matches the desktop card', () => {
-  it('draws the composer as a 4 pt well on the elevated surface with a hairline edge and rules it off from the transcript, as desktop does', () => {
+describe('composer matches the board', () => {
+  it('draws the composer as one fill pill at the sheet corner, on the ground with no rule above it', () => {
     const { container } = render(<Composer placeholder="Message @doc…" onPickAttachment={() => {}} />);
     const c = styleOf(card(container));
-    expect(c.backgroundColor).toBe(tokens.palettes.light.bgElev);
-    expect(c.borderRadius).toBe(4);
-    expect(c.borderColor).toBe(tokens.palettes.light.line2);
-    expect(styleOf(container.firstChild).borderTopWidth).toBeGreaterThan(0);
+    expect(c.backgroundColor).toBe(tokens.palettes.light.fill);
+    expect(c.borderRadius).toBe(tokens.radii.sheet);
+    expect(c.borderWidth).toBeUndefined();
+    expect(styleOf(container.firstChild).borderTopWidth).toBeUndefined();
+    expect(styleOf(container.firstChild).backgroundColor).toBe(tokens.palettes.light.bg);
   });
 
-  it('draws send as a 4 pt sheet that never fixes its height, so large text cannot clip it', () => {
+  it('draws send and + as 40 pt circles', () => {
     render(<Composer placeholder="Message @doc…" onPickAttachment={() => {}} />);
-    const send = styleOf(screen.getByLabelText('Send'));
-    expect(send.minWidth).toBe(36);
-    expect(send.minHeight).toBe(36);
-    expect(send.height).toBeUndefined();
-    expect(send.borderRadius).toBe(tokens.radii.xs);
+    for (const label of ['Send', 'Attach file']) {
+      const st = styleOf(screen.getByLabelText(label));
+      expect(st.width).toBe(40);
+      expect(st.height).toBe(40);
+      expect(st.borderRadius).toBe(tokens.radii.pill);
+    }
   });
 
-  it('gives send more weight than attach, since only one is the primary action', () => {
+  it('gives send more weight than +, since only one is the primary action', () => {
     render(<Composer placeholder="Message @doc…" onPickAttachment={() => {}} />);
-    const send = styleOf(screen.getByLabelText('Send'));
-    const attach = styleOf(screen.getByLabelText('Attach file'));
-    expect(send.backgroundColor).toBeTruthy();
-    expect(attach.backgroundColor).toBeUndefined();
+    expect(styleOf(screen.getByLabelText('Send')).backgroundColor).toBeTruthy();
+    expect(styleOf(screen.getByLabelText('Attach file')).backgroundColor).toBe('transparent');
   });
 
-  it('offers a tappable mention affordance only where mentions exist', () => {
+  it('offers mention only where mentions exist, behind +', () => {
     const plain = render(<Composer placeholder="Message @doc…" onPickAttachment={() => {}} />);
     expect(plain.container.textContent).not.toMatch(/mention/i);
     cleanup();
     render(<Composer placeholder="Message @doc…" onPickAttachment={() => {}} mentionSource={() => []} />);
+    fireEvent.click(screen.getByLabelText('Add'));
     expect(screen.getByLabelText('Mention a peer').textContent).toMatch(/mention/i);
   });
 

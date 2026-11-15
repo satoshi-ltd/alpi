@@ -1,38 +1,80 @@
-import { WORKGROUP_FOLD } from "../../../common/folds.mjs";
-import { palettes } from "../../../common/tokens.mjs";
-import { Crease, Fold, Tip } from "./index.js";
+import { useCallback, useId, useRef, useState } from "react";
+import { WORKGROUP_SHAPE } from "../../../common/shapes.mjs";
+import { MUTED_NAME, nameVars } from "../lib/nameVars.js";
+import { useDismissOnOutside } from "../hooks/useDismissOnOutside.js";
+import { ChevDownIcon, Fold, Tip } from "./index.js";
 import styles from "./ChatHeader.module.css";
+
+export function HeaderDetail({ label, children }) {
+  return (
+    <div className={styles.detail}>
+      <span className={styles.detailLabel}>{label}</span>
+      <span className={styles.detailValue}>{children}</span>
+    </div>
+  );
+}
 
 export default function ChatHeader({
   kind = "profile",
   id,
   accent,
-  fold,
+  shape,
   bio,
   meta,
   right,
   paused = false,
+  mark = null,
+  state = null,
+  label = null,
+  flag = null,
+  className = "",
 }) {
   const isWg = kind === "workgroup";
   const trimmedBio = (bio || "").trim();
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+  const menuId = useId();
+  const nameId = useId();
+  const moreId = useId();
+  const close = useCallback(() => setOpen(false), []);
+  useDismissOnOutside({ open, onClose: close, wrapRef });
   const glyph = isWg
-    ? <Fold fold={WORKGROUP_FOLD} color={accent} size="md" unfolded={paused} />
-    : <Fold fold={fold} color={accent} size="md" unfolded={paused} />;
+    ? <Fold shape={WORKGROUP_SHAPE} color={accent} size="md" {...mark} state={paused ? "paused" : mark?.state} />
+    : <Fold shape={shape} color={accent} size="md" state={paused ? "paused" : state || "idle"} />;
   const titleGlyph = trimmedBio
     ? <Tip text={trimmedBio} side="l">{glyph}</Tip>
     : glyph;
   return (
-    <header className="ds-chat-header" style={{ "--c": accent }} data-drag>
-      <div className={`row between ${styles.topRow}`}>
-        <div className={`col ${styles.titleCol}`}>
-          <div className="title-row">
-            {titleGlyph}
-            <h1><Crease text={id} accent={paused ? palettes.light.ink3 : accent} /></h1>
-          </div>
-          {meta && <div className="meta-row">{meta}</div>}
+    <header className={["ds-chat-header", styles.bar, className].filter(Boolean).join(" ")} style={{ "--c": accent }} data-drag>
+      <div ref={wrapRef} className={styles.titleWrap}>
+        <div className={`title-row ${styles.titleRow}`} data-menu={meta ? "" : undefined}>
+          {titleGlyph}
+          <h1 id={nameId} className="ds-name" style={paused ? MUTED_NAME : isWg ? null : nameVars(accent)}>{id}</h1>
+          {label ? <span className={styles.label}>{label}</span> : null}
+          {flag ? <span className={styles.flag} data-flag={flag.tone || "warning"} role="img" aria-label={flag.label} title={flag.label} /> : null}
+          {meta ? (
+            <button
+              type="button"
+              className={styles.title}
+              aria-haspopup="dialog"
+              aria-expanded={open}
+              aria-controls={menuId}
+              aria-labelledby={`${nameId} ${moreId}`}
+              onClick={() => setOpen((v) => !v)}
+            >
+              <span id={moreId} className={styles.srOnly}>details</span>
+              <ChevDownIcon className={styles.chevron} />
+            </button>
+          ) : null}
         </div>
-        {right && <div className={`row ${styles.actions}`}>{right}</div>}
+        {meta && (
+          <div id={menuId} role="dialog" aria-label={`${id} details`} className={`anim-pop ${styles.menu}`} hidden={!open} data-no-drag>
+            {meta}
+          </div>
+        )}
       </div>
+      <span className={styles.spring} />
+      {right && <div className={`row ${styles.actions}`}>{right}</div>}
     </header>
   );
 }

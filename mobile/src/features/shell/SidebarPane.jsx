@@ -29,7 +29,6 @@ import { PaneContext } from '../../nav/PaneContext';
 import { useTheme } from '../../theme/ThemeContext';
 
 const LIST_PANE = { twoPane: true, side: 'list' };
-const HAIRLINE = 0.5;
 
 function isRowSelected(item, kind, id) {
   if (!id) return false;
@@ -154,9 +153,10 @@ export function SidebarPane({ onCollapse }) {
   const activityEntry = activity.supported ? openActivity : null;
 
   const renderRow = useCallback(
-    ({ item }) => (
+    ({ item, tile }) => (
       <InboxRow
         item={item}
+        tile={tile}
         selected={isRowSelected(item, selectedKind, selectedId)}
         showState
         offline={activeFailed}
@@ -186,16 +186,12 @@ export function SidebarPane({ onCollapse }) {
           width: SIDEBAR_W,
           flexShrink: 0,
           backgroundColor: colors.bgSide,
-          borderRightWidth: HAIRLINE,
-          borderRightColor: colors.line,
         }}
       >
         <ConnHeader
           name={endpoint?.name ?? 'No daemon'}
           host={endpointHost(endpoint) || 'not paired'}
           status={daemonStatus}
-          searchOpen={searchOpen}
-          onToggleSearch={toggleSearch}
           onConnPress={() => setSheet('conn')}
           onCollapse={onCollapse}
         />
@@ -224,6 +220,8 @@ export function SidebarPane({ onCollapse }) {
           onSettingsPress={openSettings}
           onActivityPress={activityEntry}
           needsYou={activity.needsYouCount}
+          searchOpen={searchOpen}
+          onSearchPress={toggleSearch}
         />
         <ConnectionSheet open={sheet === 'conn'} onClose={closeSheet} />
         {canCreate ? (

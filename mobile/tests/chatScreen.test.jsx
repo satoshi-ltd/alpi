@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 afterEach(cleanup);
 
@@ -21,6 +21,8 @@ const h = vi.hoisted(() => ({
   params: { id: 'doc' },
   sessionIds: [],
   att: null,
+  stream: { pendingTurn: null, isStreaming: false },
+  needs: false,
 }));
 
 vi.mock('../src/features/sheets/ConnectionSheet', () => ({ ConnectionSheet: () => null }));
@@ -51,6 +53,8 @@ vi.mock('react-native', () => {
         { ...p, 'data-scroll': horizontal ? 'horizontal' : 'vertical' },
         children,
       ),
+    Modal: ({ children, visible }) => (visible ? React.createElement('div', { 'data-modal': 'open' }, children) : null),
+    useWindowDimensions: () => ({ width: 393, height: 852 }),
     Platform: { OS: 'ios', select: (s) => s?.ios ?? s?.default },
     AppState: { addEventListener: () => ({ remove: () => {} }), currentState: 'active' },
     Dimensions: { get: () => ({ height: 852, width: 393 }), addEventListener: () => ({ remove: () => {} }) },
@@ -73,7 +77,7 @@ vi.mock('react-native-safe-area-context', () => ({
 vi.mock('../src/theme/ThemeContext', () => ({
   useTheme: () => ({
     colors: {
-      bg: '#fff', bgPane: '#fff', bgInput: '#f1f3f5', line: '#eee', line2: '#ddd',
+      bg: '#fff', bgElev: '#fff', bgPane: '#fff', bgInput: '#f1f3f5', line: '#eee', line2: '#ddd',
       selected: '#eaeaea', hover: '#f4f4f4',
       ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999',
       accent: '#c90', danger: '#c00', warning: '#dd0', success: '#0a0',
@@ -90,11 +94,11 @@ vi.mock('../src/theme/ThemeContext', () => ({
 }));
 
 vi.mock('../src/components/ActionSheet', () => ({
-  ActionSheet: ({ open, title, actions = [] }) =>
+  ActionSheet: ({ open, title, subtitle, actions = [] }) =>
     open
       ? React.createElement(
           'div',
-          { 'data-sheet': title },
+          { 'data-sheet': title, 'data-subtitle': subtitle ?? '' },
           actions.map((a, i) =>
             a.divider
               ? React.createElement('hr', { key: `d-${i}` })
@@ -112,7 +116,7 @@ vi.mock('../src/components/Banner', () => ({
 }));
 vi.mock('../src/components/Button', () => ({ Button: ({ title, onPress }) => React.createElement('button', { type: 'button', onClick: onPress }, title) }));
 vi.mock('../src/components/Diamond', () => ({ Diamond: () => React.createElement('span', { 'data-diamond': 'true' }) }));
-vi.mock('../src/components/Fold', () => ({ Fold: ({ fold, color, size, outlined }) => React.createElement('span', { 'data-fold': fold ?? 'diamond', 'data-color': color, 'data-size': size, 'data-outlined': String(!!outlined) }) }));
+vi.mock('../src/components/Fold', () => ({ Fold: ({ shape, color, size, outlined, state }) => React.createElement('span', { 'data-shape': shape ?? 'round', 'data-color': color, 'data-size': size, 'data-outlined': String(!!outlined), 'data-state': state ?? '' }) }));
 vi.mock('../src/components/Icon', () => ({ Icon: ({ name }) => React.createElement('span', { 'data-icon': name }) }));
 vi.mock('../src/components/Meter', () => ({
   Meter: ({ label, value, tail, pct, compactText }) =>
@@ -153,7 +157,11 @@ vi.mock('../src/features/aln/deeplink', () => ({ isForeignConnection: () => fals
 
 vi.mock('../src/hooks/useActiveRole', () => ({ useCanAdminEarly: () => h.canAdmin }));
 vi.mock('../src/hooks/useChatSend', () => ({
-  useChatSend: () => ({ send: vi.fn(), isSending: () => false, pendingTurn: null, isStreaming: false }),
+  useChatSend: () => ({ send: vi.fn(), isSending: () => false, ...h.stream }),
+}));
+vi.mock('../src/hooks/useActivity', async (importOriginal) => ({
+  ...(await importOriginal()),
+  useActivity: () => ({ states: new Map(h.needs ? [['profile:doc', { state: 'needs-you' }]] : []) }),
 }));
 vi.mock('../src/hooks/useDaemonData', () => ({
   useProfileSummaries: () => ({
@@ -225,6 +233,8 @@ beforeEach(() => {
   h.profile = { ...READY };
   h.params = { id: 'doc' };
   h.sessionIds = [];
+  h.stream = { pendingTurn: null, isStreaming: false };
+  h.needs = false;
 });
 
 describe('Profile chat header menu', () => {
@@ -370,12 +380,12 @@ describe('Profile chat failed jobs', () => {
 });
 
 describe('Profile chat meters', () => {
-  it('draws context and budget as proportional bars', async () => {
+  it('draws context and budget as proportional bars on two panes', async () => {
     h.ctxTokens = 20_000;
     h.profile = { ...READY, budget_daily_usd: 2, budget_used_usd: 0.5 };
     h.call.mockImplementation(async (method) =>
       method === 'host.model.ctx_window' ? { ctx_window: 200_000 } : {});
-    render(<ProfileChat />);
+    render(<PaneContext.Provider value={{ twoPane: true, side: 'detail' }}><ProfileChat /></PaneContext.Provider>);
 
     const budget = document.querySelector('[data-meter="Daily budget"]');
     expect(budget.getAttribute('data-pct')).toBe('0.25');
@@ -387,15 +397,26 @@ describe('Profile chat meters', () => {
     expect(ctx.textContent).toBe('20K/200K');
   });
 
-  it('writes context and spend as short text on the phone and keeps the bars in two panes', async () => {
+  it('keeps the phone header to the chip, shows model, context and spend in its popover and the profile menu, and keeps the bars in two panes', async () => {
     h.ctxTokens = 20_000;
     h.profile = { ...READY, budget_daily_usd: 2, budget_used_usd: 0.5 };
     h.call.mockImplementation(async (method) =>
       method === 'host.model.ctx_window' ? { ctx_window: 200_000 } : {});
     render(<ProfileChat />);
-    await waitFor(() => expect(document.querySelector('[data-meter="Context window"]')).toBeTruthy());
-    expect(document.querySelector('[data-meter="Context window"]').getAttribute('data-compact')).toBe('· 10% ctx');
-    expect(document.querySelector('[data-meter="Daily budget"]').getAttribute('data-compact')).toBe('· $0.50 today');
+    await waitFor(() => expect(h.call.mock.calls.some(([m]) => m === 'host.model.ctx_window')).toBe(true));
+    expect(document.querySelector('[data-meter]')).toBeNull();
+    expect(document.querySelector('[testid="header-model"], [data-testid="header-model"]')).toBeNull();
+    fireEvent.click(screen.getByLabelText('doc, profile details'));
+    const popover = document.querySelector('[data-modal="open"]');
+    expect(popover.textContent).toMatch('claude-opus-5');
+    expect(popover.querySelector('[data-meter="Context window"]').textContent).toBe('20K/200K');
+    expect(popover.querySelector('[data-meter="Daily budget"]').textContent).toBe('$0.50/$2.00');
+    fireEvent.click(document.querySelector('[testid="details-backdrop"]'));
+    expect(document.querySelector('[data-modal="open"]')).toBeNull();
+    openMenu();
+    await waitFor(() => expect(sheet().getAttribute('data-subtitle')).toMatch('10% context'));
+    expect(sheet().getAttribute('data-subtitle')).toMatch('$0.50 of $2.00 today');
+    expect(sheet().getAttribute('data-subtitle')).toMatch('claude-opus-5');
     cleanup();
     render(
       <PaneContext.Provider value={{ twoPane: true, side: 'detail' }}>
@@ -419,18 +440,64 @@ describe('Profile chat meters', () => {
   });
 });
 
-describe('Profile chat fold', () => {
-  it('carries the profile fold into the header at header size', () => {
-    h.profile = { ...READY, fold: 'shield' };
+describe('Profile chat shape', () => {
+  it('carries the profile shape into the header at header size', () => {
+    h.profile = { ...READY, shape: 'bell' };
     render(<ProfileChat />);
-    const fold = document.querySelector('[data-fold="shield"]');
-    expect(fold.getAttribute('data-color')).toBe('#abc123');
-    expect(fold.getAttribute('data-size')).toBe('md');
+    const mark = document.querySelector('[data-shape="bell"]');
+    expect(mark.getAttribute('data-color')).toBe('#abc123');
+    expect(mark.getAttribute('data-size')).toBe('28');
   });
 
-  it('draws the diamond for a profile with no fold', () => {
+  it('hands the header no shape for a profile that has none', () => {
     render(<ProfileChat />);
-    expect(document.querySelector('[data-fold="diamond"]')).not.toBeNull();
+    expect(document.querySelector('[data-shape="round"][data-size="28"]')).not.toBeNull();
+  });
+});
+
+describe('Profile chat header state', () => {
+  const header = () => document.querySelector('[data-size="28"]').getAttribute('data-state');
+
+  it('rests while nothing runs', () => {
+    render(<ProfileChat />);
+    expect(header()).toBe('idle');
+  });
+
+  it('works while a turn streams and shows done when it ends cleanly, then rests', () => {
+    vi.useFakeTimers();
+    try {
+      h.stream = { pendingTurn: { pending: true }, isStreaming: true };
+      const view = render(<ProfileChat />);
+      expect(header()).toBe('working');
+      h.stream = { pendingTurn: { pending: false }, isStreaming: false };
+      view.rerender(<ProfileChat />);
+      expect(header()).toBe('done');
+      act(() => vi.advanceTimersByTime(2400));
+      expect(header()).toBe('idle');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('fails when the turn ends in an error', () => {
+    h.stream = { pendingTurn: { pending: true }, isStreaming: true };
+    const view = render(<ProfileChat />);
+    h.stream = { pendingTurn: { pending: false, error: 'boom' }, isStreaming: false };
+    view.rerender(<ProfileChat />);
+    expect(header()).toBe('failed');
+  });
+
+  it('needs you while a question or permission waits', () => {
+    h.needs = true;
+    h.stream = { pendingTurn: { pending: true }, isStreaming: true };
+    render(<ProfileChat />);
+    expect(header()).toBe('needs');
+  });
+
+  it('reads paused for a paused profile', () => {
+    h.profile = { ...READY, paused: true };
+    render(<ProfileChat />);
+    expect(header()).toBe('paused');
   });
 });
 
@@ -439,16 +506,16 @@ describe('Profile chat model label', () => {
     return [...document.querySelectorAll('span')].filter((el) => el.textContent === text);
   }
 
-  it('names the same provider-less model in the header and the empty state', () => {
+  it('names the provider-less model in the empty state', () => {
     render(<ProfileChat />);
-    expect(shown('claude-opus-5').length).toBe(2);
+    expect(shown('claude-opus-5').length).toBe(1);
     expect(document.body.textContent).not.toMatch('anthropic/claude-opus-5');
   });
 
   it('drops the gateway and the vendor from a three-segment id', () => {
     h.profile = { ...READY, model: 'openrouter/deepseek/deepseek-v4-flash-0731' };
     render(<ProfileChat />);
-    expect(shown('deepseek-v4-flash-0731').length).toBe(2);
+    expect(shown('deepseek-v4-flash-0731').length).toBe(1);
     expect(document.body.textContent).not.toMatch('openrouter');
   });
 
@@ -485,7 +552,9 @@ describe('Profile chat model label', () => {
   it('keeps a bare Ollama id whole', () => {
     h.profile = { ...READY, model: 'llama3', provider_keys: [], provider_ollama: ['llama3'] };
     render(<ProfileChat />);
-    expect(shown('llama3').length).toBe(2);
+    expect(shown('llama3').length).toBe(1);
+    fireEvent.click(screen.getByLabelText('doc, profile details'));
+    expect(shown('llama3').length).toBe(3);
   });
 });
 
@@ -499,7 +568,7 @@ describe('Profile chat header layout', () => {
     h.profile = { ...READY, budget_daily_usd: 2, budget_used_usd: 0.5 };
     h.call.mockImplementation(async (method) =>
       method === 'host.model.ctx_window' ? { ctx_window: 200_000 } : {});
-    render(<ProfileChat />);
+    render(<PaneContext.Provider value={{ twoPane: true, side: 'detail' }}><ProfileChat /></PaneContext.Provider>);
     await waitFor(() => expect(document.querySelector('[data-meter="Context window"]')).toBeTruthy());
 
     expect(metaRow().querySelector('[data-meter="Context window"]')).toBeTruthy();

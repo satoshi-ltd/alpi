@@ -14,10 +14,10 @@ vi.mock('react-native', () => {
   const resolve = (style) => h.flat(style instanceof Function ? style({ pressed: false }) : style);
   const View = ({ children, style }) => React.createElement('div', { 'data-style': JSON.stringify(resolve(style)) }, children);
   const Text = ({ children, style }) => React.createElement('span', { 'data-size': resolve(style).fontSize, 'data-shrink': resolve(style).flexShrink }, children);
-  const Pressable = ({ children, style, hitSlop, accessibilityLabel, onPress, disabled }) =>
+  const Pressable = ({ children, style, hitSlop, accessibilityLabel, onPress, disabled, onFocus, onBlur, testID }) =>
     React.createElement(
       'button',
-      { type: 'button', 'aria-label': accessibilityLabel, 'data-hitslop': JSON.stringify(hitSlop ?? null), 'data-style': JSON.stringify(resolve(style)), disabled: !!disabled, onClick: onPress },
+      { type: 'button', 'data-testid': testID, 'aria-label': accessibilityLabel, 'data-hitslop': JSON.stringify(hitSlop ?? null), 'data-style': JSON.stringify(resolve(style)), disabled: !!disabled, onClick: onPress, onFocus, onBlur },
       children instanceof Function ? children({ pressed: false }) : children,
     );
   const TextInput = ({ value, onChangeText, onFocus, onBlur, submitBehavior, onSubmitEditing, returnKeyType, style, placeholderTextColor }) =>
@@ -32,11 +32,14 @@ vi.mock('react-native', () => {
       onBlur,
       onKeyDown: (e) => { if (e.key === 'Enter') onSubmitEditing?.(); },
     });
+  const Modal = ({ children, visible, onRequestClose }) => (visible ? React.createElement('div', { 'data-modal': '', onKeyDown: (e) => { if (e.key === 'Escape') onRequestClose?.(); } }, children) : null);
   return {
     View,
     Text,
     Pressable,
     TextInput,
+    Modal,
+    useWindowDimensions: () => ({ height: 852, width: 393 }),
     AppState: { addEventListener: () => ({ remove: () => {} }), currentState: 'active' },
     Platform: { OS: 'ios', select: (s) => s?.ios ?? s?.default },
     Dimensions: { get: () => ({ height: 852, width: 393 }), addEventListener: () => ({ remove: () => {} }) },
@@ -54,6 +57,7 @@ vi.mock('../../lib/haptics', () => ({ tap: () => h.haptics.push('tap'), selectio
 vi.mock('../../components/Icon', () => ({ Icon: ({ name }) => React.createElement('span', { 'data-icon': name }) }));
 vi.mock('../../components/Button', () => ({ Button: ({ title, onPress }) => React.createElement('button', { type: 'button', 'data-resume': title, onClick: onPress }, title) }));
 vi.mock('./AttachmentCards', () => ({ AttachmentCards: () => null }));
+vi.mock('../../components/EdgeFade', () => ({ EdgeFade: ({ side }) => React.createElement('span', { 'data-fade': side }) }));
 vi.mock('./MentionPopover', () => ({ MentionPopover: ({ candidates, token }) => React.createElement('div', { 'data-mention': token, 'data-count': candidates.length }) }));
 vi.mock('../../theme/ThemeContext', async () => {
   const tokens = await import('../../theme/tokens');
@@ -63,7 +67,7 @@ vi.mock('../../theme/ThemeContext', async () => {
 import { state as keyboard } from '../../../tests/mocks/reanimated.js';
 import { COMPOSER_PAD_Y } from '../../lib/panes';
 import { fontSizes, mobile, palettes, radii, typography } from '../../theme/tokens';
-import { Composer } from './Composer';
+import { COMPOSER_BTN, COMPOSER_H, Composer } from './Composer';
 
 beforeEach(() => {
   h.haptics.length = 0;
@@ -112,71 +116,107 @@ describe('send and stop', () => {
 });
 
 describe('model chip', () => {
-  it('shows model · effort in the bottom row and opens on tap', () => {
+  it('moves model · effort into the + menu on the phone and opens its picker from there', () => {
     const onPress = vi.fn();
-    render(<Composer onSend={() => {}} modelChip={{ label: 'sonnet-4 · medium', onPress }} />);
-    const chip = screen.getByLabelText('Model and effort: sonnet-4 · medium');
-    expect(chip.textContent).toContain('sonnet-4 · medium');
-    const box = JSON.parse(chip.getAttribute('data-style'));
-    const slop = Number(JSON.parse(chip.getAttribute('data-hitslop')));
-    expect(box.height).toBeUndefined();
-    expect(box.minHeight + slop * 2).toBeGreaterThanOrEqual(mobile.tap);
-    fireEvent.click(chip);
+    render(<Composer onSend={() => {}} onPickAttachment={() => {}} modelChip={{ label: 'sonnet-4 · medium', onPress }} />);
+    expect(screen.queryByLabelText(/Model and effort/)).toBeNull();
+    fireEvent.click(screen.getByLabelText('Add'));
+    fireEvent.click(screen.getByLabelText('Model and effort: sonnet-4 · medium'));
     expect(onPress).toHaveBeenCalledTimes(1);
   });
 
+  it('closes the + menu on a tap outside it, and floats it in a modal layer above the stream', () => {
+    render(<Composer onSend={() => {}} onPickAttachment={() => {}} modelChip={{ label: 'sonnet-4 · medium', onPress: () => {} }} />);
+    fireEvent.click(screen.getByLabelText('Add'));
+    expect(screen.getByLabelText('Model and effort: sonnet-4 · medium').closest('[data-modal]')).not.toBeNull();
+    fireEvent.click(screen.getByTestId('composer-menu-backdrop'));
+    expect(screen.queryByLabelText(/Model and effort/)).toBeNull();
+    fireEvent.click(screen.getByLabelText('Add'));
+    fireEvent.click(screen.getByLabelText('Add'));
+    expect(screen.queryByLabelText(/Model and effort/)).toBeNull();
+  });
+
   it('is absent without the admin gate', () => {
-    render(<Composer onSend={() => {}} />);
+    render(<Composer onSend={() => {}} onPickAttachment={() => {}} />);
+    expect(screen.queryByLabelText('Add')).toBeNull();
     expect(screen.queryByLabelText(/Model and effort/)).toBeNull();
   });
 });
 
-describe('composer controls', () => {
+describe('composer anatomy', () => {
   const box = (label) => JSON.parse(screen.getByLabelText(label).getAttribute('data-style'));
+  const pill = () => [...document.querySelectorAll('div[data-style]')].map((d) => JSON.parse(d.getAttribute('data-style'))).find((st) => st.minHeight === COMPOSER_H);
 
-  it('share one minimum height and the chip radius, never a fixed height', () => {
-    render(<Composer onSend={() => {}} onPickAttachment={() => {}} mentionSource={() => []} modelChip={{ label: 'sonnet-4 · medium', model: 'sonnet-4', effort: 'medium', onPress: () => {} }} />);
-    const controls = ['Mention a peer', 'Model and effort: sonnet-4 · medium', 'Attach file', 'Send'].map(box);
-    for (const c of controls) {
-      expect(c.minHeight).toBe(36);
-      expect(c.height).toBeUndefined();
+  it('is one 56 pt fill pill: +, a 16 pt input and a round send, at the sheet corner', () => {
+    render(<Composer onSend={() => {}} onPickAttachment={() => {}} mentionSource={() => []} />);
+    expect(COMPOSER_H).toBe(56);
+    expect(pill()).toMatchObject({ minHeight: 56, borderRadius: radii.sheet, backgroundColor: palettes.light.fill });
+    expect(pill().borderWidth).toBeUndefined();
+    for (const label of ['Add', 'Send']) {
+      expect(box(label)).toMatchObject({ width: COMPOSER_BTN, height: COMPOSER_BTN, borderRadius: radii.pill });
     }
-    expect(box('Mention a peer').borderRadius).toBe(radii.xs);
-    expect(box('Model and effort: sonnet-4 · medium').borderRadius).toBe(radii.xs);
-    expect(box('Send').borderRadius).toBe(radii.xs);
+    expect(Number(field().getAttribute('data-size'))).toBe(16);
   });
 
-  it('shrinks the model with an ellipsis and keeps the effort whole', () => {
-    render(<Composer onSend={() => {}} modelChip={{ label: 'deepseek · medium', model: 'deepseek', effort: 'medium', onPress: () => {} }} />);
-    const model = screen.getByText('deepseek');
-    const effort = screen.getByText(/· medium/);
-    expect(model.getAttribute('data-shrink')).toBe('1');
-    expect(effort.getAttribute('data-shrink')).toBe('0');
+  it('attaches straight from + when attaching is the only extra', () => {
+    const onPick = vi.fn();
+    render(<Composer onSend={() => {}} onPickAttachment={onPick} />);
+    fireEvent.click(screen.getByLabelText('Attach file'));
+    expect(onPick).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps mention, attach and model behind + with every action intact', () => {
+    const onPick = vi.fn();
+    render(<Composer onSend={() => {}} onPickAttachment={onPick} mentionSource={() => []} modelChip={{ label: 'm', onPress: () => {} }} />);
+    fireEvent.click(screen.getByLabelText('Add'));
+    fireEvent.click(screen.getByLabelText('Mention a peer'));
+    expect(field().value).toBe('@');
+    fireEvent.click(screen.getByLabelText('Add'));
+    fireEvent.click(screen.getByLabelText('Attach file'));
+    expect(onPick).toHaveBeenCalledTimes(1);
+  });
+
+  it('gives each round control a 44 pt target', () => {
+    render(<Composer onSend={() => {}} onPickAttachment={() => {}} mentionSource={() => []} />);
+    for (const label of ['Add', 'Send']) {
+      const slop = Number(JSON.parse(screen.getByLabelText(label).getAttribute('data-hitslop')));
+      expect(box(label).height + slop * 2).toBeGreaterThanOrEqual(mobile.tap);
+    }
   });
 });
 
 describe('composer states', () => {
-  it('dims only the controls when disabled and greys the well with no edge', () => {
-    render(<Composer onSend={() => {}} disabled onPickAttachment={() => {}} mentionSource={() => []} modelChip={{ label: 'm', onPress: () => {} }} />);
+  it('dims only the controls by the shared 0.45 when disabled and keeps the pill on the fill', () => {
+    render(<Composer onSend={() => {}} disabled onPickAttachment={() => {}} mentionSource={() => []} />);
     const styles = [...document.querySelectorAll('div[data-style]')].map((d) => JSON.parse(d.getAttribute('data-style')));
     expect(styles.some((st) => st.opacity != null && st.opacity < 1)).toBe(false);
-    for (const label of ['Mention a peer', 'Model and effort: m', 'Attach file', 'Send']) {
+    for (const label of ['Add', 'Send']) {
       expect(JSON.parse(screen.getByLabelText(label).getAttribute('data-style')).opacity).toBe(0.45);
     }
-    const well = styles.find((st) => st.borderWidth === 1);
-    expect(well.backgroundColor).toBe(palettes.light.field);
-    expect(well.borderColor).toBe('transparent');
+    expect(styles.find((st) => st.minHeight === COMPOSER_H).backgroundColor).toBe(palettes.light.fill);
     expect(field().getAttribute('data-placeholder-color')).toBe(palettes.light.ink2);
   });
 
-  it('rests on the elevated surface and focuses by sharpening only the edge', () => {
+  it('shows no focus ring and no edge when the input takes focus: the caret is its focus', () => {
     render(<Composer onSend={() => {}} />);
-    const well = () => [...document.querySelectorAll('div[data-style]')].map((d) => JSON.parse(d.getAttribute('data-style'))).find((st) => st.borderWidth === 1);
-    expect(well()).toMatchObject({ backgroundColor: palettes.light.bgElev, borderColor: palettes.light.line2 });
+    const pillStyle = () => [...document.querySelectorAll('div[data-style]')].map((d) => JSON.parse(d.getAttribute('data-style'))).find((st) => st.minHeight === COMPOSER_H);
     fireEvent.focus(field());
-    expect(well()).toMatchObject({ backgroundColor: palettes.light.bgElev, borderColor: palettes.light.edge, borderWidth: 1 });
-    fireEvent.blur(field());
-    expect(well().borderColor).toBe(palettes.light.line2);
+    expect(pillStyle().borderWidth).toBeUndefined();
+    expect(pillStyle().outlineWidth).toBeUndefined();
+  });
+
+  it('fades the stream into the composer instead of a rule above it', () => {
+    render(<Composer onSend={() => {}} />);
+    const styles = [...document.querySelectorAll('div[data-style]')].map((d) => JSON.parse(d.getAttribute('data-style')));
+    expect(styles.some((st) => st.borderTopWidth)).toBe(false);
+    expect(document.querySelector('[data-fade="bottom"]')).toBeTruthy();
+    expect(styles.some((st) => st.backgroundColor === palettes.light.bg)).toBe(true);
+  });
+
+  it('sends with alpi ink when the profile has no accent', () => {
+    render(<Composer onSend={() => {}} />);
+    fireEvent.change(field(), { target: { value: 'hi' } });
+    expect(JSON.parse(screen.getByLabelText('Send').getAttribute('data-style')).backgroundColor).toBe(palettes.light.accent);
   });
 
   it('shows no Resume action under a disabled composer', () => {
@@ -192,6 +232,13 @@ describe('composer states', () => {
     type('hello @zz');
     expect(document.querySelector('[data-mention]').getAttribute('data-mention')).toBe('zz');
     expect(document.querySelector('[data-mention]').getAttribute('data-count')).toBe('0');
+  });
+
+  it('rings the send button for a keyboard focus only', () => {
+    render(<Composer onSend={() => {}} />);
+    expect(JSON.parse(screen.getByLabelText('Send').getAttribute('data-style')).outlineWidth).toBeUndefined();
+    fireEvent.focus(screen.getByLabelText('Send'));
+    expect(JSON.parse(screen.getByLabelText('Send').getAttribute('data-style')).outlineWidth).toBe(2);
   });
 });
 
@@ -239,11 +286,3 @@ describe('initial text', () => {
   });
 });
 
-describe('small controls reach 44 pt', () => {
-  it('lets a thumb hit the mention chip above and below its 36 pt box', () => {
-    render(<Composer onSend={() => {}} mentionSource={() => []} />);
-    const chip = screen.getByLabelText('Mention a peer');
-    const slop = Number(JSON.parse(chip.getAttribute('data-hitslop')));
-    expect(JSON.parse(chip.getAttribute('data-style')).minHeight + slop * 2).toBeGreaterThanOrEqual(mobile.tap);
-  });
-});

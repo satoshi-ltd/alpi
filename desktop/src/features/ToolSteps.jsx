@@ -127,7 +127,7 @@ export const ToolStep = memo(function ToolStep({ tool, accent, open: openProp, o
   );
 });
 
-export const ProcessBlock = memo(function ProcessBlock({ entries, accent, fold, thinking = false, answered = false }) {
+export const ProcessBlock = memo(function ProcessBlock({ entries, accent, shape, thinking = false, answered = false }) {
   const [bucketChoice, setBucketChoice] = useState(null);
   const [overrides, setOverrides] = useState({});
   const setStep = useCallback((key, value) => setOverrides((prev) => ({ ...prev, [key]: value })), []);
@@ -149,7 +149,7 @@ export const ProcessBlock = memo(function ProcessBlock({ entries, accent, fold, 
     <Reasoning
       key={e.key}
       accent={accent}
-      fold={fold}
+      shape={shape}
       text={e.text}
       seconds={e.seconds}
       timeline={e.timeline}

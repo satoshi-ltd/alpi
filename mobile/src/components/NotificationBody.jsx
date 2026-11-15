@@ -9,6 +9,7 @@ import { errorParts, failedTitle, inlineSegments, parseNotificationBody } from '
 import { useTheme } from '../theme/ThemeContext';
 import { lineHeights, radii, space } from '../theme/tokens';
 import { detailTitleStyle } from './detailTitle';
+import { code } from '../theme/code';
 
 function topMargin(block, prev) {
   if (!prev) return 0;
@@ -85,8 +86,7 @@ function Inline({ text, theme }) {
         <Text
           key={i}
           style={{
-            fontFamily: theme.fonts.mono,
-            fontSize: theme.fontSizes.md,
+            ...code(theme.fonts, theme.fontSizes.md),
             backgroundColor: theme.colors.hover,
             color: theme.colors.ink,
           }}
@@ -115,13 +115,13 @@ function Inline({ text, theme }) {
 
 function Entry({ entry, last, theme }) {
   return (
-    <View style={{ gap: space.s1, paddingVertical: space.s4, borderBottomWidth: last ? 0 : 0.5, borderBottomColor: theme.colors.line }}>
+    <View style={{ gap: space.s1, paddingVertical: space.s4 }}>
       <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: space.s3 }}>
         <Text selectable style={{ flexShrink: 0, fontFamily: theme.fonts.sans.semibold, fontSize: theme.fontSizes.lg, lineHeight: theme.fontSizes.lg * lineHeights.normal, color: theme.colors.ink }}>
           {entry.name}
         </Text>
         {entry.meta ? (
-          <Text numberOfLines={1} style={{ flex: 1, fontFamily: theme.fonts.mono, fontSize: theme.fontSizes.xs, color: theme.colors.ink3 }}>
+          <Text numberOfLines={1} style={{ flex: 1, fontFamily: theme.fonts.sans.regular, fontSize: theme.fontSizes.xs, color: theme.colors.ink3 }}>
             {entry.meta}
           </Text>
         ) : null}
@@ -147,7 +147,7 @@ function List({ block, theme }) {
     <View style={{ paddingLeft: space.s4, gap: space.s2 }}>
       {block.items.map((it, j) => (
         <View key={j} style={{ flexDirection: 'row', gap: space.s3 }}>
-          <Text style={{ fontFamily: block.ordered ? theme.fonts.mono : theme.fonts.sans.regular, fontSize: theme.fontSizes.lg, lineHeight: theme.fontSizes.lg * lineHeights.normal, color: theme.colors.ink3, minWidth: block.ordered ? 18 : undefined }}>
+          <Text style={{ fontFamily: block.ordered ? theme.fonts.sans.regular : theme.fonts.sans.regular, fontSize: theme.fontSizes.lg, lineHeight: theme.fontSizes.lg * lineHeights.normal, color: theme.colors.ink3, minWidth: block.ordered ? 18 : undefined }}>
             {it.marker}
           </Text>
           <Text selectable style={{ flex: 1, fontFamily: theme.fonts.sans.regular, fontSize: theme.fontSizes.lg, lineHeight: theme.fontSizes.lg * lineHeights.normal, color: theme.colors.ink2 }}>
@@ -163,15 +163,13 @@ function CodeBlock({ text, theme }) {
   return (
     <View
       style={{
-        borderRadius: radii.xs,
-        borderWidth: 0.5,
-        borderColor: theme.colors.line,
+        borderRadius: radii.surface,
         backgroundColor: theme.colors.hover,
         overflow: 'hidden',
       }}
     >
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ padding: space.s5 }}>
-        <Text style={{ fontFamily: theme.fonts.mono, fontSize: theme.fontSizes.md, lineHeight: theme.fontSizes.md * lineHeights.normal, color: theme.colors.ink }}>
+        <Text style={{ ...code(theme.fonts, theme.fontSizes.md), lineHeight: theme.fontSizes.md * lineHeights.normal, color: theme.colors.ink }}>
           {text}
         </Text>
       </ScrollView>
@@ -183,15 +181,13 @@ function ReportTable({ block, theme }) {
   const rows = [block.headers, ...block.rows];
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-      <View style={{ borderWidth: 0.5, borderColor: theme.colors.line, borderRadius: radii.xs, overflow: 'hidden' }}>
+      <View style={{ borderRadius: radii.surface, overflow: 'hidden' }}>
         {rows.map((row, i) => (
           <View
             key={i}
             style={{
               flexDirection: 'row',
               backgroundColor: i === 0 ? theme.colors.hover : 'transparent',
-              borderTopWidth: i === 0 ? 0 : 0.5,
-              borderTopColor: theme.colors.line,
             }}
           >
             {row.map((cell, j) => (
@@ -201,8 +197,6 @@ function ReportTable({ block, theme }) {
                   minWidth: 96,
                   paddingHorizontal: space.s4,
                   paddingVertical: space.s3,
-                  borderLeftWidth: j === 0 ? 0 : 0.5,
-                  borderLeftColor: theme.colors.line,
                   fontFamily: i === 0 ? theme.fonts.sans.semibold : theme.fonts.sans.regular,
                   fontSize: theme.fontSizes.sm,
                   lineHeight: theme.fontSizes.sm * lineHeights.normal,
@@ -223,11 +217,11 @@ function renderBlock(block, theme, accent = null) {
   switch (block.kind) {
     case 'chart': return <Chart spec={block.spec} accent={accent} />;
     case 'heading': return <Heading text={block.text} theme={theme} />;
-    case 'label': return <Eyebrow style={{ lineHeight: theme.fontSizes.xs * lineHeights.cozy }}>{block.label}</Eyebrow>;
+    case 'label': return <Eyebrow>{block.label}</Eyebrow>;
     case 'labelBody':
       return (
         <View style={{ gap: space.s1 }}>
-          <Eyebrow style={{ lineHeight: theme.fontSizes.xs * lineHeights.cozy }}>{block.label}</Eyebrow>
+          <Eyebrow>{block.label}</Eyebrow>
           <Para text={block.body} theme={theme} />
         </View>
       );
@@ -273,7 +267,7 @@ export function NotificationBody({ body, lead = null, accent = null }) {
 function Details({ blocks, theme }) {
   const [open, setOpen] = useState(false);
   return (
-    <View style={{ borderRadius: radii.xs, backgroundColor: theme.colors.hover, overflow: 'hidden' }}>
+    <View style={{ borderRadius: radii.surface, backgroundColor: theme.colors.hover, overflow: 'hidden' }}>
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
@@ -282,11 +276,11 @@ function Details({ blocks, theme }) {
         style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2, minHeight: 44, paddingHorizontal: space.s5 }}
       >
         <Icon name={open ? 'chevron-down' : 'chevron-right'} size="xs" color={theme.colors.ink3} />
-        <Text style={{ fontFamily: theme.fonts.mono, fontSize: theme.fontSizes.sm, color: theme.colors.ink2 }}>Details</Text>
+        <Text style={{ fontFamily: theme.fonts.sans.regular, fontSize: theme.fontSizes.sm, color: theme.colors.ink2 }}>Details</Text>
       </Pressable>
       {open ? blocks.map((b, i) => (
         <ScrollView key={i} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: space.s5, paddingBottom: space.s4 }}>
-          <Text selectable style={{ fontFamily: theme.fonts.mono, fontSize: theme.fontSizes.sm, lineHeight: theme.fontSizes.sm * lineHeights.normal, color: theme.colors.ink2 }}>
+          <Text selectable style={{ ...code(theme.fonts, theme.fontSizes.sm), lineHeight: theme.fontSizes.sm * lineHeights.normal, color: theme.colors.ink2 }}>
             {b.text}
           </Text>
         </ScrollView>
@@ -301,7 +295,7 @@ export function ErrorCard({ title, summary = '', body, actions = null, accent = 
   const { lead, failed } = failedTitle(title);
   const { facts, details, rest } = errorParts(parseNotificationBody(body));
   return (
-    <View style={{ gap: space.s5, padding: space.s6, borderRadius: radii.xs, backgroundColor: groupTone(colors) }}>
+    <View style={{ gap: space.s5, padding: space.s6, borderRadius: radii.surface, backgroundColor: groupTone(colors) }}>
       <View accessibilityRole="header" style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
         <Icon name="triangle-alert" size="md" color={colors.danger} />
         <Text style={{ flex: 1, fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, lineHeight: fontSizes.lg * lineHeights.cozy, color: colors.ink }}>
@@ -317,9 +311,9 @@ export function ErrorCard({ title, summary = '', body, actions = null, accent = 
       {facts.length ? (
         <View>
           {facts.map((f, i) => (
-            <View key={i} style={{ flexDirection: 'row', gap: space.s5, paddingVertical: space.s3, borderBottomWidth: i === facts.length - 1 ? 0 : 0.5, borderBottomColor: colors.line }}>
-              <Text style={{ minWidth: 64, flexShrink: 0, paddingTop: 2, fontFamily: fonts.mono, fontSize: fontSizes.xs, letterSpacing: 0.6, color: colors.ink3 }}>
-                {f.label.toUpperCase()}
+            <View key={i} style={{ flexDirection: 'row', gap: space.s5, paddingVertical: space.s3 }}>
+              <Text style={{ minWidth: 64, flexShrink: 0, paddingTop: 2, fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>
+                {f.label.charAt(0).toUpperCase() + f.label.slice(1)}
               </Text>
               <Text selectable style={{ flex: 1, fontFamily: fonts.sans.regular, fontSize: fontSizes.md, lineHeight: fontSizes.md * lineHeights.normal, color: i === 0 ? colors.ink : colors.ink2 }}>
                 <Inline text={f.body} theme={theme} />

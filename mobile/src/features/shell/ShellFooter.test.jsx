@@ -9,6 +9,8 @@ afterEach(cleanup);
 const h = vi.hoisted(() => ({
   layout: null,
   fontScale: 1,
+  pref: 'system',
+  setMode: null,
   flat: (style) => [style].flat(Infinity).filter(Boolean).reduce((acc, s) => ({ ...acc, ...s }), {}),
 }));
 
@@ -25,7 +27,7 @@ vi.mock('react-native', () => {
   const Pressable = ({ children, style, onPress, accessibilityLabel, ...p }) =>
     React.createElement(
       'button',
-      { type: 'button', onClick: onPress, 'aria-label': accessibilityLabel, ...p },
+      { type: 'button', onClick: onPress, 'aria-label': accessibilityLabel, ...p, ...(p.hitSlop && typeof p.hitSlop === 'object' ? { hitSlop: JSON.stringify(p.hitSlop) } : {}) },
       typeof children === 'function' ? children({ pressed: false }) : children,
     );
   return { View, Text, Pressable };
@@ -38,19 +40,23 @@ vi.mock('../../components/Icon', () => ({ Icon: ({ name, color }) => React.creat
 vi.mock('../../theme/ThemeContext', () => ({
   useTheme: () => ({
     colors: { ink2: '#333', ink3: '#666', ink4: '#999', line: '#eee', selected: '#eaeaea', danger: '#c00', warning: '#e08a3c', warningText: '#8a5a0a' },
-    fonts: { sans: { medium: 'm', semibold: 's' }, mono: 'monoFace', monoMedium: 'monoMedium' },
+    fonts: { sans: { regular: 'r', medium: 'm', semibold: 's' }, mono: 'monoFace', monoMedium: 'monoMedium' },
     fontSizes: { xs: 11, sm: 12 },
     chromeScale: 1.3,
     fontScale: h.fontScale,
+    pref: h.pref,
+    setMode: h.setMode,
   }),
 }));
 
 import { CHROME_H } from '../../lib/panes';
-import { dotScale, mobile } from '../../theme/tokens';
+import { dotScale, iconSizes, mobile } from '../../theme/tokens';
 import { PaneContext } from '../../nav/PaneContext';
 import { ICON_ROLES } from '../../../../common/iconRoles.mjs';
-import { ENTRY_INSET_X, LABEL_ROOM, ShellFooter } from './ShellFooter';
+import { ENTRY_INSET_X, LABEL_ROOM, ShellFooter, versionFits } from './ShellFooter';
 import { space } from '../../theme/tokens';
+import { typeLadder } from '../../../../common/tokens.mjs';
+const realSizes = { xs: typeLadder.meta };
 
 const settings = () => screen.getByLabelText('Settings');
 const bell = (unread = 0) => screen.getByLabelText(unread > 0 ? `Notifications · ${unread} unread` : 'Notifications');
@@ -165,7 +171,7 @@ describe('ShellFooter activity entry', () => {
     render(<ShellFooter unread={1} onNotificationsPress={() => {}} onSettingsPress={() => {}} onActivityPress={() => {}} />);
     for (const entry of [settings(), bell(1), activity()]) {
       expect(entry.getAttribute('accessibilityRole')).toBe('button');
-      expect(Number(entry.getAttribute('hitSlop')) * 2 + 36).toBe(mobile.tap);
+      expect(Number(entry.getAttribute('hitSlop')) * 2 + mobile.tap).toBe(mobile.tap);
     }
     expect(screen.getByText('Settings').getAttribute('maxFontSizeMultiplier')).toBe('1.3');
   });
@@ -279,11 +285,13 @@ describe('ShellFooter two panes', () => {
     expect(bell(1).querySelector('[testID="dot-anchor"]')).toBeTruthy();
     expect(screen.getByLabelText('Activity · 2 need you').querySelector('[testID="dot-anchor"]')).toBeTruthy();
     for (const entry of [settings(), bell(1), screen.getByLabelText('Activity · 2 need you')]) {
-      expect(Number(entry.getAttribute('hitSlop')) * 2 + 36).toBe(mobile.tap);
+      const slop = JSON.parse(entry.getAttribute('hitSlop'));
+      expect([slop.left, slop.right]).toEqual([0, 0]);
+      expect(slop.top + slop.bottom + mobile.tap).toBe(CHROME_H);
     }
   });
 
-  it('shows the bare version as plain mono ink3 text at the right, not focusable, one inset from the edge like the first icon', () => {
+  it('shows the bare version as medium sans ink3 text at the right, not focusable, one inset from the edge like the first icon', () => {
     h.layout = null;
     render(
       <PaneContext.Provider value={pane}>
@@ -298,23 +306,58 @@ describe('ShellFooter two panes', () => {
     expect(version.getAttribute('numberOfLines')).toBe('1');
     expect(version.getAttribute('maxFontSizeMultiplier')).toBe('1.3');
     const at = JSON.parse(version.getAttribute('data-style'));
-    expect(at).toMatchObject({ fontFamily: 'monoFace', fontSize: 11, color: '#666', flexShrink: 0 });
+    expect(at).toMatchObject({ fontFamily: 'm', fontSize: 11, color: '#666', flexShrink: 0 });
     const box = JSON.parse(version.parentElement.getAttribute('data-style'));
-    expect(box.paddingRight).toBe((mobile.tap - 16) / 2);
+    expect(box.paddingRight).toBe((40 - iconSizes.md) / 2);
   });
 
-  it.each([280, 300])('fits three 44 pt targets and the version at %i pt, even at the largest text size', (width) => {
-    h.fontScale = 1.3;
+  it.each([280, 300])('fits the five desktop entries and a six-character version at %i pt', (width) => {
+    h.setMode = () => {};
     h.layout = null;
     render(
       <PaneContext.Provider value={pane}>
-        <ShellFooter {...FULL} />
+        <ShellFooter {...FULL} onSearchPress={() => {}} />
       </PaneContext.Provider>,
     );
     act(() => h.layout({ nativeEvent: { layout: { width, height: 44 } } }));
+    expect(screen.getAllByRole('button')).toHaveLength(5);
     expect(screen.getByText('0.9.0')).toBeTruthy();
-    expect(width - 2 * space.s5 - 3 * mobile.tap).toBeGreaterThanOrEqual(0.6 * 11 * 1.3 * 5 + 14 + space.s5);
-    h.fontScale = 1;
+    expect(versionFits(width, 5, 0.6 * realSizes.xs * '0.10.0'.length)).toBe(true);
+    h.setMode = null;
+  });
+
+  it('matches the desktop footer order: settings, notifications, activity, search, theme, then the version', () => {
+    h.setMode = vi.fn();
+    h.pref = 'dark';
+    h.layout = null;
+    const onSearchPress = vi.fn();
+    render(
+      <PaneContext.Provider value={pane}>
+        <ShellFooter {...FULL} onSearchPress={onSearchPress} searchOpen />
+      </PaneContext.Provider>,
+    );
+    expect(screen.getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Settings', 'Notifications · 1 unread', 'Activity · 2 need you', 'Close filter', 'Theme: Dark']);
+    fireEvent.click(screen.getByLabelText('Close filter'));
+    expect(onSearchPress).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText('Theme: Dark').querySelector('[data-icon]').getAttribute('data-icon')).toBe('moon');
+    fireEvent.click(screen.getByLabelText('Theme: Dark'));
+    expect(h.setMode).toHaveBeenCalledWith('system');
+    h.setMode = null;
+    h.pref = 'system';
+  });
+
+  it('keeps search and theme out of the phone tab bar', () => {
+    h.setMode = () => {};
+    render(<ShellFooter {...FULL} onSearchPress={() => {}} />);
+    expect(screen.getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Settings', 'Notifications · 1 unread', 'Activity · 2 need you']);
+    h.setMode = null;
+  });
+
+  it('moves the sidebar filter from the connection header into the footer, as on desktop', () => {
+    const sidebar = source('src/features/shell/SidebarPane.jsx');
+    const header = sidebar.match(/<ConnHeader[\s\S]*?\/>/)[0];
+    expect(header).not.toMatch(/onToggleSearch/);
+    expect(sidebar.match(/<ShellFooter[\s\S]*?\/>/)[0]).toMatch(/onSearchPress=\{toggleSearch\}/);
   });
 
   it('hides the version before it would crowd the targets', () => {
@@ -324,7 +367,7 @@ describe('ShellFooter two panes', () => {
         <ShellFooter {...FULL} />
       </PaneContext.Provider>,
     );
-    act(() => h.layout({ nativeEvent: { layout: { width: 200, height: 44 } } }));
+    act(() => h.layout({ nativeEvent: { layout: { width: 160, height: 44 } } }));
     expect(screen.queryByText('0.9.0')).toBeNull();
     expect(settings()).toBeTruthy();
   });
@@ -382,7 +425,7 @@ describe('ShellFooter label room', () => {
     expect(labelsShown()).toBe(false);
     expect(screen.queryByText('Settings')).toBeNull();
     for (const entry of [settings(), bell(), screen.getByLabelText('Activity')]) {
-      expect(Number(entry.getAttribute('hitSlop')) * 2 + 36).toBe(mobile.tap);
+      expect(Number(entry.getAttribute('hitSlop')) * 2 + mobile.tap).toBe(mobile.tap);
     }
   });
 

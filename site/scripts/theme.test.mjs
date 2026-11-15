@@ -2,8 +2,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
+import { palettes } from '../../common/tokens.mjs';
+import { themeScript } from './brand.mjs';
 
-const script = readFileSync(new URL('../templates/theme.js', import.meta.url), 'utf8');
+const template = readFileSync(new URL('../templates/theme.js', import.meta.url), 'utf8');
+const script = themeScript(template);
+const LIGHT = palettes.light.bg;
+const DARK = palettes.dark.bg;
 function page({ saved = null, dark = false, blocked = false } = {}) {
   const events = {};
   const root = { dataset: {} };
@@ -29,7 +34,7 @@ function page({ saved = null, dark = false, blocked = false } = {}) {
 test('saved choice sets theme, browser color and accessible toggle before page content', () => {
   const p = page({ saved: 'light', dark: true });
   assert.equal(p.root.dataset.theme, 'light');
-  assert.equal(p.meta.color, '#f0f0f0');
+  assert.equal(p.meta.color, LIGHT);
   assert.equal(p.button.label, 'Switch to dark theme');
   p.system.change();
   assert.equal(p.root.dataset.theme, 'light');
@@ -43,7 +48,7 @@ test('system preference follows changes until the user chooses', () => {
   assert.equal(p.root.dataset.theme, 'dark');
   p.click();
   assert.equal(p.saved(), 'light');
-  assert.equal(p.meta.color, '#f0f0f0');
+  assert.equal(p.meta.color, LIGHT);
   p.system.change();
   assert.equal(p.root.dataset.theme, 'light');
   const nextPage = page({ saved: p.saved(), dark: true });
@@ -54,6 +59,13 @@ test('theme toggle works when browser storage is unavailable', () => {
   const p = page({ blocked: true });
   p.click();
   assert.equal(p.root.dataset.theme, 'dark');
-  assert.equal(p.meta.color, '#0b0b0b');
+  assert.equal(p.meta.color, DARK);
   assert.equal(p.button.label, 'Switch to light theme');
+});
+
+test('the browser colour is the page ground of the shared tokens, never a literal', () => {
+  assert.ok(!/#[0-9a-f]{3,8}\b/i.test(template));
+  assert.ok(!script.includes('__THEME_'));
+  assert.equal(page({ saved: 'light' }).meta.color, LIGHT);
+  assert.equal(page({ saved: 'dark' }).meta.color, DARK);
 });

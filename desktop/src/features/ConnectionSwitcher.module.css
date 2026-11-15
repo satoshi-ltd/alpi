@@ -1,6 +1,10 @@
 .label {
-  display: block;
-  padding: 0 var(--sp-12) var(--sp-8) calc(var(--sp-12) + 2px);
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .root > div {
@@ -19,12 +23,11 @@
   padding: var(--sp-8);
   resize: vertical;
   border: .5px solid transparent;
-  border-radius: var(--r-xs);
+  border-radius: var(--r-control);
   background: var(--well);
-  box-shadow: var(--well-edge);
   color: var(--ink);
   font-family: var(--font-mono);
-  font-size: var(--text-meta);
+  font-size: var(--text-mono);
   line-height: var(--lh-normal);
   outline: none;
   transition:
@@ -35,10 +38,10 @@
 
 .payload:focus,
 .payload:focus-visible {
-  outline: none;
   border-color: transparent;
   background: var(--well-focus);
-  box-shadow: var(--well-ring);
+  box-shadow: var(--field-focus);
+  outline: none;
 }
 
 .add {
@@ -46,9 +49,8 @@
   width: calc(100% - var(--sp-16));
   height: var(--sp-32);
   margin: 0 var(--sp-8) var(--sp-8);
-  border: .5px solid var(--line-2);
-  border-radius: var(--r-xs);
-  background: var(--bg-input);
+  border-radius: var(--r-control);
+  background: var(--selected);
   color: var(--ink);
   font-size: var(--text-ui);
   font-weight: var(--fw-medium);
@@ -63,7 +65,7 @@
   align-items: center;
   gap: var(--sp-8);
   padding: var(--sp-8) var(--sp-12);
-  border-radius: var(--r-xs);
+  border-radius: var(--r-control);
 }
 
 .rowLead {
@@ -162,7 +164,7 @@
 .rowCaption {
   margin-top: var(--sp-4);
   color: var(--ink-3);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
 }
 

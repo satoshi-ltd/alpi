@@ -25,7 +25,7 @@ vi.mock('../theme/ThemeContext', async () => {
   return {
     useTheme: () => ({
       colors: { danger: '#c14545', warning: '#e08a3c', onDanger: '#fff' },
-      fonts: { sans: { semibold: 's' }, monoSemibold: 'mono-600' },
+      fonts: { sans: { semibold: 'sans-600' }, monoSemibold: 'mono-600' },
       fontSizes: scaleFontSizes(h.scale),
       chromeScale: 1,
     }),
@@ -37,12 +37,12 @@ import { countBadge } from '../theme/tokens';
 import { CountBadge } from './CountBadge';
 
 describe('CountBadge', () => {
-  it('draws the shared badge spec: mono 600 at its 18 pt size', () => {
+  it('draws the shared badge spec: sans 600 at its 18 pt size', () => {
     h.scale = 1;
     render(<CountBadge count={3} />);
     const text = screen.getByText('3');
-    expect(countBadgeSpec).toMatchObject({ family: 'mono', weight: 600 });
-    expect(text.getAttribute('data-font')).toBe('mono-600');
+    expect(countBadgeSpec).toMatchObject({ family: 'sans', weight: 600 });
+    expect(text.getAttribute('data-font')).toBe('sans-600');
     expect(Number(text.parentElement.getAttribute('data-h'))).toBe(countBadgeSpec.size.mobile);
     expect(Number(text.parentElement.getAttribute('data-min-w'))).toBe(countBadgeSpec.size.mobile);
   });
@@ -75,11 +75,11 @@ describe('CountBadge', () => {
 });
 
 describe('CountBadge shape', () => {
-  it('is a 4 pt square badge with no ring, in the danger tone', () => {
+  it('is a round count badge with no ring, in the danger tone', () => {
     render(<CountBadge count={3} />);
     const pill = screen.getByText('3').parentElement;
     expect(Number(pill.getAttribute('data-radius'))).toBe(countBadge.radius);
-    expect(countBadge.radius).toBe(4);
+    expect(countBadge.radius).toBe(999);
     expect(pill.getAttribute('data-border')).toBeNull();
     expect(pill.getAttribute('data-bg')).toBe('#c14545');
   });

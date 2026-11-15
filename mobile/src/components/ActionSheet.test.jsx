@@ -65,7 +65,7 @@ vi.mock('./useSheetGesture', () => ({
 vi.mock('../theme/ThemeContext', () => ({
   useTheme: () => ({
     shadow: { sheet: { borderWidth: 0, borderTopWidth: 1, borderColor: '#sheet' }, dialog: { borderWidth: 0.5, borderColor: '#ddd' }, popover: { borderWidth: 0.5, borderColor: '#ddd' } },
-    colors: { bgPane: '#fff', ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', line: '#ddd', danger: '#f00', accent: '#c90', dangerText: '#a00', selected: '#eee' },
+    colors: { bgPane: '#fff', bgElev: '#f9f9f9', ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', line: '#ddd', danger: '#f00', accent: '#c90', dangerText: '#a00', selected: '#eee' },
     fonts: {
       sans: { regular: 'Geist_400Regular', semibold: 'Geist_600SemiBold' },
       mono: 'GeistMono_400Regular',
@@ -148,10 +148,10 @@ function renderAnchored(anchor, width = 852) {
 describe('ActionSheet popover on a fold', () => {
   const anchor = { x: 796, y: 3, width: 44, height: 44 };
 
-  it('opens a 280 pt popover 6 pt under the trigger, aligned to its right edge, with no veil', () => {
+  it('opens a 280 pt popover 8 pt under the trigger, aligned to its right edge, with no veil', () => {
     const { container } = renderAnchored(anchor);
     const style = sheetStyleOf(container);
-    expect(style).toMatchObject({ position: 'absolute', width: 280, top: 53, left: 560, borderRadius: radii.xs });
+    expect(style).toMatchObject({ position: 'absolute', width: 280, top: 55, left: 560, borderRadius: radii.surface, padding: 8, backgroundColor: '#f9f9f9' });
     expect(JSON.parse(container.querySelector('[data-style]').getAttribute('data-style')).backgroundColor).toBe('transparent');
   });
 
@@ -216,12 +216,12 @@ describe('ActionSheet wide form', () => {
   it('keeps the phone bottom-sheet form outside any pane provider', () => {
     const { container } = renderSheet();
     expect(sheetStyleOf(container)).toEqual({
-      backgroundColor: '#fff',
+      backgroundColor: '#f9f9f9',
       borderWidth: 0,
       borderTopWidth: 1,
       borderColor: '#sheet',
-      borderTopLeftRadius: radii.xs,
-      borderTopRightRadius: radii.xs,
+      borderTopLeftRadius: radii.sheet,
+      borderTopRightRadius: radii.sheet,
       overflow: 'hidden',
     });
   });
@@ -229,12 +229,12 @@ describe('ActionSheet wide form', () => {
   it('becomes a centred capped dialog in two-pane mode', () => {
     const { container } = renderInTwoPane();
     expect(sheetStyleOf(container)).toEqual({
-      backgroundColor: '#fff',
+      backgroundColor: '#f9f9f9',
       borderWidth: 0.5,
       borderColor: '#ddd',
-      borderTopLeftRadius: radii.xs,
-      borderTopRightRadius: radii.xs,
-      borderRadius: radii.xs,
+      borderTopLeftRadius: radii.sheet,
+      borderTopRightRadius: radii.sheet,
+      borderRadius: radii.sheet,
       overflow: 'hidden',
       alignSelf: 'center',
       width: '100%',
@@ -350,12 +350,12 @@ describe('dialog title role', () => {
   it('uses the same title size and scales it with the text preference', () => {
     const { rerender } = render(<ActionSheet open onClose={() => {}} title="Preferences" />);
     const titleStyle = () => JSON.parse(screen.getByText('Preferences').getAttribute('data-text-style'));
-    expect(titleStyle().fontSize).toBe(18);
-    expect(titleStyle().lineHeight).toBeCloseTo(23.4);
+    expect(titleStyle().fontSize).toBe(20);
+    expect(titleStyle().lineHeight).toBeCloseTo(26);
     h.textScale = 1.3;
     rerender(<ActionSheet open onClose={() => {}} title="Preferences" />);
-    expect(titleStyle().fontSize).toBe(23);
-    expect(titleStyle().lineHeight).toBeCloseTo(29.9);
+    expect(titleStyle().fontSize).toBe(26);
+    expect(titleStyle().lineHeight).toBeCloseTo(33.8);
   });
 });
 
@@ -386,20 +386,20 @@ describe('ActionSheet picker lane', () => {
 
   const lefts = () => [...document.querySelectorAll('[data-vstyle]')].map((d) => JSON.parse(d.getAttribute('data-vstyle') ?? 'null')).filter((st) => st && st.marginLeft !== undefined).map((st) => st.marginLeft);
 
-  it('starts the divider at the text edge of a picker', () => {
+  it('parts groups with 8 pt of space instead of a rule', () => {
     render(<ActionSheet open onClose={() => {}} actions={[{ id: 'a', label: 'doc', selected: true }, { divider: true }, { id: 'b', label: 'abby' }]} />);
-    expect(lefts()).toEqual([42]);
+    expect(lefts()).toEqual([]);
+    const gap = document.querySelector('[testid="action-group-gap"]');
+    expect(JSON.parse(gap.getAttribute('data-vstyle'))).toEqual({ height: 8 });
+    expect(vstyles(document.body)).not.toContain('"height":0.5');
   });
 
-  it('keeps the icon lane for a menu', () => {
-    render(<ActionSheet open onClose={() => {}} actions={[{ id: 'a', label: 'doc' }, { divider: true }]} />);
-    expect(lefts()).toEqual([52]);
-  });
-
-  it('uses a 12 gap between the dot slot and the text', () => {
+  it('presses a row with the selected fill at the control corner inside an 8 pt gutter, text still 16 in', () => {
     render(<ActionSheet open onClose={() => {}} actions={[{ id: 'a', label: 'doc', selected: true }]} />);
     const tap = JSON.parse(screen.getByRole('button', { name: 'doc' }).getAttribute('data-tap'));
-    expect([tap.gap, tap.paddingHorizontal]).toEqual([12, 16]);
+    expect([tap.gap, tap.marginHorizontal, tap.paddingHorizontal, tap.borderRadius]).toEqual([12, 8, 8, radii.control]);
+    expect(tap.marginHorizontal + tap.paddingHorizontal).toBe(16);
+    expect(tap.backgroundColor).toBe('#eee');
   });
 });
 

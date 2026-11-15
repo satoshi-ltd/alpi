@@ -27,7 +27,7 @@ export default function ToolsRoute() {
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-      <PanelHeader profile={id} section="TOOLS" count={rows.length} onBack={goBack} />
+      <PanelHeader profile={id} section="Tools" count={rows.length} onBack={goBack} />
       {wide ? (
         <MasterDetail
           list={<ToolsList profile={id} selectedName={selected} onOpen={(t) => setPicked(t.name)} />}

@@ -31,7 +31,7 @@ export default function ActivityScreen() {
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-      <ScreenHeader title="Activity" subtitle="ACROSS PROFILES" onBack={goBack} />
+      <ScreenHeader title="Activity" subtitle="Across profiles" onBack={goBack} />
       {loadError ? (
         <LoadFailed label="activity" error={loadError} onRetry={refresh} />
       ) : (

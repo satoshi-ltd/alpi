@@ -183,6 +183,14 @@ describe("useChatStream live frames", () => {
     expect(turnOf(result).ended).toBe(true);
   });
 
+  it("marks a turn the user cancelled as interrupted so it never reads as done", async () => {
+    const { result } = mount();
+    await waitForListen();
+    seedTurn(result, { sessionId: "sess-1" });
+    emit({ kind: "interrupted" });
+    expect(turnOf(result).interrupted).toBe(true);
+  });
+
   it("drops frames whose request_id is not a tracked turn (interrupted/stale)", async () => {
     const { result } = mount();
     await waitForListen();

@@ -6,12 +6,15 @@ import {
   useProfileDetail,
   invalidateProfileDetailCache,
   _clearProfileDetailCache,
+  _profileDetailInflightSinceKeys,
 } from "./useProfileDetail.js";
 import { _resetDaemonBus } from "../lib/daemon-bus.js";
+import { _resetProfileEdits, applyEdits, beginEdit, confirmEdit } from "../lib/optimisticProfiles.js";
 
 let daemonEventListener;
 
 beforeEach(() => {
+  _resetProfileEdits();
   _clearProfileDetailCache();
   _resetDaemonBus();
   vi.resetAllMocks();
@@ -152,6 +155,45 @@ describe("useProfileDetail", () => {
     expect(b.result.current.detail).toEqual({ peers: ["bob"] });
   });
 
+  it("forgets each fetch's start clock once it settles or its connection is invalidated", async () => {
+    let finishB;
+    invoke
+      .mockResolvedValueOnce({ peers: [] })
+      .mockRejectedValueOnce(new Error("down"))
+      .mockReturnValueOnce(new Promise((r) => { finishB = r; }))
+      .mockReturnValueOnce(new Promise(() => {}));
+    renderHook(() => useProfileDetail("conn-a", "doc"));
+    renderHook(() => useProfileDetail("conn-a", "mirai"));
+    await waitFor(() => expect(invoke).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(_profileDetailInflightSinceKeys()).toEqual([]));
+    renderHook(() => useProfileDetail("conn-b", "doc"));
+    renderHook(() => useProfileDetail("conn-c", "doc"));
+    await waitFor(() => expect(invoke).toHaveBeenCalledTimes(4));
+    expect(_profileDetailInflightSinceKeys().sort()).toEqual(["conn-b|doc", "conn-c|doc"]);
+    invalidateProfileDetailCache("conn-c");
+    expect(_profileDetailInflightSinceKeys()).toEqual(["conn-b|doc"]);
+    await act(async () => { finishB({}); });
+    expect(_profileDetailInflightSinceKeys()).toEqual([]);
+    renderHook(() => useProfileDetail("conn-d", "doc"));
+    expect(_profileDetailInflightSinceKeys()).toEqual(["conn-d|doc"]);
+    _clearProfileDetailCache();
+    expect(_profileDetailInflightSinceKeys()).toEqual([]);
+  });
+
+  it("a superseded fetch settling late never forgets the newer fetch for the same key", async () => {
+    let finishOld;
+    invoke
+      .mockReturnValueOnce(new Promise((r) => { finishOld = r; }))
+      .mockReturnValueOnce(new Promise(() => {}));
+    renderHook(() => useProfileDetail("conn-e", "doc"));
+    await waitFor(() => expect(invoke).toHaveBeenCalledTimes(1));
+    invalidateProfileDetailCache("conn-e");
+    renderHook(() => useProfileDetail("conn-e", "doc"));
+    await waitFor(() => expect(invoke).toHaveBeenCalledTimes(2));
+    await act(async () => { finishOld({}); });
+    expect(_profileDetailInflightSinceKeys()).toEqual(["conn-e|doc"]);
+  });
+
   it("refresh() forces a refetch and updates the cached detail", async () => {
     invoke
       .mockResolvedValueOnce({ peers: ["alice"] })
@@ -164,6 +206,23 @@ describe("useProfileDetail", () => {
     await waitFor(() => {
       expect(result.current.detail).toEqual({ peers: ["alice", "bob"] });
     });
+  });
+
+  it("refresh() after a confirmed edit reads again instead of joining a read that started before it", async () => {
+    const reads = [];
+    invoke.mockImplementation(() => new Promise((resolve) => reads.push(resolve)));
+    const { result } = renderHook(() => useProfileDetail("conn-a", "doc"));
+    await waitFor(() => expect(reads).toHaveLength(1));
+    confirmEdit(beginEdit("conn-a", "doc", { vision_model: "x/y" }));
+    const vision = () => applyEdits({ name: "doc", vision_model: "old" }, "conn-a").vision_model;
+    let refreshed;
+    act(() => { refreshed = result.current.refresh(); });
+    await act(async () => reads[0]({ vision_model: "old" }));
+    expect(vision()).toBe("x/y");
+    await waitFor(() => expect(reads).toHaveLength(2));
+    await act(async () => { reads[1]({ vision_model: "x/y" }); await refreshed; });
+    expect(vision()).toBe("old");
+    expect(result.current.detail).toEqual({ vision_model: "x/y" });
   });
 
   it("falls back to {} (not null) when invoke rejects, so consumers stop spinning", async () => {

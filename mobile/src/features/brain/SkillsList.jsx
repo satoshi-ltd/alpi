@@ -1,11 +1,12 @@
 
-import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, View } from 'react-native';
 import { space } from '../../theme/tokens';
 
-import { Dot } from '../../components/Dot';
 import { useAttention } from '../../hooks/useAttention';
 import { skillItem, skillWord } from '../../../../common/attention.mjs';
 import { Row, RowGroup, RowSeparator, SectionHeader } from '../../components/Row';
+import { PanelRow } from '../../components/PanelRow';
+import { skillMeta } from '../../../../common/panelRow.mjs';
 import { useSkills } from '../../hooks/useDaemonData';
 import { usePullRefresh } from '../../hooks/usePullRefresh';
 import { useTheme } from '../../theme/ThemeContext';
@@ -47,8 +48,13 @@ export function groupSkills(skillList, att) {
   return { rows, needs, groups, categoryOrder, ordered };
 }
 
+function SkillRow({ skill, selected, onPress }) {
+  const { meta, tone } = skillMeta(skill, skill.flag ? skillWord(skill.flag) : null);
+  return <PanelRow title={skill.name} sub={skill.description || null} meta={meta} metaTone={tone} off={!!skill.status && skill.status !== 'active'} selected={selected} onPress={onPress} />;
+}
+
 export function SkillsList({ profile: id, selectedKey = null, onOpen }) {
-  const { colors, fonts, fontSizes } = useTheme();
+  const { colors } = useTheme();
   const pull = usePullRefresh(() => skills.refresh?.());
   const skills = useSkills(id);
   const { att } = useAttention(id);
@@ -76,40 +82,7 @@ export function SkillsList({ profile: id, selectedKey = null, onOpen }) {
                 {list.map((s, i) => (
                   <View key={s.path ?? `${s.category}/${s.name}/${i}`}>
                     {i > 0 ? <RowSeparator /> : null}
-                    <Pressable
-                      onPress={() => onOpen(s)}
-                      accessibilityRole="button"
-                      android_ripple={{ color: colors.selected }}
-                      style={({ pressed }) => ({
-                        minHeight: 44,
-                        paddingHorizontal: space.s7,
-                        paddingVertical: space.s6,
-                        gap: space.s1,
-                        backgroundColor: pressed || skillKey(s) === selectedKey ? colors.selected : 'transparent',
-                      })}
-                    >
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
-                        {s.flag ? <Dot color={colors.danger} /> : null}
-                        <Text style={{ flex: 1, fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.ink }} numberOfLines={1}>
-                          {s.name}
-                        </Text>
-                        {s.flag ? (
-                          <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.dangerText }}>{skillWord(s.flag)}</Text>
-                        ) : s.status && s.status !== 'active' ? (
-                          <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: s.status === 'invalid' ? colors.dangerText : colors.ink3 }}>
-                            {s.status}
-                          </Text>
-                        ) : null}
-                      </View>
-                      {s.description ? (
-                        <Text
-                          numberOfLines={2}
-                          style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}
-                        >
-                          {s.description}
-                        </Text>
-                      ) : null}
-                    </Pressable>
+                    <SkillRow skill={s} selected={skillKey(s) === selectedKey} onPress={() => onOpen(s)} />
                   </View>
                 ))}
               </RowGroup>

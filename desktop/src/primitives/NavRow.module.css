@@ -3,14 +3,14 @@
   align-items: center;
   gap: var(--sp-8);
   width: 100%;
-  height: var(--ctl-28);
+  height: var(--ctl-32);
   padding: 0 var(--sp-12);
-  border-radius: var(--r-xs);
+  border-radius: var(--r-control);
   background: transparent;
   text-align: left;
   font-size: var(--text-ui);
   color: var(--ink);
-  transition: background var(--dur-1) var(--ease);
+  transition: background-color var(--state-out);
   min-width: 0;
 }
 
@@ -53,7 +53,7 @@
 }
 
 .hash {
-  font-size: var(--text-ui);
+  font-size: var(--text-mono-ui);
   font-family: var(--font-mono);
   color: var(--ink-3);
   flex-shrink: 0;

@@ -73,27 +73,35 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('job list', () => {
-  it('puts the last result under every job, with the failure reason on one line', () => {
+  it('draws two lines like the other panels: no last-result line, a failed job says so as its meta', () => {
     mount();
-    expect(screen.getByText('ran 2d ago')).toBeTruthy();
-    expect(screen.getByText('failed 1h ago · timed out while reading')).toBeTruthy();
-    expect(screen.getByText('never run')).toBeTruthy();
+    expect(screen.queryByText('ran 2d ago')).toBeNull();
+    expect(screen.queryByText(/timed out/)).toBeNull();
+    expect(screen.queryByText('never run')).toBeNull();
+    const failed = screen.getByLabelText(/^Daily review digest,/);
+    expect([...failed.querySelectorAll('span')].map((n) => n.textContent)).toEqual(['Daily review digest', 'failed']);
+    expect(screen.getByLabelText(/^Weekly listing refresh,/).textContent).toBe('Weekly listing refreshin 20hCompares every listing');
   });
 
-  it('marks a running job with a pulsing dot and the time it started', () => {
+  it('marks a running job with the word as its meta, never a leading dot', () => {
     h.activity = { running: [{ kind: 'turn', profile: 'scout', job_id: 'a', started_at: NOW / 1000 - 90, source: 'schedule' }] };
     mount();
     const row = screen.getByLabelText(/^Weekly listing refresh,/);
     expect(row.getAttribute('aria-label')).toMatch(/, running$/);
-    expect(row.querySelector('[data-pulse="true"]')).toBeTruthy();
-    expect([...row.querySelectorAll('span')].map((n) => n.textContent)).toEqual(['Weekly listing refresh', 'running', 'Compares every listing', expect.stringMatching(/^started \d{2}:\d{2}$/)]);
-    expect(document.querySelectorAll('[data-pulse="true"]').length).toBe(1);
+    expect([...row.querySelectorAll('span')].map((n) => n.textContent)).toEqual(['Weekly listing refresh', 'running', 'Compares every listing']);
+    expect(document.querySelectorAll('[data-dot]').length).toBe(0);
+  });
+
+  it('starts every row with its title, the state left to the section and the trailing word', () => {
+    mount();
+    expect(document.querySelectorAll('[data-dot]').length).toBe(0);
+    expect(screen.getByLabelText(/^Nudge,/).textContent).toMatch(/^Nudgepaused/);
   });
 
   it('ignores a run of another profile', () => {
     h.activity = { running: [{ kind: 'turn', profile: 'other', job_id: 'a', started_at: NOW / 1000 - 5, source: 'schedule' }] };
     mount();
-    expect(document.querySelectorAll('[data-pulse="true"]').length).toBe(0);
+    expect(screen.getByLabelText(/^Weekly listing refresh,/).getAttribute('aria-label')).not.toMatch(/running/);
   });
 
   it('filters on the title, the description, the prompt, the id and what it says about when', () => {

@@ -33,8 +33,8 @@ describe('readable text ink', () => {
 
 describe('rows say they are buttons', () => {
   it.each([
-    'features/brain/ToolsList.jsx',
-    'features/brain/SkillsList.jsx',
+    'components/PanelRow.jsx',
+    'components/DetailHead.jsx',
     'features/sheets/TasksSheet.jsx',
     '../app/profile/[id]/email/index.jsx',
     '../app/profile/[id]/email/[aid].jsx',
@@ -81,5 +81,26 @@ describe('toast levels at call sites', () => {
   it('leaves no numeric duration on a toast call outside the chat screens', () => {
     const files = ['features/settings/SettingsBody.jsx', 'features/sheets/EditBudgetSheet.jsx', 'features/sheets/CreateProfileSheet.jsx', 'features/shell/useActivityActions.js', 'hooks/usePullRefresh.js'];
     for (const path of files) expect(read(path)).not.toMatch(/duration: \d+/);
+  });
+});
+
+describe('panel rows start with their name', () => {
+  it.each(['features/brain/SkillsList.jsx', 'features/brain/MemoryList.jsx', 'features/schedule/JobList.jsx'])('%s draws no leading dot', (path) => {
+    const src = read(path);
+    expect(src).not.toMatch(/<Dot\b/);
+    expect(src).not.toMatch(/marginLeft: space\./);
+  });
+
+  it.each(['features/brain/SkillsList.jsx', 'features/brain/ToolsList.jsx', 'features/brain/MemoryList.jsx', 'features/schedule/JobList.jsx'])('%s draws its rows with the shared panel row', (path) => {
+    const src = read(path);
+    expect(src).toMatch(/<PanelRow\b/);
+    expect(src).not.toMatch(/<Pressable\b|code\(fonts|<Pill\b|opacity:/);
+  });
+
+  it.each(['features/schedule/JobDetail.jsx', 'features/brain/SkillDetail.jsx', 'features/brain/ToolDetail.jsx', 'features/brain/MemoryDetail.jsx'])('%s heads the page with the shared header and states its facts in the shared table', (path) => {
+    const src = read(path);
+    expect(src).toMatch(/<DetailHead\b/);
+    expect(src).toMatch(/<FactTable\b/);
+    expect(src).not.toMatch(/<StatusWord\b|detailTitleStyle/);
   });
 });

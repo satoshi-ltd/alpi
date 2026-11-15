@@ -5,22 +5,25 @@ vi.mock("../theme/ThemeContext", () => ({ useTheme: () => ({ colors: { accent: "
 
 import { EndpointContext } from "../lib/EndpointContext";
 import { _resetDaemonDataCache, useProfileMemory, useProfileSnapshot, useProfileSummaries } from "./useDaemonData";
+import { _resetProfileEdits, applyEdits, beginEdit, confirmEdit } from "../lib/optimisticProfiles";
 
 beforeEach(() => {
   _resetDaemonDataCache();
 });
 
 describe("useProfileSummaries and the default profile", () => {
-  it("shows the default profile as the alpaca even when an older daemon reports a diamond", async () => {
-    const call = vi.fn(async () => ({ profiles: [{ name: "default", is_default: true, fold: "diamond", accent: null }, { name: "doc", fold: "shield", accent: "#3899e2" }] }));
+  it("shows the default profile as the brand mark whatever shape it reports and never reads a fold", async () => {
+    const call = vi.fn(async () => ({ profiles: [{ name: "default", is_default: true, shape: "round", accent: null }, { name: "doc", fold: "shield", accent: "#3899e2" }, { name: "lab", shape: "pill", accent: "#2cb3b5" }] }));
     const wrapper = ({ children }) => (
       <EndpointContext.Provider value={{ endpoint: { id: "old", name: "old" }, call }}>{children}</EndpointContext.Provider>
     );
     const { result } = renderHook(() => useProfileSummaries(), { wrapper });
-    await waitFor(() => expect(result.current.data?.profiles).toHaveLength(2));
-    const [alpi, doc] = result.current.data.profiles;
-    expect(alpi).toMatchObject({ fold: "alpaca", accent: "#14110c" });
-    expect(doc).toMatchObject({ fold: "shield", accent: "#3899e2" });
+    await waitFor(() => expect(result.current.data?.profiles).toHaveLength(3));
+    const [alpi, doc, lab] = result.current.data.profiles;
+    expect(alpi).toMatchObject({ shape: "twin", accent: "#14110c" });
+    expect(doc).toMatchObject({ accent: "#3899e2" });
+    expect(doc.shape).toBeUndefined();
+    expect(lab).toMatchObject({ shape: "pill", accent: "#2cb3b5" });
   });
 
   it("returns the same data reference across renders while the snapshot is unchanged", async () => {
@@ -33,6 +36,45 @@ describe("useProfileSummaries and the default profile", () => {
     const first = result.current.data;
     rerender();
     expect(result.current.data).toBe(first);
+  });
+});
+
+describe("a landed read releases the confirmed choices it carries", () => {
+  beforeEach(() => _resetProfileEdits());
+  const mountOn = (hook, call) => {
+    const wrapper = ({ children }) => (
+      <EndpointContext.Provider value={{ endpoint: { id: "ep", name: "ep" }, call }}>{children}</EndpointContext.Provider>
+    );
+    return renderHook(hook, { wrapper });
+  };
+
+  it("a summaries read started after the confirmation shows the daemon's value", async () => {
+    const ticket = beginEdit("ep", "doc", { shape: "heart" });
+    confirmEdit(ticket);
+    const call = vi.fn(async () => ({ profiles: [{ name: "doc", shape: "cloud", accent: "#3899e2" }] }));
+    const { result } = mountOn(() => useProfileSummaries(), call);
+    await waitFor(() => expect(result.current.data?.profiles?.[0]?.shape).toBe("cloud"));
+  });
+
+  it("a summaries read keeps a choice still pending", async () => {
+    beginEdit("ep", "doc", { shape: "heart" });
+    const call = vi.fn(async () => ({ profiles: [{ name: "doc", shape: "cloud", accent: "#3899e2" }] }));
+    const { result } = mountOn(() => useProfileSummaries(), call);
+    await waitFor(() => expect(result.current.data?.profiles).toHaveLength(1));
+    expect(result.current.data.profiles[0].shape).toBe("heart");
+  });
+
+  it("a snapshot read releases the detail-only fields only", async () => {
+    const tier = beginEdit("ep", "doc", { "tiers.fast.model": "m/a" });
+    const shape = beginEdit("ep", "doc", { shape: "heart" });
+    confirmEdit(tier);
+    confirmEdit(shape);
+    const call = vi.fn(async () => ({ detail: { name: "doc", shape: "cloud", tiers: { fast: { model: "m/z" } } } }));
+    const { result } = mountOn(() => useProfileSnapshot("doc"), call);
+    await waitFor(() => expect(result.current.data?.detail).toBeTruthy());
+    const shown = applyEdits({ name: "doc", shape: "cloud", tiers: { fast: { model: "m/z" } } }, "ep");
+    expect(shown.tiers.fast.model).toBe("m/z");
+    expect(shown.shape).toBe("heart");
   });
 });
 

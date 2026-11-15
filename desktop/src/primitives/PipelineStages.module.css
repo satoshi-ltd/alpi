@@ -10,11 +10,11 @@
   display: inline-flex;
   align-items: center;
   gap: var(--sp-4);
-  height: var(--ctl-24);
+  height: var(--ctl-32);
   padding: 0 var(--sp-8);
-  border-radius: var(--r-tag);
+  border-radius: var(--r-pill);
   background: var(--hover);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   color: var(--ink-2);
   white-space: nowrap;
@@ -22,7 +22,7 @@
 
 .ghost {
   display: inline-flex;
-  height: var(--ctl-24);
+  height: var(--ctl-32);
 }
 
 .slug {
@@ -66,7 +66,7 @@
 }
 
 .button:hover {
-  box-shadow: inset 0 0 0 1px var(--focus-border);
+  background-image: linear-gradient(var(--hover), var(--hover));
 }
 
 .row :global(.ds-tip):focus-within > :global(.ds-tip-body) {
@@ -75,8 +75,8 @@
 }
 
 .button:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring), inset 0 0 0 1px var(--focus-border);
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-outline-offset);
 }
 
 .handoff {

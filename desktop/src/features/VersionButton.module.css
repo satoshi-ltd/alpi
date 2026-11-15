@@ -8,11 +8,11 @@
   align-items: center;
   justify-content: flex-end;
   width: 100%;
-  height: var(--ctl-24);
+  height: var(--ctl-32);
   font-size: var(--text-meta);
   line-height: var(--lh-tight);
-  padding: 0 calc((var(--ctl-24) - var(--icon-sm)) / 2) 0 0;
-  border-radius: var(--r-xs);
+  padding: 0 calc((var(--ctl-32) - var(--icon-sm)) / 2) 0 0;
+  border-radius: var(--r-control);
   background: transparent;
   border: 0;
   cursor: pointer;
@@ -42,7 +42,7 @@
   right: 0;
   width: var(--pop-xs);
   background: var(--bg-elev);
-  border-radius: var(--r-xs);
+  border-radius: var(--r-surface);
   box-shadow: var(--shadow-edge-sm);
   z-index: var(--z-panel);
 }

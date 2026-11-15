@@ -55,15 +55,6 @@ export function dayLabel(sec, nowSec) {
 
 const oneLine = (text) => String(text ?? '').replace(/\s+/g, ' ').trim();
 
-export function lastResultLine(job, startedClock = null) {
-  if (startedClock) return `started ${startedClock}`;
-  if (job?.last_run_status !== 'error') return formatLastRun(job?.last_run_at, job?.last_run_status);
-  const ms = Date.parse(job.last_run_at ?? '');
-  const rel = Number.isNaN(ms) ? '' : formatRelative(ms / 1000);
-  const message = oneLine(job.last_run_message);
-  return `${['failed', rel].filter(Boolean).join(' ')}${message ? ` · ${message}` : ''}`;
-}
-
 export function jobMatches(job, query, whenText = '') {
   const needle = oneLine(query).toLowerCase();
   if (!needle) return true;

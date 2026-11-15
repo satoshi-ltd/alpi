@@ -23,13 +23,13 @@ vi.mock('./Eyebrow', () => ({ Eyebrow: ({ children }) => React.createElement('sp
 vi.mock('../theme/ThemeContext', () => ({
   useTheme: () => ({
     mode: h.mode,
-    colors: { ink: '#000', ink3: '#666', ink4: '#999', danger: '#f00', bgPane: '#151515', card: '#f4f4f4', line: '#ddd', selected: '#eee' },
+    colors: { ink: '#000', ink3: '#666', ink4: '#999', danger: '#f00', bgPane: '#151515', card: '#f4f4f4', line: '#ddd', selected: '#eee', pressed: '#e0e0e0' },
     fonts: { sans: { regular: 'r', medium: 'm', semibold: 's' }, mono: 'mono', monoSemibold: 'ms' },
     fontSizes: { xs: 11, sm: 12, md: 14, lg: 15 },
   }),
 }));
 
-const { Row, RowGroup, RowSeparator, SectionHeader, SettingsBand, groupTone } = await import('./Row');
+const { Row, RowGroup, RowSeparator, SectionHeader, SettingsBand, TILE_GAP, groupTone } = await import('./Row');
 const { useGroundTone } = await import('./groupTone');
 const { UsageChart } = await import('./UsageChart');
 const { toUsageDays } = await import('../../../common/usage.mjs');
@@ -45,12 +45,36 @@ afterEach(() => {
 });
 
 describe('RowGroup', () => {
-  it.each([['light', '#f4f4f4'], ['dark', '#f4f4f4']])('draws the %s group one tone off the ground with 4 pt corners', (mode, tone) => {
+  it.each([['light', '#f4f4f4'], ['dark', '#f4f4f4']])('draws the %s group as one fill card at the 20 pt surface corner, rows parted by nothing but their padding', (mode, tone) => {
     h.mode = mode;
-    const { container } = render(<RowGroup><Row label="Model" /></RowGroup>);
+    const { container } = render(<RowGroup><Row label="Model" /><Row label="Effort" /></RowGroup>);
     const group = styleOf(container.firstChild);
-    expect(group).toMatchObject({ backgroundColor: tone, borderRadius: 4, overflow: 'hidden', marginHorizontal: 16 });
+    expect(group).toMatchObject({ borderRadius: 20, overflow: 'hidden', marginHorizontal: 16, gap: TILE_GAP });
+    expect(TILE_GAP).toBe(0);
+    expect(group.backgroundColor).toBeUndefined();
+    const tiles = [...container.firstChild.children].map(styleOf);
+    expect(tiles).toHaveLength(2);
+    for (const tile of tiles) expect(tile).toEqual({ backgroundColor: tone });
     expect(groupTone({ card: '#f4f4f4' })).toBe(tone);
+  });
+
+  it('drops separators and unwraps fragments so every row is its own tile with no hairline', () => {
+    const { container } = render(
+      <RowGroup>
+        <Row label="A" />
+        <RowSeparator />
+        <>
+          <Row label="B" />
+          <RowSeparator />
+          <Row label="C" />
+        </>
+        {null}
+      </RowGroup>,
+    );
+    expect(container.firstChild.children).toHaveLength(3);
+    const styles = [...container.querySelectorAll('[data-style]')].map(styleOf);
+    expect(styles.some((x) => x.height === 0.5)).toBe(false);
+    expect(styles.some((x) => x.backgroundColor === '#ddd')).toBe(false);
   });
 
   it('hands its tone to whatever mixes against the ground inside it', () => {
@@ -102,7 +126,8 @@ describe('phone rows inside a group', () => {
     expect(row.backgroundColor).toBeUndefined();
     expect(row.marginHorizontal).toBeUndefined();
     expect(row.paddingHorizontal).toBe(16);
-    expect(styles.find((s) => s.height === 0.5)).toEqual({ height: 0.5, backgroundColor: '#ddd', marginLeft: 16 });
+    expect(styles.find((s) => s.height === TILE_GAP)).toEqual({ height: TILE_GAP });
+    expect(styles.some((s) => s.height === 0.5)).toBe(false);
     expect(styles.find((s) => s.paddingVertical === 16).backgroundColor).toBeUndefined();
   });
 
@@ -110,8 +135,8 @@ describe('phone rows inside a group', () => {
     const { container } = render(<RowGroup><Row label="Model" onPress={() => {}} /></RowGroup>);
     const button = container.querySelector('button');
     expect(JSON.parse(button.dataset.idle).backgroundColor).toBe('transparent');
-    expect(JSON.parse(button.dataset.pressed).backgroundColor).toBe('#eee');
-    expect(button.parentElement).toBe(container.firstChild);
+    expect(JSON.parse(button.dataset.pressed).backgroundColor).toBe('#e0e0e0');
+    expect(button.parentElement).toBe(container.firstChild.firstChild);
     expect(styleOf(button.firstChild).backgroundColor).toBeUndefined();
   });
 

@@ -50,8 +50,8 @@ vi.mock('expo-router', () => ({
   useFocusEffect: () => {},
 }));
 vi.mock('../src/components/ScreenHeader', () => ({ ScreenHeader: ({ title }) => React.createElement('h1', {}, title) }));
-vi.mock('../src/hooks/useDaemonData', () => ({ useProfileSummaries: () => ({ data: { profiles: [{ name: 'doc', fold: 'heart', accent: '#f36a8a' }] } }) }));
-vi.mock('../src/components/Fold', () => ({ Fold: ({ fold, pulse }) => React.createElement('i', { 'data-fold': fold ?? 'none', 'data-pulse': String(!!pulse) }) }));
+vi.mock('../src/hooks/useDaemonData', () => ({ useProfileSummaries: () => ({ data: { profiles: [{ name: 'doc', shape: 'heart', accent: '#f36a8a' }] } }) }));
+vi.mock('../src/components/Fold', () => ({ Fold: ({ shape, pulse, color }) => React.createElement('i', { 'data-shape': shape ?? 'none', 'data-pulse': String(!!pulse), 'data-color': color ?? 'none' }) }));
 vi.mock('../src/components/Icon', () => ({ Icon: ({ name }) => React.createElement('i', { 'data-icon': name }) }));
 vi.mock('../src/components/Eyebrow', () => ({ Eyebrow: ({ children }) => React.createElement('h2', {}, children) }));
 vi.mock('../src/lib/EndpointContext', () => ({ useEndpoint: () => ({ call: h.call, endpoint: { id: h.endpointId } }) }));
@@ -292,9 +292,9 @@ describe('activity screen', () => {
 
   it('leads each row with the profile object, the workgroup with its honeycomb rippling while it runs', () => {
     render(<ActivityScreen />);
-    const folds = [...document.querySelectorAll('[data-fold]')];
-    expect(folds.some((n) => n.getAttribute('data-fold') === 'heart' && n.getAttribute('data-pulse') === 'false')).toBe(true);
-    expect(folds.some((n) => n.getAttribute('data-fold') === 'honeycomb' && n.getAttribute('data-pulse') === 'true')).toBe(true);
+    const folds = [...document.querySelectorAll('[data-shape]')];
+    expect(folds.some((n) => n.getAttribute('data-shape') === 'heart' && n.getAttribute('data-pulse') === 'false')).toBe(true);
+    expect(folds.some((n) => n.getAttribute('data-shape') === 'honeycomb' && n.getAttribute('data-pulse') === 'true')).toBe(true);
   });
 
   it('opens the approval sheet and the question sheet from a needs-you row', () => {
@@ -312,6 +312,16 @@ describe('activity screen', () => {
     expect(h.push).toHaveBeenCalledWith('/chat/alpi?sid=s%201');
     fireEvent.click(screen.getByLabelText(/^launch-crew · #analyze, phase 2 of 4/));
     expect(h.push).toHaveBeenLastCalledWith('/wg/launch-crew');
+  });
+
+  it("lights a workgroup row in its hub's colour, never the local member's, and neutral when the hub is not here", () => {
+    const wg = (name, profile, hub) => ({ kind: 'workgroup', profile, workgroup_id: name, hub_id: hub, name, phases_done: 0, phases_total: 2 });
+    h.activity = state({ needsYou: [], scheduled: [], running: [wg('joined', 'alice', 'doc'), wg('member', 'doc', 'remote-hub'), wg('legacy', 'doc', undefined)] });
+    render(<ActivityScreen />);
+    const colour = (name) => screen.getByLabelText(new RegExp(`^${name}, phase`)).querySelector('[data-shape]').dataset.color;
+    expect(colour('joined')).toBe('#f36a8a');
+    expect(colour('member')).toBe('none');
+    expect(colour('legacy')).toBe('none');
   });
 
   it('opens an upcoming job on its page', () => {

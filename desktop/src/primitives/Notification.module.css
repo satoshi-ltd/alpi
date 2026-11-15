@@ -13,21 +13,23 @@
 .toast {
   display: inline-flex;
   align-items: center;
-  gap: var(--sp-8);
-  padding: var(--toast-pad);
-  background: var(--bg-elev);
+  gap: var(--sp-12);
+  min-height: var(--ctl-48);
+  box-sizing: border-box;
+  padding: var(--sp-8) var(--sp-8) var(--sp-8) var(--sp-16);
+  background: var(--raised);
   border: 0;
-  border-radius: var(--r-xs);
-  box-shadow: var(--shadow-edge-sm);
+  border-radius: var(--r-surface);
+  box-shadow: var(--shadow-float);
   font-size: var(--text-ui);
-  color: var(--ink-2);
+  color: var(--ink);
   pointer-events: auto;
   width: max-content;
   max-width: min(380px, 100%);
 }
 
 .toastWithAction {
-  padding: var(--toast-pad);
+  padding: var(--sp-8) var(--sp-8) var(--sp-8) var(--sp-16);
 }
 
 .dot {
@@ -42,7 +44,7 @@
 }
 
 .text {
-  line-height: var(--sp-16);
+  line-height: var(--lh-ui);
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -53,20 +55,21 @@
 .divider {
   width: 1px;
   height: 14px;
-  background: var(--line-2);
+  background: none;
   margin: 0 2px;
 }
 
 .actionBtn {
-  padding: var(--sp-4) var(--sp-12);
-  border-radius: var(--r-xs);
+  height: var(--ctl-32);
+  padding: 0 var(--sp-12);
+  border-radius: var(--r-pill);
   background: transparent;
   color: var(--ink);
-  font-size: var(--text-meta);
+  font-size: var(--text-small);
   font-weight: var(--fw-medium);
   border: 0;
   cursor: pointer;
-  transition: background var(--dur-1) var(--ease);
+  transition: background-color var(--state-out);
 }
 
 .closeBtn {
@@ -74,18 +77,20 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: var(--ctl-28);
-  height: var(--ctl-28);
+  width: var(--ctl-32);
+  height: var(--ctl-32);
   border: 0;
-  border-radius: var(--r-xs);
+  border-radius: var(--r-pill);
   background: transparent;
   color: var(--ink-3);
   cursor: pointer;
+  transition: background-color var(--state-out);
 }
 
 .closeBtn:hover {
   background: var(--hover);
   color: var(--ink);
+  transition: background-color var(--state-in);
 }
 
 .actionBtn {
@@ -95,6 +100,7 @@
 
 .actionBtn:hover {
   background: var(--hover);
+  transition: background-color var(--state-in);
 }
 
 @keyframes notifDotPulse {

@@ -11,7 +11,7 @@ export function SettingsSkeleton({ wide = false }) {
       {ROWS.map((helper, i) => (
         <View key={helper} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.s5 }}>
           <SkeletonBar width={helper} height={10} delay={i * STAGGER_MS} />
-          <SkeletonBar width={64} height={14} radius={radii.tag} delay={i * STAGGER_MS} />
+          <SkeletonBar width={64} height={14} radius={radii.xs} delay={i * STAGGER_MS} />
         </View>
       ))}
     </View>

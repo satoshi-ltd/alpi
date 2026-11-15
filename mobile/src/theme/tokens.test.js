@@ -1,7 +1,7 @@
-import { BRAND_INK } from '../../../common/folds.mjs';
+import { BRAND_INK } from '../../../common/shapes.mjs';
 import { describe, expect, it } from 'vitest';
 
-import { PALETTE_OVERRIDES, palettes, shadows } from './tokens';
+import { floatShadow, palettes, shadows, veils } from './tokens';
 
 const MODES = ['light', 'dark'];
 
@@ -93,58 +93,54 @@ describe('accent', () => {
 describe('neutral greys on the phone', () => {
   const grey = (hex) => hex.length === 7 && hex.slice(1, 3) === hex.slice(3, 5) && hex.slice(3, 5) === hex.slice(5, 7);
 
-  it('keeps every palette override and shadow colour an equal-channel grey', () => {
-    for (const [path, [value]] of Object.entries(PALETTE_OVERRIDES)) expect(grey(value), path).toBe(true);
+  it('keeps every surface and shadow colour an equal-channel grey', () => {
+    for (const mode of ['light', 'dark']) for (const key of ['bg', 'bgPane', 'bgSide', 'bgElev', 'fill', 'raised']) expect(grey(palettes[mode][key]), key).toBe(true);
     for (const mode of ['light', 'dark']) {
       for (const level of Object.values(shadows[mode])) expect(grey(level.shadowColor.length === 4 ? `#${[...level.shadowColor.slice(1)].map((c) => c + c).join('')}` : level.shadowColor)).toBe(true);
     }
   });
 });
 
-describe('paper surfaces on the phone', () => {
-  it.each(['light', 'dark'])('makes every %s elevation a hairline seam with no blur', (mode) => {
-    for (const level of Object.values(shadows[mode])) {
-      expect(level.shadowOpacity).toBe(0);
-      expect(level.shadowRadius).toBe(0);
-      expect(level.elevation).toBe(0);
-      expect(level).not.toHaveProperty('shadowOffset');
-    }
-  });
-
-  it.each(['light', 'dark'])('keeps base and sm on the %s hairline lines', (mode) => {
+describe('floating surfaces on the phone', () => {
+  it.each(['light', 'dark'])('leaves base and sm flat with no border in %s, since the phone draws no hairlines', (mode) => {
     for (const name of ['base', 'sm']) {
-      expect(shadows[mode][name].borderWidth).toBe(0.5);
-      expect([palettes[mode].line, palettes[mode].line2]).toContain(shadows[mode][name].borderColor);
-    }
-  });
-
-  it.each(['light', 'dark'])('draws a %s sheet with a 1 pt top edge in the edge ink and no other side', (mode) => {
-    const { sheet } = shadows[mode];
-    expect(sheet.borderTopWidth).toBe(1);
-    expect(sheet.borderWidth).toBe(0);
-    expect(sheet.borderColor).toBe(palettes[mode].edge);
-  });
-
-  it.each(['light', 'dark'])('rings %s dialogs, popovers and toasts with 0.5 pt ink3', (mode) => {
-    for (const name of ['dialog', 'popover', 'toast']) {
-      expect(shadows[mode][name].borderWidth, name).toBe(0.5);
-      expect(shadows[mode][name].borderColor, name).toBe(palettes[mode].ink3);
+      expect(shadows[mode][name].shadowOpacity).toBe(0);
+      expect(shadows[mode][name].borderWidth).toBe(0);
       expect(shadows[mode][name]).not.toHaveProperty('borderTopWidth');
     }
   });
 
-  it.each(['light', 'dark'])('meets 3:1 for the %s ring and sheet edge over the elevated surface', (mode) => {
-    expect(contrast(palettes[mode].ink3, palettes[mode].bgElev)).toBeGreaterThanOrEqual(3);
-    expect(contrast(palettes[mode].edge, palettes[mode].bgElev)).toBeGreaterThanOrEqual(3);
+  it('floats light sheets, dialogs, popovers and toasts on a soft shadow with no edge', () => {
+    expect(floatShadow.light).toMatch(/0 12px 32px/);
+    for (const name of ['sheet', 'dialog', 'popover', 'toast']) {
+      const level = shadows.light[name];
+      expect(level.shadowOpacity, name).toBeCloseTo(0.1);
+      expect(level.shadowRadius, name).toBeGreaterThan(0);
+      expect(level.shadowOffset.height, name).toBe(12);
+      expect(level.borderWidth, name).toBe(0);
+    }
+  });
+
+  it('edges dark floats with the one 1 pt hairline of the board and a deep shadow', () => {
+    expect(floatShadow.dark).toMatch(/0 0 0 1px rgba\(237, 237, 237, 0\.09\)/);
+    for (const name of ['sheet', 'dialog', 'popover', 'toast']) {
+      const level = shadows.dark[name];
+      expect(level.borderWidth, name).toBe(1);
+      expect(level.borderColor, name).toBe('rgba(237,237,237,0.09)');
+      expect(level.shadowOpacity, name).toBeCloseTo(0.55);
+    }
   });
 });
 
 describe('paper dialogs on the phone', () => {
-  it('cuts sheets with the 4 pt corner and veils the screen towards the ground', async () => {
+  it('cuts sheets with the 28 pt sheet corner and dims the screen with the veil', async () => {
     const { radii, veil } = await import('./tokens');
-    expect(radii.sheet).toBeUndefined();
-    expect(radii.xs).toBe(4);
-    for (const mode of ['light', 'dark']) expect(veil(palettes[mode])).toBe(`${palettes[mode].bg}b8`);
+    expect(radii.sheet).toBe(28);
+    expect(radii.xs).toBe(6);
+    expect(veil(palettes.light)).toBe(veils.light);
+    expect(veil(palettes.dark)).toBe(veils.dark);
+    expect(veils.light).toBe('rgba(20, 20, 20, 0.22)');
+    expect(veils.dark).toBe('rgba(0, 0, 0, 0.55)');
   });
 
   it('leaves no dark scrim behind a sheet, a prompt or a confirm', async () => {
@@ -170,5 +166,21 @@ describe('paper dialogs on the phone', () => {
     expect(read('features/chat/MentionPopover.jsx')).toMatch(/\.\.\.shadow\.popover/);
     expect(read('features/chat/JumpToLatest.jsx')).toMatch(/\.\.\.shadow\.popover/);
     expect(shadows.light).not.toHaveProperty('float');
+  });
+
+  it('floats every sheet, dialog, prompt, toast and popover on the raised surface, one step over the fills it covers', async () => {
+    const { readdirSync, readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(dir, e.name)) : /\.jsx$/.test(e.name) && !/\.test\./.test(e.name) ? [join(dir, e.name)] : []));
+    const floats = walk(join(import.meta.dirname, '..')).filter((path) => /shadow\.(dialog|popover|toast|sheet)\b/.test(readFileSync(path, 'utf8')));
+    expect(floats.length).toBeGreaterThanOrEqual(7);
+    for (const path of floats) {
+      const source = readFileSync(path, 'utf8');
+      expect(source, path).toMatch(/colors\.bgElev/);
+      expect(source, path).not.toMatch(/backgroundColor: colors\.bgPane,\s*\n\s*(\.\.\.shadow|borderTopLeftRadius|borderRadius: radii\.sheet)/);
+    }
+    expect(palettes.light.bgElev).toBe(palettes.light.raised);
+    expect(palettes.dark.bgElev).toBe(palettes.dark.raised);
+    expect(luminance(palettes.dark.raised)).toBeGreaterThan(luminance(palettes.dark.fill));
   });
 });

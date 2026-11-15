@@ -18,8 +18,3 @@ export const STATUS_WORDS = ["active", "paused", "attention", "failed"];
 export function statusKind(word) {
   return KIND[word] ?? "paused";
 }
-
-export function statusDot(word) {
-  const kind = statusKind(word);
-  return kind === "active" ? "filled" : kind === "paused" ? "hollow" : "red";
-}

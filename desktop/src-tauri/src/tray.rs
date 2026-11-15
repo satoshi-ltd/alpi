@@ -259,7 +259,18 @@ fn build_menu(app: &AppHandle, s: &TrayState) -> tauri::Result<Menu<tauri::Wry>>
     }
 }
 
+pub fn attaches_native_menu(platform: Platform) -> bool {
+    platform != Platform::Mac
+}
+
+pub fn opens_popover(platform: Platform, button: MouseButton) -> bool {
+    button == MouseButton::Left || (platform == Platform::Mac && button == MouseButton::Right)
+}
+
 fn rebuild_menu(app: &AppHandle) {
+    if !attaches_native_menu(PLATFORM) {
+        return;
+    }
     let snapshot = lock(state());
     if let Ok(menu) = build_menu(app, &snapshot) {
         if let Some(tray) = app.tray_by_id("main") {
@@ -303,14 +314,21 @@ pub fn install(app: &mut App) -> tauri::Result<()> {
     lock(icon_slot()).applied = Some((IconState::Quiet, icon_size(PLATFORM, scale)));
     let icon = Image::from_bytes(icon_bytes(IconState::Quiet, PLATFORM, scale))?;
 
-    TrayIconBuilder::with_id("main")
+    let builder = TrayIconBuilder::with_id("main")
         .icon(icon)
         .icon_as_template(true)
-        .tooltip(tooltip_text(&Facts::default()))
-        .menu(&menu)
-        .show_menu_on_left_click(cfg!(target_os = "linux"))
+        .tooltip(tooltip_text(&Facts::default()));
+    let builder = if attaches_native_menu(PLATFORM) {
+        builder.menu(&menu).show_menu_on_left_click(cfg!(target_os = "linux"))
+    } else {
+        builder
+    };
+    builder
         .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click { button: MouseButton::Left, button_state, position, .. } = event {
+            if let TrayIconEvent::Click { button, button_state, position, .. } = event {
+                if !opens_popover(PLATFORM, button) {
+                    return;
+                }
                 match button_state {
                     MouseButtonState::Down => crate::tray_popover::on_tray_down(tray.app_handle()),
                     MouseButtonState::Up => crate::tray_popover::on_tray_up(tray.app_handle(), (position.x, position.y)),
@@ -485,6 +503,18 @@ mod tests {
     fn an_empty_or_unknown_snapshot_reads_quiet() {
         assert_eq!(tooltip_text(&Facts::default()), "alpi · all quiet");
         assert_eq!(tooltip_text(&facts(json!({"state": "something-new"}))), "alpi · all quiet");
+    }
+
+    #[test]
+    fn macos_keeps_the_status_item_free_of_a_native_menu_so_every_click_reaches_the_popover() {
+        assert!(!attaches_native_menu(Platform::Mac));
+        assert!(attaches_native_menu(Platform::Windows));
+        assert!(attaches_native_menu(Platform::Linux));
+        assert!(opens_popover(Platform::Mac, MouseButton::Left));
+        assert!(opens_popover(Platform::Mac, MouseButton::Right));
+        assert!(opens_popover(Platform::Windows, MouseButton::Left));
+        assert!(!opens_popover(Platform::Windows, MouseButton::Right));
+        assert!(!opens_popover(Platform::Linux, MouseButton::Right));
     }
 
     #[test]

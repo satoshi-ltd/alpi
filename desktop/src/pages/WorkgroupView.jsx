@@ -38,7 +38,9 @@ import {
   saveCachedMessages,
 } from "../lib/workgroup-cache.js";
 import { fetchWorkgroupTranscript } from "../lib/workgroup-fetch.js";
-import { FOLD_SIZES, WORKGROUP_FOLD } from "../../../common/folds.mjs";
+import { WORKGROUP_SHAPE } from "../../../common/shapes.mjs";
+import { MARK_SIZES } from "../../../common/agentMarks.mjs";
+import { pipelineRunMark } from "../../../common/workgroupMarkState.mjs";
 import { chainChips, liveChip, orderedPipelines, phaseCostLine, runChips, runProgress, sameName } from "../../../common/pipelinePhases.mjs";
 import PipelineStages, { PipelinePlaceholder } from "../primitives/PipelineStages.jsx";
 import { WorkgroupChatHeader, TasksButton, Eyebrow, LoadFailed } from "../primitives/index.js";
@@ -203,7 +205,7 @@ export default function WorkgroupView({
   const pendingChain = shownChips != null && shownChips === knownChain;
   const profileOf = (name) => {
     const p = (profiles ?? []).find((x) => sameName(x.name, name));
-    return p ? { fold: p.fold, accent: p.accent } : null;
+    return p ? { shape: p.shape, accent: p.accent } : null;
   };
   const live = liveChip(stripChips);
   const progress = runProgress(run);
@@ -267,6 +269,12 @@ export default function WorkgroupView({
     () => profiles.find((p) => p.name === hubName) ?? null,
     [profiles, hubName],
   );
+  const mark = pipelineRunMark({
+    workgroup,
+    pipelineRun: run,
+    task: activeTask,
+    offline: daemonOffline,
+  });
 
   useEffect(() => {
     setMySeqs(loadMySeqs(connectionId, workgroup.profile, workgroup.id));
@@ -502,7 +510,8 @@ export default function WorkgroupView({
       <WorkgroupChatHeader
         workgroup={workgroup}
         hubAccent={ownerProfile?.accent}
-        hubFold={ownerProfile?.fold}
+        mark={mark}
+        hubShape={ownerProfile?.shape}
         hubName={hubName}
         hubBio={ownerProfile?.bio || ownerProfile?.public_bio}
         memberCount={members.length || workgroup.members || 0}
@@ -583,11 +592,12 @@ export default function WorkgroupView({
         <RefreshBar
           key={refreshBeat}
           active={refreshBeat > 0}
+          color={ownerProfile?.accent ?? null}
         />
         {error && messages === null ? (
           <LoadFailed label="this workgroup" error={error} onRetry={() => setRefreshTick((t) => t + 1)} />
         ) : error ? (
-          <div className={styles.error}>{error}</div>
+          <Banner kind="danger">{error}</Banner>
         ) : null}
         {messages === null && !error && <ChatLoadSkeleton />}
 
@@ -595,7 +605,7 @@ export default function WorkgroupView({
           <>
             {messages.length === 0 && (
               <div className={styles.empty}>
-                <Fold fold={WORKGROUP_FOLD} color={ownerProfile?.accent || "var(--accent)"} size={FOLD_SIZES.hero} />
+                <Fold shape={WORKGROUP_SHAPE} color={ownerProfile?.accent || "var(--accent)"} size={MARK_SIZES.hero} {...mark} seed={workgroup.id} />
                 <div className={styles.emptyHeading}>{EMPTY.posts.title}</div>
                 <div className={styles.emptyModel}>{postsHint(profileLabel(hubName))}</div>
               </div>
@@ -615,7 +625,7 @@ export default function WorkgroupView({
                       isFromHub={Boolean(hubPubkey && m.from_pubkey === hubPubkey)}
                       speakerName={speaker.name}
                       speakerAccent={speaker.accent}
-                      speakerFold={speaker.fold}
+                      speakerShape={speaker.shape}
                       speakerBio={speaker.bio}
                       costTokens={cost?.tokens ?? 0}
                       costUsd={cost?.usd ?? 0}
@@ -645,7 +655,7 @@ export default function WorkgroupView({
         mentions={mentionsForWorkgroup(members, peers, profiles, ownPubkey)}
         hubName={hubName}
         hubAccent={ownerProfile?.accent}
-        hubFold={ownerProfile?.fold}
+        hubShape={ownerProfile?.shape}
         onSend={async (text) => {
           const tempSeq = Date.now();
           const optimistic = {
@@ -736,7 +746,7 @@ function renderWgFooter({
       </Tip>
       <ExportMenu message={exportMessage} accent={exportAccent} className={styles.footerBtn} />
       {stampTs ? (
-        <Mono className={`tnum ${styles.footerTime}`}><RelativeTime ts={stampTs} /></Mono>
+        <span className={`tnum ${styles.footerTime}`}><RelativeTime ts={stampTs} /></span>
       ) : null}
     </>
   );
@@ -755,7 +765,7 @@ function PhaseWho({ name, profileOf, note }) {
   const profile = profileOf(name);
   return (
     <span className={styles.phaseWho}>
-      {profile ? <Fold fold={profile.fold} color={profile.accent} size={13} /> : <Fold fold="diamond" size={13} unfolded />}
+      {profile ? <Fold shape={profile.shape} color={profile.accent} size={13} /> : <Fold shape="diamond" size={13} unfolded />}
       <span className={styles.phaseWhoName}>@{name}</span>
       <span className={styles.phaseNote}>{note}</span>
     </span>
@@ -769,19 +779,19 @@ function PhaseDetail({ chip, jumpable, profileOf }) {
       <span className={styles.phaseDetailHead}>
         <Mono>#{chip.slug}</Mono>
         <span className={styles.phaseNote}>{PHASE_WORD[chip.state] ?? chip.state}</span>
-        {chip.seq != null && <Mono className={styles.phaseNote}>post #{chip.seq}</Mono>}
+        {chip.seq != null && <span className={styles.phaseNote}>post #{chip.seq}</span>}
       </span>
       {chip.owner && <PhaseWho name={chip.owner} profileOf={profileOf} note="declared owner" />}
       {chip.assignee && <PhaseWho name={chip.assignee} profileOf={profileOf} note="assigned by the hub" />}
       {chip.task && <span className={styles.phaseTask}>{chip.task}</span>}
-      {cost && <Mono className={styles.phaseNote}>{cost}</Mono>}
+      {cost && <span className={styles.phaseNote}>{cost}</span>}
       <span className={styles.phaseNote}>{jumpable ? "Click to jump to the post" : phaseUnavailable(chip)}</span>
     </span>
   );
 }
 
 function renderWgMeta({ seq, cost, speaker, isFromHub, styles }) {
-  const rawDiamond = <Fold fold={speaker.fold} color={speaker.accent} />;
+  const rawDiamond = <Fold shape={speaker.shape} color={speaker.accent} />;
   const diamond = speaker.bio
     ? <Tip text={speaker.bio} side={isFromHub ? "up-r" : "up-l"}>{rawDiamond}</Tip>
     : rawDiamond;
@@ -794,7 +804,7 @@ function renderWgMeta({ seq, cost, speaker, isFromHub, styles }) {
   );
   const seqEl = <Mono className="tnum">{`#${seq}`}</Mono>;
   const hasCost = (cost?.tokens ?? 0) > 0 || (cost?.usd ?? 0) > 0;
-  const costEl = hasCost ? <Mono className="tnum">{formatCostLine(cost)}</Mono> : null;
+  const costEl = hasCost ? <span className="tnum">{formatCostLine(cost)}</span> : null;
   return isFromHub ? (
     <>
       {costEl}
@@ -818,7 +828,7 @@ const WgMessage = memo(function WgMessage({
   isFromHub,
   speakerName,
   speakerAccent,
-  speakerFold,
+  speakerShape,
   speakerBio,
   costTokens,
   costUsd,
@@ -832,7 +842,7 @@ const WgMessage = memo(function WgMessage({
   last = false,
 }) {
   const notify = useNotify();
-  const speaker = { name: speakerName, accent: speakerAccent, fold: speakerFold, bio: speakerBio };
+  const speaker = { name: speakerName, accent: speakerAccent, shape: speakerShape, bio: speakerBio };
   const cls = classifyMessage(body);
   const task = cls.variant === "task" ? cls.task : null;
   const working = cls.variant === "working" ? { content: cls.text } : null;
@@ -926,12 +936,12 @@ function mentionsForWorkgroup(members, peers, profiles, ownPubkey) {
     const profile = profiles.find(
       (p) => p.pubkey_b64 === m.pubkey || p.name === id,
     );
-    out.push({ id, accent: profile?.accent ?? null, fold: profile?.fold });
+    out.push({ id, accent: profile?.accent ?? null, shape: profile?.shape });
   }
   return out;
 }
 
-function WorkgroupComposer({ paused, offline, mentions, onSend, hubName, hubAccent, hubFold, draftKey }) {
+function WorkgroupComposer({ paused, offline, mentions, onSend, hubName, hubAccent, hubShape, draftKey }) {
   const [text, setText] = useState(() => getDraft(draftKey));
   const textRef = useRef(text);
   textRef.current = text;
@@ -984,29 +994,6 @@ function WorkgroupComposer({ paused, offline, mentions, onSend, hubName, hubAcce
     }
   }
 
-  const hint = !taskShape.ok ? (
-    <span className={styles.metaGroup} style={{ color: "var(--c-warning)" }}>
-      {taskShape.error}
-    </span>
-  ) : (
-    <>
-      <span className={styles.metaGroup}>
-        <span className={styles.hintArrow}>→</span>
-        <Fold fold={hubFold} color={hubAccent} />
-        <span>
-          <Mono className={styles.hintMono}>@{profileLabel(hubName)}</Mono>
-          {" formulates as "}
-          <Mono className={styles.hintMono}>#task #&lt;slug&gt;</Mono>
-        </span>
-      </span>
-      <span className={styles.kbdGroup}>
-        <Kbd>⌘</Kbd>
-        <Kbd>↵</Kbd>
-        <span>send</span>
-      </span>
-    </>
-  );
-
   return (
     <Composer
       value={text}
@@ -1017,12 +1004,12 @@ function WorkgroupComposer({ paused, offline, mentions, onSend, hubName, hubAcce
       canSend={canSend}
       accent={hubAccent ?? null}
       placeholder={placeholder}
-      sendTitle={paused ? "Workgroup is paused" : offline ? "Reconnecting…" : "Send (⌘↵)"}
+      sendTitle={paused ? "Workgroup is paused" : offline ? "Reconnecting…" : `Send (⌘↵) · @${profileLabel(hubName)} formulates as #task #<slug>`}
+      reason={taskShape.ok ? null : taskShape.error}
       disabledTitle={
         taskShape.ok ? "Type a message" : "#task needs a #<slug>"
       }
       mentions={mentions}
-      hint={hint}
     />
   );
 }

@@ -68,7 +68,7 @@
 
 .recipePipelineName {
   font-family: var(--font-mono);
-  font-size: var(--text-meta);
+  font-size: var(--text-mono);
   color: var(--ink);
 }
 
@@ -101,7 +101,7 @@
 
 .emptyState code {
   font-family: var(--font-mono);
-  font-size: var(--text-meta);
+  font-size: var(--text-mono);
   color: var(--ink);
 }
 

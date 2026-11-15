@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { WORKGROUP_FOLD } from "../../../common/folds.mjs";
+import { WORKGROUP_SHAPE } from "../../../common/shapes.mjs";
+import { workgroupPhase } from "../../../common/workgroupMarkState.mjs";
 import { ACTIVITY_FILTERS, applyFilter, capDays, failingJobs, groupActivity, groupByDay, nextRun, stripProfilePrefix, visibleFilters } from "../../../common/activityGroups.mjs";
 import { Scrim, PanelShell } from "../primitives/Panels.jsx";
 import { Button, Fold, Icon, IconBtn, Kbd } from "../primitives/index.js";
@@ -122,7 +123,7 @@ export default function ActivityPanel({
   activity,
   connectionId = null,
   accentByProfile = {},
-  foldByProfile = {},
+  shapeByProfile = {},
   canRetry = false,
   onRetry = null,
   onReview,
@@ -257,7 +258,7 @@ export default function ActivityPanel({
                 <Row
                   key={item.request_id}
                   tone="warning"
-                  glyph={<Fold fold={foldByProfile[item.profile]} color={accentByProfile[item.profile] || undefined} />}
+                  glyph={<Fold shape={shapeByProfile[item.profile]} color={accentByProfile[item.profile] || undefined} />}
                   title={item.title || (item.kind === "clarification" ? "has a question" : "wants to run a command")}
                   sub={`${profileLabel(item.profile ?? "")} · ${item.kind === "clarification" ? "question" : "approval"} · ${ago(toEpochSeconds(item.ts), now)}`}
                   action={
@@ -286,7 +287,7 @@ export default function ActivityPanel({
                     >
                       <span className={styles.chev}><Icon name={expanded ? "chev-down" : "chev-right"} size="sm" /></span>
                       <span className={styles.glyph}>
-                        <Fold fold={foldByProfile[group.profile]} color={accentByProfile[group.profile] || undefined} />
+                        <Fold shape={shapeByProfile[group.profile]} color={accentByProfile[group.profile] || undefined} />
                       </span>
                       <span className={styles.groupName}>{name}</span>
                       <span className={styles.groupCount}>{group.count} {pluralize(group.count, "job")}</span>
@@ -328,8 +329,7 @@ export default function ActivityPanel({
                   <Row
                     key={`wg:${run.profile}/${run.workgroup_id}`}
                     tone="accent"
-                    color={accentByProfile[run.profile]}
-                    glyph={<Fold fold={WORKGROUP_FOLD} color={accentByProfile[run.profile] || undefined} pulse />}
+                    glyph={<Fold shape={WORKGROUP_SHAPE} color={(run.hub_id && accentByProfile[run.hub_id]) || undefined} state="running" phase={workgroupPhase(run)} seed={`${run.profile}/${run.workgroup_id}`} />}
                     title={`${run.name || run.workgroup_id}${run.phase ? ` · #${run.phase}` : ""}`}
                     sub={[
                       profileLabel(run.profile ?? ""),
@@ -344,7 +344,7 @@ export default function ActivityPanel({
                     key={run.job_id ? `job:${run.profile}/${run.job_id}` : `turn:${run.profile}/${run.session_id ?? ""}`}
                     tone="accent"
                     color={accentByProfile[run.profile]}
-                    glyph={<Fold fold={foldByProfile[run.profile]} color={accentByProfile[run.profile] || undefined} pulse />}
+                    glyph={<Fold shape={shapeByProfile[run.profile]} color={accentByProfile[run.profile] || undefined} pulse />}
                     title={run.title || "New session"}
                     sub={[
                       profileLabel(run.profile ?? ""),
@@ -367,7 +367,7 @@ export default function ActivityPanel({
                       <TimedRow
                         key={`job:${job.profile}/${job.job_id}`}
                         job={job}
-                        glyph={<Fold fold={foldByProfile[job.profile]} color={accentByProfile[job.profile] || undefined} />}
+                        glyph={<Fold shape={shapeByProfile[job.profile]} color={accentByProfile[job.profile] || undefined} />}
                         onClick={close(() => openJob(job.profile, job.job_id))}
                       />
                     ))}

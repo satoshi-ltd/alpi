@@ -1,4 +1,6 @@
-import { ChatHeader, Fold, MeterChip, Mono, Tip } from "./index.js";
+import { ChatHeader, Fold, MeterChip, Tip } from "./index.js";
+import { HeaderDetail } from "./ChatHeader.jsx";
+import { workgroupStatusLine } from "../../../common/workgroupMarkState.mjs";
 import { profileLabel } from "../lib/profile-display.js";
 import SoundWave from "./SoundWave.jsx";
 import HeaderMenu from "./HeaderMenu.jsx";
@@ -7,7 +9,7 @@ import styles from "./WorkgroupChatHeader.module.css";
 export default function WorkgroupChatHeader({
   workgroup,
   hubAccent,
-  hubFold,
+  hubShape,
   hubName,
   hubBio,
   memberCount = 0,
@@ -19,29 +21,37 @@ export default function WorkgroupChatHeader({
   onOpenSettings,
   onRefresh,
   tasksButton,
+  mark = null,
 }) {
   const accent = hubAccent || "var(--accent)";
   const bio = (hubBio || "").trim();
-  const rawDiamond = <Fold fold={hubFold} color={accent} />;
+  const rawDiamond = <Fold shape={hubShape} color={accent} />;
   const diamond = bio
     ? <Tip text={bio} side="l">{rawDiamond}</Tip>
     : rawDiamond;
 
+  const status = paused ? null : workgroupStatusLine(mark);
+  const flag = !paused && (mark?.state === "needs" || mark?.state === "failed")
+    ? { label: status || (mark.state === "needs" ? "Needs you" : "Failed"), tone: mark.state === "failed" ? "danger" : "warning" }
+    : null;
   const meta = (
     <>
-      <span className={`row row-gap ${styles.hubRow}`}>
-        <span className={styles.label}>hub</span>
-        {diamond}
-        <Mono className={styles.ink2}>{`@${profileLabel(hubName)}`}</Mono>
-      </span>
-      <span className="sep" aria-hidden />
-      <span>
-        <span className={styles.label}>members</span>{" "}
-        <Mono className={`tnum ${styles.ink2}`}>{memberCount}</Mono>
-      </span>
+      <HeaderDetail label="Hub">
+        <span className={`row row-gap ${styles.hubRow}`}>
+          {diamond}
+          <span className={styles.ink2}>{`@${profileLabel(hubName)}`}</span>
+        </span>
+      </HeaderDetail>
+      <HeaderDetail label="Members">
+        <span className={`tnum ${styles.ink2}`}>{memberCount}</span>
+      </HeaderDetail>
+      {status && (
+        <HeaderDetail label="Status">
+          <span className={styles.ink2} data-status="">{status}</span>
+        </HeaderDetail>
+      )}
       {budget && budget.cap > 0 && (
-        <>
-          <span className="sep" aria-hidden />
+        <HeaderDetail label="Budget">
           <MeterChip
             value={
               <>
@@ -53,7 +63,7 @@ export default function WorkgroupChatHeader({
             color={accent}
             tip={`Workgroup budget — spent $${budget.used.toFixed(2)} of $${budget.cap.toFixed(2)} cap`}
           />
-        </>
+        </HeaderDetail>
       )}
     </>
   );
@@ -84,6 +94,8 @@ export default function WorkgroupChatHeader({
       meta={meta}
       right={right}
       paused={paused}
+      mark={mark}
+      flag={flag}
     />
   );
 }

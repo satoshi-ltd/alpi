@@ -42,9 +42,9 @@ describe("Composer reason", () => {
     expect(screen.queryByRole("button", { name: "Resume" })).toBeNull();
   });
 
-  it("dims only the input and the controls, never the whole body or the reason", () => {
+  it("dims only the input and the controls to the disabled alpha, never the whole body or the reason", () => {
     expect(css).not.toMatch(/\.body\[data-disabled="true"\]\s*\{[^}]*opacity/);
-    expect(css).toMatch(/\.body\[data-disabled="true"\] \.input,\s*\.body\[data-disabled="true"\] \.row\s*\{[^}]*opacity:\s*0\.6/);
+    expect(css).toMatch(/\.body\[data-disabled="true"\] \.input,\s*\.body\[data-disabled="true"\] \.row,\s*\.body\[data-disabled="true"\] \.leading\s*\{[^}]*opacity:\s*var\(--alpha-disabled\)/);
     expect(css).not.toMatch(/\.reason\s*\{[^}]*(opacity|pointer-events)/);
   });
 });
@@ -100,8 +100,8 @@ describe("Composer mentions", () => {
     expect(screen.getAllByText("bo")).toHaveLength(1);
   });
 
-  it("draws the popover on the edge shadow", () => {
-    expect(css).toMatch(/\.mentionPopover\s*\{[^}]*box-shadow:\s*var\(--shadow-edge-sm\)/);
+  it("floats the popover on the raised surface with the float shadow", () => {
+    expect(css).toMatch(/\.mentionPopover\s*\{[^}]*background:\s*var\(--raised\)[^}]*box-shadow:\s*var\(--shadow-float\)/);
   });
 });
 

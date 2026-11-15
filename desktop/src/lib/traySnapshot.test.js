@@ -74,11 +74,11 @@ describe("buildTraySnapshot next", () => {
     const s = buildTraySnapshot({
       ...quiet(own),
       connection: { ...online, name: "casa" },
-      foldByProfile: { doc: "owl" },
+      shapeByProfile: { doc: "owl" },
       accentByProfile: { doc: "#aa0000" },
-      otherActivity: [{ id: "mirai", name: "mirai", activity: { scheduled: there }, folds: { sentinel: "diamond" }, accents: { sentinel: "#00aa00" } }],
+      otherActivity: [{ id: "mirai", name: "mirai", activity: { scheduled: there }, shapes: { sentinel: "round" }, accents: { sentinel: "#00aa00" } }],
     });
-    expect(s.next.rows.map((r) => [r.title, r.fold, r.accent])).toEqual([["There", "diamond", "#00aa00"], ["Here", "owl", "#aa0000"]]);
+    expect(s.next.rows.map((r) => [r.title, r.shape, r.accent])).toEqual([["There", "round", "#00aa00"], ["Here", "owl", "#aa0000"]]);
   });
 
   it("names the connection of a row only while more than one connection is read", () => {
@@ -139,7 +139,7 @@ describe("buildTraySnapshot across connections", () => {
       running: [{ profile: "sentinel", session_id: "s7", title: "Review PR" }],
       scheduled: [{ profile: "sentinel", job_id: "x", title: "scan", last_run_status: "error", last_run_at: sec(600) }],
     },
-    folds: { sentinel: "diamond" },
+    shapes: { sentinel: "round" },
     accents: { sentinel: "#00aa00" },
     ...over,
   });
@@ -157,7 +157,7 @@ describe("buildTraySnapshot across connections", () => {
     const mine = { needs_you: [{ request_id: "r9", kind: "approval", profile: "abby", title: "t", ts: sec(5) }], running: [], scheduled: [] };
     const s = buildTraySnapshot({ connection: here, activity: mine, otherActivity: [other()], nowMs: NOW });
     expect(s.needs.rows.map((r) => [r.id, r.source, r.deeplink.connection_id])).toEqual([["r9", "casa", "local"], ["mirai/r9", "mirai", "mirai"]]);
-    expect(s.needs.rows[1]).toMatchObject({ fold: "diamond", accent: "#00aa00" });
+    expect(s.needs.rows[1]).toMatchObject({ shape: "round", accent: "#00aa00" });
     expect(s.running.rows[0]).toMatchObject({ source: "mirai", deeplink: { kind: "chat", id: "s7", connection_id: "mirai" } });
   });
 
@@ -191,7 +191,7 @@ describe("buildTraySnapshot across connections", () => {
 });
 
 describe("buildTraySnapshot", () => {
-  const base = { connection: online, activity, foldByProfile: { abby: "alpaca" }, accentByProfile: { abby: "#df4b9d" }, nowMs: NOW };
+  const base = { connection: online, activity, shapeByProfile: { abby: "twin" }, accentByProfile: { abby: "#df4b9d" }, nowMs: NOW };
 
   it("counts what Activity counts and names the heading state", () => {
     const s = buildTraySnapshot({ ...base, unread: 3 });
@@ -209,9 +209,9 @@ describe("buildTraySnapshot", () => {
 
   it("builds a Review deeplink in the shape the notification listener resolves", () => {
     const [approval, question] = buildTraySnapshot(base).needs.rows;
-    expect(approval).toMatchObject({ id: "a1", kind: "approval", label: "abby", fold: "alpaca", accent: "#df4b9d" });
+    expect(approval).toMatchObject({ id: "a1", kind: "approval", label: "abby", shape: "twin", accent: "#df4b9d" });
     expect(approval.deeplink).toEqual({ kind: "approval", profile: "abby", id: "a1", connection_id: "local" });
-    expect(question).toMatchObject({ kind: "question", fold: null, accent: null });
+    expect(question).toMatchObject({ kind: "question", shape: null, accent: null });
     expect(question.deeplink).toEqual({ kind: "clarification", profile: "doc", id: "q1", connection_id: "local" });
   });
 
@@ -239,8 +239,8 @@ describe("buildTraySnapshot", () => {
   });
 
   it("opens a running chat turn by its session", () => {
-    const s = buildTraySnapshot({ connection: online, activity: { needs_you: [], running: [{ kind: "turn", profile: "abby", session_id: "s9", title: "x", started_at: 100 }], scheduled: [] }, foldByProfile: { abby: "llama" }, nowMs: NOW });
-    expect(s.running.rows[0]).toMatchObject({ profile: "abby", fold: "llama", ts: 100, deeplink: { kind: "chat", profile: "abby", id: "s9", connection_id: "local" } });
+    const s = buildTraySnapshot({ connection: online, activity: { needs_you: [], running: [{ kind: "turn", profile: "abby", session_id: "s9", title: "x", started_at: 100 }], scheduled: [] }, shapeByProfile: { abby: "llama" }, nowMs: NOW });
+    expect(s.running.rows[0]).toMatchObject({ profile: "abby", shape: "llama", ts: 100, deeplink: { kind: "chat", profile: "abby", id: "s9", connection_id: "local" } });
   });
 
   it("opens a workgroup pipeline row by its workgroup and keeps repeated runs distinct", () => {

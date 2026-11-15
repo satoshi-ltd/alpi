@@ -8,7 +8,7 @@ import { processSteps } from './processSteps';
 
 const edgesAt = (i, n) => ({ top: i === 0, bottom: i === n - 1 });
 
-export function ProcessBlock({ turn, tools, reasoning, seconds, reasoningLive, answered, showReasoning, accent, fold }) {
+export function ProcessBlock({ turn, tools, reasoning, seconds, reasoningLive, answered, showReasoning, accent, shape }) {
   const steps = processSteps(turn, { tools, reasoning, seconds, streaming: reasoningLive, hasReasoning: showReasoning });
   if (!steps.length) return null;
   return (
@@ -22,7 +22,7 @@ export function ProcessBlock({ turn, tools, reasoning, seconds, reasoningLive, a
         <Reasoning
           key={step.key}
           accent={accent}
-          fold={fold}
+          shape={shape}
           text={step.text}
           seconds={step.seconds}
           timeline={step.timeline}

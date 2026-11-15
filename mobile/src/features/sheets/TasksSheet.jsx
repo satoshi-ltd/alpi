@@ -78,11 +78,11 @@ export function TasksSheet({ open, onClose, tasks = [], workgroupId, accent, onP
       <View style={{ paddingHorizontal: space.s7, paddingTop: space.s3, paddingBottom: space.s5 }}>
         <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3, lineHeight: fontSizes.sm * 1.45 }}>
           The hub opens one{' '}
-          <Text style={{ fontFamily: fonts.mono, color: colors.ink2, backgroundColor: colors.hover }}>{' #task '}</Text>
+          <Text style={{ fontFamily: fonts.sans.regular, color: colors.ink2, backgroundColor: colors.hover }}>{' #task '}</Text>
           at a time and closes with{' '}
-          <Text style={{ fontFamily: fonts.mono, color: colors.ink2, backgroundColor: colors.hover }}>{' #done '}</Text>
+          <Text style={{ fontFamily: fonts.sans.regular, color: colors.ink2, backgroundColor: colors.hover }}>{' #done '}</Text>
           or{' '}
-          <Text style={{ fontFamily: fonts.mono, color: colors.ink2, backgroundColor: colors.hover }}>{' #skip '}</Text>
+          <Text style={{ fontFamily: fonts.sans.regular, color: colors.ink2, backgroundColor: colors.hover }}>{' #skip '}</Text>
           .
         </Text>
       </View>
@@ -111,14 +111,14 @@ export function TasksSheet({ open, onClose, tasks = [], workgroupId, accent, onP
                   onPick?.(t.seq);
                   onClose?.();
                 }}
-                android_ripple={{ color: colors.selected }}
+                android_ripple={{ color: colors.pressed }}
                 style={({ pressed }) => ({
                   flexDirection: 'row',
                   alignItems: 'flex-start',
                   gap: space.s6,
                   paddingHorizontal: space.s7,
                   paddingVertical: space.s5,
-                  backgroundColor: pressed ? colors.selected : 'transparent',
+                  backgroundColor: pressed ? colors.pressed : 'transparent',
                 })}
               >
                 <View style={{ width: 24, height: fontSizes.md * 1.3, alignItems: 'center', justifyContent: 'center' }}>
@@ -136,15 +136,15 @@ export function TasksSheet({ open, onClose, tasks = [], workgroupId, accent, onP
                     {t.title || `#${t.id}`}
                   </Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.s3 }}>
-                    <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
+                    <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>
                       #{t.id}
                     </Text>
-                    <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>·</Text>
-                    <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
+                    <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>·</Text>
+                    <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>
                       {t.msgs} msg{t.msgs === 1 ? '' : 's'}
                     </Text>
-                    <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>·</Text>
-                    <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: statusColor }}>
+                    <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>·</Text>
+                    <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: statusColor }}>
                       {statusLabel}
                     </Text>
                   </View>

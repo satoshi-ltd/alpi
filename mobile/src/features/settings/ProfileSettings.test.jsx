@@ -6,6 +6,8 @@ import { EndpointContext } from '../../lib/EndpointContext';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import { PaneContext } from '../../nav/PaneContext';
 import { _resetDaemonDataCache } from '../../hooks/useDaemonData';
+import { _resetProfileEdits } from '../../lib/optimisticProfiles';
+import { useProfileSummaries } from '../../hooks/useDaemonData';
 
 const h = vi.hoisted(() => ({
   params: { id: 'doc' },
@@ -157,6 +159,7 @@ afterEach(cleanup);
 
 beforeEach(() => {
   _resetDaemonDataCache();
+  _resetProfileEdits();
   h.params = { id: 'doc' };
   h.router = { push: vi.fn(), back: vi.fn(), replace: vi.fn() };
   h.visionSheetProps = null;
@@ -772,46 +775,56 @@ describe('ProfileSettings appearance', () => {
     });
 
   it('shows the pair name and the colour on the appearance row', async () => {
-    const call = profileCall({ fold: 'shield' }, { accent: '#3899e2' });
+    const call = profileCall({ shape: 'bell' }, { accent: '#3899e2' });
     render(<ProfileSettings />, { wrapper: wrapper(call) });
 
     await waitFor(() => expect(screen.getByText('Appearance')).toBeTruthy());
-    expect(screen.getByText('blue shield')).toBeTruthy();
+    expect(screen.getByText('blue bell')).toBeTruthy();
     expect(screen.getByText('#3899e2')).toBeTruthy();
-    expect(document.querySelector('svg[data-fold="shield"]')).not.toBeNull();
+    expect(document.querySelector('svg[data-shape="bell"]')).not.toBeNull();
     expect(screen.queryByText('Accent')).toBeNull();
   });
 
-  it('shows the default profile as the alpaca on a row that cannot be opened', async () => {
-    h.params = { id: 'default' };
-    const call = profileCall({ name: 'default', fold: 'alpaca' }, { name: 'default', accent: '#f0b447' });
+  it('reads only the shape field, so a profile that carries only a fold is the round', async () => {
+    const call = profileCall({ fold: 'shield' }, { accent: '#3899e2' });
     render(<ProfileSettings />, { wrapper: wrapper(call) });
 
-    await waitFor(() => expect(screen.getByText('Alpaca')).toBeTruthy());
-    expect(screen.getByText('brand accent')).toBeTruthy();
-    expect(document.querySelector('svg[data-fold="alpaca"]')).not.toBeNull();
+    await waitFor(() => expect(screen.getByText('blue round')).toBeTruthy());
+    expect(screen.queryByText('blue bell')).toBeNull();
+    expect(document.querySelector('svg[data-shape="bell"]')).toBeNull();
+  });
+
+  it('shows the default profile as Twin, the brand mark, on a row that cannot be opened', async () => {
+    h.params = { id: 'default' };
+    const call = profileCall({ name: 'default', shape: 'round' }, { name: 'default', accent: '#f0b447' });
+    render(<ProfileSettings />, { wrapper: wrapper(call) });
+
+    await waitFor(() => expect(screen.getByText('Twin')).toBeTruthy());
+    expect(screen.getByText('brand mark')).toBeTruthy();
+    expect(screen.queryByText(/alpaca/i)).toBeNull();
+    expect(document.querySelector('svg[data-shape="twin"]').getAttribute('data-mark')).toMatch(/^alpi-twin/);
     h.params = { id: 'doc' };
   });
 
-  it('names a profile without a fold after the diamond', async () => {
+  it('names a profile without a shape after the round', async () => {
     const call = profileCall({}, { accent: '#f0b447' });
     render(<ProfileSettings />, { wrapper: wrapper(call) });
 
-    await waitFor(() => expect(screen.getByText('amber diamond')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('amber round')).toBeTruthy());
   });
 
-  it('writes the fold and the accent to their own config keys', async () => {
+  it('writes the shape name and the accent to their own config keys', async () => {
     const calls = [];
-    const call = profileCall({ fold: 'shield' }, { accent: '#3899e2' }, calls);
+    const call = profileCall({ shape: 'bell' }, { accent: '#3899e2' }, calls);
     render(<ProfileSettings />, { wrapper: wrapper(call) });
 
-    await waitFor(() => expect(h.appearanceSheetProps?.initialFold).toBe('shield'));
+    await waitFor(() => expect(h.appearanceSheetProps?.initialShape).toBe('bell'));
     expect(h.appearanceSheetProps.initialValue).toBe('#3899e2');
 
-    await h.appearanceSheetProps.onSave({ fold: 'rocket', accent: '#2CB3B5' });
+    await h.appearanceSheetProps.onSave({ shape: 'pill', accent: '#2CB3B5' });
     const writes = calls.filter(([method]) => method === 'host.config.set_field').map(([, params]) => params);
     expect(writes).toEqual([
-      { profile: 'doc', key: 'tui.fold', value: 'rocket' },
+      { profile: 'doc', key: 'tui.shape', value: 'pill' },
       { profile: 'doc', key: 'tui.accent', value: '#2cb3b5' },
     ]);
 
@@ -820,6 +833,171 @@ describe('ProfileSettings appearance', () => {
     expect(calls.filter(([method]) => method === 'host.config.set_field').map(([, params]) => params)).toEqual([
       { profile: 'doc', key: 'tui.accent', value: '#9b5ad9' },
     ]);
+  });
+});
+
+describe('ProfileSettings optimistic appearance', () => {
+  beforeEach(cleanup);
+
+  function RosterProbe() {
+    const summaries = useProfileSummaries();
+    h.rosterRefresh = summaries.refresh;
+    const doc = summaries.data?.profiles?.find((p) => p.name === 'doc');
+    return doc ? <output data-roster-shape={doc.shape} data-roster-accent={doc.accent} /> : null;
+  }
+
+  const daemon = () => {
+    const state = { summary: { shape: 'bell', accent: '#3899e2' }, writes: [] };
+    state.call = vi.fn((method, params) => {
+      if (method === 'host.profile.summaries') return Promise.resolve({ profiles: [{ name: 'doc', counts: {}, ...state.summary }] });
+      if (method === 'host.settings.profile_snapshot') {
+        return Promise.resolve({ detail: { name: 'doc' }, usage: { days: [] }, schedules: { jobs: [] }, workgroups: { workgroups: [] }, email: { accounts: [] }, storage: { storage: [] } });
+      }
+      if (method === 'host.config.set_field') {
+        return new Promise((resolve, reject) => state.writes.push({ params, resolve, reject }));
+      }
+      if (method === 'host.profile.attention') return Promise.resolve({ memory: [], skills: [], schedules: [], counts: {}, total: 0 });
+      return Promise.reject(new Error(`unexpected ${method}`));
+    });
+    return state;
+  };
+
+  const rosterShape = () => document.querySelector('output[data-roster-shape]')?.getAttribute('data-roster-shape');
+  const mountWith = async (state) => {
+    render(<><ProfileSettings /><RosterProbe /></>, { wrapper: wrapper(state.call) });
+    await waitFor(() => expect(screen.getByText('blue bell')).toBeTruthy());
+    await waitFor(() => expect(rosterShape()).toBe('bell'));
+  };
+
+  it('shows the picked shape and colour on the row, the header and the roster before the daemon answers', async () => {
+    const state = daemon();
+    await mountWith(state);
+    const saving = h.appearanceSheetProps.onSave({ shape: 'pill', accent: '#2CB3B5' });
+    await waitFor(() => expect(screen.getByText('teal pill')).toBeTruthy());
+    expect(screen.getByText('#2cb3b5')).toBeTruthy();
+    expect(document.querySelector('svg[data-shape="pill"]')).not.toBeNull();
+    expect(rosterShape()).toBe('pill');
+    expect(document.querySelector('output').getAttribute('data-roster-accent')).toBe('#2cb3b5');
+    expect(state.writes.map((w) => w.params.key)).toEqual(['tui.shape', 'tui.accent']);
+    state.summary = { shape: 'pill', accent: '#2cb3b5' };
+    state.writes.forEach((w) => w.resolve({}));
+    await saving;
+    await waitFor(() => expect(state.call.mock.calls.filter(([m]) => m === 'host.profile.summaries').length).toBeGreaterThan(1));
+    expect(rosterShape()).toBe('pill');
+  });
+
+  it('rolls everything back and rejects so the sheet can report the failure', async () => {
+    const state = daemon();
+    await mountWith(state);
+    const saving = h.appearanceSheetProps.onSave({ shape: 'pill' });
+    await waitFor(() => expect(rosterShape()).toBe('pill'));
+    state.writes[0].reject(new Error('disk full'));
+    await expect(saving).rejects.toThrow('disk full');
+    await waitFor(() => expect(screen.getByText('blue bell')).toBeTruthy());
+    expect(rosterShape()).toBe('bell');
+  });
+
+  it('sends the picks in order and ends at the last choice', async () => {
+    const state = daemon();
+    await mountWith(state);
+    const first = h.appearanceSheetProps.onSave({ shape: 'pill' });
+    const second = h.appearanceSheetProps.onSave({ shape: 'cloud' });
+    await waitFor(() => expect(rosterShape()).toBe('cloud'));
+    expect(state.writes).toHaveLength(1);
+    state.writes[0].reject(new Error('late'));
+    await first.catch(() => {});
+    await waitFor(() => expect(state.writes).toHaveLength(2));
+    expect(state.writes[1].params.value).toBe('cloud');
+    state.summary = { shape: 'cloud', accent: '#3899e2' };
+    state.writes[1].resolve({});
+    await second;
+    await waitFor(() => expect(screen.getByText('blue cloud')).toBeTruthy());
+    expect(rosterShape()).toBe('cloud');
+  });
+
+  it('a failed pick over a confirmed one refreshes and ends at what the daemon has', async () => {
+    const state = daemon();
+    await mountWith(state);
+    const first = h.appearanceSheetProps.onSave({ shape: 'pill' });
+    const second = h.appearanceSheetProps.onSave({ shape: 'cloud' });
+    state.writes[0].resolve({});
+    await first;
+    await waitFor(() => expect(state.writes).toHaveLength(2));
+    expect(rosterShape()).toBe('cloud');
+    state.summary = { shape: 'heart', accent: '#3899e2' };
+    state.writes[1].reject(new Error('nope'));
+    await second.catch(() => {});
+    await waitFor(() => expect(rosterShape()).toBe('heart'));
+    await waitFor(() => expect(screen.getByText('blue heart')).toBeTruthy());
+  });
+
+  it('a refresh that fails after the save keeps the pick until a fresh roster lands', async () => {
+    const state = daemon();
+    await mountWith(state);
+    const saving = h.appearanceSheetProps.onSave({ shape: 'pill' });
+    await waitFor(() => expect(rosterShape()).toBe('pill'));
+    const before = state.call.mock.calls.filter(([m]) => m === 'host.profile.summaries').length;
+    const answer = state.call.getMockImplementation();
+    state.call.mockImplementation((method, params) => (method === 'host.profile.summaries'
+      ? Promise.reject(new Error('offline'))
+      : answer(method, params)));
+    state.writes[0].resolve({});
+    await saving;
+    await waitFor(() => expect(state.call.mock.calls.filter(([m]) => m === 'host.profile.summaries').length).toBeGreaterThan(before));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(rosterShape()).toBe('pill');
+    expect(screen.getByText('blue pill')).toBeTruthy();
+    state.call.mockImplementation(answer);
+    state.summary = { shape: 'heart', accent: '#3899e2' };
+    await h.rosterRefresh();
+    await waitFor(() => expect(rosterShape()).toBe('heart'));
+  });
+
+  it('on a daemon without the snapshot verb, a fresh detail read releases a saved detail-only field', async () => {
+    const daemonVision = { value: 'openrouter/v/one' };
+    const call = vi.fn(async (method) => {
+      if (method === 'host.profile.summaries') return { profiles: [{ name: 'doc', counts: {} }] };
+      if (method === 'host.settings.profile_snapshot') throw Object.assign(new Error('method-not-found'), { code: -32601 });
+      if (method === 'host.profile.detail') {
+        return { name: 'doc', model: 'openrouter/v/one', vision_model: daemonVision.value, models: ['openrouter/v/one'] };
+      }
+      if (method === 'host.config.set_field') {
+        daemonVision.value = 'openrouter/v/three';
+        return { ok: true };
+      }
+      if (method === 'host.profile.attention') return { memory: [], skills: [], schedules: [], counts: {}, total: 0 };
+      throw new Error(`unexpected ${method}`);
+    });
+    const { container } = render(<ProfileSettings />, { wrapper: wrapper(call) });
+    const scope = within(container);
+    await waitFor(() => expect(scope.getByText('Vision model')).toBeTruthy());
+    await waitFor(() => expect(h.visionSheetProps).toBeTruthy());
+    await h.visionSheetProps.onSave('openrouter/v/two');
+    await waitFor(() => expect(scope.getByText('three')).toBeTruthy());
+  });
+
+  it('a roster refresh during the save does not revert the pick', async () => {
+    const state = daemon();
+    await mountWith(state);
+    h.appearanceSheetProps.onSave({ shape: 'pill' });
+    await waitFor(() => expect(rosterShape()).toBe('pill'));
+    const before = state.call.mock.calls.filter(([m]) => m === 'host.profile.summaries').length;
+    await h.rosterRefresh();
+    expect(state.call.mock.calls.filter(([m]) => m === 'host.profile.summaries').length).toBeGreaterThan(before);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(rosterShape()).toBe('pill');
+    expect(screen.getByText('blue pill')).toBeTruthy();
+  });
+
+  it('pausing shows at once and rolls back when the daemon refuses', async () => {
+    const state = daemon();
+    await mountWith(state);
+    expect(screen.getByLabelText('Paused').getAttribute('aria-pressed')).toBe('false');
+    screen.getByLabelText('Paused').click();
+    await waitFor(() => expect(screen.getByLabelText('Paused').getAttribute('aria-pressed')).toBe('true'));
+    state.writes[0].reject(new Error('nope'));
+    await h.lastToggle?.catch(() => {});
+    await waitFor(() => expect(screen.getByLabelText('Paused').getAttribute('aria-pressed')).toBe('false'));
   });
 });
 
@@ -902,7 +1080,7 @@ describe('ProfileSettings attention', () => {
     render(<ProfileSettings />, { wrapper: wrapper(call) });
     await waitFor(() => expect(screen.getByText('instructions loaded on demand')).toBeTruthy());
     await waitFor(() => expect(call.mock.calls.some(([m]) => m === 'host.profile.attention')).toBe(true));
-    expect(screen.getByText('USER · MEMORY · AGENT')).toBeTruthy();
+    expect(screen.getByText('User · memory · agent')).toBeTruthy();
     expect(screen.getByText('disable · fire · delete · add new')).toBeTruthy();
     expect(document.querySelector('[accessibilitylabel*="need"]')).toBeNull();
   });

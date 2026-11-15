@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} };
 globalThis.Element.prototype.scrollTo ??= () => {};
@@ -365,18 +367,27 @@ describe("NotificationsModal — read / unread", () => {
     expect(document.body.textContent).not.toMatch(/\d unread/);
   });
 
-  it("marks unread with an ink dot and leaves the profile's object whole, the alpaca included", () => {
+  it("marks unread by weight with no dot or gutter before the mark, says Unread to a screen reader, and leaves the mark whole, Twin included", () => {
     h.rows = [
       { ...h.ROW, id: "a", status: "unread", accent: "#3899e2" },
       { ...h.ROW, id: "b", status: "read", accent: "#3899e2" },
-      { ...h.ROW, id: "c", profile: "default", status: "read", accent: null, fold: "alpaca" },
+      { ...h.ROW, id: "c", profile: "default", status: "read", accent: null, shape: "twin" },
     ];
     renderModal();
-    const [unread, read, alpaca] = screen.getAllByRole("option");
-    expect(unread.querySelector('[aria-label="Unread"]')).toBeTruthy();
-    expect(read.querySelector('[aria-label="Unread"]')).toBeNull();
-    expect(read.querySelector("[data-fold]").style.getPropertyValue("--c")).toBe("#3899e2");
-    expect(alpaca.querySelector("[data-fold]").dataset.fold).toBe("alpaca");
+    const [unread, read, twin] = screen.getAllByRole("option");
+    expect(unread.textContent.startsWith("Unread")).toBe(true);
+    expect(read.textContent).not.toMatch(/^Unread/);
+    expect(unread.querySelector('[role="img"]')).toBeNull();
+    expect(read.firstElementChild.querySelector("[data-shape]")).toBeTruthy();
+    expect(unread.firstElementChild.className).toMatch(/srOnly/);
+    expect(unread.children[1].querySelector("[data-shape]")).toBeTruthy();
+    expect(unread.className).toMatch(/rowUnread/);
+    const css = readFileSync(join(import.meta.dirname, "NotificationsModal.module.css"), "utf8");
+    expect(css).toMatch(/\.rowUnread \.rowTitle \{ font-weight: var\(--fw-semibold\); \}/);
+    expect(css).toMatch(/\.rowUnread \.rowTs \{ color: var\(--ink\); font-weight: var\(--fw-semibold\); \}/);
+    expect(css).not.toMatch(/unreadDot|rowGutter/);
+    expect(read.querySelector("[data-shape] path[data-body]").getAttribute("fill")).toBe("#3899e2");
+    expect(twin.querySelector("[data-shape]").dataset.mark).toMatch(/^alpi-twin/);
   });
 
   it("omits the unread suffix when nothing is unread", () => {
@@ -646,7 +657,7 @@ describe("NotificationsModal triage", () => {
     fireEvent.click(warning);
     await act(async () => { fireEvent.keyDown(warning, { key: "u" }); });
     expect(h.markUnread).toHaveBeenCalledTimes(1);
-    expect(warning.querySelector('[aria-label="Unread"]')).toBeTruthy();
+    expect(warning.className).toMatch(/rowUnread/);
     expect(unreadFilter()).toBe("Unread3");
     await new Promise((resolve) => setTimeout(resolve, READ_DWELL_MS + 100));
     expect(h.markRead).not.toHaveBeenCalled();
@@ -692,7 +703,7 @@ describe("NotificationsModal triage", () => {
     fireEvent.click(option("Digest"));
     fireEvent.click(option("Key expiring"));
     await dwell();
-    expect(option("Digest").querySelector('[aria-label="Unread"]')).toBeTruthy();
+    expect(option("Digest").className).toMatch(/rowUnread/);
     expect(h.markRead).not.toHaveBeenCalled();
   });
 
@@ -704,7 +715,7 @@ describe("NotificationsModal triage", () => {
     await dwell();
     expect(h.markRead).not.toHaveBeenCalled();
     expect(h.markUnread).not.toHaveBeenCalled();
-    expect(digest.querySelector('[aria-label="Unread"]')).toBeTruthy();
+    expect(digest.className).toMatch(/rowUnread/);
   });
 
   it("folds a run of Backspace deletes into one counting Undo and ignores a held key", async () => {

@@ -1,5 +1,7 @@
 import { act, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { nameTone } from "../../../common/name.mjs";
+import { palettes } from "../../../common/tokens.mjs";
 
 const playTtsMock = vi.fn();
 const stopTtsMock = vi.fn();
@@ -126,7 +128,7 @@ describe("ChatPane read aloud while preparing", () => {
 });
 
 describe("ChatPane sync bar", () => {
-  it("waits in ink, never in the profile's colour", async () => {
+  it("waits in the profile's colour", async () => {
     const profile = { name: "lens", model: "x/y", accent: "#ff3366" };
     render(
       <ChatPane
@@ -141,7 +143,6 @@ describe("ChatPane sync bar", () => {
       />,
     );
     const bar = await screen.findByRole("progressbar", { name: "syncing conversation" }, { timeout: 2000 });
-    expect(bar.getAttribute("style")).toBeNull();
-    expect(bar.outerHTML).not.toContain("#ff3366");
+    expect(bar.style.getPropertyValue("--c-light")).toBe(nameTone("#ff3366", palettes.light.bgPane));
   });
 });

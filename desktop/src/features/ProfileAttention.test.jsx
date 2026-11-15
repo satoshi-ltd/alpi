@@ -13,7 +13,7 @@ vi.mock("../primitives/Notification.jsx", () => ({ useNotify: () => () => {} }))
 
 import ProfilePanels from "./ProfilePanels.jsx";
 
-const OWNER = { name: "scout", fold: "house", accent: "#cc4422" };
+const OWNER = { name: "scout", shape: "arch", accent: "#cc4422" };
 const ATT = {
   memory: [{ file: "AGENT.md", used: 9454, limit: 8000, pct: 118, over: true }],
   skills: [{ name: "review-digest", category: "research", problem: "lint", message: "SKILL.md line 4: bad name" }],

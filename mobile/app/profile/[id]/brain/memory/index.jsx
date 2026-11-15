@@ -43,7 +43,7 @@ export default function MemoryRoute() {
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-      <PanelHeader profile={id} section="MEMORIES" count={MEMORY_FILES.length} onBack={goBack} />
+      <PanelHeader profile={id} section="Memories" count={MEMORY_FILES.length} onBack={goBack} />
       {split ? (
         <MasterDetail
           list={<MemoryList profile={id} selectedFile={selected} refreshKey={savedTick} onOpen={choose} />}

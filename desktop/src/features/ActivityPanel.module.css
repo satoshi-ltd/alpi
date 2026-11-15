@@ -3,7 +3,6 @@
   align-items: center;
   gap: var(--sp-8);
   padding: var(--panel-head-pad);
-  border-bottom: .5px solid var(--line);
   color: var(--ink);
 }
 
@@ -31,38 +30,43 @@
   display: inline-flex;
   align-items: center;
   gap: var(--sp-4);
-  height: var(--ctl-24);
-  padding: 0 var(--sp-8);
+  height: var(--ctl-32);
+  padding: 0 var(--sp-12);
+  box-sizing: border-box;
   border: 0;
-  border-radius: var(--r-xs);
-  background: transparent;
-  box-shadow: inset 0 0 0 1px var(--line);
-  color: var(--ink-2);
+  border-radius: var(--r-pill);
+  background: var(--fill);
+  color: var(--ink);
   font: inherit;
-  font-size: var(--text-ui);
-  line-height: var(--sp-16);
+  font-size: var(--text-small);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-small);
   white-space: nowrap;
   cursor: pointer;
-  transition: background var(--dur-1) var(--ease);
+  transition: box-shadow var(--state-out);
 }
 
 .filter:hover {
-  background: var(--hover);
+  box-shadow: var(--hover-wash);
+  transition: box-shadow var(--state-in);
 }
 
 .filter:focus-visible {
-  outline-offset: calc(var(--focus-outline-offset) * -1);
+  outline-offset: var(--focus-inset);
 }
 
 .filter[data-on] {
-  background: var(--selected);
+  background: var(--accent);
   box-shadow: none;
-  color: var(--ink);
-  font-weight: var(--fw-medium);
+  color: var(--bg-pane);
+}
+
+.filter[data-on] .filterCount {
+  color: var(--bg-pane);
 }
 
 .filterCount {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   font-weight: var(--fw-regular);
   color: var(--ink-3);
@@ -149,7 +153,7 @@
   height: var(--ctl-32);
   padding: 0 var(--sp-12);
   border: 0;
-  border-radius: var(--r-xs);
+  border-radius: var(--r-control);
   background: transparent;
   color: var(--ink);
   font: inherit;
@@ -157,7 +161,7 @@
   line-height: var(--sp-16);
   text-align: left;
   cursor: pointer;
-  transition: background var(--dur-1) var(--ease);
+  transition: background-color var(--state-out);
 }
 
 .groupHead:hover,
@@ -166,7 +170,7 @@
 }
 
 .groupHead:focus-visible {
-  outline-offset: calc(var(--focus-outline-offset) * -1);
+  outline-offset: var(--focus-inset);
 }
 
 .groupHead[aria-expanded="true"] {
@@ -193,7 +197,7 @@
 
 .groupCount,
 .groupTime {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   white-space: nowrap;
 }
@@ -215,7 +219,7 @@
 .dayHead {
   display: flex;
   align-items: center;
-  height: var(--ctl-24);
+  height: var(--ctl-32);
   margin: 0;
   padding: 0 var(--sp-12);
   line-height: var(--sp-16);
@@ -223,7 +227,7 @@
 
 .timedRow {
   height: var(--ctl-32);
-  border-radius: var(--r-xs);
+  border-radius: var(--r-control);
 }
 
 .timedRow:hover,
@@ -239,7 +243,7 @@
   height: 100%;
   padding: 0 var(--sp-12);
   border: 0;
-  border-radius: var(--r-xs);
+  border-radius: var(--r-control);
   background: transparent;
   color: inherit;
   font: inherit;
@@ -248,13 +252,13 @@
 }
 
 .timedMain:focus-visible {
-  outline-offset: calc(var(--focus-outline-offset) * -1);
+  outline-offset: var(--focus-inset);
 }
 
 .time {
   min-width: calc(var(--sp-32) + var(--sp-32));
   flex-shrink: 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   line-height: var(--sp-16);
   color: var(--ink-3);
@@ -279,7 +283,7 @@
 }
 
 .tagName {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   line-height: var(--sp-16);
   color: var(--ink-3);
@@ -296,7 +300,7 @@
   gap: var(--sp-8);
   height: var(--ctl-40);
   padding-right: var(--sp-8);
-  border-radius: var(--r-xs);
+  border-radius: var(--r-control);
 }
 
 .row:hover,
@@ -313,7 +317,7 @@
   gap: var(--sp-8);
   padding: 0 var(--sp-12);
   border: 0;
-  border-radius: var(--r-xs);
+  border-radius: var(--r-control);
   background: transparent;
   color: inherit;
   font: inherit;
@@ -329,7 +333,7 @@ button.rowMain {
 }
 
 button.rowMain:focus-visible {
-  outline-offset: calc(var(--focus-outline-offset) * -1);
+  outline-offset: var(--focus-inset);
 }
 
 .actions {
@@ -385,7 +389,7 @@ button.rowMain:focus-visible {
 }
 
 .sub {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   line-height: var(--sp-16);
   color: var(--ink-3);

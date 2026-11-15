@@ -21,7 +21,7 @@ import { EMPTY } from "../../../common/emptyCopy.mjs";
 function PeerRow({ peer, onOpen }) {
   return (
     <button type="button" onClick={onOpen} className={styles.row}>
-      <Fold fold={peer.fold} color={peer.accent} />
+      <Fold shape={peer.shape} color={peer.accent} />
       <span className={styles.rowId}>{peer.id}</span>
       <Mono className={styles.rowKey}>
         {pubkeyTail(peer.pubkey)}
@@ -42,7 +42,7 @@ function PeerDetail({ peer, onBack, onRemove }) {
             <ArrowLeftIcon />
           </IconBtn>
         </Tip>
-        <Fold fold={peer.fold} color={peer.accent} />
+        <Fold shape={peer.shape} color={peer.accent} />
         <span className={styles.detailHandle}>@{peer.id}</span>
         <span className={styles.detailStatusSlot}>
           <Pill state={peer.online ? "on" : "off"}>

@@ -20,7 +20,7 @@ vi.mock('react-native', () => {
   const View = ({ children, style, onLayout, ...p }) => React.createElement('div', p, children);
   const Text = ({ children, style, numberOfLines, ellipsizeMode, selectable, ...p }) => React.createElement('span', p, children);
   const Pressable = ({ children, onPress, onLongPress, style, hitSlop, android_ripple, accessibilityRole, accessibilityLabel, ...p }) =>
-    React.createElement('button', { type: 'button', onClick: onPress, 'aria-label': accessibilityLabel, ...p }, children);
+    React.createElement('button', { type: 'button', onClick: onPress, 'aria-label': accessibilityLabel, 'data-hit': hitSlop, 'data-w': typeof style === 'function' ? style({ pressed: false }).width : undefined, ...p }, children);
   return {
     View,
     Text,
@@ -212,6 +212,13 @@ describe('connection detail', () => {
     expect(document.querySelector('[data-chart]')).toBeTruthy();
   });
 
+  it('draws the revoke control as a 44 pt button with no extra hit slop', () => {
+    render(<ConnectionRoute />);
+    const button = screen.getByLabelText('Revoke Pixel');
+    expect(button.getAttribute('data-w')).toBe('44');
+    expect(button.getAttribute('data-hit')).toBe('0');
+  });
+
   it('revokes a device after the typed confirmation', async () => {
     render(<ConnectionRoute />);
     fireEvent.click(screen.getByLabelText('Revoke Pixel'));
@@ -290,7 +297,7 @@ describe('connections page waiting on the daemon', () => {
   afterEach(() => { vi.useRealTimers(); });
   const tick = (ms) => act(() => { vi.advanceTimersByTime(ms); });
 
-  it('shows the ink alpaca with what it waits for after 300 ms and holds it 400 ms after the answer', () => {
+  it('shows the ink Twin with what it waits for after 300 ms and holds it 400 ms after the answer', () => {
     h.summary = null;
     h.loading = true;
     const view = render(<ConnectionsRoute />);

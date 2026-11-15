@@ -34,7 +34,7 @@ vi.mock('../../theme/ThemeContext', () => ({
   useTheme: () => ({
     colors: { ink: '#000000', ink3: '#666666', bgPane: '#ffffff', warning: '#cc8800' },
     fonts: {
-      sans: { regular: 'Geist_400Regular', semibold: 'Geist_600SemiBold' },
+      sans: { regular: 'Geist_400Regular', medium: 'Geist_500Medium', semibold: 'Geist_600SemiBold' },
       monoMedium: 'GeistMono_500Medium',
       monoSemibold: 'GeistMono_600SemiBold',
     },
@@ -43,7 +43,7 @@ vi.mock('../../theme/ThemeContext', () => ({
   }),
 }));
 
-vi.mock('../../components/Fold', () => ({ Fold: ({ fold, color, size, outlined }) => React.createElement('span', { 'data-fold': fold ?? 'diamond', 'data-color': color, 'data-size': size, 'data-outlined': String(!!outlined) }) }));
+vi.mock('../../components/Fold', () => ({ Fold: ({ shape, color, size, outlined }) => React.createElement('span', { 'data-shape': shape ?? 'diamond', 'data-color': color, 'data-size': size, 'data-outlined': String(!!outlined) }) }));
 vi.mock('../../components/Dot', () => ({ Dot: () => React.createElement('span', { 'data-dot': 'true' }) }));
 vi.mock('../../components/RichText', () => ({
   RichText: ({ children }) => React.createElement('span', { 'data-rich': 'true' }, children),
@@ -73,23 +73,23 @@ describe('MarkerCard typography', () => {
 
   it('keeps eyebrow, meta and title on their own tokens', () => {
     render(<MarkerCard variant="task" hubColor="#0af0af" seq={7} speakerName="scout" title="collect the brief" />);
-    expect(screen.getByText('TASK').getAttribute('data-font')).toBe('GeistMono_600SemiBold');
-    expect(screen.getByText('#7').getAttribute('data-font')).toBe('GeistMono_500Medium');
+    expect(screen.getByText('Task').getAttribute('data-font')).toBe('Geist_600SemiBold');
+    expect(screen.getByText('#7').getAttribute('data-font')).toBe('Geist_500Medium');
     expect(screen.getByText('collect the brief').getAttribute('data-font')).toBe('Geist_600SemiBold');
   });
 });
 
 describe('MarkerCard speaker fold', () => {
   it('marks the speaker with their fold in the hub colour', () => {
-    const { container } = render(<MarkerCard variant="task" hubColor="#0af0af" hubFold="shield" seq={7} speakerName="scout" title="collect" />);
-    const fold = container.querySelector('[data-fold]');
-    expect(fold.getAttribute('data-fold')).toBe('shield');
+    const { container } = render(<MarkerCard variant="task" hubColor="#0af0af" hubShape="shield" seq={7} speakerName="scout" title="collect" />);
+    const fold = container.querySelector('[data-shape]');
+    expect(fold.getAttribute('data-shape')).toBe('shield');
     expect(fold.getAttribute('data-color')).toBe('#0af0af');
   });
 
   it('keeps the diamond when the speaker has no fold', () => {
     const { container } = render(<MarkerCard variant="task" hubColor="#0af0af" seq={7} speakerName="scout" title="collect" />);
-    expect(container.querySelector('[data-fold]').getAttribute('data-fold')).toBe('diamond');
+    expect(container.querySelector('[data-shape]').getAttribute('data-shape')).toBe('diamond');
   });
 });
 
@@ -135,7 +135,7 @@ describe('MarkerCard cap by pane mode', () => {
 describe('MarkerCard chat floor', () => {
   it('keeps its eyebrow and meta at 12 pt or more', () => {
     render(<MarkerCard variant="task" hubColor="#0af0af" seq={7} speakerName="lingo" title="translate" />);
-    expect(Number(screen.getByText('TASK').getAttribute('data-size'))).toBeGreaterThanOrEqual(12);
+    expect(Number(screen.getByText('Task').getAttribute('data-size'))).toBeGreaterThanOrEqual(12);
     expect(Number(screen.getByText('lingo').getAttribute('data-size'))).toBeGreaterThanOrEqual(12);
   });
 });
@@ -174,6 +174,6 @@ describe('MarkerCard calm tint and lane', () => {
 
   it('carries the state in the eyebrow word', () => {
     render(<MarkerCard variant="done" hubColor="#0af0af" title="x" />);
-    expect(screen.getByText('DONE')).toBeTruthy();
+    expect(screen.getByText('Done')).toBeTruthy();
   });
 });

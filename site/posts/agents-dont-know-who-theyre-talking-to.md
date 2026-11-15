@@ -1,11 +1,11 @@
 ---
-title: Agents Don't Know Who They're Talking To
+title: Agents don't know who they're talking to
 date: 2026-06-11
 description: Every major agent framework identifies agents by a name and a role string — no keys, no signatures, no peer verification. What production actually needs.
 tags: [identity, security, architecture]
 ---
 
-# Agents Don't Know Who They're Talking To
+# Agents don't know who they're talking to
 
 You build a multi-agent system. You give Agent A the role "researcher" and Agent B the role "reviewer." They pass messages, delegate tasks, and produce output together. At no point does Agent A have a way to prove it is the same agent it was five minutes ago. At no point can Agent B verify that the message claiming to be from Agent A was actually written by Agent A. There is no key. No signature. No cryptographic handshake at any layer.
 

@@ -21,6 +21,7 @@ import NotificationBody, { Deck, ErrorCard } from "./NotificationBody.jsx";
 import WaveBars from "../primitives/WaveBars.jsx";
 import { SkeletonRows } from "../primitives/Skeleton.jsx";
 import Eyebrow from "../primitives/Eyebrow.jsx";
+import Banner from "../primitives/Banner.jsx";
 import { playTts, subscribeTts, VOICE_POOL } from "../lib/tts.js";
 import { useOnline } from "../lib/useOnline.js";
 import { useNotify } from "../primitives/Notification.jsx";
@@ -478,7 +479,7 @@ export default function NotificationsModal({
     <ul ref={listRef} className={styles.list} role="listbox" aria-label="Notifications" onKeyDown={onListKey}>
       {rows.length > 0 && unreachable.length > 0 && (
         <li className={styles.partial} role="presentation">
-          {unreachableTitle(unreachable)}. Their notifications are missing from this list.
+          <Banner kind="warning">{unreachableTitle(unreachable)}. Their notifications are missing from this list.</Banner>
         </li>
       )}
       {rows.length === 0 && loading ? (
@@ -508,7 +509,7 @@ export default function NotificationsModal({
               key={rowKey(row)}
               row={row}
               accent={row.accent}
-              fold={row.fold}
+              shape={row.shape}
               multi={multi}
               dayGroup={group.id.startsWith("day:")}
               unread={isUnread(row)}
@@ -539,7 +540,7 @@ export default function NotificationsModal({
         <DetailPane
           row={detail}
           accent={activeRow?.accent}
-          fold={activeRow?.fold}
+          shape={activeRow?.shape}
           connId={activeConnId}
           connectionName={activeRow?.connectionName}
           voiceId={activeVoiceId}
@@ -561,7 +562,7 @@ export default function NotificationsModal({
 }
 
 
-function NotificationRow({ row, accent, fold, multi, dayGroup = true, unread, active, onSelect, onDelete }) {
+function NotificationRow({ row, accent, shape, multi, dayGroup = true, unread, active, onSelect, onDelete }) {
   const label = profileLabel(row.profile);
   const { headline, preview } = notificationParts(row);
   const sev = typeTag(row);
@@ -584,19 +585,17 @@ function NotificationRow({ row, accent, fold, multi, dayGroup = true, unread, ac
         onSelect?.(row);
       }}
     >
-      <span className={styles.rowGutter}>
-        {unread ? <span className={styles.unreadDot} role="img" aria-label="Unread" /> : null}
-      </span>
-      <span className={styles.rowFold}><Fold fold={fold} color={accent} /></span>
+      {unread ? <span className={styles.srOnly}>Unread</span> : null}
+      <span className={styles.rowFold}><Fold shape={shape} color={accent} /></span>
       <div className={styles.rowBody}>
         <div className={styles.rowMeta}>
           <span className={styles.rowMetaLead}>
             <Mono className={styles.rowProfile}>@{label}</Mono>
-            {multi && row.connectionName ? <Mono className={styles.rowConn}>· {row.connectionName}</Mono> : null}
+            {multi && row.connectionName ? <span className={styles.rowConn}>· {row.connectionName}</span> : null}
           </span>
           <span className={styles.rowSlot}>
             {sev ? <Chip state={sev === "error" ? "error" : "warn"} size="sm">{sev}</Chip> : null}
-            <Mono className={styles.rowTs}>{notificationTime(row.created_at, { dayGroup })}</Mono>
+            <span className={styles.rowTs}>{notificationTime(row.created_at, { dayGroup })}</span>
             <span className={styles.rowDelete}>
               <Tip text="Delete" side="up">
                 <IconBtn aria-label="Delete notification" onClick={handleDelete}>
@@ -614,7 +613,7 @@ function NotificationRow({ row, accent, fold, multi, dayGroup = true, unread, ac
 }
 
 
-function DetailPane({ row, accent, fold, connId, connectionName, voiceId, onCopy, onReply, onDownload, onExportPdf, onOpenChat, onMarkUnread, onRunAgain, onOpenJob, running = false }) {
+function DetailPane({ row, accent, shape, connId, connectionName, voiceId, onCopy, onReply, onDownload, onExportPdf, onOpenChat, onMarkUnread, onRunAgain, onOpenJob, running = false }) {
   const label = profileLabel(row.profile);
   const failure = row.type === "error";
   const tag = failure ? null : typeTag(row);
@@ -650,7 +649,7 @@ function DetailPane({ row, accent, fold, connId, connectionName, voiceId, onCopy
     <article className={styles.article}>
       <div className={styles.detailMeta}>
         <span className={styles.detailMetaProfile}>
-          <Fold fold={fold} color={accent} />
+          <Fold shape={shape} color={accent} />
           <span className={styles.detailMetaName}>@{label}</span>
           <span className={styles.detailMetaWhen}>
             {[!isHost ? connectionName : null, notificationStamp(row.created_at)].filter(Boolean).map((part) => ` · ${part}`).join("")}
@@ -729,7 +728,7 @@ function DetailPane({ row, accent, fold, connId, connectionName, voiceId, onCopy
 
       {externalDelivery.length ? (
         <div className={styles.detailMetaSecondary}>
-          <Mono>delivered: {externalDelivery.join(", ")}</Mono>
+          <span>delivered: {externalDelivery.join(", ")}</span>
         </div>
       ) : null}
     </article>

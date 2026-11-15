@@ -3,7 +3,7 @@
   width: max-content;
   padding: var(--sp-12) 0;
   font-family: var(--font-mono);
-  font-size: var(--text-meta);
+  font-size: var(--text-mono);
   line-height: var(--lh-relaxed);
   color: var(--ink-2);
 }
@@ -46,7 +46,7 @@
   height: 100%;
   min-height: 320px;
   font-family: var(--font-mono);
-  font-size: var(--text-meta);
+  font-size: var(--text-mono);
   line-height: var(--lh-relaxed);
 }
 

@@ -12,7 +12,7 @@ export default function MessageBubble({
   const isRight = side === "right";
   const background = tint
     ? `color-mix(in srgb, ${tint} 11%, var(--bg-pane))`
-    : "var(--hover)";
+    : "var(--fill)";
   return (
     <div className={`msg-row ${styles.root} ${isRight ? styles.rootRight : styles.rootLeft}`}>
       {meta && (

@@ -1,4 +1,4 @@
-import { defaultAsAlpaca } from "../../../../../common/folds.mjs";
+import { defaultAsTwin } from "../../../lib/brandMark.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { profileLabel } from "../../../lib/profile-display.js";
 import { invoke } from "@tauri-apps/api/core";
@@ -109,7 +109,7 @@ export function DevicesField({
   if (devices === null || showSkeleton) {
     return (
       <Row label="paired">
-        {showSkeleton ? <Skeleton width="112px" height="22px" radius="var(--r-tag)" delay={0} /> : null}
+        {showSkeleton ? <Skeleton width="112px" height="22px" radius="var(--r-pill)" delay={0} /> : null}
       </Row>
     );
   }
@@ -360,10 +360,10 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
     invoke("profile_summaries", connectionArg)
       .then((rows) => setProfiles(
         Array.isArray(rows)
-          ? rows.filter((r) => r && r.name).map(defaultAsAlpaca("var(--accent)")).map((r) => ({
+          ? rows.filter((r) => r && r.name).map(defaultAsTwin("var(--accent)")).map((r) => ({
               name: r.name,
               accent: r.accent || null,
-              fold: r.fold,
+              shape: r.shape,
             }))
           : [],
       ))
@@ -703,7 +703,7 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
                         onClick={() => toggleScope(p.name)}
                       >
                         <span className={styles.scopeRowName}>
-                          <Fold fold={p.fold} color={p.accent || "var(--accent)"} />
+                          <Fold shape={p.shape} color={p.accent || "var(--accent)"} />
                           <span className={styles.mono}>@{profileLabel(p.name)}</span>
                         </span>
                       </Dropdown.Row>

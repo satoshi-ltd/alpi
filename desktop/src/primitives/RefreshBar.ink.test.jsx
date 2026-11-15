@@ -1,53 +1,62 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import RefreshBar from "./RefreshBar.jsx";
 import BrowseModal from "./BrowseModal.jsx";
+import { ACCENT_HEXES } from "../../../common/accents.mjs";
+import { contrastRatio, nameTone } from "../../../common/name.mjs";
+import { palettes } from "../../../common/tokens.mjs";
 
 const SRC = join(import.meta.dirname, "..");
 
-function walk(dir, out = []) {
-  for (const name of readdirSync(dir)) {
-    const p = join(dir, name);
-    if (statSync(p).isDirectory()) walk(p, out);
-    else if (/\.jsx?$/.test(name) && !/\.test\./.test(name)) out.push(p);
-  }
-  return out;
-}
+describe("the refresh bar wears the profile colour", () => {
+  it("carries the profile hue, toned per theme like the name", () => {
+    render(<RefreshBar active controlled color="#ff3366" label="Syncing" />);
+    const bar = screen.getByRole("progressbar", { name: "Syncing" });
+    expect(bar.style.getPropertyValue("--c-light")).toBe(nameTone("#ff3366", palettes.light.bgPane));
+    expect(bar.style.getPropertyValue("--c-dark")).toBe(nameTone("#ff3366", palettes.dark.bgPane));
+  });
 
-describe("the refresh bar waits in ink", () => {
-  it("takes no colour from its caller", () => {
-    render(<RefreshBar active controlled accent="#ff3366" style={{ "--c": "#ff3366" }} label="Syncing" />);
+  it.each(ACCENT_HEXES)("%s passes 3:1 on both grounds of both themes", (accent) => {
+    render(<RefreshBar active controlled color={accent} label={`bar ${accent}`} />);
+    const bar = screen.getByRole("progressbar", { name: `bar ${accent}` });
+    for (const [mode, prop] of [["light", "--c-light"], ["dark", "--c-dark"]]) {
+      const tone = bar.style.getPropertyValue(prop);
+      expect(tone).toMatch(/^#[0-9a-f]{6}$/);
+      expect(contrastRatio(tone, palettes[mode].bg)).toBeGreaterThanOrEqual(3);
+      expect(contrastRatio(tone, palettes[mode].bgPane)).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("falls back to the brand ink without a colour", () => {
+    render(<RefreshBar active controlled label="Syncing" />);
     const bar = screen.getByRole("progressbar", { name: "Syncing" });
     expect(bar.getAttribute("style")).toBeNull();
-    expect(bar.outerHTML).not.toContain("#ff3366");
-  });
-
-  it("paints only the brand ink token, never an inherited profile colour", () => {
     const css = readFileSync(join(SRC, "styles/design-system.css"), "utf8");
     const rule = css.match(/\.refresh-bar > i \{([^}]*)\}/)[1];
-    expect(rule).toMatch(/background: var\(--accent\);/);
-    expect(rule).not.toMatch(/--c\b/);
+    expect(rule).toMatch(/background: var\(--c-light, var\(--accent\)\);/);
+    expect(css).toMatch(/:root:not\(\[data-mode="light"\]\) \.refresh-bar > i \{ background: var\(--c-dark, var\(--accent\)\); \}/);
+    expect(css).toMatch(/\[data-mode="dark"\] \.refresh-bar > i \{ background: var\(--c-dark, var\(--accent\)\); \}/);
   });
 
-  it("a browse panel's wait carries no owner colour", () => {
+  it("a browse panel's wait keeps the brand ink", () => {
     render(
-      <BrowseModal open onClose={() => {}} title="Skills" loading loadingLabel="Loading skills" accent="#ff3366" owner={{ name: "lens", accent: "#ff3366", fold: "lens" }} list={<ul />} />,
+      <BrowseModal open onClose={() => {}} title="Skills" loading loadingLabel="Loading skills" accent="#ff3366" owner={{ name: "lens", accent: "#ff3366", shape: "lens" }} list={<ul />} />,
     );
     const bar = screen.getByRole("progressbar", { name: "Loading skills" });
     expect(bar.getAttribute("style")).toBeNull();
     expect(bar.outerHTML).not.toContain("#ff3366");
   });
 
-  it("no caller hands the bar a colour", () => {
-    const offenders = [];
-    for (const path of walk(SRC)) {
-      const source = readFileSync(path, "utf8");
-      for (const m of source.matchAll(/<RefreshBar\b[^>]*>/g)) {
-        if (/\baccent=|\bstyle=/.test(m[0])) offenders.push(`${relative(SRC, path)}: ${m[0].replace(/\s+/g, " ")}`);
-      }
-    }
-    expect(offenders).toEqual([]);
+  it.each([
+    ["pages/ChatPane.jsx", "activeProfile?.accent"],
+    ["features/settings/ProfileDetail.jsx", "profile.accent"],
+    ["pages/WorkgroupView.jsx", "ownerProfile?.accent"],
+    ["features/settings/WorkgroupDetail.jsx", "hub?.accent"],
+  ])("%s hands the bar its owner's accent", (file, expr) => {
+    const source = readFileSync(join(SRC, file), "utf8");
+    const bars = [...source.matchAll(/<RefreshBar\b[\s\S]*?\/>/g)].map((m) => m[0]);
+    expect(bars.some((tag) => tag.includes(`color={${expr}`))).toBe(true);
   });
 });

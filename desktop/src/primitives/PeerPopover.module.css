@@ -4,7 +4,7 @@
   gap: var(--sp-8);
   width: 100%;
   padding: var(--sp-8) var(--sp-12);
-  border-radius: var(--r-xs);
+  border-radius: var(--r-control);
   text-align: left;
   background: transparent;
   border: 0;
@@ -38,7 +38,7 @@
 
 .detailHandle {
   font-family: var(--font-mono);
-  font-size: var(--text-ui);
+  font-size: var(--text-mono-ui);
   font-weight: var(--fw-medium);
   color: var(--ink);
 }
@@ -55,9 +55,8 @@
 
 .pubkey {
   padding: var(--sp-8) var(--sp-12);
-  background: var(--hover);
-  border: .5px solid var(--line);
-  border-radius: var(--r-xs);
+  background: var(--well);
+  border-radius: var(--r-control);
   font-size: var(--text-meta);
   color: var(--ink-2);
   word-break: break-all;
@@ -78,7 +77,6 @@
 
 .listHead {
   padding: var(--sp-12) var(--sp-16);
-  border-bottom: .5px solid var(--line);
   background: var(--bg-side);
 }
 
@@ -101,5 +99,4 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--sp-8) var(--sp-12);
-  border-top: .5px solid var(--line);
 }

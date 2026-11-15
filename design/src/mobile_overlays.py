@@ -1,9 +1,11 @@
-from gen import DANGER, DOC_ACCENT, FLOAT_EDGE, SHEET_EDGE, diamond, mi as ic, m_button, m_confirm_dialog, m_group, m_row, m_screen_header, m_section, mix, page, pill, switch
+from gen import DANGER, DOC_ACCENT, FLOAT_EDGE, SHEET_EDGE, NEST, R_CONTROL, R_SURFACE, R_SHEET, M_RECESS, mi as ic, m_button, m_confirm_dialog, m_group, m_row, m_screen_header, m_section, mix, page, pill, switch
 
 INK, INK2, INK3, INK4 = "#141414", "#454545", "#6b6b6b", "#b4b4b4"
-LINE, LINE2, SELECTED, INPUT = "rgba(20,20,20,0.07)", "rgba(20,20,20,0.14)", "rgba(20,20,20,0.06)", "#f2f2f2"
+LINE, LINE2, SELECTED, INPUT = "rgba(20,20,20,0.07)", "rgba(20,20,20,0.14)", "rgba(20,20,20,0.08)", "#f2f2f2"
+ELEV = "var(--bg-elev, #ffffff)"
+GROUP_GAP = '<div role="presentation" style="height: 8px"></div>'
 MONO = "'Geist Mono', monospace"
-BACKDROP = "color-mix(in srgb, #ffffff 72%, transparent)"
+BACKDROP = "var(--veil, rgba(20, 20, 20, 0.22))"
 
 
 def backdrop(w, h):
@@ -11,28 +13,29 @@ def backdrop(w, h):
 
 
 def sheet_header(title, subtitle, dialog=False):
-    grabber = "" if dialog else f'<div style="display: flex; justify-content: center; padding-top: 8px"><span style="width: 36px; height: 4px; border-radius: 2px; background: {INK4}; opacity: 0.6"></span></div>'
+    grabber = "" if dialog else '<div style="display: flex; justify-content: center; padding-top: 8px"><span style="width: 36px; height: 4px; border-radius: 999px; background: {INK4}"></span></div>'
+    sub = f'<span style="font-size: 14px; line-height: 1.3; color: {INK3}; margin-top: 8px">{subtitle}</span>' if subtitle else ""
     return f"""{grabber}
-<div style="display: flex; align-items: flex-start; gap: 12px; padding: {16 if dialog else 12}px 12px 14px 16px">
-<div style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-weight: 600; font-size: 18px; line-height: 1.3; letter-spacing: -0.01em; color: {INK}">{title}</span>{f'<span style="font-family: {MONO}; font-size: 12px; color: {INK3}; margin-top: 4px">{subtitle}</span>' if subtitle else ""}</div>
-<button aria-label="Close" style="width: 44px; height: 44px; border: 0; border-radius: 4px; background: transparent; display: inline-flex; align-items: center; justify-content: center; margin-top: -8px; cursor: pointer">{ic("x", 20, INK3)}</button>
+<div style="display: flex; align-items: flex-start; gap: 12px; padding: {16 if dialog else 12}px 12px 16px 16px">
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-weight: 600; font-size: 20px; line-height: 1.3; color: {INK}">{title}</span>{sub}</div>
+<button aria-label="Close" style="width: 44px; height: 44px; border: 0; border-radius: 999px; background: transparent; display: inline-flex; align-items: center; justify-content: center; margin-top: -6px; cursor: pointer">{ic("x", 20, INK3)}</button>
 </div>"""
 
 
 def primary_bar(label, variant="primary", second=None):
-    btn = lambda t, v: f'<span style="flex: 1; display: flex">{m_button(t, v, "lg").replace("border-radius: 4px", "border-radius: 4px; width: 100%")}</span>'
+    btn = lambda t, v: f'<span style="flex: 1; display: flex">{m_button(t, v, "lg").replace("border-radius: 999px", "border-radius: 999px; width: 100%")}</span>'
     inner = (btn(second[0], second[1]) if second else "") + btn(label, variant)
-    return f'<div style="display: flex; gap: 10px; padding: 20px 16px 24px; background: #ffffff">{inner}</div>'
+    return f'<div style="display: flex; gap: 10px; padding: 20px 16px 24px; background: {ELEV}">{inner}</div>'
 
 
 def sheet(w, h, title, subtitle, body, primary=None, variant="primary", dialog=False, second=None, top=None):
     bar = primary_bar(primary, variant, second) if primary else '<div style="height: 24px"></div>'
     if dialog:
-        box = f'position: absolute; left: {(w - 560) // 2}px; top: 50%; transform: translateY(-50%); width: 560px; border-radius: 4px;'
+        box = f'position: absolute; left: {(w - 560) // 2}px; top: 50%; transform: translateY(-50%); width: 560px; border-radius: {R_SHEET}px;'
     else:
-        box = f'position: absolute; left: 0; right: 0; bottom: 0; border-radius: 4px 4px 0 0;'
+        box = f'position: absolute; left: 0; right: 0; bottom: 0; border-radius: {R_SHEET}px {R_SHEET}px 0 0;'
     return f"""{backdrop(w, h)}
-<div style="{box} background: #ffffff; {FLOAT_EDGE if dialog else SHEET_EDGE}; overflow: hidden; display: flex; flex-direction: column">
+<div style="{box} background: {ELEV}; {FLOAT_EDGE if dialog else SHEET_EDGE}; overflow: hidden; display: flex; flex-direction: column">
 {sheet_header(title, subtitle, dialog)}
 {body}
 {bar}
@@ -40,25 +43,26 @@ def sheet(w, h, title, subtitle, body, primary=None, variant="primary", dialog=F
 
 
 def picker_row(label, helper="", selected=False, accent=DOC_ACCENT, meta=""):
-    dot = f'<span style="width: 6px; height: 6px; border-radius: 999px; background: {accent}"></span>' if selected else ""
+    dot = f'<span style="width: 8px; height: 8px; border-radius: 999px; background: {accent}"></span>' if selected else ""
     m = f'{pill(meta, tone="neutral")}' if meta else ""
-    return f"""<div style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: {SELECTED if selected else "transparent"}">
+    help_ = f'<span style="font-size: 14px; line-height: 1.45; color: {INK3}">{helper}</span>' if helper else ""
+    return f"""<div style="display: flex; align-items: center; gap: 12px; min-height: 56px; margin: 0; padding: 16px; box-sizing: border-box; border-radius: 0; background: {SELECTED if selected else "transparent"}">
 <span style="width: 14px; display: inline-flex; justify-content: center">{dot}</span>
-<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px"><span style="font-weight: 500; font-size: 14px; color: {INK}">{label}</span>{f'<span style="font-family: {MONO}; font-size: 11px; color: {INK3}">{helper}</span>' if helper else ""}</div>
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 500; font-size: 15px; line-height: 1.4; color: {INK}">{label}</span>{help_}</div>
 {m}
 </div>"""
 
 
 def separator(inset=42):
-    return f'<div style="height: 0.5px; background: {LINE}; margin-left: {inset}px"></div>'
+    return ""
 
 
-def action_item(icon, label, detail="", danger=False, toggle=None):
+def action_item(icon, label, detail="", danger=False, toggle=None, pressed=False, inset=8):
     color = DANGER if danger else INK
-    det = f'<span style="font-family: {MONO}; font-weight: 500; font-size: 12px; color: {INK3}">{detail}</span>' if detail else ""
+    det = f'<span style="font-weight: 500; font-size: 14px; color: {INK3}">{detail}</span>' if detail else ""
     if toggle is not None:
         det = switch(toggle, DOC_ACCENT, label)
-    return f"""<div style="display: flex; align-items: center; gap: 12px; padding: 14px 16px">
+    return f"""<div role="button" style="display: flex; align-items: center; gap: 12px; min-height: 56px; margin: 0 {inset}px; padding: 0 8px; box-sizing: border-box; border-radius: {R_CONTROL}px; background: {SELECTED if pressed else "transparent"}">
 <span style="width: 24px; display: inline-flex; justify-content: center">{ic(icon, 20, DANGER if danger else INK2)}</span>
 <span style="flex: 1; font-size: 15px; color: {color}">{label}</span>{det}
 </div>"""
@@ -70,7 +74,7 @@ def typed_confirm(w, h, title, body, code, confirm):
 
 
 def settings_backdrop_rows():
-    return f"""{m_screen_header("doc", "Profile · settings", creased=True)}
+    return f"""{m_screen_header("doc", "Profile · settings", named=True)}
 {m_section("Model")}
 {m_group(m_row("Default model", "", "deepseek-v4.1-flash"), m_row("Reasoning effort", "how hard the model thinks", "Medium"), m_row("Fast model", "", "deepseek-v4.1-flash", sep=False))}
 {m_section("Budget")}
@@ -99,11 +103,11 @@ def _schedule_item():
 
 
 def phone_action_sheet():
-    divider = f'<div style="height: 0.5px; background: {LINE}; margin-left: 52px"></div>'
-    items = (action_item("settings", "Profile settings") + action_item("pause", "Pause profile") + action_item("volume-2", "Auto-read replies", toggle=False) + divider
+    divider = GROUP_GAP
+    items = (action_item("settings", "Profile settings") + action_item("pause", "Pause profile", pressed=True) + action_item("volume-2", "Auto-read replies", toggle=False) + divider
              + action_item("sparkle", "Skills") + action_item("archive", "Memory") + action_item("cpu", "Tools") + _schedule_item() + divider
              + action_item("refresh-cw", "Refresh thread"))
-    body = f'<div style="height: 0.5px; background: {LINE}"></div><div style="padding-bottom: 24px">{items}</div>'
+    body = f'<div style="padding-bottom: 24px">{items}</div>'
     page_body = f"""<div style="display: flex; flex-direction: column">{settings_backdrop_rows()}</div>
 {sheet(390, 844, "doc", "profile · deepseek-v4.1-flash", body)}
 """
@@ -112,12 +116,12 @@ def phone_action_sheet():
 
 def fallback_entry(i, model, last):
     def act(name, label, off=False):
-        return (f'<button aria-label="{label}" style="width: 44px; height: 44px; border: 0; border-radius: 4px; background: transparent; padding: 0; '
+        return (f'<button aria-label="{label}" style="width: 44px; height: 44px; border: 0; border-radius: {R_CONTROL}px; background: transparent; padding: 0; '
                 f'display: inline-flex; align-items: center; justify-content: center; opacity: {0.35 if off else 1}">{ic(name, 20, INK2)}</button>')
     name = model.split("/")[-1]
     return (f'<div style="display: flex; align-items: center; padding: 0 6px 0 16px; min-height: 56px">'
-            f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 500; font-size: 14px; color: {INK}">{i} · {name}</span>'
-            f'<span style="font-family: {MONO}; font-size: 11px; color: {INK3}">{model}</span></div>'
+            f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 500; font-size: 15px; color: {INK}">{i} · {name}</span>'
+            f'<span style="font-family: {MONO}; font-size: 12px; color: {INK3}">{model}</span></div>'
             f'{act("chevron-up", f"Move {name} up", i == 1)}{act("chevron-down", f"Move {name} down", last)}{act("x", f"Remove {name}")}</div>')
 
 
@@ -141,7 +145,7 @@ def phone_typed_confirm():
 def fold_sheet():
     from gen import m_sidebar, m_wide_row, m_wide_section
     detail = f"""<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: #ffffff">
-{m_screen_header("doc", "SETTINGS", wide=True, back=False, creased=True)}
+{m_screen_header("doc", "Settings", wide=True, back=False, named=True)}
 <div style="padding: 0 24px">{m_wide_section("Model", first=True)}{m_wide_row("Default model", value="deepseek-v4.1-flash")}{m_wide_row("Reasoning effort", "how hard the model thinks", "Medium")}{m_wide_section("Budget")}{m_wide_row("Daily cap", "$0.00 of $1.00 today", "$1.00")}</div>
 </div>"""
     body = effort_rows()
@@ -153,8 +157,9 @@ def fold_sheet():
 
 def fold_popover():
     from gen import fold_chat
-    items = action_item("settings", "Profile settings") + action_item("pause", "Pause profile") + action_item("volume-2", "Auto-read replies", toggle=False) + separator(52) + action_item("sparkle", "Skills") + action_item("archive", "Memory") + separator(52) + action_item("refresh-cw", "Refresh thread")
-    pop = f'<div style="position: absolute; right: 8px; top: 62px; width: 280px; padding: 4px 0; box-sizing: border-box; border-radius: 4px; background: #ffffff; overflow: hidden; {FLOAT_EDGE}">{items}</div>'
+    item = lambda *a, **k: action_item(*a, inset=0, **k)
+    items = item("settings", "Profile settings") + item("pause", "Pause profile") + item("volume-2", "Auto-read replies", toggle=False) + GROUP_GAP + item("sparkle", "Skills") + item("archive", "Memory") + GROUP_GAP + item("refresh-cw", "Refresh thread")
+    pop = f'<div style="position: absolute; right: 8px; top: 62px; width: 280px; padding: {NEST}px; box-sizing: border-box; border-radius: {R_SURFACE}px; background: {ELEV}; overflow: hidden; {FLOAT_EDGE}">{items}</div>'
     return _inject(fold_chat(), pop)
 
 
@@ -165,14 +170,14 @@ def _inject(html, extra):
 
 def chat_backdrop():
     from gen import m_chat_header, m_composer, m_thread, meter
-    meta = f'<span style="font-family: {MONO}; font-size: 11px; color: {INK2}">deepseek-v4.1-flash</span>{meter("24K", "/1.0M", 0.024, DOC_ACCENT, False)}'
+    meta = f'<span style="font-family: {MONO}; font-size: 12px; color: {INK2}">deepseek-v4.1-flash</span>{meter("24K", "/1.0M", 0.024, DOC_ACCENT, False)}'
     return f'<div style="display: flex; flex-direction: column; height: 100%">{m_chat_header("doc", DOC_ACCENT, meta)}{m_thread(DOC_ACCENT)}{m_composer()}</div>'
 
 
 def tool_block(label, text, tag="", danger=False):
-    t = f'<span style="font-family: {MONO}; font-size: 12px; color: {INK3}">{tag}</span>' if tag else ""
-    return (f'<div style="display: flex; flex-direction: column; gap: 8px"><div style="display: flex; align-items: center; gap: 8px"><span style="font-weight: 500; font-size: 12px; color: {INK3}">{label}</span>{t}</div>'
-            f'<div style="border-radius: 4px; background: {INPUT}; padding: 12px 14px"><pre style="margin: 0; white-space: pre-wrap; font-family: {MONO}; font-size: 14px; line-height: 23.1px; color: {DANGER if danger else INK}">{text}</pre></div></div>')
+    t = f'<span style="font-family: {MONO}; font-size: 14px; color: {INK3}">{tag}</span>' if tag else ""
+    return (f'<div style="display: flex; flex-direction: column; gap: 8px"><div style="display: flex; align-items: center; gap: 8px"><span style="font-weight: 500; font-size: 14px; color: {INK3}">{label}</span>{t}</div>'
+            f'<div style="border-radius: {R_SURFACE}px; {M_RECESS}; padding: 12px 14px"><pre style="margin: 0; white-space: pre-wrap; font-family: {MONO}; font-size: 15px; line-height: 23.1px; color: {DANGER if danger else INK}">{text}</pre></div></div>')
 
 
 def phone_tool_sheet():
@@ -199,7 +204,7 @@ def phone_select_text():
 
 def phone_message_actions():
     items = action_item("copy", "Copy") + action_item("file-text", "Select text") + action_item("download", "Download .md") + action_item("file-text", "Export PDF…") + action_item("refresh-cw", "Ask again")
-    body = f'<div style="height: 0.5px; background: {LINE}"></div><div style="padding-bottom: 24px">{items}</div>'
+    body = f'<div style="padding-bottom: 24px">{items}</div>'
     page_body = f"""{chat_backdrop()}
 {sheet(390, 844, "Agent message", "", body)}
 """
@@ -208,11 +213,11 @@ def phone_message_actions():
 
 def connection_row(name, url, status, tag="", tag_tone="neutral", server=False):
     dot = {"online": "#3fb37a", "offline": "#c14545", "disabled": "#6b6b6b"}[status]
-    tile = (f'<span style="position: relative; width: 40px; height: 40px; border-radius: 4px; background: #f6f6f6; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">'
+    tile = (f'<span style="position: relative; width: 40px; height: 40px; border-radius: {R_CONTROL}px; background: var(--card, #f4f4f4); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">'
             f'{ic("server" if server else "cpu", 20, INK2)}<span style="position: absolute; right: 2px; bottom: 2px; width: 8px; height: 8px; border-radius: 999px; background: {dot}"></span></span>')
     return (f'<div style="display: flex; align-items: center; gap: 12px; padding: 14px 16px">{tile}'
-            f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 15px; line-height: 1.3; color: {INK}">{name}</span>'
-            f'<span style="font-family: {MONO}; font-weight: 500; font-size: 11px; color: {INK3}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{url}</span></div>'
+            f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 16px; line-height: 1.3; color: {INK}">{name}</span>'
+            f'<span style="font-family: {MONO}; font-weight: 500; font-size: 12px; color: {INK3}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{url}</span></div>'
             f'{pill(tag, tone=tag_tone) if tag else ""}</div>')
 
 
@@ -229,7 +234,7 @@ def phone_connection_sheet():
 def _roster_backdrop():
     from gen import m_conn_header, m_roster, m_shell_footer
     return (f'<div style="display: flex; flex-direction: column; height: 100%; background: #ffffff">{m_conn_header(ring="#ffffff", collapse=False, bg="#ffffff")}'
-            f'<div style="height: 0.5px; background: {LINE}"></div><div style="flex: 1; min-height: 0; overflow: hidden">{m_roster(compact=False)}</div>{m_shell_footer(ring="#ffffff", border=True)}</div>')
+            f'<div style="flex: 1; min-height: 0; overflow: hidden">{m_roster(compact=False)}</div>{m_shell_footer(ring="#ffffff", border=True)}</div>')
 
 
 MOBILE_OVERLAYS = {"fold_popover": fold_popover, "phone_connection": phone_connection_sheet, "phone_sheet": phone_sheet, "phone_action": phone_action_sheet, "phone_confirm": phone_typed_confirm, "fold_sheet": fold_sheet,

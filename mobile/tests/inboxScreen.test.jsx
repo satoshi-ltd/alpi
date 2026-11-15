@@ -308,9 +308,9 @@ describe('Inbox screen creation', () => {
   it('gives an admin a + on the profiles and workgroups headings only', () => {
     h.pinnedProfiles = ['doc'];
     render(<Index />);
-    expect(header('PROFILES').querySelector('[aria-label="New profile"]')).toBeTruthy();
-    expect(header('WORKGROUPS').querySelector('[aria-label="New workgroup"]')).toBeTruthy();
-    expect(header('PINNED').querySelector('button')).toBeNull();
+    expect(header('Profiles').querySelector('[aria-label="New profile"]')).toBeTruthy();
+    expect(header('Workgroups').querySelector('[aria-label="New workgroup"]')).toBeTruthy();
+    expect(screen.queryByText('Pinned')).toBeNull();
   });
 
   it('gives a non-admin no + at all', () => {
@@ -340,11 +340,11 @@ describe('Inbox screen creation', () => {
     expect(document.querySelector('[data-create="workgroup"]')).toBeTruthy();
   });
 
-  it('keeps both + reachable when every row sits under PINNED', () => {
+  it('keeps both + reachable when every row is a pinned tile', () => {
     h.items = ITEMS.filter((it) => it.kind === 'profile');
     h.pinnedProfiles = ['doc', 'agora'];
     render(<Index />);
-    expect(header('PINNED')).toBeTruthy();
+    expect(header('Profiles')).toBeTruthy();
     fireEvent.click(screen.getByLabelText('New profile'));
     expect(document.querySelector('[data-create="profile"]')).toBeTruthy();
     fireEvent.click(screen.getByLabelText('New workgroup'));

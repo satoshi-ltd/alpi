@@ -25,9 +25,17 @@ The active profile is resolved in this order:
 4. Default (`~/.alpi/`).
 
 `alpi profile list` shows all profiles with their model, size on
-disk, and active marker (the profile's object glyph; a plain diamond on
-terminals without truecolor and UTF-8). `alpi profile show [name]` draws
-the profile's object as half-block art with its model and path.
+disk, and active marker (the glyph of the profile's shape, `⍥` for Twin; a plain
+diamond on terminals without truecolor and UTF-8). `alpi profile show [name]`
+draws the profile's mark as half-block art beside its name in the name
+tone, its pair (`blue bell`, `twin (brand mark)` for the default), model,
+size and path. A profile's look is `tui.shape` (one of twelve shape names) and
+`tui.accent` in its `config.yaml`; a new profile is seeded with the next unworn
+pair, `/shape` in the TUI and `alpi setup → Appearance` change it, and a legacy
+`tui.fold` still stored in an old config reads as its shape until the shape is saved. On a
+light theme a pale accent's mark is drawn a step deeper so its white eyes stay readable
+(`markTone`); the stored `tui.accent` never changes. The default profile is always Twin in
+the brand ink.
 
 ## What's isolated per profile
 

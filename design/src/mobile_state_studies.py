@@ -20,23 +20,23 @@ def frame(inner, h=300):
 
 
 def caption(key):
-    return f'<span style="font-family: {MONO}; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: {INK3}">{TITLES[key]}</span>'
+    return f'<span style="font-size: 14px; color: {INK3}">{TITLES[key]}</span>'
 
 
 def activity_empty():
-    return frame(m_screen_header("Activity", "ACROSS PROFILES", glyph="") + m_empty_state("Nothing running", "Running turns, workgroup phases, schedules and anything waiting on you show up here."))
+    return frame(m_screen_header("Activity", "Across profiles", glyph="") + m_empty_state("Nothing running", "Running turns, workgroup phases, schedules and anything waiting on you show up here."))
 
 
 def notifications_empty():
-    return frame(m_screen_header("Notifications", "INBOX ZERO", glyph="") + m_empty_state("No notifications yet", "Notifications land here when an agent notifies you or a scheduled job fails."))
+    return frame(m_screen_header("Notifications", "Inbox zero", glyph="") + m_empty_state("No notifications yet", "Notifications land here when an agent notifies you or a scheduled job fails."))
 
 
 def schedule_empty():
-    return frame(m_screen_header("scout", "SCHEDULES · 0", glyph="") + m_empty_state("No scheduled jobs", "Ask the agent to set one up.", "New schedule"))
+    return frame(m_screen_header("scout", "Schedules · 0", glyph="") + m_empty_state("No scheduled jobs", "Ask the agent to set one up.", "New schedule"))
 
 
 def schedule_error():
-    return frame(m_screen_header("scout", "SCHEDULES", glyph="") + m_empty_state("Couldn’t load schedule", "Cannot reach the daemon.", "Retry"))
+    return frame(m_screen_header("scout", "Schedules", glyph="") + m_empty_state("Couldn’t load schedule", "Cannot reach the daemon.", "Retry"))
 
 
 def roster_down():
@@ -52,17 +52,17 @@ def roster_rows_down():
 def composer_states():
     body = (f'<div style="flex: 1; display: flex; flex-direction: column; justify-content: center">'
             f'{m_composer(state="offline")}{m_composer(state="paused")}'
-            f'<span style="padding: 12px 20px 0; font-family: {MONO}; font-size: 11px; color: {INK3}">Offline above, a paused profile below; only the controls dim and the send button stays off in both.</span></div>')
+            f'<span style="padding: 12px 20px 0; font-family: {MONO}; font-size: 12px; color: {INK3}">Offline above, a paused profile below; only the controls dim and the send button stays off in both.</span></div>')
     return frame(body, 360)
 
 
 def undo_toast():
-    return frame(f'<div style="position: relative; flex: 1"><span style="position: absolute; left: 20px; right: 20px; top: 16px; font-family: {MONO}; font-size: 11px; color: {INK3}">One toast for the batch, anchored above the bottom edge; Undo restores every pending row for 5 s.</span>'
+    return frame(f'<div style="position: relative; flex: 1"><span style="position: absolute; left: 20px; right: 20px; top: 16px; font-family: {MONO}; font-size: 12px; color: {INK3}">One toast for the batch, anchored above the bottom edge; Undo restores every pending row for 5 s.</span>'
                  f'{m_toast("Deleted 3 notifications", action="Undo", bottom=40)}</div>')
 
 
 def error_toast():
-    return frame(f'<div style="position: relative; flex: 1"><span style="position: absolute; left: 20px; right: 20px; top: 16px; font-family: {MONO}; font-size: 11px; color: {INK3}">An error lasts 6 s; with Retry it stays until dismissed. The message wraps to two lines and Dismiss is a 44 pt target.</span>'
+    return frame(f'<div style="position: relative; flex: 1"><span style="position: absolute; left: 20px; right: 20px; top: 16px; font-family: {MONO}; font-size: 12px; color: {INK3}">An error lasts 6 s; with Retry it stays until dismissed. The message wraps to two lines and Dismiss is a 44 pt target.</span>'
                  f'{m_toast("Couldn’t save: the daemon refused the request for this device.", kind="danger", retry=True, dismiss=True, bottom=40)}</div>', 300)
 
 

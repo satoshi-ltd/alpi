@@ -7,11 +7,16 @@ this file is the whole contract of the kit.
 ## Generator
 
 - `python3 design/build.py` rewrites every `design/*.html`, `boards.css`, `favicon.svg` and the canvas artboards under
-  `design/canvas/project/`. It needs `node` on PATH to read the shared icons in `common/`.
+  `design/canvas/project/`, and writes `common/agentMarks.mjs` and `common/workgroupMark.mjs`, the mark data both clients import,
+  from `design/src/marks_export.py`. It needs `node` on PATH to read the shared icons in `common/`. With `--out DIR` it writes
+  only the kit into `DIR` and leaves `common/` alone.
 - `design/src/` is the source, one module per family of boards: `build.py` (page shell and nav), `gen.py` (canvas index, mobile screens),
   `system_boards.py`, `desktop_boards.py`, `desktop_overlays.py`, `desktop_tray.py` (the tray popover and the tray icon views, the icons read from the shipped PNGs under `desktop/src-tauri/icons/tray/`), `conversation_boards.py`, `mobile_overlays.py`,
-  `brand_boards.py` and `folds.py` (the Brand tab), `panel_kit.py` (the drawing helpers of the profile window and phone panels, one place for the views and the proposals),
-  `profile_panel_studies.py` (the Desktop and Mobile panel views, drawn from the shipped panels), `mobile_state_studies.py` (the empty, error and offline states of the phone), `onboarding_studies.py` and `first_run_parts.py` (the first-run views of both clients, the welcome, pairing, paired and first-profile screens, and the drawing helpers the proposals reuse), `mobile_attention_studies.py` (the drawings of the schedule job pages, the roster band, the chat menu, the settings jump and the fold's two-pane schedule and notifications, drawn from the mobile components), `proposals.py` (the Proposals page frame) and `proposal_boards.py` (the proposal boards, each mobile row drawable in a fixed light and dark palette). Never edit a generated file by hand.
+  `brand_boards.py` (the Brand tab), `panel_kit.py` (the drawing helpers of the profile window and phone panels, one place for the views and the proposals),
+  `profile_panel_studies.py` (the Desktop and Mobile panel views, drawn from the shipped panels), `mobile_state_studies.py` (the empty, error and offline states of the phone), `onboarding_studies.py` and `first_run_parts.py` (the first-run views of both clients, the welcome, pairing, paired and first-profile screens), `mobile_attention_studies.py` (the drawings of the schedule job pages, the roster band, the chat menu, the settings jump and the fold's two-pane schedule and notifications, drawn from the mobile components), `proposals.py` (the Proposals page frame), `proposal_boards.py` (the proposal boards, each mobile row drawable in a fixed light and dark palette; a large board draws in its own module beside it and leaves with its board), `site_stage.py` (the two calm app moments the marketing site shows on its stage).
+- The marks: `agent_marks.py` (the twelve profile shapes and Twin, alpi’s mark: outlines, eyes and their expressions, the eight states, sizes, palette and the macOS app icon tile), `volume_marks.py` (the same marks turned in 3D: one turn per state with the eyes’ parallax, a held angle at rest and a smaller one at row size, and the turn projected as fixed geometry for the app icon, menu bar and favicon), `workgroup_marks.py` (the soft honeycomb of a workgroup, its pipeline states and turns), `marks.py` (what the views call: a profile’s mark from its shape and state, Twin in the theme’s ink for the default profile and the busy wait, the honeycomb, the sample cast and `name_tone`) and `marks_export.py` (the two generated `common/` modules). Never edit a generated file by hand.
+- `python3 design/stage.py` renders `site_stage.py` in light and dark with a headless Chromium (Brave or Chrome, or `CHROME`) into
+  `site/assets/stage-{desktop,phone}-{light,dark}.png`; run it once per desktop or mobile release. The build never runs it.
 - `design/drift.py` runs the build and exits 1 naming every file it had to regenerate; `scripts/validate.py` runs it as the
   `design` step. `scripts/` holds no design file.
 - `design/README.md` is the human note; this file owns the contract.
@@ -21,11 +26,20 @@ this file is the whole contract of the kit.
 - `Brand` (the identity as it ships), `System` (tokens and components of both clients), `Desktop`, `Mobile`, `Proposals`, in that order. The marketing site is not a tab: it is a web page you open in a browser, and a proposal for it is a board on Proposals with `client: site`.
 - The Fold (the foldable-phone layout) is rendered inside Mobile, not on a tab of its own.
 - A new interface adds its tab before Proposals.
-- `Brand` describes the identity as it ships (the mark and wordmark, the twelve pairs, the palette and the states), one board per area, in `design/src/brand_boards.py`
-  with the objects read from `common/folds.mjs` (the single source, through node) and the crease tones from `common/crease.mjs`. A new direction is first a board on Proposals; when it ships it is one change: the code, the views regenerated and its board deleted or rewritten as a description.
-- **Hard gate on every Brand object:** it is an established origami model folded from one square (named in `folds.MODELS`), has at most six
-  facets, is one piece (every facet touches another; nothing floats), fills the 1:1 square (shorter side at least 80 % of the longer) and has no shadows, gradients or outlines, and is never a four-fold chiral motif (a pinwheel reads as a swastika). An icon of something
-  (a pencil, a flag, an isometric cube) is not origami and does not enter. `tests/test_design_kit.py` enforces it.
+- `Brand` describes the identity as it ships, one board per area, in `design/src/brand_boards.py`: Twin and its states, the wordmark and its
+  lockups, the app icon, menu bar and favicon, the twelve shapes with the palette and the legacy-id map, the eyes and the eight states, the
+  turn per state and the size scale, names in the UI with `nameTone`, the workgroups’ soft honeycomb, and the gate. Everything is drawn from
+  the mark modules above, so the tab, the views and `common/agentMarks.mjs` cannot disagree. A new direction is first a board on Proposals;
+  when it ships it is one change: the code, the views regenerated and its board deleted or rewritten as a description.
+- **Brand gate, on every mark:** (1) one closed silhouette of tangent-continuous curves: no corners, nothing floating, no
+  holes but the eyes cut out of the one-ink icon, menu-bar template and favicon; (2) one flat fill on the body: no outline, gradient, shadow or second colour but the eyes; (3) two eyes filled in the paper tone of the theme, white in light and black in dark, at 3:1 or more on the body
+  (in light a pale accent's body is drawn deeper by `markTone` in `common/markTone.mjs`), inside the body in every pose
+  of every state from 16 px; (4) equal area and a shared optical centre across the twelve, so no profile shouts in a row of 20 px;
+  (5) upright at rest: a held angle is a turn in 3D, never a flat tilt, and the app icon is static and may show the held turn;
+  (6) readable at 16 px: the silhouette and both eyes survive the menu bar and the smallest row; (7) every state has a still form,
+  motion only from 20 px and never under reduce motion; (8) never a copy of a known character, mascot or logo, and nothing that reads
+  as a hate symbol; (9) alpi is always neutral ink, cream in dark, never an accent, and a profile is always one of the 144 shape × accent
+  pairs. `tests/test_design_kit.py` computes every rule it can from `common/agentMarks.mjs`; rule 8 is the reviewer’s.
 - There is no Open work page: `docs/ROADMAP.md` already is the list of what is left.
 
 ## Proposals
@@ -81,12 +95,12 @@ and a stale or orphaned artboard fails the tests.
 
 - `tests/test_design_kit.py` builds the kit into a temporary directory and fails until `design/` is regenerated. It enforces:
   every page carries the shipped tokens and the version banner; the nav is exactly Brand, System, Desktop, Mobile, Proposals and no
-  Open work page exists; the Brand tab holds its four boards, every pair of object and colour drawn in the palette; the committed files equal what the generator writes and the canvas holds the same artboards;
+  Open work page exists; the Brand tab holds its nine boards in order, with Twin, the twelve shapes, every shipped accent and the legacy-id map; no page draws the retired fold polygons or the old mark, and every Twin in the views is in the theme’s ink; every mark passes the Brand gate; `common/agentMarks.mjs` and `common/workgroupMark.mjs` equal what `marks_export.py` writes; the committed files equal what the generator writes and the canvas holds the same artboards;
   every page and artboard links the favicon copy inside `design/`; boards follow the theme except the literal swatches;
   every ROADMAP task of type `ui` has a board with its ID, names the board in its accept, and a board without a task is a
   valid pending proposal carrying its parts; board IDs are unique and a split task names its `UI-<TASKID>` board; the
   parser counts raw markers against parsed ones; `design/AGENTS.md` exists and `scripts/` holds no design file.
-- Design drift is `design/drift.py`, covered by `tests/test_release_scripts.py`, and `python3 scripts/validate.py` runs it
+- Design drift is `design/drift.py` (it also watches the two generated `common/` modules), covered by `tests/test_release_scripts.py` and the kit test, and `python3 scripts/validate.py` runs it
   with the kit test whenever a path under `design/`, `common/`, the client sources or the kit test changes.
 
 ## Particulars of alpi

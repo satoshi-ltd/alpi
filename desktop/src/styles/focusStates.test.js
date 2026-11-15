@@ -31,6 +31,7 @@ describe("focus", () => {
     const offenders = SHEETS.flatMap((file) =>
       rules(readFileSync(file, "utf8"))
         .filter(({ all, body }) => /:focus-visible/.test(all) && !/:not\(:focus-visible\)/.test(all) && /outline:\s*(none|0)\b/.test(body) && !/box-shadow|background|border-color/.test(body))
+        .filter(({ all }) => !(file.endsWith("Composer.module.css") && /^\.input:focus/.test(all)))
         .map(({ all }) => `${relative(SRC, file)} ${all}`),
     );
     expect(offenders).toEqual([]);
@@ -42,14 +43,16 @@ describe("focus", () => {
 
   it("insets the focus outline on rows that sit inside a clipping scroller", () => {
     for (const [file, selector] of [["features/ToolSteps.module.css", ".head:focus-visible"], ["features/ToolSteps.module.css", ".bucket:focus-visible"], ["primitives/Reasoning.module.css", ".row:focus-visible"]]) {
-      expect(find(read(file), selector), selector).toMatch(/outline-offset:\s*calc\(var\(--focus-outline-offset\) \* -1\)/);
+      expect(find(read(file), selector), selector).toMatch(/outline-offset:\s*var\(--focus-inset\)/);
     }
   });
 
-  it("insets the focus ring on menu, dropdown, context menu and sidebar rows that sit inside a clipping surface", () => {
-    const inset = /outline-offset:\s*calc\(var\(--focus-outline-offset\) \* -1\)/;
+  it("insets the focus ring on sidebar rows and lights menu, dropdown and context menu rows with the fill alone", () => {
+    const inset = /outline-offset:\s*var\(--focus-inset\)/;
     const ruleFor = (css, selector) => rules(css).find((r) => r.all.split(",").map((x) => x.trim()).includes(selector) && /outline-offset/.test(r.body));
-    expect(ruleFor(read("primitives/Menu.module.css"), ".row:focus-visible")?.body).toMatch(inset);
+    const menuFocus = rules(read("primitives/Menu.module.css")).find((r) => r.all === ".row:focus-visible").body;
+    expect(menuFocus).toMatch(/background:\s*var\(--selected\)/);
+    expect(menuFocus).toMatch(/outline:\s*none/);
     expect(ruleFor(DS, ".ds-sb-row:focus-visible")?.body).toMatch(inset);
     expect(ruleFor(DS, ".sb-row:focus-visible")?.body).toMatch(inset);
     expect(read("primitives/Dropdown.jsx")).toMatch(/menuRowClass\(/);
@@ -61,7 +64,7 @@ describe("focus", () => {
     for (const [file, selector, pattern] of [
       ["features/settings/Settings.module.css", '.checkboxRow input[type="checkbox"]', /margin-top:\s*var\(--space-snug\)/],
       ["primitives/TasksButton.module.css", ".phaseBody", /gap:\s*var\(--space-snug\)/],
-      ["features/VersionButton.module.css", ".trigger", /padding:\s*0 calc\(\(var\(--ctl-24\) - var\(--icon-sm\)\) \/ 2\) 0 0/],
+      ["features/VersionButton.module.css", ".trigger", /padding:\s*0 calc\(\(var\(--ctl-32\) - var\(--icon-sm\)\) \/ 2\) 0 0/],
       ["features/NotificationBody.module.css", ".factLabel", /padding-top:\s*var\(--space-tight\)/],
       ["primitives/AppearancePicker.module.css", ".previewText", /gap:\s*var\(--space-tight\)/],
     ]) expect(find(read(file), selector), `${file} ${selector}`).toMatch(pattern);
@@ -76,21 +79,27 @@ describe("state matrix", () => {
     expect(find(css, ".button:disabled:not(.loading)")).toMatch(/opacity:\s*var\(--alpha-disabled\)/);
   });
 
-  it.each([".ds-iconbtn", ".ds-alink", ".ds-sb-row"])("gives %s an :active fill", (selector) => {
-    expect(DS).toMatch(new RegExp(`\\${selector}:active[^{]*\\{\\s*background:`));
+  it.each([".ds-iconbtn", ".ds-alink", ".ds-sb-row"])("gives %s an instant :active fill on the pressed step", (selector) => {
+    expect(DS).toMatch(new RegExp(`\\${selector}(:not\\(:disabled\\))?:active[^{]*\\{\\s*background:\\s*var\\(--pressed\\);\\s*transition:\\s*none`));
+  });
+
+  it.each([".ds-iconbtn", ".ds-alink", ".ds-seg > button"])("fades a disabled %s and never hovers it", (selector) => {
+    const escaped = selector.replace(/[.>]/g, "\\$&").replace(/ /g, "\\s*");
+    expect(DS).toMatch(new RegExp(`${escaped}:disabled[^{]*\\{[^}]*opacity:\\s*var\\(--alpha-disabled\\)`));
+    expect(DS).not.toMatch(new RegExp(`${escaped}:hover`));
   });
 
   it("gives menu rows hover, active and disabled states", () => {
     const css = read("primitives/Menu.module.css");
     expect(css).toMatch(/\.row:not\(:disabled\):hover/);
-    expect(css).toMatch(/\.row:not\(:disabled\):active\s*\{\s*background:\s*var\(--selected\)/);
+    expect(css).toMatch(/\.row:not\(:disabled\):active\s*\{\s*background:\s*var\(--pressed\)/);
     expect(find(css, ".row:disabled")).toMatch(/opacity:\s*var\(--alpha-disabled\)/);
   });
 
   it("gives the field hover, active, focus and disabled states", () => {
     expect(DS).toMatch(/\.ds-field:not\(:disabled\):hover/);
     expect(DS).toMatch(/\.ds-field:not\(:disabled\):active/);
-    expect(find(DS, ".ds-field:focus")).toMatch(/box-shadow:\s*var\(--well-ring\)/);
+    expect(find(DS, ".ds-field:focus")).toMatch(/box-shadow:\s*var\(--field-focus\)/);
     expect(find(DS, ".ds-field:disabled")).toMatch(/opacity:\s*var\(--alpha-disabled\)/);
   });
 });

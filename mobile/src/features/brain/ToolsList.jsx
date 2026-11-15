@@ -1,8 +1,9 @@
-import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, View } from 'react-native';
 import { space } from '../../theme/tokens';
 
 import { Row, RowGroup, RowSeparator, SectionHeader } from '../../components/Row';
-import { Eyebrow } from '../../components/Eyebrow';
+import { PanelRow } from '../../components/PanelRow';
+import { firstSentence } from '../../../../common/panelRow.mjs';
 import { useTools } from '../../hooks/useDaemonData';
 import { usePullRefresh } from '../../hooks/usePullRefresh';
 import { useTheme } from '../../theme/ThemeContext';
@@ -13,7 +14,6 @@ import { useReveal } from '../../hooks/useReveal';
 import { FadeIn } from '../../components/FadeIn';
 import { ListSkeleton } from '../../components/ListSkeleton';
 
-// Same category order as desktop ToolsPanel.
 const CATEGORY_ORDER = [
   'Filesystem',
   'Workspace',
@@ -42,7 +42,7 @@ export function groupTools(toolList) {
 }
 
 export function ToolsList({ profile: id, selectedName = null, onOpen }) {
-  const { colors, fonts, fontSizes } = useTheme();
+  const { colors } = useTheme();
   const pull = usePullRefresh(() => tools.refresh?.());
   const tools = useTools(id);
   const { rows, groups, cats } = groupTools(tools.data?.tools);
@@ -69,46 +69,14 @@ export function ToolsList({ profile: id, selectedName = null, onOpen }) {
                 {groups.get(cat).map((t, i) => (
                   <View key={t.name}>
                     {i > 0 ? <RowSeparator /> : null}
-                    <Pressable
+                    <PanelRow
+                      title={t.name}
+                      sub={firstSentence(t.description) || null}
+                      meta={t.denied ? 'denied' : null}
+                      off={!!t.denied}
+                      selected={t.name === selectedName}
                       onPress={() => onOpen(t)}
-                      accessibilityRole="button"
-                      android_ripple={{ color: colors.selected }}
-                      style={({ pressed }) => ({
-                        paddingHorizontal: space.s7,
-                        paddingVertical: space.s6,
-                        gap: space.s1,
-                        backgroundColor: pressed || t.name === selectedName ? colors.selected : 'transparent',
-                      })}
-                    >
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
-                        <Text
-                          style={{
-                            fontFamily: fonts.monoMedium,
-                            fontSize: fontSizes.lg,
-                            color: t.denied ? colors.ink3 : colors.ink,
-                            textDecorationLine: t.denied ? 'line-through' : 'none',
-                          }}
-                        >
-                          {t.name}
-                        </Text>
-                        {t.denied ? (
-                          <Eyebrow color={colors.warning}>denied</Eyebrow>
-                        ) : null}
-                      </View>
-                      {t.description ? (
-                        <Text
-                          numberOfLines={2}
-                          style={{
-                            fontFamily: fonts.sans.regular,
-                            fontSize: fontSizes.sm,
-                            color: colors.ink3,
-                            opacity: t.denied ? 0.6 : 1,
-                          }}
-                        >
-                          {t.description}
-                        </Text>
-                      ) : null}
-                    </Pressable>
+                    />
                   </View>
                 ))}
               </RowGroup>

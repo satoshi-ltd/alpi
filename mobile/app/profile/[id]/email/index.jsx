@@ -40,7 +40,7 @@ export default function EmailList() {
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScreenHeader
         title="Email"
-        subtitle={`@${id} · ${list.length} ACCOUNT${list.length === 1 ? '' : 'S'}`}
+        subtitle={`@${id} · ${list.length} account${list.length === 1 ? '' : 'S'}`}
         onBack={goBack}
         right={<Button title="+ Add" size="md" variant="ghost" onPress={() => setChooser(true)} />}
       />
@@ -62,12 +62,12 @@ export default function EmailList() {
                     <Pressable
                       onPress={() => router.push(`/profile/${id}/email/${a.id}`)}
                       accessibilityRole="button"
-                      android_ripple={{ color: colors.selected }}
+                      android_ripple={{ color: colors.pressed }}
                       style={({ pressed }) => ({
                         paddingHorizontal: space.s7,
                         paddingVertical: space.s6,
                         gap: space.s1,
-                        backgroundColor: pressed ? colors.selected : 'transparent',
+                        backgroundColor: pressed ? colors.pressed : 'transparent',
                       })}
                     >
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
@@ -80,7 +80,7 @@ export default function EmailList() {
                         </Text>
                         {a.configured ? <Pill tone="on">on</Pill> : <Pill off>off</Pill>}
                       </View>
-                      <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3, letterSpacing: 0.6 }}>
+                      <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>
                         {type}
                       </Text>
                     </Pressable>

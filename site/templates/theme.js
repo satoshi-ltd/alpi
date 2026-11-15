@@ -1,6 +1,7 @@
 (function(){
   const root = document.documentElement;
   const system = matchMedia('(prefers-color-scheme: dark)');
+  const color = { light: '__THEME_LIGHT__', dark: '__THEME_DARK__' };
   let choice = null;
   try { choice = localStorage.getItem('alpi-theme'); } catch {}
   if (choice !== 'light' && choice !== 'dark') choice = null;
@@ -9,7 +10,7 @@
     const theme = choice || (system.matches ? 'dark' : 'light');
     root.dataset.theme = theme;
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', theme === 'light' ? '#f0f0f0' : '#0b0b0b');
+    if (meta) meta.setAttribute('content', color[theme]);
     const button = document.querySelector('.theme-btn');
     if (button) button.setAttribute('aria-label', theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme');
   }

@@ -40,7 +40,7 @@
 
 .emptyHash {
   font-family: var(--font-mono);
-  font-size: var(--text-hero);
+  font-size: var(--text-display);
   font-weight: var(--fw-medium);
   color: var(--ink-3);
   line-height: var(--lh-tight);
@@ -58,7 +58,7 @@
 }
 
 .emptyHint {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   color: var(--ink-3);
   text-align: center;
@@ -72,7 +72,7 @@
 
 .emptyModel {
   font-family: var(--font-mono);
-  font-size: var(--text-meta);
+  font-size: var(--text-mono);
   line-height: var(--sp-16);
   color: var(--ink-3);
   text-align: center;
@@ -81,7 +81,7 @@
 
 .emptyHint code {
   font-family: var(--font-mono);
-  font-size: var(--text-meta);
+  font-size: var(--text-mono);
   color: var(--ink);
   background: var(--hover);
   padding: var(--sp-4) var(--sp-8);
@@ -138,7 +138,7 @@
 .timeline {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-32);
+  gap: var(--sp-24);
   width: 100%;
   max-width: var(--stream-max);
   margin-left: auto;
@@ -146,7 +146,7 @@
 }
 
 .messageTime {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   color: var(--ink-3);
   font-variant-numeric: tabular-nums slashed-zero;
@@ -189,8 +189,8 @@
   flex-direction: column;
   gap: var(--sp-4);
   padding: var(--sp-8) var(--sp-12);
-  border: 1px solid var(--line);
-  border-radius: var(--r-xs);
+  background: var(--card);
+  border-radius: var(--r-surface);
 }
 
 .askUserBannerQuestion {
@@ -203,11 +203,10 @@
   display: flex;
   align-items: center;
   gap: var(--sp-4);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--eyebrow-size);
   letter-spacing: var(--eyebrow-tracking);
   color: var(--ink-3);
-  text-transform: uppercase;
 }
 
 .loading {
@@ -235,12 +234,12 @@
 
 .toolError {
   padding: var(--sp-8) var(--sp-12);
-  border-radius: var(--r-xs);
+  border-radius: var(--r-surface);
   background: color-mix(in srgb, var(--c-danger) 10%, transparent);
   border: .5px solid color-mix(in srgb, var(--c-danger) 24%, transparent);
   color: var(--c-danger-text);
   font-size: var(--text-meta);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   align-self: flex-start;
   max-width: 100%;
 }
@@ -256,13 +255,13 @@
 }
 
 .userActionBtn {
-  width: var(--ctl-24);
-  height: var(--ctl-24);
+  width: var(--ctl-32);
+  height: var(--ctl-32);
 }
 
 .agentActionBtn {
-  width: var(--ctl-28);
-  height: var(--ctl-28);
+  width: var(--ctl-32);
+  height: var(--ctl-32);
 }
 
 .unfinished {
@@ -274,15 +273,19 @@
 .foot {
   display: flex;
   align-items: center;
-  gap: var(--sp-8);
+  gap: var(--sp-4);
 }
 
-.foot[data-side="left"] .footActions {
-  margin-left: calc((var(--ctl-28) - var(--icon-sm)) / -2);
+.foot[data-side="right"] {
+  justify-content: flex-end;
 }
 
-.foot[data-side="right"] .footActions {
-  margin-right: calc((var(--ctl-24) - var(--icon-sm)) / -2);
+.foot[data-side="left"] .footTime {
+  padding-right: var(--sp-4);
+}
+
+.foot[data-side="right"] .footTime {
+  padding-left: var(--sp-4);
 }
 
 .footTime {
@@ -321,13 +324,4 @@
   .footActions { transition: none; }
 }
 
-.hintAt {
-  color: var(--ink-2);
-}
-
-.hintKeys {
-  display: inline-flex;
-  gap: var(--space-snug);
-  align-items: center;
-}
 

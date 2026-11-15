@@ -23,9 +23,11 @@ vi.mock('react-native', () => {
   return { View, Text, Pressable };
 });
 vi.mock('../lib/haptics', () => ({ selection }));
+const theme = vi.hoisted(() => ({ mode: 'light' }));
 vi.mock('../theme/ThemeContext', () => ({
   useTheme: () => ({
-    colors: { hover: '#eee', selected: '#e5e5e5', bgPane: '#fff', ink: '#000', ink2: '#333' },
+    mode: theme.mode,
+    colors: { hover: '#eee', selected: '#e5e5e5', bgPane: '#fff', ink: '#000', ink2: '#333', accent: '#14110c', fill: '#f2f2f2', raised: '#ffffff', line2: 'rgba(237,237,237,0.16)' },
     fonts: { sans: { regular: 'r', semibold: 's' } },
     fontSizes: { md: 14 },
   }),
@@ -40,22 +42,39 @@ const OPTIONS = [
 ];
 
 describe('Segmented', () => {
-  it('draws one 44 pt cell per option in a 4 pt radius track and marks the selected one', () => {
+  it('edges the selected cell in dark, where raised and fill sit close, and sets it semibold in both themes', () => {
+    for (const mode of ['light', 'dark']) {
+      theme.mode = mode;
+      render(<Segmented label="Theme" options={OPTIONS} value="light" onChange={() => {}} />);
+      const [off, on] = screen.getAllByRole('radio').map((c) => JSON.parse(c.getAttribute('data-style')));
+      expect(on.borderWidth).toBe(off.borderWidth);
+      expect(on.borderColor).toBe(mode === 'dark' ? 'rgba(237,237,237,0.16)' : 'transparent');
+      expect(off.borderColor).toBe('transparent');
+      const label = JSON.parse(screen.getByText('Light').getAttribute('data-style'));
+      expect(label.fontFamily).toBe('s');
+      cleanup();
+    }
+    theme.mode = 'light';
+  });
+
+  it('draws one 44 pt pill cell per option on a pill track 4 pt in, and marks the selected one', () => {
     render(<Segmented label="Theme" options={OPTIONS} value="light" onChange={() => {}} />);
     const cells = screen.getAllByRole('radio');
     expect(cells).toHaveLength(3);
     expect(cells.map((c) => c.getAttribute('aria-checked'))).toEqual(['false', 'true', 'false']);
     for (const cell of cells) expect(JSON.parse(cell.getAttribute('data-style')).minHeight).toBe(44);
-    expect(JSON.parse(screen.getByRole('radiogroup').getAttribute('data-style'))).toMatchObject({ borderRadius: 4, padding: 2 });
+    expect(JSON.parse(screen.getByRole('radiogroup').getAttribute('data-style'))).toMatchObject({ borderRadius: 999, padding: 4 });
+    for (const cell of cells) expect(JSON.parse(cell.getAttribute('data-style')).borderRadius).toBe(999);
   });
 
-  it('draws the selected cell in ink with a pane-tone label on the selected-tone track, as desktop does', () => {
+  it('raises the selected cell on the fill track with an ink label, never a black chip', () => {
     render(<Segmented label="Theme" options={OPTIONS} value="light" onChange={() => {}} />);
     const style = (el) => JSON.parse(el.getAttribute('data-style'));
-    expect(style(screen.getByRole('radiogroup')).backgroundColor).toBe('#e5e5e5');
+    expect(style(screen.getByRole('radiogroup')).backgroundColor).toBe('#f2f2f2');
     const [system, light] = screen.getAllByRole('radio');
-    expect(style(light).backgroundColor).toBe('#000');
-    expect(style(light.querySelector('span')).color).toBe('#fff');
+    expect(style(light).backgroundColor).toBe('#ffffff');
+    expect(style(light).shadowOpacity).toBeGreaterThan(0);
+    expect(style(light.querySelector('span')).color).toBe('#000');
     expect(style(system).backgroundColor).toBe('transparent');
     expect(style(system.querySelector('span')).color).toBe('#333');
   });

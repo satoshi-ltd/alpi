@@ -26,6 +26,8 @@ DOCUMENTED_BUT_PARSED_ELSEWHERE = {
     "tools.db.max_mb",  # alpi/tools/db.py::max_db_mb
     "alp.max_active_workgroups",  # alpi/alp/pipeline_queue.py::limit_origin reads raw YAML so absence stays absence
     "model_reasoning.effort",
+    "tui.shape",
+    "tui.fold",
     "memory.review_interval",
     "host.tcp_port",
     "host.device_name",

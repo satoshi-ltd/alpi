@@ -1,4 +1,5 @@
 import React from 'react';
+import { markInset } from '../src/lib/firstRun';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
@@ -109,9 +110,9 @@ describe('welcome', () => {
     const { container } = render(<Onboarding />);
     const column = screen.getByText('Pair with your alpi').parentElement;
     expect(style(column)).toMatchObject({ maxWidth: 480, alignSelf: 'flex-start' });
-    const mark = container.querySelector('[data-fold]');
+    const mark = container.querySelector('[data-shape]');
     expect(mark.dataset.size).toBe('72');
-    expect(style(mark.parentElement).marginLeft).toBeCloseTo(-12.42, 2);
+    expect(style(mark.parentElement).marginLeft).toBeCloseTo(-markInset(72), 6);
     for (const el of container.querySelectorAll('[data-style]')) {
       expect(style(el).textAlign, el.textContent).toBeUndefined();
     }

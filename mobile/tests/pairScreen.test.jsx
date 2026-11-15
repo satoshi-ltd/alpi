@@ -1,4 +1,5 @@
 import React from 'react';
+import { markInset } from '../src/lib/firstRun';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -76,17 +77,17 @@ describe('paste state', () => {
   it('keeps the shipped title in the theme semibold font and the mark at 72 pt on the edge', () => {
     const { container } = render(<Pair />);
     expect(style(screen.getByText('Pair this phone')).fontFamily).toMatch(/600SemiBold/);
-    const mark = container.querySelector('[data-fold]');
+    const mark = container.querySelector('[data-shape]');
     expect(mark.dataset.size).toBe('72');
-    expect(style(mark.parentElement).marginLeft).toBeCloseTo(-12.42, 2);
+    expect(style(mark.parentElement).marginLeft).toBeCloseTo(-markInset(72), 6);
   });
 
-  it('makes Paste from clipboard a 44 pt ghost whose text starts on the edge', async () => {
+  it('makes Paste from clipboard a 48 pt ghost whose text starts on the edge', async () => {
     h.clip.mockResolvedValue(LINK);
     render(<Pair />);
     const paste = screen.getByText('Paste from clipboard');
-    expect([paste.dataset.variant, paste.dataset.size, paste.dataset.height]).toEqual(['ghost', 'md', '44']);
-    expect(style(paste.parentElement).marginLeft).toBe(-14);
+    expect([paste.dataset.variant, paste.dataset.size, paste.dataset.height]).toEqual(['ghost', 'md', '48']);
+    expect(style(paste.parentElement).marginLeft).toBe(-24);
     fireEvent.click(paste);
     await waitFor(() => expect(input().value).toBe(LINK));
     expect(screen.getByText('casa · ws://100.1.2.3:49200')).toBeTruthy();
@@ -110,7 +111,7 @@ describe('keyboard open', () => {
   it('hides the mark and the sources so the field is the first control, and drops the safe-area pad', () => {
     const { container } = render(<Pair />);
     act(() => emit('keyboardWillShow'));
-    expect(container.querySelector('[data-fold]')).toBeNull();
+    expect(container.querySelector('[data-shape]')).toBeNull();
     expect(screen.queryByText('In the alpi desktop app')).toBeNull();
     const title = screen.getByText('Pair this phone');
     expect(style(title).marginTop).toBe(0);
@@ -118,7 +119,7 @@ describe('keyboard open', () => {
     expect(style(bar).paddingBottom).toBe(16);
     expect(document.querySelector('[data-keyboard-pane]').contains(bar)).toBe(true);
     act(() => emit('keyboardWillHide'));
-    expect(container.querySelector('[data-fold]')).toBeTruthy();
+    expect(container.querySelector('[data-shape]')).toBeTruthy();
     expect(style(screen.getByText('Pair').parentElement.parentElement).paddingBottom).toBe(50);
   });
 });
@@ -132,12 +133,12 @@ describe('connecting', () => {
     await waitFor(() => expect(document.querySelector('[data-busy]')).toBeTruthy());
   };
 
-  it('shows Busy at 77 pt in the Fold place, the ladder, and no button at all', async () => {
+  it('shows Busy at 72 pt in the mark place, the ladder, and no button at all', async () => {
     await connect();
     const busy = document.querySelector('[data-busy]');
-    expect(busy.dataset.size).toBe('77');
-    expect(style(busy).marginLeft).toBeCloseTo(-13.29, 2);
-    expect(document.querySelector('[data-fold]')).toBeNull();
+    expect(busy.dataset.size).toBe('72');
+    expect(style(busy).marginLeft).toBeCloseTo(-markInset(72), 6);
+    expect(document.querySelector('[data-shape]')).toBeNull();
     expect(screen.getByText('Reaching casa').closest('[data-state]').dataset.state).toBe('now');
     expect(screen.queryByText('Pair')).toBeNull();
     expect(screen.queryByText('Pairing…')).toBeNull();
@@ -171,7 +172,7 @@ describe('failed', () => {
     fireEvent.change(input(), { target: { value: LINK } });
     fireEvent.click(screen.getByText('Pair'));
     await waitFor(() => expect(screen.getByText("Can't reach casa")).toBeTruthy());
-    expect(container.querySelector('[data-fold]')).toBeTruthy();
+    expect(container.querySelector('[data-shape]')).toBeTruthy();
     expect(container.querySelector('[data-busy]')).toBeNull();
     expect(screen.getByText('casa · ws://100.1.2.3:49200')).toBeTruthy();
     const ladder = screen.getByText('Link read').closest('[role="list"]');

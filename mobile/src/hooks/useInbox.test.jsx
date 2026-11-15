@@ -50,7 +50,7 @@ vi.mock('../lib/profileReady', () => ({
 }));
 vi.mock('../lib/profileName', () => ({ profileLabel: (name) => name }));
 
-import { FALLBACK_ACCENT } from '../../../common/folds.mjs';
+import { FALLBACK_ACCENT } from '../../../common/shapes.mjs';
 import { useInbox } from './useInbox';
 
 let seen;
@@ -112,15 +112,15 @@ describe('useInbox roster membership', () => {
 
 describe('useInbox profile fold', () => {
   it('carries the summary fold onto the profile row', () => {
-    h.profiles = [{ ...fresh('doc'), fold: 'shield' }];
+    h.profiles = [{ ...fresh('doc'), shape: 'bell' }];
     render(<Probe />);
-    expect(seen.items[0].fold).toBe('shield');
+    expect(seen.items[0].shape).toBe('bell');
   });
 
   it('leaves the fold undefined for a daemon that does not send one', () => {
     h.profiles = [fresh('doc')];
     render(<Probe />);
-    expect(seen.items[0].fold).toBeUndefined();
+    expect(seen.items[0].shape).toBeUndefined();
   });
 });
 
@@ -144,6 +144,15 @@ describe('useInbox accent', () => {
     const accentOf = (id) => seen.items.find((i) => i.id === id).accent;
     expect(accentOf('alpha')).toBe('#3ac9f3');
     expect(accentOf('beta')).toBe(FALLBACK_ACCENT);
+  });
+
+  it('hands a workgroup no member colours, only its hub accent', () => {
+    h.profiles = [{ ...withSession('doc', 60), accent: '#3ac9f3' }, { ...withSession('lingo', 50), accent: '#e2558a' }];
+    h.workgroups = [{ ...wg('alpha', 30), hub_id: 'doc', phase_map: { translate: { owner: '@Lingo' } } }];
+    render(<Probe />);
+    const item = seen.items.find((i) => i.id === 'alpha');
+    expect(item.memberAccents).toBeUndefined();
+    expect(item.accent).toBe('#3ac9f3');
   });
 });
 

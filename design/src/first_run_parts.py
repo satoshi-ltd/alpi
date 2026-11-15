@@ -2,23 +2,20 @@ import json
 import os
 import subprocess
 
-from brand_boards import black_alpaca
-from desktop_boards import HOVER, INK, INK2, INK3, INK4, LINE, LINE2, MONO, PANE, SELECTED, SIDE
-from gen import COMMON, DOC_ACCENT, di, m_button, m_conn_header, m_eyebrow, m_row, m_shell_footer, mi, pill, switch
-from loading_studies import alpaca as busy_alpaca
+import agent_marks as am
+import marks
+from desktop_boards import INK, INK2, INK3, INK4, LINE2, MONO, PANE, SELECTED, SIDE
+from gen import COMMON, DOC_ACCENT, di, m_button, m_conn_header, m_eyebrow, m_row, m_shell_footer, mi, pill, switch, ladder_px, mono_px, section_label
 
 
 def _load_copy():
     script = (
         f"const m = await import({json.dumps(os.path.join(COMMON, 'onboarding.mjs'))});"
-        f"const f = await import({json.dumps(os.path.join(COMMON, 'folds.mjs'))});"
         f"const e = await import({json.dumps(os.path.join(COMMON, 'emptyCopy.mjs'))});"
-        "const pts = f.foldFacets(f.ALPACA_FOLD).flatMap((x) => x.points);"
         "const g = (k, h) => m.pairingFailure(k, h);"
         "process.stdout.write(JSON.stringify({rows: m.LINK_SOURCE_ROWS, start: m.START_COMMAND,"
         "steps: m.PAIRING_STEPS.map((s) => m.pairingStepLabel(s, 'casa')), member: m.memberEmptyCopy('this phone'),"
         "admin: m.pairedRoleLine('admin'), roster: e.EMPTY.roster,"
-        "ink: {left: Math.min(...pts.map((p) => p[0])), top: Math.min(...pts.map((p) => p[1]))},"
         "unreachable: g('unreachable', 'casa'), used: g('link-used', 'casa')}));"
     )
     out = subprocess.run(["node", "--input-type=module", "-e", script], capture_output=True, text=True, check=True)
@@ -31,11 +28,11 @@ Z_FOLD = 0.6
 
 
 def t(value, size=13, color=INK, weight=400, extra=""):
-    return f'<span style="font-size: {size}px; line-height: 1.3; font-weight: {weight}; color: {color}; {extra}">{value}</span>'
+    return f'<span style="font-size: {ladder_px(size)}px; line-height: 1.3; font-weight: {weight}; color: {color}; {extra}">{value}</span>'
 
 
 def mono(value, size=11, color=INK3, extra=""):
-    return f'<span style="font-family: {MONO}; font-size: {size}px; line-height: 1.3; color: {color}; {extra}">{value}</span>'
+    return f'<span style="font-family: {MONO}; font-size: {mono_px(size)}px; line-height: 1.3; color: {color}; {extra}">{value}</span>'
 
 
 def col(*items, gap=8, align="stretch", extra=""):
@@ -46,8 +43,8 @@ def line(*items, gap=8, align="center", extra=""):
     return f'<div style="display: flex; align-items: {align}; gap: {gap}px; {extra}">{"".join(items)}</div>'
 
 
-def alp(size):
-    return black_alpaca(size, INK)
+def alp(size, state="idle"):
+    return marks.twin(size, state, seed="first-run")
 
 
 def scaled(inner, w, h, z):
@@ -56,26 +53,26 @@ def scaled(inner, w, h, z):
 
 
 def dbtn(label, kind="primary", h=40, w=None, flush=False):
-    bg, fg, fw = {"primary": (INK, PANE, 600), "secondary": (SELECTED, INK, 500), "ghost": ("transparent", INK2, 500)}[kind]
+    bg, fg, fw = {"primary": ("#14110c", PANE, 500), "secondary": ("#f2f2f2", INK, 500), "ghost": ("transparent", INK, 500)}[kind]
     pad = 24 if h >= 48 else 16 if h >= 40 else 12
     width = f"width: {w}px;" if w else f"padding: 0 {pad}px;"
     margin = f"margin-left: -{pad}px;" if flush else ""
-    return (f'<span style="display: inline-flex; align-items: center; justify-content: center; height: {h}px; {width} {margin} box-sizing: border-box; border-radius: 4px; '
-            f'background: {bg}; color: {fg}; font-size: 13px; font-weight: {fw}; line-height: 1; white-space: nowrap; flex-shrink: 0">{label}</span>')
+    return (f'<span style="display: inline-flex; align-items: center; justify-content: center; height: {h}px; {width} {margin} box-sizing: border-box; border-radius: 999px; '
+            f'background: {bg}; color: {fg}; font-size: 15px; font-weight: {fw}; line-height: 1; white-space: nowrap; flex-shrink: 0">{label}</span>')
 
 
 def dfield(value, w=360, h=40, placeholder=True, focus=False):
-    ring = f"box-shadow: inset 0 0 0 1px {'#8c8c8c' if focus else LINE2};"
-    return (f'<span style="display: inline-flex; align-items: center; width: {w}px; height: {h}px; padding: 0 12px; box-sizing: border-box; border-radius: 4px; background: var(--bg-elev, #ffffff); {ring} '
-            f'font-family: {MONO}; font-size: 13px; color: {INK3 if placeholder else INK}; white-space: nowrap; overflow: hidden">{value}</span>')
+    ring = "box-shadow: inset 0 0 0 1.5px #6b6b6b;" if focus else ""
+    return (f'<span style="display: inline-flex; align-items: center; width: {w}px; height: {h}px; padding: 0 12px; box-sizing: border-box; border-radius: 12px; background: var(--well, #f4f4f4); {ring} '
+            f'font-family: {MONO}; font-size: 14px; color: {INK3 if placeholder else INK}; white-space: nowrap; overflow: hidden">{value}</span>')
 
 
 def sidebar_chip(state, extra="", w=192):
     dot = {"online": INK, "offline": DANGER_TEXT, "stopped": INK4}[state]
     status_dot = f'<span style="width: 8px; height: 8px; border-radius: 999px; background: {dot}"></span>'
-    return (f'<div style="width: {w}px; flex-shrink: 0; background: {SIDE}; box-shadow: inset -0.5px 0 0 {LINE}; display: flex; flex-direction: column; padding: 12px; gap: 8px; box-sizing: border-box">'
-            f'{mono("Connection", 11, INK3, "letter-spacing: 0.08em; text-transform: uppercase")}'
-            f'{line(di("chip", 16, INK2), col(t("This computer", 13, INK, 500), mono("host.sock", 11, INK3), gap=0, extra="flex: 1"), status_dot, gap=8, extra=f"padding: 8px; border-radius: 4px; background: {PANE}; box-shadow: 0 0 0 0.5px {LINE2}")}'
+    return (f'<div style="width: {w}px; flex-shrink: 0; background: {SIDE}; display: flex; flex-direction: column; padding: 12px; gap: 8px; box-sizing: border-box">'
+            f'{section_label("Connection", INK3, "")}'
+            f'{line(di("chip", 16, INK2), col(t("This computer", 13, INK, 500), mono("host.sock", 11, INK3), gap=0, extra="flex: 1"), status_dot, gap=8, extra="padding: 8px; border-radius: 12px; background: var(--bg-elev, #ffffff)")}'
             f'{extra}</div>')
 
 
@@ -88,8 +85,8 @@ C_STRIP = 38
 C_EDGE = 64
 C_TOP = 32
 C_LOG_LINES = 12
-INK_LEFT = COPY["ink"]["left"]
-INK_TOP = COPY["ink"]["top"]
+INK_LEFT = am.outline(marks.TWIN)["left"]
+INK_TOP = am.outline(marks.TWIN)["top"]
 C_INSET = round(INK_LEFT * C_MARK / 100, 2)
 C_INK_TOP = round(INK_TOP * C_MARK / 100, 2)
 BUSY_PX = 77
@@ -98,11 +95,11 @@ CONNECT_SUB = "Paste the link made on the computer that runs it."
 
 
 def ct(value, size=13, lh=20, color=INK, weight=400, extra=""):
-    return f'<div style="font-size: {size}px; line-height: {lh}px; font-weight: {weight}; color: {color}; {extra}">{value}</div>'
+    return f'<div style="font-size: {ladder_px(size)}px; line-height: {lh}px; font-weight: {weight}; color: {color}; {extra}">{value}</div>'
 
 
 def cm(value, size=13, lh=20, color=INK, extra=""):
-    return f'<div style="font-family: {MONO}; font-size: {size}px; line-height: {lh}px; color: {color}; {extra}">{value}</div>'
+    return f'<div style="font-family: {MONO}; font-size: {mono_px(size)}px; line-height: {lh}px; color: {color}; {extra}">{value}</div>'
 
 
 def c_win(inner, side="", w=U_W, h=U_H, z=U_Z):
@@ -123,7 +120,7 @@ def c_page(*parts):
 
 
 def c_mark(busy=None):
-    inner = busy_alpaca(C_MARK, busy, fill=INK) if busy else alp(C_MARK)
+    inner = alp(C_MARK, "busy" if busy else "idle")
     return f'<div style="width: {C_MARK}px; height: {C_MARK}px; margin: -{C_INK_TOP}px 0 -{C_INK_TOP}px -{C_INSET}px; flex-shrink: 0">{inner}</div>'
 
 
@@ -133,7 +130,7 @@ def c_head(title, sub=None, busy=None):
 
 
 def c_ring(html):
-    return f'<span style="display: inline-flex; border-radius: 4px; flex-shrink: 0; box-shadow: 0 0 0 2px {PANE}, 0 0 0 4px {INK2}">{html}</span>'
+    return f'<span style="display: inline-flex; border-radius: 12px; flex-shrink: 0; box-shadow: 0 0 0 2px {PANE}, 0 0 0 4px {INK2}">{html}</span>'
 
 
 def c_actions(primary, *ghosts, focus=True, dim=False):
@@ -151,7 +148,7 @@ def c_command(value):
 def c_log(text):
     rows = "".join(f'<div style="min-height: 16px; flex-shrink: 0">{row}</div>' for row in text.split("\n"))
     return (f'<div style="max-height: {C_LOG_LINES * 16}px; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; '
-            f'font-family: {MONO}; font-size: 11px; line-height: 16px; color: {DANGER_TEXT}; white-space: pre-wrap; overflow-wrap: anywhere">{rows}</div>')
+            f'font-family: {MONO}; font-size: 12px; line-height: 16px; color: {DANGER_TEXT}; white-space: pre-wrap; overflow-wrap: anywhere">{rows}</div>')
 
 
 def c_ladder(*steps):
@@ -273,11 +270,11 @@ Q_FOLD_W, Q_FOLD_H = 852, 884
 
 
 def qt(value, size=14, lh=21, color=INK2, weight=400, extra=""):
-    return f'<div style="font-size: {size}px; line-height: {lh}px; font-weight: {weight}; color: {color}; {extra}">{value}</div>'
+    return f'<div style="font-size: {ladder_px(size)}px; line-height: {lh}px; font-weight: {weight}; color: {color}; {extra}">{value}</div>'
 
 
 def qm(value, size=12, lh=16, color=INK3, extra=""):
-    return f'<div style="font-family: {MONO}; font-size: {size}px; line-height: {lh}px; color: {color}; overflow-wrap: anywhere; {extra}">{value}</div>'
+    return f'<div style="font-family: {MONO}; font-size: {mono_px(size)}px; line-height: {lh}px; color: {color}; overflow-wrap: anywhere; {extra}">{value}</div>'
 
 
 def q_page(*parts):
@@ -291,7 +288,7 @@ def q_mark(busy=None):
         left = round(INK_LEFT * BUSY_PX / 100, 2)
         bottom = round(BUSY_PX - C_MARK - top, 2)
         return (f'<div style="width: {BUSY_PX}px; height: {BUSY_PX}px; margin: -{top}px 0 -{bottom}px -{left}px; flex-shrink: 0">'
-                f'{busy_alpaca(BUSY_PX, busy, fill=INK)}</div>')
+                f'{alp(BUSY_PX, "busy")}</div>')
     return f'<div style="width: {C_MARK}px; height: {C_MARK}px; margin-left: -{C_INSET}px; flex-shrink: 0">{alp(C_MARK)}</div>'
 
 
@@ -306,14 +303,14 @@ def q_head(title, sub=None, fact=None, busy=None, mark=True, size=28):
 
 
 def q_label(text):
-    return f'<div style="margin-bottom: 8px">{m_eyebrow(text, INK3, 500, 0.08, 11, "line-height: 11px; display: block")}</div>'
+    return f'<div style="margin-bottom: 8px">{m_eyebrow(text, INK3, 500, 0, 14, "display: block")}</div>'
 
 
 def q_field(value="", focus=False):
     shown = value or "alpi://device?url=wss://…&amp;name=…&amp;pairing_token=…"
-    ring = "#8c8c8c" if focus else LINE2
-    return (f'<div style="min-height: 92px; box-sizing: border-box; padding: 12px; border-radius: 4px; border: 1px solid {ring}; background: var(--bg-elev, #ffffff); font-family: {MONO}; '
-            f'font-size: 12px; line-height: 1.3; color: {INK if value else INK4}; word-break: break-all">{shown}</div>')
+    ring = "box-shadow: inset 0 0 0 1.5px #6b6b6b; " if focus else ""
+    return (f'<div style="min-height: 88px; box-sizing: border-box; padding: 12px; border-radius: 12px; {ring}background: var(--well, #f4f4f4); '
+            f'font-size: 14px; color: {INK if value else INK4}; word-break: break-all">{shown}</div>')
 
 
 def q_sources():
@@ -324,15 +321,15 @@ def q_ladder(states):
     rows = []
     for state, label in zip(states, Q_STEPS):
         glyph = {
-            "done": mi("check", 12, INK),
-            "fail": mi("x", 12, DANGER_TEXT),
+            "done": mi("check", 16, INK),
+            "fail": mi("x", 16, "#c14545"),
             "now": f'<span style="width: 6px; height: 6px; border-radius: 4px; background: {INK2}"></span>',
             "todo": f'<span style="width: 6px; height: 6px; border-radius: 4px; background: {INK4}"></span>',
         }[state]
         color = {"todo": INK3, "fail": DANGER_TEXT}.get(state, INK)
         weight = 400 if state == "todo" else 500
         rows.append(line(f'<span style="width: 16px; flex-shrink: 0; display: inline-flex; justify-content: center">{glyph}</span>',
-                         t(label, 14, color, weight, "line-height: 20px"), gap=8))
+                         t(label, 15, color, weight, "line-height: 20px"), gap=8))
     return f'<div style="display: flex; flex-direction: column; gap: 8px">{"".join(rows)}</div>'
 
 
@@ -341,9 +338,9 @@ def q_failure(failure):
 
 
 def qb(label, kind="primary", size="hero", disabled=False, dark=False):
-    html = m_button(label, kind, size, disabled=disabled).replace("border-radius: 4px", "border-radius: 4px; width: 100%", 1)
+    html = m_button(label, kind, size, disabled=disabled).replace("border-radius: 999px", "border-radius: 999px; width: 100%", 1)
     if dark:
-        html = html.replace("background: rgba(20,20,20,0.06)", "background: rgba(255,255,254,0.12)", 1).replace("color: #141414", f"color: {Q_WHITE}", 1)
+        html = html.replace("background: rgba(20,20,20,0.08)", "background: rgba(255,255,254,0.12)", 1).replace("color: #141414", f"color: {Q_WHITE}", 1)
     return html
 
 
@@ -393,8 +390,8 @@ def q_pair(states=None, value=Q_LINK, failure=None, busy=None, keyboard=False, s
 
 def q_scan():
     head = (f'<div style="padding: {Q_SAFE_TOP + 16}px {Q_EDGE}px 16px; display: flex; flex-direction: column; gap: 4px">'
-            f'<div style="font-size: 14px; line-height: 18px; font-weight: 600; color: {Q_WHITE}">Pair this phone</div>'
-            f'<div style="font-family: {MONO}; font-size: 11px; line-height: 14px; color: rgba(255,255,254,0.6)">Scan the QR shown on your daemon</div></div>')
+            f'<div style="font-size: 15px; line-height: 18px; font-weight: 600; color: {Q_WHITE}">Pair this phone</div>'
+            f'<div style="font-size: 12px; line-height: 14px; color: rgba(255,255,254,0.6)">Scan the QR shown on your daemon</div></div>')
     camera = f'<div style="flex: 1; background: {Q_CAM}; display: flex; align-items: center; justify-content: center">{mono("camera", 11, "rgba(255,255,254,0.4)")}</div>'
     bottom = f'<div style="padding: 16px {Q_EDGE}px {16 + Q_SAFE_BOTTOM}px">{qb("Paste link", "secondary", "lg", dark=True)}</div>'
     return f'<div style="width: {Q_W}px; height: {Q_H}px; background: #000000; display: flex; flex-direction: column; box-sizing: border-box">{head}{camera}{bottom}</div>'
@@ -430,10 +427,10 @@ def q_first_profile(kind, w=Q_W, h=Q_H, side=False):
     pane = (f'<div style="flex: 1; min-height: 0; box-sizing: border-box; padding: 24px {Q_EDGE}px 16px; display: flex; flex-direction: column">'
             f'<div style="flex: 1; min-height: 0; overflow: hidden">{body}</div>{action}</div>')
     if side:
-        return (f'<div style="width: {w}px; height: {h}px; flex-shrink: 0; box-sizing: border-box; background: #f6f6f6; border-right: 0.5px solid rgba(20,20,20,0.07); display: flex; flex-direction: column">'
+        return (f'<div style="width: {w}px; height: {h}px; flex-shrink: 0; box-sizing: border-box; background: #f6f6f6; display: flex; flex-direction: column">'
                 f'{m_conn_header()}<div style="flex: 1; min-height: 0; display: flex; flex-direction: column">{pane}</div>{m_shell_footer(icons_only=True)}</div>')
     return (f'<div style="width: {w}px; height: {h}px; display: flex; flex-direction: column; box-sizing: border-box; padding-top: {Q_SAFE_TOP}px; background: {PANE}">'
-            f'{m_conn_header(ring="#ffffff", collapse=False, bg="#ffffff")}<div style="height: 0.5px; background: {LINE}"></div>{pane}'
+            f'{m_conn_header(ring="#ffffff", collapse=False, bg="#ffffff")}{pane}'
             f'{m_shell_footer(ring="#ffffff", border=True)}<div style="height: {Q_SAFE_BOTTOM}px"></div></div>')
 
 

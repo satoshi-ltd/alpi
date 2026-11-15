@@ -2,108 +2,134 @@ import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render } from '@testing-library/react';
 
-import { FOLD_SIZES, foldFacets } from '../../../common/folds.mjs';
+import { MARK_SIZES } from '../../../common/agentMarks.mjs';
 
-afterEach(() => {
-  cleanup();
-  h.delays.length = 0;
-});
-
-const h = vi.hoisted(() => ({ delays: [] }));
+afterEach(cleanup);
 
 vi.mock('react-native', () => {
-  const View = ({ children }) => React.createElement('div', {}, children);
-  const Animated = {
-    Value: class {
-      constructor(value) {
-        this.value = value;
-      }
-      setValue(next) {
-        this.value = next;
-      }
-    },
-    timing: () => ({}),
-    delay: (ms) => {
-      h.delays.push(ms);
-      return {};
-    },
-    sequence: () => ({ start: () => {}, stop: () => {} }),
-    loop: () => ({ start: () => {}, stop: () => {} }),
-    View,
-  };
-  return { Animated, Easing: { inOut: (fn) => fn, ease: 'ease' }, View };
+  const View = ({ children, style, pointerEvents, ...p }) => React.createElement('div', p, children);
+  return { View };
 });
 
+vi.mock('../lib/reduceMotion', () => ({ useReduceMotion: () => true }));
+
 vi.mock('../theme/ThemeContext', () => ({
-  useTheme: () => ({ colors: { ink3: '#828b97', ink4: '#b4b4b4' } }),
+  useTheme: () => ({ colors: { ink3: '#828b97' }, mode: 'light' }),
 }));
 
-const { Glyph } = await import('./Glyph');
+const { Glyph, markState, workgroupGlyph } = await import('./Glyph');
 
-const draw = (props) => render(<Glyph kind="profile" {...props} />).container;
+const mark = (glyph) => render(glyph).container.querySelector('[data-mark]');
 
-describe('Glyph profile fold', () => {
-  it('draws the profile fold in the profile colour', () => {
-    const root = draw({ fold: 'shield', color: '#3899e2' });
-    const polygons = root.querySelectorAll('polygon');
-    expect(polygons).toHaveLength(foldFacets('shield').length);
-    expect([...polygons].some((p) => p.getAttribute('fill') === '#3899e2')).toBe(true);
+describe('markState', () => {
+  it.each([
+    [{}, 'idle'],
+    [{ unread: true }, 'done'],
+    [{ pending: true, unread: true }, 'working'],
+    [{ pending: true }, 'working'],
+    [{ working: true, pending: true }, 'working'],
+    [{ rowState: 'working' }, 'working'],
+    [{ rowState: 'failed', working: true }, 'failed'],
+    [{ rowState: 'needs-you', working: true }, 'needs'],
+    [{ paused: true, rowState: 'needs-you' }, 'paused'],
+    [{ needsProvider: true }, 'needs'],
+    [{ needsProvider: true, working: true }, 'needs'],
+    [{ needsProvider: true, paused: true }, 'paused'],
+    [{ offline: true, needsProvider: true }, 'offline'],
+  ])('maps %o to %s', (row, state) => {
+    expect(markState(row)).toBe(state);
   });
 
-  it('ripples a working profile fold facet by facet, and holds one that needs a model still', () => {
-    expect(draw({ fold: 'shield', color: '#3899e2', working: true }).querySelectorAll('svg').length).toBe(foldFacets('shield').length);
+  it('maps a workgroup row to the honeycomb states the desktop shows', () => {
+    const state = (row) => workgroupGlyph(row).state;
+    expect(state({ working: true })).toBe('running');
+    expect(state({ rowState: 'working' })).toBe('running');
+    expect(state({ working: true, paused: true })).toBe('paused');
+    expect(state({ offline: true })).toBe('offline');
+    expect(state({ workgroup: { pipeline_status: 'blocked' } })).toBe('needs');
+    expect(state({ workgroup: { pipeline_status: 'queued' } })).toBe('queued');
+    expect(state({ rowState: 'failed' })).toBe('failed');
+    expect(state({ workgroup: { pipeline_status: 'running' } })).toBe('running');
+    expect(state({})).toBe('idle');
+  });
+
+  it('names the owner of the current phase and hands the mark no colour of its own', () => {
+    const workgroup = { pipeline_status: 'running', phase_map: { translate: { owner: '@Scout' } } };
+    const mark = workgroupGlyph({ workgroup, rowState: 'working', phase: '1/3', phaseSlug: 'translate' });
+    expect(mark).toEqual({ state: 'running', phase: [1, 3], step: 'translate', owner: 'Scout' });
+    expect(workgroupGlyph({ workgroup: { ...workgroup, pipeline_status: 'blocked', pipeline_phase: 'translate' } }).owner).toBe('Scout');
+    expect(workgroupGlyph({ workgroup, rowState: 'working', phaseSlug: 'file' }).owner).toBeNull();
+  });
+});
+
+describe('Glyph', () => {
+  it('draws a profile as its mark in its colour at the shared row size', () => {
+    const slot = mark(<Glyph kind="profile" shape="bell" color="#3899e2" />);
+    expect(slot.getAttribute('data-mark')).toBe('bell');
     cleanup();
-    expect(draw({ fold: 'shield', color: '#3899e2', working: true, needsProvider: true }).querySelectorAll('svg').length).toBe(1);
+    expect(mark(<Glyph kind="profile" shape="shield" color="#3899e2" />).getAttribute('data-mark')).toBe('round');
+    cleanup();
+    expect(slot.querySelector('path').getAttribute('fill')).toBe('#3899e2');
+    expect(slot.getAttribute('width')).toBe(String(MARK_SIZES.row));
   });
 
-  it('draws a roster profile at the shared row size, as the desktop rows and the design boards do', () => {
-    expect(draw({ fold: 'shield', color: '#3899e2' }).querySelector('svg').getAttribute('width')).toBe(String(FOLD_SIZES.row));
+  it('carries the row state onto the mark', () => {
+    expect(mark(<Glyph kind="profile" shape="heart" color="#3899e2" rowState="needs-you" />).getAttribute('data-state')).toBe('needs');
+    cleanup();
+    expect(mark(<Glyph kind="profile" shape="heart" color="#3899e2" needsProvider working />).getAttribute('data-state')).toBe('needs');
+    cleanup();
+    expect(mark(<Glyph kind="profile" shape="heart" color="#3899e2" rowState="failed" state="done" />).getAttribute('data-state')).toBe('done');
   });
 
-  it('draws the kite-base origami for a profile that never chose a fold', () => {
-    expect(draw({ color: '#3899e2' }).querySelectorAll('polygon').length).toBeGreaterThan(1);
+  it('merges the selected row: an idle session never hides the roster state', () => {
+    const state = (props) => {
+      const value = mark(<Glyph kind="profile" shape="heart" color="#3899e2" active {...props} />).getAttribute('data-state');
+      cleanup();
+      return value;
+    };
+    expect(state({ state: 'idle', rowState: 'failed' })).toBe('failed');
+    expect(state({ state: 'idle', working: true })).toBe('working');
+    expect(state({ state: 'idle', rowState: 'needs-you' })).toBe('needs');
+    expect(state({ state: 'idle', needsProvider: true })).toBe('needs');
+    expect(state({ state: 'idle', paused: true })).toBe('paused');
+    expect(state({ state: 'idle', unread: true })).toBe('done');
+    expect(state({ state: 'idle' })).toBe('idle');
   });
 
-  it('draws the kite-base origami for an unknown fold from a newer daemon', () => {
-    expect(draw({ fold: 'pencil', color: '#3899e2' }).querySelectorAll('polygon').length).toBeGreaterThan(1);
+  it('puts paused and a missing provider over the session, and needs you over its done or failed', () => {
+    const state = (props) => {
+      const value = mark(<Glyph kind="profile" shape="heart" color="#3899e2" active {...props} />).getAttribute('data-state');
+      cleanup();
+      return value;
+    };
+    expect(state({ state: 'working', paused: true })).toBe('paused');
+    expect(state({ state: 'done', needsProvider: true })).toBe('needs');
+    expect(state({ state: 'done', rowState: 'needs-you' })).toBe('needs');
+    expect(state({ state: 'failed', rowState: 'needs-you' })).toBe('needs');
+    expect(state({ state: 'working', rowState: 'failed' })).toBe('working');
+    expect(state({ state: 'failed', working: true })).toBe('failed');
   });
 
-  it('outlines the fold of a profile that needs a model', () => {
-    const polygon = draw({ fold: 'shield', color: '#3899e2', needsProvider: true }).querySelector('polygon');
-    expect(polygon.getAttribute('fill-opacity')).toBe('0.22');
-    expect(polygon.getAttribute('stroke')).toBe(polygon.getAttribute('fill'));
+  it('draws a workgroup as the soft honeycomb whatever the shape, only its current cell in the hub colour', () => {
+    const workgroup = { phase_map: { translate: { owner: '@scout' } } };
+    const slot = mark(<Glyph kind="workgroup" shape="shield" color="#3899e2" working phase="1/3" phaseSlug="translate" workgroup={workgroup} />);
+    expect(slot.getAttribute('data-mark')).toBe('soft-honeycomb');
+    expect(slot.getAttribute('data-state')).toBe('running');
+    const fills = [...slot.querySelectorAll('path')].map((p) => p.getAttribute('fill'));
+    expect(fills[1]).toBe('#3899e2');
+    expect(fills.filter((f) => f === '#3899e2')).toHaveLength(1);
   });
 
-  it('leaves a ready profile filled', () => {
-    const polygon = draw({ fold: 'shield', color: '#3899e2' }).querySelector('polygon');
-    expect(polygon.getAttribute('fill-opacity')).toBe('1');
-    expect(polygon.getAttribute('stroke')).toBeNull();
+  it('shows a blocked workgroup as needing you on the phone too', () => {
+    expect(mark(<Glyph kind="workgroup" color="#3899e2" workgroup={{ pipeline_status: 'blocked' }} />).getAttribute('data-state')).toBe('needs');
   });
 
-  it('draws a workgroup as the honeycomb in its hub colour whatever the fold', () => {
-    const root = render(<Glyph kind="workgroup" fold="shield" color="#3899e2" />).container;
-    const polygons = root.querySelectorAll('polygon');
-    expect(polygons).toHaveLength(foldFacets('honeycomb').length);
-    expect([...polygons].some((p) => p.getAttribute('fill') === '#3899e2')).toBe(true);
-    expect(root.querySelector('svg').getAttribute('width')).toBe(String(FOLD_SIZES.row));
-    expect(polygons[0].getAttribute('fill-opacity')).toBe('1');
-  });
-
-  it('unfolds a paused workgroup and a paused profile in grey', () => {
-    for (const glyph of [<Glyph kind="workgroup" color="#3899e2" paused />, <Glyph kind="profile" fold="heart" color="#3899e2" paused />]) {
-      const polygon = render(glyph).container.querySelector('polygon');
-      expect(polygon.getAttribute('fill')).toBe('none');
-      expect(polygon.getAttribute('stroke')).toBe('#828b97');
+  it('draws a paused workgroup and a paused profile as a grey dashed outline', () => {
+    for (const glyph of [<Glyph kind="workgroup" color="#3899e2" paused />, <Glyph kind="profile" shape="heart" color="#3899e2" paused />]) {
+      const path = render(glyph).container.querySelector('path');
+      expect(path.getAttribute('fill')).toBe('none');
+      expect(path.getAttribute('stroke')).toBe('#828b97');
       cleanup();
     }
-  });
-
-  it('ripples a working workgroup and stills a paused one', () => {
-    render(<Glyph kind="workgroup" color="#3899e2" working />);
-    expect(h.delays.map(Math.round)).toEqual([0, 533, 1067]);
-    cleanup();
-    h.delays.length = 0;
-    render(<Glyph kind="workgroup" color="#3899e2" working paused />);
-    expect(h.delays).toEqual([]);
   });
 });

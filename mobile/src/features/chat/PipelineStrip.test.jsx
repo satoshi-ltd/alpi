@@ -79,7 +79,7 @@ vi.mock('../../components/Pill', () => ({
 }));
 
 vi.mock('../../components/Fold', () => ({
-  Fold: ({ fold, unfolded, pulse }) => React.createElement('span', { 'data-fold': fold, 'data-unfolded': String(!!unfolded), 'data-pulse': String(!!pulse) }),
+  Fold: ({ shape, unfolded, pulse }) => React.createElement('span', { 'data-shape': shape, 'data-unfolded': String(!!unfolded), 'data-pulse': String(!!pulse) }),
 }));
 
 vi.mock('../../components/SkeletonBar', () => ({
@@ -115,7 +115,7 @@ const PHASE_MAP = {
   'media-build': { owner: 'pixel', task: 'rebuild the site' },
   'media-qa': { owner: 'lens' },
 };
-const CREW = { muse: { fold: 'star', accent: '#70f' }, pixel: { fold: 'rocket', accent: '#099' }, lingua: { fold: 'plane', accent: '#b29' } };
+const CREW = { muse: { shape: 'clover', accent: '#70f' }, pixel: { shape: 'pill', accent: '#099' }, lingua: { shape: 'drop', accent: '#b29' } };
 const profileOf = (name) => CREW[name] ?? null;
 const LOADED = new Set([40, 42, 43]);
 
@@ -137,8 +137,8 @@ describe('PipelineStrip', () => {
   it('marks every phase with its declared owner and its state as its ground, with no check and no word', () => {
     const { container } = strip();
     const ground = (label) => JSON.parse(screen.getByLabelText(label).dataset.style).backgroundColor;
-    expect(screen.getByLabelText('#media-build · @pixel · running').querySelector('[data-fold="rocket"]')).toBeTruthy();
-    expect(screen.getByLabelText('#media-config · skipped').querySelector('[data-fold]')).toBeNull();
+    expect(screen.getByLabelText('#media-build · @pixel · running').querySelector('[data-shape="pill"]')).toBeTruthy();
+    expect(screen.getByLabelText('#media-config · skipped').querySelector('[data-shape]')).toBeNull();
     expect(screen.getByLabelText('#media-qa · @lens · pending').querySelector('[data-unfolded="true"]')).toBeTruthy();
     expect(container.querySelector('[data-icon="check"]')).toBeNull();
     expect(screen.getByLabelText('#media-update · @muse · completed').textContent).toBe('#media-update');
@@ -172,8 +172,8 @@ describe('PipelineStrip', () => {
   it('names the member a routed repair is addressed to, who ripples instead of the owner', () => {
     strip(RUN, { active: { slug: 'media-build', assignees: ['pixel', 'lingua'] } });
     const chip = screen.getByLabelText('#media-build · @pixel · → @lingua · running');
-    expect(chip.querySelector('[data-fold="plane"]').getAttribute('data-pulse')).toBe('true');
-    expect(chip.querySelector('[data-fold="rocket"]').getAttribute('data-pulse')).toBe('false');
+    expect(chip.querySelector('[data-shape="drop"]').getAttribute('data-pulse')).toBe('true');
+    expect(chip.querySelector('[data-shape="pill"]').getAttribute('data-pulse')).toBe('false');
   });
 
   it('gives every phase a 44 px target that opens its detail', () => {

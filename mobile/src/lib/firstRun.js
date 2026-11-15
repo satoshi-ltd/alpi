@@ -1,10 +1,12 @@
-import { ALPACA_FOLD, FOLD_SIZES, foldFacets } from '../../../common/folds.mjs';
+import { MARK_SIZES } from '../../../common/agentMarks.mjs';
+import { shapeBox } from './agentMark';
 import { lineHeights, space, tracking } from '../theme/tokens';
 import { isTwoPane } from './panes';
+import { code } from '../theme/code';
 
 export const FIRST_RUN_MAX_W = 480;
 export const FIRST_RUN_PATHS = ['/onboarding', '/pair', '/paired'];
-export const BUSY_MARK_PX = 77;
+export const BUSY_MARK_PX = MARK_SIZES.hero;
 
 export const firstRun = {
   top: space.s9,
@@ -17,29 +19,22 @@ export const firstRun = {
 
 export const firstRunColumn = { width: '100%', maxWidth: FIRST_RUN_MAX_W, alignSelf: 'flex-start' };
 
-const INK = foldFacets(ALPACA_FOLD).flatMap(({ points }) => points);
-const INK_LEFT = Math.min(...INK.map(([x]) => x));
-const INK_TOP = Math.min(...INK.map(([, y]) => y));
+const [INK_LEFT] = shapeBox('alpi-twin');
 
 export const markInset = (px) => (INK_LEFT * px) / 100;
 
 export const firstRunEdge = (width, height) => (isTwoPane(width, height) ? firstRun.foldEdge : firstRun.edge);
 
-export const foldMarkStyle = { marginLeft: -markInset(FOLD_SIZES.hero), alignSelf: 'flex-start' };
+export const foldMarkStyle = { marginLeft: -markInset(MARK_SIZES.hero), alignSelf: 'flex-start' };
 
-export const busyMarkStyle = (() => {
-  const top = (INK_TOP * BUSY_MARK_PX) / 100;
-  return {
-    padding: 0,
-    gap: 0,
-    alignItems: 'flex-start',
-    justifyContent: 'flex-start',
-    alignSelf: 'flex-start',
-    marginLeft: -markInset(BUSY_MARK_PX),
-    marginTop: -top,
-    marginBottom: -(BUSY_MARK_PX - FOLD_SIZES.hero - top),
-  };
-})();
+export const busyMarkStyle = {
+  padding: 0,
+  gap: 0,
+  alignItems: 'flex-start',
+  justifyContent: 'flex-start',
+  alignSelf: 'flex-start',
+  marginLeft: -markInset(BUSY_MARK_PX),
+};
 
 export const firstRunScroll = (insets, edge) => ({
   flexGrow: 1,
@@ -69,7 +64,7 @@ export function firstRunType({ colors, fonts, fontSizes }, titleSize = fontSizes
       marginTop: firstRun.gap,
     },
     fact: {
-      fontFamily: fonts.mono,
+      fontFamily: fonts.sans.regular,
       fontSize: fontSizes.sm,
       lineHeight: lineOf(fontSizes.sm, lineHeights.cozy),
       color: colors.ink3,
@@ -89,8 +84,7 @@ export function firstRunType({ colors, fonts, fontSizes }, titleSize = fontSizes
       color: colors.ink3,
     },
     sourcePath: {
-      fontFamily: fonts.mono,
-      fontSize: fontSizes.md,
+      ...code(fonts, fontSizes.md),
       lineHeight: lineOf(fontSizes.md, lineHeights.normal),
       color: colors.ink2,
     },

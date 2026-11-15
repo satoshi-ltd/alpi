@@ -2,8 +2,10 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ConnectionSwitcher from "./ConnectionSwitcher.jsx";
 import VersionButton from "./VersionButton.jsx";
 import { ActionLink, SidebarRow, SectionLabel, ContextMenu } from "../primitives/index.js";
-import { WORKGROUP_FOLD } from "../../../common/folds.mjs";
+import { WORKGROUP_SHAPE } from "../../../common/shapes.mjs";
+import { workgroupMark, workgroupStatusLine } from "../../../common/workgroupMarkState.mjs";
 import { shortcutKeys } from "../lib/shortcuts.js";
+import { cycleTheme, nextTheme, useTheme } from "../lib/theme.js";
 import {
   Button,
   IconBtn,
@@ -20,6 +22,8 @@ import {
   XIcon,
 } from "../primitives/index.js";
 import RelativeTime from "../primitives/RelativeTime.jsx";
+import { nameVars } from "../lib/nameVars.js";
+import { MARK_SIZES } from "../../../common/agentMarks.mjs";
 import { profileLabel } from "../lib/profile-display.js";
 import {
   useReadState,
@@ -37,7 +41,7 @@ import { EMPTY } from "../../../common/emptyCopy.mjs";
 const MIN_VISIBLE_ALPIS = 3;
 const MIN_VISIBLE_WORKGROUPS = 2;
 const MAX_VISIBLE_WORKGROUPS = 6;
-const ROW_HEIGHT_FALLBACK = 34;
+const ROW_HEIGHT_FALLBACK = 42;
 
 export function fitWorkgroupRows(current, maximum, freeSpace, rowHeight) {
   const minimum = Math.min(MIN_VISIBLE_WORKGROUPS, maximum);
@@ -81,6 +85,7 @@ function Sidebar({
   taskByWorkgroup = {},
   activityByWorkgroup = {},
   pendingProfiles = null,
+  activeMarkState = null,
   rosterState = null,
   view,
   settingsTarget = null,
@@ -113,6 +118,7 @@ function Sidebar({
   activityNeedsYou = 0,
   searchOpen = false,
   onCloseSearch,
+  onOpenPalette = null,
 }) {
   const inSettings = view.kind === "settings";
   const [query, setQuery] = useState("");
@@ -247,8 +253,8 @@ function Sidebar({
         it.kind === "profile" ? matchProfile(it.item) : matchWorkgroup(it.item),
       )
     : pinnedItems;
-  const hasPinned = filteredPinnedItems.length > 0;
   const visibleFront = frontProfile && matchProfile(frontProfile) ? frontProfile : null;
+  const hasTiles = filteredPinnedItems.length > 0 || !!visibleFront;
   const showProfilesSection =
     filteredProfiles.length > 0 || (!q && !!visibleFront && !!onNewProfile);
   const noMatches =
@@ -270,7 +276,7 @@ function Sidebar({
     return () => ro.disconnect();
   }, []);
 
-  const [frontSectionRef, frontSectionH] = useMeasuredHeight();
+  const frontSectionH = 0;
   const [pinnedSectionRef, pinnedSectionH] = useMeasuredHeight();
   const [profilesSectionRef, profilesSectionH] = useMeasuredHeight();
   const [workgroupsSectionRef, workgroupsSectionH] = useMeasuredHeight();
@@ -450,6 +456,7 @@ function Sidebar({
       key={keyPrefix + p.name}
       profile={p}
       active={activeProfileName === p.name}
+      liveState={activeProfileName === p.name ? activeMarkState : null}
       pending={!!pendingProfiles?.has(p.name) || rosterState?.profiles?.[p.name] === "working"}
       rowState={rosterState?.profiles?.[p.name] ?? null}
       isPinned={pinnedProfileNames.includes(p.name)}
@@ -461,6 +468,42 @@ function Sidebar({
       onContextMenu={openProfileCtx}
     />
   );
+
+  const renderProfileTile = (p) => (
+    <ProfileTile
+      key={`tile:${p.name}`}
+      profile={p}
+      active={activeProfileName === p.name}
+      liveState={activeProfileName === p.name ? activeMarkState : null}
+      pending={!!pendingProfiles?.has(p.name) || rosterState?.profiles?.[p.name] === "working"}
+      rowState={rosterState?.profiles?.[p.name] ?? null}
+      connId={connId}
+      checkUnread={checkUnread}
+      onOpen={openProfile}
+      onContextMenu={openProfileCtx}
+    />
+  );
+
+  const renderWorkgroupTile = (w) => {
+    const key = `${w.profile}/${w.id}`;
+    return (
+      <WorkgroupTile
+        key={`tile:${key}`}
+        workgroup={w}
+        hubAccent={hubAccentByProfile[w.hub_id ?? w.profile] ?? null}
+        task={taskByWorkgroup[key] ?? null}
+        busy={!!activityByWorkgroup[key]}
+        run={rosterState?.workgroups?.[key] ?? null}
+        active={activeWorkgroupId === key}
+        connId={connId}
+        checkUnread={checkWorkgroupUnread}
+        onOpen={openWorkgroup}
+        onContextMenu={openWorkgroupCtx}
+      />
+    );
+  };
+
+  const activeProfile = activeProfileName ? profiles.find((p) => p.name === activeProfileName) ?? null : null;
 
   const renderWorkgroupRow = (w, keyPrefix = "") => {
     const key = `${w.profile}/${w.id}`;
@@ -538,19 +581,13 @@ function Sidebar({
               <SidebarLoadingRows />
             </Section>
           )}
-          {visibleFront && (
-            <div ref={frontSectionRef} className={styles.section}>
-              {renderProfileRow(visibleFront, "front:")}
-            </div>
-          )}
-          {hasPinned && (
-            <Section label="Pinned" containerRef={pinnedSectionRef}>
+          {hasTiles && (
+            <div ref={pinnedSectionRef} className={styles.tiles} role="group" aria-label="Pinned">
+              {visibleFront && renderProfileTile(visibleFront)}
               {filteredPinnedItems.map((it) =>
-                it.kind === "profile"
-                  ? renderProfileRow(it.item, "pin:")
-                  : renderWorkgroupRow(it.item, "pin:"),
+                it.kind === "profile" ? renderProfileTile(it.item) : renderWorkgroupTile(it.item),
               )}
-            </Section>
+            </div>
           )}
 
           {showProfilesSection && (
@@ -636,6 +673,7 @@ function Sidebar({
         notificationsUnread={notificationsUnread}
         onOpenActivity={onOpenActivity}
         activityNeedsYou={activityNeedsYou}
+        onOpenPalette={onOpenPalette}
       />
       {ctxMenu && (
         <ContextMenu
@@ -654,7 +692,7 @@ function SidebarLoadingRows() {
     <div className={styles.loadingRows} role="status" aria-label="Loading profiles">
       {["68%", "52%", "60%"].map((w) => (
         <div key={w} className={styles.loadingRow}>
-          <Skeleton width="9px" height="9px" radius="2px" delay={0} />
+          <Skeleton width="9px" height="9px" radius="var(--r-xs)" delay={0} />
           <Skeleton width={w} height="0.65em" delay={0} />
         </div>
       ))}
@@ -669,6 +707,7 @@ function SidebarFooter({
   notificationsUnread = 0,
   onOpenActivity = null,
   activityNeedsYou = 0,
+  onOpenPalette = null,
 }) {
   return (
     <div className={styles.footer}>
@@ -694,8 +733,40 @@ function SidebarFooter({
       {onOpenActivity && (
         <ActivityButton needsYou={activityNeedsYou} onClick={onOpenActivity} />
       )}
+      {onOpenPalette && (
+        <Tip text={`Search · ${shortcutKeys("palette")}`} side="up-l">
+          <IconBtn
+            size="sm"
+            className={styles.footerIcon}
+            aria-label="Search profiles, sessions and commands"
+            onClick={onOpenPalette}
+          >
+            <SearchIcon />
+          </IconBtn>
+        </Tip>
+      )}
+      <ThemeButton />
       <VersionButton />
     </div>
+  );
+}
+
+const THEME_LABEL = { system: "System", light: "Light", dark: "Dark" };
+const THEME_ICON = { system: "sun-moon", light: "sun", dark: "moon" };
+
+function ThemeButton() {
+  const theme = useTheme();
+  return (
+    <Tip text={`Theme: ${THEME_LABEL[theme]} · click for ${THEME_LABEL[nextTheme(theme)]}`} side="up-l">
+      <IconBtn
+        size="sm"
+        className={styles.footerIcon}
+        aria-label={`Theme: ${THEME_LABEL[theme]}`}
+        onClick={() => cycleTheme()}
+      >
+        <Icon name={THEME_ICON[theme]} size="sm" />
+      </IconBtn>
+    </Tip>
   );
 }
 
@@ -733,12 +804,11 @@ function ActivityButton({ needsYou = 0, onClick }) {
 
 const ROW_STATE_LABEL = { "needs-you": "needs you", failed: "failed", working: "working" };
 
-export function RowStateChip({ state, color }) {
+export function RowStateChip({ state }) {
   const text = ROW_STATE_LABEL[state];
   if (!text) return null;
   return (
-    <span className={styles.stateChip} data-state={state} style={color ? { "--c": color } : undefined}>
-      {state === "working" ? null : <span className={styles.stateDot} aria-hidden />}
+    <span className={styles.stateChip} data-state={state}>
       {text}
     </span>
   );
@@ -775,9 +845,21 @@ function PinAction({ isPinned, onClick }) {
   );
 }
 
+export function profileMarkState({ incomplete = false, paused = false, rowState = null, pending = false, unread = false, live = null }) {
+  if (paused) return "paused";
+  if (incomplete) return "needs";
+  if (rowState === "needs-you") return "needs";
+  if (live && live !== "idle") return live;
+  if (rowState === "failed") return "failed";
+  if (rowState === "working" || pending) return "working";
+  if (live) return live;
+  return unread ? "done" : "idle";
+}
+
 const ProfileRow = memo(function ProfileRow({
   profile,
   active,
+  liveState = null,
   pending,
   rowState = null,
   isPinned,
@@ -808,7 +890,7 @@ const ProfileRow = memo(function ProfileRow({
   const unread =
     !incomplete && !paused && !active && checkUnread?.(profile.name, sessionRecency);
   const trailing = rowState
-    ? <RowStateChip state={rowState} color={profile.accent || undefined} />
+    ? <RowStateChip state={rowState} />
     : sessionRecency > 0
       ? (
         <span className={`tnum sb-ts${unread ? " is-unr" : ""}`}>
@@ -818,7 +900,8 @@ const ProfileRow = memo(function ProfileRow({
       : null;
   const label = profileLabel(profile.name);
   const incompleteHint = `@${label}, needs provider — tap to set up`;
-  const leadingDiamond = <Fold fold={profile.fold} color={profile.accent || undefined} pulse={pending} outlined={incomplete} unfolded={!!profile.paused} />;
+  const markState = profileMarkState({ incomplete, paused, rowState, pending, unread, live: active ? liveState : null });
+  const leadingDiamond = <Fold shape={profile.shape} color={profile.accent || undefined} state={markState} seed={profile.name} still={!active} />;
   const bio = (profile.bio || profile.public_bio || "").trim();
 
   return (
@@ -827,7 +910,7 @@ const ProfileRow = memo(function ProfileRow({
         kind="profile"
         id={label}
         color={profile.accent || undefined}
-        fold={profile.fold}
+        shape={profile.shape}
         sel={active}
         unread={unread}
         state={paused ? "paused" : incomplete ? "needs-provider" : undefined}
@@ -853,6 +936,111 @@ const ProfileRow = memo(function ProfileRow({
       />
       {pinnable ? <PinAction isPinned={isPinned} onClick={handleTogglePin} /> : null}
     </div>
+  );
+});
+
+const TILE_PIP = { needs: "needs", failed: "failed" };
+
+function Tile({ label, mark, nameStyle, sel, unread, pip, ariaLabel, tip, onClick, onContextMenu, dim = false, state }) {
+  const button = (
+    <button
+      type="button"
+      className={styles.tile}
+      data-sel={sel || undefined}
+      data-unread={unread || undefined}
+      data-dim={dim || undefined}
+      data-state={state || undefined}
+      aria-current={sel ? "page" : undefined}
+      aria-label={ariaLabel || undefined}
+      onClick={onClick}
+      onContextMenu={onContextMenu}
+    >
+      <span className={styles.tileMark}>
+        {mark}
+        {pip ? <span className={styles.tilePip} data-pip={pip} aria-hidden /> : null}
+      </span>
+      <span className={`ds-name ${styles.tileName}`} style={nameStyle || undefined}>{label}</span>
+    </button>
+  );
+  return tip ? <Tip text={tip} side="up">{button}</Tip> : button;
+}
+
+const ProfileTile = memo(function ProfileTile({
+  profile,
+  active,
+  liveState = null,
+  pending,
+  rowState = null,
+  connId,
+  checkUnread,
+  onOpen,
+  onContextMenu,
+}) {
+  const handleClick = useCallback(() => onOpen(profile), [onOpen, profile]);
+  const handleContextMenu = useCallback((e) => onContextMenu?.(e, profile), [onContextMenu, profile]);
+  const ls = profile.latest_session;
+  const sessionRecency = ls?.updated_at ?? ls?.started_at ?? ls?.mtime ?? 0;
+  const incomplete = !profile.model;
+  const paused = !!profile.paused;
+  useEffect(() => {
+    if (active && sessionRecency > 0) markProfileRead(connId, profile.name, sessionRecency);
+  }, [active, connId, profile.name, sessionRecency]);
+  const unread = !incomplete && !paused && !active && checkUnread?.(profile.name, sessionRecency);
+  const label = profileLabel(profile.name);
+  const markState = profileMarkState({ incomplete, paused, rowState, pending, unread, live: active ? liveState : null });
+  const status = incomplete ? "needs provider" : paused ? "paused" : rowState ? ROW_STATE_LABEL[rowState] : unread ? "unread" : null;
+  return (
+    <Tile
+      label={label}
+      sel={active}
+      unread={unread}
+      dim={paused}
+      state={paused ? "paused" : incomplete ? "needs-provider" : undefined}
+      pip={TILE_PIP[markState] ?? null}
+      ariaLabel={status ? `${label}, ${status}` : label}
+      nameStyle={nameVars(profile.accent)}
+      mark={<Fold shape={profile.shape} color={profile.accent || undefined} state={markState} seed={profile.name} size={MARK_SIZES.tile} still={!active} />}
+      onClick={handleClick}
+      onContextMenu={handleContextMenu}
+    />
+  );
+});
+
+const WorkgroupTile = memo(function WorkgroupTile({
+  workgroup,
+  hubAccent,
+  task,
+  busy,
+  run = null,
+  active,
+  connId,
+  checkUnread,
+  onOpen,
+  onContextMenu,
+}) {
+  const handleClick = useCallback(() => onOpen(workgroup), [onOpen, workgroup]);
+  const handleContextMenu = useCallback((e) => onContextMenu?.(e, workgroup), [onContextMenu, workgroup]);
+  const label = workgroup.name ?? workgroup.id;
+  const mtime = workgroup.mtime ?? 0;
+  const paused = !!workgroup.paused;
+  const mark = workgroupMark({ workgroup, run, task, busy });
+  useEffect(() => {
+    if (active && mtime > 0) markWorkgroupRead(connId, workgroup.profile, workgroup.id, mtime);
+  }, [active, connId, workgroup.profile, workgroup.id, mtime]);
+  const unread = !paused && !active && checkUnread?.(workgroup.profile, workgroup.id, mtime);
+  return (
+    <Tile
+      label={label}
+      sel={active}
+      unread={unread}
+      dim={paused}
+      pip={TILE_PIP[mark.state] ?? null}
+      ariaLabel={paused ? `${label}, paused` : unread ? `${label}, unread` : label}
+      tip={paused ? null : workgroupStatusLine(mark)}
+      mark={<Fold shape={WORKGROUP_SHAPE} color={hubAccent || undefined} state={mark.state} phase={mark.phase} seed={`${workgroup.profile}/${workgroup.id}`} size={MARK_SIZES.tile} still={!active} />}
+      onClick={handleClick}
+      onContextMenu={handleContextMenu}
+    />
   );
 });
 
@@ -884,35 +1072,19 @@ const WorkgroupRow = memo(function WorkgroupRow({
   const mtime = workgroup.mtime ?? 0;
   const paused = !!workgroup.paused;
 
-  let stateKind;
-  let stateLabel;
-  if (run || busy || task?.state === "open") {
-    stateKind = "working";
-    stateLabel = run?.phase ? `Working · ${run.phase}` : "Working…";
-  } else if (paused) {
-    stateKind = "paused";
-    stateLabel = "Paused";
-  } else if (task?.state === "error") {
-    stateKind = "error";
-    stateLabel = "Error";
-  } else if (task?.state === "done") {
-    stateKind = "done";
-    stateLabel = "Task done";
-  } else {
-    stateKind = "idle";
-    stateLabel = "Idle";
-  }
+  const mark = workgroupMark({ workgroup, run, task, busy });
+  const tip = paused ? null : workgroupStatusLine(mark);
 
   useEffect(() => {
     if (active && mtime > 0) markWorkgroupRead(connId, workgroup.profile, workgroup.id, mtime);
   }, [active, connId, workgroup.profile, workgroup.id, mtime]);
   const unread =
     !paused && !active && checkUnread?.(workgroup.profile, workgroup.id, mtime);
-  const working = stateKind === "working";
+  const glyph = <Fold shape={WORKGROUP_SHAPE} color={hubAccent || undefined} state={mark.state} phase={mark.phase} seed={`${workgroup.profile}/${workgroup.id}`} still={!active} />;
   const hasPhases = run?.phasesTotal > 0 && run?.phasesDone != null;
   const trailing = hasPhases
     ? (
-      <span className={`tnum ${styles.phaseCount}`} style={hubAccent ? { "--c": hubAccent } : undefined} aria-label={`phase ${run.phasesDone} of ${run.phasesTotal}`}>
+      <span className={`tnum ${styles.phaseCount}`} style={nameVars(hubAccent, "bgSide") ?? undefined} aria-label={`phase ${run.phasesDone} of ${run.phasesTotal}`}>
         {run.phasesDone}/{run.phasesTotal}
       </span>
     )
@@ -936,13 +1108,7 @@ const WorkgroupRow = memo(function WorkgroupRow({
         ariaLabel={unread ? `${label} unread` : undefined}
         leading={
           <span className={styles.workgroupLeading} style={{ color: hubAccent || "var(--ink-3)" }}>
-            {working && !paused ? (
-              <Tip text={stateLabel} side="up-l">
-                <Fold fold={WORKGROUP_FOLD} color={hubAccent || undefined} pulse />
-              </Tip>
-            ) : (
-              <Fold fold={WORKGROUP_FOLD} color={hubAccent || undefined} unfolded={paused} />
-            )}
+            {tip ? <Tip text={tip} side="up-l">{glyph}</Tip> : glyph}
           </span>
         }
         trailing={trailing}

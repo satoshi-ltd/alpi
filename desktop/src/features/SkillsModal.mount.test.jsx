@@ -51,12 +51,55 @@ describe("SkillsModal (mounted)", () => {
     ));
   });
 
+  it("keys requirements by kind and name and marks missing only the unresolved one", async () => {
+    const requires = [{ kind: "env", name: "TOKEN", resolved: true }, { kind: "bin", name: "TOKEN", resolved: false }];
+    h.invoke.mockImplementation((cmd) => {
+      if (cmd === "profile_skills") return Promise.resolve(SKILLS);
+      if (cmd === "profile_skill_read") return Promise.resolve({ ...DETAIL, requires });
+      return Promise.resolve(null);
+    });
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    render(<SkillsModal open onClose={() => {}} profile="muse" connectionId="c2" />);
+    const req = await waitFor(() => {
+      const dt = Array.from(document.querySelectorAll("dt")).find((d) => d.textContent === "Requires");
+      expect(dt).toBeTruthy();
+      return dt.nextElementSibling;
+    });
+    expect(Array.from(req.querySelectorAll("code")).map((c) => c.textContent)).toEqual(["TOKEN", "TOKEN"]);
+    expect(req.querySelectorAll("[class*=idMissing]")).toHaveLength(1);
+    expect(req.textContent).toBe("TOKEN, TOKEN missing");
+    expect(errors.mock.calls.some((c) => /same key/.test(String(c[0])))).toBe(false);
+    errors.mockRestore();
+  });
+
   it("re-fetches against the new daemon when the connection changes", async () => {
     const { rerender } = render(<SkillsModal open onClose={() => {}} profile="muse" connectionId="c2" />);
     await waitFor(() => expect(h.invoke).toHaveBeenCalledWith("profile_skills", { profile: "muse", connectionId: "c2" }));
     h.invoke.mockClear();
     rerender(<SkillsModal open onClose={() => {}} profile="muse" connectionId="c9" />);
     await waitFor(() => expect(h.invoke).toHaveBeenCalledWith("profile_skills", { profile: "muse", connectionId: "c9" }));
+  });
+
+  it("starts every row with the skill's name in sans, its size or state the one trailing meta, never a pill or a fade", async () => {
+    render(<SkillsModal open onClose={() => {}} profile="muse" connectionId="c2" />);
+    const options = await screen.findAllByRole("option");
+    expect(options).toHaveLength(2);
+    for (const [i, option] of options.entries()) {
+      expect(option.querySelector("[class*=rowTitle]").textContent).toBe(SKILLS[i].name);
+      expect(option.querySelectorAll("[class*=rowMeta]")).toHaveLength(1);
+      expect(option.querySelector("[class*=sizeTag]")).toBeNull();
+      expect(option.className).not.toMatch(/Muted/);
+    }
+    expect(options[0].querySelector("[class*=rowMeta]").textContent).toBe("2.3 KB");
+    expect(options[1].querySelector("[class*=rowMeta]").textContent).toBe("inactive");
+    expect(options[1].querySelector("[class*=rowTitle]").className).toMatch(/rowOff/);
+    expect(screen.getByText("Creative")).toBeTruthy();
+    await screen.findByRole("heading", { name: "make-logo-svg" });
+    expect(screen.getByRole("button", { name: "Copy creative/make-logo-svg" })).toBeTruthy();
+    const labels = Array.from(document.querySelectorAll("dt")).map((d) => d.textContent);
+    expect(labels).toEqual(["About", "Tools", "Keywords", "Version"]);
+    expect(screen.getByText("v0.1.1 · user · Jun 5")).toBeTruthy();
+    expect(screen.getByText("read_file").tagName).toBe("CODE");
   });
 
   it("shows an empty state when no skills are installed", async () => {

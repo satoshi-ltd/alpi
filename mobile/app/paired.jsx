@@ -1,7 +1,8 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { AppState, Linking, ScrollView, Text, View } from 'react-native';
-import { ALPACA_FOLD, FOLD_SIZES } from '../../common/folds.mjs';
+import { TWIN_SHAPE } from '../../common/shapes.mjs';
+import { MARK_SIZES } from '../../common/agentMarks.mjs';
 import { pairedRoleLine } from '../../common/onboarding.mjs';
 import { mobile, space } from '../src/theme/tokens';
 import { firstRun, firstRunActions, firstRunBottom, firstRunColumn, firstRunScroll, firstRunType, foldMarkStyle } from '../src/lib/firstRun';
@@ -82,7 +83,7 @@ export default function PairSuccess() {
       <ScrollView style={{ flex: 1 }} contentContainerStyle={firstRunScroll(insets, edge)}>
         <View style={firstRunColumn}>
           <View style={foldMarkStyle}>
-            <Fold fold={ALPACA_FOLD} size={FOLD_SIZES.hero} />
+            <Fold shape={TWIN_SHAPE} size={MARK_SIZES.hero} />
           </View>
           <Text accessibilityRole="header" style={type.title}>{host ? `Paired with ${host}` : 'Paired'}</Text>
           {role ? <Text style={type.fact}>{pairedRoleLine(role, sharedCount)}</Text> : null}

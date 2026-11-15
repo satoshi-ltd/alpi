@@ -25,9 +25,10 @@ export function flattenTree(tree, parentPath = '') {
   return out;
 }
 
-export function fileSize(n) {
-  const b = Number(n) || 0;
-  if (b < 1024) return `${b}b`;
-  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)}kb`;
-  return `${(b / (1024 * 1024)).toFixed(1)}mb`;
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+export function skillVersion(detail) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(detail?.created_at ?? '').trim());
+  const date = m && Number(m[2]) >= 1 && Number(m[2]) <= 12 ? `${MONTHS[Number(m[2]) - 1]} ${Number(m[3])}` : null;
+  return [detail?.version ? `v${detail.version}` : null, detail?.origin || 'agent', date].filter(Boolean).join(' · ');
 }

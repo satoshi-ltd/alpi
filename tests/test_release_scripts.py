@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -174,10 +175,10 @@ def _suites(paths: list[str]) -> list[str]:
     "paths, expected",
     [
         ([], ["release"]),
-        (["README.md"], ["release", "alpi"]),
+        (["README.md"], ["release", "alpi", "site"]),
         (["alpi/tools/terminal.py"], ["release", "alpi"]),
         (["alpi/host/server.py"], ["release", "alpi"]),
-        (["docs/guide.md"], ["release", "alpi", "knowledge"]),
+        (["docs/guide.md"], ["release", "alpi", "knowledge", "site"]),
         (["alpi/knowledge/references/x.md"], ["release", "alpi", "knowledge"]),
         (["desktop/src/App.helpers.test.jsx"], ["release", "desktop", "desktop-build", "tauri", "mobile"]),
         (["desktop/src/App.jsx"], ["release", "desktop", "desktop-build", "tauri", "mobile", "design", "design-kit"]),
@@ -185,7 +186,9 @@ def _suites(paths: list[str]) -> list[str]:
         (["desktop/package.json"], ["release", "desktop", "desktop-build", "tauri", "mobile", "design", "design-kit"]),
         (["mobile/package.json"], ["release", "desktop", "desktop-build", "tauri", "mobile", "mobile-lock", "design", "design-kit"]),
         (["mobile/src/screens/Chat.jsx"], ["release", "desktop", "desktop-build", "tauri", "mobile", "design", "design-kit"]),
-        (["common/tokens.mjs"], ["release", "alpi", "desktop", "desktop-build", "tauri", "mobile", "design", "design-kit"]),
+        (["common/tokens.mjs"], ["release", "alpi", "desktop", "desktop-build", "tauri", "mobile", "design", "design-kit", "site"]),
+        (["site/templates/landing.html"], ["release", "site"]),
+        ([".github/workflows/publish-site.yml"], ["release", "alpi", "site"]),
         (["design/src/gen.py"], ["release", "design", "design-kit"]),
         ([".github/workflows/publish-desktop.yml"], ["release", "alpi"]),
         ([".githooks/pre-commit"], ["release", "alpi"]),
@@ -210,6 +213,7 @@ def test_validate_all_runs_every_suite() -> None:
         "mobile-lock",
         "design",
         "design-kit",
+        "site",
     ]
 
 
@@ -269,3 +273,41 @@ def test_the_design_build_survives_a_malformed_previous_index(tmp_path: Path, pr
     (out / "canvas" / "project" / "canvas.json").write_text(previous)
     subprocess.run([sys.executable, str(REPO / "design" / "build.py"), "--out", str(out)], cwd=REPO, check=True, capture_output=True)
     assert json.loads((out / "canvas" / "project" / "canvas.json").read_text())["createdOnFiles"]["at"]
+
+
+def _run_hook(tmp_path: Path, staged: list[str]) -> list[str]:
+    repo = tmp_path / "repo"
+    bin_dir = tmp_path / "bin"
+    log = tmp_path / "calls.log"
+    for folder in (".githooks", "desktop/src-tauri", "mobile"):
+        (repo / folder).mkdir(parents=True)
+    shutil.copy(REPO / ".githooks" / "pre-commit", repo / ".githooks" / "pre-commit")
+    bin_dir.mkdir()
+    for tool in ("uv", "pnpm", "npm", "cargo"):
+        stub = bin_dir / tool
+        stub.write_text(f'#!/bin/sh\necho "{tool} $*" >> "{log}"\n')
+        stub.chmod(0o755)
+    isolated = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")} | {"HOME": str(tmp_path), "GIT_CEILING_DIRECTORIES": str(tmp_path)}
+    git = ["git", "-C", str(repo)]
+    subprocess.run([*git, "init", "-q"], check=True, env=isolated)
+    assert subprocess.run([*git, "rev-parse", "--show-toplevel"], check=True, env=isolated, capture_output=True, text=True).stdout.strip() == str(repo.resolve())
+    for path in staged:
+        (repo / path).parent.mkdir(parents=True, exist_ok=True)
+        (repo / path).write_text("x\n")
+        subprocess.run([*git, "add", path], check=True, env=isolated)
+    env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "HOME": str(tmp_path), "GIT_CEILING_DIRECTORIES": str(tmp_path)}
+    subprocess.run(["bash", str(repo / ".githooks" / "pre-commit")], cwd=repo, env=env, check=True, capture_output=True)
+    return log.read_text().splitlines() if log.exists() else []
+
+
+@pytest.mark.parametrize("source", ["common/agentMarks.mjs", "common/workgroupMark.mjs", "common/markEyes.mjs", "common/shapes.mjs"])
+def test_pre_commit_runs_the_console_mark_tests_when_only_shared_marks_change(tmp_path: Path, source: str) -> None:
+    calls = _run_hook(tmp_path, [source])
+    assert "uv run pytest -q tests/core/test_fold_art.py tests/core/test_appearance.py tests/test_icons.py" in calls
+    assert any(c.startswith("pnpm") for c in calls) and any(c.startswith("npm") for c in calls)
+
+
+def test_pre_commit_skips_the_console_mark_tests_for_other_common_files_and_when_the_alpi_suite_runs(tmp_path: Path) -> None:
+    assert not any(c.startswith("uv") for c in _run_hook(tmp_path / "a", ["common/tokens.mjs"]))
+    calls = _run_hook(tmp_path / "b", ["common/agentMarks.mjs", "alpi/fold_art.py"])
+    assert [c for c in calls if c.startswith("uv")] == ["uv run pytest -q --ignore=tests/llm --ignore=tests/integration"]

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import AttachmentChips from "../primitives/AttachmentChips.jsx";
-import { PaperclipIcon } from "../primitives/icons.jsx";
+import { PlusIcon } from "../primitives/icons.jsx";
 import ModelPicker from "./ModelPicker.jsx";
 import Composer from "../primitives/Composer.jsx";
-import { IconBtn, Kbd, Mono } from "../primitives/index.js";
+import { IconBtn } from "../primitives/index.js";
 import { useNotify } from "../primitives/Notification.jsx";
 import { FIELD_KEYS } from "./settings/util.js";
 import { attachmentMimeFor } from "../lib/fileKind.js";
@@ -180,7 +180,7 @@ export default function ChatComposer({
     () =>
       baseMentions.map((m) => {
         const profile = profiles.find((p) => p.name === m.id);
-        return { ...m, accent: profile?.accent ?? null, fold: profile?.fold };
+        return { ...m, accent: profile?.accent ?? null, shape: profile?.shape };
       }),
     [baseMentions, profiles],
   );
@@ -247,18 +247,6 @@ export default function ChatComposer({
       reason={reason}
       disabledTitle="Type a message"
       mentions={mentions}
-      hint={
-        <>
-          <span>
-            <Mono className={styles.hintAt}>@</Mono> mention
-          </span>
-          <span className={styles.hintKeys}>
-            <Kbd>⌘</Kbd>
-            <Kbd>↵</Kbd>
-            <span>send</span>
-          </span>
-        </>
-      }
       topBar={
         attachments.length > 0 ? (
           <AttachmentChips
@@ -267,11 +255,11 @@ export default function ChatComposer({
           />
         ) : null
       }
-      leftActions={
-        <>
-          <IconBtn
+      leading={
+        <IconBtn
+            size="md"
             aria-label="Attach files"
-            tip="Attach files"
+            tip={mentions ? "Attach files · @ mentions a peer" : "Attach files"}
             disabled={disabled || daemonOffline}
             onClick={async () => {
               try {
@@ -282,8 +270,11 @@ export default function ChatComposer({
               }
             }}
           >
-            <PaperclipIcon />
+            <PlusIcon size="md" />
           </IconBtn>
+      }
+      leftActions={
+        <>
           {activeProfile && canManageProfileSurfaces && (
             <ModelPicker
               profile={activeProfile.name}

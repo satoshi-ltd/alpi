@@ -12,7 +12,7 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-      <ScreenHeader title="Settings" subtitle="THIS PHONE" onBack={goBack} />
+      <ScreenHeader title="Settings" onBack={goBack} />
       <SettingsBody />
     </SafeAreaView>
   );

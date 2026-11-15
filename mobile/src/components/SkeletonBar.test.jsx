@@ -59,10 +59,10 @@ describe('SkeletonBar', () => {
 
   it('rounds with the xs radius unless told otherwise', () => {
     render(<SkeletonBar width={80} />);
-    expect(h.style.borderRadius).toBe(4);
+    expect(h.style.borderRadius).toBe(6);
     cleanup();
-    render(<SkeletonBar width={80} radius={2} />);
-    expect(h.style.borderRadius).toBe(2);
+    render(<SkeletonBar width={80} radius={12} />);
+    expect(h.style.borderRadius).toBe(12);
   });
 
   it('holds still at full opacity under reduced motion', () => {

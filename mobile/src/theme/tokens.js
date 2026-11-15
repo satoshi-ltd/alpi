@@ -1,15 +1,17 @@
 import {
   fontSizes as sharedFontSizes,
   eyebrow as sharedEyebrow,
-  iconSizesAllowed,
+  floatShadow,
+  iconSizes as sharedIconSizes,
   iconStrokeFor as sharedIconStrokeFor,
   motionTokens,
   nativeFace,
   palettes as sharedPalettes,
   radii as sharedRadii,
   space as sharedSpace,
-  spaceExtra,
+  typeLadder,
   typography as sharedTypography,
+  veils,
 } from '../../../common/tokens.mjs';
 import { countBadgeSpec } from '../../../common/countBadge.mjs';
 
@@ -18,27 +20,39 @@ export {
   glyphSize,
   glyphSizeMd,
   controlHeight,
+  controlRole,
   dotScale,
   eyebrow,
+  fieldFocus,
+  floatShadow,
   focusRing,
   fontWeights,
+  monoScale,
+  nestInset,
+  retiredRadii,
+  shell,
+  stateFill,
+  stateFills,
+  stateMotion,
+  surfaces,
   iconSizesAllowed,
   iconStrokeRendered,
   ladderDirection,
   lineHeights,
   spaceScale,
   status,
+  touchTarget,
+  typeFloor,
   typeLadder,
+  typeLeading,
+  veils,
 } from '../../../common/tokens.mjs';
 
-export const FONT_SIZE_DROPS = ['xxs', 'label'];
-export const FONT_SIZE_ADDS = { chat: 16 };
+export const FONT_SIZE_ADDS = { chat: typeLadder.read };
 
 // Runtime consumers must read useTheme().fontSizes — these raw values ignore the user's text-size setting.
 export const fontSizes = Object.fromEntries(
-  Object.entries({ ...sharedFontSizes, ...FONT_SIZE_ADDS })
-    .filter(([name]) => !FONT_SIZE_DROPS.includes(name))
-    .sort((a, b) => a[1] - b[1]),
+  Object.entries({ ...sharedFontSizes, ...FONT_SIZE_ADDS }).sort((a, b) => a[1] - b[1]),
 );
 
 export const typography = {
@@ -57,7 +71,7 @@ export const fonts = {
   mono: nativeFace('mono', '400Regular'),
   monoMedium: nativeFace('mono', '500Medium'),
   monoSemibold: nativeFace('mono', '600SemiBold'),
-  crease: 'BricolageGrotesque_800ExtraBold',
+  name: 'BricolageGrotesque_800ExtraBold',
 };
 
 // em multipliers — apply as fontSize * tracking.<tier>
@@ -69,14 +83,14 @@ export const tracking = {
   eyebrow: sharedEyebrow.tracking,
 };
 
-export const iconSizes = { xs: iconSizesAllowed.mobile[0], md: iconSizesAllowed.mobile[1] };
+export const iconSizes = { xs: sharedIconSizes.inline, md: sharedIconSizes.control, lg: sharedIconSizes.nav };
 
 export const iconStrokeFor = sharedIconStrokeFor;
 
 // fixed-size chrome: deliberately outside the user/OS text scale so digits never clip the pill
-export const countBadge = { size: countBadgeSpec.size.mobile, border: 1.5, fontSize: fontSizes.xs, radius: sharedRadii.xs };
+export const countBadge = { size: countBadgeSpec.size.mobile, border: 1.5, fontSize: fontSizes.xs, radius: sharedRadii.pill };
 
-export const space = { ...sharedSpace, ...spaceExtra.mobile };
+export const space = { ...sharedSpace };
 
 export const pulseDuration = motionTokens.pulse;
 
@@ -95,71 +109,40 @@ export const motion = {
 
 export const mobile = {
   tap: 44,
-  inputH: 44,
+  inputH: 48,
   btnH: 48,
   iconBtn: 44,
   bubbleMaxPct: 0.82,
-  composerPad: { x: 12, y: 8 },
+  composerH: 56,
+  composerPad: { x: 8, y: 8 },
 };
-
-export const PALETTE_OVERRIDES = {
-  'light.bg': [
-    '#ffffff',
-    'desktop bg is the canvas its floating panes sit on; every mobile screen is edge-to-edge, so bg doubles as the pane',
-  ],
-  'light.bgInput': [
-    '#f2f2f2',
-    'mobile consumers fill borderless buttons and chips with bgInput, which desktop white would erase on a white ground',
-  ],
-  'dark.bgInput': [
-    '#1f1f1f',
-    'follows light.bgInput: mobile raises the input above bgElev where desktop recesses it below',
-  ],
-  'light.field': [
-    '#ececec',
-    'a field inside a card on the phone reads 1.07:1 over the #f4f4f4 card; the desktop well is #eaeaea at 1.09:1',
-  ],
-  'dark.card': [
-    '#151515',
-    'every phone screen is edge-to-edge on bg, so its cards sit lighter than the ground; desktop cards sit below the pane',
-  ],
-  'dark.field': [
-    '#1f1f1f',
-    'a phone field inside a dark card steps up to #1f1f1f where the desktop well is a tint over a darker card',
-  ],
-};
-
-function withOverrides(mode) {
-  const out = { ...sharedPalettes[mode] };
-  for (const [path, [value]] of Object.entries(PALETTE_OVERRIDES)) {
-    const [scope, key] = path.split('.');
-    if (scope === mode) out[key] = value;
-  }
-  return out;
-}
 
 export const palettes = {
-  light: withOverrides('light'),
-  dark: withOverrides('dark'),
+  light: { ...sharedPalettes.light },
+  dark: { ...sharedPalettes.dark },
 };
 
-const shadowsFor = (mode, shadowColor) => {
-  const p = palettes[mode];
-  const flat = { shadowColor, shadowOpacity: 0, shadowRadius: 0, elevation: 0 };
-  const dialog = { ...flat, borderWidth: 0.5, borderColor: p.ink3 };
+const FLOAT_NATIVE = {
+  light: { shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 16, shadowOffset: { width: 0, height: 12 }, elevation: 8, borderWidth: 0 },
+  dark: { shadowColor: '#000', shadowOpacity: 0.55, shadowRadius: 20, shadowOffset: { width: 0, height: 16 }, elevation: 8, borderWidth: 1, borderColor: 'rgba(237,237,237,0.09)' },
+};
+
+const shadowsFor = (mode) => {
+  const flat = { shadowColor: '#000', shadowOpacity: 0, shadowRadius: 0, elevation: 0, borderWidth: 0 };
+  const float = FLOAT_NATIVE[mode];
   return {
-    base: { ...flat, borderWidth: 0.5, borderColor: p.line2 },
-    sm: { ...flat, borderWidth: 0.5, borderColor: p.line },
-    sheet: { ...flat, borderWidth: 0, borderTopWidth: 1, borderColor: p.edge },
-    dialog,
-    popover: { ...dialog },
-    toast: { ...dialog },
+    base: { ...flat },
+    sm: { ...flat },
+    sheet: { ...float },
+    dialog: { ...float },
+    popover: { ...float },
+    toast: { ...float },
   };
 };
 
 export const shadows = {
-  light: shadowsFor('light', '#141414'),
-  dark: shadowsFor('dark', '#000'),
+  light: shadowsFor('light'),
+  dark: shadowsFor('dark'),
 };
 
-export const veil = (colors) => `${colors.bg}b8`;
+export const veil = (colors) => (colors?.ink === sharedPalettes.dark.ink ? veils.dark : veils.light);

@@ -3,7 +3,6 @@
   align-items: center;
   gap: var(--sp-8);
   padding: var(--panel-head-pad);
-  border-bottom: .5px solid var(--line);
 }
 
 .title {
@@ -35,8 +34,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-8);
-  min-height: var(--ctl-28);
-  border-bottom: .5px solid var(--line);
+  min-height: var(--ctl-32);
 }
 
 .label {

@@ -89,16 +89,16 @@ async def test_status_line_and_list_rows_wear_the_profile_glyph_on_a_truecolor_t
     from alpi.tui import list_row
 
     cfg = config.load(tui_profile_home)
-    cfg.tui = {"fold": "rocket", "accent": "#2cb3b5"}
+    cfg.tui = {"shape": "pill", "accent": "#2cb3b5"}
     config.save(cfg)
     monkeypatch.setattr(list_row, "_marker", "◆")
     monkeypatch.setattr(fold_art, "supports_fold_art", lambda *a, **k: True)
     app = AlpiApp(home_dir=tui_profile_home)
     async with app.run_test(size=(160, 40)) as pilot:
         await pilot.pause()
-        assert app.status_line.plain.startswith(f"{fold_art.glyph('rocket')} ")
+        assert app.status_line.plain.startswith(f"{fold_art.glyph('pill')} ")
         row = list_row.row_text("m", "", width=4, active=True, accent="#2cb3b5")
-        assert row.plain.startswith(f"{fold_art.glyph('rocket')} ")
+        assert row.plain.startswith(f"{fold_art.glyph('pill')} ")
 
 
 @pytest.mark.asyncio

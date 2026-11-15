@@ -16,7 +16,7 @@
   align-items: center;
   gap: var(--sp-8);
   padding: var(--sp-8) var(--sp-12);
-  border-radius: var(--r-xs);
+  border-radius: var(--r-control);
   background: transparent;
   text-align: left;
   border: 0;

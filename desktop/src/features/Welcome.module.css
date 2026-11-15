@@ -60,7 +60,7 @@
   display: flex;
   align-items: center;
   gap: var(--sp-4);
-  height: var(--ctl-28);
+  height: var(--ctl-32);
   margin-top: var(--sp-8);
   max-width: 100%;
 }
@@ -81,7 +81,7 @@
   overflow-y: auto;
   color: var(--c-danger-text);
   font-family: var(--font-mono);
-  font-size: var(--text-meta);
+  font-size: var(--text-mono);
   line-height: var(--sp-16);
   white-space: pre-wrap;
   overflow-wrap: anywhere;

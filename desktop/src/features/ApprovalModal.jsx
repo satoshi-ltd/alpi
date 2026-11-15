@@ -72,7 +72,7 @@ export default function ApprovalModal({ requests, onResolved, profiles = [] }) {
           <div className={styles.who}>
             {current.profile ? (
               <>
-                <Fold fold={asker?.fold} color={asker?.accent || undefined} />
+                <Fold shape={asker?.shape} color={asker?.accent || undefined} />
                 <span className={styles.profile}>{profileLabel(current.profile)}</span>
               </>
             ) : null}

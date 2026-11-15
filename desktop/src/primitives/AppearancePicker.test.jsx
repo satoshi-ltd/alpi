@@ -1,43 +1,52 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { FOLD_IDS } from "../../../common/folds.mjs";
+import { SHAPE_IDS } from "../../../common/shapes.mjs";
 import { ACCENTS } from "../../../common/accents.mjs";
+import { SHAPE_ORDER } from "../../../common/agentMarks.mjs";
 import AppearancePicker from "./AppearancePicker.jsx";
 
 afterEach(cleanup);
 
 const open = (props = {}) => {
   const onChange = vi.fn();
-  render(<AppearancePicker fold="shield" accent="#3899e2" onChange={onChange} {...props} />);
-  fireEvent.click(screen.getByRole("button", { name: /shield/ }));
+  render(<AppearancePicker shape="bell" accent="#3899e2" onChange={onChange} {...props} />);
+  fireEvent.click(screen.getByRole("button", { name: /bell/ }));
   return onChange;
 };
 
 describe("AppearancePicker", () => {
-  it("names the pair on its trigger and stays closed until clicked", () => {
+  it("names the colour and the shape on its trigger, closed until clicked", () => {
     const onChange = vi.fn();
-    render(<AppearancePicker fold="shield" accent="#3899e2" onChange={onChange} />);
-    expect(screen.getByRole("button", { name: "blue shield" })).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByText("Reset to diamond")).toBeNull();
+    render(<AppearancePicker shape="bell" accent="#3899e2" onChange={onChange} />);
+    expect(screen.getByRole("button", { name: "blue bell" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Reset to round")).toBeNull();
   });
 
-  it("falls back to the amber diamond for a profile with neither", () => {
+  it("reads a legacy fold id as the round, never as its old shape", () => {
+    render(<AppearancePicker shape="shield" accent="#3899e2" onChange={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "blue round" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "blue bell" })).toBeNull();
+  });
+
+  it("falls back to the amber round for a profile with neither", () => {
     render(<AppearancePicker onChange={vi.fn()} />);
-    expect(screen.getByRole("button", { name: "amber diamond" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "amber round" })).toBeInTheDocument();
   });
 
-  it("offers the twelve objects and the twelve colours", () => {
+  it("offers the twelve shapes under their shape names and the twelve colours", () => {
     open();
-    for (const id of FOLD_IDS) expect(screen.getByRole("button", { name: id })).toBeInTheDocument();
+    for (const id of SHAPE_IDS) expect(screen.getByRole("button", { name: id })).toBeInTheDocument();
+    expect(SHAPE_IDS).toEqual(SHAPE_ORDER);
+    expect(screen.getByText("Shape")).toBeInTheDocument();
     for (const [name, hex] of ACCENTS) expect(screen.getByRole("button", { name: `${name} ${hex}` })).toBeInTheDocument();
-    expect(FOLD_IDS).toHaveLength(12);
+    expect(SHAPE_IDS).toHaveLength(12);
     expect(ACCENTS).toHaveLength(12);
   });
 
-  it("marks the current object and colour as pressed, and nothing else", () => {
+  it("marks the current shape and colour as pressed, and nothing else", () => {
     open();
     const pressed = screen.getAllByRole("button", { pressed: true }).map((b) => b.getAttribute("aria-label"));
-    expect(pressed.sort()).toEqual(["blue #3899e2", "shield"]);
+    expect(pressed.sort()).toEqual(["bell", "blue #3899e2"]);
   });
 
   it("marks the nearest swatch for a free-form accent", () => {
@@ -45,11 +54,11 @@ describe("AppearancePicker", () => {
     expect(screen.getByRole("button", { name: "blue #3899e2" })).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("picking an object changes only the fold", () => {
+  it("picking a shape saves its shape name and changes nothing else", () => {
     const onChange = open();
     fireEvent.click(screen.getByRole("button", { name: "heart" }));
     expect(onChange).toHaveBeenCalledTimes(1);
-    expect(onChange).toHaveBeenCalledWith({ fold: "heart" });
+    expect(onChange).toHaveBeenCalledWith({ shape: "heart" });
   });
 
   it("picking a colour changes only the accent and mirrors it in the hex field", () => {
@@ -60,17 +69,17 @@ describe("AppearancePicker", () => {
     expect(screen.getByPlaceholderText("#hex")).toHaveValue("#f36a8a");
   });
 
-  it("resets the object to the diamond and leaves the colour alone", () => {
+  it("resets to the round shape, saved by name, and leaves the colour alone", () => {
     const onChange = open();
-    fireEvent.click(screen.getByRole("button", { name: "Reset to diamond" }));
-    expect(onChange).toHaveBeenCalledWith({ fold: "diamond" });
+    fireEvent.click(screen.getByRole("button", { name: "Reset to round" }));
+    expect(onChange).toHaveBeenCalledWith({ shape: "round" });
     expect(onChange.mock.calls[0][0]).not.toHaveProperty("accent");
   });
 
   it("previews the pair by name with the values that will be saved", () => {
     open();
-    expect(screen.getByText("Blue shield")).toBeInTheDocument();
-    expect(screen.getByText('fold: shield · accent: "#3899e2"')).toBeInTheDocument();
+    expect(screen.getByText("Blue bell")).toBeInTheDocument();
+    expect(screen.getByText('shape: bell · accent: "#3899e2"')).toBeInTheDocument();
   });
 
   it("commits a valid hex and explains an invalid one without committing it", () => {
@@ -81,16 +90,16 @@ describe("AppearancePicker", () => {
     expect(onChange).not.toHaveBeenCalled();
     fireEvent.change(input, { target: { value: "#123abc" } });
     expect(screen.queryByText("must be 6-digit #hex")).toBeNull();
-    expect(onChange).toHaveBeenCalledWith({ accent: "#123abc" });
+    expect(onChange).toHaveBeenCalledWith({ accent: "#123abc" }, { typed: true });
   });
 
   it("closes on Escape", () => {
     open();
     fireEvent.keyDown(document, { key: "Escape" });
-    expect(screen.queryByText("Reset to diamond")).toBeNull();
+    expect(screen.queryByText("Reset to round")).toBeNull();
   });
 
-  it("lays the twelve colours out like the objects: a six-column grid of the same 42 px tiles", async () => {
+  it("lays the twelve colours out like the shapes: a six-column grid of the same 42 px tiles", async () => {
     const { readFileSync } = await import("node:fs");
     const { join } = await import("node:path");
     const css = readFileSync(join(import.meta.dirname, "AppearancePicker.module.css"), "utf8");

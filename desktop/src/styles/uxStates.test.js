@@ -16,8 +16,11 @@ describe("message actions", () => {
 describe("sidebar selection and muted rows", () => {
   const ds = read("styles/design-system.css");
 
-  it("marks the selected row with a 3 px bar and a visible fill", () => {
-    expect(ds).toMatch(/\.ds-sb-row\[data-sel\]:hover, \.sb-row\[data-sel\]:hover \{\s*background: var\(--selected\);\s*box-shadow: inset 3px 0 0 var\(--row-accent, var\(--accent\)\);/);
+  it("marks the chosen row with the selected fill alone, no bar, and rings keyboard focus inside the row", () => {
+    expect(ds).toMatch(/\.ds-sb-row\[data-sel\]:hover, \.sb-row\[data-sel\]:hover \{\s*background: var\(--selected\);\s*\}/);
+    expect(ds).not.toMatch(/inset 3px 0 0|--row-accent/);
+    expect(ds).toMatch(/\.ds-sb-row:focus-visible, \.sb-row:focus-visible \{\s*outline-offset: var\(--focus-inset\);/);
+    expect(ds).toMatch(/\.sb-name\.is-sel \{ font-weight: var\(--fw-medium\); color: var\(--ink\); \}/);
   });
 
   it("never fades a row with opacity", () => {
@@ -33,8 +36,8 @@ describe("sidebar selection and muted rows", () => {
 describe("hit areas", () => {
   const sidebar = read("features/Sidebar.module.css");
 
-  it("gives the footer icon buttons a 24 px target", () => {
-    expect(rule(sidebar, ".footer :global(.ds-tip) .footerIcon")).toMatch(/width:\s*var\(--ctl-24\);\s*height:\s*var\(--ctl-24\)/);
+  it("gives the footer icon buttons a 32 px target", () => {
+    expect(rule(sidebar, ".footer :global(.ds-tip) .footerIcon")).toMatch(/width:\s*var\(--ctl-32\);\s*height:\s*var\(--ctl-32\)/);
   });
 
   it.each([".sectionAdd", ".pinButton", ".searchClose"])("gives %s at least 24 px", (selector) => {

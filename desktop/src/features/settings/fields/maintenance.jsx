@@ -145,7 +145,7 @@ export function StorageField({ profile, activeConnection, prefetched, onLoadingC
   const showStorageSkeleton = useSkeleton(storagePending);
 
   if (storagePending) {
-    return <Row label="storage">{showStorageSkeleton ? <Skeleton width="112px" height="22px" radius="var(--r-tag)" delay={0} label="Loading storage" /> : null}</Row>;
+    return <Row label="storage">{showStorageSkeleton ? <Skeleton width="112px" height="22px" radius="var(--r-pill)" delay={0} label="Loading storage" /> : null}</Row>;
   }
   if (usageOverride == null && usage == null && error) {
     return <Row label="storage"><LoadFailed inline label="storage" onRetry={refreshUsage} /></Row>;

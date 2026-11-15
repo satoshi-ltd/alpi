@@ -34,12 +34,15 @@ describe("desktop Field helper and error", () => {
     expect(screen.getByLabelText("Name").getAttribute("aria-describedby")).toMatch(/^hint \S+$/);
   });
 
-  it("rings an invalid well in the danger fill and fades a disabled one, as the shared recipe says", () => {
+  it("rings an invalid well in the danger text colour and fades a disabled one, as the shared recipe says", () => {
     const css = readFileSync(join(import.meta.dirname, "../styles/design-system.css"), "utf8");
-    expect(wellStates.error.ring).toBe("danger");
+    expect(wellStates.error).toEqual({ ring: "dangerText", width: 1.5 });
+    expect(wellStates.edge).toEqual({ rest: null, focus: "inset" });
+    expect(wellStates.focus).toEqual({ ink: "ink3", width: 1.5 });
+    expect(css).toMatch(/--well-error|box-shadow: var\(--field-focus\)/);
     expect(css).toMatch(/\.ds-field-wrap \{ display: flex;[^}]*width: 100%/);
-    expect(css).toMatch(/\[aria-invalid="true"\]:not\(:disabled\):focus \{\s*box-shadow: inset 0 0 0 1px var\(--c-danger\)/);
-    expect(wellStates.disabled).toEqual({ surface: "field", edge: "transparent", fade: "disabled" });
+    expect(css).toMatch(/\[aria-invalid="true"\]:not\(:disabled\):focus \{\s*box-shadow: var\(--well-error\)/);
+    expect(wellStates.disabled).toEqual({ surface: "fill", edge: "transparent", fade: "disabled" });
     expect(css).toMatch(/\.ds-field:disabled, \.field:disabled \{ background: var\(--well-off\); box-shadow: none; opacity: var\(--alpha-disabled\);/);
     expect(css).toMatch(/\.ds-field:disabled[^{]*\{[^}]*opacity: var\(--alpha-disabled\)/);
     expect(css).toMatch(/\.ds-field-note\.is-error \{ color: var\(--c-danger-text\); \}/);

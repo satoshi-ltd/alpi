@@ -1,7 +1,8 @@
 import { OverlayScope, useOverlay } from "../hooks/useOverlay.js";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
-import { IconBtn, Mono, RefreshBar, SearchIcon, Tip, XIcon } from "./index.js";
+import { CheckIcon, CopyIcon, IconBtn, RefreshBar, SearchIcon, Tip, XIcon } from "./index.js";
+import { useCopyFeedback } from "../hooks/useCopyFeedback.js";
 import Fold from "./Fold.jsx";
 import { badgeCount } from "../../../common/countBadge.mjs";
 import styles from "./BrowseModal.module.css";
@@ -110,7 +111,7 @@ export function BrowseBody({
         {owner ? (
           <>
             <span className={styles.owner}>
-              <Fold fold={owner.fold} color={owner.accent} size={18} />
+              <Fold shape={owner.shape} color={owner.accent} size={18} />
               <span className={styles.ownerName}>{owner.name}</span>
             </span>
             {sections ? (
@@ -144,7 +145,7 @@ export function BrowseBody({
               <span className={styles.title}>{title}</span>
               {count != null ? <span className={styles.count}>{count}</span> : null}
             </span>
-            {kicker ? <Mono className={styles.kicker}>· {kicker}</Mono> : null}
+            {kicker ? <span className={styles.kicker}>· {kicker}</span> : null}
           </>
         )}
         <span className={styles.headerSpacer} />
@@ -182,6 +183,72 @@ export function BrowseBody({
         <div className={styles.detail}>{children}</div>
       </div>
     </>
+  );
+}
+
+export function BrowseRow({ title, sub = null, meta = null, metaTone = null, bar = null, off = false, active = false, onSelect, label, ...rest }) {
+  const pct = bar ? Math.max(0, Math.min(100, bar.pct)) : 0;
+  return (
+    <li>
+      <button
+        type="button"
+        className={`${styles.row} ${active ? styles.rowActive : ""}`.trim()}
+        onClick={onSelect}
+        role="option"
+        aria-selected={active}
+        aria-label={label}
+        {...rest}
+      >
+        <span className={styles.rowHead}>
+          <span className={`${styles.rowTitle} ${off ? styles.rowOff : ""}`.trim()}>{title}</span>
+          {meta ? <span className={styles.rowMeta} data-tone={metaTone ?? undefined}>{meta}</span> : null}
+        </span>
+        {sub ? <span className={styles.rowSub}>{sub}</span> : null}
+        {bar ? (
+          <span className={styles.rowBar} data-over={bar.over ? "" : undefined} aria-hidden>
+            <span style={{ width: `${pct}%` }} />
+          </span>
+        ) : null}
+      </button>
+    </li>
+  );
+}
+
+export function BrowseDetailHead({ title, state = null, stateTone = null, id = null, actions = null }) {
+  const [copied, copy] = useCopyFeedback();
+  return (
+    <div className={styles.detailHead}>
+      <div className={styles.detailHeadText}>
+        <div className={styles.detailTitleLine}>
+          <h2 className={styles.detailTitle}>{title}</h2>
+          {state ? <span className={styles.detailState} data-tone={stateTone ?? undefined}>{state}</span> : null}
+        </div>
+        {id ? (
+          <div className={styles.detailIdLine}>
+            <span className={styles.detailId}>{id}</span>
+            <IconBtn tip={copied === "id" ? "Copied" : "Copy"} aria-label={`Copy ${id}`} onClick={() => copy("id", id)}>
+              {copied === "id" ? <CheckIcon /> : <CopyIcon />}
+            </IconBtn>
+          </div>
+        ) : null}
+      </div>
+      {actions ? <div className={styles.detailActions}>{actions}</div> : null}
+    </div>
+  );
+}
+
+export function FactTable({ rows }) {
+  const shown = rows.filter((r) => r && r.value != null && r.value !== "" && r.value !== false);
+  if (!shown.length) return null;
+  return (
+    <dl className={styles.facts}>
+      {shown.map((r) => (
+        <div key={r.label} className={styles.fact}>
+          <dt>{r.label}</dt>
+          <dd data-tone={r.tone ?? undefined}>{r.value}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 

@@ -114,7 +114,7 @@ vi.mock('../src/components/Banner', () => ({
     React.createElement('div', { 'data-banner': kind }, children, action ? React.createElement('button', { type: 'button', 'data-banner-action': action, onClick: onAction }) : null),
 }));
 vi.mock('../src/components/Diamond', () => ({ Diamond: () => React.createElement('span', { 'data-diamond': 'true' }) }));
-vi.mock('../src/components/Fold', () => ({ Fold: ({ fold, color, size, outlined }) => React.createElement('span', { 'data-fold': fold ?? 'diamond', 'data-color': color, 'data-size': size, 'data-outlined': String(!!outlined) }) }));
+vi.mock('../src/components/Fold', () => ({ Fold: ({ shape, color, size, outlined }) => React.createElement('span', { 'data-shape': shape ?? 'diamond', 'data-color': color, 'data-size': size, 'data-outlined': String(!!outlined) }) }));
 vi.mock('../src/components/Dot', () => ({ Dot: () => React.createElement('span', { 'data-dot': 'true' }) }));
 vi.mock('../src/components/Icon', () => ({ Icon: ({ name }) => React.createElement('span', { 'data-icon': name }) }));
 vi.mock('../src/components/Meter', () => ({
@@ -327,14 +327,33 @@ describe('Workgroup budget meter', () => {
   });
 });
 
+describe('Workgroup header status', () => {
+  it('names the owner of the running phase in the meta', () => {
+    h.wg = { ...WG, pipeline_status: 'running', pipeline_phase: 'translate', phase_map: { translate: { owner: '@lingua' } } };
+    render(<WorkgroupChat />);
+    expect(screen.getByText('· Working · translate · @lingua')).toBeTruthy();
+  });
+
+  it('names who a blocked phase waits on', () => {
+    h.wg = { ...WG, pipeline_status: 'blocked', pipeline_phase: 'approval', phase_map: { approval: { owner: 'yuri' } } };
+    render(<WorkgroupChat />);
+    expect(screen.getByText('· Needs you · approval · @yuri')).toBeTruthy();
+  });
+
+  it('says nothing at rest', () => {
+    render(<WorkgroupChat />);
+    expect(screen.queryByText(/Working|Needs you/)).toBeNull();
+  });
+});
+
 describe('Workgroup header layout', () => {
   function metaRow() {
     return document.querySelector('[data-scroll="horizontal"]');
   }
 
-  it('scrolls hub, members and budget while the menu stays outside the row', () => {
+  it('scrolls hub, members and budget on two panes while the menu stays outside the row', () => {
     h.wg = { ...WG, budget_usd: 4, spent_usd: 3, members: 3 };
-    render(<WorkgroupChat />);
+    render(<PaneContext.Provider value={{ twoPane: true, side: 'detail' }}><WorkgroupChat /></PaneContext.Provider>);
     expect(metaRow().textContent).toMatch('@doc · 3 members');
     expect(metaRow().querySelector('[data-meter="Workgroup budget"]')).toBeTruthy();
     expect(metaRow().querySelector('[aria-label="More"]')).toBeNull();
@@ -512,7 +531,7 @@ describe('Workgroup header phase button', () => {
     render(<WorkgroupChat />);
     const button = screen.getByLabelText('#qa · @lingua · 1 of 2');
     expect(button.textContent).toContain('1 of 2');
-    expect(button.querySelector('[data-fold="diamond"]')).toBeTruthy();
+    expect(button.querySelector('[data-shape="round"]')).toBeTruthy();
   });
 });
 

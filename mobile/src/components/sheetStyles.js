@@ -1,20 +1,21 @@
-import { radii, space } from '../theme/tokens';
+import { iconSizes, mobile, radii, space } from '../theme/tokens';
+import { SHEET_CLOSE_BLEED } from './SheetClose';
 
 export const sheetStyles = {
   dialog: {
     alignSelf: 'center',
     width: '100%',
     maxWidth: 560,
-    borderRadius: radii.xs,
+    borderRadius: radii.sheet,
   },
   dialogHeader: { paddingTop: space.s7 },
   grabberWrap: { alignItems: 'center', paddingTop: space.s3 },
-  grabber: { width: 36, height: 4, borderRadius: 2, opacity: 0.6 },
+  grabber: { width: 36, height: 4, borderRadius: radii.pill, opacity: 0.6 },
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     paddingLeft: space.s7,
-    paddingRight: space.s5,
+    paddingRight: space.s7 + SHEET_CLOSE_BLEED - (mobile.tap - iconSizes.md) / 2,
     paddingTop: space.s5,
     paddingBottom: space.s6,
     gap: space.s5,

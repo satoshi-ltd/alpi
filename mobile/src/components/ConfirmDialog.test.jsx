@@ -130,7 +130,7 @@ describe('ConfirmDialog exit', () => {
 
   it('offers a plain neutral confirm for reversible actions: no typing, no red', () => {
     render(<ConfirmDialog open onClose={() => {}} title="Promote to admin" body="ok" confirmLabel="Promote" tone="neutral" typed={false} onConfirm={() => {}} />);
-    expect(screen.queryByText(/TO CONFIRM/)).toBeNull();
+    expect(screen.queryByText(/to confirm/)).toBeNull();
     const btn = screen.getByText('Promote');
     expect(btn.disabled).toBe(false);
     expect(btn.getAttribute('data-variant')).toBe('primary');
@@ -142,10 +142,10 @@ describe('ConfirmDialog contract', () => {
   it('asks for a typed word only when one is expected, in the readable placeholder ink', () => {
     const { container, rerender } = render(<ConfirmDialog open onClose={() => {}} title="Delete" body="Gone." expected="roma" />);
     expect(container.querySelector('input').getAttribute('data-placeholder-color')).toBe('#666');
-    expect(screen.getByText(/TO CONFIRM/)).toBeTruthy();
+    expect(screen.getByText(/to confirm/)).toBeTruthy();
     rerender(<ConfirmDialog open onClose={() => {}} title="Discard changes?" body="Unsaved edits." confirmLabel="Discard" />);
     expect(container.querySelector('input')).toBeNull();
-    expect(screen.queryByText(/TO CONFIRM/)).toBeNull();
+    expect(screen.queryByText(/to confirm/)).toBeNull();
   });
 
   it('gives the primary the danger variant and a worded cancel', () => {

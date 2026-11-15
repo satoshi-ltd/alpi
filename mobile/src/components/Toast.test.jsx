@@ -47,7 +47,7 @@ vi.mock('./Icon', () => ({ Icon: ({ name }) => React.createElement('i', { 'data-
 
 vi.mock('../theme/ThemeContext', () => ({
   useTheme: () => ({
-    colors: { selected: '#ddd', bgPane: '#fff', ink: '#000', ink2: '#333', ink3: '#666', success: '#0a0', warning: '#fa0', danger: '#f00' },
+    colors: { selected: '#ddd', bgPane: '#fff', bgElev: '#f9f9f9', ink: '#000', ink2: '#333', ink3: '#666', success: '#0a0', warning: '#fa0', danger: '#f00' },
     fonts: { sans: { regular: 'Geist_400Regular', semibold: 'Geist_600SemiBold' } },
     fontSizes: { md: 14 },
     shadow: { toast: { shadowColor: '#token-shadow', shadowRadius: 24 } },
@@ -88,13 +88,14 @@ describe('Toast elevation', () => {
     expect(container.querySelector('[data-shadow]').getAttribute('data-shadow')).toBe('#token-shadow');
   });
 
-  it('cuts the toast as a 4 pt card', () => {
+  it('cuts the toast at the 20 pt surface corner on the raised fill', () => {
     const { container } = render(
       <ToastProvider>
         <Trigger />
       </ToastProvider>,
     );
-    expect(container.querySelector('[data-shadow]').getAttribute('data-radius')).toBe('4');
+    expect(container.querySelector('[data-shadow]').getAttribute('data-radius')).toBe('20');
+    expect(JSON.parse(container.querySelector('[data-shadow]').getAttribute('data-vstyle')).backgroundColor).toBe('#f9f9f9');
   });
 });
 
@@ -337,7 +338,8 @@ describe('Toast first line', () => {
 
   it('centres a trailing button on the first text line: the line is the button box left after its negative margins', () => {
     expect(BUTTON_LINE).toBe(mobile.tap - 2 * space.s4);
-    expect(firstLineHeight(14, true)).toBe(24);
+    expect(firstLineHeight(14, true)).toBe(BUTTON_LINE);
+    expect(BUTTON_LINE).toBe(20);
   });
 
   it('sets a plain toast first line from the cozy leading, not from a hand-set dot offset', () => {
@@ -349,6 +351,6 @@ describe('Toast first line', () => {
     expect(lanes(plain.container).map((l) => l.height)).toContain(18);
     cleanup();
     const withAction = render(<ToastProvider><WithAction /></ToastProvider>);
-    expect(lanes(withAction.container).map((l) => l.height)).toContain(24);
+    expect(lanes(withAction.container).map((l) => l.height)).toContain(BUTTON_LINE);
   });
 });

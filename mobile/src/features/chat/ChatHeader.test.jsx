@@ -28,7 +28,7 @@ vi.mock('react-native', () => {
     );
   const Text = ({ children, style, numberOfLines, ...p }) =>
     React.createElement('span', { ...p, 'data-style': JSON.stringify(h.flatStyle(style)) }, children);
-  const Pressable = ({ children, onPress, hitSlop, style, accessibilityLabel, ...p }) => {
+  const Pressable = ({ children, onPress, hitSlop, style, accessibilityLabel, accessibilityState, ...p }) => {
     const body = children instanceof Function ? children({ pressed: false }) : children;
     const resolved = style instanceof Function ? style({ pressed: false }) : style;
     return React.createElement(
@@ -37,6 +37,7 @@ vi.mock('react-native', () => {
         type: 'button',
         onClick: onPress,
         'aria-label': accessibilityLabel,
+        'aria-expanded': accessibilityState?.expanded === undefined ? undefined : String(accessibilityState.expanded),
         'data-hitslop': hitSlop === undefined ? undefined : String(hitSlop),
         'data-style': JSON.stringify(h.flatStyle(resolved)),
         ...p,
@@ -57,32 +58,37 @@ vi.mock('react-native', () => {
       },
       children,
     );
-  return { View, Text, Pressable, ScrollView };
+  const Modal = ({ children, visible, onRequestClose }) => (visible ? React.createElement('div', { 'data-modal': 'open', onKeyDown: onRequestClose }, children) : null);
+  return { View, Text, Pressable, ScrollView, Modal, useWindowDimensions: () => ({ width: 390, height: 800 }) };
 });
+
+vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 
 vi.mock('../../theme/ThemeContext', () => ({
   useTheme: () => ({
     colors: {
       ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999',
-      bg: '#fff', line: '#eee', line2: '#ddd', selected: '#eee', accent: '#c90',
+      bg: '#fff', bgElev: '#fafafa', line: '#eee', line2: '#ddd', selected: '#eee', pressed: '#e0e0e0', accent: '#c90', warning: '#e08a3c', danger: '#c14545',
     },
     fonts: {
       sans: { regular: 'r', medium: 'm', semibold: 's' },
       mono: 'mono',
       monoMedium: 'monoMedium',
     },
-    fontSizes: { xs: 11, md: 14, lg: 15, xl: 18, display: 28 },
+    fontSizes: { xs: 12, sm: 14, md: 15, lg: 16, xl: 20, display: 28 },
+    shadow: { popover: { shadowOpacity: 0.1 } },
   }),
 }));
 
-vi.mock('../../components/Fold', () => ({ Fold: ({ fold, color, size, outlined, unfolded }) => React.createElement('span', { 'data-fold': fold ?? 'diamond', 'data-color': color, 'data-size': size, 'data-outlined': String(!!outlined), 'data-unfolded': String(!!unfolded) }) }));
-vi.mock('../../components/Crease', () => ({ Crease: ({ text, accent, size }) => React.createElement('span', { 'data-crease': text, 'data-accent': accent, 'data-size': size }) }));
+vi.mock('../../components/Fold', () => ({ Fold: ({ shape, color, size, state, phase, active }) => React.createElement('span', { 'data-shape': shape ?? 'diamond', 'data-color': color, 'data-size': size, 'data-state': state ?? '', 'data-phase': phase ? phase.join('/') : '', 'data-active': active ?? '' }) }));
 vi.mock('../../components/Icon', () => ({ Icon: ({ name }) => React.createElement('span', {}, name) }));
 
 import { PaneContext } from '../../nav/PaneContext';
 import { BACK_BLEED, BACK_INK_INSET, CHROME_BTN, PANE_PAD_X, TOGGLE_BLEED, tapSlop } from '../../lib/panes';
-import { mobile, space } from '../../theme/tokens';
-import { ChatHeader, headerMenuActions } from './ChatHeader';
+import { fonts, iconSizes, mobile, radii, space } from '../../theme/tokens';
+import { MARK_SIZES } from '../../../../common/agentMarks.mjs';
+import { nameTone } from '../../../../common/name.mjs';
+import { ChatHeader, headerMenuActions, PHONE_HEADER_H } from './ChatHeader';
 
 function inTwoPane(node) {
   return render(<PaneContext.Provider value={{ twoPane: true, side: 'detail' }}>{node}</PaneContext.Provider>);
@@ -107,54 +113,68 @@ beforeEach(() => {
 
 describe('ChatHeader profile fold', () => {
   it('draws the profile fold at header size in the accent', () => {
-    const { container } = render(<ChatHeader kind="profile" accent="#3899e2" fold="shield" title="@doc" />);
-    const fold = container.querySelector('[data-fold]');
-    expect(fold.getAttribute('data-fold')).toBe('shield');
+    const { container } = render(<ChatHeader kind="profile" accent="#3899e2" shape="shield" title="@doc" />);
+    const fold = container.querySelector('[data-shape]');
+    expect(fold.getAttribute('data-shape')).toBe('shield');
     expect(fold.getAttribute('data-color')).toBe('#3899e2');
-    expect(fold.getAttribute('data-size')).toBe('md');
+    expect(fold.getAttribute('data-size')).toBe(String(MARK_SIZES.header));
   });
 
   it('draws the legacy diamond when the profile never chose a fold', () => {
     const { container } = render(<ChatHeader kind="profile" accent="#3899e2" title="@doc" />);
-    expect(container.querySelector('[data-fold]').getAttribute('data-fold')).toBe('diamond');
+    expect(container.querySelector('[data-shape]').getAttribute('data-shape')).toBe('diamond');
   });
 
   it('draws the honeycomb in the hub colour for a workgroup, whatever fold the profile has', () => {
-    const { container } = render(<ChatHeader kind="workgroup" fold="shield" accent="#6572e4" title="alpha" />);
-    const fold = container.querySelector('[data-fold]');
-    expect(fold.getAttribute('data-fold')).toBe('honeycomb');
+    const { container } = render(<ChatHeader kind="workgroup" shape="shield" accent="#6572e4" title="alpha" />);
+    const fold = container.querySelector('[data-shape]');
+    expect(fold.getAttribute('data-shape')).toBe('honeycomb');
     expect(fold.getAttribute('data-color')).toBe('#6572e4');
-    expect(fold.getAttribute('data-outlined')).toBe('false');
+    expect(fold.getAttribute('data-state')).toBe('');
   });
 
-  it('unfolds a paused object in grey and greys its crease name', () => {
+  it('hands the run state and progress to the workgroup mark with the hub colour', () => {
+    const { container } = render(<ChatHeader kind="workgroup" accent="#6572e4" title="alpha" mark={{ state: 'running', phase: [1, 3], owner: 'lingo' }} />);
+    const fold = container.querySelector('[data-shape]');
+    expect(fold.getAttribute('data-state')).toBe('running');
+    expect(fold.getAttribute('data-phase')).toBe('1/3');
+    expect(fold.getAttribute('data-color')).toBe('#6572e4');
+  });
+
+  it('draws a paused mark as paused whatever state it is handed, and greys its name', () => {
     for (const kind of ['workgroup', 'profile']) {
-      const { container } = render(<ChatHeader kind={kind} creased accent="#6572e4" title="alpha" paused />);
-      expect(container.querySelector('[data-fold]').getAttribute('data-unfolded')).toBe('true');
-      expect(container.querySelector('[data-crease]').getAttribute('data-accent')).not.toBe('#6572e4');
+      const { container } = render(<ChatHeader kind={kind} named accent="#6572e4" title="alpha" paused mark={{ state: 'working' }} />);
+      expect(container.querySelector('[data-shape]').getAttribute('data-state')).toBe('paused');
+      expect(styleOf(screen.getByText('alpha')).color).toBe('#666');
       cleanup();
     }
   });
 });
 
-describe('ChatHeader crease title', () => {
-  it('draws the name in crease type at 28 or more when creased', () => {
-    const { container } = render(<ChatHeader kind="profile" creased accent="#3899e2" title="@doc" />);
-    const crease = container.querySelector('[data-crease]');
-    expect(crease.getAttribute('data-crease')).toBe('@doc');
-    expect(crease.getAttribute('data-accent')).toBe('#3899e2');
-    expect(Number(crease.getAttribute('data-size'))).toBeGreaterThanOrEqual(28);
+describe('ChatHeader name title', () => {
+  it('draws the name in the name face at the 20 pt title rung, a step darker than its mark on a light ground', () => {
+    render(<ChatHeader kind="profile" named accent="#3899e2" title="@doc" />);
+    const name = styleOf(screen.getByText('@doc'));
+    expect(name.fontFamily).toBe(fonts.name);
+    expect(name.color).toBe(nameTone('#3899e2', '#fff'));
+    expect(name.fontSize).toBe(20);
   });
 
-  it('keeps plain Geist for placeholder headers that are not creased', () => {
-    const { container } = render(<ChatHeader kind="profile" accent="#666" title="@doc" meta="loading…" />);
-    expect(container.querySelector('[data-crease]')).toBeNull();
-    expect(screen.getByText('@doc')).toBeTruthy();
+  it('draws a workgroup name in the name face in neutral ink, never the hub tone', () => {
+    render(<ChatHeader kind="workgroup" named accent="#3899e2" title="alpha" />);
+    const name = styleOf(screen.getByText('alpha'));
+    expect(name.fontFamily).toBe(fonts.name);
+    expect(name.color).toBe('#000');
+  });
+
+  it('keeps plain Geist for placeholder headers that are not named', () => {
+    render(<ChatHeader kind="profile" accent="#666" title="@doc" meta="loading…" />);
+    expect(styleOf(screen.getByText('@doc')).fontFamily).toBe('s');
   });
 
   it('keeps plain Geist when there is no accent', () => {
-    const { container } = render(<ChatHeader kind="workgroup" creased title="#alpha" />);
-    expect(container.querySelector('[data-crease]')).toBeNull();
+    render(<ChatHeader kind="workgroup" named title="#alpha" />);
+    expect(styleOf(screen.getByText('#alpha')).fontFamily).toBe('s');
   });
 });
 
@@ -194,13 +214,12 @@ describe('ChatHeader back chevron', () => {
 });
 
 describe('ChatHeader gutter', () => {
-  it('keeps one edge whatever the pane mode', () => {
+  it('keeps the pane edge on two panes and seats the phone controls 8 pt in, so their 44 pt circles centre the title', () => {
     const two = inTwoPane(<ChatHeader kind="workgroup" title="#alpha" />);
-    const paneEdge = headerStyle(two.container).paddingHorizontal;
+    expect(headerStyle(two.container).paddingHorizontal).toBe(PANE_PAD_X);
     two.unmount();
     const { container } = render(<ChatHeader kind="workgroup" title="#alpha" />);
-    expect(headerStyle(container).paddingHorizontal).toBe(paneEdge);
-    expect(paneEdge).toBe(PANE_PAD_X);
+    expect(headerStyle(container).paddingHorizontal).toBe(space.s3);
   });
 });
 
@@ -216,36 +235,106 @@ describe('ChatHeader descenders', () => {
 });
 
 describe('ChatHeader title scale', () => {
-  it('keeps the phone title size under two panes', () => {
-    const { container } = inTwoPane(<ChatHeader kind="workgroup" title="#alpha" />);
-    expect(styleOf(screen.getByText('#alpha')).fontSize).toBe(18);
-    expect(headerStyle(container).paddingTop).not.toBe(space.s11);
+  it('keeps the 20 pt title under two panes', () => {
+    inTwoPane(<ChatHeader kind="workgroup" title="#alpha" />);
+    expect(styleOf(screen.getByText('#alpha')).fontSize).toBe(20);
   });
 
-  it('stays compact on the phone', () => {
+  it('sets the phone title at the same 20 pt in a 64 pt centred header', () => {
     const { container } = render(<ChatHeader kind="workgroup" title="#alpha" />);
-    expect(styleOf(screen.getByText('#alpha')).fontSize).toBe(18);
-    expect(headerStyle(container).paddingTop).toBe(space.s2);
-    expect(headerStyle(container).paddingBottom).toBe(space.s3);
+    expect(styleOf(screen.getByText('#alpha')).fontSize).toBe(20);
+    expect(headerStyle(container).minHeight).toBe(PHONE_HEADER_H);
+    expect(PHONE_HEADER_H).toBe(56);
+  });
+});
+
+describe('ChatHeader phone anatomy', () => {
+  const DETAILS = {
+    model: 'deepseek-v4.1-flash',
+    modelId: 'openrouter/deepseek/deepseek-v4.1-flash',
+    context: { value: '36K', tail: '/1.0M', pct: 0.04 },
+    cost: { value: '$0.07', tail: '/$1.00', pct: 0.07 },
+  };
+
+  it('draws one 56 pt row with the chip centred between two 88 pt side columns and no model line', () => {
+    const { container } = render(<ChatHeader kind="profile" named accent="#3899e2" title="doc" details={DETAILS} onBack={() => {}} onMore={() => {}} />);
+    expect(PHONE_HEADER_H).toBe(56);
+    expect(headerStyle(container).minHeight).toBe(56);
+    const [left, centre, right] = container.firstChild.children;
+    expect(styleOf(left).width).toBe(88);
+    expect(styleOf(right).width).toBe(88);
+    expect(styleOf(centre).justifyContent).toBe('center');
+    expect(left.contains(screen.getByLabelText('Back'))).toBe(true);
+    expect(right.contains(screen.getByLabelText('More'))).toBe(true);
+    expect(centre.contains(screen.getByLabelText('doc, profile details'))).toBe(true);
+    expect(screen.queryByText('deepseek-v4.1-flash')).toBeNull();
+    expect(document.querySelector('[testid="header-model"]')).toBeNull();
+  });
+
+  it('keeps a header extra such as the read-aloud wave beside the chip, out of the 88 pt action column', () => {
+    const { container } = render(<ChatHeader kind="profile" named accent="#3899e2" title="doc" details={DETAILS} right={<span data-testid="wave" />} onMore={() => {}} />);
+    const [, centre, right] = container.firstChild.children;
+    expect(centre.contains(screen.getByTestId('wave'))).toBe(true);
+    expect(right.contains(screen.getByTestId('wave'))).toBe(false);
+  });
+
+  it('sizes the chip to a 44 pt target with a pill radius and the mark at 28', () => {
+    const { container } = render(<ChatHeader kind="profile" named accent="#3899e2" title="doc" details={DETAILS} />);
+    const chip = screen.getByLabelText('doc, profile details');
+    expect(styleOf(chip).minHeight).toBe(44);
+    expect(styleOf(chip).borderRadius).toBe(radii.pill);
+    expect(chip.querySelector('[data-size]').getAttribute('data-size')).toBe('28');
+    expect(container.querySelectorAll('[data-modal]')).toHaveLength(0);
+  });
+
+  it('opens the details popover on a chip tap and closes it from the backdrop or Back', () => {
+    render(<ChatHeader kind="profile" named accent="#3899e2" title="doc" details={DETAILS} />);
+    const chip = screen.getByLabelText('doc, profile details');
+    expect(chip.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(chip);
+    expect(document.querySelector('[data-modal="open"]')).toBeTruthy();
+    expect(chip.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('Model')).toBeTruthy();
+    expect(screen.getByText('deepseek-v4.1-flash')).toBeTruthy();
+    expect(document.querySelector('[testid="details-model-id"]').textContent).toBe('openrouter/deepseek/deepseek-v4.1-flash');
+    expect(screen.getByText('Context')).toBeTruthy();
+    expect(screen.getByText('Cost today')).toBeTruthy();
+    expect(screen.getByLabelText('Context window')).toBeTruthy();
+    fireEvent.click(document.querySelector('[testid="details-backdrop"]'));
+    expect(document.querySelector('[data-modal="open"]')).toBeNull();
+    fireEvent.click(chip);
+    fireEvent.keyDown(document.querySelector('[data-modal="open"]'));
+    expect(document.querySelector('[data-modal="open"]')).toBeNull();
+  });
+
+  it('omits the rows the profile has no data for', () => {
+    render(<ChatHeader kind="profile" named accent="#3899e2" title="doc" details={{ model: 'm', modelId: null, context: null, cost: null }} />);
+    fireEvent.click(screen.getByLabelText('doc, profile details'));
+    expect(screen.queryByText('Context')).toBeNull();
+    expect(screen.queryByText('Cost today')).toBeNull();
+    expect(document.querySelector('[testid="details-model-id"]')).toBeNull();
+  });
+
+  it('keeps the meters off the phone header', () => {
+    render(<ChatHeader kind="profile" title="doc" details={DETAILS} meta={<span data-meta="context">20K</span>} />);
+    expect(document.querySelector('[data-meta]')).toBeNull();
+  });
+
+  it('fades the stream under the header instead of a rule', () => {
+    const { container } = render(<ChatHeader kind="profile" title="doc" />);
+    const styles = [...container.querySelectorAll('div')].map(styleOf);
+    expect(styles.some((st) => st.borderBottomWidth)).toBe(false);
+    expect(styles.some((st) => st.position === 'absolute' && st.top === '100%')).toBe(true);
   });
 });
 
 describe('ChatHeader box', () => {
-  it('spends the same trimmed padding whatever the pane mode', () => {
-    const two = inTwoPane(<ChatHeader kind="workgroup" title="#alpha" />);
-    const tablet = headerStyle(two.container);
-    two.unmount();
-    const { container } = render(<ChatHeader kind="workgroup" title="#alpha" />);
-    const phone = headerStyle(container);
-    expect(phone.paddingTop).toBe(tablet.paddingTop);
-    expect(phone.paddingBottom).toBe(tablet.paddingBottom);
-    expect(phone.paddingTop).toBeLessThan(space.s3);
-  });
-
-  it('lets the title row set the height instead of a tap-sized control', () => {
+  it('draws every phone control as a 44 pt circle, the touch target itself', () => {
     render(<ChatHeader kind="profile" title="doc" onBack={() => {}} onPickSession={() => {}} onMore={() => {}} />);
     for (const label of ['Back', 'Sessions', 'More']) {
-      expect(styleOf(screen.getByLabelText(label)).height).toBeLessThan(mobile.tap);
+      const style = styleOf(screen.getByLabelText(label));
+      expect(style.height).toBe(mobile.tap);
+      expect(style.borderRadius).toBe(999);
     }
   });
 });
@@ -266,7 +355,7 @@ describe('ChatHeader seam', () => {
     );
     const title = screen.getByText('etxea');
     const clock = screen.getByLabelText('Sessions');
-    expect(title.parentElement.contains(clock)).toBe(true);
+    expect(title.parentElement.parentElement.contains(clock)).toBe(true);
     expect(styleOf(container.firstChild).alignItems).toBe('flex-start');
   });
 });
@@ -382,14 +471,14 @@ describe('ChatHeader meta row', () => {
   }
 
   it('scrolls the meters horizontally with no visible indicator', () => {
-    render(<ChatHeader kind="profile" title="doc" meta={meta} />);
+    inTwoPane(<ChatHeader kind="profile" title="doc" meta={meta} />);
     expect(scroller().getAttribute('data-scroll')).toBe('horizontal');
     expect(scroller().getAttribute('data-indicator')).toBe('false');
     expect(scroller().querySelectorAll('[data-meta]').length).toBe(3);
   });
 
   it('locks the pan to one axis so the transcript keeps its vertical scroll', () => {
-    render(<ChatHeader kind="profile" title="doc" meta={meta} />);
+    inTwoPane(<ChatHeader kind="profile" title="doc" meta={meta} />);
     expect(scroller().getAttribute('data-locked')).toBe('true');
   });
 
@@ -410,7 +499,8 @@ describe('ChatHeader meta row', () => {
     expect(scroller().querySelectorAll('[testid="meta-sep"]').length).toBe(2);
     cleanup();
     render(<ChatHeader kind="profile" title="doc" meta={meta} />);
-    expect(scroller().querySelectorAll('[testid="meta-sep"]').length).toBe(0);
+    expect(scroller()).toBeNull();
+    expect(document.querySelectorAll('[testid="meta-sep"]').length).toBe(0);
   });
 
   it('leaves a plain string meta unscrolled', () => {
@@ -419,14 +509,13 @@ describe('ChatHeader meta row', () => {
     expect(screen.getByText('profile · not found')).toBeTruthy();
   });
 
-  it('keeps Sessions and the menu out of the scroller on the phone', () => {
+  it('keeps Sessions and the menu on the phone, beside a meta row that does not scroll', () => {
     const onPickSession = vi.fn();
     const onMore = vi.fn();
     render(
       <ChatHeader kind="profile" title="doc" meta={meta} onPickSession={onPickSession} onMore={onMore} />,
     );
-    expect(scroller().querySelector('[aria-label="Sessions"]')).toBeNull();
-    expect(scroller().querySelector('[aria-label="More"]')).toBeNull();
+    expect(scroller()).toBeNull();
     screen.getByLabelText('Sessions').click();
     screen.getByLabelText('More').click();
     expect(onPickSession).toHaveBeenCalledTimes(1);
@@ -448,7 +537,7 @@ describe('ChatHeader meta row', () => {
   });
 
   it('lets the controls keep their width while the meters take the rest', () => {
-    const { container } = render(
+    const { container } = inTwoPane(
       <ChatHeader kind="profile" title="doc" meta={meta} onPickSession={() => {}} onMore={() => {}} />,
     );
     const actions = [...container.querySelectorAll('div')]
@@ -566,8 +655,9 @@ describe('headerMenuActions', () => {
 });
 
 describe('ChatHeader back control geometry', () => {
-  it('pulls the glyph box flush to the header padding, level with the screen header back control', () => {
-    render(<ChatHeader kind="workgroup" title="#alpha" onBack={() => {}} />);
+  it('pulls the glyph box flush to the header padding on two panes, level with the screen header back control', () => {
+    h.pathname = '/wg/alpha/deep';
+    render(<PaneContext.Provider value={{ twoPane: true, sidebarOpen: true, side: 'detail' }}><ChatHeader kind="workgroup" title="#alpha" onBack={() => {}} /></PaneContext.Provider>);
     const style = styleOf(screen.getByText('back').closest('button'));
     expect(style.width).toBe(CHROME_BTN);
     expect(style.marginLeft).toBe(-(BACK_BLEED + BACK_INK_INSET));
@@ -586,6 +676,22 @@ describe('ChatHeader two-pane show-sidebar button', () => {
     const margin = styleOf(wrap).marginLeft;
     expect(headerStyle(container).paddingHorizontal).toBe(PANE_PAD_X);
     expect(margin).toBe(-TOGGLE_BLEED);
-    expect(headerStyle(container).paddingHorizontal + margin + (CHROME_BTN - 16) / 2).toBe(16);
+    expect(headerStyle(container).paddingHorizontal + margin + (CHROME_BTN - iconSizes.md) / 2).toBe(16);
+  });
+});
+
+describe('ChatHeader flag', () => {
+  it('draws a passive flag beside the name on the phone and in two panes, spoken by its label', () => {
+    for (const mount of [(n) => render(n), inTwoPane]) {
+      const { container } = mount(<ChatHeader kind="profile" accent="#3899e2" named title="doc" flag={{ label: 'Context 85% full', tone: 'warning' }} />);
+      const flag = document.querySelector('[testid="header-flag"]');
+      expect(flag.getAttribute('aria-label')).toBe('Context 85% full');
+      expect(styleOf(flag).backgroundColor).toBe('#e08a3c');
+      expect(flag.previousElementSibling.textContent).toBe('doc');
+      cleanup();
+      expect(container.querySelector('[testid="header-flag"]')).toBeNull();
+    }
+    render(<ChatHeader kind="profile" accent="#3899e2" named title="doc" />);
+    expect(document.querySelector('[testid="header-flag"]')).toBeNull();
   });
 });

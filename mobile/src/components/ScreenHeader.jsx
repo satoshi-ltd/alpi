@@ -1,7 +1,7 @@
 import { Pressable, Text, View } from 'react-native';
-import { lineHeights, radii, space, tracking } from '../theme/tokens';
+import { lineHeights, radii, space, typeLeading } from '../theme/tokens';
 
-import { Crease } from './Crease';
+import { NAME_TEXT, nameColor, nameSize, nameStyle } from '../theme/name';
 import { Icon } from './Icon';
 import { MetaStrip, metaItems } from './MetaStrip';
 import { useShowBack } from '../hooks/useShowBack';
@@ -9,7 +9,7 @@ import { backMargins, CHROME_BTN, PANE_PAD_X, TOGGLE_BLEED, tapSlop } from '../l
 import { usePane } from '../nav/PaneContext';
 import { useTheme } from '../theme/ThemeContext';
 
-const CREASE_MIN_SIZE = 28;;
+const NAME_MIN_SIZE = 28;
 
 function ChromeButton({ label, onPress, children }) {
   const { colors } = useTheme();
@@ -22,10 +22,10 @@ function ChromeButton({ label, onPress, children }) {
       style={({ pressed }) => ({
         width: CHROME_BTN,
         height: CHROME_BTN,
-        borderRadius: radii.xs,
+        borderRadius: radii.pill,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: pressed ? colors.selected : 'transparent',
+        backgroundColor: pressed ? colors.pressed : 'transparent',
       })}
     >
       {children}
@@ -38,13 +38,13 @@ export function headerRightBleed(node) {
   return height ? Math.max(0, (height - CHROME_BTN) / 2) : 0;
 }
 
-export function ScreenHeader({ title, subtitle, meta, onBack, right, leadingGlyph, accent }) {
-  const { colors, fonts, fontSizes } = useTheme();
+export function ScreenHeader({ title, subtitle, meta, onBack, right, leadingGlyph, accent, neutral = false, muted = false }) {
+  const { colors, fonts, fontSizes, textScale = 1, fontScale = 1 } = useTheme();
   const { twoPane, sidebarOpen, toggleSidebar } = usePane();
   const showBack = useShowBack(onBack);
   const showSidebarToggle = twoPane && !sidebarOpen;
   const titleSize = fontSizes.xl;
-  const creased = typeof accent === 'string' && typeof title === 'string' && title.length > 0;
+  const named = typeof accent === 'string' && typeof title === 'string' && title.length > 0;
   const metaList = twoPane ? metaItems(meta) : [];
   return (
     <View
@@ -56,8 +56,6 @@ export function ScreenHeader({ title, subtitle, meta, onBack, right, leadingGlyp
         paddingTop: twoPane ? space.s5 : space.s3,
         paddingBottom: space.s5,
         backgroundColor: colors.bg,
-        borderBottomWidth: 0.5,
-        borderBottomColor: colors.line,
       }}
     >
       {showSidebarToggle ? (
@@ -81,15 +79,17 @@ export function ScreenHeader({ title, subtitle, meta, onBack, right, leadingGlyp
       <View style={{ flex: 1, minWidth: 0, flexDirection: 'column' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: twoPane ? space.s4 : space.s2 }}>
           {leadingGlyph}
-          {creased ? (
-            <Crease text={title} accent={accent} size={Math.max(CREASE_MIN_SIZE, titleSize)} />
+          {named ? (
+            <Text {...NAME_TEXT} style={[nameStyle(nameSize(Math.max(Math.round(NAME_MIN_SIZE * textScale), titleSize), fontScale), neutral ? (muted ? colors.ink3 : colors.ink) : nameColor(accent, colors)), { flexShrink: 1 }]}>
+              {title}
+            </Text>
           ) : (
             <Text
               numberOfLines={1}
               style={{
                 fontFamily: fonts.sans.semibold,
                 fontSize: titleSize,
-                lineHeight: titleSize * lineHeights.cozy,
+                lineHeight: Math.round(titleSize * typeLeading.title),
                 color: colors.ink,
                 flexShrink: 1,
               }}
@@ -101,10 +101,9 @@ export function ScreenHeader({ title, subtitle, meta, onBack, right, leadingGlyp
             <Text
               numberOfLines={1}
               style={{
-                fontFamily: fonts.mono,
-                fontSize: fontSizes.xs,
-                lineHeight: fontSizes.xs * lineHeights.cozy,
-                letterSpacing: fontSizes.xs * tracking.eyebrow,
+                fontFamily: fonts.sans.regular,
+                fontSize: fontSizes.sm,
+                lineHeight: Math.round(fontSizes.sm * typeLeading.small),
                 color: colors.ink3,
                 marginTop: space.s1,
               }}
@@ -118,9 +117,9 @@ export function ScreenHeader({ title, subtitle, meta, onBack, right, leadingGlyp
             <Text
               numberOfLines={1}
               style={{
-                fontFamily: fonts.mono,
-                fontSize: fontSizes.xs,
-                lineHeight: fontSizes.xs * lineHeights.cozy,
+                fontFamily: fonts.sans.regular,
+                fontSize: fontSizes.sm,
+                lineHeight: Math.round(fontSizes.sm * typeLeading.small),
                 color: colors.ink3,
               }}
             >

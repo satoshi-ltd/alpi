@@ -2,8 +2,9 @@ import { describe, it, expect, vi } from "vitest";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
+import { sizeLabel, skillMeta, firstSentence, memoryMeta, factLabel } from "../../../common/panelRow.mjs";
 import {
-  formatBytes,
+  skillVersion,
   fileIconName,
   formatSkillDate,
   matchesSkill,
@@ -13,17 +14,46 @@ import {
   displayTool,
 } from "./SkillsModal.jsx";
 
-describe("formatBytes", () => {
-  it("shows raw bytes under 1kb", () => {
-    expect(formatBytes(0)).toBe("0b");
-    expect(formatBytes(512)).toBe("512b");
+describe("panel row meta", () => {
+  it("writes sizes as one-decimal units with a space", () => {
+    expect(sizeLabel(0)).toBe("0 B");
+    expect(sizeLabel(512)).toBe("512 B");
+    expect(sizeLabel(4300)).toBe("4.2 KB");
+    expect(sizeLabel(5 * 1024 * 1024)).toBe("5.0 MB");
   });
-  it("shows one-decimal kb", () => {
-    expect(formatBytes(1024)).toBe("1.0kb");
-    expect(formatBytes(3400)).toBe("3.3kb");
+  it("lets a state word replace the size, danger only where it applies", () => {
+    expect(skillMeta({ status: "active", size: 4300 })).toEqual({ meta: "4.2 KB", tone: null });
+    expect(skillMeta({ status: "inactive", size: 4300 })).toEqual({ meta: "inactive", tone: null });
+    expect(skillMeta({ status: "invalid", size: 4300 })).toEqual({ meta: "invalid", tone: "danger" });
+    expect(skillMeta({ status: "active", size: 4300 }, "missing")).toEqual({ meta: "missing", tone: "danger" });
   });
-  it("rolls over to mb", () => {
-    expect(formatBytes(5 * 1024 * 1024)).toBe("5.0mb");
+  it("shows a memory's share, or the flag word in danger", () => {
+    expect(memoryMeta(3200, 5000)).toEqual({ meta: "64%", tone: null });
+    expect(memoryMeta(null, null)).toEqual({ meta: "", tone: null });
+    expect(memoryMeta(5200, 5000, "over")).toEqual({ meta: "over", tone: "danger" });
+  });
+  it("keeps the first sentence of a tool description", () => {
+    expect(firstSentence("Fetches a URL and returns its readable text. Use it for pages.")).toBe("Fetches a URL and returns its readable text.");
+    expect(firstSentence("Reads `a` file\nfrom disk")).toBe("Reads a file from disk");
+    expect(firstSentence("")).toBe("");
+  });
+  it("keeps underscores inside words and strips only markdown marks", () => {
+    expect(firstSentence("Use recall_sessions to find past chats. More.")).toBe("Use recall_sessions to find past chats.");
+    expect(firstSentence("Calls `index_workgroups` first")).toBe("Calls index_workgroups first");
+    expect(firstSentence("## Reads **bold** and _soft_ and *lean* text")).toBe("Reads bold and soft and lean text");
+    expect(firstSentence("> Quoted __strong__ line. Next.")).toBe("Quoted strong line.");
+  });
+  it("does not cut at common abbreviations", () => {
+    expect(firstSentence("Search the web, e.g. news.")).toBe("Search the web, e.g. news.");
+    expect(firstSentence("Pick one, i.e. the newest. Then stop.")).toBe("Pick one, i.e. the newest.");
+    expect(firstSentence("Compare a vs. b, etc. and more! Rest.")).toBe("Compare a vs. b, etc. and more!");
+  });
+  it("writes group and fact labels in sentence case", () => {
+    expect(factLabel("research")).toBe("Research");
+  });
+  it("moves version, origin and date into one fact", () => {
+    expect(skillVersion({ version: "1.2", origin: "agent", created_at: "2026-09-14" })).toBe("v1.2 · agent · Sep 14");
+    expect(skillVersion({})).toBe("agent");
   });
 });
 

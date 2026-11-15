@@ -15,13 +15,17 @@ describe("control boundaries", () => {
 
   it.each([
     ["primitives/TasksButton.module.css"],
-    ["features/ScheduleModal.module.css"],
-    ["features/SkillsModal.module.css"],
     ["primitives/icons.jsx"],
   ])("%s keeps control borders off --ink-4", (file) => {
     const src = read(file);
     expect(src).toMatch(/solid var\(--edge\)/);
     expect(src).not.toMatch(/border[^;\n]*var\(--ink-4\)/);
+  });
+
+  it.each([["features/ScheduleModal.module.css"], ["features/SkillsModal.module.css"]])("%s draws no status ring before a row", (file) => {
+    const src = read(file);
+    expect(src).not.toMatch(/border[^;\n]*var\(--ink-4\)/);
+    expect(src).not.toMatch(/\.dot\b/);
   });
 
   it("draws decorative hash glyphs in --ink-3", () => {
@@ -36,7 +40,7 @@ describe("control boundaries", () => {
 
   it("rings an invalid field in danger, focused or not", () => {
     const css = read("styles/design-system.css");
-    expect(css).toMatch(/\.ds-field\[aria-invalid="true"\][^{]*\{\s*box-shadow:\s*inset 0 0 0 1px var\(--c-danger\);/);
+    expect(css).toMatch(/\.ds-field\[aria-invalid="true"\][^{]*\{\s*box-shadow:\s*var\(--well-error\);/);
     expect(css).toMatch(/\.ds-field\[aria-invalid="true"\]:not\(:disabled\):focus/);
   });
 });

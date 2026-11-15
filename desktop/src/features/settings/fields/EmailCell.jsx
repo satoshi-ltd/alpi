@@ -82,7 +82,7 @@ export function EmailCell({
 
   return (
     <span className={styles.chipRow}>
-      {showSkeleton && <Skeleton width="112px" height="22px" radius="var(--r-tag)" delay={0} label="Loading email accounts" />}
+      {showSkeleton && <Skeleton width="112px" height="22px" radius="var(--r-pill)" delay={0} label="Loading email accounts" />}
       {!showSkeleton && failed && <LoadFailed inline label="email accounts" onRetry={refresh} />}
       {!showSkeleton && accounts?.length === 0 && <span className={styles.muted}>{emptyLine("email")}</span>}
       {!showSkeleton && accounts?.map((a) => (

@@ -15,7 +15,7 @@ import { useBack } from '../../../../src/hooks/useBack';
 import { useProfileSummaries } from '../../../../src/hooks/useDaemonData';
 import { useProfile } from '../../../../src/hooks/useSubject';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
-import { accentForPubkey, foldForPubkey } from '../../../../src/lib/localFold';
+import { accentForPubkey, shapeForPubkey } from '../../../../src/lib/localShape';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 
 const KNOWN_SCOPES = [
@@ -51,9 +51,9 @@ export default function PeerDetail() {
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScreenHeader
         title={`@${pid}`}
-        subtitle={`@${id} · PEER`}
+        subtitle={`@${id} · peer`}
         onBack={goBack}
-        leadingGlyph={<Fold fold={foldForPubkey(summaries, peer?.pubkey)} color={accentForPubkey(summaries, peer?.pubkey)} size="md" />}
+        leadingGlyph={<Fold shape={shapeForPubkey(summaries, peer?.pubkey)} color={accentForPubkey(summaries, peer?.pubkey)} size="md" />}
       />
       <ScrollView>
         <SectionHeader>Identity</SectionHeader>

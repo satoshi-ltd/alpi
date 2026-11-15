@@ -15,13 +15,14 @@ import { Meter } from '../../src/components/Meter';
 import { useToast } from '../../src/components/Toast';
 import { WorkgroupMessage } from '../../src/features/chat/Bubble';
 import { ChatHeader, headerMenuActions } from '../../src/features/chat/ChatHeader';
+import { workgroupHeaderFlag } from '../../src/features/chat/headerFlag';
 import { SoundWave } from '../../src/features/chat/SoundWave';
 import { useBack } from '../../src/hooks/useBack';
 import { enqueueReadAloud } from '../../src/lib/readAloud';
 import { useCanAdminEarly } from '../../src/hooks/useActiveRole';
 import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
 import { Composer } from '../../src/features/chat/Composer';
-import { FALLBACK_ACCENT, WORKGROUP_FOLD } from '../../../common/folds.mjs';
+import { FALLBACK_ACCENT, WORKGROUP_SHAPE } from '../../../common/shapes.mjs';
 import { EmptyThread } from '../../src/features/chat/EmptyThread';
 import { KeyboardDismissArea } from '../../src/components/KeyboardDismissArea';
 import { useDismissKeyboard } from '../../src/hooks/useDismissKeyboard';
@@ -38,6 +39,7 @@ import { buildTasks, classifyMessage } from '../../src/features/chat/parseMarker
 import { PipelineStrip } from '../../src/features/chat/PipelineStrip';
 import { PhaseMark } from '../../src/features/workgroups/PhaseChip';
 import { liveChip, runChips, runProgress, sameName } from '../../../common/pipelinePhases.mjs';
+import { pipelineRunMark, workgroupStatusLine } from '../../../common/workgroupMarkState.mjs';
 import { TasksSheet } from '../../src/features/sheets/TasksSheet';
 import {
   useProfileSummaries,
@@ -91,10 +93,10 @@ function PaneColumn({ children }) {
   return <View style={twoPane ? WG_STYLES.contentColumn : undefined}>{children}</View>;
 }
 
-const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, accent, accentFor, foldFor, setActionTarget, colors, fonts, fontSizes, imageProfile }) {
+const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, accent, accentFor, shapeFor, setActionTarget, colors, fonts, fontSizes, imageProfile }) {
   const speakerName = m.from?.startsWith('@') ? m.from.slice(1) : m.from || '';
   const speakerAccent = accentFor(speakerName, accent);
-  const speakerFold = foldFor(speakerName);
+  const speakerShape = shapeFor(speakerName);
   const isFromHub = hubPubkey != null && m.from_pubkey === hubPubkey;
   const isOwn = ownPubkey != null && m.from_pubkey === ownPubkey;
   const c = classifyMessage(m.body);
@@ -106,7 +108,7 @@ const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, acc
       <MarkerCard
         variant="task"
         hubColor={speakerAccent}
-        hubFold={speakerFold}
+        hubShape={speakerShape}
         speakerName={speakerName}
         isFromHub={isFromHub}
         seq={m.seq}
@@ -121,10 +123,10 @@ const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, acc
     return (
       <MarkerCard
         variant={c.variant}
-        label={isStaleWorking ? 'WORK' : undefined}
+        label={isStaleWorking ? 'Work' : undefined}
         stale={isStaleWorking}
         hubColor={speakerAccent}
-        hubFold={speakerFold}
+        hubShape={speakerShape}
         speakerName={speakerName}
         isFromHub={isFromHub}
         seq={m.seq}
@@ -141,7 +143,7 @@ const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, acc
         body={m.body}
         speakerName={speakerName}
         speakerAccent={speakerAccent}
-        speakerFold={speakerFold}
+        speakerShape={speakerShape}
         isFromHub={isFromHub}
         seq={m.seq > 0 ? m.seq : null}
         cost={m.cost}
@@ -149,7 +151,7 @@ const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, acc
         onLongPress={() => setActionTarget(makeTarget())}
       />
       {m.error ? (
-        <Text style={[WG_STYLES.error, { color: colors.dangerText, fontFamily: fonts.mono, fontSize: fontSizes.sm }]}>
+        <Text style={[WG_STYLES.error, { color: colors.dangerText, fontFamily: fonts.sans.regular, fontSize: fontSizes.sm }]}>
           {m.error}
         </Text>
       ) : null}
@@ -158,7 +160,7 @@ const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, acc
 });
 
 const WgList = forwardRef(function WgList(
-  { messages, hubPubkey, ownPubkey, workingStale, accent, accentFor, foldFor, setActionTarget, hubLabel, colors, fonts, fontSizes, hydrating, imageProfile, loadError = null, onRetryLoad },
+  { messages, hubPubkey, ownPubkey, workingStale, accent, accentFor, shapeFor, setActionTarget, hubLabel, colors, fonts, fontSizes, hydrating, imageProfile, loadError = null, onRetryLoad, paused = false },
   ref,
 ) {
   const reduceMotion = useReduceMotion();
@@ -202,7 +204,7 @@ const WgList = forwardRef(function WgList(
           workingStale={workingStale}
           accent={accent}
           accentFor={accentFor}
-          foldFor={foldFor}
+          shapeFor={shapeFor}
           setActionTarget={setActionTarget}
           colors={colors}
           fonts={fonts}
@@ -211,7 +213,7 @@ const WgList = forwardRef(function WgList(
         />
       </EnterOnce>
     ),
-    [hubPubkey, ownPubkey, workingStale, accent, accentFor, foldFor, setActionTarget, colors, fonts, fontSizes, imageProfile, reduceMotion, isFresh, markSeen],
+    [hubPubkey, ownPubkey, workingStale, accent, accentFor, shapeFor, setActionTarget, colors, fonts, fontSizes, imageProfile, reduceMotion, isFresh, markSeen],
   );
 
   if (hydrating && messages.length === 0) {
@@ -227,7 +229,8 @@ const WgList = forwardRef(function WgList(
           heading={EMPTY.posts.title}
           detail={postsHint(hubLabel)}
           accent={accent}
-          fold={WORKGROUP_FOLD}
+          shape={WORKGROUP_SHAPE}
+          state={paused ? 'paused' : undefined}
         />
       </KeyboardDismissArea>
     );
@@ -291,8 +294,8 @@ function TasksHeaderButton({ tasks, accent, phase, profileOf, onPress }) {
         gap: space.s2,
         paddingHorizontal: space.s4,
         minHeight: 44,
-        backgroundColor: pressed ? colors.selected : colors.field,
-        borderRadius: radii.xs,
+        backgroundColor: pressed ? colors.pressed : colors.field,
+        borderRadius: radii.pill,
       })}
     >
       {phase?.chip ? (
@@ -302,7 +305,7 @@ function TasksHeaderButton({ tasks, accent, phase, profileOf, onPress }) {
       ) : (
         <Dot color={dotColor} pulse={last?.status === 'working'} />
       )}
-      <Text style={{ fontFamily: fonts.monoSemibold, fontSize: fontSizes.xs, color: colors.ink }}>
+      <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.xs, color: colors.ink }}>
         {phase ? phase.count : `${closed}/${total}`}
       </Text>
     </Pressable>
@@ -492,21 +495,21 @@ function WorkgroupChatInner() {
     },
     [summaries.data],
   );
-  const foldFor = useCallback(
-    (name) => summaries.data?.profiles?.find((x) => x.name === name)?.fold,
+  const shapeFor = useCallback(
+    (name) => summaries.data?.profiles?.find((x) => x.name === name)?.shape,
     [summaries.data],
   );
   const profileOf = useCallback(
     (name) => {
       const p = summaries.data?.profiles?.find((x) => sameName(x.name, name));
-      return p ? { fold: p.fold, accent: p.accent } : null;
+      return p ? { shape: p.shape, accent: p.accent } : null;
     },
     [summaries.data],
   );
   const livePhase = useMemo(() => {
     const chip = liveChip(runChips(pipelineRun, wg?.phase_map, activeTask));
     const progress = runProgress(pipelineRun);
-    return progress ? { chip, count: progress.label } : null;
+    return progress ? { chip, count: progress.label, run: [progress.done, progress.total] } : null;
   }, [pipelineRun, wg?.phase_map, activeTask]);
 
   const sendMessage = async (text) => {
@@ -563,21 +566,24 @@ function WorkgroupChatInner() {
     );
   }
 
+  const headerMark = pipelineRunMark({ workgroup: wg, pipelineRun, offline: daemonDown });
+  const statusLine = paused ? null : workgroupStatusLine(headerMark);
   const memberCount = members.length || wg.members || 0;
   const budgetCap = Number(wg.budget_usd ?? 0);
   const budgetUsed = Number(wg.spent_usd ?? 0);
   const metaTextStyle = {
-    fontFamily: fonts.mono,
+    fontFamily: fonts.sans.regular,
     fontSize: fontSizes.xs,
     color: colors.ink3,
   };
   const meta = (
     <>
       <Text style={metaTextStyle}>hub</Text>
-      <Fold fold={hub?.fold} color={accent} />
+      <Fold shape={hub?.shape} color={accent} />
       <Text style={metaTextStyle}>
         {`@${wg.hub_id} · ${memberCount} members`}
       </Text>
+      {statusLine ? <Text style={metaTextStyle}>{`· ${statusLine}`}</Text> : null}
       {budgetCap > 0 ? (
         <Meter
           label="Workgroup budget"
@@ -630,8 +636,10 @@ function WorkgroupChatInner() {
       <ChatHeader
         kind="workgroup"
         accent={accent}
-        creased
+        named
         paused={!!paused}
+        mark={headerMark}
+        flag={workgroupHeaderFlag({ mark: headerMark, status: statusLine, paused })}
         title={wg.name || wg.id}
         meta={meta}
         onBack={goBack}
@@ -692,7 +700,7 @@ function WorkgroupChatInner() {
           workingStale={workingStale}
           accent={accent}
           accentFor={accentFor}
-          foldFor={foldFor}
+          shapeFor={shapeFor}
           setActionTarget={setActionTarget}
           hubLabel={wg.hub_id}
           colors={colors}
@@ -702,6 +710,7 @@ function WorkgroupChatInner() {
           imageProfile={profile}
           loadError={transcript.error && !transcript.data ? transcript.error : null}
           onRetryLoad={() => transcript.refresh()}
+          paused={!!paused}
         />
         <PaneColumn>
           <Composer
@@ -721,7 +730,7 @@ function WorkgroupChatInner() {
         anchor={menuAnchor}
         onClose={() => setMenuOpen(false)}
         title={wg.name || wg.id}
-        subtitle="WORKGROUP"
+        subtitle="Workgroup"
         actions={menuActions}
       />
       <MessageActionsSheet

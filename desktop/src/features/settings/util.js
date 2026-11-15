@@ -6,7 +6,7 @@ export const FIELD_KEYS = {
   workspace: "workspace",
   model: "model",
   accent: "tui.accent",
-  fold: "tui.fold",
+  shape: "tui.shape",
   reasoningEffort: "model_reasoning.effort",
 };
 

@@ -45,7 +45,7 @@ export function ConnHeader({
       style={({ pressed }) => ({
         width: CHROME_BTN,
         height: CHROME_BTN,
-        borderRadius: radii.xs,
+        borderRadius: radii.pill,
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: pressed || searchOpen ? colors.selected : 'transparent',
@@ -64,10 +64,8 @@ export function ConnHeader({
     minHeight: mobile.tap,
     paddingHorizontal: space.s5,
     paddingVertical: space.s2,
-    borderWidth: 0.5,
-    borderColor: colors.line,
-    borderRadius: radii.xs,
-    backgroundColor: pressed ? colors.selected : colors.bgElev,
+    borderRadius: radii.control,
+    backgroundColor: pressed ? colors.pressed : colors.bgElev,
   });
 
   const identity = (
@@ -96,7 +94,7 @@ export function ConnHeader({
         </Text>
         <Text
           numberOfLines={1}
-          style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, lineHeight: fontSizes.xs * lineHeights.cozy, color: colors.ink3 }}
+          style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, lineHeight: fontSizes.xs * lineHeights.cozy, color: colors.ink3 }}
         >
           {host}
         </Text>
@@ -121,8 +119,6 @@ export function ConnHeader({
         paddingTop: space.s2,
         paddingBottom: space.s3,
         backgroundColor: twoPane ? colors.bgSide : colors.bg,
-        borderBottomWidth: twoPane ? 0 : 0.5,
-        borderBottomColor: colors.line,
       }}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', paddingRight: CONN_EDGE_NUDGE }}>
@@ -136,10 +132,10 @@ export function ConnHeader({
             style={({ pressed }) => ({
               width: CHROME_BTN,
               height: CHROME_BTN,
-              borderRadius: radii.xs,
+              borderRadius: radii.pill,
               alignItems: 'center',
               justifyContent: 'center',
-              backgroundColor: pressed ? colors.selected : 'transparent',
+              backgroundColor: pressed ? colors.pressed : 'transparent',
             })}
           >
             <Icon name="panel-left" size="md" color={colors.ink2} />

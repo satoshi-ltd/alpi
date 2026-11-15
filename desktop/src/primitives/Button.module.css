@@ -3,10 +3,10 @@
   align-items: center;
   justify-content: center;
   gap: var(--sp-8);
-  height: var(--ctl-32);
+  height: var(--ctl-40);
   padding: 0;
   border: 0;
-  border-radius: var(--r-xs);
+  border-radius: var(--r-pill);
   background: transparent;
   color: var(--ink-2);
   font: inherit;
@@ -15,9 +15,15 @@
   line-height: var(--lh-tight);
   white-space: nowrap;
   cursor: pointer;
-  transition: background var(--dur-1) var(--ease),
-    color var(--dur-1) var(--ease),
-    opacity var(--dur-1) var(--ease);
+  transition: background-color var(--state-out), box-shadow var(--state-out), color var(--state-out);
+}
+
+.button:not(:disabled):hover {
+  transition: background-color var(--state-in), box-shadow var(--state-in), color var(--state-in);
+}
+
+.button:not(:disabled):active {
+  transition: none;
 }
 
 .button:disabled:not(.loading) {
@@ -26,8 +32,7 @@
 }
 
 .button[aria-expanded="true"] {
-  outline: var(--focus-outline);
-  outline-offset: var(--focus-outline-offset);
+  box-shadow: var(--selected-wash);
 }
 
 .icon {
@@ -38,11 +43,11 @@
 }
 
 .withLabel {
-  padding: 0 var(--sp-12);
+  padding: 0 var(--sp-16);
 }
 
 .iconOnly {
-  width: var(--ctl-32);
+  width: var(--ctl-40);
 }
 
 .ghost:not(:disabled):hover {
@@ -52,23 +57,22 @@
 
 .ghost.active,
 .ghost:not(:disabled):active {
-  background: var(--line);
+  background: var(--pressed);
   color: var(--ink);
 }
 
 .primary {
-  background: var(--ink);
+  background: var(--accent);
   color: var(--bg-pane);
-  font-weight: var(--fw-semibold);
 }
 
 .primary:not(:disabled).active,
 .primary:not(:disabled):hover {
-  background: var(--ink-2);
+  background: var(--accent-hover);
 }
 
 .primary:not(:disabled):active {
-  background: color-mix(in srgb, var(--ink) 85%, var(--bg-pane));
+  background: var(--accent-pressed);
 }
 
 .danger-ghost {
@@ -86,8 +90,8 @@
 }
 
 .sm {
-  height: var(--ctl-28);
-  font-size: var(--text-meta);
+  height: var(--ctl-32);
+  font-size: var(--text-small);
 }
 
 .sm.withLabel {
@@ -95,9 +99,8 @@
 }
 
 .button .spinner {
-  width: var(--sp-12);
-  height: var(--sp-12);
-  stroke-width: 2;
+  width: var(--icon-sm);
+  height: var(--icon-sm);
   opacity: 0.6;
 }
 
@@ -106,7 +109,7 @@
 }
 
 .sm.iconOnly {
-  width: var(--ctl-28);
+  width: var(--ctl-32);
 }
 
 .lg {
@@ -123,7 +126,7 @@
 }
 
 .hero {
-  height: var(--ctrl-xl);
+  height: var(--ctl-48);
   font-size: var(--text-ui);
 }
 
@@ -132,27 +135,25 @@
 }
 
 .hero.iconOnly {
-  width: var(--ctrl-xl);
+  width: var(--ctl-48);
 }
 
 .secondary {
-  background: var(--selected);
+  background: var(--fill);
   color: var(--ink);
-  font-weight: var(--fw-semibold);
 }
 
 .secondary:not(:disabled):hover {
-  background: var(--line-2);
+  box-shadow: var(--hover-wash);
 }
 
 .secondary:not(:disabled):active {
-  background: color-mix(in srgb, var(--ink) 18%, var(--bg-pane));
+  box-shadow: var(--pressed-wash);
 }
 
 .danger {
   background: var(--c-danger);
   color: var(--on-danger);
-  font-weight: var(--fw-semibold);
 }
 
 .danger:not(:disabled):hover {

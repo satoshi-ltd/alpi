@@ -23,6 +23,7 @@ import { cloudProvider } from '../../../../src/lib/providers';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 import { SkeletonBar } from '../../../../src/components/SkeletonBar';
 import { ListSkeleton } from '../../../../src/components/ListSkeleton';
+import { code } from '../../../../src/theme/code';
 
 export default function ProviderKey() {
   const { id, key } = useLocalSearchParams();
@@ -163,15 +164,15 @@ export default function ProviderKey() {
               style={{
                 padding: space.s5,
                 backgroundColor: colors.field,
-                borderRadius: radii.xs,
+                borderRadius: radii.surface,
               }}
             >
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink }}>{value || '—'}</Text>
+              <Text style={{ ...code(fonts, fontSizes.sm), color: colors.ink }}>{value || '—'}</Text>
             </View>
           ) : null}
           <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}>
-            Get a key at <Text style={{ fontFamily: fonts.mono, color: colors.ink2 }}>{info.console}</Text>. Keys are
-            stored encrypted on the daemon's <Text style={{ fontFamily: fonts.mono, color: colors.ink2 }}>.env</Text>.
+            Get a key at <Text style={{ ...code(fonts, fontSizes.sm), color: colors.ink2 }}>{info.console}</Text>. Keys are
+            stored encrypted on the daemon's <Text style={{ ...code(fonts, fontSizes.sm), color: colors.ink2 }}>.env</Text>.
           </Text>
           <Button
             title={isExisting ? 'Save changes' : 'Add key'}
@@ -255,7 +256,7 @@ function OllamaScreen({
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScreenHeader
         title={info.label}
-        subtitle={`@${id} · ${isNew ? 'NEW INSTANCE' : 'LOCAL MODELS'}`}
+        subtitle={`@${id} · ${isNew ? 'new instance' : 'local models'}`}
         onBack={() => onSaved()}
       />
       <KeyboardPane>
@@ -304,7 +305,7 @@ function OllamaScreen({
               ) : myModels.length === 0 ? (
                 <View style={{ paddingHorizontal: space.s7, paddingVertical: space.s5, gap: space.s3 }}>
                   {myError ? (
-                    <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.dangerText, lineHeight: fontSizes.sm * 1.5 }}>
+                    <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.dangerText, lineHeight: fontSizes.sm * 1.5 }}>
                       {myError.detail}
                     </Text>
                   ) : null}

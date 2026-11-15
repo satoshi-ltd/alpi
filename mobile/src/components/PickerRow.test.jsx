@@ -35,9 +35,10 @@ describe('PickerRow lane', () => {
     expect(document.querySelector('[data-dot]').getAttribute('data-dot')).toBe('#c90');
   });
 
-  it('starts its separator exactly at the text edge', () => {
+  it('parts rows with space, never a rule', () => {
     render(<PickerRow label="doc" separator onPress={() => {}} />);
     const sep = JSON.parse(document.querySelector('[testid="picker-separator"]').getAttribute('data-vstyle'));
-    expect(sep.marginLeft).toBe(42);
+    expect(sep.backgroundColor).toBeUndefined();
+    expect(sep.height).toBe(4);
   });
 });

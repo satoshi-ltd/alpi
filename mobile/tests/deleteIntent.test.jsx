@@ -105,7 +105,7 @@ vi.mock('../src/components/ActionSheet', () => ({
   ActionSheet: (props) => { sheet.props = props; return null; },
 }));
 vi.mock('../src/components/Diamond', () => ({ Diamond: () => React.createElement('span') }));
-vi.mock('../src/components/Fold', () => ({ Fold: ({ fold, color, size, outlined }) => React.createElement('span', { 'data-fold': fold ?? 'diamond', 'data-color': color, 'data-size': size, 'data-outlined': String(!!outlined) }) }));
+vi.mock('../src/components/Fold', () => ({ Fold: ({ shape, color, size, outlined }) => React.createElement('span', { 'data-shape': shape ?? 'diamond', 'data-color': color, 'data-size': size, 'data-outlined': String(!!outlined) }) }));
 vi.mock('../src/components/Eyebrow', () => ({ Eyebrow: ({ children }) => React.createElement('span', {}, children) }));
 vi.mock('../src/components/Icon', () => ({ Icon: ({ name }) => React.createElement('span', { 'data-icon': name }) }));
 vi.mock('../src/components/OnOff', () => ({ OnOff: ({ on }) => React.createElement('span', {}, on ? 'on' : 'off') }));

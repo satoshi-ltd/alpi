@@ -9,7 +9,9 @@
 
 .shell {
   background: var(--bg-elev);
-  border-radius: var(--r-xs);
+  --well: var(--well-float);
+  --well-focus: var(--well-float);
+  border-radius: var(--r-sheet);
   box-shadow: var(--shadow-edge-lg);
   overflow: hidden;
   display: flex;
@@ -18,12 +20,10 @@
 
 .panelHeader {
   padding: var(--panel-head-pad);
-  border-bottom: .5px solid var(--line);
 }
 
 .panelHeaderTight {
   padding: var(--panel-head-pad);
-  border-bottom: .5px solid var(--line);
 }
 
 .panelTitle {
@@ -50,7 +50,7 @@
 .connRow {
   width: 100%;
   padding: var(--sp-12) var(--sp-12);
-  border-radius: var(--r-xs);
+  border-radius: var(--r-control);
   background: transparent;
   text-align: left;
   gap: var(--sp-12);
@@ -68,13 +68,12 @@
 }
 
 .connIcon {
-  width: var(--ctl-28);
-  height: var(--ctl-28);
-  border-radius: var(--r-xs);
-  background: var(--bg-input);
+  width: var(--ctl-32);
+  height: var(--ctl-32);
+  border-radius: var(--r-control);
+  background: var(--card);
   display: grid;
   place-items: center;
-  border: .5px solid var(--line);
   position: relative;
   flex-shrink: 0;
   color: var(--ink-2);
@@ -154,28 +153,26 @@
 .renameInput {
   min-width: 0;
   max-width: 240px;
-  height: var(--ctl-24);
+  height: var(--ctl-32);
   box-sizing: border-box;
-  border: .5px solid transparent;
-  border-radius: var(--r-xs);
+  border: 0;
+  border-radius: var(--r-control);
   background: var(--well);
-  box-shadow: var(--well-edge);
   color: var(--ink);
   font: inherit;
   font-size: var(--text-ui);
   font-weight: var(--fw-medium);
   line-height: 20px;
   outline: none;
-  padding: 0 var(--sp-8);
+  padding: 0 var(--sp-12);
 }
 
 .renameInput:focus {
-  background: var(--well-focus);
-  box-shadow: var(--well-ring);
+  box-shadow: var(--field-focus);
+  outline: none;
 }
 
 .pairFoot {
-  border-top: .5px solid var(--line);
   padding: var(--sp-16) var(--sp-24);
   background: var(--bg-side);
 }
@@ -196,26 +193,25 @@
 .paletteInputWrap {
   display: flex;
   align-items: center;
-  gap: var(--sp-8);
+  gap: var(--sp-12);
   padding: 0 var(--sp-16);
-  border-bottom: .5px solid var(--line);
 }
 
 .paletteSearchIcon {
-  width: var(--icon-sm);
-  height: var(--icon-sm);
+  width: var(--icon-md);
+  height: var(--icon-md);
   color: var(--ink-3);
   flex-shrink: 0;
 }
 
 .paletteInput {
   width: 100%;
-  height: var(--ctl-40);
+  height: 56px;
   border: 0;
   outline: 0;
   background: transparent;
   font-family: var(--font-sans);
-  font-size: var(--text-ui);
+  font-size: var(--text-read);
   color: var(--ink);
 }
 
@@ -236,17 +232,30 @@
 
 .paletteItem {
   width: 100%;
+  min-height: var(--ctl-48);
   padding: var(--sp-8) var(--sp-12);
-  border-radius: var(--r-xs);
+  border-radius: var(--r-control);
   background: transparent;
   text-align: left;
-  gap: var(--sp-8);
+  gap: var(--sp-12);
   align-items: center;
   border: 0;
   cursor: pointer;
+  transition: background-color var(--state-out);
 }
 
-.paletteItemSelected {
+.paletteItem:hover {
+  background: var(--hover);
+  transition: background-color var(--state-in);
+}
+
+.paletteItem:focus-visible {
+  outline: none;
+  background: var(--selected);
+}
+
+.paletteItemSelected,
+.paletteItemSelected:hover {
   background: var(--selected);
 }
 
@@ -273,7 +282,7 @@
 
 .paletteSub {
   flex-shrink: 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   color: var(--ink-3);
 }
@@ -304,28 +313,28 @@
   margin: var(--sp-24) 0 var(--sp-8);
   font-size: var(--text-ui);
   font-weight: var(--fw-semibold);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
 }
 
 .mdH3 {
   margin: var(--sp-24) 0 var(--sp-8);
   font-size: var(--text-chat);
   font-weight: var(--fw-semibold);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
 }
 
 .mdH2 {
   margin: var(--sp-8) 0 var(--sp-16);
   font-size: var(--text-title);
   font-weight: var(--fw-semibold);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
 }
 
 .mdTable {
   width: 100%;
   border-collapse: collapse;
   margin: var(--sp-12) 0 var(--sp-16);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
 }
 
@@ -334,22 +343,19 @@
   padding: var(--sp-8) var(--sp-12);
   color: var(--ink-3);
   font-weight: var(--fw-medium);
-  border-bottom: .5px solid var(--line-2);
 }
 
 .mdTd {
   padding: var(--sp-8) var(--sp-12);
-  border-bottom: .5px solid var(--line);
 }
 
 .mdPre {
   margin: var(--sp-12) 0;
   padding: var(--sp-12) var(--sp-16);
-  border-radius: var(--r-xs);
-  background: var(--hover);
-  border: .5px solid var(--line);
+  border-radius: var(--r-surface);
+  background: var(--card);
   font-family: var(--font-mono);
-  font-size: var(--text-meta);
+  font-size: var(--text-mono);
   overflow-x: auto;
   white-space: pre;
 }
@@ -387,7 +393,6 @@
 }
 
 .browseRail {
-  border-right: .5px solid var(--line);
   background: var(--bg-side);
   min-height: 0;
 }

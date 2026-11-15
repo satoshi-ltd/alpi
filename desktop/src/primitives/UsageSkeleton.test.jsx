@@ -77,7 +77,7 @@ describe("skeleton consumers", () => {
     for (const f of ["fields/WorkgroupsField.jsx", "fields/maintenance.jsx", "fields/devices.jsx", "fields/EmailCell.jsx"]) {
       const src = feature(f);
       expect(src).toMatch(/useSkeleton\(/);
-      expect(src).toMatch(/width="112px" height="22px" radius="var\(--r-tag\)"/);
+      expect(src).toMatch(/width="112px" height="22px" radius="var\(--r-pill\)"/);
       expect(src).toMatch(/delay=\{0\}/);
     }
   });

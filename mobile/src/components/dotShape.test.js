@@ -27,8 +27,6 @@ describe('dots on the ladder', () => {
   it.each([
     'src/components/Dot.jsx',
     'src/components/Pill.jsx',
-    'src/features/inbox/RowState.jsx',
-    'src/features/notifications/NotificationRow.jsx',
     'src/features/settings/SectionJump.jsx',
     'src/features/chat/ThinkingDots.jsx',
   ])('%s takes its dot from the scale instead of a literal', (path) => {

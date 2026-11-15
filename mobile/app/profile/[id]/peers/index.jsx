@@ -14,11 +14,12 @@ import { useBack } from '../../../../src/hooks/useBack';
 import { usePeersPending, useProfileSummaries } from '../../../../src/hooks/useDaemonData';
 import { useProfile } from '../../../../src/hooks/useSubject';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
-import { accentForPubkey, foldForPubkey } from '../../../../src/lib/localFold';
+import { accentForPubkey, shapeForPubkey } from '../../../../src/lib/localShape';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 import { EMPTY } from '../../../../../common/emptyCopy.mjs';
 import { ListSkeleton } from '../../../../src/components/ListSkeleton';
 import { PendingPeerActions } from '../../../../src/features/peers/PendingPeerActions';
+import { code } from '../../../../src/theme/code';
 
 function shortPubkey(pk) {
   if (!pk) return '—';
@@ -60,7 +61,7 @@ export default function PeersList() {
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScreenHeader
         title="Peers"
-        subtitle={`@${id} · ${peers.length} TRUSTED${pending.length ? ` · ${pending.length} PENDING` : ''}`}
+        subtitle={`@${id} · ${peers.length} trusted${pending.length ? ` · ${pending.length} pending` : ''}`}
         onBack={goBack}
         right={<Button title="+ Add" size="md" variant="ghost" onPress={() => router.push(`/profile/${id}/peers/new`)} />}
       />
@@ -82,12 +83,12 @@ export default function PeersList() {
                       paddingVertical: space.s6,
                     }}
                   >
-                    <Fold fold={foldForPubkey(summaries, p.pubkey)} color={accentForPubkey(summaries, p.pubkey)} size="md" />
+                    <Fold shape={shapeForPubkey(summaries, p.pubkey)} color={accentForPubkey(summaries, p.pubkey)} size="md" />
                     <View style={{ flex: 1, gap: space.s1 }}>
-                      <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.md, color: colors.ink }} numberOfLines={1}>
+                      <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink }} numberOfLines={1}>
                         {p.local_profile ? `@${p.local_profile}` : shortPubkey(p.pubkey)}
                       </Text>
-                      <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }} numberOfLines={1}>
+                      <Text style={{ ...code(fonts, fontSizes.xs), color: colors.ink3 }} numberOfLines={1}>
                         {p.address ?? p.pubkey}
                       </Text>
                     </View>
@@ -119,7 +120,7 @@ export default function PeersList() {
                 <View key={p.id ?? i}>
                   {i > 0 ? <RowSeparator /> : null}
                   <Row
-                    leading={<Fold fold={foldForPubkey(summaries, p.pubkey)} color={accentForPubkey(summaries, p.pubkey)} size="md" />}
+                    leading={<Fold shape={shapeForPubkey(summaries, p.pubkey)} color={accentForPubkey(summaries, p.pubkey)} size="md" />}
                     label={`@${p.id}`}
                     helper={p.alias || p.address || 'intra-machine'}
                     value={

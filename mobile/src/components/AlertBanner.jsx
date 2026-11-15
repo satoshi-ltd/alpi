@@ -1,11 +1,13 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
-import { radii, space } from '../theme/tokens';
+import { mobile, space } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeContext';
+import { bannerTones } from './bannerTones';
 import { Icon } from './Icon';
 
 export function AlertBanner({ lead, detail, action, onAction }) {
-  const { colors, fonts, fontSizes } = useTheme();
+  const { colors, fonts, fontSizes, mode } = useTheme();
+  const { surface, text } = bannerTones('danger', colors, mode);
   return (
     <View
       accessibilityRole="alert"
@@ -14,25 +16,22 @@ export function AlertBanner({ lead, detail, action, onAction }) {
         alignItems: 'center',
         gap: space.s4,
         padding: space.s5,
-        borderRadius: radii.xs,
-        backgroundColor: colors.hover,
-        borderWidth: StyleSheet.hairlineWidth,
-        borderColor: colors.line,
+        backgroundColor: surface,
       }}
     >
-      <Icon name="triangle-alert" size="xs" color={colors.danger} />
+      <Icon name="triangle-alert" size="xs" color={text} />
       <View style={{ flex: 1, minWidth: 0, gap: space.s1 }}>
         <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, color: colors.ink }}>{lead}</Text>
-        {detail ? <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}>{detail}</Text> : null}
+        {detail ? <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink2 }}>{detail}</Text> : null}
       </View>
       {action ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={action}
           onPress={onAction}
-          style={{ minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.s3 }}
+          style={{ minHeight: mobile.tap, minWidth: mobile.tap, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.s3 }}
         >
-          <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.sm, color: colors.ink }}>{action}</Text>
+          <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.sm, color: text }}>{action}</Text>
         </Pressable>
       ) : null}
     </View>

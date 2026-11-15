@@ -20,7 +20,7 @@ export function TextPrompt({
   keyboardType = 'default',
 }) {
   const { colors, fonts, fontSizes, shadow } = useTheme();
-  const [well, focus] = useWell(colors);
+  const [well, focus] = useWell(colors, false, false, true);
   const [value, setValue] = useState(initialValue);
   const [kbHeight, setKbHeight] = useState(0);
   useEffect(() => {
@@ -54,9 +54,9 @@ export function TextPrompt({
           style={{
             width: '100%',
             maxWidth: 420,
-            backgroundColor: colors.bgPane,
+            backgroundColor: colors.bgElev,
             ...shadow.dialog,
-            borderRadius: radii.xs,
+            borderRadius: radii.sheet,
             padding: space.s9,
             gap: space.s7,
           }}
@@ -73,7 +73,7 @@ export function TextPrompt({
           </Text>
           <View style={{ gap: space.s3 }}>
             {label ? (
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3, letterSpacing: 0.6 }}>
+              <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>
                 {label}
               </Text>
             ) : null}
@@ -95,7 +95,7 @@ export function TextPrompt({
                 ...well,
                 paddingHorizontal: space.s5,
                 height: 44,
-                fontFamily: fonts.mono,
+                fontFamily: fonts.sans.regular,
                 fontSize: fontSizes.md,
                 color: colors.ink,
               }}

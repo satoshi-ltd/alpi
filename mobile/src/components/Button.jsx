@@ -1,15 +1,16 @@
 import { contrastText, mixHex } from "../../../common/color.mjs";
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { buttonAccentPressed, buttonDefaults, buttonHeights, buttonLabelWeight, buttonPressed, buttonVariants } from '../../../common/button.mjs';
+import { buttonAccentPressed, buttonDefaults, buttonHeights, buttonLabelWeight, buttonPressed, buttonRadius, buttonVariants } from '../../../common/button.mjs';
 import { alpha, radii, space } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeContext';
 import { Spinner } from './Spinner';
+import { focusRingStyle, useFocusRing } from './focusRing';
 
 const SIZES = {
-  sm: { padX: space.s5, token: 'sm' },
-  md: { padX: space.s6, token: 'md' },
-  lg: { padX: space.s8, token: 'lg' },
-  hero: { padX: space.s9, token: 'xl' },
+  sm: { padX: space.s6, token: 'sm' },
+  md: { padX: space.s8, token: 'md' },
+  lg: { padX: space.s8, token: 'md' },
+  hero: { padX: space.s9, token: 'lg' },
 };
 
 export function Button({
@@ -23,6 +24,7 @@ export function Button({
   accent,
 }) {
   const { colors, fonts, fontSizes } = useTheme();
+  const [focused, focusHandlers] = useFocusRing();
   variant = buttonVariants.includes(variant) ? variant : buttonDefaults.mobile.variant;
   size = Object.hasOwn(buttonHeights, size) ? size : buttonDefaults.mobile.size;
   const dims = SIZES[size];
@@ -31,8 +33,8 @@ export function Button({
   const primary = variant === 'primary';
   const danger = variant === 'danger' || variant === 'danger-ghost';
   const bgIdle = quiet ? 'transparent'
-    : primary ? accent ?? colors.ink
-      : danger ? colors.danger : colors.selected;
+    : primary ? accent ?? colors.accent
+      : danger ? colors.danger : colors.fill;
   const fg = quiet ? (danger ? colors.dangerText : colors.ink2)
     : danger ? colors.onDanger : primary ? (accent ? contrastText(accent) : colors.bgPane) : colors.ink;
   const bgPressed = pressedColor(variant, colors, primary ? accent : null);
@@ -44,10 +46,11 @@ export function Button({
       accessibilityState={{ disabled: blocked, busy: loading }}
       onPress={onPress}
       disabled={blocked}
-      style={({ pressed }) => [styles.root, {
+      {...focusHandlers}
+      style={({ pressed }) => [styles.root, focusRingStyle(colors, focused), {
         minHeight: Button.touchHeight(size),
         paddingHorizontal: dims.padX,
-        borderRadius: radii.xs,
+        borderRadius: radii[buttonRadius],
         backgroundColor: pressed && !blocked ? bgPressed : bgIdle,
         ...(disabled && !loading ? { opacity: alpha.disabled } : {}),
         alignSelf: fullWidth ? 'stretch' : 'auto',

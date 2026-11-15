@@ -523,6 +523,8 @@ export function useChatStream({
         }));
       } else if (p.kind === "error") {
         updateTurn(rid, (prev) => ({ ...prev, error: describeConnectionError(p.text) }));
+      } else if (p.kind === "interrupted") {
+        updateTurn(rid, (prev) => ({ ...prev, interrupted: true }));
       } else if (p.kind === "reply") {
         if (!p.session_id) return;
         const turn = pendingTurnsRef.current[rid];

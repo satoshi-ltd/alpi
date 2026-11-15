@@ -28,7 +28,7 @@ export default function UsageSkeleton({ label = "Loading usage" }) {
       <div className={styles.track}>
         {DAY_BARS.map((h, i) => (
           <div key={i} data-bar className={styles.col}>
-            <Bone width="100%" height={`${h}%`} radius="3px" className={styles.bar} delay={i * 0.09} />
+            <Bone width="100%" height={`${h}%`} radius="var(--r-xs)" className={styles.bar} delay={i * 0.09} />
           </div>
         ))}
       </div>

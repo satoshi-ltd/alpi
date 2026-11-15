@@ -1,7 +1,7 @@
 import { useDismissOnOutside } from "../hooks/useDismissOnOutside.js";
 import Button from "../primitives/Button.jsx";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Dot, Fold, Tip, Mono, CheckIcon } from "../primitives/index.js";
+import { Dot, Fold, Tip, CheckIcon } from "../primitives/index.js";
 import {
   applyPendingUpdate,
   checkForUpdates,
@@ -9,14 +9,11 @@ import {
   quitForUpdate,
   subscribeUpdater,
 } from "../lib/updater.js";
-import Crease, { creaseInk, creaseVars } from "../primitives/Crease.jsx";
-import { ALPACA_FOLD } from "../../../common/folds.mjs";
+import { TWIN } from "../lib/brandMark.js";
 import styles from "./VersionButton.module.css";
 
 // eslint-disable-next-line no-undef
 const APP_VERSION = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
-
-const BRAND_VARS = creaseVars(null);
 
 export default function VersionButton() {
   const [state, setState] = useState({
@@ -66,9 +63,9 @@ export default function VersionButton() {
       </Tip>
       {open && (
         <div className={`anim-pop ${styles.popover}`}>
-          <div className={`${styles.brand} ${creaseInk}`} style={BRAND_VARS}>
-            <Fold fold={ALPACA_FOLD} size={26} />
-            <Crease text="alpi" accent={null} className={styles.brandMark} />
+          <div className={styles.brand}>
+            <Fold shape={TWIN} size={26} />
+            <span className={`ds-name ${styles.brandMark}`}>alpi</span>
           </div>
           <VersionPanel
             state={state}
@@ -92,7 +89,7 @@ function VersionPanel({ state, current, onInstall, onClose }) {
           <Dot pulse color="var(--ink-3)" />
           <span className={styles.label}>Checking for updates…</span>
         </div>
-        <Mono className={styles.metaXs}>v{current}</Mono>
+        <span className={styles.metaXs}>v{current}</span>
       </div>
     );
   }
@@ -117,10 +114,10 @@ function VersionPanel({ state, current, onInstall, onClose }) {
             <Dot color="var(--c-success)" pulse />
             <span className={styles.labelStrong}>Update available</span>
           </div>
-          <Mono className={styles.metaSm}>
+          <span className={styles.metaSm}>
             {current} →{" "}
             <span className={styles.versionTo}>{state.version}</span>
-          </Mono>
+          </span>
         </div>
         {activity ? (
           <div className={`row row-gap ${styles.rowGap3}`} aria-live="polite">
@@ -134,7 +131,7 @@ function VersionPanel({ state, current, onInstall, onClose }) {
             <span className={styles.label}>{describeUpdaterError(state.error, state.errorPhase)}</span>
           </div>
         ) : staleCheck ? (
-          <Mono className={styles.metaXs}>last check failed · {describeUpdaterError(state.error, "check")}</Mono>
+          <span className={styles.metaXs}>last check failed · {describeUpdaterError(state.error, "check")}</span>
         ) : null}
         <div className="row between">
           <button
@@ -177,7 +174,7 @@ function VersionPanel({ state, current, onInstall, onClose }) {
           <Dot color="var(--c-danger)" />
           <span className={styles.labelStrong}>{friendly}</span>
         </div>
-        <Mono className={styles.metaSm}>v{current}</Mono>
+        <span className={styles.metaSm}>v{current}</span>
       </div>
     );
   }
@@ -191,7 +188,7 @@ function VersionPanel({ state, current, onInstall, onClose }) {
         />
         <span className={styles.labelStrong}>You're up to date</span>
       </div>
-      <Mono className={styles.metaSm}>v{current}</Mono>
+      <span className={styles.metaSm}>v{current}</span>
     </div>
   );
 }

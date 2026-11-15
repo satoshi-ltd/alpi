@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { buttonHeights } from '../../../common/button.mjs';
-import { ALPACA_FOLD, FOLD_SIZES, foldFacets } from '../../../common/folds.mjs';
+import { MARK_SIZES } from '../../../common/agentMarks.mjs';
+import { shapeBox } from './agentMark';
 import { TEXT_SCALES, scaleFontSizes } from '../theme/textScale';
 import { fonts, lineHeights, mobile, palettes, space } from '../theme/tokens';
 import {
@@ -70,20 +71,18 @@ describe('first run edge', () => {
     expect(firstRunEdge(956, 440)).toBe(16);
   });
 
-  it('puts the ink of the Fold on the edge: the box is pulled back by 17.256 % of its size', () => {
-    const left = Math.min(...foldFacets(ALPACA_FOLD).flatMap(({ points }) => points.map(([x]) => x)));
-    expect(foldMarkStyle.marginLeft).toBeCloseTo(-(left * FOLD_SIZES.hero) / 100, 6);
-    expect(markInset(FOLD_SIZES.hero)).toBeCloseTo(12.42, 2);
+  it('puts the ink of Twin on the edge: the box is pulled back by its left margin', () => {
+    const [left] = shapeBox('alpi-twin');
+    expect(left).toBeGreaterThan(0);
+    expect(foldMarkStyle.marginLeft).toBeCloseTo(-(left * MARK_SIZES.hero) / 100, 6);
     for (const edge of [16, 24]) {
-      expect(edge + foldMarkStyle.marginLeft + markInset(FOLD_SIZES.hero)).toBeCloseTo(edge, 6);
+      expect(edge + foldMarkStyle.marginLeft + markInset(MARK_SIZES.hero)).toBeCloseTo(edge, 6);
     }
   });
 
-  it('puts the ink of Busy on the same edge and keeps the Fold box height while it waits', () => {
-    expect(BUSY_MARK_PX).toBe(77);
-    expect(busyMarkStyle.marginLeft).toBeCloseTo(-13.29, 2);
-    expect(busyMarkStyle.marginTop).toBeCloseTo(-2.31, 2);
-    expect(BUSY_MARK_PX + busyMarkStyle.marginTop + busyMarkStyle.marginBottom).toBeCloseTo(FOLD_SIZES.hero, 6);
+  it('draws Busy at the hero size on the same edge so the page does not jump while it waits', () => {
+    expect(BUSY_MARK_PX).toBe(MARK_SIZES.hero);
+    expect(busyMarkStyle.marginLeft).toBe(foldMarkStyle.marginLeft);
     expect(busyMarkStyle).toMatchObject({ padding: 0, gap: 0, alignItems: 'flex-start' });
   });
 });
@@ -137,11 +136,11 @@ describe('first run type', () => {
   const theme = { colors: palettes.light, fonts, fontSizes: scaleFontSizes(1) };
   const type = firstRunType(theme);
 
-  it('sets the display title at 28 with the 24 gap under the mark, mono facts at 12 and the sentence at 14', () => {
+  it('sets the display title at 28 with the 24 gap under the mark, sans facts at 14 and the sentence at 15', () => {
     expect(type.title).toMatchObject({ fontSize: 28, lineHeight: 36, marginTop: 24 });
-    expect(type.fact).toMatchObject({ fontFamily: fonts.mono, fontSize: 12, marginTop: 8 });
-    expect(type.sentence).toMatchObject({ fontSize: 14, lineHeight: 21, marginTop: 8 });
-    expect(Math.round(14 * lineHeights.normal)).toBe(21);
+    expect(type.fact).toMatchObject({ fontFamily: fonts.sans.regular, fontSize: 14, marginTop: 8 });
+    expect(type.sentence).toMatchObject({ fontSize: 15, lineHeight: 23, marginTop: 8 });
+    expect(Math.round(15 * lineHeights.normal)).toBe(23);
   });
 
   it('takes the title size of the roster page from the caller and scales with the text step', () => {

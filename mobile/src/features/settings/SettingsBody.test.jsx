@@ -25,7 +25,7 @@ const h = vi.hoisted(() => ({
 vi.mock('react-native', () => {
   const View = ({ children, style, ...p }) => React.createElement('div', p, children);
   const Text = ({ children, numberOfLines, ellipsizeMode, style, ...p }) =>
-    React.createElement('span', p, children);
+    React.createElement('span', { ...p, 'data-style': JSON.stringify(style ?? null) }, children);
   const Pressable = ({ children, onPress, onLongPress, android_ripple, style, accessibilityState, ...p }) =>
     React.createElement(
       'button',
@@ -66,7 +66,7 @@ vi.mock('../../components/OnOff', () => ({
     React.createElement('span', { 'data-onoff': on ? onLabel : offLabel }),
 }));
 vi.mock('../../components/Fold', () => ({
-  Fold: ({ fold, color, size }) => React.createElement('span', { 'data-fold': fold, 'data-color': color ?? '', 'data-size': size }),
+  Fold: ({ shape, color, size }) => React.createElement('span', { 'data-shape': shape, 'data-color': color ?? '', 'data-size': size }),
 }));
 vi.mock('../../components/Toast', () => ({ useToast: () => vi.fn() }));
 vi.mock('../../components/ConfirmDialog', () => ({
@@ -121,14 +121,14 @@ describe('SettingsBody', () => {
     expect(screen.getByText('Alpi mobile · v0.3.1')).toBeTruthy();
   });
 
-  it('signs the About block with the alpaca and a crease wordmark', async () => {
+  it('signs the About block with Twin and a solid wordmark in plain ink', async () => {
     render(<SettingsBody />);
     await waitFor(() => expect(screen.getByText('Face ID unlock')).toBeTruthy());
-    expect(document.querySelectorAll('text')).toHaveLength(1);
-    expect(document.querySelector('text').textContent).toBe('alpi');
-    expect(document.querySelectorAll('linearGradient')).toHaveLength(1);
-    const mark = document.querySelector('[data-fold]');
-    expect(mark.getAttribute('data-fold')).toBe('alpaca');
+    const word = JSON.parse(screen.getByText('alpi').getAttribute('data-style'));
+    expect(word.fontFamily).toBe('BricolageGrotesque_800ExtraBold');
+    expect(word.color).toBe('#000');
+    const mark = document.querySelector('[data-shape]');
+    expect(mark.getAttribute('data-shape')).toBe('twin');
     expect(mark.getAttribute('data-color')).toBe('');
   });
 

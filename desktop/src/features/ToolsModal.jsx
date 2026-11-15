@@ -1,13 +1,14 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Eyebrow } from "../primitives/index.js";
+import { Banner, Eyebrow } from "../primitives/index.js";
 import shell from "../primitives/BrowseModal.module.css";
-import { BrowseBody, BrowseShell } from "../primitives/BrowseModal.jsx";
+import { BrowseBody, BrowseDetailHead, BrowseRow, BrowseShell, FactTable } from "../primitives/BrowseModal.jsx";
 import { PROFILE_PANELS } from "../lib/profilePanels.js";
 import { SkeletonReader, SkeletonRows } from "../primitives/Skeleton.jsx";
 import MarkdownBody from "../primitives/MarkdownBody.jsx";
 import styles from "./ToolsModal.module.css";
 import { EMPTY } from "../../../common/emptyCopy.mjs";
+import { firstSentence } from "../../../common/panelRow.mjs";
 
 const CATEGORY_ORDER = [
   "Filesystem", "Workspace", "Web", "Memory", "Comms", "Agent", "Media", "System", "Collab",
@@ -97,18 +98,15 @@ export function ToolsPanel({ open = true, profile, connectionId, owner = null, o
         <Fragment key={g.cat}>
           <Eyebrow as="li" className={shell.groupHeader} role="presentation">{g.cat}</Eyebrow>
           {g.tools.map((t) => (
-            <li key={t.name}>
-              <button
-                type="button"
-                className={`${shell.row} ${styles.toolRow} ${t.name === selected?.name ? shell.rowActive : ""}`}
-                onClick={() => setSelected(t)}
-                role="option"
-                aria-selected={t.name === selected?.name}
-              >
-                <span className={`${styles.toolName} ${t.denied ? styles.toolMuted : ""}`}>{t.name}</span>
-                <span className={styles.toolCount}>{t.denied ? "denied" : t.tag}</span>
-              </button>
-            </li>
+            <BrowseRow
+              key={t.name}
+              title={t.name}
+              sub={firstSentence(t.description)}
+              meta={t.denied ? "denied" : null}
+              off={!!t.denied}
+              active={t.name === selected?.name}
+              onSelect={() => setSelected(t)}
+            />
           ))}
         </Fragment>
       ))}
@@ -146,20 +144,25 @@ function ToolDetail({ tool }) {
   const rows = Object.entries(props);
   return (
     <>
-      <div className={shell.detailMeta}>
-        <span className={styles.toolNameLg}>
-          {tool.category ? <span className={styles.detailCat}>{tool.category}/</span> : null}
-          <span>{tool.name}</span>
-        </span>
-        <span className={shell.detailMetaSpacer} />
-      </div>
-      <div className={shell.detailScroll}>
+      <BrowseDetailHead
+        title={tool.name}
+        state={tool.denied ? "denied" : null}
+        id={tool.name}
+      />
+      <div className={shell.detailBody}>
         {tool.denied ? (
-          <div className={styles.denyBanner}>
-            Denied for this profile via <code>tools.deny</code> in <code>config.yaml</code>. The agent does not see this tool.
+          <div className={styles.deny}>
+            <Banner kind="warning">
+              Denied for this profile via <code>tools.deny</code> in <code>config.yaml</code>. The agent does not see this tool.
+            </Banner>
           </div>
         ) : null}
-        {tool.description ? <MarkdownBody source={tool.description} /> : null}
+        <FactTable
+          rows={[
+            { label: "About", value: tool.description ? <MarkdownBody source={tool.description} className={shell.factMd} /> : null },
+            { label: "Category", value: tool.category || null },
+          ]}
+        />
         {rows.length > 0 ? (
           <table className={styles.params}>
             <thead>

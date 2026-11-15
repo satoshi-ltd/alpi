@@ -1,5 +1,5 @@
-from gen import ic as _ic, DANGER, DOC_ACCENT, EDGE, FIELD, WELL, FLOAT_EDGE, diamond, di as ic, identity_glyph, m_button, mi, mix, page, profile_mark
-from desktop_boards import ELEV, HOVER, INK, INK2, INK3, INK4, LG_FLOAT, LINE, LINE2, MONO, PANE, RING_CTRL, SELECTED, SIDE, SM_FLOAT
+from gen import ic as _ic, R_SHEET, DANGER, DOC_ACCENT, WELL, FLOAT_EDGE, R_XS, R_CHIP, R_CONTROL, R_SURFACE, NEST, di as ic, identity_glyph, m_button, mi, mix, page, profile_mark, ladder_px, mono_px
+from desktop_boards import ELEV, HOVER, INK, INK2, INK3, INK4, LINE, LINE2, MONO, PANE, SELECTED, SM_FLOAT, CARD
 
 AMBER = "#14110c"
 BRAND = "#14110c"
@@ -11,11 +11,11 @@ SANS = "Geist, ui-sans-serif, system-ui, sans-serif"
 
 def h1(text, sub):
     return (f'<div style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 28px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15">{text}</span>'
-            f'<span style="font-size: 13px; line-height: 1.5; color: {INK3}; max-width: 900px">{sub}</span></div>')
+            f'<span style="font-size: 15px; line-height: 1.5; color: {INK3}; max-width: 900px">{sub}</span></div>')
 
 
 def label(text):
-    return f'<span style="font-family: {MONO}; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: {INK3}">{text}</span>'
+    return f'<span style="font-size: 14px; color: {INK3}">{text}</span>'
 
 
 def spec(title, inner, w=None, pad=20, bg=PANE):
@@ -29,16 +29,12 @@ def row(*items, gap=22):
 
 
 def mono(text, size=12, color=INK3, weight=400):
-    return f'<span style="font-family: {MONO}; font-size: {size}px; color: {color}; font-weight: {weight}">{text}</span>'
+    return f'<span style="font-family: {MONO}; font-size: {mono_px(size)}px; color: {color}; font-weight: {weight}">{text}</span>'
 
 
-def small_diamond(color, size=8):
-    return f'<span style="width: {size}px; height: {size}px; border-radius: 1.5px; background: {color}; transform: rotate(45deg); display: inline-block; flex-shrink: 0"></span>'
-
-
-def iconbtn(name, size=24, glyph=14, color=INK2):
-    return (f'<button aria-label="{name}" style="width: {size}px; height: {size}px; border: 0; border-radius: 4px; background: transparent; display: inline-flex; '
-            f'align-items: center; justify-content: center; padding: 0; color: {color}; cursor: pointer">{ic(name, glyph, color)}</button>')
+def iconbtn(name, size=32, glyph=16, color=INK2):
+    return (f'<span role="button" aria-label="{name}" style="width: {size}px; height: {size}px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">'
+            f'{ic(name, glyph, color)}</span>')
 
 
 def sep():
@@ -64,34 +60,35 @@ def vsep():
 
 def d_user(text, accent=AMBER):
     return (f'<div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px">'
-            f'<div style="max-width: 76%; padding: 12px 16px; border-radius: 4px; background: {SELECTED}; font-size: 15px; line-height: 1.65; color: {INK}">{text}</div>'
-            f'<div style="display: flex; align-items: center; gap: 8px; color: {INK3}">{mono("2m", 11)}<span style="opacity: 0.4; display: inline-flex; margin-right: -5px">{iconbtn("pencil", 24, 14)}{iconbtn("copy", 24, 14)}</span></div></div>')
+            f'<div style="max-width: 76%; padding: 8px 16px; box-sizing: border-box; border-radius: {R_SURFACE}px; background: #f2f2f2; font-size: 16px; line-height: 1.6; color: {INK}">{text}</div>'
+            f'<div data-foot="right" style="display: flex; align-items: center; justify-content: flex-end; gap: 4px; color: {INK3}"><span style="opacity: 0.4; display: inline-flex">{iconbtn("pencil", 32, 16)}{iconbtn("copy", 32, 16)}</span><span style="font-size: 12px; padding-left: 4px">2m</span></div></div>')
 
 
 def d_assistant(body, meta=True, hover=True):
     footer = ""
     if meta:
-        tip = (f'<span style="display: inline-flex; flex-direction: column; gap: 4px; margin-left: 8px; padding: 4px 8px; border-radius: 4px; background: {INK}; {SM_FLOAT}">'
-               f'{mono("3.4K tokens · $0.0123", 11, PANE)}{mono("sonnet-4 · 12.4s", 11, INK4)}</span>')
-        footer = (f'<div style="display: flex; align-items: center; gap: 8px; margin-top: 4px"><span style="display: inline-flex; margin-left: -7px; opacity: {1 if hover else 0.4}">{iconbtn("copy", 28, 14)}{iconbtn("refresh", 28, 14)}{iconbtn("volume", 28, 14)}{iconbtn("download", 28, 14)}</span>{mono("2m", 11)}{tip if hover else ""}</div>')
-    return f'<div style="display: flex; flex-direction: column; gap: 8px"><div style="font-size: 15px; line-height: 1.65; letter-spacing: -0.003em; color: {INK}">{body}</div>{footer}</div>'
+        tip = (f'<span style="display: inline-flex; flex-direction: column; gap: 4px; margin-left: 8px; padding: 6px 10px; border-radius: 8px; background: {INK}">'
+               f'<span style="font-size: 12px; font-weight: 500; color: {PANE}">3.4K tokens · $0.0123</span>{mono("sonnet-4 · 12.4s", 11, INK4)}</span>')
+        footer = (f'<div data-foot="left" style="display: flex; align-items: center; gap: 4px"><span style="font-size: 12px; color: {INK3}; padding-right: 4px">2m</span>'
+                  f'<span style="display: inline-flex; opacity: {1 if hover else 0.4}">{iconbtn("copy", 32, 16, INK3)}{iconbtn("refresh", 32, 16, INK3)}{iconbtn("volume", 32, 16, INK3)}{iconbtn("download", 32, 16, INK3)}</span>{tip if hover else ""}</div>')
+    return f'<div style="display: flex; flex-direction: column; gap: 10px"><div style="font-size: 16px; line-height: 1.6; color: {INK}">{body}</div>{footer}</div>'
 
 
 def code_inline(text):
-    return f'<code style="font-family: {MONO}; font-size: 0.92em; background: {HOVER}; padding: 1px 5px; border-radius: 4px">{text}</code>'
+    return f'<code style="font-family: {MONO}; font-size: 0.92em; background: {HOVER}; padding: 1px 5px; border-radius: {R_XS}px">{text}</code>'
 
 
 def d_code_block(lang, code):
-    return (f'<div style="margin: 12px 0; border: 0.5px solid {LINE}; border-radius: 4px; overflow: hidden">'
-            f'<div style="display: flex; justify-content: space-between; padding: 8px 12px; background: {HOVER}; border-bottom: 0.5px solid {LINE}">{mono(lang, 11)}{mono("copy", 11)}</div>'
-            f'<pre style="margin: 0; padding: 12px; font-family: {MONO}; font-size: 11px; line-height: 1.5; color: {INK}; background: {HOVER}">{code}</pre></div>')
+    return (f'<div style="margin: 12px 0; border-radius: {R_SURFACE}px; overflow: hidden">'
+            f'<div style="display: flex; justify-content: space-between; padding: 8px 12px; background: {HOVER}">{mono(lang, 11)}{mono("copy", 11)}</div>'
+            f'<pre style="margin: 0; padding: 12px; font-family: {MONO}; font-size: 12px; line-height: 1.5; color: {INK}; background: {HOVER}">{code}</pre></div>')
 
 
 def d_table():
     cells = [("job", "status", "time"), ("api-migrate", "timed out", "300s"), ("web-build", "lint error", "42s")]
-    head = "".join(f'<th style="text-align: left; padding: 12px 14px; font-weight: 600; color: {INK2}; background: {SIDE}; border-bottom: 0.5px solid {LINE}">{c}</th>' for c in cells[0])
-    body = "".join("<tr>" + "".join(f'<td style="padding: 12px 14px; border-top: 0.5px solid {LINE}; background: {PANE}">{c}</td>' for c in r) + "</tr>" for r in cells[1:])
-    return f'<div style="margin: 12px 0; border: 0.5px solid {LINE2}; border-radius: 4px; overflow: hidden"><table style="width: 100%; border-collapse: collapse; font-size: 13px"><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>'
+    head = "".join(f'<th style="text-align: left; padding: 12px 14px; font-weight: 600; color: {INK2}; background: {HOVER}">{c}</th>' for c in cells[0])
+    body = "".join("<tr>" + "".join(f'<td style="padding: 12px 14px; border-top: 2px solid {PANE}">{c}</td>' for c in r) + "</tr>" for r in cells[1:])
+    return f'<div style="margin: 12px 0; border-radius: {R_SURFACE}px; overflow: hidden; background: {CARD}"><table style="width: 100%; border-collapse: collapse; font-size: 15px"><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>'
 
 
 def d_reasoning(open_=False, streaming=False):
@@ -99,7 +96,7 @@ def d_reasoning(open_=False, streaming=False):
     peek = "" if open_ else f'<span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{mono("Checking which jobs exited non-zero…", 11)}</span>'
     lines = ""
     if open_:
-        body = "".join(f'<div style="font-family: {MONO}; font-size: 11px; line-height: 1.65; color: {INK3}">{t}</div>' for t in ("The user wants a summary of yesterday's deploys.", "Read the log, group by job, count exits.", "Two jobs failed; call them out first."))
+        body = "".join(f'<div style="font-family: {MONO}; font-size: 12px; line-height: 1.65; color: {INK3}">{t}</div>' for t in ("The user wants a summary of yesterday's deploys.", "Read the log, group by job, count exits.", "Two jobs failed; call them out first."))
         mask = "mask-image: linear-gradient(to bottom, transparent, black 28px); max-height: 116px; overflow: hidden;" if streaming else ""
         lines = f'<div style="margin-top: 8px; display: flex; flex-direction: column; gap: 8px; {mask}">{body}</div>'
     label_text = "thinking · 4s" if streaming else "thinking · 7s"
@@ -113,7 +110,7 @@ def d_tool(name, args, state="done"):
     trailer = ""
     if state == "running":
         trailer = f'<span style="display: inline-flex; gap: 2px; margin-left: 4px">{"".join(dot(BRAND, 3) for _ in range(3))}</span>'
-    return (f'<div style="display: inline-flex; align-items: center; gap: 8px; padding: 2px 0; font-family: {MONO}; font-size: 11px; color: {INK2}">'
+    return (f'<div style="display: inline-flex; align-items: center; gap: 8px; padding: 2px 0; font-family: {MONO}; font-size: 12px; color: {INK2}">'
             f'{ic("chip", 14, color)}<span style="font-weight: 500; color: {name_color}">{name}</span><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{arg_html}</span>{trailer}</div>')
 
 
@@ -124,106 +121,100 @@ def d_bucket(text, failed=0, size=11, h=24, open_=False):
 
 
 def d_attachment(name, sub, variant="composer"):
-    bg = PANE if variant == "composer" else HOVER
-    border = LINE2 if variant == "composer" else "transparent"
+    bg = SELECTED if variant == "composer" else HOVER
     box_bg = HOVER if variant == "composer" else PANE
     remove = iconbtn("x", 24, 14, INK3) if variant == "composer" else ""
-    return (f'<div style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border: 0.5px solid {border}; border-radius: 4px; background: {bg}; max-width: 280px">'
-            f'<span style="width: 32px; height: 32px; border-radius: 4px; background: {box_bg}; display: inline-flex; align-items: center; justify-content: center">{ic("copy", 16, INK3)}</span>'
-            f'<span style="display: flex; flex-direction: column; min-width: 0"><span style="font-size: 11px; color: {INK}">{name}</span>{mono(sub, 11)}</span>{remove}</div>')
+    return (f'<div style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: {R_CONTROL}px; background: {bg}; max-width: 280px">'
+            f'<span style="width: 32px; height: 32px; border-radius: {R_CHIP}px; background: {box_bg}; display: inline-flex; align-items: center; justify-content: center">{ic("copy", 16, INK3)}</span>'
+            f'<span style="display: flex; flex-direction: column; min-width: 0"><span style="font-size: 12px; color: {INK}">{name}</span>{mono(sub, 11)}</span>{remove}</div>')
 
 
 def d_images():
-    tile = lambda c: f'<div style="aspect-ratio: 4 / 3; border-radius: 4px; border: 0.5px solid {LINE}; background: linear-gradient(135deg, {mix(c, 0.35)}, {mix(c, 0.12)})"></div>'
+    tile = lambda c: f'<div style="aspect-ratio: 4 / 3; border-radius: {R_SURFACE}px; background: linear-gradient(135deg, {mix(c, 0.35)}, {mix(c, 0.12)})"></div>'
     return f'<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; max-width: 420px">{tile(DOC_ACCENT)}{tile(AMBER)}</div>'
 
 
 def d_peer():
     return (f'<div style="display: flex; flex-direction: column; align-items: flex-start; gap: 8px">'
-            f'<div style="display: flex; align-items: center; gap: 8px; font-size: 11px; color: {INK3}">{profile_mark(DOC_ACCENT)}<span style="font-weight: 600; color: {INK}">@doc</span></div>'
-            f'<div style="max-width: 76%; padding: 12px 16px; border-radius: 4px; background: {mix(DOC_ACCENT, 0.11)}; font-size: 15px; line-height: 1.65">The staging migration is safe to rerun; I added the missing index.</div></div>')
+            f'<div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: {INK3}">{profile_mark(DOC_ACCENT)}<span style="font-weight: 600; color: {INK}">@doc</span></div>'
+            f'<div style="max-width: 76%; padding: 12px 16px; border-radius: {R_SURFACE}px; background: {mix(DOC_ACCENT, 0.11)}; font-size: 16px; line-height: 1.65">The staging migration is safe to rerun; I added the missing index.</div></div>')
 
 
 def d_ask_answered():
-    return f'<div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: {INK}">{profile_mark(AMBER)}Use the staging database</div>'
+    return f'<div style="display: flex; align-items: center; gap: 8px; font-size: 15px; color: {INK}">{profile_mark(AMBER)}Use the staging database</div>'
 
 
 def d_ask_missing():
-    return (f'<div style="display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; border: 1px solid {LINE}; border-radius: 4px">'
-            f'<span style="font-size: 13px; color: {INK3}">Which environment should I target?</span>'
-            f'<span style="font-family: {MONO}; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: {INK3}">∅ expired</span></div>')
+    return (f'<div style="display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; border-radius: {R_SURFACE}px; background: {CARD}">'
+            f'<span style="font-size: 15px; color: {INK3}">Which environment should I target?</span>'
+            f'<span style="font-size: 14px; color: {INK3}">∅ expired</span></div>')
 
 
 def kbd(t):
-    return f'<span style="padding: 1px 5px; border-radius: 4px; background: {HOVER}; border: 0.5px solid {LINE}; font-family: {MONO}; font-size: 11px; font-weight: 500; color: {INK2}">{t}</span>'
+    return f'<span style="min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; border-radius: {R_XS}px; background: #f2f2f2; font-size: 12px; font-weight: 500; color: {INK3}">{t}</span>'
 
 
 def d_send(state="idle", accent=AMBER):
     if state == "busy":
-        return f'<button aria-label="Stop" style="width: 32px; height: 32px; border: 0; border-radius: 4px; background: {INK}; display: inline-flex; align-items: center; justify-content: center"><span style="width: 12px; height: 12px; background: {PANE}; border-radius: 2px"></span></button>'
-    bg, fg = (accent, "#ffffff") if state == "ready" else (LINE, INK3)
-    return f'<button aria-label="Send" style="width: 32px; height: 32px; border: 0; border-radius: 4px; background: {bg}; display: inline-flex; align-items: center; justify-content: center">{ic("up", 14, fg)}</button>'
+        return f'<button aria-label="Stop" style="width: 40px; height: 40px; border: 0; border-radius: 999px; background: {AMBER}; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0"><span style="width: 12px; height: 12px; background: {PANE}; border-radius: 3px"></span></button>'
+    bg, fg = (AMBER, PANE) if state == "ready" else ("#ffffff", INK3)
+    return f'<button aria-label="Send · ⌘↵" title="Send · ⌘↵" style="width: 40px; height: 40px; border: 0; border-radius: 999px; background: {bg}; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">{ic("up", 20, fg)}</button>'
 
 
 def d_composer(text="", state="idle", hint=True, model=True, name="alpi", model_name="sonnet-4", effort=None, reason=None, reason_action=None, dim=False, placeholder=None):
-    shown = placeholder or f"Message {name}…"
-    value = f'<span style="font-size: 13px; line-height: 1.5; color: {INK}">{text}</span>' if text else f'<span style="font-size: 13px; line-height: 1.5; color: {INK3}">{shown}</span>'
-    hints = f'<span style="display: inline-flex; align-items: center; gap: 8px; font-size: 11px; color: {INK3}"><span>{mono("@", 11, INK2)} mention</span><span style="display: inline-flex; gap: 4px; align-items: center">{kbd("⌘")}{kbd("↵")} send</span></span>' if hint else ""
+    shown = placeholder or f"Message {name}"
+    value = f'<span style="font-size: 16px; line-height: 1.5; color: {INK}">{text}</span>' if text else f'<span style="font-size: 16px; line-height: 1.5; color: {INK3}">{shown}</span>'
     tail = f'<span style="flex: none; white-space: pre">{" · " + effort}</span>' if effort else ""
-    label = (f'<span style="display: inline-flex; min-width: 0; max-width: 160px; font-family: {MONO}; font-size: 11px; color: {INK}">'
+    label = (f'<span style="display: inline-flex; min-width: 0; max-width: 160px; font-family: {MONO}; font-size: 13px; color: {INK2}">'
              f'<span style="min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{model_name}</span>{tail}</span>')
-    picker = f'<span style="display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 12px; border-radius: 4px">{ic("sun", 14, INK3)}{label}{ic("chev-d", 14, INK3)}</span>' if model else ""
+    picker = f'<span style="display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px 0 12px; border-radius: 999px; flex-shrink: 0">{label}{ic("chev-d", 16, INK3)}</span>' if model else ""
     fade = "opacity: 0.6;" if dim else ""
     why = ""
     if reason:
         from desktop_boards import button
         act = button(reason_action, "secondary", "sm") if reason_action else ""
-        why = f'<div style="display: flex; align-items: center; gap: 12px; min-height: 28px"><span style="flex: 1; min-width: 0; font-size: 13px; font-weight: 500; color: {INK2}">{reason}</span>{act}</div>'
-    well = f"background: {FIELD}" if dim and not reason else WELL
-    return (f'<div style="display: flex; flex-direction: column; gap: 8px; padding: 16px 16px 12px; border-radius: 4px; {well}">'
-            f'<div style="min-height: 24px; {fade}">{value}</div>{why}'
-            f'<div style="display: flex; align-items: center; gap: 8px; {fade}">{hints}<span style="flex: 1"></span>{iconbtn("clip", 28, 16)}{picker}{d_send(state)}</div></div>')
+        why = f'<div style="display: flex; align-items: center; gap: 12px; min-height: 32px; padding: 0 12px 8px"><span style="flex: 1; min-width: 0; font-size: 14px; font-weight: 500; color: {INK2}">{reason}</span>{act}</div>'
+    pill = (f'<div style="display: flex; align-items: center; gap: 8px; min-height: 56px; padding: 8px; box-sizing: border-box; border-radius: {R_SHEET}px; background: #f2f2f2">'
+            f'<span style="{fade} display: inline-flex">{iconbtn("plus", 40, 20, INK2)}</span><span style="flex: 1; min-width: 0; padding-left: 2px; {fade}">{value}</span><span style="display: inline-flex; align-items: center; gap: 8px; {fade}">{picker}{d_send(state)}</span></div>')
+    return f'<div style="display: flex; flex-direction: column">{why}{pill}</div>' if why else pill
 
 
 def d_mention(rows=None, empty=None):
     people = (("doc", DOC_ACCENT, ""), ("abby", "#c14580", "Abby · labs"), ("builder", BUILDER, "")) if rows is None else rows
-    items = "".join(f'<div role="option" style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 4px; {"background: " + SELECTED + ";" if i == 0 else ""} font-size: 13px; font-weight: 500">{profile_mark(c)}{n}'
-                    + (f'<span style="font-size: 11px; font-weight: 400; color: {INK3}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{h}</span>' if h else "") + '</div>'
+    items = "".join(f'<div role="option" style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: {R_CONTROL}px; {"background: " + SELECTED + ";" if i == 0 else ""} font-size: 15px; font-weight: 500">{profile_mark(c)}{n}'
+                    + (f'<span style="font-size: 12px; font-weight: 400; color: {INK3}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{h}</span>' if h else "") + '</div>'
                     for i, (n, c, h) in enumerate(people))
     if empty:
-        items = f'<div style="padding: 8px 12px; font-size: 13px; color: {INK2}">{empty}</div>'
+        items = f'<div style="padding: 8px 12px; font-size: 15px; color: {INK2}">{empty}</div>'
     w = 260 if empty else 200
-    return f'<div style="width: {w}px; padding: 8px; border-radius: 4px; background: {ELEV}; {SM_FLOAT}">{items}</div>'
+    return f'<div style="width: {w}px; padding: {NEST}px; border-radius: {R_SURFACE}px; background: {ELEV}; {SM_FLOAT}">{items}</div>'
 
 
 def d_jump():
-    return f'<span style="width: 32px; height: 32px; border-radius: 4px; background: {ELEV}; {SM_FLOAT}; display: inline-flex; align-items: center; justify-content: center">{ic("chev-d", 14, INK2)}</span>'
+    return f'<span style="width: 32px; height: 32px; border-radius: {R_CONTROL}px; background: {ELEV}; {SM_FLOAT}; display: inline-flex; align-items: center; justify-content: center">{ic("chev-d", 14, INK2)}</span>'
 
 
 def d_header(kind="profile", w=1032):
-    from brand_boards import app_crease
+    from brand_boards import app_name
     from desktop_boards import wg_mark
-    edge = max(32, (w - 920) // 2)
     if kind == "profile":
-        glyph = identity_glyph("alpi", AMBER, 20)
+        glyph = identity_glyph("alpi", AMBER, 28)
         title = "alpi"
-        meta = f'{mono("sonnet-4", 11, INK2)}{vsep()}{meter("12.4K", "/200K", 0.06)}{vsep()}{meter("$0.42", "/$5.00", 0.08)}'
-        right = f'<span style="display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; font-size: 13px; font-weight: 500; color: {INK2}">Sessions{ic("chev-d", 14, INK2)}</span>{iconbtn("more", 32, 16)}'
+        right = f'<span style="display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 14px; font-size: 14px; font-weight: 500; color: {INK}">{ic("history", 16, INK)}Sessions</span>{iconbtn("more", 32, 16)}'
     else:
-        glyph = wg_mark(AMBER, 20)
+        glyph = wg_mark(AMBER, 28)
         title = "launch-crew"
-        meta = f'<span style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px"><span style="color: {INK3}">hub</span>{profile_mark(AMBER)}{mono("@alpi", 11, INK2)}</span>{vsep()}<span style="font-size: 11px"><span style="color: {INK3}">members</span> {mono("4", 11, INK2)}</span>{vsep()}{meter("$1.20", "/$10.00", 0.12)}'
-        right = f'<span style="display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 12px; font-size: 11px; font-weight: 500; color: {INK}"><span style="width: 9px; height: 9px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #8c8c8c; display: inline-block"></span>Tasks{ic("chev-d", 14, INK2)}</span>{iconbtn("more", 32, 16)}'
-    return (f'<div style="position: relative; display: flex; align-items: flex-start; justify-content: space-between; padding: 30px {edge}px 18px; background: {PANE}; border-bottom: 0.5px solid {LINE}">'
-            f'<div style="display: flex; flex-direction: column; gap: 8px"><div style="display: flex; align-items: center; gap: 12px">{glyph}{app_crease(title, 28, AMBER, PANE, track="-0.018em")}</div>'
-            f'<div style="display: flex; align-items: center; gap: 12px; white-space: nowrap; color: {INK3}">{meta}</div></div><div style="display: flex; align-items: center; gap: 2px; height: 32px; margin-top: -2px">{right}</div>'
-            f'</div>')
+        right = f'<span style="display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 14px; font-size: 14px; font-weight: 500; color: {INK}"><span style="width: 9px; height: 9px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #8c8c8c; display: inline-block"></span>Tasks</span>{iconbtn("more", 32, 16)}'
+    return (f'<div style="position: relative; height: 56px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px 0 18px; background: {PANE}">'
+            f'<span style="display: inline-flex; align-items: center; gap: 10px; height: 40px; padding: 0 10px 0 6px; border-radius: 999px">{glyph}{app_name(title, 20, None, PANE)}{ic("chev-d", 16, INK3)}</span>'
+            f'<div style="display: flex; align-items: center; gap: 4px">{right}</div>'
+            f'<div style="position: absolute; left: 0; right: 0; top: 56px; height: 20px; background: linear-gradient({PANE}, transparent)"></div></div>')
 
 
 def d_skeleton():
     from loading_studies import BREATH, bone
-    return (f'{BREATH}<div style="display: flex; flex-direction: column; gap: 9px">{bone("88%", 13, 2, 0)}{bone("100%", 13, 2, 1)}{bone("62%", 13, 2, 2)}</div>'
-            f'<div style="align-self: flex-end; min-width: 220px; max-width: 70%; padding: 12px 16px; border-radius: 4px; background: {HOVER}">{bone("160px", 13, 2, 3)}</div>')
+    return (f'{BREATH}<div style="display: flex; flex-direction: column; gap: 9px">{bone("88%", 13, 4, 0)}{bone("100%", 13, 4, 1)}{bone("62%", 13, 4, 2)}</div>'
+            f'<div style="align-self: flex-end; min-width: 220px; max-width: 70%; padding: 12px 16px; border-radius: {R_SURFACE}px; background: {HOVER}">{bone("160px", 13, 4, 3)}</div>')
 
 
 TOOL_ICONS = {"read_file": "file", "grep": "search", "shell": "terminal", "web_fetch": "globe", "memory": "chip", "send_message": "link"}
@@ -237,55 +228,55 @@ def d_step(name, summary, dur, state="done", body="", size=11, h=24, open_=None)
     chev = ic("chev-r", 14, INK3).replace("style=" + chr(34), "style=" + chr(34) + ("transform: rotate(90deg); " if expanded else ""), 1)
     head = (f'<div style="display: flex; align-items: center; gap: 8px; height: {h}px; padding: 0 12px">'
             f'{ic(icon, 14, color)}{mono(name, size, DANGER if state == "failed" else INK2)}<span style="margin-left: -4px; display: inline-flex">{chev}</span>'
-            f'<span style="flex: 1; min-width: 0; font-family: {MONO}; font-size: {size}px; color: {INK3}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{summary}</span>{status}</div>')
+            f'<span style="flex: 1; min-width: 0; font-family: {MONO}; font-size: {mono_px(size)}px; color: {INK3}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{summary}</span>{status}</div>')
     return f'<div style="display: flex; flex-direction: column; gap: 4px">{head}{body}</div>'
 
 
 def step_body(lines, size=11):
-    return f'<div style="margin: 4px 12px 4px 34px; padding: 12px; border-radius: 4px; background: {SIDE}; border: 0.5px solid {LINE}; font-family: {MONO}; font-size: {size}px; line-height: 1.65; color: {INK2}">{"<br>".join(lines)}</div>'
+    return f'<div style="margin: 4px 12px 4px 34px; padding: 12px; border-radius: {R_SURFACE}px; background: {CARD}; font-family: {MONO}; font-size: {mono_px(size)}px; line-height: 1.65; color: {INK2}">{"<br>".join(lines)}</div>'
 
 
 def req_btn(text, variant="ghost"):
-    bg, fg = {"primary": (INK, PANE), "secondary": (SELECTED, INK), "ghost": ("transparent", INK2)}[variant]
-    return f'<span style="display: inline-flex; align-items: center; height: 28px; padding: 0 12px; border-radius: 4px; font-size: 11px; font-weight: 500; white-space: nowrap; background: {bg}; color: {fg}">{text}</span>'
+    bg, fg = {"primary": (AMBER, PANE), "secondary": (SELECTED, INK), "ghost": ("transparent", INK2)}[variant]
+    return f'<span style="display: inline-flex; align-items: center; height: 28px; padding: 0 12px; border-radius: {R_CONTROL}px; font-size: 12px; font-weight: 500; white-space: nowrap; background: {bg}; color: {fg}">{text}</span>'
 
 
 def inline_request(who="@alpi", command="rm -rf dist &amp;&amp; npm run build", seconds=42):
-    return (f'<div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; border-radius: 4px; {RING_CTRL}; background: var(--card, #f4f4f4)">'
-            f'<span style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600">{ic("alert", 14, WARNING)}<span style="flex: 1">{who} wants to run a command</span>{mono(f"auto-deny in {seconds}s", 11)}</span>'
-            f'<span style="font-family: {MONO}; font-size: 11px; line-height: 1.65; color: {INK}">{command}</span>'
+    return (f'<div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; border-radius: {R_SURFACE}px; background: var(--card, #f4f4f4)">'
+            f'<span style="display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600">{ic("alert", 14, WARNING)}<span style="flex: 1">{who} wants to run a command</span>{mono(f"auto-deny in {seconds}s", 11)}</span>'
+            f'<span style="font-family: {MONO}; font-size: 12px; line-height: 1.65; color: {INK}">{command}</span>'
             f'<span style="display: flex; flex-wrap: wrap; gap: 8px">{req_btn("Deny")}{req_btn("Allow once", "primary")}{req_btn("Allow this session")}{req_btn("Always allow")}</span></div>')
 
 
 def inline_ask(question="Which lab should I book with?", choices=("Quest · Main St", "Labcorp · 5th Ave"), seconds=88):
-    return (f'<div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; border-radius: 4px; {RING_CTRL}; background: var(--card, #f4f4f4)">'
-            f'<span style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600">{ic("sparkle", 14, BRAND)}<span style="flex: 1">{question}</span>{mono(f"auto-cancel in {seconds}s", 11)}</span>'
+    return (f'<div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; border-radius: {R_SURFACE}px; background: var(--card, #f4f4f4)">'
+            f'<span style="display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600">{ic("sparkle", 14, BRAND)}<span style="flex: 1">{question}</span>{mono(f"auto-cancel in {seconds}s", 11)}</span>'
             f'<span style="display: flex; flex-wrap: wrap; gap: 8px">{"".join(req_btn(c, "secondary") for c in choices)}{req_btn("Type your own…", "ghost")}</span></div>')
 
 
 def reasoning_mark(glyph=14):
-    import folds
-    return folds.fold("shield", DOC_ACCENT, glyph)
+    import marks
+    return marks.shape_mark("bell", DOC_ACCENT, glyph, seed="reasoning")
 
 
 def reasoning_label(text, size):
-    return f'<span style="font-size: {size}px; font-weight: 500; color: color-mix(in srgb, {DOC_ACCENT} 50%, {INK})">{text}</span>'
+    return f'<span style="font-size: {ladder_px(size)}px; font-weight: 500; color: color-mix(in srgb, {DOC_ACCENT} 50%, {INK})">{text}</span>'
 
 
 def d_reasoning_label(text, size):
-    return f'<span style="font-size: {size}px; font-weight: 500; color: {INK3}">{text}</span>'
+    return f'<span style="font-size: {ladder_px(size)}px; font-weight: 500; color: {INK3}">{text}</span>'
 
 
 def thinking(peek="reading the deploy log", size=12, h=22, pad=10, glyph=14, label=None):
     label = label or size + 1
     return (f'<div style="display: flex; align-items: center; gap: 10px; height: {h}px; padding: 0 {pad}px">{reasoning_mark(glyph)}{reasoning_label("Thinking…", label)}'
-            f'<span style="font-size: {label}px; font-style: italic; color: {INK3}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{peek}</span></div>')
+            f'<span style="font-size: {ladder_px(label)}px; font-style: italic; color: {INK3}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{peek}</span></div>')
 
 
 def d_thinking(peek="reading the deploy log", size=11, h=24, pad=12, glyph=14, label=None):
     label = label or 13
     return (f'<div style="display: flex; align-items: center; gap: 8px; height: {h}px; padding: 0 {pad}px">{reasoning_mark(glyph)}{d_reasoning_label("Thinking…", label)}'
-            f'<span style="font-size: {label}px; font-style: italic; color: {INK3}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{peek}</span></div>')
+            f'<span style="font-size: {ladder_px(label)}px; font-style: italic; color: {INK3}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{peek}</span></div>')
 
 
 def thought(open_=False, size=12, h=22, secs="7s", chev=INK3, pad=10, glyph=14, rule=(2, 14, 12), label=None, lines=("The user wants a summary of yesterday’s deploys.", "Read the log, group by job, count exits.", "Two jobs failed; call them out first.")):
@@ -293,7 +284,7 @@ def thought(open_=False, size=12, h=22, secs="7s", chev=INK3, pad=10, glyph=14, 
             f'<span style="margin-left: auto">{_ic("chev-d" if open_ else "chev-r", 12, chev)}</span></div>')
     if not open_:
         return head
-    body = "".join(f'<div style="font-family: {MONO}; font-size: {size}px; line-height: 1.65; color: {INK2}">{t}</div>' for t in lines)
+    body = "".join(f'<div style="font-family: {MONO}; font-size: {mono_px(size)}px; line-height: 1.65; color: {INK2}">{t}</div>' for t in lines)
     return head + f'<div style="display: flex; flex-direction: column; gap: 4px; margin: 4px 0 4px {rule[1]}px; padding-left: {rule[2]}px; border-left: {rule[0]}px solid {LINE}">{body}</div>'
 
 
@@ -303,7 +294,7 @@ def d_thought(open_=False, size=11, h=24, secs="7s", chev=INK3, pad=12, glyph=14
             f'<span style="margin-left: -4px; display: inline-flex">{chev_html}</span></div>')
     if not open_:
         return head
-    body = "".join(f'<div style="font-family: {MONO}; font-size: {size}px; line-height: 1.65; color: {INK2}">{t}</div>' for t in lines)
+    body = "".join(f'<div style="font-family: {MONO}; font-size: {mono_px(size)}px; line-height: 1.65; color: {INK2}">{t}</div>' for t in lines)
     return head + f'<div style="display: flex; flex-direction: column; gap: 8px; margin: 4px 0 4px {rule[1]}px; padding: 4px 12px 4px {rule[2]}px; border-left: {rule[0]}px solid {LINE}">{body}</div>'
 
 
@@ -318,7 +309,7 @@ def desktop_conversation():
 {spec("Chat header · workgroup", d_header("workgroup", 1184), 1184, 0)}
 {row(spec("User message · neutral selected tone, radius 4, faint time then actions flush with the bubble’s right edge, on hover or focus within", d_user("Can you summarize yesterday’s deploy logs and flag anything that failed?"), 580), spec("Peer reply · peer accent 11%, radius 6 14 14 14", d_peer(), 580))}
 {spec("Alpi message · markdown body, actions flush with the left edge then the faint time, on hover or focus within and at rest on the last message, usage in a tooltip on the time", d_assistant("<strong>Deploy summary</strong>: 14 jobs ran; 2 failed.<ul style='margin: 8px 0; padding-left: 22px'><li>" + code_inline("api-migrate") + " timed out after 300s</li><li>" + code_inline("web-build") + " hit a lint error</li></ul>" + d_code_block("bash", "alpi logs api-migrate --tail 50") + d_table() + "Want me to open a fix?"), 1184)}
-{row(spec("Process block · collapsed: the thinking row leads with the profile’s object, tool rows in mono, 24 px rows 2 px apart, in order", process(d_thought(secs="3s"), d_bucket("2 tool calls")), 380), spec("Process block · streaming: the running step and Thinking… (static under reduced motion)", process(d_thought(secs="3s"), d_step("read_file", "deploy.log · first 200 lines", "0.2s"), d_step("web_fetch", "status.example.com", "3s", "running"), d_thinking()), 380), spec("Process block · opened: reasoning in mono, spans between the steps", process(d_thought(True, secs="3s", lines=("The user wants yesterday’s deploys.", "Read the log first.")), d_step("read_file", "deploy.log · first 200 lines", "0.2s"), d_thought(secs="2s"), d_step("grep", "3 matches for exit=1", "0.1s")), 380))}
+{row(spec("Process block · collapsed: the thinking row leads with the profile’s mark, tool rows in mono, 24 px rows 2 px apart, in order", process(d_thought(secs="3s"), d_bucket("2 tool calls")), 380), spec("Process block · streaming: the running step and Thinking… (static under reduced motion)", process(d_thought(secs="3s"), d_step("read_file", "deploy.log · first 200 lines", "0.2s"), d_step("web_fetch", "status.example.com", "3s", "running"), d_thinking()), 380), spec("Process block · opened: reasoning in mono, spans between the steps", process(d_thought(True, secs="3s", lines=("The user wants yesterday’s deploys.", "Read the log first.")), d_step("read_file", "deploy.log · first 200 lines", "0.2s"), d_thought(secs="2s"), d_step("grep", "3 matches for exit=1", "0.1s")), 380))}
 {row(spec("Process block · steps open to arguments and output; failures open themselves", process(d_bucket("+3 previous tool calls", 1), d_step("shell", "npm run lint", "4.1s", "failed", step_body(["$ npm run lint", '<span style="color: #c14545">src/app.ts:14  no-unused-vars</span>', "1 error, 0 warnings"])), d_step("grep", "3 matches for exit=1", "0.1s")), 580), spec("Inline approval · the open chat asks in the flow on a card with an ink-4 ring; one primary action and three ghost alternatives; a question uses the same card", inline_request() + inline_ask(), 580))}
 {spec("Load skeleton · after 450 ms", d_skeleton(), 580)}
 {row(spec("Attachments · composer and message variants", d_attachment("deploy-report.pdf", "1.2 MB") + d_attachment("chart.png", "png · 240 KB", "message"), 380), spec("Produced images · 2-column grid, 4:3", d_images(), 380), spec("Ask user · answered and unanswered", d_ask_answered() + d_ask_missing(), 380))}
@@ -332,24 +323,24 @@ def desktop_conversation():
 
 
 def d_post(name, color, text, seq, side="left", cost="1.2K · $0.01"):
-    radius = "4px"
+    radius = f"{R_SURFACE}px"
     meta_items = [f'<span style="display: inline-flex; align-items: center; gap: 8px">{profile_mark(color)}<span style="font-weight: 600; color: {INK}">{name}</span></span>', mono(f"#{seq}", 11), mono(cost, 11)]
     meta = "".join(meta_items if side == "left" else list(reversed(meta_items)))
     align = "flex-start" if side == "left" else "flex-end"
-    return (f'<div style="display: flex; flex-direction: column; align-items: {align}; gap: 8px"><div style="display: flex; align-items: center; gap: 8px; font-size: 11px; color: {INK3}">{meta}</div>'
-            f'<div style="max-width: 76%; padding: 12px 16px; border-radius: {radius}; background: {mix(color, 0.11)}; font-size: 15px; line-height: 1.65">{text}</div></div>')
+    return (f'<div style="display: flex; flex-direction: column; align-items: {align}; gap: 8px"><div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: {INK3}">{meta}</div>'
+            f'<div style="max-width: 76%; padding: 12px 16px; border-radius: {radius}; background: {mix(color, 0.11)}; font-size: 16px; line-height: 1.65">{text}</div></div>')
 
 
 def d_marker(variant, color, body, side="right"):
     tints = {"task": (mix(color, 0.18), color), "working": (mix(color, 0.14), color), "done": (mix(color, 0.18), color), "blocked": (mix(DANGER_FILL, 0.12), DANGER), "skipped": (mix(WARNING, 0.12), WARNING_TEXT), "skip": (mix(color, 0.11), color)}
     bg, ey = tints[variant]
     icon = {"task": dot(ey), "working": dot(ey, ring=True), "done": ic("check", 11, ey), "blocked": ic("x", 11, ey), "skipped": ic("x", 11, ey), "skip": ic("x", 11, ey)}[variant]
-    radius = "4px"
+    radius = f"{R_SURFACE}px"
     align = "flex-end" if side == "right" else "flex-start"
     eyebrow_color = ey if variant in ("blocked", "skipped") else f"color-mix(in srgb, {ey} 75%, {INK})"
     return (f'<div style="display: flex; flex-direction: column; align-items: {align}"><div style="max-width: 76%; min-width: 320px; padding: 16px; border-radius: {radius}; background: {bg}">'
-            f'<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-family: {MONO}; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: {eyebrow_color}">{icon}{variant.upper()}</div>'
-            f'<div style="font-size: 15px; line-height: 1.5; color: {INK}">{body}</div></div></div>')
+            f'<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-family: {MONO}; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; color: {eyebrow_color}">{icon}{variant.upper()}</div>'
+            f'<div style="font-size: 16px; line-height: 1.5; color: {INK}">{body}</div></div></div>')
 
 
 def d_pipeline():
@@ -380,9 +371,9 @@ def d_pipeline_detail():
 
 
 def d_wg_composer():
-    hint = f'<span style="font-size: 11px; color: {INK3}"><span style="color: {INK3}">→</span> {identity_glyph("alpi", AMBER, 16)} {mono("@alpi", 11, INK2)} formulates as {mono("#task #&lt;slug&gt;", 11, INK2)}</span>'
-    return (f'<div style="display: flex; flex-direction: column; gap: 8px; padding: 16px 16px 12px; border-radius: 4px; {WELL}">'
-            f'<span style="font-size: 13px; color: {INK3}">Send a message — use @&lt;peer&gt; or #task #&lt;slug&gt; to open</span>'
+    hint = f'<span style="font-size: 12px; color: {INK3}"><span style="color: {INK3}">→</span> {identity_glyph("alpi", AMBER, 16)} {mono("@alpi", 11, INK2)} formulates as {mono("#task #&lt;slug&gt;", 11, INK2)}</span>'
+    return (f'<div style="display: flex; flex-direction: column; gap: 8px; padding: 16px 16px 12px; border-radius: {R_SURFACE}px; {WELL}">'
+            f'<span style="font-size: 15px; color: {INK3}">Send a message — use @&lt;peer&gt; or #task #&lt;slug&gt; to open</span>'
             f'<div style="display: flex; align-items: center; gap: 6px">{hint}<span style="flex: 1"></span>{kbd("⌘")}{kbd("↵")}{d_send()}</div></div>')
 
 
@@ -407,18 +398,18 @@ def phone(inner, w=390):
 
 
 def m_stamp(text="2m"):
-    return f'<span style="font-family: {MONO}; font-size: 12px; font-weight: 500; line-height: 1; color: {INK3}">{text}</span>'
+    return f'<span style="font-size: 12px; font-weight: 400; line-height: 1; color: {INK3}">{text}</span>'
 
 
 def m_user(text, accent=AMBER, pane=False):
     return (f'<div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px; padding: 0 16px">'
-            f'<div style="max-width: {76 if pane else 82}%; padding: 12px 16px; border-radius: 4px; background: {SELECTED}; font-size: 16px; line-height: 26.4px">{text}</div>'
-            f'{m_stamp()}</div>')
+            f'<div style="max-width: {76 if pane else 82}%; padding: 10px 16px; box-sizing: border-box; border-radius: {R_SURFACE}px; background: #f2f2f2; font-size: 16px; line-height: 1.6">{text}</div>'
+            f'<span style="padding-right: 6px">{m_stamp()}</span></div>')
 
 
 def m_assistant():
-    code = (f'<div style="margin: 8px 0; border-radius: 4px; border: 0.5px solid {LINE}; background: {HOVER}; overflow: hidden"><div style="padding: 6px 10px; border-bottom: 0.5px solid {LINE}">{mono("bash", 11)}</div>'
-            f'<div style="padding: 12px; font-family: {MONO}; font-size: 14px; line-height: 21px">alpi logs api-migrate</div></div>')
+    code = (f'<div style="margin: 8px 0; border-radius: {R_SURFACE}px; background: {HOVER}; overflow: hidden"><div style="padding: 6px 10px">{mono("bash", 11)}</div>'
+            f'<div style="padding: 12px; font-family: {MONO}; font-size: 15px; line-height: 21px">alpi logs api-migrate</div></div>')
     quote = f'<div style="margin: 6px 0; padding-left: 10px; border-left: 3px solid {INK}; opacity: 0.85">Two jobs failed overnight.</div>'
     lst = "".join(f'<div style="display: flex; gap: 8px"><span>•</span><span>{t}</span></div>' for t in ("api-migrate timed out", "web-build hit a lint error"))
     return (f'<div style="padding: 0 16px; font-size: 16px; line-height: 26.4px; color: {INK}"><div style="font-weight: 600; margin-top: 4px; margin-bottom: 4px">Deploy summary</div>'
@@ -432,7 +423,7 @@ def m_more_button():
 
 def m_agent_text(text, stamp="2m", more=False):
     foot = f'<div style="display: flex; align-items: center; justify-content: space-between">{m_stamp(stamp)}{m_more_button()}</div>' if more else m_stamp(stamp)
-    return f'<div style="padding: 0 16px; display: flex; flex-direction: column; gap: 4px"><div style="font-size: 16px; line-height: 26.4px; color: {INK}">{text}</div>{foot}</div>'
+    return f'<div style="padding: 0 16px; display: flex; flex-direction: column; gap: 4px"><div style="font-size: 16px; line-height: 1.6; color: {INK}">{text}</div>{foot}</div>'
 
 
 def m_reasoning(open_=False, secs="7s"):
@@ -441,8 +432,8 @@ def m_reasoning(open_=False, secs="7s"):
 
 def m_tool(name, args, state="done"):
     color = {"running": BRAND, "done": INK3, "failed": DANGER_FILL}[state]
-    return (f'<div style="display: flex; align-items: center; gap: 8px; height: 20px; padding: 0 16px">{mi(TOOL_ICONS.get(name, "chip"), 12, color)}{mono(name, 12, DANGER if state == "failed" else INK2)}'
-            f'<span style="flex: 1; min-width: 0; font-family: {MONO}; font-size: 12px; color: {DANGER if state == "failed" else INK3}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{args}</span>{mi("chev-r", 12, INK4)}</div>')
+    return (f'<div style="display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 16px">{mi(TOOL_ICONS.get(name, "chip"), 16, color)}<span style="font-family: {MONO}; font-size: 13px; color: {DANGER if state == "failed" else INK2}">{name}</span>'
+            f'<span style="flex: 1; min-width: 0; font-size: 14px; color: {DANGER if state == "failed" else INK3}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{args}</span>{mi("chev-r", 16, INK3)}</div>')
 
 
 def m_process(*rows):
@@ -455,64 +446,62 @@ def m_bucket(text, failed=0, open_=False):
     return f'<div style="display: flex; align-items: center; gap: 8px; height: 20px; padding: 0 16px">{chev}{mono(text, 12)}{fail}</div>'
 
 
-CHIP = "display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border-radius: 4px; background: rgba(20,20,20,0.06); box-sizing: border-box"
+CHIP = "display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border-radius: 999px; background: #ffffff; box-sizing: border-box"
 
 
 def m_model_chip(text="sonnet-4 · medium"):
     model, _, effort = text.partition(" · ")
     tail = f'<span style="flex-shrink: 0; white-space: pre">{" · " + effort}</span>' if effort else ""
-    return (f'<span role="button" aria-label="Model and effort: {text}" style="{CHIP}; min-width: 0">{mi("sparkle", 12, INK3)}<span style="display: inline-flex; min-width: 0; font-size: 14px; color: {INK2}">'
+    return (f'<span role="button" aria-label="Model and effort: {text}" style="{CHIP}; min-width: 0">{mi("sparkle", 12, INK3)}<span style="display: inline-flex; min-width: 0; font-size: 15px; color: {INK2}">'
             f'<span style="min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{model}</span>{tail}</span>{mi("chev-d", 12, INK3)}</span>')
 
 
 def m_mention_chip():
-    return f'<span role="button" aria-label="Mention a peer" style="{CHIP}; flex-shrink: 0"><span style="font-family: {MONO}; font-size: 14px; color: {INK3}">@</span><span style="font-size: 14px; color: {INK2}">mention</span></span>'
+    return f'<span role="button" aria-label="Mention a peer" style="{CHIP}; flex-shrink: 0"><span style="font-family: {MONO}; font-size: 15px; color: {INK3}">@</span><span style="font-size: 15px; color: {INK2}">mention</span></span>'
 
 
 def m_attachment(name, sub, variant="composer"):
-    bg = PANE if variant == "composer" else HOVER
-    border = LINE2 if variant == "composer" else "transparent"
+    bg = SELECTED if variant == "composer" else HOVER
     remove = mi("x", 14, INK3) if variant == "composer" else ""
-    return (f'<div style="display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 4px; background: {bg}; border: 0.5px solid {border}; max-width: 240px">'
-            f'<span style="width: 32px; height: 32px; border-radius: 4px; background: {HOVER}; display: inline-flex; align-items: center; justify-content: center">{mi("copy", 16, INK3)}</span>'
-            f'<span style="display: flex; flex-direction: column"><span style="font-size: 12px">{name}</span>{mono(sub, 11)}</span>{remove}</div>')
+    return (f'<div style="display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: {R_CONTROL}px; background: {bg}; max-width: 240px">'
+            f'<span style="width: 32px; height: 32px; border-radius: {R_CHIP}px; background: {HOVER}; display: inline-flex; align-items: center; justify-content: center">{mi("copy", 16, INK3)}</span>'
+            f'<span style="display: flex; flex-direction: column"><span style="font-size: 14px">{name}</span>{mono(sub, 11)}</span>{remove}</div>')
 
 
-def m_composer(text="", state="idle", workgroup=False, name="alpi", chip="sonnet-4 · medium", accent=AMBER, placeholder="", mention=None, resume=False):
+def m_composer(text="", state="idle", workgroup=False, name="alpi", chip="", accent=AMBER, placeholder="", mention=None, resume=False):
     paused = state in ("offline", "paused")
-    shown = placeholder or {"offline": "Daemon unreachable — sending paused", "paused": "Paused — resume to chat"}.get(state, f"Message @{name}…")
+    shown = placeholder or {"offline": "Daemon unreachable — sending paused", "paused": "Paused — resume to chat"}.get(state, f"Message {name}")
     value = f'<span style="font-size: 16px; line-height: 24px">{text}</span>' if text else f'<span style="font-size: 16px; line-height: 24px; color: {INK2 if paused else INK3}">{shown}</span>'
     dim = (lambda inner: f'<span style="display: inline-flex; min-width: 0; opacity: 0.45">{inner}</span>') if paused else (lambda inner: inner)
-    box = lambda inner, bg: f'<span style="width: 36px; height: 36px; border-radius: 4px; background: {bg}; display: inline-flex; align-items: center; justify-content: center">{inner}</span>'
+    box = lambda inner, bg: f'<span style="width: 40px; height: 40px; border-radius: 999px; background: {bg}; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">{inner}</span>'
     if state == "busy":
-        send = box('<span style="width: 12px; height: 12px; background: #ffffff; border-radius: 2px"></span>', accent)
+        send = box('<span style="width: 12px; height: 12px; background: #ffffff; border-radius: 3px"></span>', AMBER)
     elif state == "ready":
-        send = box(mi("up", 14, "#ffffff"), accent)
+        send = box(mi("up", 20, "#ffffff"), AMBER)
     else:
-        send = box(mi("up", 16, INK3), LINE)
-    clip = "" if workgroup else dim(f'<span style="width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center">{mi("clip", 20, INK3)}</span>')
-    model = "" if workgroup else dim(m_model_chip(chip))
+        send = box(mi("up", 20, INK3), PANE)
+    plus = dim(f'<span role="button" aria-label="Attach" style="width: 40px; height: 40px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">{mi("plus", 20, INK2)}</span>')
+    model = dim(m_model_chip(chip)) if chip and not workgroup else ""
     mention_html = dim(m_mention_chip()) if (workgroup if mention is None else mention) else ""
-    controls = f'<div style="display: flex; align-items: center; gap: 8px">{mention_html}{model}<span style="flex: 1"></span>{clip}{dim(send)}</div>'
-    well = "border: 1px solid transparent; background: var(--field)" if paused else f"border: 1px solid {LINE2}; background: {ELEV}"
     resume_html = f'<div style="display: flex; justify-content: flex-end; padding-top: 8px">{m_button("Resume profile", "secondary", "lg")}</div>' if resume else ""
-    return (f'<div style="padding: 8px 16px; border-top: 0.5px solid {LINE}; background: {PANE}"><div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px 8px; box-sizing: border-box; border-radius: 4px; {well}">'
-            f'{value}{controls}</div>{resume_html}</div>')
+    fade = f'<div style="height: 20px; margin-top: -20px; background: linear-gradient(transparent, {PANE})"></div>'
+    return (f'<div style="position: relative; padding: 0 16px 16px; background: {PANE}">{fade}<div style="display: flex; align-items: center; gap: 8px; min-height: 56px; padding: 8px; box-sizing: border-box; border-radius: {R_SHEET}px; background: #f2f2f2">'
+            f'{plus}{mention_html}<span style="flex: 1; min-width: 0; padding-left: 2px">{value}</span>{model}{dim(send)}</div>{resume_html}</div>')
 
 
 def m_header(kind="profile"):
-    from brand_boards import app_crease
+    from brand_boards import app_name
     from desktop_boards import wg_mark
     glyph = identity_glyph("alpi", AMBER, 20) if kind == "profile" else wg_mark(AMBER, 20)
     title = "alpi" if kind == "profile" else "launch-crew"
     meta = f'{mono("sonnet-4", 11, INK2)} {meter("12.4K", "/200K", 0.06, BRAND, False)}' if kind == "profile" else f'{mono("hub", 11)} {profile_mark(AMBER)} {mono("@alpi · 4 members", 11)}'
-    return (f'<div style="position: relative; display: flex; align-items: flex-start; gap: 10px; padding: 6px 16px 8px; border-bottom: 0.5px solid {LINE}; background: {PANE}">{mi("back", 20, INK2)}'
-            f'<div style="flex: 1; display: flex; flex-direction: column; gap: 1px"><div style="display: flex; align-items: center; gap: 6px">{glyph}{app_crease(title, 28, AMBER, PANE, track="-0.018em")}</div><div style="display: flex; align-items: center; gap: 6px">{meta}</div></div>'
+    return (f'<div style="position: relative; display: flex; align-items: flex-start; gap: 10px; padding: 6px 16px 8px; background: {PANE}">{mi("back", 20, INK2)}'
+            f'<div style="flex: 1; display: flex; flex-direction: column; gap: 1px"><div style="display: flex; align-items: center; gap: 6px">{glyph}{app_name(title, 28, AMBER if kind == "profile" else None, PANE)}</div><div style="display: flex; align-items: center; gap: 6px">{meta}</div></div>'
             f'{mi("clock", 20, INK2)}{mi("more", 20, INK2)}</div>')
 
 
 def m_jump():
-    return f'<span style="display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border-radius: 4px; background: {PANE}; {FLOAT_EDGE}; font-size: 12px; font-weight: 500; color: {INK2}">{mi("chev-d", 14, INK2)}Latest</span>'
+    return f'<span style="display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border-radius: {R_CONTROL}px; background: var(--bg-elev, #ffffff); {FLOAT_EDGE}; font-size: 14px; font-weight: 500; color: {INK2}">{mi("chev-d", 14, INK2)}Latest</span>'
 
 
 def m_empty():
@@ -523,18 +512,18 @@ def m_empty():
 def m_mention_popover(items=(), token="zz"):
     from gen import pill
     rows = "".join(
-        f'<div style="display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 14px; border-top: {"0.5px solid " + LINE if i else "0"}">'
-        f'{profile_mark(c, 16)}<span style="flex: 1; font-family: {MONO}; font-size: 14px; color: {INK}">@{n}</span>{pill("hub", tone="success") if hub else ""}'
-        f'<span style="font-family: {MONO}; font-size: 12px; color: {INK3}">{model}</span></div>' for i, (n, c, hub, model) in enumerate(items))
+        f'<div style="display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 10px; border-radius: {R_CONTROL}px">'
+        f'{profile_mark(c, 16)}<span style="flex: 1; font-family: {MONO}; font-size: 15px; color: {INK}">@{n}</span>{pill("hub", tone="success") if hub else ""}'
+        f'<span style="font-family: {MONO}; font-size: 14px; color: {INK3}">{model}</span></div>' for i, (n, c, hub, model) in enumerate(items))
     if not items:
-        rows = f'<div style="min-height: 44px; padding: 0 16px; display: flex; align-items: center; font-size: 14px; color: {INK3}">No peer matches “{token}”</div>'
-    return f'<div style="margin: 0 16px 8px; border-radius: 4px; background: {PANE}; {FLOAT_EDGE}; overflow: hidden">{rows}</div>'
+        rows = f'<div style="min-height: 44px; padding: 0 16px; display: flex; align-items: center; font-size: 15px; color: {INK3}">No peer matches “{token}”</div>'
+    return f'<div style="margin: 0 16px 8px; padding: {NEST}px; border-radius: {R_SURFACE}px; background: var(--bg-elev, #ffffff); {FLOAT_EDGE}; overflow: hidden">{rows}</div>'
 
 
 def m_failure_row(label, action=""):
-    act = f'<span role="button" style="min-width: 44px; min-height: 44px; padding: 0 10px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; font-weight: 600; font-size: 12px; color: #b73737">{action}</span>' if action else ""
+    act = f'<span role="button" style="min-width: 44px; min-height: 44px; padding: 0 10px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px; color: #b73737">{action}</span>' if action else ""
     return (f'<div style="display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px">{mi("alert", 14, DANGER_FILL)}'
-            f'<span style="flex: 1; font-size: 12px; color: #b73737">{label}</span>{act}</div>')
+            f'<span style="flex: 1; font-size: 14px; color: #b73737">{label}</span>{act}</div>')
 
 
 def m_chat_states():
@@ -551,7 +540,7 @@ def mobile_conversation():
 {h1("Conversation · phone and Fold", "The phone draws the same conversation with touch rules: bubbles at radius 4, chat text at 16, actions behind a long press (with Select text), steps that open into a sheet, and a composer where Return adds a line and the model chip sits beside attach.")}
 {row(spec("Chat header · profile", m_header("profile"), 420, 0), spec("Chat header · workgroup", m_header("workgroup"), 420, 0), spec("Empty thread", m_empty(), 300))}
 {row(spec("User message · neutral selected tone, radius 4, long press for actions", phone(m_user("Can you summarize yesterday’s deploy logs?")), 420, 16), spec("Alpi message · rich text: heading, quote, list, code, routed model", phone(m_assistant()), 420, 16))}
-{row(spec("Process block · the thinking row leads with the profile’s object, tool rows in mono at 12 pt, flush with the answer, in order; tap a step for its sheet", phone(m_process(m_reasoning(secs="3s"), m_tool("read_file", "deploy.log · 200 lines"), m_bucket("2 tool calls", 1), m_reasoning(True, "2s"), thinking("reading the log", 12, 20, 16, 12, label=12))), 420, 16), spec("Attachments · composer and message", m_attachment("deploy-report.pdf", "1.2 MB") + m_attachment("chart.png", "png · 240 KB", "message"), 420))}
+{row(spec("Process block · the thinking row leads with the profile’s mark, tool rows in mono at 12 pt, flush with the answer, in order; tap a step for its sheet", phone(m_process(m_reasoning(secs="3s"), m_tool("read_file", "deploy.log · 200 lines"), m_bucket("2 tool calls", 1), m_reasoning(True, "2s"), thinking("reading the log", 12, 20, 16, 12, label=12))), 420, 16), spec("Attachments · composer and message", m_attachment("deploy-report.pdf", "1.2 MB") + m_attachment("chart.png", "png · 240 KB", "message"), 420))}
 {row(spec("Composer · idle", phone(m_composer()), 420, 0), spec("Composer · ready", phone(m_composer("Open a fix", "ready")), 420, 0))}
 {row(spec("Composer · busy (Stop on the accent)", phone(m_composer("Open a fix", "busy")), 420, 0), spec("Jump to latest · floating, edged in the edge ink", m_jump(), 300))}
 {row(spec("Composer · daemon unreachable (controls dim, the reason stays readable on an edged well)", phone(m_composer(state="offline")), 420, 0), spec("Composer · paused (no Resume here; the banner above is the one place that offers it)", phone(m_composer(state="paused")), 420, 0))}
@@ -562,7 +551,7 @@ def mobile_conversation():
 
 
 def m_post(name, color, text, seq, side="left"):
-    radius = "4px"
+    radius = f"{R_SURFACE}px"
     align = "flex-start" if side == "left" else "flex-end"
     return (f'<div style="display: flex; flex-direction: column; align-items: {align}; gap: 6px; padding: 0 16px"><div style="display: flex; align-items: center; gap: 6px">{profile_mark(color)}{mono(name, 12, INK3, 500)}{mono(f"#{seq}", 12, INK3, 500)}{mono("1.2K · $0.01", 12, INK3, 500)}</div>'
             f'<div style="max-width: 90%; padding: 14px 16px; border-radius: {radius}; background: {mix(color, 0.11)}; font-size: 16px; line-height: 26.4px">{text}</div></div>')
@@ -573,9 +562,9 @@ def m_marker(variant, color, body, side="left"):
     pct = {"task": 0.10, "working": 0.10, "done": 0.10, "skip": 0.12}[variant]
     skip = f'<span style="position: relative; width: 10px; height: 10px; box-sizing: border-box; border-radius: 999px; border: 1.5px solid {base}; overflow: hidden; display: inline-block"><span style="position: absolute; width: 14px; height: 1.5px; top: 3.5px; left: -2.5px; transform: rotate(45deg); background: {base}"></span></span>'
     icon = {"task": dot(base, 6), "working": dot(base, 6), "done": mi("check", 12, base), "skip": skip}[variant]
-    return (f'<div style="display: flex; flex-direction: column; align-items: flex-start; padding: 0 16px"><div style="max-width: 90%; padding: 14px 16px; border-radius: 4px; background: {mix(base, pct)}">'
-            f'<div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-family: {MONO}; font-size: 12px; font-weight: 600; letter-spacing: 0.1em; color: {base}"><span style="width: 14px; display: inline-flex; justify-content: center">{icon}</span>{variant.upper()}</div>'
-            f'<div style="font-size: 14px; line-height: 21px">{body}</div></div></div>')
+    return (f'<div style="display: flex; flex-direction: column; align-items: flex-start; padding: 0 16px"><div style="max-width: 90%; padding: 14px 16px; border-radius: {R_SURFACE}px; background: {mix(base, pct)}">'
+            f'<div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-family: {MONO}; font-size: 14px; font-weight: 600; letter-spacing: 0.1em; color: {base}"><span style="width: 14px; display: inline-flex; justify-content: center">{icon}</span>{variant.upper()}</div>'
+            f'<div style="font-size: 15px; line-height: 21px">{body}</div></div></div>')
 
 
 def m_pipeline():

@@ -28,18 +28,19 @@ const composite = (ink, alpha, base) => {
 };
 
 describe("scales mirror the shared module", () => {
-  it("declares the spacing scale 4/8/12/16/24/32", () => {
+  it("declares the spacing scale 4/8/12/16/24/32/48", () => {
     for (const [name, value] of Object.entries(shared.spaceScale)) expect(one(`sp-${name}`)).toBe(`${value}px`);
-    expect(Object.values(shared.spaceScale)).toEqual([4, 8, 12, 16, 24, 32]);
+    expect(Object.values(shared.spaceScale)).toEqual([4, 8, 12, 16, 24, 32, 48]);
   });
 
-  it("declares the control heights 24/28/32/40", () => {
+  it("declares the control heights 32/40/48", () => {
     for (const [name, value] of Object.entries(shared.controlHeight)) expect(one(`ctl-${name}`)).toBe(`${value}px`);
-    expect(Object.values(shared.controlHeight)).toEqual([24, 28, 32, 40]);
+    expect(Object.values(shared.controlHeight)).toEqual([32, 40, 48]);
+    expect(shared.controlRole).toEqual({ compact: 32, control: 40, touch: 48 });
   });
 
-  it("declares the type ladder 11/13/15/18/22/28 as --text-*", () => {
-    expect(Object.values(shared.typeLadder)).toEqual([11, 13, 15, 18, 22, 28]);
+  it("declares the type ladder 12/14/15/16/20/28 as --text-*", () => {
+    expect(Object.values(shared.typeLadder)).toEqual([12, 14, 15, 16, 20, 28]);
     for (const [name, value] of Object.entries(shared.typeLadder)) expect(one(`text-${name}`)).toBe(`${value}px`);
   });
 
@@ -49,11 +50,13 @@ describe("scales mirror the shared module", () => {
     expect(one("eyebrow-tracking")).toBe(`${shared.eyebrow.tracking}em`.replace("0.", "."));
   });
 
-  it("declares dots 6/8 and the constant 1.33 icon stroke", () => {
+  it("declares dots 6/8, icons 16/20/24 and the constant 1.5 icon stroke", () => {
     for (const [name, value] of Object.entries(shared.dotScale)) expect(one(`dot-${name}`)).toBe(`${value}px`);
     expect(one("icon-stroke")).toBe(String(shared.iconStrokeRendered));
+    expect(shared.iconStrokeRendered).toBe(1.5);
     expect(one("icon-sm")).toBe(`${shared.iconSizesAllowed.desktop[0]}px`);
     expect(one("icon-md")).toBe(`${shared.iconSizesAllowed.desktop[1]}px`);
+    expect(one("icon-lg")).toBe(`${shared.iconSizesAllowed.desktop[2]}px`);
   });
 });
 
@@ -86,8 +89,10 @@ describe("motion and focus mirror the shared module", () => {
 });
 
 describe("edge tiers", () => {
-  it("lifts dark elev to #202020 in both clients' source", () => {
-    expect(shared.palettes.dark.bgElev).toBe("#202020");
+  it("lifts dark elev to the #2c2c2c raised surface over the #1a1a1a pane", () => {
+    expect(shared.palettes.dark.bgElev).toBe("#2c2c2c");
+    expect(shared.palettes.dark.raised).toBe("#2c2c2c");
+    expect(shared.palettes.dark.bgPane).toBe("#1a1a1a");
     expect(shared.palettes.light.bgElev).toBe("#ffffff");
   });
 
@@ -97,24 +102,36 @@ describe("edge tiers", () => {
     expect(contrast(dark.edge, dark.bgElev)).toBeGreaterThanOrEqual(3);
     expect(contrast(light.ink4, light.bgElev)).toBeGreaterThanOrEqual(2);
     const darkLine2 = composite("#ededed", 0.16, dark.bgElev);
-    expect(darkLine2).toBe("#414141");
+    expect(darkLine2).toBe("#4b4b4b");
     expect(contrast(darkLine2, dark.bgElev)).toBeGreaterThanOrEqual(1.5);
     expect(contrast(light.ink4, light.bgElev)).toBeLessThan(contrast(light.edge, light.bgElev));
   });
 
-  it("sets --ring-ctrl to the 1 px ink-4 ring", () => {
-    expect(one("ring-ctrl")).toBe("0 0 0 1px var(--ink-4)");
+  it("retires the control ring and the well edge: controls and wells are fills", () => {
+    expect(declared("ring-ctrl")).toEqual([]);
+    expect(declared("well-edge")).toEqual([]);
+    expect(declared("well-ring")).toEqual([]);
   });
 });
 
 describe("surface ladder", () => {
-  it("lifts the light card to 1.10:1 over white and the field to 1.09:1 inside it", () => {
+  it("draws the four surfaces: side, pane, fill and raised, the same on both clients", () => {
     const { light, dark } = shared.palettes;
-    expect(light.card).toBe("#f4f4f4");
-    expect(Number(contrast(light.card, light.bgPane).toFixed(2))).toBeGreaterThanOrEqual(1.1);
-    expect(Number(contrast(light.field, light.card).toFixed(2))).toBeGreaterThanOrEqual(1.07);
-    expect(luminance(dark.field)).toBeGreaterThan(luminance(dark.card));
-    expect(dark.field).toBe(composite("#ededed", 0.04, dark.card));
+    expect(shared.surfaces.light).toEqual({ side: "#f6f6f6", pane: "#ffffff", fill: "#f2f2f2", raised: "#ffffff" });
+    expect(shared.surfaces.dark).toEqual({ side: "#121212", pane: "#1a1a1a", fill: "#262626", raised: "#2c2c2c" });
+    for (const p of [light, dark]) {
+      expect(p.card).toBe(p.fill);
+      expect(p.field).toBe(p.fill);
+      expect(p.bgInput).toBe(p.fill);
+      expect(p.bg).toBe(p.bgPane);
+    }
+    expect(Number(contrast(light.fill, light.bgPane).toFixed(2))).toBeGreaterThanOrEqual(1.1);
+  });
+
+  it("splits the dark sidebar from the content, and climbs side, pane, fill, raised", () => {
+    const { dark } = shared.palettes;
+    const steps = [dark.bgSide, dark.bgPane, dark.fill, dark.raised].map(luminance);
+    for (let i = 1; i < steps.length; i++) expect(steps[i]).toBeGreaterThan(steps[i - 1]);
   });
 
   it("writes the direction per mode and the palettes obey it", () => {

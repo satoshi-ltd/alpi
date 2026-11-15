@@ -95,8 +95,8 @@ describe("paneAnimation", () => {
 });
 
 describe("chrome targets", () => {
-  it("draws chrome buttons at 36 and pads them to the 44 pt target", () => {
-    expect(CHROME_BTN).toBe(36);
+  it("draws chrome buttons as 44 pt circles, the touch target itself", () => {
+    expect(CHROME_BTN).toBe(44);
     expect(CHROME_BTN + tapSlop(CHROME_BTN) * 2).toBe(44);
   });
 });

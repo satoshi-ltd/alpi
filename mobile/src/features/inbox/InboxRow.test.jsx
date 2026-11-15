@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react';
 
 afterEach(cleanup);
 
@@ -73,11 +73,20 @@ vi.mock('../../theme/ThemeContext', async () => {
 
 vi.mock('../../components/Dot', () => ({ Dot: () => React.createElement('span', { 'data-dot': 'true' }) }));
 vi.mock('../../components/Glyph', () => ({
-  Glyph: ({ kind, fold, needsProvider, working, paused, offline }) =>
+  Glyph: ({ kind, shape, active, state, needsProvider, working, paused, offline, rowState, unread, phase, phaseSlug, workgroup, ...rest }) =>
     React.createElement('span', {
       'data-glyph': kind,
+      'data-size': rest.size ?? '',
+      'data-active': String(!!active),
+      'data-mark-state': state ?? '',
+      'data-phase-slug': phaseSlug ?? '',
+      'data-workgroup': workgroup?.id ?? '',
+      'data-accents': JSON.stringify(rest.memberAccents ?? null),
+      'data-row-state': rowState ?? '',
+      'data-unread': String(!!unread),
+      'data-phase': phase ?? '',
       'data-offline': String(!!offline),
-      'data-fold': fold ?? '',
+      'data-shape': shape ?? '',
       'data-needs-provider': String(!!needsProvider),
       'data-working': String(!!working),
       'data-paused': String(!!paused),
@@ -110,8 +119,12 @@ vi.mock('../../components/ActionSheet', () => ({
 
 import { mobile, radii, space } from '../../theme/tokens';
 import { PaneContext } from '../../nav/PaneContext';
-import { ALPACA_ROW_SCALE, FALLBACK_ACCENT, FOLD_SIZES } from '../../../../common/folds.mjs';
-import { GLYPH_SLOT, InboxRow } from './InboxRow';
+import { FALLBACK_ACCENT } from '../../../../common/shapes.mjs';
+import { MARK_SIZES } from '../../../../common/agentMarks.mjs';
+import { GLYPH_SLOT, InboxRow, ROW_GUTTER } from './InboxRow';
+
+const SELECTED = '#eee';
+import { _resetSessionMarksForTests, sessionMarkKey, useSessionMark } from '../../lib/sessionMark';
 import { RowContextSheet } from './RowContextSheet';
 
 const WORKGROUP = {
@@ -181,10 +194,10 @@ describe('InboxRow name line', () => {
   });
 });
 
-describe('InboxRow profile fold', () => {
-  it('hands the profile fold to the glyph', () => {
-    const { container } = renderRow({ item: { ...PROFILE, fold: 'shield' } });
-    expect(container.querySelector('[data-glyph]').getAttribute('data-fold')).toBe('shield');
+describe('InboxRow profile shape', () => {
+  it('hands the profile shape to the glyph', () => {
+    const { container } = renderRow({ item: { ...PROFILE, shape: 'bell' } });
+    expect(container.querySelector('[data-glyph]').getAttribute('data-shape')).toBe('bell');
   });
 
   it('drops the stale working state of a row whose daemon is away', () => {
@@ -194,20 +207,48 @@ describe('InboxRow profile fold', () => {
   });
 
   it('unfolds the glyph while the daemon is away', () => {
-    const { container } = renderRow({ item: { ...PROFILE, fold: 'shield' }, offline: true });
+    const { container } = renderRow({ item: { ...PROFILE, shape: 'bell' }, offline: true });
     expect(container.querySelector('[data-glyph]').getAttribute('data-offline')).toBe('true');
   });
 
-  it('hands over no fold for a profile that never chose one', () => {
+  it('hands over no shape for a profile that never chose one', () => {
     const { container } = renderRow({ item: PROFILE });
-    expect(container.querySelector('[data-glyph]').getAttribute('data-fold')).toBe('');
+    expect(container.querySelector('[data-glyph]').getAttribute('data-shape')).toBe('');
   });
 
-  it('keeps the needs-a-model outline with the fold', () => {
-    const { container } = renderRow({ item: { ...PROFILE, fold: 'shield', needsProvider: true } });
+  it('keeps the needs-a-model state with the shape', () => {
+    const { container } = renderRow({ item: { ...PROFILE, shape: 'bell', needsProvider: true } });
     const glyph = container.querySelector('[data-glyph]');
-    expect(glyph.getAttribute('data-fold')).toBe('shield');
+    expect(glyph.getAttribute('data-shape')).toBe('bell');
     expect(glyph.getAttribute('data-needs-provider')).toBe('true');
+  });
+});
+
+describe('InboxRow motion and the open chat', () => {
+  afterEach(() => _resetSessionMarksForTests());
+
+  it('animates only the selected row', () => {
+    const glyph = (props) => {
+      const { container } = sidebarRow(props);
+      const out = container.querySelector('[data-glyph]').getAttribute('data-active');
+      cleanup();
+      return out;
+    };
+    expect(glyph({ item: { ...PROFILE, activity: { state: 'working' } }, showState: true })).toBe('false');
+    expect(glyph({ item: { ...PROFILE, activity: { state: 'working' } }, showState: true, selected: true })).toBe('true');
+  });
+
+  it('shows the open chat state on the selected row only', () => {
+    const chat = renderHook(() => useSessionMark({ key: sessionMarkKey(PROFILE.id), working: true }));
+    const selected = sidebarRow({ item: PROFILE, selected: true });
+    expect(selected.container.querySelector('[data-glyph]').getAttribute('data-mark-state')).toBe('working');
+    cleanup();
+    const other = sidebarRow({ item: PROFILE });
+    expect(other.container.querySelector('[data-glyph]').getAttribute('data-mark-state')).toBe('');
+    cleanup();
+    const away = sidebarRow({ item: PROFILE, selected: true, offline: true });
+    expect(away.container.querySelector('[data-glyph]').getAttribute('data-mark-state')).toBe('');
+    chat.unmount();
   });
 });
 
@@ -240,6 +281,22 @@ describe('InboxRow working state', () => {
     expect(container.querySelector('[data-glyph]').getAttribute('data-working')).toBe('true');
   });
 
+  it('hands the run progress, the current phase and the workgroup to the honeycomb, never member colours', () => {
+    const raw = { id: 'alpha', pipeline_status: 'blocked', phase_map: { translate: { owner: '@Lingo' } } };
+    const item = { ...WORKGROUP, raw, memberAccents: { lingo: '#e2558a' }, activity: { state: 'working', phases: '2/4', phase: 'translate' } };
+    const glyph = renderRow({ item }).container.querySelector('[data-glyph]');
+    expect(glyph.getAttribute('data-phase')).toBe('2/4');
+    expect(glyph.getAttribute('data-phase-slug')).toBe('translate');
+    expect(glyph.getAttribute('data-workgroup')).toBe('alpha');
+    expect(JSON.parse(glyph.getAttribute('data-accents'))).toBeNull();
+  });
+
+  it('hands the row state and unread flag to a profile mark', () => {
+    const glyph = renderRow({ item: { ...PROFILE, unread: true, activity: { state: 'needs-you' } } }).container.querySelector('[data-glyph]');
+    expect(glyph.getAttribute('data-row-state')).toBe('needs-you');
+    expect(glyph.getAttribute('data-unread')).toBe('true');
+  });
+
   it('keeps an idle workgroup glyph still and hands the paused flag to it', () => {
     const idle = renderRow({ item: WORKGROUP }).container.querySelector('[data-glyph]');
     expect(idle.getAttribute('data-working')).toBe('false');
@@ -262,37 +319,39 @@ describe('InboxRow sidebar variant', () => {
     expect(container.textContent).not.toContain('status?');
   });
 
-  it('insets an idle row with the 4 pt sheet corner', () => {
+  it('insets an idle fold row inside the 12 pt gutter at the control corner', () => {
     const { container } = sidebarRow({ item: WORKGROUP });
     const style = styleOf(pressable(container));
-    expect(style.borderRadius).toBe(radii.xs);
+    expect(style.borderRadius).toBe(radii.control);
     expect(style.marginHorizontal).toBe(space.s5);
     expect(style.minHeight).toBe(mobile.tap);
   });
 
-  it('draws the selected row as the pane\'s own sheet, square and edge to edge', () => {
+  it('draws the chosen fold row as the neutral selected fill inside the gutter, rounded, never edge to edge', () => {
     const { container } = sidebarRow({ item: WORKGROUP, selected: true });
     const style = styleOf(pressable(container));
-    expect(style.backgroundColor).toBe('#00012');
-    expect(style.marginHorizontal).toBe(0);
-    expect(style.borderRadius).toBe(0);
+    expect(style.backgroundColor).toBe(SELECTED);
+    expect(style.marginHorizontal).toBe(space.s5);
+    expect(style.borderRadius).toBe(radii.control);
   });
 
-  it('keeps the phone row two-line, full-bleed and square', () => {
+  it('keeps the phone row two-line and presses it with the selected fill inside an 8 pt gutter, text still 16 in', () => {
     const { container } = renderRow({ item: WORKGROUP });
     const style = styleOf(pressable(container));
     expect(container.textContent).toContain('status?');
-    expect(style.borderRadius).toBeUndefined();
-    expect(style.marginHorizontal).toBeUndefined();
+    expect(style.borderRadius).toBe(radii.control);
+    expect(style.marginHorizontal).toBe(ROW_GUTTER);
+    expect(ROW_GUTTER).toBe(8);
+    expect(style.marginHorizontal + style.paddingHorizontal).toBe(space.s7);
     expect(style.minHeight).toBe(64);
+    expect(style.minHeight).toBeGreaterThanOrEqual(mobile.tap);
   });
 });
 
 describe('InboxRow selection and muting', () => {
-  it('draws a 3 pt accent bar on the leading edge of the selected row and reports it as selected', () => {
+  it('marks the chosen row with no accent bar and reports it as selected', () => {
     const { container } = sidebarRow({ item: WORKGROUP, selected: true });
-    const bar = container.querySelector('[testid="selected-bar"]');
-    expect(styleOf(bar)).toMatchObject({ position: 'absolute', left: 0, width: 3, backgroundColor: FALLBACK_ACCENT });
+    expect(container.querySelector('[testid="selected-bar"]')).toBeNull();
     expect(pressable(container).getAttribute('aria-selected')).toBe('true');
   });
 
@@ -359,22 +418,23 @@ describe('InboxRow unread mark', () => {
   it('anchors unread at both ends — name weight on the left, timestamp on the right', () => {
     renderRow({ item: { ...WORKGROUP, unread: true } });
     expect(styleOf(screen.getByText('alpha')).fontFamily).toBe('Geist_700Bold');
-    expect(styleOf(screen.getByText('3m')).fontFamily).toBe('GeistMono_600SemiBold');
+    expect(styleOf(screen.getByText('3m')).fontFamily).toBe('Geist_600SemiBold');
     expect(styleOf(screen.getByText('3m')).color).toBe('#000');
   });
 
   it('rests the timestamp on a read row', () => {
     renderRow({ item: WORKGROUP });
-    expect(styleOf(screen.getByText('3m')).fontFamily).toBe('GeistMono_500Medium');
+    expect(styleOf(screen.getByText('3m')).fontFamily).toBe('Geist_500Medium');
     expect(styleOf(screen.getByText('3m')).color).toBe('#666');
   });
 
-  it('holds the preview at one ink either way — unread no longer tints it', () => {
+  it('holds the preview at one ink2 line at 14 pt either way — unread no longer tints it', () => {
     renderRow({ item: WORKGROUP });
-    expect(styleOf(screen.getByText('status?')).color).toBe('#666');
+    expect(styleOf(screen.getByText('status?')).color).toBe('#333');
+    expect(styleOf(screen.getByText('status?')).fontSize).toBe(14);
     cleanup();
     renderRow({ item: { ...WORKGROUP, unread: true } });
-    expect(styleOf(screen.getByText('status?')).color).toBe('#666');
+    expect(styleOf(screen.getByText('status?')).color).toBe('#333');
   });
 
   it('announces unread now that no dot carries the label', () => {
@@ -587,9 +647,10 @@ describe('InboxRow press contract', () => {
   });
 });
 
-describe('InboxRow alpaca on whole pixels', () => {
-  const ALPACA = { ...PROFILE, fold: 'alpaca' };
-  const drawn = FOLD_SIZES.row * ALPACA_ROW_SCALE;
+describe('InboxRow Twin on whole pixels', () => {
+  const TWIN = { ...PROFILE, shape: 'twin' };
+  const drawn = MARK_SIZES.list;
+  const sidebarDrawn = MARK_SIZES.row;
 
   function geometry(container) {
     const row = styleOf(pressable(container));
@@ -601,30 +662,67 @@ describe('InboxRow alpaca on whole pixels', () => {
     return { slot, height, lines };
   }
 
-  it('draws the alpaca at 20 pt in a 16 pt glyph', () => {
-    expect(ALPACA_ROW_SCALE).toBe(1.25);
-    expect(drawn).toBe(20);
+  it('draws the phone row mark at the 40 pt list size and the sidebar row mark at the 24 pt row size', () => {
+    expect(drawn).toBe(40);
+    expect(sidebarDrawn).toBe(24);
+    expect(Number(renderRow({ item: TWIN }).container.querySelector('[data-glyph]').getAttribute('data-size'))).toBe(40);
+    cleanup();
+    expect(Number(sidebarRow({ item: TWIN }).container.querySelector('[data-glyph]').getAttribute('data-size'))).toBe(24);
   });
 
   it('centres it on whole x in the glyph column of both rows', () => {
-    for (const container of [renderRow({ item: ALPACA }).container, sidebarRow({ item: ALPACA }).container]) {
+    for (const [container, mark] of [[renderRow({ item: TWIN }).container, drawn], [sidebarRow({ item: TWIN }).container, sidebarDrawn]]) {
       const { slot } = geometry(container);
-      expect(slot.width).toBe(GLYPH_SLOT);
-      expect(Number.isInteger((slot.width - FOLD_SIZES.row) / 2 - (drawn - FOLD_SIZES.row) / 2)).toBe(true);
+      expect(slot.width).toBe(mark);
+      expect(Number.isInteger((slot.width - mark) / 2)).toBe(true);
     }
+    expect(GLYPH_SLOT).toBe(drawn);
   });
 
-  it('centres it on whole y: the phone row and the sidebar row have whole heights', () => {
-    for (const container of [renderRow({ item: ALPACA }).container, sidebarRow({ item: ALPACA }).container]) {
+  it('centres it on whole y: the phone row is 64 pt and both rows have whole heights', () => {
+    for (const [container, mark] of [[renderRow({ item: TWIN }).container, drawn], [sidebarRow({ item: TWIN }).container, sidebarDrawn]]) {
       const { height, lines } = geometry(container);
       for (const line of lines) expect(Number.isInteger(line.lineHeight)).toBe(true);
       expect(Number.isInteger(height)).toBe(true);
-      expect(Number.isInteger((height - FOLD_SIZES.row) / 2 - (drawn - FOLD_SIZES.row) / 2)).toBe(true);
+      expect(Number.isInteger((height - mark) / 2)).toBe(true);
     }
+    expect(geometry(renderRow({ item: TWIN }).container).height).toBe(64);
   });
 
   it('keeps the sidebar row at the 44 pt tap height', () => {
-    const { height } = geometry(sidebarRow({ item: ALPACA }).container);
+    const { height } = geometry(sidebarRow({ item: TWIN }).container);
     expect(height).toBe(mobile.tap);
+  });
+});
+
+describe('InboxRow as a pinned tile', () => {
+  it('stacks the 48 pt mark over the name in the name face, with no preview or timestamp', () => {
+    const { container } = renderRow({ item: { ...PROFILE, accent: '#3899e2', ts: '4m' }, tile: true });
+    expect(container.querySelector('[data-glyph]').getAttribute('data-size')).toBe('48');
+    const name = styleOf(screen.getByText('agora'));
+    expect(name.fontFamily).toBe('BricolageGrotesque_800ExtraBold');
+    expect(name.fontSize).toBe(14);
+    expect(screen.queryByText('ready')).toBeNull();
+    expect(screen.queryByText('4m')).toBeNull();
+    const tile = styleOf(pressable(container));
+    expect(tile.alignItems).toBe('center');
+    expect(tile.width).toBeUndefined();
+    expect(tile.alignSelf).toBe('stretch');
+  });
+
+  it('selects with the neutral fill only and keeps the row a labelled button', () => {
+    const { container } = renderRow({ item: PROFILE, tile: true, selected: true });
+    const tile = pressable(container);
+    expect(styleOf(tile).backgroundColor).toBe('#eee');
+    expect(styleOf(tile).borderWidth).toBeUndefined();
+    expect(tile.getAttribute('aria-label') ?? tile.getAttribute('accessibilityLabel')).toContain('agora');
+  });
+
+  it('puts a warning pip on a tile that needs you', () => {
+    const { container } = renderRow({ item: { ...PROFILE, activity: { state: 'needs-you' } }, tile: true });
+    const pip = container.querySelector('[testid="tile-pip"]') ?? container.querySelector('[data-testid="tile-pip"]');
+    expect(pip).toBeTruthy();
+    expect(pip.parentElement).not.toBe(pressable(container));
+    expect(pip.parentElement.parentElement).toBe(pressable(container));
   });
 });

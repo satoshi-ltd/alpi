@@ -3,18 +3,18 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const read = (file) => readFileSync(join(import.meta.dirname, "..", file), "utf8");
-const rule = (css, selector) => css.match(new RegExp(`(?:^|\\n)${selector.replace(".", "\\.")}\\s*\\{([^{}]*)\\}`))[1];
+const rule = (css, selector) => css.match(new RegExp(`(?:^|\\n)${selector.replace(/[.()[\]"=:,>*]/g, "\\$&")}\\s*\\{([^{}]*)\\}`))[1];
 
-const OVERLAYS = [
+const FLOATS = [
   ["features/VersionButton.module.css", ".popover"],
   ["features/settings/Settings.module.css", ".popover"],
-  ["features/settings/Usage.module.css", ".tip"],
   ["primitives/Composer.module.css", ".mentionPopover"],
   ["primitives/AppearancePicker.module.css", ".popover"],
-  ["primitives/SearchBar.module.css", ".bar"],
   ["primitives/ContextMenu.module.css", ".root"],
   ["primitives/Dropdown.module.css", ".menu"],
   ["primitives/ModelPicker.module.css", ".modelPickerPop"],
+  ["tray/TrayApp.module.css", ".pop"],
+  ["features/settings/Usage.module.css", ".tip"],
 ];
 
 describe("paper surfaces", () => {
@@ -25,12 +25,12 @@ describe("paper surfaces", () => {
     for (const value of values) expect(value).toMatch(/^0 0 0 \.5px var\(--line(-2)?\)$/);
   });
 
-  it.each(OVERLAYS)("squares %s %s to the 4 px sheet corner", (file, selector) => {
-    expect(rule(read(file), selector)).toMatch(/border-radius:\s*var\(--r-xs\)/);
+  it.each(FLOATS)("rounds %s %s at the surface radius", (file, selector) => {
+    expect(rule(read(file), selector)).toMatch(/border-radius:\s*var\(--r-surface\)/);
   });
 
-  it("squares the shared Popover primitive behind every header menu and picker", () => {
-    expect(read("primitives/Popover.jsx")).toMatch(/borderRadius: "var\(--r-xs\)"/);
+  it("rounds the shared Popover primitive behind every header menu and picker at the surface radius", () => {
+    expect(read("primitives/Popover.jsx")).toMatch(/borderRadius: "var\(--r-surface\)"/);
   });
 
   it("draws the error card as a sheet with no ring", () => {
@@ -43,8 +43,8 @@ describe("paper surfaces", () => {
 describe("paper buttons", () => {
   const css = read("primitives/Button.module.css");
 
-  it("cuts every button with the 4 px sheet corner", () => {
-    expect(rule(css, ".button")).toMatch(/border-radius:\s*var\(--r-xs\)/);
+  it("cuts every button as a pill", () => {
+    expect(rule(css, ".button")).toMatch(/border-radius:\s*var\(--r-pill\)/);
   });
 
   it("presses by tone, never by moving", () => {
@@ -52,24 +52,29 @@ describe("paper buttons", () => {
     expect(rule(css, ".button")).not.toMatch(/transform/);
   });
 
-  it("darkens a pressed primary or danger button with a solid tone", () => {
-    expect(css).toMatch(/\.primary:not\(:disabled\):active\s*\{\s*background:\s*color-mix\(in srgb, var\(--ink\) 85%, var\(--bg-pane\)\)/);
+  it("fills the primary with alpi's ink and steps it toward the pane on hover and press", () => {
+    expect(rule(css, ".primary")).toMatch(/background:\s*var\(--accent\)/);
+    expect(rule(css, ".primary")).toMatch(/color:\s*var\(--bg-pane\)/);
+    expect(css).toMatch(/\.primary:not\(:disabled\):hover\s*\{\s*background:\s*var\(--accent-hover\)/);
+    expect(css).toMatch(/\.primary:not\(:disabled\):active\s*\{\s*background:\s*var\(--accent-pressed\)/);
     expect(css).toMatch(/\.danger:not\(:disabled\):active\s*\{\s*background:\s*color-mix\(in srgb, var\(--c-danger\) \d+%, black\)/);
   });
 
-  it("squares the icon buttons, action links and error buttons outside the primitive", () => {
+  it("rounds the icon buttons, action links and error buttons outside the primitive as pills", () => {
     const ds = read("styles/design-system.css");
     for (const selector of [".ds-iconbtn, .iconbtn", ".ds-alink, .alink"]) {
-      const body = ds.match(new RegExp(`${selector.replace(/[.]/g, "\\.")}\\s*\\{([^{}]*)\\}`))[1];
-      expect(body).toMatch(/border-radius:\s*var\(--r-xs\)/);
+      expect(rule(ds, selector)).toMatch(/border-radius:\s*var\(--r-pill\)/);
     }
     expect(ds).not.toMatch(/(iconbtn|alink):active[^{]*\{[^}]*transform/);
-    expect(read("primitives/ErrorBoundary.module.css")).toMatch(/\.primary,\n\.secondary \{[^}]*border-radius:\s*var\(--r-xs\)/);
+    expect(read("primitives/ErrorBoundary.module.css")).toMatch(/\.primary,\n\.secondary \{[^}]*border-radius:\s*var\(--r-pill\)/);
   });
 
-  it("gives the secondary button a solid step that reads without a border", () => {
-    expect(rule(css, ".secondary")).toMatch(/background:\s*var\(--selected\)/);
-    expect(css).toMatch(/\.secondary:not\(:disabled\):hover\s*\{\s*background:\s*var\(--line-2\)/);
+  it("lays the secondary on the fill and steps it with the hover and pressed state fills, without a border", () => {
+    expect(rule(css, ".secondary")).toMatch(/background:\s*var\(--fill\)/);
+    expect(css).toMatch(/\.secondary:not\(:disabled\):hover\s*\{\s*box-shadow:\s*var\(--hover-wash\)/);
+    expect(css).toMatch(/\.secondary:not\(:disabled\):active\s*\{\s*box-shadow:\s*var\(--pressed-wash\)/);
+    expect(css).toMatch(/\.ghost:not\(:disabled\):active\s*\{\s*background:\s*var\(--pressed\)/);
+    expect(css).not.toMatch(/var\(--line(-2)?\)\s*;\s*\}/);
   });
 });
 
@@ -80,31 +85,45 @@ describe("paper fields", () => {
     ["features/settings/Settings.module.css", ".input"],
     ["features/settings/Settings.module.css", ".railSearch"],
     ["features/ClarificationModal.module.css", ".otherBlock"],
-    ["primitives/Composer.module.css", ".body"],
-    ["primitives/Dropdown.module.css", ".triggerField"],
     ["primitives/Dropdown.module.css", ".search"],
     ["primitives/EditableSessionTitle.module.css", ".input"],
-    ["primitives/ModelPicker.module.css", ".modelPickerTriggerField"],
     ["primitives/Panels.module.css", ".renameInput"],
     ["styles/design-system.css", ".ds-field, .field"],
   ];
 
-  it.each(FIELDS)("makes %s %s a 4 px well on the elevated surface with a hairline edge", (file, selector) => {
+  it.each(FIELDS)("makes %s %s a well: a fill at the control radius with no edge", (file, selector) => {
     const body = rule(read(file), selector);
     expect(body).toMatch(/background:\s*var\(--well\)/);
-    expect(body).toMatch(/box-shadow:\s*var\(--well-edge\)/);
-    expect(body).toMatch(/border-radius:\s*var\(--r-xs\)/);
-    expect(body).not.toMatch(/border:\s*[.\d]+px solid var\(--line/);
+    expect(body).toMatch(/border-radius:\s*var\(--r-control\)/);
+    expect(body).not.toMatch(/box-shadow:(?!\s*none)/);
+    expect(body).not.toMatch(/border:\s*[.\d]+px solid var\(--(line|edge)/);
   });
 
-  it("focuses a well by sharpening its edge, never with a darker fill, an underline or a halo", () => {
+  it.each([["primitives/Dropdown.module.css", ".triggerField"], ["primitives/ModelPicker.module.css", ".modelPickerTriggerField"]])("makes %s %s a select: a pill on the fill", (file, selector) => {
+    const body = rule(read(file), selector);
+    expect(body).toMatch(/background:\s*var\(--fill\)/);
+    expect(body).toMatch(/border-radius:\s*var\(--r-pill\)/);
+    expect(body).toMatch(/height:\s*var\(--ctl-40\)/);
+  });
+
+  it("makes the composer one pill on the fill at the sheet radius with no rule above it", () => {
+    const css = read("primitives/Composer.module.css");
+    expect(rule(css, ".body")).toMatch(/background:\s*var\(--fill\)/);
+    expect(rule(css, ".body")).toMatch(/border-radius:\s*var\(--r-sheet\)/);
+    expect(rule(css, ".body")).not.toMatch(/box-shadow:(?!\s*none)/);
+    expect(rule(css, ".wrap")).not.toMatch(/border-top/);
+  });
+
+  it("draws the well on the fill in both modes, with no edge token left", () => {
     const tokens = read("styles/tokens.css");
-    expect(tokens).toMatch(/--well-edge:\s*inset 0 0 0 1px var\(--line-2\);/);
-    expect(tokens).toMatch(/--well-ring:\s*inset 0 0 0 1px var\(--edge\);/);
+    expect(tokens).toMatch(/:root \{[\s\S]*?--well: var\(--card\);/);
+    expect([...tokens.matchAll(/--well: var\(--bg-elev\);/g)]).toHaveLength(0);
+    expect(tokens).not.toMatch(/--well-edge|--well-ring|--ring-ctrl|--focus-border|--focus-ring:/);
+  });
+
+  it("focuses a well with the 1.5 px inset ink3 line, never a ring, a darker fill, an underline or a halo", () => {
     const FOCUS = [
-      ["primitives/Composer.module.css", ".body:has(.input:focus)"],
       ["features/settings/Settings.module.css", ".input:focus-visible"],
-      ["primitives/Dropdown.module.css", ".triggerField.triggerField.triggerOpen:hover"],
       ["styles/design-system.css", ".ds-field:focus, .field:focus"],
       ["features/ConnectionSwitcher.module.css", ".payload:focus,\n.payload:focus-visible"],
       ["features/InlineRequest.module.css", ".otherInput:focus"],
@@ -112,17 +131,22 @@ describe("paper fields", () => {
       ["features/ClarificationModal.module.css", ".otherBlock:focus-within"],
     ];
     for (const [file, selector] of FOCUS) {
-      const body = read(file).match(new RegExp(`${selector.replace(/[.():,]/g, "\\$&")}\\s*\\{([^{}]*)\\}`))[1];
-      expect(body, selector).toMatch(/background:\s*var\(--well-focus\)/);
-      expect(body, selector).toMatch(/box-shadow:\s*var\(--well-ring\)/);
-      expect(body, selector).not.toMatch(/border-bottom|focus-ring/);
+      const body = rule(read(file), selector);
+      expect(body, selector).toMatch(/box-shadow:\s*var\(--field-focus\)/);
+      expect(body, selector).toMatch(/outline:\s*none/);
+      expect(body, selector).not.toMatch(/var\(--focus-outline\)|border-bottom/);
     }
+  });
+
+  it("errs with a 1.5 px danger line and keeps the fill", () => {
+    expect(read("styles/tokens.css")).toMatch(/--well-error:\s*inset 0 0 0 1.5px var\(--c-danger-text\);/);
+    expect(read("styles/design-system.css")).toMatch(/\.field\[aria-invalid="true"\]:not\(:disabled\):focus \{\s*box-shadow: var\(--well-error\);/);
   });
 });
 
 describe("disabled fields", () => {
   it("turn grey only when disabled, with no edge", () => {
-    expect(read("primitives/Composer.module.css")).toMatch(/\.body\[data-disabled="true"\]:not\(\[data-busy\]\)\s*\{[^}]*background:\s*var\(--well-off\);[^}]*box-shadow:\s*none;/);
+    expect(read("primitives/Composer.module.css")).toMatch(/\.body\[data-disabled="true"\]:not\(\[data-busy\]\)\s*\{[^}]*background:\s*var\(--fill\);/);
     expect(read("styles/design-system.css")).toMatch(/\.ds-field:disabled, \.field:disabled \{[^}]*background:\s*var\(--well-off\);\s*box-shadow:\s*none;/);
     expect(read("features/settings/Settings.module.css")).toMatch(/\.input:disabled,\s*\.textarea:disabled \{[^}]*background:\s*var\(--well-off\);\s*box-shadow:\s*none;/);
     expect(read("primitives/Dropdown.module.css")).toMatch(/\.triggerField\.triggerField:disabled \{[^}]*background:\s*var\(--well-off\);\s*box-shadow:\s*none;/);
@@ -133,26 +157,23 @@ describe("disabled fields", () => {
     expect(read("primitives/Composer.jsx")).toMatch(/data-busy=\{busy \|\| undefined\}/);
   });
 
-  it("keeps the input edge token for inputs, and a stronger ring on rows and segments", () => {
-    for (const file of ["styles/design-system.css", "primitives/JumpToLatest.module.css"]) {
-      expect(read(file)).not.toMatch(/(\.ds-seg > button:focus-visible|\.jump[^{]*:focus-visible)[^{]*\{[^}]*--well-ring/);
-    }
-    expect(read("styles/design-system.css")).toMatch(/\.ds-seg > button:focus-visible \{[^}]*inset 0 0 0 1px var\(--focus-border\)/);
-    expect(read("features/NotificationsModal.module.css")).toMatch(/\.row:focus-visible \{ box-shadow: inset 0 0 0 1px var\(--focus-border\); \}/);
+  it("rings rows and segments with the system outline, drawn inside the row", () => {
+    expect(read("features/NotificationsModal.module.css")).toMatch(/\.row:focus-visible \{ outline: var\(--focus-outline\); outline-offset: var\(--focus-inset\); \}/);
+    expect(read("styles/tokens.css")).toMatch(/--focus-inset:\s*-2px;/);
+    expect(read("styles/design-system.css")).not.toMatch(/\.ds-seg > button:focus-visible/);
   });
 });
 
 describe("one active style for every field", () => {
-  it("draws an open dropdown, an expanded picker and a focused field the same way", () => {
-    const dropdown = read("primitives/Dropdown.module.css");
-    expect(dropdown).toMatch(/\.triggerField\.triggerField\.triggerOpen,[^{]*\{[^}]*background:\s*var\(--well-focus\);[^}]*box-shadow:\s*var\(--well-ring\)/);
-    expect(read("primitives/ModelPicker.module.css")).toMatch(/\.modelPickerTriggerField\.modelPickerTriggerField\[aria-expanded="true"\]:not\(:disabled\):active\s*\{[^}]*outline:\s*none;[^}]*background:\s*var\(--well-focus\);[^}]*box-shadow:\s*var\(--well-ring\)/);
-    expect(read("styles/design-system.css")).toMatch(/\.selectish\[aria-expanded="true"\]\s*\{[^}]*background:\s*var\(--well-focus\);[^}]*box-shadow:\s*var\(--well-ring\)/);
+  it("draws an open dropdown, an expanded picker and an open select the same way: the selected fill over the pill", () => {
+    expect(read("primitives/Dropdown.module.css")).toMatch(/\.triggerField\.triggerField\.triggerOpen,[^{]*\{[^}]*box-shadow:\s*var\(--selected-wash\);[^}]*outline:\s*none/);
+    expect(read("primitives/ModelPicker.module.css")).toMatch(/\.modelPickerTriggerField\.modelPickerTriggerField:not\(:disabled\):active\s*\{[^}]*box-shadow:\s*var\(--selected-wash\);[^}]*outline:\s*none/);
+    expect(read("styles/design-system.css")).toMatch(/\.selectish\[aria-expanded="true"\]\s*\{[^}]*box-shadow:\s*var\(--selected-wash\);[^}]*outline:\s*none/);
   });
 
   it("leaves the 4 px halo nowhere", () => {
-    for (const file of ["primitives/Dropdown.module.css", "primitives/ModelPicker.module.css", "styles/design-system.css", "features/ConnectionSwitcher.module.css", "features/settings/Settings.module.css", "primitives/JumpToLatest.module.css", "primitives/Composer.module.css"]) {
-      expect(read(file), file).not.toMatch(/var\(--focus-ring\)|0 0 0 4px color-mix/);
+    for (const file of ["primitives/Dropdown.module.css", "primitives/ModelPicker.module.css", "styles/design-system.css", "features/ConnectionSwitcher.module.css", "features/settings/Settings.module.css", "primitives/JumpToLatest.module.css", "primitives/Composer.module.css", "primitives/PipelineStages.module.css"]) {
+      expect(read(file), file).not.toMatch(/var\(--focus-ring\)|0 0 0 4px color-mix|var\(--focus-border\)/);
     }
   });
 });
@@ -173,47 +194,57 @@ describe("the active field style outranks the button and global focus rules", ()
       expect(specificity(selector), selector).toBeGreaterThan(globalFocus);
     }
     for (const file of ["primitives/ModelPicker.module.css", "primitives/Dropdown.module.css"]) {
-      expect(read(file), file).toMatch(/background:\s*var\(--well-focus\);[^}]*box-shadow:\s*var\(--well-ring\)/);
-      expect(read(file).match(/border-radius:\s*var\(--r-xs\);\s*background:\s*var\(--well-focus\)/), file).not.toBeNull();
+      expect(read(file).match(/border-radius:\s*var\(--r-pill\);\s*background:\s*var\(--fill\)/), file).not.toBeNull();
     }
   });
 });
 
 describe("paper dialogs", () => {
-  it("fades the window towards the ground instead of darkening it", () => {
-    expect(read("styles/tokens.css")).toMatch(/--veil:\s*color-mix\(in srgb, var\(--bg\) 72%, transparent\);/);
+  it("dims the window under a dialog with the veil, darker in dark", () => {
+    expect(read("styles/tokens.css")).toMatch(/--veil:\s*rgba\(20, 20, 20, \.22\);/);
+    expect(read("styles/tokens.css")).toMatch(/--veil:\s*rgba\(0, 0, 0, \.55\);/);
     for (const [file, selector] of [["primitives/Modal.module.css", ".backdrop"], ["primitives/BrowseModal.module.css", ".backdrop"], ["features/sessions/ManageSessionsModal.module.css", ".backdrop"], ["primitives/Panels.module.css", ".scrim"]]) {
       expect(rule(read(file), selector), file).toMatch(/background:\s*var\(--veil\)/);
     }
   });
 
-  it.each([["primitives/Modal.module.css", ".modal"], ["primitives/BrowseModal.module.css", ".modal"], ["features/sessions/ManageSessionsModal.module.css", ".modal"], ["primitives/Panels.module.css", ".shell"]])("cuts %s %s as a 4 px sheet", (file, selector) => {
-    expect(rule(read(file), selector)).toMatch(/border-radius:\s*var\(--r-xs\)/);
+  it.each([["primitives/Modal.module.css", ".modal"], ["primitives/BrowseModal.module.css", ".modal"], ["features/sessions/ManageSessionsModal.module.css", ".modal"], ["primitives/Panels.module.css", ".shell"]])("cuts %s %s at the sheet radius", (file, selector) => {
+    expect(rule(read(file), selector)).toMatch(/border-radius:\s*var\(--r-sheet\)/);
   });
 
-  it("sets the dialog actions on a footer band one tone down that spans the sheet", () => {
-    const css = read("primitives/Modal.module.css");
-    expect(css).toMatch(/\.content \[data-dialog-footer\]\s*\{[^}]*margin:\s*var\(--sp-16\) calc\(-1 \* var\(--dialog-pad\)\) 0;[^}]*background:\s*var\(--bg-side\)/);
+  it("sets the dialog actions on the dialog's own surface, with no band and no seam", () => {
+    const footer = rule(read("primitives/Modal.module.css"), ".content [data-dialog-footer]");
+    expect(footer).toMatch(/background:\s*transparent/);
+    expect(footer).not.toMatch(/box-shadow|border/);
+    const sheet = rule(read("primitives/ConfirmDelete.module.css"), ".body.inSheet [data-dialog-footer]");
+    expect(sheet).toMatch(/background:\s*transparent/);
+    expect(sheet).not.toMatch(/box-shadow|border/);
     expect(read("primitives/DialogFooter.jsx")).toMatch(/data-dialog-footer/);
   });
 });
 
 describe("paper selection", () => {
-  it("draws the selected sidebar row as the pane's own sheet, square and edge to edge", () => {
+  it("draws the chosen sidebar row as a rounded neutral fill inside the gutter, no bleed and no stripe", () => {
     const ds = read("styles/design-system.css");
-    expect(ds).toMatch(/\.ds-sb-row\[data-sel\], \.sb-row\[data-sel\] \{[^}]*margin: 0 calc\(-1 \* var\(--sb-bleed, 0px\)\);[^}]*border-radius: 0;/);
-    expect(ds).toMatch(/\.ds-sb-row:hover, \.sb-row:hover \{ background: var\(--hover\); \}/);
-    expect(ds).toMatch(/\.ds-sb-row:hover, \.sb-row:hover,\s*\.ds-sb-row\[data-sel\], \.sb-row\[data-sel\] \{[^}]*margin: 0 calc\(-1 \* var\(--sb-bleed, 0px\)\);[^}]*border-radius: 0;/);
-    expect(rule(read("features/Sidebar.module.css"), ".inner")).toMatch(/--sb-bleed:\s*var\(--sp-12\)/);
+    expect(rule(ds, ".ds-sb-row, .sb-row")).toMatch(/border-radius:\s*var\(--r-control\)/);
+    expect(ds).toMatch(/\.ds-sb-row:hover, \.sb-row:hover \{ background: var\(--hover\); transition: background-color var\(--state-in\); \}/);
+    expect(ds).toMatch(/\.ds-sb-row\[data-sel\]:hover, \.sb-row\[data-sel\]:hover \{\s*background: var\(--selected\);\s*\}/);
+    expect(ds).not.toMatch(/sb-bleed|--row-accent|border-radius: 0;\s*\}\s*\.ds-sb-row \.ts/);
+    expect(read("features/Sidebar.module.css")).not.toMatch(/--sb-bleed/);
     const row = read("primitives/SidebarRow.jsx");
-    expect(row).not.toMatch(/var\(--bg-pane\)/);
-    expect(ds).toMatch(/\.ds-sb-row\[data-sel\], \.sb-row\[data-sel\],[^{]*\{\s*background: var\(--selected\);\s*box-shadow: inset 3px 0 0 var\(--row-accent, var\(--accent\)\);/);
+    expect(row).not.toMatch(/--row-accent|colorWash|color-mix/);
     expect(row).toMatch(/data-sel=\{sel \|\| undefined\}/);
+    expect(row).toMatch(/aria-current=\{sel \? "page" : undefined\}/);
   });
 
-  it("cuts chips and status pills as 2 px tags", () => {
-    expect(read("styles/tokens.css")).toMatch(/--r-tag:\s*2px;/);
-    expect(rule(read("primitives/Chip.module.css"), ".chip")).toMatch(/border-radius:\s*var\(--r-tag\)/);
+  it("steps the trailing text on the chosen row to ink-2", () => {
+    expect(read("styles/design-system.css")).toMatch(/\.sb-row\[data-sel\] \.ts \{ color: var\(--ink-2\); \}/);
+  });
+
+  it("cuts chips and status pills as pills, the chip radius retired", () => {
+    expect(read("styles/tokens.css")).not.toMatch(/--r-chip/);
+    expect(rule(read("primitives/Chip.module.css"), ".chip")).toMatch(/border-radius:\s*var\(--r-pill\)/);
+    expect(rule(read("primitives/PipelineStages.module.css"), ".chip")).toMatch(/border-radius:\s*var\(--r-pill\)/);
   });
 });
 
@@ -231,21 +262,21 @@ describe("paper headers", () => {
 });
 
 describe("paper bubbles", () => {
-  it("draws your message as a neutral 4 px sheet, never in the profile's colour", () => {
-    expect(rule(read("primitives/ProfileMessage.module.css"), ".userBubble")).toMatch(/border-radius:\s*var\(--r-xs\);\s*background:\s*var\(--selected\)/);
+  it("draws your message as a neutral bubble at the surface radius, never in the profile's colour", () => {
+    expect(rule(read("primitives/ProfileMessage.module.css"), ".userBubble")).toMatch(/border-radius:\s*var\(--r-surface\);\s*background:\s*var\(--fill\)/);
     expect(read("primitives/ProfileMessage.jsx")).not.toMatch(/color-mix|accent/);
-    expect(rule(read("primitives/MessageBubble.module.css"), ".bubble")).toMatch(/border-radius:\s*var\(--r-xs\)/);
+    expect(rule(read("primitives/MessageBubble.module.css"), ".bubble")).toMatch(/border-radius:\s*var\(--r-surface\)/);
     expect(rule(read("primitives/Message.module.css"), ".bubble")).not.toMatch(/box-shadow/);
-    expect(read("primitives/MarkerCard.module.css")).not.toMatch(/r-2xl/);
-    expect(rule(read("pages/ChatSkeletons.module.css"), ".userBubble")).toMatch(/border-radius:\s*var\(--r-xs\)/);
+    expect(rule(read("pages/ChatSkeletons.module.css"), ".userBubble")).toMatch(/border-radius:\s*var\(--r-surface\)/);
   });
 });
 
 describe("paper toasts", () => {
-  it("draws a notice as a flat 4 px card with one seam", () => {
+  it("floats a notice on the raised surface at the surface radius with the float shadow", () => {
     const toast = rule(read("primitives/Notification.module.css"), ".toast");
-    expect(toast).toMatch(/border-radius:\s*var\(--r-xs\)/);
-    expect(toast).toMatch(/box-shadow:\s*var\(--shadow-edge-sm\)/);
+    expect(toast).toMatch(/border-radius:\s*var\(--r-surface\)/);
+    expect(toast).toMatch(/background:\s*var\(--raised\)/);
+    expect(toast).toMatch(/box-shadow:\s*var\(--shadow-float\)/);
     expect(toast).toMatch(/border:\s*0;/);
   });
 });

@@ -22,39 +22,13 @@ import { copyText } from '../../lib/clipboard';
 import { useEndpoint } from '../../lib/EndpointContext';
 import { clockOf, formatLastRun, formatNextFire, jobFailed, jobTitle } from '../../lib/scheduleFormat';
 import { useTheme } from '../../theme/ThemeContext';
-import { jobBanner, jobItem, nextRunWord } from '../../../../common/attention.mjs';
+import { jobBanner, jobItem, nextRunCountdown } from '../../../../common/attention.mjs';
 import { describeTimeout, describeWhen, rawWhen } from '../../../../common/schedule.mjs';
 import { PanelHeader } from '../profile/PanelHeader';
-import { StatusWord } from '../profile/StatusWord';
 import { changeDraft, chatWithDraft } from './drafts';
 import { useRunningJob } from './useRunningJob';
-import { detailTitleStyle } from '../../components/detailTitle';
-
-function Fact({ label, children }) {
-  const { colors, fonts, fontSizes } = useTheme();
-  return (
-    <View style={{ flexDirection: 'row', gap: space.s5, minHeight: 24, alignItems: 'baseline' }}>
-      <Text style={{ width: 72, fontFamily: fonts.mono, fontSize: fontSizes.xs, letterSpacing: 0.6, color: colors.ink3 }}>{label}</Text>
-      <View style={{ flex: 1, gap: space.s2, alignItems: 'flex-start' }}>{children}</View>
-    </View>
-  );
-}
-
-function FactText({ children, tone }) {
-  const { colors, fonts, fontSizes } = useTheme();
-  return (
-    <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, lineHeight: fontSizes.md * lineHeights.normal, color: tone === 'danger' ? colors.dangerText : colors.ink2 }}>{children}</Text>
-  );
-}
-
-function Chip({ children }) {
-  const { colors, fonts, fontSizes } = useTheme();
-  return (
-    <View style={{ paddingHorizontal: space.s3, paddingVertical: 2, borderRadius: radii.xs, backgroundColor: colors.hover }}>
-      <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>{children}</Text>
-    </View>
-  );
-}
+import { DetailHead } from '../../components/DetailHead';
+import { FactCode, FactTable } from '../../components/FactTable';
 
 export function statusOf(job, running) {
   if (running) return { word: 'running', on: true, danger: false };
@@ -71,8 +45,7 @@ export function confirmWord(job) {
 export function JobDetail({ profile, jobId, embedded = false, onBack, onGone }) {
   const router = useRouter();
   const toast = useToast();
-  const theme = useTheme();
-  const { colors, fonts, fontSizes } = theme;
+  const { colors, fonts, fontSizes } = useTheme();
   const schedule = useScheduleList(profile);
   const { att } = useAttention(profile);
   const outputs = useOutputs({ profile });
@@ -163,7 +136,7 @@ export function JobDetail({ profile, jobId, embedded = false, onBack, onGone }) 
 
   return (
     <View style={{ flex: 1 }}>
-      {embedded ? null : <PanelHeader profile={profile} section="SCHEDULES" onBack={onBack} right={moreButton} />}
+      {embedded ? null : <PanelHeader profile={profile} section="Schedules" onBack={onBack} right={moreButton} />}
       {!job && schedule.error && !schedule.data ? (
         <LoadFailed inline label="this job" error={schedule.error} onRetry={() => schedule.refresh?.()} />
       ) : !job || holding ? (
@@ -178,16 +151,13 @@ export function JobDetail({ profile, jobId, embedded = false, onBack, onGone }) 
           contentContainerStyle={{ padding: space.s8, gap: space.s6, paddingBottom: space.s10 }}
         >
           {failed ? <AlertBanner {...banner} /> : null}
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space.s3 }}>
-            <View style={{ flex: 1, gap: space.s3 }}>
-              <Text accessibilityRole="header" style={detailTitleStyle(theme)}>{jobTitle(job)}</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s4, flexWrap: 'wrap' }}>
-                <StatusWord word={status.word} on={status.on} danger={status.danger} />
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>{describeWhen(job)}</Text>
-              </View>
-            </View>
-            {embedded ? moreButton : null}
-          </View>
+          <DetailHead
+            title={jobTitle(job)}
+            state={status.word}
+            stateTone={status.danger ? 'danger' : null}
+            id={String(job.id)}
+            right={embedded ? moreButton : null}
+          />
           <View style={{ flexDirection: 'row', gap: space.s3 }}>
             <View style={{ flex: 1 }}>
               <Button
@@ -212,36 +182,29 @@ export function JobDetail({ profile, jobId, embedded = false, onBack, onGone }) 
               alignItems: 'center',
               justifyContent: 'center',
               gap: space.s3,
-              borderRadius: radii.xs,
-              borderWidth: 0.5,
-              borderColor: colors.line2,
-              backgroundColor: pressed ? colors.selected : 'transparent',
+              borderRadius: radii.pill,
+              backgroundColor: pressed ? colors.pressed : 'transparent',
             })}
           >
             <Icon name="sparkle" size="xs" color={colors.ink2} />
             <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.ink2 }}>Ask the agent to change this</Text>
           </Pressable>
-          <View style={{ gap: space.s4 }}>
-            {about ? <Fact label="ABOUT"><FactText>{about}</FactText></Fact> : null}
-            <Fact label="WHEN">
-              <FactText>{describeWhen(job)}</FactText>
-              {rawWhen(job) && job.kind !== 'once' ? <Chip>{rawWhen(job)}</Chip> : null}
-            </Fact>
-            {next ? <Fact label="NEXT"><FactText>{[next, nextRunWord(job)].filter(Boolean).join(' · ')}</FactText></Fact> : null}
-            <Fact label="LAST RUN">
-              <FactText tone={failed && !run.running ? 'danger' : undefined}>
-                {run.running ? `running since ${run.startedMs ? clockOf(run.startedMs / 1000) : 'now'}` : formatLastRun(job.last_run_at, job.last_run_status)}
-              </FactText>
-            </Fact>
-            <Fact label="RUNS"><FactText>{[job.no_agent ? 'shell script' : 'agent', describeTimeout(job)].filter(Boolean).join(' · ')}</FactText></Fact>
-            {job.timeout_error ? <Fact label="TIMEOUT"><FactText tone="danger">{job.timeout_error}</FactText></Fact> : null}
-            <Fact label="NOTIFY"><FactText>{job.notify ? 'pushes to your apps' : 'silent — failures still alert'}</FactText></Fact>
-          </View>
+          <FactTable
+            rows={[
+              { label: 'About', value: about || null },
+              { label: 'When', value: rawWhen(job) && job.kind !== 'once' ? [describeWhen(job), ' · ', <FactCode key="cron" quiet>{rawWhen(job)}</FactCode>] : describeWhen(job) },
+              { label: 'Next', value: next ? [next, nextRunCountdown(job)].filter(Boolean).join(' · ') : null },
+              { label: 'Last run', value: run.running ? `running since ${run.startedMs ? clockOf(run.startedMs / 1000) : 'now'}` : formatLastRun(job.last_run_at, job.last_run_status), tone: failed && !run.running ? 'danger' : null },
+              { label: 'Runs', value: [job.no_agent ? 'shell script' : 'agent', describeTimeout(job)].filter(Boolean).join(' · ') },
+              { label: 'Timeout', value: job.timeout_error || null, tone: 'danger' },
+              { label: 'Notify', value: job.notify ? 'pushes to your apps' : 'silent — failures still alert' },
+            ]}
+          />
           {job.prompt ? (
-            <View style={{ padding: space.s5, gap: space.s3, borderRadius: radii.xs, borderWidth: 0.5, borderColor: colors.line, backgroundColor: colors.bg }}>
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, letterSpacing: 0.6, color: colors.ink3 }}>PROMPT</Text>
+            <View style={{ padding: space.s5, gap: space.s3, borderRadius: radii.surface, backgroundColor: colors.bg }}>
+              <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>Prompt</Text>
               {job.no_agent ? (
-                <Text selectable style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * lineHeights.cozy, color: colors.ink }}>{job.prompt}</Text>
+                <Text selectable style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * lineHeights.cozy, color: colors.ink }}>{job.prompt}</Text>
               ) : (
                 <RichText size={fontSizes.md} color={colors.ink2}>{job.prompt}</RichText>
               )}

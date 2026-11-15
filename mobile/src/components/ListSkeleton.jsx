@@ -31,7 +31,7 @@ export function ListSkeleton({ rows = 3, label, flat = false, title = 'lg', help
                   <Line size={fontSizes[title]} width={titleW} delay={i * STAGGER_MS} />
                   {helper ? <Line size={fontSizes[helper]} width={helperW} delay={i * STAGGER_MS + STAGGER_MS / 2} /> : null}
                 </View>
-                {value ? <SkeletonBar width={56} height={fontSizes.md} radius={radii.tag} delay={i * STAGGER_MS} /> : null}
+                {value ? <SkeletonBar width={56} height={fontSizes.md} radius={radii.xs} delay={i * STAGGER_MS} /> : null}
               </View>
             </View>
           );

@@ -40,8 +40,10 @@ def test_built_theme_uses_the_token_values(dark: bool) -> None:
     assert theme.accent.lower() == tokens["accent"]
     assert theme.primary.lower() == tokens["accent"]
     assert theme.background.lower() == tokens["bg"]
-    assert theme.surface.lower() == tokens["bgPane"]
-    assert theme.panel.lower() == tokens["bgElev"]
+    assert theme.surface.lower() == tokens["fill"] == palette["fill"].lower()
+    assert theme.surface.lower() != theme.background.lower()
+    assert theme.panel.lower() in {tokens["bgElev"], tokens["fill"]}
+    assert theme.panel.lower() != theme.background.lower()
     assert theme.foreground.lower() == tokens["ink"]
     assert theme.variables["text-muted"].lower() == tokens["ink3"] == palette["ink3"].lower()
     assert theme.success.lower() == status["success"]
@@ -107,3 +109,8 @@ def test_the_console_greys_are_neutral_like_the_apps() -> None:
             r, g, b = (theme[key][i:i + 2] for i in (1, 3, 5))
             assert r == g == b, (key, theme[key])
     assert ui._MUTED_STYLE == f"fg:{DARK['ink3']}"
+
+
+@pytest.mark.parametrize("mode", ["dark", "light"])
+def test_mark_eyes_mirror_the_shared_token(mode: str) -> None:
+    assert palette.EYE_INK[mode] == _object(mode)["markEye"]

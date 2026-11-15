@@ -11,6 +11,7 @@ import { useEndpoint } from '../../../../src/lib/EndpointContext';
 import { fileSize } from '../../../../src/lib/skillDetail';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 import { ReaderSkeleton } from '../../../../src/components/ReaderSkeleton';
+import { code } from '../../../../src/theme/code';
 
 export default function SkillFile() {
   const { id, name, category, file } = useLocalSearchParams();
@@ -32,11 +33,11 @@ export default function SkillFile() {
 
   const f = state.file;
   const markdown = f && !f.binary && (f.ftype === 'md' || f.ftype === 'skill');
-  const meta = { fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 };
+  const meta = { fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 };
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-      <PanelHeader profile={id} section={`SKILLS · ${String(name ?? '').toUpperCase()}`} onBack={goBack} />
+      <PanelHeader profile={id} section={`Skills · ${String(name ?? '')}`} onBack={goBack} />
       {state.loading ? (
         <ReaderSkeleton label="Loading the file" />
       ) : !f ? (
@@ -47,7 +48,7 @@ export default function SkillFile() {
       ) : (
         <ScrollView contentContainerStyle={{ padding: space.s8, gap: space.s5, paddingBottom: space.s10 }}>
           <View style={{ gap: space.s1 }}>
-            <Text style={{ fontFamily: fonts.monoSemibold ?? fonts.mono, fontSize: fontSizes.md, color: colors.ink }}>{String(file)}</Text>
+            <Text style={{ ...code(fonts, fontSizes.md, 'semibold'), color: colors.ink }}>{String(file)}</Text>
             <Text style={meta}>{[fileSize(f.size), f.truncated ? 'truncated' : null].filter(Boolean).join(' · ')}</Text>
           </View>
           {f.binary ? (
@@ -55,7 +56,7 @@ export default function SkillFile() {
           ) : markdown ? (
             <RichText size={fontSizes.md} color={colors.ink}>{f.text ?? ''}</RichText>
           ) : (
-            <Text selectable style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * lineHeights.cozy, color: colors.ink }}>
+            <Text selectable style={{ ...code(fonts, fontSizes.sm), lineHeight: fontSizes.sm * lineHeights.cozy, color: colors.ink }}>
               {f.text ?? ''}
             </Text>
           )}

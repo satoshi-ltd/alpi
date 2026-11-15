@@ -1,10 +1,10 @@
 import { ChatHeader, MeterChip, Mono } from "./index.js";
+import { HeaderDetail } from "./ChatHeader.jsx";
 import { profileLabel } from "../lib/profile-display.js";
 import { modelLabel } from "../lib/modelLabel.js";
 import SessionsButton from "./SessionsButton.jsx";
 import SoundWave from "./SoundWave.jsx";
 import HeaderMenu from "./HeaderMenu.jsx";
-import Tip from "./Tip.jsx";
 import styles from "./ProfileChatHeader.module.css";
 
 function fmtCount(n) {
@@ -19,6 +19,8 @@ function fmtCost(n) {
   if (n < 0.01) return `$${n.toFixed(4)}`;
   return `$${n.toFixed(2)}`;
 }
+
+export const HIGH_USE = 0.8;
 
 export default function ProfileChatHeader({
   profile,
@@ -42,6 +44,7 @@ export default function ProfileChatHeader({
   onChangeSession,
   sessionsOpenTick = 0,
   sessionsButton,
+  markState = null,
 }) {
   const accent = profile?.accent || "var(--accent)";
   const shownModel = model || profile?.model;
@@ -64,17 +67,27 @@ export default function ProfileChatHeader({
     };
   }
 
+  const budgetPct = budgetSeg?.pct ?? 0;
+  const flag = paused
+    ? null
+    : budgetPct >= HIGH_USE
+      ? { label: `Daily budget ${Math.round(budgetPct * 100)}% used`, tone: budgetPct >= 1 ? "danger" : "warning" }
+      : ctxPct >= HIGH_USE
+        ? { label: `Context ${Math.round(ctxPct * 100)}% full`, tone: "warning" }
+        : null;
+
   const meta = (
     <>
       {shownModel && (
-        <Tip text={shownModel} side="down" wide>
+        <HeaderDetail label="Model">
           <Mono className={styles.ink2}>{modelLabel(shownModel)}</Mono>
-        </Tip>
+        </HeaderDetail>
       )}
-      {shownModel && contextWindow > 0 && (
-        <span className="sep" aria-hidden />
+      {shownModel && modelLabel(shownModel) !== shownModel && (
+        <span className={styles.detailId} data-model-id="">{shownModel}</span>
       )}
       {contextWindow > 0 && (
+        <HeaderDetail label="Context">
         <MeterChip
           value={
             <>
@@ -86,12 +99,12 @@ export default function ProfileChatHeader({
           color={accent}
           tip="Context window"
         />
+        </HeaderDetail>
       )}
       {budgetSeg && (
-        <>
-          <span className="sep" aria-hidden />
+        <HeaderDetail label="Cost today">
           <MeterChip {...budgetSeg} color={accent} />
-        </>
+        </HeaderDetail>
       )}
     </>
   );
@@ -133,11 +146,13 @@ export default function ProfileChatHeader({
       kind="profile"
       id={profileLabel(profile?.name) || ""}
       accent={accent}
-      fold={profile?.fold}
+      shape={profile?.shape}
       bio={profile?.bio || profile?.public_bio}
       meta={meta}
       right={right}
       paused={paused}
+      state={markState}
+      flag={flag}
     />
   );
 }

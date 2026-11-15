@@ -32,7 +32,7 @@ export function ProfilePicker({ profiles, selected, onToggle }) {
         );
       })}
       {!profiles.length ? (
-        <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>{EMPTY.profiles.title}</Text>
+        <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>{EMPTY.profiles.title}</Text>
       ) : null}
     </View>
   );

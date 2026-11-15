@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 
-import { WORKGROUP_FOLD } from '../../../../common/folds.mjs';
+import { WORKGROUP_SHAPE } from '../../../../common/shapes.mjs';
 import { ICON_ROLES } from '../../../../common/iconRoles.mjs';
 import { EmptyState } from '../../components/EmptyState';
 import { Eyebrow } from '../../components/Eyebrow';
@@ -82,6 +82,7 @@ function runningRow(run, nowSec) {
       key: `wg:${run.workgroup_id}`,
       tone: 'accent',
       profile: run.profile,
+      hub: run.hub_id || null,
       workgroup: true,
       icon: ICON_ROLES.activity,
       title: [run.name || run.workgroup_id, run.phase ? `#${run.phase}` : null].filter(Boolean).join(' · '),
@@ -169,6 +170,11 @@ export function activitySections(activity, nowSec = Date.now() / 1000) {
   return sections;
 }
 
+export function rowOwner(row, byName) {
+  if (row.workgroup) return row.hub ? byName[row.hub] ?? null : null;
+  return byName[row.profile];
+}
+
 export function activityTint(tone, colors) {
   return {
     warning: colors.warningText ?? colors.warning,
@@ -182,11 +188,11 @@ export function ActivityRow({ row, onPress, onRun, who }) {
   const { colors, fonts, fontSizes } = useTheme();
   const tint = activityTint(row.tone, colors);
   const lead = who || row.workgroup
-    ? <Fold fold={row.workgroup ? WORKGROUP_FOLD : who?.fold} color={who?.accent ?? undefined} size="md" pulse={row.tone === 'accent'} />
+    ? <Fold shape={row.workgroup ? WORKGROUP_SHAPE : who?.shape} color={who?.accent ?? undefined} size="md" pulse={row.tone === 'accent'} />
     : <Icon name={row.icon} size="md" color={tint} />;
   const separate = !!row.run && !!onRun;
   const chip = (
-    <View style={{ paddingHorizontal: space.s5, paddingVertical: space.s2, borderRadius: radii.xs, backgroundColor: colors.ink }}>
+    <View style={{ paddingHorizontal: space.s5, paddingVertical: space.s2, borderRadius: radii.pill, backgroundColor: colors.ink }}>
       <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.sm, color: colors.bgPane }}>{row.action}</Text>
     </View>
   );
@@ -206,7 +212,7 @@ export function ActivityRow({ row, onPress, onRun, who }) {
         paddingLeft: space.s7,
         paddingRight: separate ? space.s3 : space.s7,
         paddingVertical: space.s3,
-        backgroundColor: pressed ? colors.selected : 'transparent',
+        backgroundColor: pressed ? colors.pressed : 'transparent',
       })}
     >
       {lead}
@@ -215,13 +221,13 @@ export function ActivityRow({ row, onPress, onRun, who }) {
           {row.title}
         </Text>
         {row.sub ? (
-          <Text numberOfLines={1} style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * lineHeights.cozy, color: row.tone === 'danger' || row.tone === 'warning' ? tint : colors.ink3 }}>
+          <Text numberOfLines={1} style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * lineHeights.cozy, color: row.tone === 'danger' || row.tone === 'warning' ? tint : colors.ink3 }}>
             {row.sub}
           </Text>
         ) : null}
       </View>
       {row.when ? (
-        <Text style={{ fontFamily: fonts.monoMedium ?? fonts.mono, fontSize: fontSizes.md, color: colors.ink2 }}>{row.when}</Text>
+        <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.ink2 }}>{row.when}</Text>
       ) : null}
       {row.action && !separate ? chip : null}
     </Pressable>
@@ -266,7 +272,7 @@ function SectionHeader({ label, tone, right = null }) {
 function FilterChips({ filter, counts, ids, onChange }) {
   const { colors, fonts, fontSizes, chromeScale } = useTheme();
   return (
-    <View accessibilityRole="radiogroup" accessibilityLabel="Filter activity" style={{ backgroundColor: colors.bg, borderBottomWidth: 0.5, borderBottomColor: colors.line }}>
+    <View accessibilityRole="radiogroup" accessibilityLabel="Filter activity" style={{ backgroundColor: colors.bg }}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: space.s7, gap: space.s3 }}>
         {ids.map((id) => {
           const on = filter === id;
@@ -287,16 +293,14 @@ function FilterChips({ filter, counts, ids, onChange }) {
                   alignItems: 'center',
                   gap: space.s2,
                   paddingHorizontal: space.s5,
-                  borderRadius: radii.xs,
+                  borderRadius: radii.pill,
                   backgroundColor: on ? colors.selected : 'transparent',
-                  borderWidth: 0.5,
-                  borderColor: on ? colors.line2 : colors.line,
                 }}
               >
                 <Text maxFontSizeMultiplier={chromeScale} numberOfLines={1} style={{ fontFamily: on ? fonts.sans.semibold : fonts.sans.regular, fontSize: fontSizes.sm, color: on ? colors.ink : colors.ink2 }}>
                   {FILTER_LABEL[id]}
                 </Text>
-                <Text maxFontSizeMultiplier={chromeScale} style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: danger ? colors.dangerText ?? colors.danger : colors.ink3 }}>
+                <Text maxFontSizeMultiplier={chromeScale} style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: danger ? colors.dangerText ?? colors.danger : colors.ink3 }}>
                   {counts[id]}
                 </Text>
               </View>
@@ -324,13 +328,13 @@ function FailGroupHead({ group, expanded, who, now, onToggle }) {
         alignItems: 'center',
         gap: space.s3,
         paddingHorizontal: space.s7,
-        backgroundColor: pressed ? colors.selected : 'transparent',
+        backgroundColor: pressed ? colors.pressed : 'transparent',
       })}
     >
       <Icon name={expanded ? 'chevron-down' : 'chevron-right'} size="xs" color={colors.ink3} />
-      <Fold fold={who?.fold} color={who?.accent ?? undefined} />
+      <Fold shape={who?.shape} color={who?.accent ?? undefined} />
       <Text numberOfLines={1} style={{ flex: 1, minWidth: 0, fontFamily: fonts.sans.medium, fontSize: fontSizes.lg, color: colors.ink }}>{name}</Text>
-      <Text numberOfLines={1} style={{ flexShrink: 0, fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3 }}>
+      <Text numberOfLines={1} style={{ flexShrink: 0, fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>
         {`${group.count} ${pluralize(group.count, 'job')} · `}
         <Text style={{ color: colors.dangerText ?? colors.danger }}>{latest}</Text>
       </Text>
@@ -360,11 +364,11 @@ function FailJobRow({ job, name, now, retryable, busy, onOpen, onRetry }) {
           paddingLeft: JOB_INDENT,
           paddingRight: retryable ? space.s3 : space.s7,
           paddingVertical: space.s3,
-          backgroundColor: pressed ? colors.selected : 'transparent',
+          backgroundColor: pressed ? colors.pressed : 'transparent',
         })}
       >
         <Text numberOfLines={1} style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.lg, lineHeight: fontSizes.lg * lineHeights.cozy, color: colors.ink }}>{title}</Text>
-        <Text numberOfLines={2} style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * lineHeights.cozy, color: colors.ink3 }}>
+        <Text numberOfLines={2} style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * lineHeights.cozy, color: colors.ink3 }}>
           <Text style={{ color: danger }}>{failed}</Text>
           {lastOk ? ` · ${lastOk}` : ''}
         </Text>
@@ -383,7 +387,7 @@ function FailJobRow({ job, name, now, retryable, busy, onOpen, onRetry }) {
             paddingHorizontal: space.s5,
             alignItems: 'center',
             justifyContent: 'center',
-            borderRadius: radii.xs,
+            borderRadius: radii.pill,
             backgroundColor: pressed && !busy ? colors.selected : 'transparent',
           })}
         >
@@ -398,7 +402,7 @@ function Quiet({ children }) {
   const { colors, fonts, fontSizes } = useTheme();
   return (
     <View style={{ minHeight: GROUP_H, justifyContent: 'center', paddingHorizontal: space.s7 }}>
-      <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * lineHeights.cozy, color: colors.ink3 }}>{children}</Text>
+      <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * lineHeights.cozy, color: colors.ink3 }}>{children}</Text>
     </View>
   );
 }
@@ -512,7 +516,7 @@ export function ActivityList({
       add(<SectionHeader key="h-needs" label={`Needs you · ${shown.needs.length}`} tone="warning" />, true);
       shown.needs.forEach((item) => {
         const row = needsYouRow(item, now);
-        add(<ActivityRow key={row.key} row={row} onPress={onOpen} who={byName[row.profile]} />);
+        add(<ActivityRow key={row.key} row={row} onPress={onOpen} who={rowOwner(row, byName)} />);
       });
     }
     if (shown.failing.length) {
@@ -548,7 +552,7 @@ export function ActivityList({
       add(<SectionHeader key="h-running" label={`Running · ${shown.running.length}`} />, true);
       shown.running.forEach((run) => {
         const row = runningRow(run, now);
-        add(<ActivityRow key={row.key} row={row} onPress={onOpen} who={byName[row.profile]} />);
+        add(<ActivityRow key={row.key} row={row} onPress={onOpen} who={rowOwner(row, byName)} />);
       });
     }
     if (shown.upcoming.length) {
@@ -562,7 +566,7 @@ export function ActivityList({
             <View style={{ paddingHorizontal: space.s7, paddingTop: space.s3, paddingBottom: space.s1 }}>
               <Eyebrow>{day.label}</Eyebrow>
             </View>
-            {day.rows.map((row) => <ActivityRow key={row.key} row={row} onPress={onOpen} who={byName[row.profile]} />)}
+            {day.rows.map((row) => <ActivityRow key={row.key} row={row} onPress={onOpen} who={rowOwner(row, byName)} />)}
           </View>,
         );
       });
@@ -573,7 +577,7 @@ export function ActivityList({
             onPress={() => setShowAllUpcoming(true)}
             accessibilityRole="button"
             accessibilityLabel={`Show ${capped.hidden} more upcoming`}
-            style={({ pressed }) => ({ minHeight: mobile.tap, justifyContent: 'center', paddingHorizontal: space.s7, backgroundColor: pressed ? colors.selected : 'transparent' })}
+            style={({ pressed }) => ({ minHeight: mobile.tap, justifyContent: 'center', paddingHorizontal: space.s7, backgroundColor: pressed ? colors.pressed : 'transparent' })}
           >
             <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.sm, color: colors.ink2 }}>{`Show ${capped.hidden} more`}</Text>
           </Pressable>,

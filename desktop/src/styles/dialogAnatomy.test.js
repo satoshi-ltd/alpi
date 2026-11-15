@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { STATUS_WORDS, statusDot, statusKind } from "../lib/statusVocab.js";
+import { STATUS_WORDS, statusKind } from "../lib/statusVocab.js";
 
 const read = (file) => readFileSync(join(import.meta.dirname, "..", file), "utf8");
 
@@ -36,8 +36,7 @@ describe("dialog anatomy", () => {
   });
 
   it.each([
-    ["features/ScheduleModal.module.css", /\.fields \{[^}]*grid-template-columns: var\(--def-col\) 1fr/],
-    ["features/SkillsModal.module.css", /\.fmLabel \{[^}]*width: var\(--def-col\)/],
+    ["primitives/BrowseModal.module.css", /\.fact \{[^}]*grid-template-columns: var\(--def-col\) 1fr/],
     ["features/NotificationBody.module.css", /\.fact \{[^}]*grid-template-columns: var\(--def-col\) 1fr/],
   ])("%s labels details in the shared 84 px column", (file, pattern) => {
     expect(read(file)).toMatch(pattern);
@@ -50,9 +49,5 @@ describe("status vocabulary", () => {
     expect(STATUS_WORDS).toEqual(["active", "paused", "attention", "failed"]);
     const kinds = ["active", "running", "paused", "inactive", "lint", "over", "failed", "invalid"].map(statusKind);
     expect(kinds).toEqual(["active", "active", "paused", "attention", "attention", "attention", "failed", "failed"]);
-  });
-
-  it("draws filled for ok, hollow for off and red for attention and failure", () => {
-    expect(["active", "paused", "inactive", "invalid"].map(statusDot)).toEqual(["filled", "hollow", "red", "red"]);
   });
 });

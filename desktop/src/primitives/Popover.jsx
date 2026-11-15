@@ -61,7 +61,7 @@ export default function Popover({
           width,
           maxWidth: "min(var(--pop-lg), calc(100vw - 16px))",
           background: "var(--bg-elev)",
-          borderRadius: "var(--r-xs)",
+          borderRadius: "var(--r-surface)",
           boxShadow: large ? "var(--shadow-edge-lg)" : "var(--shadow-edge-sm)",
           zIndex: 50,
           overflow: "hidden",

@@ -98,7 +98,7 @@ export function PrivateRouteField({ onLoadingChange = null }) {
         tooltip="Direct private-network route derived from the address and listen port"
       >
         {showStatusSkeleton
-          ? <Skeleton width="112px" height="22px" radius="var(--r-tag)" delay={0} label="Loading the private route" />
+          ? <Skeleton width="112px" height="22px" radius="var(--r-pill)" delay={0} label="Loading the private route" />
           : !status
             ? null
             : !supportsEndpoints || needsRestart
@@ -175,7 +175,7 @@ export function PublicRouteField({ onLoadingChange = null }) {
       <span ref={wrapRef} className={styles.popoverAnchor}>
         <span className={styles.inlineRow}>
           <Chip state={current ? "on" : "off"} tooltip="Optional certificate-validated Internet route">
-            {showStatusSkeleton ? <Skeleton width="112px" height="22px" radius="var(--r-tag)" delay={0} label="Loading the public route" /> : !status ? null : !supportsEndpoints ? "restart required" : current?.url || "off"}
+            {showStatusSkeleton ? <Skeleton width="112px" height="22px" radius="var(--r-pill)" delay={0} label="Loading the public route" /> : !status ? null : !supportsEndpoints ? "restart required" : current?.url || "off"}
           </Chip>
           {supportsEndpoints && (
             <Button size="sm" onClick={() => setOpen((visible) => !visible)}>
@@ -344,7 +344,7 @@ export function NetworkAddressField({ profile, onSaved, onLoadingChange = null }
             state={status?.host_in_use ? "on" : "off"}
             tooltip={`${source}. The address is read-only.`}
           >
-            {showStatusSkeleton ? <Skeleton width="112px" height="22px" radius="var(--r-tag)" delay={0} label="Loading the address" /> : !status ? null : address}
+            {showStatusSkeleton ? <Skeleton width="112px" height="22px" radius="var(--r-pill)" delay={0} label="Loading the address" /> : !status ? null : address}
           </Chip>
           <Chip
             state="on"

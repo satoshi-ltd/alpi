@@ -144,8 +144,8 @@ function ToastView({ toast, slide, fade, onDismiss }) {
         paddingHorizontal: space.s4,
         alignItems: 'center',
         justifyContent: 'center',
-        borderRadius: radii.xs,
-        backgroundColor: pressed ? colors.selected : 'transparent',
+        borderRadius: radii.pill,
+        backgroundColor: pressed ? colors.pressed : 'transparent',
       })}
     >
       <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, color: colors.ink }}>{label}</Text>
@@ -176,8 +176,8 @@ function ToastView({ toast, slide, fade, onDismiss }) {
               width: '100%',
               maxWidth: 560,
               padding: space.s6,
-              backgroundColor: colors.bgPane,
-              borderRadius: radii.xs,
+              backgroundColor: colors.bgElev,
+              borderRadius: radii.surface,
               ...shadow.toast,
               transform: [{ translateY: slide }],
               opacity: fade,
@@ -224,8 +224,8 @@ function ToastView({ toast, slide, fade, onDismiss }) {
                   marginRight: -space.s4,
                   alignItems: 'center',
                   justifyContent: 'center',
-                  borderRadius: radii.xs,
-                  backgroundColor: pressed ? colors.selected : 'transparent',
+                  borderRadius: radii.pill,
+                  backgroundColor: pressed ? colors.pressed : 'transparent',
                 })}
               >
                 <Icon name="x" size="md" color={colors.ink2} />

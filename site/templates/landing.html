@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=Geist+Mono:wght@400..700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400..700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="demo.css" />
 <style>
   :root{--space:clamp(24px, 5vw, 80px)}
@@ -14,452 +14,341 @@
   *{box-sizing:border-box;margin:0;padding:0}
   html{scroll-behavior:smooth}
   @media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
-  html,body{background:var(--bg);color:var(--fg);font:17px/1.6 "Instrument Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  html,body{background:var(--bg);color:var(--fg);font:var(--t-read)/1.6 var(--font-sans);-webkit-font-smoothing:antialiased}
   body{overflow-x:hidden}
-  a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:5px}
+  a:focus-visible,button:focus-visible,summary:focus-visible,.cast-item:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+  :focus:not(:focus-visible){outline:none}
   section[id]{scroll-margin-top:100px}
   ::selection{background:var(--accent);color:var(--bg)}
-  .mono{font-family:"Geist Mono",ui-monospace,monospace}
-  p .mono,li .mono,.cell .mono{white-space:nowrap;max-width:100%}
+  code,.mono{font-family:var(--font-mono);font-size:var(--t-mono)}
+  p .mono,li .mono,.cell .mono{color:var(--fg);background:var(--hover);padding:1px 6px;border-radius:var(--r-xs);white-space:nowrap;max-width:100%}
 
-  #ascii-bg{
-    position:absolute;top:0;left:0;right:0;height:100vh;
-    -webkit-mask-image:linear-gradient(to bottom,#000 0,#000 45%,transparent 100%);
-    mask-image:linear-gradient(to bottom,#000 0,#000 45%,transparent 100%);
-    z-index:1;pointer-events:none;opacity:.32;
-    font-family:"Geist Mono",ui-monospace,monospace;
-    font-size:12px;line-height:12px;letter-spacing:0;
-    color:var(--dim);
-    white-space:pre;
-    overflow:hidden;
-    user-select:none;
-  }
-  #ascii-bg pre{margin:0;padding:0;font:inherit;white-space:pre;color:var(--dim)}
-
-
-  /* Shell */
   .shell{position:relative;z-index:5;width:min(1280px, 100% - var(--space) * 2);margin:0 auto}
 
-  /* Nav — shared with docs (see site/templates/doc.css) */
-  nav.top{
-    position:sticky;top:0;z-index:20;
-    background:var(--bg);box-shadow:inset 0 calc(var(--seam) * -1) 0 var(--line);
-  }
-  nav.top .row{
-    display:flex;align-items:center;justify-content:space-between;
-    padding-top:30px;padding-bottom:30px;gap:24px;
-  }
+  nav.top{position:sticky;top:0;z-index:20;background:var(--bg)}
+  nav.top .row{display:flex;align-items:center;justify-content:space-between;padding-top:20px;padding-bottom:20px;gap:24px}
   .brand-lockup{display:flex;align-items:center;gap:18px;min-width:0}
   .brand{display:inline-flex;align-items:center;color:var(--fg);text-decoration:none;line-height:1}
-  .brand .logo{color:var(--fg);flex-shrink:0;display:inline-flex;align-items:center;gap:12px}
-  .brand .logo-mark{height:34px;width:auto;display:block}
-  .brand .logo-word{font-family:"Instrument Sans",system-ui,sans-serif;font-weight:700;font-size:29px;line-height:1;letter-spacing:-1px;color:var(--fg)}
-    .bp-tail{display:inline-flex;align-items:center;gap:14px;line-height:1;margin-top:4px}
-  .bp-sep,
-  .bp-seg{font-family:"Geist Mono",ui-monospace,monospace;font-size:12px;letter-spacing:.04em;text-transform:uppercase;font-weight:400}
-  .bp-sep{color:var(--muted)}
-  .bp-seg{color:var(--muted);padding:4px 0;border-bottom:1px solid transparent;transition:.15s;text-decoration:none}
-  a.bp-seg:hover{color:var(--fg);border-bottom-color:var(--fg)}
-  .bp-current{color:var(--fg)}
-  .bp-docs{color:var(--fg);font-weight:700}
-  nav ul{list-style:none;display:flex;gap:22px;font-size:12px;color:var(--muted);font-family:"Geist Mono",ui-monospace,monospace;letter-spacing:.04em;text-transform:uppercase}
-  nav ul a{color:inherit;text-decoration:none;padding:6px 0;border-bottom:1px solid transparent;transition:.15s}
-  nav ul a:hover{color:var(--fg);border-bottom-color:var(--fg)}
-  .nav-actions{display:flex;align-items:center;gap:8px}
-  .nav-github{
-    width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;
-    color:var(--muted);border:var(--seam) solid var(--line);border-radius:var(--radius-btn);text-decoration:none;
-    transition:border-color .2s,background .2s,color .2s;
-  }
-  .nav-github svg{width:16px;height:16px;display:block}
-  .nav-github:hover{color:var(--fg);border-color:var(--fg);background:var(--hover)}
-  .nav-cta{
-    display:inline-flex;align-items:center;gap:8px;
-    font-family:"Geist Mono",ui-monospace,monospace;font-size:12px;
-    border:var(--seam) solid var(--line);padding:8px 12px;border-radius:var(--radius-btn);
-    color:var(--fg);text-decoration:none;white-space:nowrap;
-    transition:border-color .2s,background .2s;
-  }
-  .nav-cta:hover{border-color:var(--fg);background:var(--hover)}
-  /* Burger + mobile drawer — only visible below 760px */
+  .brand .logo{color:var(--fg);flex-shrink:0;display:inline-flex;align-items:center;gap:10px}
+  .brand .logo-mark{height:32px;width:auto;display:block}
+  .brand .logo-word{font-size:var(--t-display);line-height:1}
+  .bp-tail{display:inline-flex;align-items:center;gap:8px;line-height:1}
+  .bp-sep,.bp-seg{font-size:var(--t-ui);font-weight:500}
+  .bp-sep{color:var(--dim)}
+  .bp-seg{color:var(--muted);text-decoration:none;transition:color .15s}
+  a.bp-seg:hover{color:var(--fg)}
+  .bp-current,.bp-docs{color:var(--fg)}
+  nav ul{list-style:none;display:flex;gap:32px;font-size:var(--t-ui);font-weight:500;color:var(--ink-2)}
+  nav ul a{color:inherit;text-decoration:none;transition:color .15s}
+  nav ul a:hover{color:var(--fg)}
+  .nav-actions{display:flex;align-items:center;gap:4px}
+  nav.top .nav-get{visibility:hidden;opacity:0;transition:opacity .2s,visibility .2s}
+  body:has(.hero.is-away) nav.top .nav-get{visibility:visible;opacity:1}
   .burger{
-    display:none;background:transparent;border:var(--seam) solid var(--line);
-    width:40px;height:40px;padding:0;border-radius:var(--radius-btn);cursor:pointer;
+    display:none;background:var(--soft);border:0;
+    width:40px;height:40px;padding:0;border-radius:var(--r-pill);cursor:pointer;
     flex-direction:column;align-items:center;justify-content:center;gap:5px;
-    transition:border-color .2s;
   }
-  .burger:hover{border-color:var(--fg)}
+  .burger:hover{background:var(--selected)}
   .burger span{display:block;width:18px;height:1.5px;background:var(--fg);transition:transform .2s, opacity .2s}
   .burger[aria-expanded="true"] span:nth-child(1){transform:translateY(6.5px) rotate(45deg)}
   .burger[aria-expanded="true"] span:nth-child(2){opacity:0}
   .burger[aria-expanded="true"] span:nth-child(3){transform:translateY(-6.5px) rotate(-45deg)}
-  .nav-drawer{
-    display:none;border-top:var(--seam) solid var(--line);
-    padding:16px clamp(24px, 5vw, 64px) 24px;
-    background:var(--drawer-bg);
-  }
+  .nav-drawer{display:none;padding:8px clamp(24px, 5vw, 64px) 24px;background:var(--drawer-bg)}
   .nav-drawer ul{list-style:none;display:flex;flex-direction:column;gap:4px;margin-bottom:16px}
-  .nav-drawer ul a{
-    display:block;padding:12px 0;color:var(--muted);font-family:"Geist Mono",ui-monospace,monospace;
-    font-size:13px;letter-spacing:.04em;text-transform:uppercase;text-decoration:none;
-    border-bottom:var(--seam) solid var(--line);transition:color .15s;
-  }
-  .nav-drawer ul a:hover{color:var(--fg)}
-  .nav-drawer .nav-cta{width:100%;justify-content:center;padding:14px}
+  .nav-drawer ul a{display:flex;align-items:center;min-height:48px;padding:0 16px;border-radius:var(--r-control);color:var(--ink-2);font-size:var(--t-read);font-weight:500;text-decoration:none}
+  .nav-drawer ul a:hover{background:var(--hover);color:var(--fg)}
 
-
-  /* Hero */
-  .hero{padding:48px 0 72px;position:relative}
-  .hero .shell{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:48px;align-items:center}
-  .hero .kicker{
-    font:11px/1.5 "Geist Mono",ui-monospace,monospace;letter-spacing:1.6px;text-transform:uppercase;
-    color:var(--muted);display:flex;align-items:center;gap:10px;margin-bottom:18px;
-  }
-  .hero .kicker .dot{width:6px;height:6px;background:var(--accent);border-radius:50%;flex-shrink:0}
-  /* arca's scale, which only works if each line stays two or three words. */
-  .hero h1{
-    font-size:clamp(40px,4.9vw,68px);line-height:1.02;
-    margin:25px 0;
-  }
+  .hero{padding:28px 0 72px;position:relative}
+  .hero .shell{display:flex;flex-direction:column;align-items:center;text-align:center}
+  .hero .kicker{font-size:var(--t-small);font-weight:500;color:var(--ink-2);background:var(--soft);padding:6px 14px;border-radius:var(--r-pill)}
+  .hero h1{font-size:var(--t-hero);line-height:1.02;margin:20px 0 18px}
   .hero h1 span{display:block}
-  .hero p.lead{max-width:46ch;font-size:20px;line-height:1.6;color:var(--muted);margin-bottom:30px}
-  .hero-cta{display:flex;flex-direction:column;align-items:flex-start;gap:14px;margin:30px 0 16px}
-  .hero-cta .under{font-size:13px;color:var(--accent);border-bottom:var(--seam) solid var(--accent-line);padding-bottom:2px}
-  .hero-cta .under:hover{color:var(--accent)}
-  .hero-meta{margin-top:16px;font-size:12px;line-height:1.8;color:var(--muted);white-space:nowrap}
+  .hero h1 .hero-line{justify-content:center}
+  .hero h1 .display-second{margin-inline:auto}
+  .hero p.lead{max-width:60ch;font-size:var(--t-title);line-height:1.5;color:var(--muted)}
+  .hero-cta{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:24px}
+  .btn.hero-copy{cursor:pointer;font-family:var(--font-mono);font-size:var(--t-mono)}
+  .hero-copy .copy-icon{color:var(--ink-2)}
+  .hero-meta{margin-top:12px;font-size:var(--t-meta);color:var(--muted)}
 
-  /* arca's own breakpoints: the hero headline must lose tracking before it loses legibility */
+  .cast{--m:min(68px, calc((100vw - var(--space) * 2) / 16.5));--twin:calc(var(--m) * 1.62);display:flex;justify-content:center;align-items:center;gap:calc(var(--m) * .2);margin:30px 0 26px;width:100%;position:relative;z-index:7}
+  .cast-item{position:relative;display:inline-flex;flex:none;width:var(--m);height:var(--m);perspective:calc(var(--m) * 2.6);translate:0 calc(var(--m) * var(--lift));border-radius:var(--r-control);outline-offset:6px}
+  .cast-item.cast-twin{width:var(--twin);height:var(--twin);perspective:calc(var(--twin) * 2.6);margin-inline:calc(var(--m) * .15)}
+  .cast-item svg{display:block;width:100%;height:100%;overflow:visible;transform-origin:50% 55%}
+  .cast-twin .mark-body{fill:var(--brand-ink)}
+  .cast-gaze{display:block;width:100%;height:100%;transform-style:preserve-3d;transform-origin:50% 55%;transform:rotateY(calc(var(--gx, 0) * 21.6deg)) rotateX(calc(var(--gy, 0) * -14.4deg))}
+  .cast-look{transform:translate(calc(var(--gx, 0) * 6px), calc(var(--gy, 0) * 4px))}
+  .cast-break{display:none}
+  .cast-tip{position:absolute;top:calc(100% + 10px);left:50%;translate:-50% 0;z-index:6;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .15s;font-size:var(--t-small);color:var(--muted);background:var(--bg);padding:4px 10px;border-radius:var(--r-control)}
+  .cast-tip .display-name{font-weight:800;letter-spacing:-.02em}
+  .cast-first .cast-tip{left:0;translate:none}
+  .cast-last .cast-tip{left:auto;right:0;translate:none}
+  .cast-item:hover .cast-tip,.cast-item:focus-visible .cast-tip{opacity:1}
 
-
-  .hero-scene{min-width:0;position:relative;padding:54px 0 42px}
-  .scene-label{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;color:var(--muted);font:10px/1.5 "Geist Mono",ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase}
-  .scene-label span:last-child{color:var(--accent)}
-  .scene-caption{margin-top:20px;text-align:center;font-size:13px;color:var(--muted)}
+  .hero-scene{width:min(960px, 100%);min-width:0;position:relative}
+  .scene-caption{margin-top:16px;text-align:center;font-size:var(--t-small);color:var(--muted)}
   .scene-caption b{color:var(--fg);font-weight:500}
-  .hero .alpi-term{height:390px;border-color:var(--line-2)}
-  .hero-install{font:12px/1.6 "Geist Mono",ui-monospace,monospace;color:var(--muted)}
-  .hero-install code{color:var(--fg);font:inherit}
-  .hero-cta .btn{font-family:"Instrument Sans",system-ui,sans-serif;font-size:15px;font-weight:600}
+  .hero .alpi-term{height:390px;text-align:left}
 
-  .strip{
-    border-block:var(--seam) solid var(--line);padding-block:23px;
-    display:flex;justify-content:space-between;gap:20px;color:var(--muted);font-size:13px;
-  }
-  .strip div{min-width:0}
-  .strip .mk{color:var(--accent);margin-right:12px}
+  .strip{padding-block:8px;display:flex;flex-wrap:wrap;justify-content:center;gap:12px 40px;color:var(--ink-2);font-size:var(--t-small)}
+  .strip div{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+  .strip svg{width:16px;height:16px;flex:none;color:var(--fg)}
 
-  .cta-row{display:flex;gap:12px;flex-wrap:wrap}
+  .cta-row{display:flex;gap:8px;flex-wrap:wrap}
   .btn{
-    display:inline-flex;align-items:center;gap:10px;
-    font-family:"Geist Mono",ui-monospace,monospace;font-size:14px;font-weight:500;
-    padding:17px 24px;border-radius:var(--radius-btn);text-decoration:none;
-    transition:background .15s,border-color .15s;
+    display:inline-flex;align-items:center;gap:10px;min-height:48px;
+    font-family:var(--font-sans);font-size:var(--t-ui);font-weight:500;
+    padding:0 24px;border:0;border-radius:var(--r-pill);text-decoration:none;
+    transition:background .15s;
   }
-  .btn-primary{background:var(--fg);color:var(--bg);border:1px solid var(--fg)}
-  .btn-primary:hover{background:var(--ink-2);border-color:var(--ink-2)}
+  .btn-primary{background:var(--fg);color:var(--bg)}
+  .btn-primary:hover{background:var(--ink-2)}
   .btn-primary:active{background:color-mix(in srgb, var(--fg) 85%, var(--bg))}
-  .btn-ghost{background:transparent;color:var(--fg);border:var(--seam) solid var(--line)}
-  .btn-ghost:hover{background:var(--hover);border-color:var(--line-2)}
-  .btn .arr{transition:transform .2s}
+  .btn-ghost{background:var(--soft);color:var(--fg)}
+  .btn-ghost:hover{background:var(--selected)}
+  .btn-ground{background:var(--bg);color:var(--fg)}
+  .btn-ground:hover{background:var(--selected)}
 
   .hero [data-alpi-demo]{display:block}
 
+  .narrow-only{display:none}
   .story{padding-bottom:24px}
   .story-layout{display:grid;grid-template-columns:.85fr 1.15fr;gap:80px;align-items:center}
   .story-copy h2{max-width:14ch}
-  .story-copy .sub{font-size:18px;max-width:39ch}
+  .story-copy .sub{max-width:39ch}
   .story-points{list-style:none;margin:30px 0;display:grid;gap:22px}
   .story-points li{display:grid;grid-template-columns:28px 1fr;gap:12px}
-  .story-points .point-num{font:11px/1.8 "Geist Mono",ui-monospace,monospace;color:var(--accent);padding-top:3px}
-  .story-points strong{font-size:16px;font-weight:600}
-  .story-points p{font-size:15px;color:var(--muted);line-height:1.6;margin-top:3px;max-width:36ch}
-  .story-link{font-size:14px;text-decoration:none}
-  .network-figure{min-width:0;margin:0;padding:28px;border:var(--seam) solid var(--line);border-radius:var(--radius);background:var(--panel-soft)}
-  .network-heading{display:flex;justify-content:space-between;gap:16px;align-items:center;margin-bottom:28px;font:10px/1.5 "Geist Mono",ui-monospace,monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-  .network-heading b{color:var(--accent);font-weight:400}
-  .network-trigger{width:fit-content;margin:auto;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--fg);padding:10px 16px;border:var(--seam) solid var(--line);border-radius:var(--r-tag);background:var(--bg)}
-  .network-icon{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
-  .network-trigger .network-icon{width:17px;height:17px;color:var(--accent)}
-  .network-route{display:block;width:100%;height:30px;fill:none;stroke:var(--accent);opacity:.45;stroke-width:1}
-  .network-route path{vector-effect:non-scaling-stroke}
-  .route-narrow{display:none}
-  .network-machines{display:grid;grid-template-columns:minmax(0,1fr) 64px minmax(0,1fr);align-items:center}
-  .network-machine{border:var(--seam) solid var(--line);border-radius:var(--radius-in);padding:18px;min-width:0;background:var(--bg)}
-  .network-machine.primary{border-color:var(--accent-line);background:var(--pane)}
-  .machine-location{font:10px/1.5 "Geist Mono",ui-monospace,monospace;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:18px}
-  .network-machine h3{font-size:24px;margin:0 0 10px}
-  .network-machine p{font-size:13px;line-height:1.6;color:var(--muted);min-height:42px}
-  .agent-memory{display:flex;gap:6px;align-items:center;margin-top:18px;padding-top:12px;border-top:var(--seam) solid var(--line);font:10px/1.5 "Geist Mono",ui-monospace,monospace;color:var(--muted)}
-  .agent-memory .network-icon{width:14px;height:14px}
-  .network-link{display:flex;align-items:center;flex-direction:column;gap:7px;color:var(--accent)}
-  .network-link svg{width:64px;height:24px;fill:none;stroke:currentColor;stroke-width:1.25}
-  .network-link span{font:9px/1.5 "Geist Mono",ui-monospace,monospace;letter-spacing:.05em}
-  .network-permission{text-align:center;font:11px/1.6 "Geist Mono",ui-monospace,monospace;color:var(--muted);margin-top:14px}
-  .network-report{padding:20px;border:var(--seam) solid var(--accent-line);border-radius:var(--radius-in);background:var(--accent-wash)}
-  .report-label{display:flex;align-items:center;gap:8px;color:var(--accent);font:10px/1.5 "Geist Mono",ui-monospace,monospace;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px}
-  .report-label .network-icon{width:16px;height:16px}
-  .network-report blockquote{font-size:18px;line-height:1.45;letter-spacing:-.3px}
-  .report-delivery{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-top:16px;padding-top:14px;border-top:var(--seam) solid var(--accent-line)}
-  .report-delivery .network-icon{width:16px;height:16px}
-  .network-figure figcaption{font-size:12px;line-height:1.6;color:var(--muted);margin-top:18px}
+  .story-points .point-num{font-size:var(--t-small);font-weight:600;font-variant-numeric:tabular-nums;color:var(--muted);padding-top:2px}
+  .story-points strong{font-size:var(--t-read);font-weight:600}
+  .story-points p{font-size:var(--t-ui);color:var(--muted);line-height:1.6;margin-top:3px;max-width:36ch}
+  .story-link{font-size:var(--t-small)}
+  .network-figure{min-width:0;margin:0;padding:28px;border-radius:var(--r-sheet);background:var(--soft);display:flex;flex-direction:column;gap:16px}
+  .network-heading{display:flex;justify-content:space-between;gap:16px;align-items:center;font-size:var(--t-small);font-weight:500;color:var(--muted)}
+  .network-heading b{color:var(--fg);font-weight:500}
+  .network-trigger{align-self:center;display:flex;align-items:center;gap:10px;font-size:var(--t-small);font-weight:500;color:var(--fg);padding:10px 16px;border-radius:var(--r-pill);background:var(--bg)}
+  .network-trigger svg{width:16px;height:16px;flex:none;color:var(--ink-2)}
+  .network-machines{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:12px;align-items:stretch}
+  .network-machine{border-radius:var(--r-surface);padding:18px;min-width:0;background:var(--bg);display:flex;flex-direction:column;gap:10px}
+  .machine-location{font-size:var(--t-small);font-weight:500;color:var(--muted)}
+  .network-machine h3{font-size:var(--t-title);margin:0}
+  .network-machine p{font-size:var(--t-small);line-height:1.6;color:var(--muted)}
+  .network-alp{align-self:center;font-size:var(--t-meta);font-weight:500;color:var(--muted);padding:4px 10px;border-radius:var(--r-control);background:var(--bg)}
+  .network-report{padding:20px;border-radius:var(--r-surface);background:var(--bg);display:flex;flex-direction:column;gap:10px}
+  .report-label{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:var(--t-small);font-weight:500}
+  .network-report blockquote{font-size:var(--t-title);line-height:1.45;letter-spacing:-.01em}
+  .report-delivery{font-size:var(--t-meta);color:var(--muted)}
+  .network-figure figcaption{font-size:var(--t-meta);line-height:1.6;color:var(--muted)}
   @media(max-width:1100px){.story-layout{grid-template-columns:1fr;gap:36px}.story-copy h2{max-width:22ch}.story-copy .sub{max-width:58ch}.story-points{grid-template-columns:repeat(3,1fr);gap:24px}.network-figure{max-width:720px;width:100%;justify-self:center}}
-  @media(max-width:600px){.route-wide{display:none}.route-narrow{display:block}.story-points{grid-template-columns:1fr;gap:18px}.network-figure{padding:20px}.network-machines{grid-template-columns:1fr}.machine-location{margin-bottom:14px}.network-machine p{min-height:0}.network-link{height:64px;flex-direction:row;justify-content:center;gap:4px}.network-link svg{width:44px;transform:rotate(90deg)}.network-heading{font-size:9px}.network-report blockquote{font-size:17px}.network-permission{font-size:10px}}
-
-  /* Section scaffolding */
-  section{padding:100px 0;position:relative}
-  .eyebrow{
-    font-family:"Geist Mono",ui-monospace,monospace;font-size:11px;color:var(--muted);
-    letter-spacing:.14em;text-transform:uppercase;margin-bottom:24px;
-    display:flex;align-items:center;gap:12px;
+  @media(max-width:600px){
+    .wide-only{display:none}.narrow-only{display:inline}
+    .story-points{grid-template-columns:1fr;gap:18px}
+    .network-figure{padding:20px}
+    .network-machines{gap:6px}
+    .network-machine{padding:16px}
+    .network-machine .profile-name{flex-direction:column;align-items:flex-start;gap:6px}
+    .network-machine .live-mark{width:28px;height:28px}
+    .network-report blockquote{font-size:var(--t-read)}
   }
-  .eyebrow:before{content:"";width:24px;height:1px;background:var(--accent-line)}
-  .eyebrow{font:11px/1.5 "Geist Mono",ui-monospace,monospace;letter-spacing:1.6px;text-transform:uppercase;color:var(--muted)}
-  .eyebrow b{color:var(--accent);font-weight:500}
-  h2{font-size:clamp(34px,4vw,53px);font-weight:500;letter-spacing:-2px;line-height:1.12;margin:15px 0 25px;max-width:22ch;text-wrap:balance}
-  h3{font-size:23px;font-weight:600;letter-spacing:-.7px;line-height:1.25;margin:22px 0 12px}
+
+  section{padding:100px 0;position:relative}
+  .eyebrow{font-size:var(--t-small);font-weight:500;color:var(--muted);margin-bottom:24px}
+  .eyebrow b{color:var(--fg);font-weight:500;font-variant-numeric:tabular-nums;margin-right:10px}
+  h2{font-size:var(--t-headline);line-height:1.1;margin:15px 0 25px;max-width:22ch;text-wrap:balance}
+  h3{font-size:var(--t-title);font-weight:600;letter-spacing:-.01em;line-height:1.25;margin:22px 0 12px}
   .sec-head{max-width:600px}
   .sec-head .eyebrow{margin-bottom:0}
   .sec-head h2{margin:15px 0 25px}
-  .sec-head .sub{color:var(--muted);font-size:17px;line-height:1.6;margin:0 0 28px}
-  p.sub{font-size:18px;color:var(--muted);max-width:680px;line-height:1.55;text-wrap:pretty}
+  .sec-head .sub{margin:0 0 28px}
+  p.sub{font-size:var(--t-title);color:var(--muted);max-width:680px;line-height:1.5;text-wrap:pretty}
 
-  /* grid */
+  #states{padding:72px 0}
+  .states-layout{display:grid;grid-template-columns:.85fr 1.15fr;gap:80px;align-items:center}
+  .states-copy h2{margin:0 0 16px;max-width:14ch}
+  .states-copy .sub{max-width:460px}
+  .states-list{list-style:none;margin:0;padding:12px;border-radius:var(--r-sheet);background:var(--soft);display:flex;flex-direction:column;gap:4px}
+  .state-row{display:grid;grid-template-columns:56px minmax(0,1fr);gap:16px;align-items:center;padding:14px 16px;border-radius:var(--r-surface);background:var(--bg)}
+  .state-row .live-mark{width:52px;height:52px;justify-self:center}
+  .state-text{display:flex;flex-direction:column;gap:4px;min-width:0}
+  .state-top{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}
+  .state-top .display-name{font-size:var(--t-title);line-height:1.1}
+  .state-label{font-size:var(--t-small);font-weight:500;color:var(--muted)}
+  .state-line{font-size:var(--t-ui);line-height:1.6;color:var(--muted)}
+
   .grid{display:grid;gap:48px 40px;margin-top:64px}
   .grid.c2{grid-template-columns:repeat(2,1fr)}
   .grid.c3{grid-template-columns:repeat(3,1fr)}
   .grid.c4{grid-template-columns:repeat(4,1fr)}
 
-
   .cell h3{margin:4px 0 0}
-  .cell{padding-top:24px;border-top:var(--seam) solid var(--line);min-width:0;display:flex;flex-direction:column;gap:12px}
+  .cell{min-width:0;display:flex;flex-direction:column;gap:10px}
 
-  /* Feature band — reserved for the two sections that carry the product: the profile boundary and ALP. Nothing else may use it, or it stops meaning anything. */
-  .feature{
-    margin-top:45px;padding:clamp(32px,4vw,56px);border-radius:var(--radius);
-    border:var(--seam) solid var(--accent-line);
-    background:var(--pane);
-    display:grid;grid-template-columns:1.2fr 1fr;gap:0 80px;align-items:start;
-  }
-  .feature > *{grid-column:1/-1}
-  .feature .lede{grid-column:1;font-size:clamp(24px,2.6vw,34px);line-height:1.22;letter-spacing:-0.02em;font-weight:500;max-width:30ch;text-wrap:balance}
-  .feature .say{grid-column:2;color:var(--muted);font-size:15px;line-height:1.6;margin:0}
+  .feature{margin-top:45px;padding:clamp(20px,3vw,48px);border-radius:var(--r-sheet);background:var(--soft);display:flex;flex-direction:column;gap:12px}
+  .feature-intro{display:grid;grid-template-columns:1.2fr 1fr;gap:18px 80px;align-items:start;margin-bottom:20px}
+  .feature .lede{font-size:var(--t-display);line-height:1.22;letter-spacing:-0.02em;font-weight:500;max-width:30ch;text-wrap:balance}
+  .feature .say{color:var(--muted);font-size:var(--t-ui);line-height:1.6;margin:0}
+  .feature-note{font-size:var(--t-meta);line-height:1.6;color:var(--muted)}
 
+  .ladder{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .rung{padding:24px;display:flex;flex-direction:column;gap:10px;border-radius:var(--r-surface);background:var(--bg);min-width:0}
+  .rung-art{height:52px;display:flex;align-items:center}
+  .rung-pair{display:inline-flex;align-items:center;gap:10px;color:var(--muted);font-size:var(--t-small)}
+  .rung-pair.inside{padding:8px 12px;border-radius:var(--r-surface);background:var(--soft)}
+  .rung .tag{font-family:var(--font-mono);font-size:var(--t-mono);line-height:1.5;color:var(--muted)}
+  .rung h3{font-size:var(--t-title);font-weight:600;letter-spacing:-0.01em;line-height:1.25;margin:0}
+  .rung p{color:var(--muted);font-size:var(--t-ui);line-height:1.6}
 
-  .ladder{border:var(--seam) solid var(--line);border-radius:var(--radius-in);overflow:hidden;background:var(--panel-soft);margin-top:44px}
-  .rung{padding:26px 30px;display:grid;grid-template-columns:104px 1.1fr 1.4fr;gap:28px;align-items:start;border-bottom:var(--seam) solid var(--line)}
-  .rung:last-child{border-bottom:0}
-  .rung .tag{font-family:"Geist Mono",ui-monospace,monospace;font-size:12px;line-height:1.5;padding-top:3px;color:var(--accent);letter-spacing:.1em}
-  .rung h3{font-size:19px;font-weight:600;letter-spacing:-0.01em;line-height:1.25;margin:0}
-  .rung p{color:var(--muted);font-size:15px;line-height:1.6}
-  .rung .mono{color:var(--fg)}
-
-  .verbs{
-    margin-top:36px;border:var(--seam) solid var(--line);border-radius:var(--radius-in);background:var(--panel-bg);
-    padding:26px 30px;font-family:"Geist Mono",ui-monospace,monospace;font-size:13.5px;line-height:2.05;
-  }
-  .verbs .v{color:var(--accent)}
+  .verbs{border-radius:var(--r-surface);background:var(--bg);padding:24px 28px;font-family:var(--font-mono);font-size:var(--t-mono);line-height:2.05;overflow-wrap:anywhere}
+  .verbs .v{color:var(--fg);display:inline-block;min-width:15ch}
   .verbs .c{color:var(--muted)}
+  .verbs .verbs-foot{margin-top:8px}
+  .rules{margin-top:40px;font-size:var(--t-read);line-height:1.6;color:var(--muted);max-width:760px}
 
-  .counter{margin-top:48px;padding:32px;border:var(--seam) solid var(--line);border-radius:var(--radius);background:var(--panel-soft);display:grid;grid-template-columns:.8fr 1.6fr;gap:40px;align-items:start}
-  .counter h3{font-size:24px;margin:0 0 14px}
-  .counter p{color:var(--muted);font-size:15px;line-height:1.65;margin:0;max-width:34ch}
+  .counter{margin-top:48px;padding:32px;border-radius:var(--r-surface);background:var(--soft);display:grid;grid-template-columns:.8fr 1.6fr;gap:40px;align-items:start}
+  .counter h3{font-size:var(--t-display);margin:0 0 14px;letter-spacing:-.02em}
+  .counter p{color:var(--muted);font-size:var(--t-ui);line-height:1.6;margin:0;max-width:34ch}
   .counter ul{list-style:none;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 32px;margin:0;padding:0}
-  .counter li{min-width:0;padding-left:16px;border-left:2px solid var(--accent-line)}
-  .counter li strong{display:block;font-size:15px;font-weight:600;color:var(--fg);margin-bottom:6px}
-  .counter li span{display:block;color:var(--muted);font-size:14px;line-height:1.6}
-  .prof .purpose{font-size:14px;line-height:1.5;color:var(--muted);min-height:3em}
+  .counter li{min-width:0}
+  .counter li strong{display:block;font-size:var(--t-read);font-weight:600;color:var(--fg);margin-bottom:4px}
+  .counter li span{display:block;color:var(--muted);font-size:var(--t-small);line-height:1.6}
 
-
-  .boundary{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:44px}
-  .prof{border:var(--seam) solid var(--line);border-radius:var(--radius-in);background:var(--panel-soft);padding:22px 24px;display:flex;flex-direction:column;gap:14px;min-width:0}
-  .prof.lit{border-color:var(--accent-line);background:var(--pane)}
-  .prof .nm{display:flex;font-size:19px;margin-bottom:-8px}
-  .prof .kv{display:flex;justify-content:space-between;gap:12px;font-family:"Geist Mono",ui-monospace,monospace;font-size:11.5px;color:var(--muted)}
-  .prof .kv b{color:var(--fg);font-weight:400;text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .boundary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .prof{border-radius:var(--r-surface);background:var(--bg);padding:22px;display:flex;flex-direction:column;gap:12px;min-width:0}
+  .prof .nm{display:flex;font-size:var(--t-title)}
+  .prof .nm .profile-name{gap:12px}
+  .prof .purpose{font-size:var(--t-small);line-height:1.5;color:var(--muted)}
+  .prof .kvs{display:flex;flex-direction:column;gap:10px}
+  .prof .kv{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:var(--t-small);color:var(--muted)}
+  .prof .kv b{color:var(--fg);font-weight:500;text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .grant{
-    margin-top:14px;display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;
-    font-family:"Geist Mono",ui-monospace,monospace;font-size:12px;color:var(--muted);
-    border:var(--seam) dashed var(--accent-line);border-radius:var(--radius-in);padding:12px 16px;
+    display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;
+    font-size:var(--t-small);color:var(--muted);border-radius:var(--r-pill);background:var(--bg);padding:12px 20px;
   }
+  .grant .pair{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
   .grant .rest{margin-left:auto}
-  .grant b{color:var(--accent);font-weight:400}
-  .grant b.deny,.prof .kv .hit{color:var(--warn)}
+  .grant b{color:var(--fg);font-weight:400}
+  .grant b.deny,.prof .kv .hit{color:var(--warn);font-weight:500}
 
   .steps{list-style:none;padding:0;margin:0}
   #how{background:var(--band);padding-block:85px}
   .how-layout .eyebrow{margin-bottom:0}
   .how-layout h2{margin:15px 0 25px}
   .how-layout{display:grid;grid-template-columns:1fr 1fr;gap:100px;align-items:start}
-  .how-layout .say{font-size:17px;color:var(--muted);max-width:475px}
-  .steps li{display:flex;gap:24px;padding:27px 0;border-bottom:var(--seam) solid var(--line)}
-  .steps .num{font:12px "Geist Mono",ui-monospace,monospace;color:var(--accent);padding-top:4px;flex-shrink:0}
-  .steps h3{margin:0 0 12px}
-  .steps p{color:var(--muted);font-size:15px;line-height:1.6;max-width:62ch;margin:0}
+  .how-layout .say{font-size:var(--t-title);line-height:1.5;color:var(--muted);max-width:475px}
+  .steps li{display:flex;gap:20px;padding:14px 0}
+  .steps .num{font-size:var(--t-small);font-weight:600;font-variant-numeric:tabular-nums;color:var(--muted);padding-top:3px;flex-shrink:0}
+  .steps h3{margin:0 0 8px}
+  .steps p{color:var(--muted);font-size:var(--t-ui);line-height:1.6;max-width:62ch;margin:0}
 
-  .questions-grid{display:grid;grid-template-columns:1fr 1.2fr;gap:80px;border-top:var(--seam) solid var(--line);padding-top:45px;margin-top:15px}
+  .questions-grid{display:grid;grid-template-columns:1fr 1.2fr;gap:80px;margin-top:15px}
   .questions-grid h2{margin:0 0 20px}
-  .questions-grid .sub{color:var(--muted);font-size:17px;line-height:1.6;max-width:400px;margin:0}
-  .qa{margin:0}
-  .qa details{padding:22px 0;border-bottom:var(--seam) solid var(--line)}
-  .qa details:first-child{padding-top:0}
+  .questions-grid .sub{max-width:400px;margin:0}
+  .qa{margin:0;display:flex;flex-direction:column;gap:8px}
+  .qa details{border-radius:var(--r-surface);background:var(--soft)}
   .qa summary{
-    list-style:none;cursor:pointer;display:flex;justify-content:space-between;gap:16px;
-    font-weight:500;transition:color .15s;
+    list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:16px;
+    min-height:56px;padding:12px 20px;font-size:var(--t-read);font-weight:500;
   }
   .qa summary::-webkit-details-marker{display:none}
-  .qa summary:after{content:"+";color:var(--accent)}
-  .qa details[open] summary:after{content:"−";color:var(--accent)}
-  .qa summary:hover{color:var(--accent)}
-  .qa p{color:var(--muted);font-size:15px;line-height:1.7;max-width:510px;margin:14px 0 0}
+  .qa summary:after{content:"+";color:var(--muted);font-size:var(--t-title);line-height:1}
+  .qa details[open] summary:after{content:"−"}
+  .qa summary:hover{color:var(--ink-2)}
+  .qa p{color:var(--muted);font-size:var(--t-ui);line-height:1.7;max-width:560px;margin:0;padding:0 20px 20px}
 
+  .stage{margin-top:16px}
+  .stage img{display:block;height:auto}
+  .stage-desk{width:100%;border-radius:var(--r-surface);outline:1px solid var(--line);outline-offset:-1px;filter:drop-shadow(0 24px 64px var(--lift))}
+  @media not (max-width:720px){.stage .stage-phone{display:none}}
+  :root[data-theme="light"] .shot-dark,:root:not([data-theme="light"]) .shot-light{display:none}
+  .surfaces{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:12px}
+  .surface{border-radius:var(--r-surface);background:var(--soft);padding:24px;display:flex;flex-direction:column;gap:12px;min-width:0}
+  .surface h3{margin:0}
+  .surface p{color:var(--muted);font-size:var(--t-ui);line-height:1.6}
+  .surface .cta-line{margin-top:auto;padding-top:4px}
+  .surface .meta{font-size:var(--t-meta);color:var(--muted)}
+  .surface .meta a{color:inherit}
+  .pulls{margin-top:auto;display:flex;flex-direction:column;gap:8px}
+  .btn svg{flex-shrink:0;opacity:.9;vertical-align:-3px}
+  .pullcmd svg{color:var(--ink-2);flex-shrink:0}
+  .pullcmd{border-radius:var(--r-control);display:flex;align-items:center;gap:12px;width:100%;border:0;cursor:pointer;text-align:left;font-family:var(--font-mono);font-size:var(--t-mono);background:var(--bg);padding:14px 16px;color:var(--fg);transition:background .15s}
+  .pullcmd:hover{background:var(--selected)}
+  .pullcmd .copy-text{flex:1;justify-items:start;min-width:0}
+  .pullcmd .copy-icon{order:2;color:var(--ink-2)}
+  .licence{margin-top:32px;font-size:var(--t-read);line-height:1.6;color:var(--muted);max-width:760px}
 
-  .surfaces{display:grid;grid-template-columns:1.05fr 1fr;gap:16px;margin-top:56px}
-  .surface{border:var(--seam) solid var(--line);border-radius:var(--radius);background:var(--panel-soft);padding:32px;display:flex;flex-direction:column;gap:14px;min-width:0}
-  .surface.lit{border-color:var(--accent-line);background:var(--pane)}
-  .surface.wide{margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center}
-  .surface.wide.split{grid-template-columns:1fr 1.15fr}
-  .surface .lbl{font-family:"Geist Mono",ui-monospace,monospace;font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
-  .surface h3{font-size:31px;font-weight:600;letter-spacing:-.9px;line-height:1.15;margin:0}
-  .surface p{color:var(--muted);font-size:16px;line-height:1.6;max-width:360px}
-  .surface .top{display:flex;align-items:center;justify-content:space-between;gap:12px}
-  .surface .pill{font-family:"Geist Mono",ui-monospace,monospace;font-size:10.5px;letter-spacing:.1em;color:var(--accent);border:var(--seam) solid var(--accent-line);padding:5px 11px;border-radius:var(--r-tag)}
-  .surface .meta{font-family:"Geist Mono",ui-monospace,monospace;font-size:11.5px;color:var(--muted);max-width:none}
-  .surface .alt{margin-top:auto;padding-top:22px;border-top:var(--seam) solid var(--line);display:flex;flex-direction:column;gap:10px}
-  .surface .alt a{display:flex;align-items:center;gap:10px;font-size:15px;color:var(--fg);opacity:.82;transition:.15s}
-  .surface .alt a:hover{opacity:1;color:var(--accent)}
-  .stores{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px}
-  .store{border:var(--seam) solid var(--line);border-radius:var(--radius-btn);padding:9px 16px;display:flex;flex-direction:column;gap:3px}
-  a.store{color:inherit;text-decoration:none}
-  a.store:hover{border-color:var(--accent)}
-  .store b{font-size:15px;font-weight:600}
-  .store span{font-family:"Geist Mono",ui-monospace,monospace;font-size:10.5px;color:var(--muted)}
-  .btn svg,.surface .alt svg,.store svg{flex-shrink:0;opacity:.9}
-  .btn svg{margin-right:9px;vertical-align:-3px}
-  .store svg{margin-bottom:6px;color:var(--accent)}
-  .pullcmd svg{color:var(--accent);flex-shrink:0}
-  .pullcmd{border-radius:var(--radius-btn);display:flex;align-items:center;gap:12px;font-family:"Geist Mono",ui-monospace,monospace;font-size:13.5px;background:var(--panel-bg);border:var(--seam) solid var(--line);padding:16px 18px;color:var(--fg);overflow-x:auto}
-
-
-  .cta-line{margin-top:18px}
-  .meta-line{font-size:13px;margin-top:12px;color:var(--muted)}
-  .meta-line a.link-inline,.link-inline{color:var(--fg);border-bottom:1px solid var(--dim)}
-  .link-inline:hover{border-color:var(--fg)}
-  .apps-footnote{margin-top:32px}
-  .cell .n{font-family:"Geist Mono",ui-monospace,monospace;font-size:11px;color:var(--muted)}
-  .cell .n::before{content:"// "}
-  .cell p{color:var(--muted);font-size:16px;line-height:1.65}
-  .cell .tag{
-    font-family:"Geist Mono",ui-monospace,monospace;font-size:10.5px;color:var(--muted);
-    border:var(--seam) solid var(--line);padding:2px 8px;border-radius:var(--r-tag);align-self:flex-start;margin-top:auto
-  }
-  pre.ascii-diagram{max-width:100%;overflow-x:auto}
-
-  pre.ascii-diagram{
-    font-family:"Geist Mono",ui-monospace,monospace;font-size:12px;line-height:1.5;color:var(--fg);
-    white-space:pre;overflow-x:auto;
-    background:var(--panel-soft);
-    border:var(--seam) solid var(--line);padding:28px;border-radius:var(--radius);
-  }
-  pre.ascii-diagram .muted{color:var(--muted)}
-
-
-  /* Footer */
-
-
-  /* Controls */
+  .link-inline{color:var(--fg);text-decoration:underline;text-decoration-color:var(--dim);text-underline-offset:4px}
+  .link-inline:hover{text-decoration-color:var(--fg)}
+  .cell .n{font-size:var(--t-small);font-weight:500;color:var(--muted)}
+  .cell p{color:var(--muted);font-size:var(--t-read);line-height:1.6}
 
   @media(max-width:720px){
     p .mono,li .mono,.cell .mono{white-space:normal;overflow-wrap:anywhere}
   }
 
-  @media(pointer:coarse){
-    /* A standalone link is a tap target; an inline one inside a sentence is not. */
-    .hero-cta .under,.surface .alt a{min-height:44px;display:inline-flex;align-items:center}
-  }
-
-  @media(max-width:720px){
-    /* Mono labels read larger than their nominal size on a desktop, not on a phone. */
-    .eyebrow,.cell .n,.cell .tag,.prof .kv,.surface .lbl,.surface .pill,.surface .meta,.store span,.strip,.hero .kicker{font-size:12.5px}
-  }
-
-  /* Responsive overrides last: a media query adds no specificity, so a base
-     rule written after one would silently win. */
 @media (max-width:760px){
     .nav-menu{display:none}
-    nav.top > .row > .nav-actions > .nav-cta{display:none}
     .burger{display:inline-flex}
     .nav-drawer[data-open="true"]{display:block}
     .bp-seg:not(.bp-docs){display:none}
     .bp-sep{display:none}
   }
-@media(max-width:900px){.hero-meta{white-space:normal}}
 @media(max-width:1000px){
-    .hero .shell{gap:20px}
     .how-layout{gap:50px}
     .questions-grid{gap:40px}
-    .feature-grid{gap:28px}
+    .states-layout{grid-template-columns:1fr;gap:32px}
   }
 @media(max-width:720px){
-    .hero{padding:28px 0 48px}
-    .hero h1{font-size:clamp(36px,10.4vw,56px)}
-    .hero p.lead{font-size:18px}
-    .hero-scene{padding:12px 0 20px}
+    .hero{padding:20px 0 48px}
+    .hero h1{font-size:var(--t-hero)}
+    .hero p.lead{font-size:var(--t-read)}
+    p.sub,.how-layout .say{font-size:var(--t-read)}
     .hero .alpi-term{height:360px}
-    .scene-label{font-size:10px;letter-spacing:.04em}
-    .hero-install{font-size:12px}
-    .hero-install code{display:block;margin-top:4px}
-    .hero .alpi-term-body{font-size:12px}
-    .scene-caption{font-size:12px}
+    .cast{--m:min(52px, calc((100vw - var(--space) * 2) / 6.4));--mid:calc(var(--m) * .85);--twin:calc(var(--m) * 1.46);flex-wrap:wrap;row-gap:12px;gap:12px calc(var(--m) * .36);margin:28px 0 24px}
+    .cast-break{display:block;flex-basis:100%;height:0}
+    .cast-item{translate:0 calc(var(--m) * var(--lift) * .5)}
+    .cast-item.cast-middle{width:var(--mid);height:var(--mid);perspective:calc(var(--mid) * 2.6)}
+    .cast-item.cast-twin{margin-inline:0}
+    .cast-first .cast-tip,.cast-last .cast-tip{left:50%;right:auto;translate:-50% 0}
+    .cast-start .cast-tip{left:0;right:auto;translate:none}
+    .cast-end .cast-tip{left:auto;right:0;translate:none}
+    .strip{flex-direction:column;align-items:flex-start;gap:12px}
     .sec-head .sub{margin-bottom:0}
     .how-layout{grid-template-columns:1fr;gap:30px}
     .questions-grid{grid-template-columns:1fr;gap:30px}
-    .strip{display:grid;grid-template-columns:1fr 1fr;gap:15px 10px}
-    .strip .mk{margin-right:7px}
     section{padding:64px 0}
     #how{padding-block:56px}
-  }
-@media(max-width:900px){
-    .hero .shell{grid-template-columns:1fr;gap:40px}
+    #states{padding:56px 0}
+    .states-list{padding:8px}
+    .state-row{grid-template-columns:48px minmax(0,1fr);padding:14px}
+    .state-row .live-mark{width:44px;height:44px}
+    .state-line{font-size:var(--t-small)}
+    .surface{padding:20px}
+    .stage .stage-desk{display:none}
+    .stage-phone{width:min(280px,76%);margin:0 auto;filter:drop-shadow(0 24px 48px var(--lift))}
   }
 @media(max-width:860px){.grid.c3,.grid.c4{grid-template-columns:repeat(2,1fr);gap:40px 32px}}
 @media(max-width:560px){.grid.c2,.grid.c3,.grid.c4{grid-template-columns:1fr}}
 @media(max-width:900px){
-    .feature{grid-template-columns:1fr;gap:0}
-    .feature .lede,.feature .say{grid-column:1}
-    .feature .say{margin-top:18px;max-width:none}
+    .feature-intro{grid-template-columns:1fr;margin-bottom:12px}
+    .counter{grid-template-columns:1fr;gap:28px}.counter p{max-width:60ch}
+    .ladder,.boundary,.surfaces{grid-template-columns:1fr}
   }
-@media(max-width:900px){.counter{grid-template-columns:1fr;gap:28px}.counter p{max-width:60ch}}
 @media(max-width:620px){
     .counter{padding:24px}.counter ul{grid-template-columns:1fr;gap:22px}
+    .grant{border-radius:var(--r-surface);padding:14px 16px}
+    .grant .pair{gap:6px}
     .grant .rest{margin-left:0;flex-basis:100%}
-  }
-@media(max-width:760px){.steps li{grid-template-columns:1fr;gap:10px}}
-@media(max-width:900px){
-    .rung{grid-template-columns:1fr;gap:12px}
-    .boundary{grid-template-columns:1fr}
-    .surfaces,.surface.wide,.surface.wide.split,.stores{grid-template-columns:1fr}
+    .feature .lede{font-size:var(--t-title)}
+    .verbs{padding:20px;line-height:1.6}
+    .verbs > div{padding:4px 0}
+    .verbs .v,.verbs .c{display:block;min-width:0}
   }
 </style>
 </head>
 <body>
 
-<!-- Bundler splash thumbnail -->
-<template id="__bundler_thumbnail" data-bg-color="#0c0b09">
-  <svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
-    <rect width="400" height="400" fill="#0c0b09"/>
-    <g fill="none" stroke="#3d3830" stroke-width="1" font-family="monospace" font-size="14">
-      <text x="40" y="80" fill="#3d3830">/////</text>
-      <text x="40" y="110" fill="#3d3830">/// //</text>
-      <text x="40" y="140" fill="#3d3830">// ///</text>
-    </g>
-    <text x="200" y="210" text-anchor="middle" fill="#f3efe6" font-family="sans-serif" font-size="64" font-weight="700" letter-spacing="-2">alpi</text>
-    <text x="200" y="250" text-anchor="middle" fill="#7a746a" font-family="monospace" font-size="12" letter-spacing="2">YOUR PRIVATE AGENT NETWORK</text>
-    <circle cx="200" cy="290" r="3" fill="#f3efe6"/>
-  </svg>
-</template>
+<!-- BUNDLER_THUMBNAIL -->
 
-<!-- ASCII background canvas -->
-<div id="ascii-bg" aria-hidden="true"><pre id="ascii-pre"></pre></div>
 
 
 <!-- NAV (injected by build.mjs) -->
@@ -467,24 +356,18 @@
 <!-- HERO -->
 <section class="hero">
   <div class="shell">
-    <div>
-      <div class="kicker"><span class="dot"></span>No account. No telemetry.</div>
-      <h1><span class="hero-line"><span class="crease crease-first">Your</span> <span class="crease crease-agents">agents.</span></span><span class="crease crease-second">Your machines.</span></h1>
-      <p class="lead">
-        Review pull requests. Keep a knowledge base. Run the nightly job. Give each agent its own memory, tools and budget &mdash; on a machine you control.
-      </p>
-      <div class="hero-cta">
-        <a class="btn btn-primary" href="#apps">Get started with alpi <span class="arr">&#8594;</span></a>
-        <span class="hero-install">Or in your terminal: <code>uv tool install alpi-agent</code></span>
-        <a class="under" href="#in-practice">See it in practice &#8594;</a>
-      </div>
-      <p class="hero-meta">
-        Python 3.11&ndash;3.13 &middot; Linux and macOS &middot; Windows via WSL2<br>
-        One daemon per machine. Every profile a directory you can back up.
-      </p>
+    <div class="kicker">No account. No telemetry.</div>
+    <h1><span class="hero-line"><span class="display display-first">Your</span> <span class="display display-agents">agents.</span></span><span class="display display-second">Your machines.</span></h1>
+    <p class="lead">
+      Review pull requests. Keep a knowledge base. Run the nightly job. Give each agent its own memory, tools and budget, on a machine you control.
+    </p>
+    <div class="hero-cta">
+      <a class="btn btn-primary" href="<!-- DESKTOP_DOWNLOAD_URL -->"><!-- APPLE -->Download for macOS</a>
+      <!-- COPY_HERO -->
     </div>
+    <p class="hero-meta">Python 3.11&ndash;3.13 &middot; Linux and macOS &middot; Windows via WSL2</p>
+    <!-- HERO_CAST -->
     <div class="hero-scene">
-      <div class="scene-label"><span>A morning with your agents</span><span>Illustrative session</span></div>
       <div data-alpi-demo data-scene-set="hero" aria-hidden="true"></div>
       <p class="scene-caption"><b>One daemon.</b> Your terminal, desktop and phone.</p>
     </div>
@@ -493,10 +376,10 @@
 
 <div class="shell">
   <div class="strip">
-    <div><span class="mk">&#10033;</span>Runs on hardware you own</div>
-    <div><span class="mk">&#10033;</span>Memory in files you can read</div>
-    <div><span class="mk">&#10033;</span>Your provider keys, your bill</div>
-    <div><span class="mk">&#10033;</span>No registry, no broker</div>
+    <div><!-- CHECK -->Runs on hardware you own</div>
+    <div><!-- CHECK -->Memory in files you can read</div>
+    <div><!-- CHECK -->Your provider keys, your bill</div>
+    <div><!-- CHECK -->No registry, no broker</div>
   </div>
 </div>
 
@@ -504,43 +387,48 @@
   <div class="shell story-layout">
     <div class="story-copy">
       <div class="eyebrow">From one agent to your own network</div>
-      <h2 id="story-title" class="crease crease-heading">Start with one.<br>Let it grow with you.</h2>
-      <p class="sub">An agent in your terminal today. A daily briefing from your server tomorrow. Add another profile when the work needs its own memory, tools or model.</p>
+      <h2 id="story-title" class="display display-heading">Start with one.<br>Let it grow with you.</h2>
+      <p class="sub">An agent in your terminal today. A daily briefing from your server tomorrow.</p>
       <ol class="story-points">
         <li><span class="point-num">01</span><div><strong>Give it a real responsibility.</strong><p>Review changes, learn your documents or prepare a morning report.</p></div></li>
-        <li><span class="point-num">02</span><div><strong>Keep the context.</strong><p>Memory and reusable skills stay with the profile, beyond a single conversation.</p></div></li>
-        <li><span class="point-num">03</span><div><strong>Connect it on your terms.</strong><p>Schedule the work. Grant access to a peer. Choose when it should notify you.</p></div></li>
+        <li><span class="point-num">02</span><div><strong>Keep the context.</strong><p>Memory and skills stay with the profile.</p></div></li>
+        <li><span class="point-num">03</span><div><strong>Connect it on your terms.</strong><p>Schedule the work, grant a peer, choose when it tells you.</p></div></li>
       </ol>
       <a class="story-link link-inline" href="docs/QUICKSTART.html">Set up your first agent &#8594;</a>
     </div>
-    <figure class="network-figure" aria-label="Example of two agents preparing a daily briefing">
+    <figure class="network-figure marks-live" aria-label="Example of two agents preparing a daily briefing">
       <div class="network-heading"><span>A daily briefing</span><b>Example setup</b></div>
-      <div class="network-trigger"><svg class="network-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>08:00 &middot; Your scheduled task</div>
-      <svg class="network-route" viewBox="0 0 560 30" preserveAspectRatio="none" aria-hidden="true"><path class="route-wide" d="M280 0v7q0 8-8 8H132q-8 0-8 8v7"/><path class="route-narrow" d="M280 0v30"/></svg>
+      <div class="network-trigger"><!-- ICON clock -->08:00 &middot; Your scheduled task</div>
       <div class="network-machines">
-        <div class="network-machine primary">
-          <span class="machine-location">Your server</span>
-          <h3><!-- PROFILE shield 28 reviewer --></h3>
-          <p>Checks the changes.<br>Prepares your briefing.</p>
-          <span class="agent-memory"><svg class="network-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h6l2 2h8v13H4z"/></svg>Own memory &amp; budget</span>
-        </div>
-        <div class="network-link" aria-label="ALP request and response"><svg viewBox="0 0 64 24" aria-hidden="true"><path d="M5 7h52m-5-4 5 4-5 4M59 17H7m5-4-5 4 5 4"/></svg><span>ALP</span></div>
         <div class="network-machine">
-          <span class="machine-location">Another machine</span>
-          <h3><!-- PROFILE tree 28 librarian --></h3>
-          <p>Finds the context<br>in your knowledge base.</p>
-          <span class="agent-memory"><svg class="network-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h6l2 2h8v13H4z"/></svg>Own memory &amp; budget</span>
+          <span class="machine-location">Your server</span>
+          <h3><!-- PROFILE bell 32 reviewer working --></h3>
+          <p>Checks the changes.<span class="wide-only"> Prepares your briefing.</span></p>
+        </div>
+        <span class="network-alp">ALP</span>
+        <div class="network-machine">
+          <span class="machine-location"><span class="wide-only">Another machine</span><span class="narrow-only">Elsewhere</span></span>
+          <h3><!-- PROFILE pebble 32 librarian working --></h3>
+          <p>Finds the context<span class="wide-only"> in your knowledge base</span>.</p>
         </div>
       </div>
-      <p class="network-permission">Pinned peers &middot; Explicit permission to ask</p>
-      <svg class="network-route" viewBox="0 0 560 30" preserveAspectRatio="none" aria-hidden="true"><path class="route-wide" d="M124 0v7q0 8 8 8h140q8 0 8 8v7"/><path class="route-narrow" d="M280 0v30"/></svg>
       <div class="network-report">
-        <div class="report-label"><svg class="network-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>Your morning, already in context</div>
+        <div class="report-label"><!-- MARK bell 20 done -->Your morning, already in context</div>
         <blockquote>“Three changes reviewed. One retry issue needs your attention. Here is the context.”</blockquote>
-        <div class="report-delivery"><svg class="network-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="13" rx="2"/><path d="M12 16v5m-4 0h8"/></svg><svg class="network-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></svg>Delivered to your paired apps</div>
+        <div class="report-delivery">Delivered to your paired apps</div>
       </div>
-      <figcaption>One machine is enough to start. Peers are optional. Each agent uses the local or cloud model you configure.</figcaption>
+      <figcaption>One machine is enough to start; peers are optional.</figcaption>
     </figure>
+  </div>
+</section>
+
+<section id="states" aria-labelledby="states-title">
+  <div class="shell states-layout">
+    <div class="states-copy">
+      <h2 id="states-title" class="display display-heading">You can tell at a glance.</h2>
+      <p class="sub">The same faces live in the terminal, the desktop app and the phone. One look at the list says who is working, who needs you and who is done.</p>
+    </div>
+    <!-- STATES -->
   </div>
 </section>
 
@@ -548,89 +436,82 @@
 <section id="what">
   <div class="shell">
     <div class="sec-head">
-      <div class="eyebrow"><b>01</b> / The unit you own is the profile</div>
-      <h2 class="crease crease-heading">A home for every responsibility.</h2>
-      <p class="sub">
-      Code review, project knowledge, research or a daily report. Each has its own model, memory, keys, schedules and spend, kept together in a profile.
-    </p>
+      <div class="eyebrow"><b>01</b>The unit you own is the profile</div>
+      <h2 class="display display-heading">A home for every responsibility.</h2>
+      <p class="sub">Code review, project knowledge, research or a daily report. Each gets its own model, memory, keys, schedules and spend.</p>
     </div>
 
-    <div class="feature">
-      <div class="lede">Separate state. Permission to collaborate.</div>
-      <p class="say">One daemon supervises the profiles on a machine. Each keeps separate state, credentials and spending records; peer calls need explicit grants. Profiles organize responsibilities under one owner. Mutually untrusted tenants need separate runtimes.</p>
-
+    <div class="feature marks-live">
       <div class="boundary">
-        <div class="prof lit">
-          <span class="nm"><!-- PROFILE shield 18 reviewer --></span>
+        <div class="prof">
+          <span class="nm"><!-- PROFILE bell 40 reviewer working --></span>
           <p class="purpose">Reviews code changes and flags what needs attention.</p>
-          <div class="kv"><span>key</span><b>ed25519 · 9f2c…</b></div>
-          <div class="kv"><span>memory</span><b>own</b></div>
-          <div class="kv"><span>model</span><b>opus-5</b></div>
-          <div class="kv"><span>cap</span><b>$20 / day</b></div>
-          <div class="kv"><span>tools</span><b>repo, email</b></div>
+          <div class="kvs">
+            <div class="kv"><span>model</span><b class="mono">opus-5</b></div>
+            <div class="kv"><span>cap</span><b>$20 / day</b></div>
+            <div class="kv"><span>tools</span><b>repo, email</b></div>
+            <div class="kv"><span>key</span><b class="mono">ed25519 · 9f2c…</b></div>
+          </div>
         </div>
         <div class="prof">
-          <span class="nm"><!-- PROFILE tree 18 librarian --></span>
+          <span class="nm"><!-- PROFILE pebble 40 librarian idle --></span>
           <p class="purpose">Keeps project knowledge and finds relevant context.</p>
-          <div class="kv"><span>key</span><b>ed25519 · 41ab…</b></div>
-          <div class="kv"><span>memory</span><b>own</b></div>
-          <div class="kv"><span>model</span><b>flash</b></div>
-          <div class="kv"><span>cap</span><b>$20 / day</b></div>
-          <div class="kv"><span>tools</span><b>knowledge</b></div>
+          <div class="kvs">
+            <div class="kv"><span>model</span><b class="mono">flash</b></div>
+            <div class="kv"><span>cap</span><b>$20 / day</b></div>
+            <div class="kv"><span>tools</span><b>knowledge</b></div>
+            <div class="kv"><span>key</span><b class="mono">ed25519 · 41ab…</b></div>
+          </div>
         </div>
         <div class="prof">
-          <span class="nm"><!-- PROFILE star 18 researcher --></span>
+          <span class="nm"><!-- PROFILE clover 40 researcher failed --></span>
           <p class="purpose">Compares sources and prepares a cited brief.</p>
-          <div class="kv"><span>key</span><b>ed25519 · c07e…</b></div>
-          <div class="kv"><span>memory</span><b>own</b></div>
-          <div class="kv"><span>model</span><b>flash</b></div>
-          <div class="kv"><span>cap</span><b>$20 / day &middot; <span class="hit">hit 11:40</span></b></div>
-          <div class="kv"><span>tools</span><b>browser</b></div>
+          <div class="kvs">
+            <div class="kv"><span>model</span><b class="mono">flash</b></div>
+            <div class="kv"><span>cap</span><b>$20 / day &middot; <span class="hit">hit 11:40</span></b></div>
+            <div class="kv"><span>tools</span><b>browser</b></div>
+            <div class="kv"><span>key</span><b class="mono">ed25519 · c07e…</b></div>
+          </div>
         </div>
       </div>
 
       <div class="grant">
-        <!-- PROFILE shield 14 reviewer --><b>&#8594; link.ask &#8594;</b><!-- PROFILE tree 14 librarian -->
+        <span class="pair"><!-- PROFILE bell 20 reviewer --><b>&#8594; <code>link.ask</code> &#8594;</b><!-- PROFILE pebble 20 librarian --></span>
         <span class="rest">everything else: <b class="deny">denied</b></span>
       </div>
+      <p class="feature-note">Profiles share one owner. Tenants who do not trust each other need separate machines.</p>
     </div>
 
     <div class="grid c3">
       <div class="cell">
-        <span class="n">identity</span>
+        <span class="n">Identity</span>
         <h3>A profile is the boundary.</h3>
-        <p>A profile is a directory under <span class="mono" style="color:var(--fg)">~/.alpi/</span>: model, memory, skills, keys, schedules, logs, approvals and ALP peer list, all in files. Copy it to back it up, open it to audit it, delete it and the agent is gone. Crossing the boundary requires capabilities you grant explicitly.</p>
-        <span class="tag">per-profile</span>
+        <p>One directory under <span class="mono">~/.alpi/</span> holds its model, memory, skills, keys, schedules and logs. Delete it and the agent is gone.</p>
       </div>
       <div class="cell">
-        <span class="n">model choice</span>
+        <span class="n">Model choice</span>
         <h3>No model is chosen for you.</h3>
-        <p>The daemon assumes no model and never will. Route the reviewer to a frontier model, the indexer to a cheap one, and anything that cannot leave the building to a local Ollama server &mdash; per profile, changed without touching a peer.</p>
-        <span class="tag">no lock-in</span>
+        <p>Route the reviewer to a frontier model, the indexer to a cheap one and private work to a local Ollama.</p>
       </div>
       <div class="cell">
-        <span class="n">memory</span>
+        <span class="n">Memory</span>
         <h3>Memory you can open.</h3>
-        <p>No hidden vector store as the source of truth. USER.md, MEMORY.md, and AGENT.md are updated in the moment and stay readable on disk.</p>
-        <span class="tag">plain files</span>
+        <p>USER.md, MEMORY.md and AGENT.md are updated as it works and stay readable on disk.</p>
       </div>
       <div class="cell">
-        <span class="n">skills</span>
+        <span class="n">Skills</span>
         <h3>Skills that pass inspection.</h3>
-        <p>A skill is a directory: instructions, scripts, references, assets, its own secrets and its own state. Mutations run through validation and a security scanner before they become useful.</p>
-        <span class="tag">scanner-gated</span>
+        <p>A skill is a directory, validated and scanned before it runs.</p>
       </div>
       <div class="cell">
-        <span class="n">integrations</span>
+        <span class="n">Integrations</span>
         <h3>MCP servers, scanned first.</h3>
-        <p>Point a profile at any MCP server and its tools register as alpi tools. npm-launched servers are checked against OSV for known malware before the wizard saves them, subprocesses get a stripped environment instead of your keys, and everything the server returns enters the turn labelled untrusted.</p>
-        <span class="tag">mcp client</span>
+        <p>Any MCP server’s tools become alpi tools, checked against OSV and labelled untrusted.</p>
       </div>
       <div class="cell">
-        <span class="n">operations</span>
+        <span class="n">Operations</span>
         <h3>Small surface. Real upkeep.</h3>
-        <p>One setup wizard, live doctor checks, launchd/systemd services, merged logs, approval audit, and a per-machine daemon supervising the scheduler, ALP, and host plane. A per-profile daily USD cap, checked before every model call, keeps a runaway agent from quietly burning your API budget.</p>
-        <span class="tag">day-2 ready</span>
+        <p>One setup wizard, live doctor checks, system services and one merged log.</p>
       </div>
     </div>
   </div>
@@ -639,46 +520,16 @@
 <section id="how">
   <div class="shell how-layout">
     <div>
-      <div class="eyebrow"><b>02</b> / Set it up once, then it is yours</div>
-      <h2 class="crease crease-heading">One daemon. Your agents around it.</h2>
-      <p class="say">Five decisions, once. After that it runs unattended, and every surface reaches the same agents.</p>
+      <div class="eyebrow"><b>02</b>Set it up once, then it is yours</div>
+      <h2 class="display display-heading">Five decisions. Then it runs.</h2>
+      <p class="say">After setup it runs unattended, and every surface reaches the same agents.</p>
     </div>
     <ol class="steps">
-      <li>
-        <span class="num">01</span>
-        <div>
-          <h3>Pick your model.</h3>
-          <p>Claude, OpenAI, OpenRouter, Gemini, Groq, Ollama or your own endpoint. A fresh profile starts empty, so nothing is chosen for you.</p>
-        </div>
-      </li>
-      <li>
-        <span class="num">02</span>
-        <div>
-          <h3>Give each responsibility a profile.</h3>
-          <p>Each profile is its own directory, so retiring one is <span class="mono">alpi profile remove</span> &mdash; the key, the memory, the schedules and the peer list go with it. No orphaned agent left running somewhere with credentials nobody tracks.</p>
-        </div>
-      </li>
-      <li>
-        <span class="num">03</span>
-        <div>
-          <h3>Pair the devices you use.</h3>
-          <p>The desktop app and the phone pair once, by scanning a code. The terminal on the machine itself pairs with nothing &mdash; the local socket is sovereign and carries no token. Revoking one device disconnects only that one, mid-session.</p>
-        </div>
-      </li>
-      <li>
-        <span class="num">04</span>
-        <div>
-          <h3>Pin the peers you trust.</h3>
-          <p>By key, never by hostname. An unpinned sender is dropped at the transport, before a model ever sees the message.</p>
-        </div>
-      </li>
-      <li>
-        <span class="num">05</span>
-        <div>
-          <h3>Set the ceiling.</h3>
-          <p>A daily dollar ceiling per profile, checked by the daemon before every model call &mdash; outside the context a looping agent can reason about.</p>
-        </div>
-      </li>
+      <li><span class="num">01</span><div><h3>Pick your model.</h3><p>Claude, OpenAI, OpenRouter, Gemini, Groq, Ollama or your own endpoint.</p></div></li>
+      <li><span class="num">02</span><div><h3>Give each responsibility a profile.</h3><p>Retiring one is <span class="mono">alpi profile remove</span>: its key, memory and schedules go with it.</p></div></li>
+      <li><span class="num">03</span><div><h3>Pair the devices you use.</h3><p>The desktop app and the phone pair once with a code. Revoke one and only that one drops.</p></div></li>
+      <li><span class="num">04</span><div><h3>Pin the peers you trust.</h3><p>By key, never by hostname. An unpinned sender never reaches the model.</p></div></li>
+      <li><span class="num">05</span><div><h3>Set the ceiling.</h3><p>A daily dollar cap per profile, checked before every model call.</p></div></li>
     </ol>
   </div>
 </section>
@@ -686,74 +537,59 @@
 <section id="alp">
   <div class="shell">
     <div class="sec-head">
-      <div class="eyebrow"><b>03</b> / ALP &mdash; the Alpi Link Protocol</div>
-      <h2 class="crease crease-heading">A team of agents. One protocol.</h2>
-      <p class="sub">
-      ALP is how alpi agents talk to each other &mdash; across profiles, across machines, and in workgroups. Pinned keys, signed envelopes, grants you wrote. Nothing in between.
-    </p>
+      <div class="eyebrow"><b>03</b>ALP, the Alpi Link Protocol</div>
+      <h2 class="display display-heading">A team of agents. One protocol.</h2>
+      <p class="sub">ALP is how alpi agents talk to each other: across profiles, across machines and in workgroups.</p>
     </div>
 
     <div class="feature">
-      <div class="lede">One key per profile. Every envelope signed. Unknown sender, dropped at the transport.</div>
-      <p class="say">The key is generated on your machine and never leaves it. There is no directory to be listed in and no account to be locked out of &mdash; the only thing that makes two daemons trust each other is a public key each owner pasted into the other's peer list. The next agent joins the same way: one line in a file. Nobody else can add a peer to your fleet, and nobody else can remove one.</p>
-
-      <div class="ladder">
+      <div class="feature-intro">
+        <div class="lede">One key per profile. Every envelope signed. Unknown senders dropped at the transport.</div>
+        <p class="say">The key is made on your machine and never leaves it. Two daemons trust each other only once each owner pins the other’s key: no directory, no account, and nobody else can add or remove a peer.</p>
+      </div>
+      <div class="ladder marks-live">
         <div class="rung">
+          <div class="rung-art"><!-- RUNG 1 --></div>
           <span class="tag">ALP.1</span>
           <h3>Profile to profile</h3>
-          <p>Same machine, same daemon. <span class="mono">alp.sock</span> at mode 0600. The grant is a line in the peer list; not listed, not allowed.</p>
+          <p>Same machine, same daemon, over <span class="mono">alp.sock</span> at mode 0600.</p>
         </div>
         <div class="rung">
+          <div class="rung-art"><!-- RUNG 2 --></div>
           <span class="tag">ALP.2</span>
           <h3>Machine to machine</h3>
-          <p>Noise_XK handshake plus ChaCha20-Poly1305, forward-secret session keys. No TLS, no PKI, no certificate authority to trust — identity is the pinned pubkey on both sides.</p>
+          <p>Noise_XK and ChaCha20-Poly1305 with forward secrecy. Identity is the pinned key.</p>
         </div>
         <div class="rung">
+          <div class="rung-art"><!-- RUNG 3 --></div>
           <span class="tag">ALP.3</span>
           <h3>Workgroups</h3>
-          <p>A team of agents on one task under a stable group key &mdash; the way it runs in production today. A hub holds the transcript; members join, post and settle their own spend. No replication, no consensus election.</p>
+          <p>A team on one task under a group key. A hub holds the transcript; each member settles its own spend.</p>
         </div>
       </div>
 
       <div class="verbs">
-        <div><span class="v">link.ping</span>   <span class="c">// liveness</span></div>
-        <div><span class="v">link.ask</span>    <span class="c">// runs a full agent turn on the peer, using its memory, skills and tools</span></div>
+        <div><span class="v">link.ping</span> <span class="c">// liveness</span></div>
+        <div><span class="v">link.ask</span> <span class="c">// a full agent turn on the peer</span></div>
         <div><span class="v">link.cancel</span> <span class="c">// interrupt</span></div>
-        <div><span class="v">link.put_blob</span> <span class="c">// hand a peer a file, chunked and hash-addressed</span></div>
+        <div><span class="v">link.put_blob</span> <span class="c">// hand a peer a file</span></div>
         <div><span class="v">link.get_blob</span> <span class="c">// fetch one back</span></div>
-        <div>&nbsp;</div>
-        <div><span class="c">// five methods, each granted separately. no introspection, no federation, no generic RPC surface.</span></div>
+        <div class="verbs-foot"><span class="c">// five methods, each granted per peer.</span></div>
       </div>
     </div>
 
-    <div class="grid c3" style="margin-top:56px">
-      <div class="cell">
-        <span class="n">capabilities</span>
-        <h3>Fail-closed per peer.</h3>
-        <p>Every peer lists an <span class="mono" style="color:var(--fg)">allow:</span> array of methods it may invoke. Not listed, not allowed. Rate limits are per peer, per minute. Spend is not: every inbound call draws on the same daily profile ceiling, and a tripped cap answers <span class="mono" style="color:var(--fg)">-32005 budget-exceeded</span>.</p>
-      </div>
-      <div class="cell">
-        <span class="n">reentrancy</span>
-        <h3>Reject fast, never queue.</h3>
-        <p>A second <span class="mono" style="color:var(--fg)">link.ask</span> on a running session returns <span class="mono" style="color:var(--fg)">-32007 target-busy</span>. The caller retries with jittered backoff. No deadlock class.</p>
-      </div>
-      <div class="cell">
-        <span class="n">audit</span>
-        <h3>Every crossing is recorded.</h3>
-        <p>Who asked, which method, under which capability, what it cost. The approval log is per profile and survives the turn — a fleet you cannot account for is a fleet you do not control.</p>
-      </div>
-    </div>
+    <p class="rules">Granted per peer and fail-closed. A busy session rejects instead of queuing. Every crossing is logged with its cost. <a class="link-inline" href="docs/ALP.html">Read the protocol &#8594;</a></p>
 
     <aside class="counter" aria-labelledby="alp-scope-title">
       <div>
         <h3 id="alp-scope-title">What ALP is not.</h3>
-        <p>A deliberately small protocol for agents you control. These are its boundaries.</p>
+        <p>A deliberately small protocol for agents you control.</p>
       </div>
       <ul>
-        <li><strong>No open federation</strong><span>Peers are explicitly pinned. There is no public network to join.</span></li>
-        <li><strong>No universal agent bridge</strong><span>ALP connects alpi profiles, not third-party agent platforms.</span></li>
-        <li><strong>No traffic anonymity</strong><span>Encrypted messages do not hide who is connecting to whom.</span></li>
-        <li><strong>No endpoint protection</strong><span>A compromised machine remains compromised. The protocol cannot secure the host for you.</span></li>
+        <li><strong>No open federation</strong><span>Peers are pinned; there is no public network to join.</span></li>
+        <li><strong>No universal bridge</strong><span>ALP connects alpi profiles, not other agent platforms.</span></li>
+        <li><strong>No traffic anonymity</strong><span>Encryption does not hide who talks to whom.</span></li>
+        <li><strong>No endpoint protection</strong><span>A compromised machine stays compromised.</span></li>
       </ul>
     </aside>
   </div>
@@ -762,75 +598,37 @@
 <section id="apps">
   <div class="shell">
     <div class="sec-head">
-      <div class="eyebrow"><b>04</b> / Put it on a machine you already run</div>
-      <h2 class="crease crease-heading">Put alpi to work.</h2>
-      <p class="sub">Start in the terminal or the desktop app, then pair your phone. The clients are windows onto the same daemon; your keys never leave the machine running it.</p>
+      <div class="eyebrow"><b>04</b>Put it on a machine you already run</div>
+      <h2 class="display display-heading">Put alpi to work.</h2>
+      <p class="sub">Start in the terminal or the desktop app, then pair your phone. Your keys never leave the machine running the daemon.</p>
     </div>
+
+    <!-- STAGE -->
 
     <div class="surfaces">
-      <div class="surface lit">
-        <div class="top"><span class="lbl">desktop</span><span class="pill">start here</span></div>
-        <h3>alpi for desktop</h3>
-        <p>Pair every daemon you own and switch with one click. Approvals, sessions and logs in a native window.</p>
-        <p class="cta-line"><a class="btn btn-primary" href="<!-- DESKTOP_DOWNLOAD_URL -->"><svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true"><path d="M16.1 12.7c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.15-2.8.85-3.5.85-.7 0-1.85-.83-3-.81-1.55.02-3 .9-3.8 2.29-1.62 2.81-.41 6.97 1.16 9.25.77 1.11 1.68 2.36 2.88 2.32 1.16-.05 1.6-.75 3-.75s1.79.75 3.01.72c1.24-.02 2.03-1.13 2.79-2.25.88-1.29 1.24-2.54 1.26-2.6-.03-.01-2.41-.93-2.4-3.71zM13.9 5.6c.63-.77 1.06-1.83.94-2.9-.91.04-2.02.61-2.67 1.37-.58.68-1.09 1.77-.95 2.81 1.02.08 2.05-.52 2.68-1.28z"/></svg>Download for macOS <span class="arr">&#8594;</span></a></p>
-        <p class="meta">Apple Silicon &middot; <!-- DESKTOP_VERSION --></p>
-        <div class="alt">
-          <span class="lbl">also for your desktop &mdash; client only, pairs with a Linux or macOS daemon</span>
-          <a href="<!-- DESKTOP_RELEASES_URL -->"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M3 5.6l7.4-1v7.1H3V5.6zm0 12.8l7.4 1v-7h-7.4v6zM11.4 19.6L21 21V12.7h-9.6v6.9zM11.4 3L21 1.6v8.1h-9.6V3z"/></svg>Windows &middot; x64 <span class="arr">&#8599;</span></a>
-          <a href="<!-- DESKTOP_RELEASES_URL -->"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M12 2c-2.2 0-3.6 1.7-3.6 4v2.5c0 1-.6 1.9-1.3 2.9-1 1.4-2.2 3-2.2 5.3 0 .8.3 1.4.9 1.8.5.4 1.2.5 1.9.5.4 1.3 1.9 2 4.3 2s3.9-.7 4.3-2c.7 0 1.4-.1 1.9-.5.6-.4.9-1 .9-1.8 0-2.3-1.2-3.9-2.2-5.3-.7-1-1.3-1.9-1.3-2.9V6c0-2.3-1.4-4-3.6-4zm-1.4 3.2c.4 0 .7.4.7.9s-.3.9-.7.9-.7-.4-.7-.9.3-.9.7-.9zm2.8 0c.4 0 .7.4.7.9s-.3.9-.7.9-.7-.4-.7-.9.3-.9.7-.9zM12 8.3c.9 0 1.7.4 1.7.8 0 .2-.2.4-.6.6l-.8.4c-.2.1-.4.1-.6 0l-.8-.4c-.4-.2-.6-.4-.6-.6 0-.4.8-.8 1.7-.8z"/></svg>Linux &middot; AppImage <span class="arr">&#8599;</span></a>
-        </div>
-      </div>
-
       <div class="surface">
-        <div class="top"><span class="lbl">in your pocket</span></div>
-        <h3>alpi for mobile</h3>
-        <p><b>Android is on Google Play; iOS is in internal testing.</b> Scan a QR to pair with your daemon; chat, workgroups, inbox and approvals, sized for one hand.</p>
-        <div class="stores">
-          <div class="store"><svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true"><path d="M16.1 12.7c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.15-2.8.85-3.5.85-.7 0-1.85-.83-3-.81-1.55.02-3 .9-3.8 2.29-1.62 2.81-.41 6.97 1.16 9.25.77 1.11 1.68 2.36 2.88 2.32 1.16-.05 1.6-.75 3-.75s1.79.75 3.01.72c1.24-.02 2.03-1.13 2.79-2.25.88-1.29 1.24-2.54 1.26-2.6-.03-.01-2.41-.93-2.4-3.71zM13.9 5.6c.63-.77 1.06-1.83.94-2.9-.91.04-2.02.61-2.67 1.37-.58.68-1.09 1.77-.95 2.81 1.02.08 2.05-.52 2.68-1.28z"/></svg><b>App Store</b><span>iPhone &amp; iPad</span></div>
-          <a class="store" href="https://play.google.com/store/apps/details?id=com.satoshilimited.alpi"><svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true"><path d="M16.6 9.5l1.6-2.8c.1-.2 0-.4-.1-.5-.2-.1-.4 0-.5.1l-1.6 2.8c-1.2-.55-2.6-.86-4-.86s-2.8.3-4 .86L6.4 6.3c-.1-.2-.3-.2-.5-.1-.2.1-.2.3-.1.5l1.6 2.8C4.7 11 3 13.5 3 16.4h18c0-2.9-1.7-5.4-4.4-6.9zM8 14c-.4 0-.8-.4-.8-.8s.4-.8.8-.8.8.4.8.8-.4.8-.8.8zm8 0c-.4 0-.8-.4-.8-.8s.4-.8.8-.8.8.4.8.8-.4.8-.8.8z"/></svg><b>Google Play</b><span>Android</span></a>
+        <h3>Desktop</h3>
+        <p>Every daemon you own in one window.</p>
+        <p class="cta-line"><a class="btn btn-primary" href="<!-- DESKTOP_DOWNLOAD_URL -->"><!-- APPLE -->Download for macOS</a></p>
+        <p class="meta">Apple Silicon &middot; <!-- DESKTOP_VERSION --> &middot; <a class="link-inline" href="<!-- DESKTOP_RELEASES_URL -->">also Windows and Linux &#8599;</a></p>
+      </div>
+      <div class="surface">
+        <h3>Phone</h3>
+        <p>Pair with a code. Answer approvals from anywhere.</p>
+        <p class="cta-line"><a class="btn btn-ground" href="https://play.google.com/store/apps/details?id=com.satoshilimited.alpi"><!-- ANDROID -->Google Play</a></p>
+        <p class="meta">iOS in internal testing</p>
+      </div>
+      <div class="surface">
+        <h3>Terminal and server</h3>
+        <p>The daemon and the console, with uv or as a container on a NAS or a VPS.</p>
+        <div class="pulls">
+          <!-- COPY_PULL_UV -->
+          <!-- COPY_PULL_DOCKER -->
         </div>
-        <p class="meta">Biometric unlock; pairing tokens never leave the device.</p>
       </div>
     </div>
 
-    <div class="surface wide split">
-      <div>
-        <span class="lbl">from the terminal</span>
-        <h3 style="margin-top:12px">Four commands. No account.</h3>
-        <p style="margin-top:12px">Python 3.11 to 3.13 &mdash; uv installs one if you have none. The default profile lives in <span class="mono" style="color:var(--fg)">~/.alpi/</span>; every other one under <span class="mono" style="color:var(--fg)">~/.alpi/profiles/</span>.</p>
-        <p class="meta" style="margin-top:14px"><a class="link-inline" href="docs/INSTALL.html">Install guide &#8594;</a></p>
-      </div>
-      <div style="min-width:0"><pre class="ascii-diagram" style="margin-top:56px;font-size:14px;line-height:1.8;max-width:780px">
-<span class="muted"># 1. install from PyPI (uv recommended; pipx works too)</span>
-$ uv tool install alpi-agent   <span class="muted"># package name; binary stays "alpi"</span>
-
-<span class="muted"># 2. configure the default profile (model + .env + workspace)</span>
-$ alpi setup
-
-<span class="muted"># 3. chat</span>
-$ alpi
-
-<span class="muted"># 4. check health</span>
-$ alpi doctor
-</pre></div>
-    </div>
-
-    <div class="surface wide">
-      <div>
-        <span class="lbl">your server</span>
-        <h3 style="margin-top:12px">alpi on an always-on machine</h3>
-        <p style="margin-top:12px">One daemon supervises every profile on the box &mdash; scheduler, peers and host plane. Install it with uv, or run the container on a NAS or a VPS.</p>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
-        <div class="pullcmd">$ uv tool install alpi-agent</div>
-        <div class="pullcmd"><svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true"><path d="M13.3 9.2h2.4v-2h-2.4v2zm-3 0h2.4v-2h-2.4v2zm0-2.6h2.4v-2h-2.4v2zm-3 2.6h2.4v-2H7.3v2zm-3 0h2.4v-2H4.3v2zm12 0h2.4v-2h-2.4v2zM22.9 10c-.5-.3-1.6-.4-2.5-.3-.1-.9-.6-1.6-1.4-2.3l-.5-.3-.3.5c-.4.6-.6 1.5-.5 2.3.05.3.2.9.5 1.3-.4.2-1.1.5-2.1.5H1.3l-.05.3c-.15 1.5.1 3.1 1 4.4.9 1.3 2.4 2 4.4 2 4.3 0 7.5-2 9-5.6 .6 0 1.9 0 2.6-1.3.05-.1.2-.3.3-.7l.05-.2-.5-.3z"/></svg><span>$ docker pull satoshiltd/alpi:latest</span></div>
-        <p class="meta">uv install: Linux and macOS. Container image: linux/amd64 and linux/arm64. Then <span class="mono" style="color:var(--fg)">alpi setup</span> in the terminal &mdash; <span class="mono" style="color:var(--fg)">docker exec -it &lt;name&gt; alpi setup</span> inside the container.</p>
-      </div>
-    </div>
-
-    <p class="sub" style="margin-top:40px;max-width:760px">
-      Free for individuals on machines they control &mdash; personal, research and non-commercial use, production included. Companies get evaluation and development free; production deployment runs under a commercial licence. <a class="link-inline" href="docs/LICENSE.html">Read the licence &#8594;</a>
-    </p>
+    <p class="licence">Free for individuals on machines they control, production included. Companies evaluate free; production runs under a commercial licence. <a class="link-inline" href="docs/LICENSE.html">Read the licence &#8594;</a></p>
   </div>
 </section>
 
@@ -839,7 +637,7 @@ $ alpi doctor
     <div class="eyebrow">Questions, answered</div>
     <div class="questions-grid">
       <div>
-        <h2 class="crease crease-heading">Before you get started.</h2>
+        <h2 class="display display-heading">Before you get started.</h2>
         <p class="sub">The answers people ask for before putting agents anywhere near production.</p>
       </div>
       <div class="qa">
@@ -901,130 +699,35 @@ $ alpi doctor
     new IntersectionObserver(([entry]) => hero.classList.toggle('is-away', !entry.isIntersecting)).observe(hero);
   })();
 
-  /* ============================================================
-     ASCII BACKGROUND ENGINE
-     ============================================================ */
   (function(){
-    const pre = document.getElementById('ascii-pre');
-    let cols = 0, rows = 0, charW = 7.2, charH = 12;
-    let t = 0;
-    let running = true;
-    const chars = " ·⋅∙•◦◌◍⚬○◎◉+*-~=/\\|".split('');
-    const NC = chars.length;
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-    // The field is four waves of the form sin/cos(phase + ω·t). The phase is fixed per
-    // cell, so it is tabulated once per resize and the frame loop only does multiply-add:
-    // sin(a+ωt) = sin a·cos ωt + cos a·sin ωt. Do not reintroduce trig inside the loop.
-    let sinA, cosA, sinB, cosB, sinC, cosC, sinD, cosD, out;
-
-    function measure(){
-      const canary = document.createElement('span');
-      canary.style.cssText = 'visibility:hidden;position:absolute;font-family:"Geist Mono",ui-monospace,monospace;font-size:12px;line-height:12px;white-space:pre;';
-      canary.textContent = 'M'.repeat(100);
-      document.body.appendChild(canary);
-      charW = canary.getBoundingClientRect().width / 100;
-      charH = 12;
-      canary.remove();
-      cols = Math.ceil(window.innerWidth / charW) + 2;
-      rows = Math.ceil(window.innerHeight / charH) + 2;
-      tabulate();
-    }
-
-    function tabulate(){
-      const n = cols * rows;
-      sinA = new Float32Array(cols); cosA = new Float32Array(cols);
-      sinB = new Float32Array(rows); cosB = new Float32Array(rows);
-      sinC = new Float32Array(n);    cosC = new Float32Array(n);
-      sinD = new Float32Array(n);    cosD = new Float32Array(n);
-      for (let x = 0; x < cols; x++){
-        const a = x * 0.06;
-        sinA[x] = Math.sin(a); cosA[x] = Math.cos(a);
-      }
-      for (let y = 0; y < rows; y++){
-        const b = y * 0.11 * 1.3;
-        sinB[y] = Math.sin(b); cosB[y] = Math.cos(b);
-      }
-      for (let y = 0; y < rows; y++){
-        const ny = y * 0.11;
-        for (let x = 0; x < cols; x++){
-          const nx = x * 0.06, i = y * cols + x;
-          const c = (nx + ny) * 0.7;
-          const d = Math.sqrt(nx * nx + ny * ny) * 0.9;
-          sinC[i] = Math.sin(c); cosC[i] = Math.cos(c);
-          sinD[i] = Math.sin(d); cosD[i] = Math.cos(d);
-        }
-      }
-      out = new Array(rows);
-    }
-
-    function renderFlow(){
-      const ca = Math.cos(t * 0.008),  sa = Math.sin(t * 0.008);
-      const cb = Math.cos(t * -0.005), sb = Math.sin(t * -0.005);
-      const cc = Math.cos(t * 0.012),  sc = Math.sin(t * 0.012);
-      const cd = Math.cos(t * -0.01),  sd = Math.sin(t * -0.01);
-      const row = new Array(cols);
-      for (let y = 0; y < rows; y++){
-        const base = y * cols, sB = sinB[y], cB = cosB[y];
-        for (let x = 0; x < cols; x++){
-          const i = base + x;
-          const v = (sinA[x] * ca + cosA[x] * sa)
-                  + (cB * cb - sB * sb)
-                  + (sinC[i] * cc + cosC[i] * sc)
-                  + (cosD[i] * cd - sinD[i] * sd);
-          let idx = ((v + 4) * 0.125 * NC) | 0;
-          if (idx < 0) idx = 0; else if (idx >= NC) idx = NC - 1;
-          row[x] = chars[idx];
-        }
-        out[y] = row.join('');
-      }
-      return out.join('\n');
-    }
-
-    // The drift is slow, so 60fps buys nothing a viewer can see and costs 3x the work.
-    const FPS = 20, STEP = 60 / FPS;
-    let raf, last = 0;
-    function loop(now){
-      if (!running) return;
-      raf = requestAnimationFrame(loop);
-      if (now - last < 1000 / FPS) return;
-      last = now;
-      t += STEP;
-      pre.textContent = renderFlow();
-    }
-
-    function start(){
-      cancelAnimationFrame(raf);
-      running = true;
-      measure();
-      if (reduced){ pre.textContent = renderFlow(); return; }
-      last = 0;
-      raf = requestAnimationFrame(loop);
-    }
-    function stop(){
-      running = false;
-      cancelAnimationFrame(raf);
-      pre.textContent = '';
-    }
-
-    // resize
-    let resizeT;
-    window.addEventListener('resize', ()=>{
-      clearTimeout(resizeT);
-      resizeT = setTimeout(()=>{
-        measure();
-      }, 150);
-    });
-
-    // lower opacity when scrolling fast? just ensure perf — throttle animation when tab hidden
-    document.addEventListener('visibilitychange', ()=>{
-      if (document.hidden){ stop(); }
-      else { start(); }
-    });
-
-    start();
+    if (!('IntersectionObserver' in window)) return;
+    const away = new IntersectionObserver((entries) => entries.forEach((entry) => entry.target.classList.toggle('is-away', !entry.isIntersecting)));
+    document.querySelectorAll('.cast, .marks-live').forEach((el) => away.observe(el));
   })();
 
+  <!-- CAST_SCRIPT -->
+
+  <!-- COPY_SCRIPT -->
+
+</script>
+<script type="module">
+import { followPointer } from './gaze.js?v=__VERSION__';
+const twin = document.querySelector('.cast-gaze');
+const hero = document.querySelector('.hero');
+const fine = matchMedia('(pointer: fine)');
+const still = matchMedia('(prefers-reduced-motion: reduce)');
+let stop = null;
+const sync = () => {
+  const on = fine.matches && !still.matches && !hero.classList.contains('is-away');
+  if (on && !stop) stop = followPointer(twin);
+  if (!on && stop) { stop(); stop = null; }
+};
+if (twin && hero) {
+  new MutationObserver(sync).observe(hero, { attributes: true, attributeFilter: ['class'] });
+  fine.addEventListener('change', sync);
+  still.addEventListener('change', sync);
+  sync();
+}
 </script>
 <script src="demo.js" defer></script>
 </body>

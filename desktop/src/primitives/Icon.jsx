@@ -3,15 +3,15 @@ import { ICONS, ICON_ALIASES } from "../../../common/iconPaths.mjs";
 import { iconSizesAllowed, iconStrokeRendered } from "../../../common/tokens.mjs";
 import styles from "./Icon.module.css";
 
-const [SM, MD] = iconSizesAllowed.desktop;
-const SIZES = { sm: SM, md: MD };
+const [SM, MD, LG] = iconSizesAllowed.desktop;
+const SIZES = { sm: SM, md: MD, lg: LG };
 
-export const iconPx = (size) => (typeof size === "number" ? (size <= SM ? SM : MD) : SIZES[size] ?? MD);
+export const iconPx = (size) => (typeof size === "number" ? (size <= SM ? SM : size <= MD ? MD : LG) : SIZES[size] ?? SM);
 export const iconStroke = (px, viewBox) => (iconStrokeRendered * viewBox) / px;
 
 export default function Icon({
   name,
-  size = "md",
+  size = "sm",
   color = null,
   className = "",
   style = null,

@@ -18,7 +18,7 @@ function renderHeader(extra = {}) {
 }
 
 describe("ProfileChatHeader context meter", () => {
-  it("keeps only the model tooltip wide and labels the visible meters", () => {
+  it("writes the full model id in the menu, reachable without hovering, and labels the visible meters", () => {
     const { container } = renderHeader({
       profile: {
         ...profile,
@@ -26,9 +26,8 @@ describe("ProfileChatHeader context meter", () => {
         budget_used_usd: 0.26,
       },
     });
-    expect(container.querySelectorAll(".ds-tip-wide")).toHaveLength(1);
-    expect(container.querySelectorAll(".ds-tip-wide")[0])
-      .toHaveTextContent("openrouter/z-ai/glm-5.3-flash");
+    expect(container.querySelectorAll(".ds-tip-wide")).toHaveLength(0);
+    expect(container.querySelector("[role='dialog'] [data-model-id]")).toHaveTextContent("openrouter/z-ai/glm-5.3-flash");
     expect(container.textContent).toContain("Context window");
     expect(container.textContent).toContain("Daily budget");
   });
@@ -47,5 +46,23 @@ describe("ProfileChatHeader context meter", () => {
   it("falls back to the session snapshot while the live turn has no usage yet", () => {
     const { container } = renderHeader({ liveCtxTokens: null });
     expect(container.textContent).toContain("20K/200K");
+  });
+
+  it.each([
+    [{ budget_daily_usd: 1, budget_used_usd: 0.85 }, 0, "Daily budget 85% used"],
+    [{ budget_daily_usd: 1, budget_used_usd: 1.2 }, 0, "Daily budget 100% used"],
+    [{}, 170000, "Context 85% full"],
+  ])("flags the name when a meter passes 80 %%", (extra, ctx, label) => {
+    const { container } = renderHeader({ profile: { ...profile, ...extra }, liveCtxTokens: ctx || null });
+    const flag = container.querySelector(".title-row [data-flag]");
+    expect(flag).toHaveAttribute("aria-label", label);
+    expect(flag).toHaveAttribute("role", "img");
+  });
+
+  it("draws no flag under 80 % or while paused", () => {
+    const { container, rerender } = renderHeader({ profile: { ...profile, budget_daily_usd: 1, budget_used_usd: 0.5 } });
+    expect(container.querySelector("[data-flag]")).toBeNull();
+    rerender(<ProfileChatHeader profile={{ ...profile, budget_daily_usd: 1, budget_used_usd: 0.95 }} paused sessionsButton={null} />);
+    expect(container.querySelector("[data-flag]")).toBeNull();
   });
 });

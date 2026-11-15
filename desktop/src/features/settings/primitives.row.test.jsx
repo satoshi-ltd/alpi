@@ -6,14 +6,14 @@ import { Row } from "./primitives.jsx";
 const draw = (query) =>
   render(
     <QueryCtx.Provider value={query}>
-      <Row label="appearance" keywords="accent colour color fold origami">
+      <Row label="appearance" keywords="accent colour color shape">
         <span>control</span>
       </Row>
     </QueryCtx.Provider>,
   );
 
 describe("Row keywords", () => {
-  it.each(["appearance", "accent", "colour", "color", "fold", "origami", ""])("finds the row for %j", (query) => {
+  it.each(["appearance", "accent", "colour", "color", "shape", ""])("finds the row for %j", (query) => {
     draw(query);
     expect(screen.getByText("control").closest("[hidden]")).toBeNull();
   });

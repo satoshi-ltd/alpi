@@ -11,7 +11,7 @@
   flex-direction: column;
   gap: var(--sp-8);
   background: var(--bg-elev);
-  border-radius: var(--r-xs);
+  border-radius: var(--r-surface);
   box-shadow: var(--shadow-edge-sm);
   z-index: var(--z-sticky);
   padding: var(--sp-16);
@@ -27,7 +27,7 @@
 .objects .object {
   width: 42px;
   height: 42px;
-  border-radius: var(--r-xs);
+  border-radius: var(--r-control);
 }
 
 .colours {
@@ -40,14 +40,14 @@
 .colours .colour {
   width: 42px;
   height: 42px;
-  border-radius: var(--r-xs);
+  border-radius: var(--r-control);
 }
 
 .chip {
   display: block;
-  width: var(--ctl-28);
-  height: var(--ctl-28);
-  border-radius: var(--r-xs);
+  width: var(--ctl-32);
+  height: var(--ctl-32);
+  border-radius: var(--r-control);
   box-shadow: inset 0 0 0 .5px rgba(0, 0, 0, 0.18);
 }
 
@@ -65,7 +65,7 @@
 .hexError {
   font-size: var(--text-meta);
   color: var(--c-danger-text);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
 }
 
 .preview {

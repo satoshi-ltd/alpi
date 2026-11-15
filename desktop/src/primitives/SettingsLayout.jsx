@@ -57,7 +57,7 @@ export function MemberRow({ member, isHub, note, owns = null, onRemove, onOpen, 
   return (
     <div className={`col ${styles.memberRow}`}>
       <div className={`row ${styles.memberHead}`}>
-        <Fold fold={member.fold} color={member.color} />
+        <Fold shape={member.shape} color={member.color} />
         {member.accent ? (
           <span className={styles.memberName}>{member.id}</span>
         ) : (

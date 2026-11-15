@@ -14,7 +14,7 @@ vi.mock('react-native', () => ({
 }));
 vi.mock('../../components/Button', () => ({ Button: () => null }));
 vi.mock('../../components/Fold', () => ({
-  Fold: ({ fold, color, size }) => React.createElement('span', { 'data-mark': color, 'data-fold': String(fold), 'data-size': String(size) }),
+  Fold: ({ shape, color, size }) => React.createElement('span', { 'data-mark': color, 'data-shape': String(shape), 'data-size': String(size) }),
 }));
 vi.mock('../../theme/ThemeContext', async () => {
   const tokens = await import('../../theme/tokens');
@@ -42,12 +42,12 @@ describe('EmptyThread', () => {
   });
 
   it('draws the heading at the display token and the profile fold in the accent', () => {
-    render(<EmptyThread heading="start a thread with doc" detail="anthropic/claude-opus-5" accent="#abc123" fold="shield" />);
+    render(<EmptyThread heading="start a thread with doc" detail="anthropic/claude-opus-5" accent="#abc123" shape="shield" />);
     expect(styles().some((s) => s.includes(`"fontSize":${fontSizes.xxl}`))).toBe(true);
     const mark = document.querySelector('[data-mark]');
     expect(mark.getAttribute('data-mark')).toBe('#abc123');
     expect(mark.getAttribute('data-size')).toBe('72');
-    expect(mark.getAttribute('data-fold')).toBe('shield');
+    expect(mark.getAttribute('data-shape')).toBe('shield');
   });
 
   it('drops the detail line when the subject has no model', () => {

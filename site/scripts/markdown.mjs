@@ -49,7 +49,7 @@ function slug(s) {
     .replace(/<[^>]+>/g, '')
     .replace(/[^\w\s-]/g, '')
     .trim()
-    .replace(/\s+/g, '-')
+    .replace(/\s/g, '-')
     .slice(0, 80);
 }
 

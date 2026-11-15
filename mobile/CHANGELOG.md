@@ -14,6 +14,15 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.10.0 — 2026-11-15 — a new identity
+
+- Profiles are twelve shapes with eyes in one palette, workgroups are neutral, and banners are flat.
+- Surfaces, chips and panel rows follow the new flat design system, in light and dark.
+- Section headers honour their first-on-screen spacing, workgroup member names use the profile colour, and the device revoke button is a full 44 pt target.
+- On a foldable, the sidebar's pinned profiles fill the width in three equal columns, as on desktop, and the version in its footer is medium weight.
+- The chat header is one row with the profile chip centred; tapping it shows model, context and cost today.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.9.17 — 2026-11-12 — one chip rule
 
 - State pills match desktop's chip: 24 pt tall, an 8 pt dot and an 11 pt mono label; the count badge is mono semibold, as on desktop.

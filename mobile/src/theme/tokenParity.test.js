@@ -5,35 +5,19 @@ import * as shared from '../../../common/tokens.mjs';
 import {
   alpha,
   FONT_SIZE_ADDS,
-  FONT_SIZE_DROPS,
   fonts,
   fontSizes,
   lineHeights,
-  PALETTE_OVERRIDES,
   palettes,
   radii,
   space,
   status,
+  surfaces,
   typography,
 } from './tokens';
+import * as mobileTokens from './tokens';
 
 const MODES = ['light', 'dark'];
-
-const MOBILE_ONLY = {
-  radii: [],
-  // Not mobile-only in name: desktop declares s10/s11 too, with its own values.
-  // common/tokens.mjs records both sides; this asserts mobile matches its own row.
-  space: ['s10', 's11'],
-};
-
-const EXPECTED_DIVERGENCES = {
-  'light.bg': '#ffffff',
-  'light.bgInput': '#f2f2f2',
-  'dark.bgInput': '#1f1f1f',
-  'light.field': '#ececec',
-  'dark.card': '#151515',
-  'dark.field': '#1f1f1f',
-};
 
 function paletteMismatches() {
   const out = {};
@@ -68,23 +52,16 @@ describe('shared design tokens', () => {
     for (const [name, value] of Object.entries(shared.radii)) expect(radii[name], name).toBe(value);
   });
 
-  it('adds nothing to the shared scales beyond the declared mobile-only steps', () => {
+  it('adds nothing to the shared spacing or radius scales', () => {
     const extra = (mine, base) => Object.keys(mine).filter((name) => !(name in base));
-    expect(extra(space, shared.space).sort()).toEqual(MOBILE_ONLY.space);
-    expect(extra(radii, shared.radii).sort()).toEqual(MOBILE_ONLY.radii);
+    expect(extra(space, shared.space)).toEqual([]);
+    expect(extra(radii, shared.radii)).toEqual([]);
+    expect('spaceExtra' in shared).toBe(false);
   });
 
-  it('takes its two extra spacing steps from the shared record, restated here so the record cannot vouch for itself', () => {
-    expect(shared.spaceExtra.mobile).toEqual({ s10: 28, s11: 36 });
-    for (const [name, value] of Object.entries(shared.spaceExtra.mobile)) {
-      expect(space[name], name).toBe(value);
-    }
-    expect(shared.spaceExtra.desktop).not.toEqual(shared.spaceExtra.mobile);
-  });
-
-  it('names the mobile-only steps so their absence from the shared module is deliberate', () => {
-    for (const name of MOBILE_ONLY.radii) expect(radii[name]).toBeGreaterThan(radii['3xl']);
-    for (const name of MOBILE_ONLY.space) expect(space[name]).toBeGreaterThan(space.s9);
+  it('puts every spacing step on the one 4 pt grid, restated here so the module cannot vouch for itself', () => {
+    expect(Object.values(shared.spaceScale)).toEqual([4, 8, 12, 16, 24, 32, 48]);
+    for (const [name, value] of Object.entries(space)) expect([4, 8, 12, 16, 24, 32, 48], name).toContain(value);
   });
 
   it('keeps fonts.mono a plain family string, since callers pass it straight to fontFamily', () => {
@@ -94,34 +71,32 @@ describe('shared design tokens', () => {
 });
 
 describe('type scale parity with the shared module', () => {
-  it('drops only the sub-11 steps and adds only the 16 pt phone chat step, restated here so the tables cannot vouch for themselves', () => {
-    expect(FONT_SIZE_DROPS).toEqual(['xxs', 'label']);
+  it('adds only the chat alias, on the read rung, and drops nothing', () => {
     expect(FONT_SIZE_ADDS).toEqual({ chat: 16 });
-    const dropped = Object.keys(shared.fontSizes).filter((name) => !(name in fontSizes));
-    const added = Object.keys(fontSizes).filter((name) => !(name in shared.fontSizes));
-    expect(dropped.sort()).toEqual(['label', 'xxs']);
-    expect(added).toEqual(['chat']);
-    expect(fontSizes.chat).toBe(16);
+    expect(Object.keys(shared.fontSizes).filter((name) => !(name in fontSizes))).toEqual([]);
+    expect(Object.keys(fontSizes).filter((name) => !(name in shared.fontSizes))).toEqual(['chat']);
+    expect(fontSizes.chat).toBe(shared.typeLadder.read);
   });
 
-  it('keeps every shared step it keeps at the shared value', () => {
+  it('keeps every shared step at the shared value', () => {
     for (const [name, value] of Object.entries(fontSizes)) {
       if (name in shared.fontSizes) expect(value, name).toBe(shared.fontSizes[name]);
     }
   });
 
-  it('sets no text under 11 pt at the default scale', () => {
-    expect(Math.min(...Object.values(fontSizes))).toBe(11);
+  it('sets no text under the 12 pt floor at the default scale and only the six ladder rungs', () => {
+    expect(Math.min(...Object.values(fontSizes))).toBe(12);
+    expect(shared.typeFloor).toBe(12);
+    expect([...new Set(Object.values(fontSizes))].sort((a, b) => a - b)).toEqual([12, 14, 15, 16, 20, 28]);
   });
 
-  it('diverges from the shared roles only on chat, which reads at 16 on the phone and 15 on desktop', () => {
-    expect(shared.fontSizes[shared.typography.chat.size]).toBe(15);
+  it('reads chat at 16 on both clients, the read rung', () => {
+    expect(shared.fontSizes[shared.typography.chat.size]).toBe(16);
     expect(fontSizes[typography.chat.size]).toBe(16);
     expect(typography.chat.leading).toBe(shared.typography.chat.leading);
     const { chat: _mine, ...rest } = typography;
     const { chat: _shared, ...sharedRest } = shared.typography;
     expect(rest).toEqual(sharedRest);
-    for (const role of Object.values(typography)) expect(fontSizes[role.size], role.size).toBeGreaterThan(0);
   });
 });
 
@@ -132,42 +107,28 @@ describe('palette parity with the shared module', () => {
     }
   });
 
-  it('declares every colour divergence, with the exact value each override installs', () => {
-    const declared = Object.fromEntries(
-      Object.entries(PALETTE_OVERRIDES).map(([path, [value]]) => [path, value]),
-    );
-    expect(paletteMismatches()).toEqual(declared);
+  it('installs no palette override: both clients draw the same surfaces', () => {
+    expect(paletteMismatches()).toEqual({});
+    expect('PALETTE_OVERRIDES' in mobileTokens).toBe(false);
+    for (const mode of MODES) expect(surfaces[mode]).toEqual(shared.surfaces[mode]);
   });
 
-  it('diverges only where this test independently expects it, so the override table cannot vouch for itself', () => {
-    expect(paletteMismatches()).toEqual(EXPECTED_DIVERGENCES);
+  it('draws the four surfaces at the board values, restated here', () => {
+    expect(surfaces.light).toEqual({ side: '#f6f6f6', pane: '#ffffff', fill: '#f2f2f2', raised: '#ffffff' });
+    expect(surfaces.dark).toEqual({ side: '#121212', pane: '#1a1a1a', fill: '#262626', raised: '#2c2c2c' });
+    expect(palettes.light.ink3).toBe('#6b6b6b');
+    expect(palettes.dark.ink3).toBe('#969696');
   });
 
-  it('gives every divergence a reason a reader can weigh', () => {
-    for (const [path, [, reason]] of Object.entries(PALETTE_OVERRIDES)) {
-      expect(path in EXPECTED_DIVERGENCES, `${path} is undeclared in this test`).toBe(true);
-      expect(String(reason).length, `${path} has no reason`).toBeGreaterThan(30);
-    }
+  it.each(MODES)('fills hover, selected and pressed from the shared state fills in %s', (mode) => {
+    const { hover, selected, pressed } = palettes[mode];
+    expect(alphaOf(hover)).toBe(shared.stateFills[mode].hover);
+    expect(alphaOf(selected)).toBe(shared.stateFills[mode].selected);
+    expect(alphaOf(pressed)).toBe(shared.stateFills[mode].pressed);
   });
 
-  it('leaves no stale override that no longer changes anything', () => {
-    for (const [path, [value]] of Object.entries(PALETTE_OVERRIDES)) {
-      const [mode, key] = path.split('.');
-      expect(shared.palettes[mode][key], path).toBeDefined();
-      expect(value, path).not.toBe(shared.palettes[mode][key]);
-    }
-  });
-
-  it('gives every override a one-line reason a reader can weigh', () => {
-    for (const [path, [, reason]] of Object.entries(PALETTE_OVERRIDES)) {
-      expect(reason, path).not.toContain('\n');
-      expect(reason.length, path).toBeGreaterThan(30);
-    }
-  });
-
-  it.each(MODES)('keeps hover under selected under line in %s', (mode) => {
-    const { hover, selected, line } = palettes[mode];
-    expect(alphaOf(hover)).toBeLessThan(alphaOf(selected));
-    expect(alphaOf(selected)).toBeLessThan(alphaOf(line));
+  it('retires every old corner token and keeps none of them on the phone', () => {
+    expect(shared.retiredRadii).toEqual(['chip', 'tag', 'sm', 'md', 'lg', 'xl', '2xl', '3xl']);
+    for (const name of shared.retiredRadii) expect(radii[name], name).toBeUndefined();
   });
 });

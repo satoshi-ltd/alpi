@@ -1,11 +1,15 @@
 import Dot from "./Dot.jsx";
+import Icon from "./Icon.jsx";
 import styles from "./Banner.module.css";
 
-const KIND_COLOR = {
+const DOT_COLOR = {
   info: "var(--ink-3)",
-  success: "var(--c-success)",
-  warning: "var(--c-warning)",
-  danger: "var(--c-danger)",
+  success: "var(--c-success-text)",
+};
+
+const GLYPH_COLOR = {
+  warning: "var(--c-warning-text)",
+  danger: "var(--c-danger-text)",
 };
 
 export default function Banner({
@@ -15,10 +19,14 @@ export default function Banner({
   action,
   onAction,
 }) {
-  const color = KIND_COLOR[kind] ?? KIND_COLOR.info;
+  const tone = DOT_COLOR[kind] || GLYPH_COLOR[kind] ? kind : "info";
   return (
-    <div className={`banner is-${kind}`} role={kind === "danger" ? "alert" : "status"}>
-      <Dot color={color} pulse={pulsing} className={styles.dot} />
+    <div className={`banner is-${tone}`} role={tone === "danger" ? "alert" : "status"}>
+      {GLYPH_COLOR[tone] ? (
+        <Icon name="triangle-alert" size="sm" color={GLYPH_COLOR[tone]} className={`${styles.glyph} ${pulsing ? "pulse-glyph" : ""}`.trim()} />
+      ) : (
+        <Dot color={DOT_COLOR[tone]} pulse={pulsing} className={styles.dot} />
+      )}
       <span className={styles.body}>{children}</span>
       {action && (
         <button type="button" onClick={onAction} className={`alink ${styles.action}`}>

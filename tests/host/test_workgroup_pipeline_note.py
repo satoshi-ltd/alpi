@@ -130,7 +130,7 @@ def test_the_cross_profile_list_carries_the_note_for_a_queued_hub_row(short_tmp:
     assert [r["pipeline_note"] for r in rows] == ["intake done · shoot next"]
 
 
-def test_a_subscribed_row_carries_the_note_for_one_profile(short_tmp: Path) -> None:
+def _subscribed_rows(short_tmp: Path, bodies: list[str]) -> list[dict]:
     from alpi.alp import subscription as sub_mod
     from alpi.alp import workgroup as wg_mod
     from alpi.alp.keys import load_or_generate
@@ -141,7 +141,7 @@ def test_a_subscribed_row_carries_the_note_for_one_profile(short_tmp: Path) -> N
     member_kp = load_or_generate(member_home)
     hub_home = short_tmp / "hub"
     wg = _hub(hub_home, pipelines=_PIPELINES, launch="intake", steps=_STEPS, member_pubkeys=[member_kp.pubkey_b64()])
-    for body in ("@scout #task #intake brief", "#done ready"):
+    for body in bodies:
         _append(hub_home, wg.meta.id, body)
     sub = sub_mod.Subscription(
         wg_id=wg.meta.id, name=wg.meta.name, hub_id="hub",
@@ -162,6 +162,39 @@ def test_a_subscribed_row_carries_the_note_for_one_profile(short_tmp: Path) -> N
         encoding="utf-8",
     )
 
-    rows = device_state._subscribed_workgroups(member_home, "member", include_pipeline_status=True)
+    return device_state._subscribed_workgroups(member_home, "member", include_pipeline_status=True)
+
+
+def test_a_subscribed_row_carries_the_note_for_one_profile(short_tmp: Path) -> None:
+    rows = _subscribed_rows(short_tmp, ["@scout #task #intake brief", "#done ready"])
 
     assert [r["pipeline_note"] for r in rows] == ["intake done · content next"]
+
+
+def test_a_blocked_subscribed_row_names_the_phase_it_waits_on(short_tmp: Path) -> None:
+    [row] = _subscribed_rows(short_tmp, ["@scout #task #intake brief", "#done BLOCKED · intake · no answer"])
+
+    assert (row["pipeline_status"], row["pipeline_phase"], row["hub_id"]) == ("blocked", "intake", "hub")
+
+
+def test_a_blocked_hub_row_names_the_phase_it_waits_on(short_tmp: Path) -> None:
+    home = short_tmp / "hub"
+    _wg(home, ["@scout #task #intake brief", "#done BLOCKED · intake · the hotel never answered"])
+
+    [row] = _hub_workgroups(home, "hub", include_pipeline_status=True)
+
+    assert row["pipeline_status"] == "blocked"
+    assert row["pipeline_phase"] == "intake"
+
+
+def test_a_blocked_aggregate_row_names_the_phase_it_waits_on(short_tmp: Path, monkeypatch) -> None:
+    from alpi.host import device_state
+
+    hub_home = short_tmp / "hub"
+    _wg(hub_home, ["@scout #task #intake brief", "#done ready", "@quill #task #content copy", "#done BLOCKED · content · no photos"])
+    monkeypatch.setattr(device_state, "_profiles", lambda: [{"name": "hub", "home": str(hub_home), "is_default": False}])
+    monkeypatch.setattr(device_state, "_resolve_home", lambda _name: hub_home)
+
+    [row] = device_state._aggregate_workgroups(None, include_pipeline_status=True)
+
+    assert (row["pipeline_status"], row["pipeline_phase"]) == ("blocked", "content")

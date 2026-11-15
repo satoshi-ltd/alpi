@@ -4,6 +4,7 @@ import { Icon } from '../../components/Icon';
 import { RowGroup, RowSeparator } from '../../components/Row';
 import { mobile, radii, space } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeContext';
+import { code } from '../../theme/code';
 
 export const ALP_SCOPES = [
   { id: 'link.ping', desc: 'liveness probe · zero LLM cost' },
@@ -21,8 +22,8 @@ function Check({ on }) {
         width: BOX,
         height: BOX,
         borderRadius: radii.xs,
-        borderWidth: 1.5,
-        borderColor: on ? colors.ink : colors.ink3,
+        borderWidth: on ? 0 : 1.5,
+        borderColor: colors.edge,
         backgroundColor: on ? colors.ink : 'transparent',
         alignItems: 'center',
         justifyContent: 'center',
@@ -47,7 +48,7 @@ export function ScopeToggles({ value, onToggle }) {
               accessibilityRole="checkbox"
               accessibilityState={{ checked: on }}
               accessibilityLabel={`${s.id}, ${s.desc}`}
-              android_ripple={{ color: colors.selected }}
+              android_ripple={{ color: colors.pressed }}
               style={({ pressed }) => ({
                 flexDirection: 'row',
                 alignItems: 'center',
@@ -60,7 +61,7 @@ export function ScopeToggles({ value, onToggle }) {
             >
               <Check on={on} />
               <View style={{ flex: 1, gap: space.s1 }}>
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink }}>{s.id}</Text>
+                <Text style={{ ...code(fonts, fontSizes.sm), color: colors.ink }}>{s.id}</Text>
                 <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>{s.desc}</Text>
               </View>
             </Pressable>

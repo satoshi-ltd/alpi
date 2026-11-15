@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { lineHeights, radii, space } from '../../theme/tokens';
 
-import { Crease } from '../../components/Crease';
 import { Fold } from '../../components/Fold';
 import { Icon } from '../../components/Icon';
+import { nameColor, nameSize, nameStyle } from '../../theme/name';
 import { useTheme } from '../../theme/ThemeContext';
+import { code } from '../../theme/code';
 
 const STYLES = StyleSheet.create({
   card: {
@@ -40,24 +41,20 @@ const STYLES = StyleSheet.create({
   tag: {
     paddingHorizontal: space.s3,
     paddingVertical: 2,
-    borderRadius: radii.xs,
+    borderRadius: radii.pill,
   },
 });
 
-export function MemberCard({ label, accent, fold, isHub, bio, owns = null, invited = false, onMore }) {
-  const { colors, fonts, fontSizes } = useTheme();
+export function MemberCard({ label, accent, shape, isHub, bio, owns = null, invited = false, onMore }) {
+  const { colors, fonts, fontSizes, fontScale = 1 } = useTheme();
   const [expanded, setExpanded] = useState(false);
   const name = label.replace(/^@/, '');
   return (
     <View style={STYLES.card}>
       <View style={STYLES.head}>
-        <Fold fold={fold} color={accent} size="md" />
+        <Fold shape={shape} color={accent} size="md" />
         <View style={STYLES.name}>
-          {accent ? (
-            <Crease text={name} accent={accent} size={18} />
-          ) : (
-            <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.ink }}>{label}</Text>
-          )}
+          <Text numberOfLines={1} style={nameStyle(nameSize(fontSizes.xl, fontScale), accent ? nameColor(accent, colors) : colors.ink)}>{accent ? name : label}</Text>
         </View>
         {isHub ? <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}>hub</Text> : null}
         {invited ? <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}>invited</Text> : null}
@@ -79,11 +76,11 @@ export function MemberCard({ label, accent, fold, isHub, bio, owns = null, invit
       ) : null}
       {Array.isArray(owns) ? (
         <View style={STYLES.owns}>
-          <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>owns</Text>
+          <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>owns</Text>
           {owns.length > 0 ? (
             owns.map((slug) => (
               <View key={slug} style={[STYLES.tag, { backgroundColor: colors.selected }]}>
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink2 }}>#{slug}</Text>
+                <Text style={{ ...code(fonts, fontSizes.xs), color: colors.ink2 }}>#{slug}</Text>
               </View>
             ))
           ) : (

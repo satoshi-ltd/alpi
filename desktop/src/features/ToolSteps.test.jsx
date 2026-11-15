@@ -194,27 +194,32 @@ describe("process block typography", () => {
   const steps = read("ToolSteps.module.css");
   const reasoning = read("../primitives/Reasoning.module.css");
 
-  it("leads the thinking row in sans at the same 22 px height, under the profile's object", () => {
+  it("leads the thinking row in sans at the same 32 px height, under the profile's object", () => {
     const rule = block(reasoning, "row");
-    expect(rule).toMatch(/height: var\(--ctl-24\)/);
+    expect(rule).toMatch(/height: var\(--ctl-32\)/);
     expect(rule).toMatch(/font-family: var\(--font-sans\)/);
   });
 
-  it.each([[steps, "head"], [steps, "bucket"]])("every tool row is a meta-size mono line", (css, sel) => {
+  it.each([[steps, "head"], [steps, "bucket"]])("every tool row is a 14 px sans line of 32 px", (css, sel) => {
     const rule = block(css, sel);
-    expect(rule).toMatch(/height: var\(--ctl-24\)/);
-    expect(rule).toMatch(/font-family: var\(--font-mono\)/);
-    expect(rule).toMatch(/font-size: var\(--text-meta\)/);
+    expect(rule).toMatch(/height: var\(--ctl-32\)/);
+    expect(rule).toMatch(/font-family: var\(--font-sans\)/);
+    expect(rule).toMatch(/font-size: var\(--text-small\)/);
   });
 
-  it("labels and meta read ink-3, names ink-2, the opened thought mono ink-2", () => {
+  it("sets only the tool's machine name in mono", () => {
+    expect(block(steps, "name")).toMatch(/font-family: var\(--font-mono\)/);
+    expect(block(steps, "name")).toMatch(/font-size: var\(--text-mono\)/);
+  });
+
+  it("labels and meta read ink-3, names ink-2, the opened thought sans ink-2", () => {
     expect(block(steps, "summary")).toMatch(/color: var\(--ink-3\)/);
     expect(block(steps, "status")).toMatch(/color: var\(--ink-3\)/);
     expect(block(steps, "name")).toMatch(/color: var\(--ink-2\)/);
     expect(block(reasoning, "label")).toMatch(/color: var\(--ink-3\)/);
     const para = block(reasoning, "para");
-    expect(para).toMatch(/font-family: var\(--font-mono\)/);
-    expect(para).toMatch(/font-size: var\(--text-meta\)/);
+    expect(para).toMatch(/font-family: var\(--font-sans\)/);
+    expect(para).toMatch(/font-size: var\(--text-small\)/);
     expect(para).toMatch(/color: var\(--ink-2\)/);
     expect(block(steps, "module")).toMatch(/gap: var\(--space-tight\)/);
   });
@@ -235,9 +240,9 @@ describe("process block typography", () => {
 });
 
 describe("ProcessBlock hands the profile to its reasoning", () => {
-  it("leads the thinking row with the profile's fold in its colour", () => {
-    render(<ProcessBlock entries={[{ kind: "reasoning", key: "r0", text: "plan", seconds: 3 }]} fold="shield" accent="#3899e2" />);
-    expect(document.querySelector("[data-fold]").dataset.fold).toBe("shield");
-    expect(document.querySelector("[data-fold] polygon").getAttribute("fill")).toBeTruthy();
+  it("leads the thinking row with the profile's mark in its colour", () => {
+    render(<ProcessBlock entries={[{ kind: "reasoning", key: "r0", text: "plan", seconds: 3 }]} shape="bell" accent="#3899e2" />);
+    expect(document.querySelector("[data-shape]").dataset.shape).toBe("bell");
+    expect(document.querySelector("[data-shape] path[data-body]").getAttribute("fill")).toBe("#3899e2");
   });
 });

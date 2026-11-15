@@ -2,7 +2,7 @@ import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render } from '@testing-library/react';
 
-import { FALLBACK_ACCENT } from '../../../../common/folds.mjs';
+import { FALLBACK_ACCENT } from '../../../../common/shapes.mjs';
 
 afterEach(cleanup);
 
@@ -19,7 +19,7 @@ vi.mock('react-native', () => {
 });
 
 vi.mock('../../components/Fold', () => ({
-  Fold: ({ fold, color }) => React.createElement('span', { 'data-fold': fold ?? '', 'data-color': color }),
+  Fold: ({ shape, color }) => React.createElement('span', { 'data-shape': shape ?? '', 'data-color': color }),
 }));
 vi.mock('../../components/Pill', () => ({ Pill: ({ children }) => React.createElement('span', {}, children) }));
 vi.mock('../../hooks/useDaemonData', () => ({ useProfileSummaries: () => ({ data: { profiles: h.profiles } }) }));
@@ -66,17 +66,17 @@ describe('MentionPopover', () => {
   });
 
   it('paints each candidate with its summary accent', () => {
-    h.profiles = [{ name: 'doc', accent: '#3ac9f3', fold: 'house' }];
+    h.profiles = [{ name: 'doc', accent: '#3ac9f3', shape: 'arch' }];
     const { container } = render(<MentionPopover candidates={[{ id: 'doc' }]} />);
-    const fold = container.querySelector('[data-fold]');
+    const fold = container.querySelector('[data-shape]');
     expect(fold.getAttribute('data-color')).toBe('#3ac9f3');
-    expect(fold.getAttribute('data-fold')).toBe('house');
+    expect(fold.getAttribute('data-shape')).toBe('arch');
   });
 
   it('falls back to the shared accent for a profile the summaries do not know, whatever its name', () => {
     h.profiles = [];
     const { container } = render(<MentionPopover candidates={[{ id: 'lex' }, { id: 'ghost' }]} />);
-    const colors = [...container.querySelectorAll('[data-fold]')].map((n) => n.getAttribute('data-color'));
+    const colors = [...container.querySelectorAll('[data-shape]')].map((n) => n.getAttribute('data-color'));
     expect(colors).toEqual([FALLBACK_ACCENT, FALLBACK_ACCENT]);
   });
 });

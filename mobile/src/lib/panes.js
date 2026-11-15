@@ -16,9 +16,9 @@ export const PANE_PAD_X = space.s7;
 export const BUBBLE_MAX_PANE = '76%';
 
 export const CHROME_H = mobile.tap;
-export const CHROME_BTN = space.s11;
+export const CHROME_BTN = mobile.iconBtn;
 export const BACK_BLEED = (CHROME_BTN - iconSizes.md) / 2;
-export const BACK_INK_INSET = 5.25;
+export const BACK_INK_INSET = (5.25 / 16) * iconSizes.md;
 export const TOGGLE_BLEED = BACK_BLEED;
 export const CONN_EDGE_NUDGE = 0.5 + space.s5 - BACK_BLEED;
 export function backMargins(leading = true) {

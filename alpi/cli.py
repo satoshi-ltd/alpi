@@ -3287,11 +3287,11 @@ def _appearance_setup(h: Path) -> None:
         ui.ok_and_wait(appearance.LOCKED_MESSAGE)
         return
     cfg = config.load(h)
-    fold, _accent = appearance.current(cfg.tui)
+    shape, _accent = appearance.current(cfg.tui)
     picked = ui.menu(
         ui.crumb("setup", "appearance"),
-        [(name, name, "current" if name == fold else "") for name in palette.FOLDS],
-        subtitle=f"origami object · {appearance.pair_name(cfg.tui)}",
+        [(name, name, "current" if name == shape else "") for name in palette.SHAPES],
+        subtitle=f"shape · {appearance.pair_name(cfg.tui)}",
         home=h,
         close="Back",
     )
@@ -3838,10 +3838,10 @@ def profile_list(ctx: click.Context) -> None:
 @click.argument("name", required=False)
 @click.pass_context
 def profile_show(ctx: click.Context, name: str | None) -> None:
-    """Show a profile's object, colour, model and location."""
+    """Show a profile's shape, colour, model and location."""
     from rich.text import Text
 
-    from alpi import appearance, fold_art, ui
+    from alpi import appearance, fold_art, palette, ui
 
     name = name or ctx.obj.get("profile") or "default"
     try:
@@ -3854,16 +3854,16 @@ def profile_show(ctx: click.Context, name: str | None) -> None:
         cfg = config.load(h)
     except Exception as e:  # noqa: BLE001
         raise click.ClickException(f"profile {name!r} has an unreadable config.yaml: {e}")
-    fold, accent = fold_art.identity(h, cfg.tui)
+    shape, accent = fold_art.identity(h, cfg.tui)
     details = [
-        ("object", appearance.pair_name(cfg.tui, h)),
+        ("shape", appearance.pair_name(cfg.tui, h)),
         ("model", cfg.model or "(no model)"),
         ("size", home.profile_size_label(h)),
         ("path", home.shorten_home(h)),
     ]
     from alpi import attention
 
-    lines = [Text(name, style=f"bold {accent}")]
+    lines = [Text(name, style=f"bold {fold_art.name_colour(accent, cfg.tui)}")]
     lines += [Text.assemble((f"{label:<7}", "dim"), value) for label, value in details]
     try:
         needs = attention.lines(attention.collect(h))
@@ -3871,7 +3871,7 @@ def profile_show(ctx: click.Context, name: str | None) -> None:
         needs = []
     lines += [Text.assemble((f"{'needs':<7}", "dim"), ("you: ", "bold"), line) for line in needs]
     if fold_art.supports_fold_art(stream=ui._console.file):
-        picture = fold_art.art(fold, accent)
+        picture = fold_art.art(shape, fold_art.body_colour(accent, cfg.tui), eye=palette.eye_ink(cfg.tui))
         ui._console.print(fold_art.beside(picture, lines))
         return
     lines[0] = Text.assemble((f"{fold_art.FALLBACK_GLYPH} ", accent), lines[0])
@@ -3898,7 +3898,7 @@ def profile_create(name: str) -> None:
     from alpi import appearance
 
     click.echo(f"created profile {name!r} at {h}")
-    click.echo(f"it wears the {appearance.pair_name(config.load(h).tui)} · change it with /fold or alpi -p {name} setup")
+    click.echo(f"it wears the {appearance.pair_name(config.load(h).tui)} · change it with /shape or alpi -p {name} setup")
     click.echo(f"use it with: alpi -p {name}")
     click.echo("")
     click.echo("Configure it:")

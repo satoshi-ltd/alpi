@@ -39,9 +39,15 @@ describe('one motion vocabulary', () => {
   });
 
   it('runs every pulse on the shared half cadence', () => {
-    for (const file of ['components/Dot.jsx', 'components/SkeletonBar.jsx', 'components/Fold.jsx', 'features/chat/ThinkingDots.jsx', 'features/chat/ToolCallRow.jsx', 'components/Toast.jsx', 'features/chat/SoundWave.jsx']) {
+    for (const file of ['components/Dot.jsx', 'components/SkeletonBar.jsx', 'features/chat/ThinkingDots.jsx', 'features/chat/ToolCallRow.jsx', 'components/Toast.jsx', 'features/chat/SoundWave.jsx']) {
       const text = sources.find(([f]) => f === `src/${file}`)[1];
       expect(text, file).toMatch(/pulseSteps|PULSE_HALF_MS|motion\.pulse/);
     }
+  });
+
+  it('runs the marks on the shared agent-mark sequences, never a local cadence', () => {
+    const text = sources.find(([f]) => f === 'src/components/Fold.jsx')[1];
+    expect(text).not.toMatch(/pulseSteps|PULSE_HALF_MS|motion\.pulse/);
+    expect(sources.find(([f]) => f === 'src/lib/agentMark.js')[1]).toMatch(/SEQUENCE[\s\S]*TURN_CSS/);
   });
 });

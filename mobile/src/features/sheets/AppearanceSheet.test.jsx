@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { ACCENTS } from '../../../../common/accents.mjs';
-import { FOLD_IDS } from '../../../../common/folds.mjs';
+import { SHAPE_IDS } from '../../../../common/shapes.mjs';
 
 afterEach(cleanup);
 
@@ -87,7 +87,7 @@ const mount = (props = {}) => {
       onClose={onClose}
       profileName="doc"
       initialValue="#3899e2"
-      initialFold="shield"
+      initialShape="bell"
       onSave={onSave}
       {...props}
     />,
@@ -100,47 +100,50 @@ const save = () => fireEvent.click(screen.getByText('Save appearance'));
 beforeEach(() => h.toast.mockReset());
 
 describe('AppearanceSheet', () => {
-  it('lays the colours out like the objects, six to a row', () => {
+  it('lays the colours out like the shapes, six to a row', () => {
     mount();
     const cell = (label) => screen.getByLabelText(label).getAttribute('data-width');
-    expect(cell('shield')).toBeTruthy();
-    expect(cell('blue')).toBe(cell('shield'));
+    expect(cell('bell')).toBeTruthy();
+    expect(cell('blue')).toBe(cell('bell'));
     expect(cell('blue')).toBe(`${100 / 6}%`);
   });
 
-  it('offers the twelve objects and the twelve colours', () => {
+  it('offers the twelve shapes by name and the twelve colours', () => {
     mount();
-    for (const id of FOLD_IDS) expect(screen.getByLabelText(id)).toBeTruthy();
+    for (const id of SHAPE_IDS) expect(screen.getByLabelText(id)).toBeTruthy();
+    expect(new Set(SHAPE_IDS).size).toBe(12);
+    expect(screen.getByText('Shape')).toBeTruthy();
+    expect(screen.getByText('@doc · shape and colour')).toBeTruthy();
     for (const [name] of ACCENTS) expect(screen.getByLabelText(name)).toBeTruthy();
-    expect(FOLD_IDS).toHaveLength(12);
+    expect(SHAPE_IDS).toHaveLength(12);
     expect(ACCENTS).toHaveLength(12);
-    expect(document.querySelectorAll('button[aria-label][aria-pressed] svg[data-fold]')).toHaveLength(12);
+    expect(document.querySelectorAll('button[aria-label][aria-pressed] svg[data-shape]')).toHaveLength(12);
   });
 
-  it('marks the stored object and colour as selected and names the pair', () => {
+  it('marks the stored shape and colour as selected and names the pair by the shape it draws', () => {
     mount();
-    expect(screen.getByLabelText('shield').getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByLabelText('house').getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByLabelText('bell').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByLabelText('arch').getAttribute('aria-pressed')).toBe('false');
     expect(screen.getByLabelText('blue').getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByText('Blue shield')).toBeTruthy();
-    expect(screen.getByText('fold: shield · accent: #3899e2')).toBeTruthy();
+    expect(screen.getByText('Blue bell')).toBeTruthy();
+    expect(screen.getByText('shape: bell · accent: #3899e2')).toBeTruthy();
   });
 
   it('selects the nearest swatch for an old stored colour', () => {
-    mount({ initialValue: '#3a9be0', initialFold: undefined });
+    mount({ initialValue: '#3a9be0', initialShape: undefined });
     expect(screen.getByLabelText('blue').getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByLabelText('amber').getAttribute('aria-pressed')).toBe('false');
-    expect(screen.getByLabelText('diamond').getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByText('Blue diamond')).toBeTruthy();
+    expect(screen.getByLabelText('round').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText('Blue round')).toBeTruthy();
   });
 
-  it('saves only the object when only the object changed', async () => {
+  it('saves only the shape name when only the shape changed', async () => {
     const { onSave, onClose } = mount();
-    fireEvent.click(screen.getByLabelText('rocket'));
-    expect(screen.getByText('Blue rocket')).toBeTruthy();
+    fireEvent.click(screen.getByLabelText('pill'));
+    expect(screen.getByText('Blue pill')).toBeTruthy();
     save();
     await waitFor(() => expect(onClose).toHaveBeenCalled());
-    expect(onSave).toHaveBeenCalledWith({ fold: 'rocket' });
+    expect(onSave).toHaveBeenCalledWith({ shape: 'pill' });
   });
 
   it('saves only the colour when only the colour changed', async () => {
@@ -153,20 +156,29 @@ describe('AppearanceSheet', () => {
 
   it('saves both when both changed', async () => {
     const { onSave } = mount();
-    fireEvent.click(screen.getByLabelText('crown'));
+    fireEvent.click(screen.getByLabelText('dome'));
     fireEvent.click(screen.getByLabelText('violet'));
     save();
-    await waitFor(() => expect(onSave).toHaveBeenCalledWith({ fold: 'crown', accent: '#9b5ad9' }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith({ shape: 'dome', accent: '#9b5ad9' }));
     expect(h.toast).toHaveBeenCalledWith(expect.objectContaining({ title: 'Appearance saved' }));
   });
 
-  it('resets the object to the diamond and saves it', async () => {
+  it('resets the shape to round and saves the shape name', async () => {
     const { onSave } = mount();
-    fireEvent.click(screen.getByLabelText('Reset to diamond'));
-    expect(screen.getByLabelText('diamond').getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByText('Blue diamond')).toBeTruthy();
+    fireEvent.click(screen.getByLabelText('Reset to round'));
+    expect(screen.getByLabelText('round').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText('Blue round')).toBeTruthy();
     save();
-    await waitFor(() => expect(onSave).toHaveBeenCalledWith({ fold: 'diamond' }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith({ shape: 'round' }));
+  });
+
+  it('reads a legacy id as the round, never as its old shape, and saves nothing unchanged', () => {
+    const { onSave, onClose } = mount({ initialShape: 'shield' });
+    expect(screen.getByLabelText('round').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByLabelText('bell').getAttribute('aria-pressed')).toBe('false');
+    save();
+    expect(onSave).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
   });
 
   it('closes without saving when nothing changed', () => {
@@ -176,15 +188,17 @@ describe('AppearanceSheet', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('keeps the sheet open and reports a failed save', async () => {
-    const onSave = vi.fn(async () => {
-      throw new Error('boom');
-    });
+  it('closes at once without waiting for the daemon and reports a failed save', async () => {
+    let fail;
+    const onSave = vi.fn(() => new Promise((_, reject) => { fail = reject; }));
     const { onClose } = mount({ onSave });
-    fireEvent.click(screen.getByLabelText('tree'));
+    fireEvent.click(screen.getByLabelText('pebble'));
     save();
+    expect(onSave).toHaveBeenCalledWith({ shape: 'pebble' });
+    expect(onClose).toHaveBeenCalled();
+    expect(h.toast).not.toHaveBeenCalled();
+    fail(new Error('boom'));
     await waitFor(() => expect(h.toast).toHaveBeenCalledWith(expect.objectContaining({ title: 'Save failed' })));
-    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('blocks saving an invalid custom hex', () => {

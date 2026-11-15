@@ -82,7 +82,7 @@ function daemon({ profiles = [ALPI, DOC], workgroups = [CREW], role = "admin", l
   return state;
 }
 
-const row = (label) => screen.getAllByText(label).map((el) => el.closest("button")).find((b) => b?.classList.contains("ds-sb-row"));
+const row = (label) => screen.getAllByText(label).map((el) => el.closest("button")).find((b) => b?.classList.contains("ds-sb-row") || b?.closest("[role='group'][aria-label='Pinned']"));
 const selected = (label) => row(label)?.dataset.sel === "true";
 const pressNewSession = () =>
   act(() => {

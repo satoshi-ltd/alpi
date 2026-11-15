@@ -40,7 +40,7 @@ export default function ScheduleList() {
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-      <PanelHeader profile={id} section="SCHEDULES" count={jobs.length} onBack={goBack} />
+      <PanelHeader profile={id} section="Schedules" count={jobs.length} onBack={goBack} />
       {wide ? (
         <MasterDetail
           list={<JobList profile={id} selectedId={selected} onOpen={(jid) => setPicked(String(jid))} embedded />}

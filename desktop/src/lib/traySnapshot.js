@@ -31,7 +31,7 @@ export function trayLink({ connection, daemon }) {
 }
 
 function needsRows(items) {
-  return items.slice(0, MAX_NEEDS_ROWS).map(({ item, source, connectionId, prefix, folds, accents }) => {
+  return items.slice(0, MAX_NEEDS_ROWS).map(({ item, source, connectionId, prefix, shapes, accents }) => {
     const question = item.kind === "clarification";
     return {
       id: `${prefix}${item.request_id}`,
@@ -41,7 +41,7 @@ function needsRows(items) {
       title: clip(item.title),
       ts: Number.isFinite(item.ts) ? item.ts : null,
       source,
-      fold: folds?.[item.profile] ?? null,
+      shape: shapes?.[item.profile] ?? null,
       accent: accents?.[item.profile] ?? null,
       deeplink: { kind: question ? "clarification" : "approval", profile: item.profile ?? null, id: String(item.request_id), connection_id: connectionId ?? "" },
     };
@@ -59,7 +59,7 @@ function runDeeplink(item, connectionId) {
 
 function runningRows(items) {
   const seen = new Map();
-  return items.slice(0, MAX_RUNNING_ROWS).map(({ item, source, connectionId, prefix, folds, accents }) => {
+  return items.slice(0, MAX_RUNNING_ROWS).map(({ item, source, connectionId, prefix, shapes, accents }) => {
     const profile = item.profile ?? null;
     const base = `${prefix}${profile ?? ""}/${item.workgroup_id ?? item.job_id ?? item.session_id ?? ""}`;
     const n = seen.get(base) ?? 0;
@@ -71,7 +71,7 @@ function runningRows(items) {
       title: clip(item.title || item.name),
       ts: Number.isFinite(item.started_at) ? item.started_at : null,
       source,
-      fold: folds?.[profile] ?? null,
+      shape: shapes?.[profile] ?? null,
       accent: accents?.[profile] ?? null,
       deeplink: runDeeplink(item, connectionId),
     };
@@ -86,7 +86,7 @@ export function buildTraySnapshot({
   member = false,
   unread = 0,
   update = null,
-  foldByProfile = {},
+  shapeByProfile = {},
   accentByProfile = {},
   otherActivity = [],
   nowMs = Date.now(),
@@ -99,19 +99,19 @@ export function buildTraySnapshot({
   const activeKnown = online && activitySupported && activity != null;
   const activeName = connection?.name ?? connection?.id ?? "";
   const sources = [
-    ...(activeKnown ? [{ id: connection?.id ?? "", name: activeName, member, prefix: "", folds: foldByProfile, accents: accentByProfile, groups: groupActivity(activity, { nowMs }) }] : []),
+    ...(activeKnown ? [{ id: connection?.id ?? "", name: activeName, member, prefix: "", shapes: shapeByProfile, accents: accentByProfile, groups: groupActivity(activity, { nowMs }) }] : []),
     ...otherActivity.filter((other) => other.id !== connection?.id).map((other) => ({
       id: other.id,
       name: other.name ?? other.id ?? "",
       member: Boolean(other.member),
       prefix: `${other.id}/`,
-      folds: other.folds,
+      shapes: other.shapes,
       accents: other.accents,
       groups: groupActivity(other.activity, { nowMs }),
     })),
   ];
   const several = sources.length > 1;
-  const tag = (src, item) => ({ item, source: several ? clip(src.name, 40) : null, connectionId: src.id, prefix: src.prefix, folds: src.folds, accents: src.accents });
+  const tag = (src, item) => ({ item, source: several ? clip(src.name, 40) : null, connectionId: src.id, prefix: src.prefix, shapes: src.shapes, accents: src.accents });
   const needs = sources.flatMap((src) => src.groups.needs.map((item) => tag(src, item)));
   const running = sources.flatMap((src) => src.groups.running.map((item) => tag(src, item)));
   const failingGroups = sources.flatMap((src) => (src.member ? [] : src.groups.failing.map((group) => ({ group, src }))));
@@ -135,7 +135,7 @@ export function buildTraySnapshot({
       label: clip(profileLabel(job.profile ?? "")),
       at: new Date(job.nextAt * 1000).toISOString(),
       source: several ? clip(src.name, 40) : null,
-      fold: src.folds?.[job.profile] ?? null,
+      shape: src.shapes?.[job.profile] ?? null,
       accent: src.accents?.[job.profile] ?? null,
       deeplink: job.profile ? { kind: "settings", profile: job.profile, id: "schedules", connection_id: src.id } : null,
     }));

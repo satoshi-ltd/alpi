@@ -24,7 +24,7 @@ export const processRowStyle = {
 
 export function processText({ fonts, fontSizes }, color) {
   return {
-    fontFamily: fonts.mono,
+    fontFamily: fonts.sans.regular,
     fontSize: fontSizes.sm,
     lineHeight: fontSizes.sm * lineHeights.cozy,
     color,

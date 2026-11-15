@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { CpuIcon, Dot, ServerIcon, ChevDownIcon, Tip } from "./index.js";
 import { RATE_LIMITED, RATE_LIMITED_MESSAGE } from "../lib/connection-status.js";
 import styles from "./ConnPill.module.css";
@@ -20,13 +21,16 @@ export default function ConnPill({
   status = "unknown",
   onClick,
   tipText = "Switch connection",
+  labelledBy = null,
 }) {
+  const valueId = useId();
   const isDisabled = status === "disabled";
   const isOffline = status === "offline" || status === "auth-failed";
   const isProbing = status === "probing";
   const isRateLimited = status === RATE_LIMITED;
   const statusColor = STATUS_COLORS[status] || STATUS_COLORS.unknown;
   const stateWord = isDisabled ? "disabled" : isRateLimited ? "rate limited" : isOffline ? "offline" : isProbing ? "connecting" : "online";
+  const spoken = host ? `${name}, ${stateWord}, ${host}` : `${name}, ${stateWord}`;
   return (
     <Tip
       text={
@@ -43,7 +47,14 @@ export default function ConnPill({
       side="l"
       block
     >
-      <button type="button" className="ds-conn-pill" onClick={onClick} aria-label={host ? `${name}, ${stateWord}, ${host}` : `${name}, ${stateWord}`}>
+      <button
+        type="button"
+        className="ds-conn-pill"
+        onClick={onClick}
+        aria-label={labelledBy ? undefined : spoken}
+        aria-labelledby={labelledBy ? `${labelledBy} ${valueId}` : undefined}
+      >
+        {labelledBy ? <span id={valueId} hidden>{spoken}</span> : null}
         <span className={styles.iconWrap}>
           {kind === "local" ? <CpuIcon /> : <ServerIcon />}
           <Dot

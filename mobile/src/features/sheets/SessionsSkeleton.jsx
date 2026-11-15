@@ -2,7 +2,6 @@ import { View } from 'react-native';
 import { space } from '../../theme/tokens';
 
 import { SkeletonBar } from '../../components/SkeletonBar';
-import { useTheme } from '../../theme/ThemeContext';
 
 function SessionRow() {
   return (
@@ -20,14 +19,10 @@ function SessionRow() {
 }
 
 export function SessionsSkeleton({ rows = 5 }) {
-  const { colors } = useTheme();
   return (
     <View>
       {Array.from({ length: rows }).map((_, i) => (
         <View key={i}>
-          {i > 0 ? (
-            <View style={{ height: 0.5, backgroundColor: colors.line, marginLeft: space.s7 }} />
-          ) : null}
           <SessionRow />
         </View>
       ))}

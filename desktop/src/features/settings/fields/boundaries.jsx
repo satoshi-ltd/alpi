@@ -6,25 +6,26 @@ import { useNotify } from "../../../primitives/Notification.jsx";
 import { Row } from "../primitives.jsx";
 import Field from "../../../primitives/Field.jsx";
 import { BudgetEdit } from "../../../primitives/index.js";
+import { saveOptimistic } from "../../../lib/optimisticProfiles.js";
 import styles from "../Settings.module.css";
 
-export function BudgetField({ profile, onSaved }) {
+export function BudgetField({ profile, connectionId = null, onSaved }) {
   const notify = useNotify();
   const usd = profile.budget_daily_usd;
   const value = usd != null ? usd : "";
 
   async function save(v) {
-    try {
-      if (v == null) {
-        await invoke("unset_config_field", { profile: profile.name, key: "budget.daily_usd" });
-      } else {
-        await invoke("set_config_field", { profile: profile.name, key: "budget.daily_usd", value: String(v) });
-      }
-      await onSaved?.();
-    } catch (e) {
-      notify({ message: `budget: ${String(e)}`, variant: "error", duration: 4000 });
-      throw e;
-    }
+    const { latest } = await saveOptimistic({
+      connectionId,
+      name: profile.name,
+      patch: { budget_daily_usd: v == null ? null : Number(v) },
+      run: () => (v == null
+        ? invoke("unset_config_field", { profile: profile.name, key: "budget.daily_usd", connectionId })
+        : invoke("set_config_field", { profile: profile.name, key: "budget.daily_usd", value: String(v), connectionId })),
+      onFailed: (e) => notify({ message: `budget: ${String(e)}`, variant: "error", duration: 4000 }),
+      refresh: onSaved,
+    });
+    if (latest) await onSaved?.();
   }
 
   const triggerLabel = usd != null ? `$${usd.toFixed(2)}/day` : "unlimited";

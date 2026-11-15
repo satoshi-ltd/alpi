@@ -32,7 +32,7 @@ export function JumpChips({ current, onJump }) {
     if (x !== null) strip.current?.scrollTo({ x, animated: true });
   }, [current]);
   return (
-    <View style={{ borderBottomWidth: 0.5, borderBottomColor: colors.line, backgroundColor: colors.bg }}>
+    <View style={{ backgroundColor: colors.bg }}>
       <ScrollView
         ref={strip}
         horizontal
@@ -53,7 +53,7 @@ export function JumpChips({ current, onJump }) {
               accessibilityRole="button"
               accessibilityLabel={`Go to ${section.label}`}
               accessibilityState={{ selected: on }}
-              style={{ minHeight: mobile.tap, paddingHorizontal: space.s5, justifyContent: 'center', borderRadius: radii.xs, backgroundColor: on ? colors.selected : 'transparent' }}
+              style={{ minHeight: mobile.tap, paddingHorizontal: space.s5, justifyContent: 'center', borderRadius: radii.pill, backgroundColor: on ? colors.selected : 'transparent' }}
             >
               <Text style={{ fontFamily: on ? fonts.sans.semibold : fonts.sans.regular, fontSize: fontSizes.md, color: on ? colors.ink : colors.ink2 }}>{section.label}</Text>
             </Pressable>
@@ -71,7 +71,7 @@ export function AttentionSummary({ att, onJump }) {
   const rows = summaryRows(att);
   if (!rows.length) return null;
   return (
-    <View accessibilityRole="summary" style={{ marginHorizontal: space.s7, marginTop: space.s6, paddingTop: space.s5, paddingHorizontal: space.s7, borderRadius: radii.xs, backgroundColor: colors.hover }}>
+    <View accessibilityRole="summary" style={{ marginHorizontal: space.s7, marginTop: space.s6, paddingTop: space.s5, paddingHorizontal: space.s7, borderRadius: radii.surface, backgroundColor: colors.hover }}>
       <Eyebrow color={colors.warningText ?? colors.warning}>{`Needs you · ${rows.length}`}</Eyebrow>
       {rows.map((row) => (
         <Pressable
@@ -83,7 +83,7 @@ export function AttentionSummary({ att, onJump }) {
         >
           <View style={{ ...dotShape('sm'), backgroundColor: colors.danger }} />
           <Text style={{ flex: 1, fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink }}>{row.text}</Text>
-          <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>{row.label}</Text>
+          <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>{row.label}</Text>
           <Icon name="chevron-right" size="xs" color={colors.ink4} />
         </Pressable>
       ))}

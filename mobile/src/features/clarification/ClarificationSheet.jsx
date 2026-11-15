@@ -1,14 +1,15 @@
-import { contrastText } from "../../../../common/color.mjs";
+import { contrastText, mixHex } from "../../../../common/color.mjs";
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import { Icon } from '../../components/Icon';
 import { Sheet } from '../../components/Sheet';
 import { warning } from '../../lib/haptics';
-import { lineHeights, mobile, radii, space } from '../../theme/tokens';
+import { lineHeights, mobile, radii, space, alpha } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeContext';
 import { useClarificationQueue } from './useClarificationQueue';
 import { useWell } from '../../components/well';
+import { buttonPressed } from '../../../../common/button.mjs';
 
 function modeFor(current) {
   if (!current) return 'single';
@@ -55,8 +56,8 @@ export function ClarificationSheet() {
 
   const eyebrow = useMemo(() => {
     if (!current) return '';
-    const tail = remaining ? `AUTO-CANCEL IN ${remaining}` : null;
-    return ['QUESTION', tail].filter(Boolean).join(' · ');
+    const tail = remaining ? `auto-cancel in ${remaining}` : null;
+    return ['Question', tail].filter(Boolean).join(' · ');
   }, [current, remaining]);
 
   function toggle(label) {
@@ -79,10 +80,9 @@ export function ClarificationSheet() {
             <View style={{ flex: 1, gap: space.s2 }}>
               <Text
                 style={{
-                  fontFamily: fonts.mono,
+                  fontFamily: fonts.sans.regular,
                   fontSize: fontSizes.sm,
                   color: colors.ink3,
-                  letterSpacing: 0.6,
                 }}
               >
                 {eyebrow}
@@ -143,7 +143,7 @@ export function ClarificationSheet() {
           ) : null}
 
           {error ? (
-            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.danger }}>
+            <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.danger }}>
               {error}
             </Text>
           ) : null}
@@ -164,7 +164,7 @@ function ChoiceRow({ children, onPress, disabled }) {
         minHeight: mobile.tap,
         justifyContent: 'center',
         paddingVertical: space.s4,
-        opacity: disabled ? 0.5 : pressed ? 0.6 : 1,
+        opacity: disabled ? alpha.disabled : 1,
       })}
     >
       {children}
@@ -183,12 +183,13 @@ function Radio({ filled, color }) {
         borderColor: color,
         alignItems: 'center',
         justifyContent: 'center',
+        backgroundColor: filled ? color : 'transparent',
       }}
     >
       {filled ? (
         <View
           style={{
-            width: 12, height: 12, borderRadius: radii.pill, backgroundColor: color,
+            width: 8, height: 8, borderRadius: radii.pill, backgroundColor: contrastText(color),
           }}
         />
       ) : null}
@@ -221,7 +222,7 @@ function Checkbox({ checked, color, fonts }) {
 function OtherInline({ otherText, setOtherText, onSend, onCancel, busy, colors, fonts }) {
   const { fontSizes } = useTheme();
   const canSend = !busy && otherText.trim().length > 0;
-  const [well, focus] = useWell(colors);
+  const [well, focus] = useWell(colors, false, false, true);
   return (
     <View
       style={{
@@ -267,8 +268,8 @@ function OtherInline({ otherText, setOtherText, onSend, onCancel, busy, colors, 
           style={{
             paddingVertical: space.s3,
             paddingHorizontal: space.s6,
-            borderRadius: radii.xs,
-            backgroundColor: colors.ink,
+            borderRadius: radii.pill,
+            backgroundColor: colors.accent,
             opacity: canSend ? 1 : 0.35,
           }}
         >
@@ -297,7 +298,7 @@ function SingleChoices({
                 {c.label}
               </Text>
               {c.description ? (
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3 }}>
+                <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}>
                   {c.description}
                 </Text>
               ) : null}
@@ -345,7 +346,7 @@ function MultiChoices({ choices, picked, onToggle, busy, colors, fonts }) {
                   {c.label}
                 </Text>
                 {c.description ? (
-                  <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3 }}>
+                  <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}>
                     {c.description}
                   </Text>
                 ) : null}
@@ -370,10 +371,10 @@ function ConfirmChoices({ choices, onPick, busy, colors, fonts }) {
         onPress={() => onPick(primary.label)}
         style={({ pressed }) => ({
           paddingVertical: space.s6,
-          borderRadius: radii.xs,
-          backgroundColor: pressed && !busy ? colors.ink2 : colors.ink,
+          borderRadius: radii.pill,
+          backgroundColor: pressed && !busy ? mixHex(colors.accent, buttonPressed.primary.amount, colors.bgPane) : colors.accent,
           alignItems: 'center',
-          opacity: busy ? 0.5 : 1,
+          opacity: busy ? alpha.disabled : 1,
         })}
       >
         <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.bgPane }}>
@@ -390,7 +391,7 @@ function ConfirmChoices({ choices, onPick, busy, colors, fonts }) {
           justifyContent: 'center',
           paddingVertical: space.s4,
           alignItems: 'center',
-          opacity: busy ? 0.5 : pressed ? 0.5 : 1,
+          opacity: busy ? alpha.disabled : 1,
         })}
       >
         <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.lg, color: colors.ink2 }}>
@@ -415,8 +416,8 @@ function Footer({ picked, busy, onContinue, colors, fonts }) {
         style={{
           paddingVertical: space.s4,
           paddingHorizontal: space.s7,
-          borderRadius: radii.xs,
-          backgroundColor: colors.ink,
+          borderRadius: radii.pill,
+          backgroundColor: colors.accent,
           opacity: canContinue ? 1 : 0.4,
         }}
       >

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { normalizeActivity } from "./useActivity.js";
 import { subscribeDaemonEvent } from "../lib/daemon-bus.js";
-import { defaultAsAlpaca } from "../../../common/folds.mjs";
+import { defaultAsTwin } from "../lib/brandMark.js";
 import { connectionCanManage } from "../lib/connection-access.js";
 
 export const OTHER_ACTIVITY_POLL_MS = 300000;
@@ -11,13 +11,13 @@ export const OTHER_ACTIVITY_DEBOUNCE_MS = 500;
 const REVOKED = /forbidden|-32601|method-not-found/i;
 
 function profileLooks(profiles) {
-  const folds = {};
+  const shapes = {};
   const accents = {};
-  for (const p of Array.isArray(profiles) ? profiles.map(defaultAsAlpaca("var(--accent)")) : []) {
-    folds[p.name] = p.fold ?? null;
+  for (const p of Array.isArray(profiles) ? profiles.map(defaultAsTwin("var(--accent)")) : []) {
+    shapes[p.name] = p.shape ?? null;
     accents[p.name] = p.accent ?? null;
   }
-  return { folds, accents };
+  return { shapes, accents };
 }
 
 export function useOtherActivity({ connections, activeId }) {

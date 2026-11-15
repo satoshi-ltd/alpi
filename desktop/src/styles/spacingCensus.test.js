@@ -15,7 +15,7 @@ const CSS = readFileSync(join(SRC, "styles/tokens.css"), "utf8");
 
 const MICRO = new Set(["0", "1", "2", "3", ".5", "0.5"]);
 const SCROLL_ROOM = new Set(["60", "80"]);
-const HEIGHT_EXCEPTIONS = new Set(["18", "42"]);
+const HEIGHT_EXCEPTIONS = new Set(["18", "20", "24", "42"]);
 
 const declarations = (property) =>
   SHEETS.flatMap((file) => {

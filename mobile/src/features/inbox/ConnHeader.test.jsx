@@ -50,9 +50,9 @@ vi.mock('../../theme/ThemeContext', () => ({
 
 vi.mock('../../components/Icon', () => ({ Icon: ({ name }) => React.createElement('span', {}, name) }));
 
-import { CHROME_BTN, tapSlop } from '../../lib/panes';
+import { CHROME_BTN, CONN_EDGE_NUDGE, tapSlop } from '../../lib/panes';
 import { PaneContext } from '../../nav/PaneContext';
-import { space } from '../../theme/tokens';
+import { iconSizes, space } from '../../theme/tokens';
 import { ConnHeader } from './ConnHeader';
 
 const rootStyleOf = (container) => JSON.parse(container.querySelector('[data-style]').getAttribute('data-style'));
@@ -61,9 +61,10 @@ const inSidebar = (ui) =>
   render(<PaneContext.Provider value={{ twoPane: true, side: 'list' }}>{ui}</PaneContext.Provider>);
 
 describe('ConnHeader seam', () => {
-  it('closes the header with the same hairline the detail-pane headers use', () => {
+  it('closes the header with space, never a hairline', () => {
     const { container } = render(<ConnHeader name="Local" host="host.sock" />);
-    expect(rootStyleOf(container)).toMatchObject({ borderBottomWidth: 0.5, borderBottomColor: '#e6e6e6' });
+    expect(rootStyleOf(container).borderBottomWidth).toBeUndefined();
+    expect(rootStyleOf(container).borderBottomColor).toBeUndefined();
   });
 
   it('still renders the endpoint identity', () => {
@@ -126,15 +127,15 @@ describe('ConnHeader in the sidebar', () => {
     expect(capped(inSidebar(<ConnHeader name="Local" host="host.sock" onConnPress={() => {}} />).container)).toBe(false);
   });
 
-  it('keeps the search toggle smaller than the row it labels, without shrinking its touch target', () => {
+  it('draws the search toggle as a 44 pt round button, the touch target itself', () => {
     const { container } = inSidebar(
       <ConnHeader name="Local" host="host.sock" onToggleSearch={() => {}} />,
     );
     const toggle = screen.getByLabelText('Filter profiles and workgroups');
     const style = JSON.parse(toggle.getAttribute('data-style') || '{}');
     expect(style.height).toBe(CHROME_BTN);
-    expect(style.height).toBeLessThan(44);
-    expect(toggle.getAttribute('data-hitslop')).toBe(String(tapSlop(CHROME_BTN)));
+    expect(style.height).toBe(44);
+    expect(style.borderRadius).toBe(999);
     expect(style.height + tapSlop(CHROME_BTN) * 2).toBe(44);
     const rows = [...container.querySelectorAll('[data-style]')]
       .map((n) => JSON.parse(n.getAttribute('data-style') || '{}'));
@@ -240,7 +241,7 @@ describe('ConnHeader right edge', () => {
     const header = rootStyleOf(container);
     const row = JSON.parse(screen.getByLabelText('Filter profiles and workgroups').parentElement.getAttribute('data-style'));
     const trigger = JSON.parse(screen.getByLabelText(/^Connection /).getAttribute('data-style'));
-    const iconInk = header.paddingHorizontal + row.paddingRight + (CHROME_BTN - 16) / 2;
+    const iconInk = header.paddingHorizontal + row.paddingRight + (CHROME_BTN - iconSizes.md) / 2;
     const chevronInk = header.paddingHorizontal + 0.5 + trigger.paddingHorizontal;
     expect(header.paddingHorizontal).toBe(space.s5);
     expect(trigger.paddingHorizontal).toBe(space.s5);
@@ -251,7 +252,7 @@ describe('ConnHeader right edge', () => {
   it('moves the hide-sidebar button with the same edge and keeps the 44 pt targets', () => {
     render(<ConnHeader name="Local" host="host.sock" onCollapse={() => {}} />);
     const hide = screen.getByLabelText('Hide sidebar');
-    expect(JSON.parse(hide.parentElement.getAttribute('data-style')).paddingRight).toBe(2.5);
+    expect(JSON.parse(hide.parentElement.getAttribute('data-style')).paddingRight).toBe(CONN_EDGE_NUDGE);
     expect(Number(hide.getAttribute('data-hitslop'))).toBe(tapSlop(CHROME_BTN));
   });
 });

@@ -160,20 +160,10 @@ export function StatusIcon({ kind, className = "", style }) {
   );
 }
 
-const Alpaca = (p) => (
-  <svg viewBox="0 0 40 40" {...p}>
-    <circle cx="20" cy="22" r="11" fill="currentColor" />
-    <rect x="10" y="6" width="6" height="11" rx="3" fill="currentColor" />
-    <rect x="24" y="6" width="6" height="11" rx="3" fill="currentColor" />
-    <circle cx="16" cy="21" r="1.4" fill="var(--bg-pane)" />
-    <circle cx="24" cy="21" r="1.4" fill="var(--bg-pane)" />
-  </svg>
-);
-export const AlpacaIcon = Alpaca;
 
 export const I = {
   Search, Plus, Arrow, ArrowLeft, Refresh,
   Gear, Check, X, Pause, Play, Power, Copy, Cpu, Server, Globe, Sun, Moon,
   Trash, ChevDown, ChevRight, Send, Blocks, Sparkle, Wrench,
-  MuteIcon: Mute, Volume, Archive, Bell, Alpaca,
+  MuteIcon: Mute, Volume, Archive, Bell,
 };

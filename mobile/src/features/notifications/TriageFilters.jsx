@@ -12,7 +12,7 @@ export function TriageFilters({ filter, counts, onFilter }) {
     <View style={{ gap: space.s3, paddingTop: space.s3, paddingBottom: space.s2 }}>
       <View
         accessibilityRole="tablist"
-        style={{ flexDirection: 'row', marginHorizontal: space.s7, padding: INSET, borderRadius: radii.xs, backgroundColor: colors.hover }}
+        style={{ flexDirection: 'row', marginHorizontal: space.s7, padding: INSET, borderRadius: radii.control, backgroundColor: colors.hover }}
       >
         {NOTIFICATION_FILTERS.map((f) => {
           const on = filter === f.id;
@@ -30,13 +30,13 @@ export function TriageFilters({ filter, counts, onFilter }) {
                 paddingHorizontal: space.s2,
                 alignItems: 'center',
                 justifyContent: 'center',
-                borderRadius: radii.xs,
+                borderRadius: radii.pill,
                 backgroundColor: on ? colors.bgPane : 'transparent',
               }}
             >
               <Text style={{ textAlign: 'center', fontFamily: on ? fonts.sans.semibold : fonts.sans.regular, fontSize: fontSizes.sm, color: on ? colors.ink : colors.ink3 }}>
                 {f.label}
-                {f.id === 'all' ? '' : <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs }}>{` ${counts[f.id]}`}</Text>}
+                {f.id === 'all' ? '' : <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs }}>{` ${counts[f.id]}`}</Text>}
               </Text>
             </Pressable>
           );

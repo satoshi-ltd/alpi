@@ -1,4 +1,4 @@
-import { WORKGROUP_FOLD } from "../../../common/folds.mjs";
+import { WORKGROUP_SHAPE } from "../../../common/shapes.mjs";
 import { Fold, MuteIcon } from "./index.js";
 import styles from "./SidebarRow.module.css";
 
@@ -8,10 +8,9 @@ export default function SidebarRow({
   kind = "profile",
   id,
   color,
-  fold,
+  shape,
   sel = false,
   unread = false,
-  colorWash = false,
   onClick,
   onContextMenu,
   trailing,
@@ -21,42 +20,28 @@ export default function SidebarRow({
   ariaLabel,
 }) {
   const isNeedsProvider = state === "needs-provider";
-  const tinted = sel && colorWash && color;
-  const background = tinted
-    ? `color-mix(in srgb, ${color} ${kind === "workgroup" ? "14%" : "18%"}, var(--bg-side))`
-    : null;
-  const tintedColor = tinted
-    ? kind === "profile"
-      ? `color-mix(in srgb, ${color} 90%, var(--ink))`
-      : "var(--ink)"
-    : null;
   const stateMod = unread ? " is-unr" : sel ? " is-sel" : "";
   return (
     <button
       type="button"
       className="ds-sb-row"
       data-sel={sel || undefined}
+      aria-current={sel ? "page" : undefined}
       data-state={state || undefined}
       data-muted={muted && !isNeedsProvider ? "" : undefined}
       aria-label={ariaLabel || undefined}
       onClick={onClick}
       onContextMenu={onContextMenu}
-      style={{
-        ...(background ? { background } : {}),
-        ...(tintedColor ? { color: tintedColor } : {}),
-        ...(sel && color ? { "--row-accent": color } : {}),
-      }}
     >
       {leading !== undefined ? (
         leading
       ) : (
         <span className={styles.glyphSlot}>
-          <Fold fold={kind === "workgroup" ? WORKGROUP_FOLD : fold} color={color} outlined={isNeedsProvider} />
+          <Fold shape={kind === "workgroup" ? WORKGROUP_SHAPE : shape} color={color} outlined={isNeedsProvider} still={!sel} />
         </span>
       )}
       <span
         className={`sb-name${stateMod} ${styles.label} ${STATE_WORD[state] ? styles.labelKeep : ""}`.trim()}
-        style={tintedColor ? { color: "inherit" } : undefined}
       >
         {id}
       </span>

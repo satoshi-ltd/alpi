@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { space } from '../../theme/tokens';
 
-import { ALPACA_FOLD } from '../../../../common/folds.mjs';
-import { Crease } from '../../components/Crease';
+import { TWIN_SHAPE } from '../../../../common/shapes.mjs';
+import { NAME_TEXT, nameSize, nameStyle } from '../../theme/name';
 import { Eyebrow } from '../../components/Eyebrow';
 import { Fold } from '../../components/Fold';
 import { OnOff } from '../../components/OnOff';
@@ -52,6 +52,7 @@ export function SettingsBody({ active = true, onDismiss }) {
     fontSizes,
     textScale = DEFAULT_TEXT_SCALE,
     setTextScale,
+    fontScale = 1,
   } = useTheme();
   const router = useRouter();
   const toast = useToast();
@@ -226,13 +227,13 @@ export function SettingsBody({ active = true, onDismiss }) {
           }}
         >
           <Eyebrow>About</Eyebrow>
-          <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.xs, color: colors.ink3 }}>
+          <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.xs, color: colors.ink3 }}>
             Alpi mobile · v{APP_VERSION}
           </Text>
         </View>
         <View style={{ paddingHorizontal: space.s7, paddingBottom: space.s9, flexDirection: 'row', alignItems: 'center', gap: space.s4 }}>
-          <Fold fold={ALPACA_FOLD} size={36} />
-          <Crease text="alpi" accent={colors.accent} size={32} />
+          <Fold shape={TWIN_SHAPE} size={36} />
+          <Text {...NAME_TEXT} style={nameStyle(nameSize(32, fontScale), colors.ink)}>alpi</Text>
         </View>
       </ScrollView>
 

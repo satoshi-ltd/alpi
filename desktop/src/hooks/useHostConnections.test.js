@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
 import { useHostConnections } from "./useHostConnections.js";
+import { profileShape } from "../../../common/shapes.mjs";
 import { pruneCachedMessages } from "../lib/workgroup-cache.js";
 import { _resetDaemonBus } from "../lib/daemon-bus.js";
 
@@ -188,18 +189,35 @@ describe("useHostConnections.onSetHostConnection", () => {
     expect(clearTurnsForConnection).not.toHaveBeenCalled();
   });
 
-  it("shows the default profile of an older daemon as the alpaca", async () => {
+  it("gives the default profile Twin and passes every other shape through untouched", async () => {
     invoke.mockImplementation(async (cmd) => {
       if (cmd === "host_connections") return makeConnections("local");
-      if (cmd === "profile_summaries") return [{ name: "default", model: "a/b", is_default: true, fold: "diamond", accent: null }, { name: "doc", model: "a/b", fold: "shield", accent: "#3899e2" }];
+      if (cmd === "profile_summaries") return [{ name: "default", model: "a/b", is_default: true, shape: "round", accent: null }, { name: "doc", model: "a/b", shape: "bell", accent: "#3899e2" }, { name: "old", model: "a/b", fold: "shield", accent: "#3899e2" }];
       if (cmd === "workgroups") return [];
       return null;
     });
 
     const { result } = renderHostConnections();
-    await waitFor(() => expect(result.current.profiles).toHaveLength(2));
-    expect(result.current.profiles[0]).toMatchObject({ fold: "alpaca", accent: "var(--accent)" });
-    expect(result.current.profiles[1]).toMatchObject({ fold: "shield", accent: "#3899e2" });
+    await waitFor(() => expect(result.current.profiles).toHaveLength(3));
+    expect(result.current.profiles[0]).toMatchObject({ shape: "twin", accent: "var(--accent)" });
+    expect(result.current.profiles[1]).toMatchObject({ shape: "bell", accent: "#3899e2" });
+    expect(profileShape(result.current.profiles[2])).toBe("round");
+  });
+
+  it("never translates a fold left in a cached roster", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("local");
+      if (cmd === "profile_summaries") return [{ name: "doc", model: "a/b", is_default: true }];
+      if (cmd === "workgroups") return [];
+      return null;
+    });
+    const { result } = renderHostConnections();
+    await waitFor(() => expect(result.current.profiles).toHaveLength(1));
+    setProfileCache("remote", [{ name: "doc", model: "x/y", fold: "crown", accent: "#6572e4" }, { name: "mirai", model: "x/z", is_default: true, fold: "alpaca" }]);
+    act(() => {
+      result.current.onSetHostConnection("remote");
+    });
+    expect(result.current.profiles.map(profileShape)).toEqual(["round", "twin"]);
   });
 
   it("sends the view to the landing on switch, with the new connection's roster already painted from cache", async () => {

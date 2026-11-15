@@ -9,6 +9,7 @@ import {
   jobItem,
   memoryBanner,
   memoryItem,
+  nextRunCountdown,
   nextRunWord,
   skillBanner,
   skillItem,
@@ -69,6 +70,13 @@ describe("attention", () => {
     expect(nextRunWord({ next_fire: null }, now)).toBe("");
     expect(nextRunWord({ paused: true, next_fire: "2026-10-09T00:00:00Z" }, now)).toBe("paused");
     expect(nextRunWord({ last_run_status: "error", next_fire: "2026-10-09T00:00:00Z" }, now)).toBe("failed");
+  });
+
+  it("counts down to the next run whatever state the job is in", () => {
+    const now = Date.parse("2026-10-07T00:00:00Z");
+    expect(nextRunCountdown({ last_run_status: "error", next_fire: "2026-10-09T00:00:00Z" }, now)).toBe("in 2d");
+    expect(nextRunCountdown({ paused: true, next_fire: "2026-10-07T15:00:00Z" }, now)).toBe("in 15h");
+    expect(nextRunCountdown({ next_fire: null }, now)).toBe("");
   });
 
   it("groups jobs under Needs you, Active and Paused and drops the empty ones", () => {

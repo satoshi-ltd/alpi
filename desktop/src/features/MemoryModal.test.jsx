@@ -6,18 +6,9 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("../primitives/Notification.jsx", () => ({ useNotify: () => () => {} }));
 
 import { invoke } from "@tauri-apps/api/core";
-import MemoryModal, { humanBytes, stripMemoryDelimiters, matchesFile } from "./MemoryModal.jsx";
+import MemoryModal, { stripMemoryDelimiters, matchesFile } from "./MemoryModal.jsx";
 
 globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} };
-
-describe("humanBytes", () => {
-  it("formats by magnitude", () => {
-    expect(humanBytes(0)).toBe("0b");
-    expect(humanBytes(891)).toBe("891b");
-    expect(humanBytes(1536)).toBe("1.5kb");
-    expect(humanBytes(2 * 1024 * 1024)).toBe("2.0mb");
-  });
-});
 
 describe("stripMemoryDelimiters", () => {
   it("drops the § entry delimiter and collapses blank runs", () => {
@@ -53,7 +44,10 @@ describe("MemoryModal budget %", () => {
       return Promise.resolve(null);
     });
     render(<MemoryModal open profile="doc" connectionId={null} canEdit />);
-    await waitFor(() => expect(screen.getAllByText("4,000 / 8,000").length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getByText("4,000 / 8,000 · 50%")).toBeTruthy());
+    const rows = screen.getAllByRole("option");
+    expect(rows.map((r) => r.querySelector("[class*=rowMeta]")?.textContent)).toEqual(["50%", "0%", "0%"]);
+    expect(rows[0].querySelector("[class*=rowBar] > span").style.width).toBe("50%");
     expect(screen.getAllByText("Identity").length).toBeGreaterThan(0);
     expect(screen.getByText("Learned")).toBeTruthy();
     expect(screen.getByText("About you")).toBeTruthy();
@@ -66,12 +60,15 @@ describe("MemoryModal budget %", () => {
         ? Promise.resolve({ "AGENT.md": raw, "MEMORY.md": "", "USER.md": "" })
         : Promise.resolve(null),
     );
-    render(<MemoryModal open profile="scout" connectionId={null} owner={{ name: "scout", fold: "house", accent: "#c42" }} />);
+    render(<MemoryModal open profile="scout" connectionId={null} owner={{ name: "scout", shape: "arch", accent: "#c42" }} />);
     await waitFor(() => expect(screen.getByText("Fact one.")).toBeTruthy());
     expect(screen.getByText("Fact two.")).toBeTruthy();
     expect(screen.getByText("captured Sep 28 · reinforced ×3")).toBeTruthy();
     expect(screen.getByText("captured Oct 2 · low confidence")).toBeTruthy();
-    expect(screen.getByText("who scout is")).toBeTruthy();
+    expect(screen.getAllByText("who scout is")).toHaveLength(2);
+    expect(Array.from(document.querySelectorAll("dt")).map((d) => d.textContent)).toEqual(["About", "Entries"]);
+    expect(screen.getByRole("heading", { name: "Identity" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Copy AGENT.md" })).toBeTruthy();
     expect(document.body.textContent).not.toContain("alpi-meta");
     expect(document.body.textContent).not.toContain("§");
   });
@@ -130,7 +127,7 @@ describe("MemoryModal edit", () => {
   it("confirms before switching to a sibling panel while the edit is dirty", async () => {
     mockLoad();
     const onSection = vi.fn();
-    render(<MemoryModal open profile="doc" connectionId={null} canEdit owner={{ name: "doc", fold: "house", accent: "#cc4422" }} onSection={onSection} />);
+    render(<MemoryModal open profile="doc" connectionId={null} canEdit owner={{ name: "doc", shape: "arch", accent: "#cc4422" }} onSection={onSection} />);
     await waitFor(() => expect(screen.getByRole("button", { name: "Edit" })).toBeTruthy());
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Edit" })); });
     fireEvent.change(await screen.findByLabelText("Edit AGENT.md"), { target: { value: "dirty draft" } });

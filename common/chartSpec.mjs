@@ -180,9 +180,10 @@ function columnLayout(spec, width, height) {
     if (i % every === 0) items.push({ k: "tick", x: x + band / 2, y: height - 4, anchor: "middle", text: label });
     if (spec.stacked) {
       let base = 0;
+      const last = spec.series.reduce((at, s, n) => ((s.values[i] ?? 0) > 0 ? n : at), -1);
       spec.series.forEach((s, n) => {
         const v = s.values[i] ?? 0;
-        if (v > 0) items.push({ k: "bar", series: n, x: x + band * 0.2, y: yOf(base + v), w: band * 0.6, h: yOf(base) - yOf(base + v) });
+        if (v > 0) items.push({ k: "bar", series: n, x: x + band * 0.2, y: yOf(base + v), w: band * 0.6, h: yOf(base) - yOf(base + v), end: n === last ? "top" : null });
         base += v;
       });
       valueAt(formatValue(totals[i], unit), x + band / 2, band * 0.6, totals[i], yOf(totals[i]));
@@ -192,7 +193,7 @@ function columnLayout(spec, width, height) {
         const v = s.values[i];
         if (v === null) return;
         const y0 = yOf(Math.max(0, lo));
-        const bar = { k: "bar", series: n, x: x + band * 0.2 + n * w, y: Math.min(yOf(v), y0), w: Math.max(w - 1, 1), h: Math.abs(y0 - yOf(v)) };
+        const bar = { k: "bar", series: n, x: x + band * 0.2 + n * w, y: Math.min(yOf(v), y0), w: Math.max(w - 1, 1), h: Math.abs(y0 - yOf(v)), end: v < 0 ? "bottom" : "top" };
         items.push(bar);
         valueAt(formatValue(v, unit), bar.x + bar.w / 2, bar.w, v, v < 0 ? bar.y + bar.h : bar.y);
       });
@@ -239,9 +240,10 @@ function rowLayout(spec, width, compact) {
     items.push({ k: "label", x: 0, y: compact ? y + 11 : barTop + block / 2 + 4, anchor: "start", text: clip(label, (compact ? width : labelWidth) - 10) });
     if (spec.stacked) {
       let base = labelWidth;
+      const last = spec.series.reduce((at, s, n) => ((s.values[i] ?? 0) > 0 ? n : at), -1);
       spec.series.forEach((s, n) => {
         const v = Math.max(s.values[i] ?? 0, 0);
-        if (v > 0) items.push({ k: "bar", series: n, x: base, y: barTop, w: scale(v), h: thick });
+        if (v > 0) items.push({ k: "bar", series: n, x: base, y: barTop, w: scale(v), h: thick, end: n === last ? "right" : null });
         base += scale(v);
       });
       items.push({ k: "value", x: base + 6, y: barTop + thick / 2 + 3.5, anchor: "start", text: formatValue(totals[i], unit) });
@@ -252,7 +254,7 @@ function rowLayout(spec, width, compact) {
       if (v === null) return;
       const w = Math.max(scale(Math.max(v, 0)), 1);
       const at = barTop + n * (thick + gap);
-      items.push({ k: "bar", series: n, x: labelWidth, y: at, w, h: thick });
+      items.push({ k: "bar", series: n, x: labelWidth, y: at, w, h: thick, end: "right" });
       items.push({ k: "value", x: labelWidth + w + 6, y: at + thick / 2 + 3.5, anchor: "start", text: formatValue(v, unit) });
     });
   });
@@ -274,6 +276,20 @@ export function chartLegend(spec) {
   return spec.series.map((s, n) => ({ name: s.name || `Series ${n + 1}`, series: n, dashed: spec.type === "line" && n > 0 }));
 }
 
+export const BAR_RADIUS = 4;
+
+export function barPath({ x, y, w, h, end = null }) {
+  const p = r1;
+  const H = Math.max(h, 0);
+  const r = end === "right" ? Math.min(BAR_RADIUS, H / 2, w) : end ? Math.min(BAR_RADIUS, w / 2, H) : 0;
+  const R = p(r);
+  const arc = (tx, ty) => `A${R},${R} 0 0 1 ${p(tx)},${p(ty)}`;
+  if (!(r > 0)) return `M${p(x)},${p(y)}H${p(x + w)}V${p(y + H)}H${p(x)}Z`;
+  if (end === "top") return `M${p(x)},${p(y + H)}V${p(y + r)}${arc(x + r, y)}H${p(x + w - r)}${arc(x + w, y + r)}V${p(y + H)}Z`;
+  if (end === "bottom") return `M${p(x)},${p(y)}H${p(x + w)}V${p(y + H - r)}${arc(x + w - r, y + H)}H${p(x + r)}${arc(x, y + H - r)}Z`;
+  return `M${p(x)},${p(y)}H${p(x + w - r)}${arc(x + w, y + r)}V${p(y + H - r)}${arc(x + w - r, y + H)}H${p(x)}Z`;
+}
+
 const escapeXml = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const r1 = (n) => Math.round(n * 10) / 10;
 
@@ -284,7 +300,7 @@ export function chartSvg(spec, options = {}) {
     if (it.k === "grid") return `<line class="ch-grid" x1="${r1(it.x1)}" x2="${r1(it.x2)}" y1="${r1(it.y)}" y2="${r1(it.y)}"/>`;
     if (it.k === "line") return `<polyline class="ch-line ${s}${it.series > 0 ? " ch-dashed" : ""}" points="${it.points.map(([x, y]) => `${r1(x)},${r1(y)}`).join(" ")}"/>`;
     if (it.k === "dot") return `<circle class="ch-dot ${s}" cx="${r1(it.cx)}" cy="${r1(it.cy)}" r="${it.r}"/>`;
-    if (it.k === "bar") return `<rect class="ch-bar ${s}" x="${r1(it.x)}" y="${r1(it.y)}" width="${r1(it.w)}" height="${r1(Math.max(it.h, 0))}"/>`;
+    if (it.k === "bar") return `<path class="ch-bar ${s}" d="${barPath(it)}"/>`;
     return `<text class="ch-${it.k}" x="${r1(it.x)}" y="${r1(it.y)}" text-anchor="${it.anchor}">${escapeXml(it.text)}</text>`;
   });
   const legend = chartLegend(spec).map((l) => `<span class="ch-key"><i class="ch-swatch ch-s${l.series}${l.dashed ? " ch-dashed" : ""}"></i>${escapeXml(l.name)}</span>`).join("");

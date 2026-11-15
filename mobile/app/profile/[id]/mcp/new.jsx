@@ -14,6 +14,7 @@ import { useToast } from '../../../../src/components/Toast';
 import { useBack } from '../../../../src/hooks/useBack';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
 import { useTheme } from '../../../../src/theme/ThemeContext';
+import { code } from '../../../../src/theme/code';
 
 // Naive shell-quote split — handles "a b" / 'a b' grouping. Daemon receives JSON list as-is.
 function splitArgs(s) {
@@ -80,16 +81,16 @@ export default function NewMcp() {
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScreenHeader
         title="Add MCP server"
-        subtitle={`@${id} · CONNECT TOOLSET`}
+        subtitle={`@${id} · connect toolset`}
         onBack={goBack}
         right={<Button title="Add" size="md" disabled={!ready} loading={busy} onPress={save} />}
       />
       <KeyboardPane>
         <ScrollView contentContainerStyle={{ padding: space.s8, gap: space.s8 }} keyboardShouldPersistTaps="handled">
           <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3, lineHeight: fontSizes.sm * 1.5 }}>
-            Example — GitHub MCP: command <Text style={{ fontFamily: fonts.mono }}>npx</Text>, args{' '}
-            <Text style={{ fontFamily: fonts.mono }}>-y @modelcontextprotocol/server-github</Text>, env{' '}
-            <Text style={{ fontFamily: fonts.mono }}>GITHUB_TOKEN=ghp_…</Text>
+            Example — GitHub MCP: command <Text style={code(fonts, fontSizes.sm)}>npx</Text>, args{' '}
+            <Text style={code(fonts, fontSizes.sm)}>-y @modelcontextprotocol/server-github</Text>, env{' '}
+            <Text style={code(fonts, fontSizes.sm)}>GITHUB_TOKEN=ghp_…</Text>
           </Text>
 
           <Field

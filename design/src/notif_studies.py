@@ -1,20 +1,20 @@
-from gen import ic, mi, pill
+from gen import ic, mi, pill, ladder_px, mono_px
 from desktop_boards import INK3, chip
 from paper_studies import PAPER, button, field, line_up, object_mark, text
 
 MONO = "'Geist Mono', monospace"
 VIEW = {"bg": "#f0f0f0", "side": "#f6f6f6", "pane": "#ffffff", "elev": "#ffffff", "ink": "#141414", "ink2": "#454545", "ink3": "#6b6b6b", "ink4": "#b4b4b4",
-        "line": "rgba(20,20,20,0.07)", "line2": "rgba(20,20,20,0.14)", "hover": "rgba(20,20,20,0.04)", "selected": "rgba(20,20,20,0.06)", "danger": "#b73737", "warn": "#b3470e", "dark": False}
+        "line": "rgba(20,20,20,0.07)", "line2": "rgba(20,20,20,0.14)", "hover": "rgba(20,20,20,0.04)", "selected": "rgba(20,20,20,0.08)", "danger": "#b73737", "warn": "#b3470e", "dark": False}
 
 ROWS = [
-    {"conn": "casa", "who": "abby", "shape": "plane", "at": "06:31", "title": "Daily mail digest", "summary": "14 new emails since yesterday, 3 need a reply.",
+    {"conn": "casa", "who": "abby", "shape": "drop", "at": "06:31", "title": "Daily mail digest", "summary": "14 new emails since yesterday, 3 need a reply.",
      "type": "info", "unread": True, "group": "Today", "job": True},
-    {"conn": "casa", "who": "abby", "shape": "plane", "at": "06:02", "title": "Daily mail digest",
+    {"conn": "casa", "who": "abby", "shape": "drop", "at": "06:02", "title": "Daily mail digest",
      "summary": "token refresh failed (400): { &quot;error&quot;: &quot;invalid_grant&quot;, &quot;error_description&quot;: &quot;Token has been expired or revoked.&quot; }",
      "type": "error", "unread": True, "group": "Today", "job": True},
-    {"conn": "mirai", "who": "sentinel", "shape": "shield", "at": "05:40", "title": "PR #482 is waiting on you", "summary": "Two blocking findings; the author answered both.",
+    {"conn": "mirai", "who": "sentinel", "shape": "bell", "at": "05:40", "title": "PR #482 is waiting on you", "summary": "Two blocking findings; the author answered both.",
      "type": "warning", "unread": False, "group": "Today", "job": False},
-    {"conn": "mirai", "who": "curator", "shape": "house", "at": "04:00", "title": "Knowledge pass finished", "summary": "212 pages checked, 4 updated, 1 flagged as stale.",
+    {"conn": "mirai", "who": "curator", "shape": "arch", "at": "04:00", "title": "Knowledge pass finished", "summary": "212 pages checked, 4 updated, 1 flagged as stale.",
      "type": "info", "unread": False, "group": "Today", "job": True},
     {"conn": "casa", "who": "doc", "shape": "heart", "at": "21:10", "title": "Weekly vitals", "summary": "Resting heart rate 54, sleep 7 h 12 min on average.",
      "type": "info", "unread": False, "group": "Yesterday", "job": True},
@@ -32,7 +32,7 @@ FYI = [
 ]
 
 def mono(value, size=12, color=INK3, weight=400):
-    return f'<span style="font-family: {MONO}; font-size: {size}px; color: {color}; font-weight: {weight}; white-space: nowrap; flex-shrink: 0">{value}</span>'
+    return f'<span style="font-family: {MONO}; font-size: {mono_px(size)}px; color: {color}; font-weight: {weight}; white-space: nowrap; flex-shrink: 0">{value}</span>'
 
 
 def row_title(r):
@@ -44,7 +44,7 @@ def row_summary(r):
 
 
 def wrap(value, size, color, weight=400, lh=1.45, extra=""):
-    return f'<span style="font-size: {size}px; font-weight: {weight}; line-height: {lh}; color: {color}; white-space: normal; {extra}">{value}</span>'
+    return f'<span style="font-size: {ladder_px(size)}px; font-weight: {weight}; line-height: {lh}; color: {color}; white-space: normal; {extra}">{value}</span>'
 
 
 def ell(value, size, color, weight=400, extra=""):
@@ -52,7 +52,7 @@ def ell(value, size, color, weight=400, extra=""):
 
 
 def clamp(value, size, color, lines=2):
-    return (f'<span style="font-size: {size}px; line-height: 1.4; color: {color}; display: -webkit-box; -webkit-line-clamp: {lines}; '
+    return (f'<span style="font-size: {ladder_px(size)}px; line-height: 1.4; color: {color}; display: -webkit-box; -webkit-line-clamp: {lines}; '
             f'-webkit-box-orient: vertical; overflow: hidden">{value}</span>')
 
 
@@ -78,7 +78,7 @@ def icon(name, p, size=14, box=24, color=None):
 
 
 def eyebrow(value, p, pad="10px 10px 4px"):
-    return (f'<div style="padding: {pad}; font-family: {MONO}; font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; '
+    return (f'<div style="padding: {pad}; font-size: 14px; '
             f'color: {p["ink3"]}; white-space: nowrap">{value}</div>')
 
 
@@ -96,29 +96,32 @@ def level_pill(kind):
 
 def fbutton(label, p, on=False, glyph="", count=""):
     bg, fg = (p["ink"], p["pane"]) if on else ("transparent", p["ink2"])
-    tail = f'<span style="font-family: {MONO}; font-size: 10px; opacity: 0.7">{count}</span>' if count else ""
-    return (f'<span style="display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border-radius: 4px; background: {bg}; color: {fg}; '
-            f'font-size: 12px; font-weight: 500; white-space: nowrap; flex-shrink: 0">{glyph}{label}{tail}</span>')
+    tail = f'<span style="font-family: {MONO}; font-size: 12px; opacity: 0.7">{count}</span>' if count else ""
+    return (f'<span style="display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border-radius: 6px; background: {bg}; color: {fg}; '
+            f'font-size: 14px; font-weight: 500; white-space: nowrap; flex-shrink: 0">{glyph}{label}{tail}</span>')
 
 
 def kbd(key, what, p):
-    return (f'<span style="display: inline-flex; align-items: center; gap: 4px; white-space: nowrap"><span style="font-family: {MONO}; font-size: 9.5px; color: {p["ink2"]}; '
-            f'padding: 0 4px; border-radius: 2px; background: {p["hover"]}; line-height: 15px">{key}</span>{mono(what, 9.5, p["ink3"])}</span>')
+    return (f'<span style="display: inline-flex; align-items: center; gap: 4px; white-space: nowrap"><span style="font-family: {MONO}; font-size: 12px; color: {p["ink2"]}; '
+            f'padding: 0 4px; border-radius: 4px; background: {p["hover"]}; line-height: 15px">{key}</span>{mono(what, 9.5, p["ink3"])}</span>')
 
 
 def ground(p, inner, pad=10):
-    return f'<div style="padding: {pad}px; background: {p["bg"]}; border-radius: 4px">{inner}</div>'
+    return f'<div style="padding: {pad}px; background: {p["bg"]}; border-radius: 20px">{inner}</div>'
 
 
-def a_row(p, r, active=False, pad_left=8):
+def unread_time(p, r, size):
+    return mono(r["at"], size, p["ink"], 600) if r["unread"] else mono(r["at"], size, p["ink3"])
+
+
+def a_row(p, r, active=False, pad_left=10):
     weight, colour = (600, p["ink"]) if r["unread"] else (400, p["ink2"])
-    gutter = f'<span style="width: 6px; padding-top: 6px; flex-shrink: 0; display: inline-flex">{dot(p["ink"] if r["unread"] else "transparent")}</span>'
     line1 = flex(text(f'@{r["who"]}', 11.5, colour, weight, f"font-family: {MONO}"), mono(f'· {r["conn"]}', 9.5, p["ink3"]), spacer(),
-                 level_chip(r["type"]), mono(r["at"], 10, p["ink3"]), gap=6)
+                 level_chip(r["type"]), unread_time(p, r, 10), gap=6)
     title = ell(row_title(r), 12.5, colour, weight)
     summ = clamp(row_summary(r), 11, p["ink3"])
     bg = p["pane"] if active else "transparent"
-    return (f'<div style="display: flex; gap: 7px; align-items: flex-start; padding: 8px 10px 8px {pad_left}px; background: {bg}">{gutter}'
+    return (f'<div style="display: flex; gap: 7px; align-items: flex-start; padding: 8px 10px 8px {pad_left}px; background: {bg}">'
             f'<span style="padding-top: 2px; display: inline-flex">{mark(r["shape"], 16)}</span>{stack(line1, title, summ, gap=2, extra="flex: 1")}</div>')
 
 
@@ -141,7 +144,7 @@ def a_list(p, w=290):
 
 
 def digest_item(p, name, mail, subject, size=12.5, seam=True):
-    edge = f"box-shadow: inset 0 -0.5px 0 {p['line']};" if seam else ""
+    edge = "" if seam else ""
     head = flex(text(name, size, p["ink"], 600), ell(mail, size - 2, p["ink3"], extra=f"font-family: {MONO}"), gap=6)
     return f'<div style="padding: 6px 0; {edge}">{stack(head, wrap(subject, size, p["ink2"], lh=1.4), gap=1)}</div>'
 
@@ -154,22 +157,22 @@ def digest(p, size=12.5, fyi=True):
 
 
 def a_detail(p):
-    meta = flex(mark("plane", 14), text("@abby", 12, p["ink"], 600, f"font-family: {MONO}"), mono("· casa · Today 6:31 AM", 10, p["ink3"]), spacer(),
+    meta = flex(mark("drop", 14), text("@abby", 12, p["ink"], 600, f"font-family: {MONO}"), mono("· casa · Today 6:31 AM", 10, p["ink3"]), spacer(),
                 button("Reply", "primary", p, PAPER, 22), button("Mark unread", "ghost", p, PAPER, 22), icon("ellipsis", p, 13, 22), gap=6,
-                extra=f"padding: 0 0 9px; box-shadow: inset 0 -0.5px 0 {p['line']}")
+                extra="padding: 0 0 9px; ")
     body = stack(meta, text("Daily mail digest", 19, p["ink"], 600, "margin-top: 4px"), wrap(LEAD, 15, p["ink2"], lh=1.5), digest(p), gap=10)
     return f'<div style="flex: 1; min-width: 0; overflow: hidden; background: {p["pane"]}; padding: 10px 16px 14px">{body}</div>'
 
 
 def keys_strip(p):
     return flex(kbd("↑↓", "move", p), kbd("⏎", "open", p), kbd("R", "reply", p), kbd("⌫", "delete", p), kbd("?", "all keys", p),
-                gap=10, extra=f"padding: 7px 12px; background: {p['side']}; box-shadow: inset 0 0.5px 0 {p['line2']}; overflow: hidden")
+                gap=10, extra=f"padding: 7px 12px; background: {p['side']}; overflow: hidden")
 
 
 def paper_frame(p, inner, h):
     head = flex(text("Notifications", 14, p["ink"], 600), spacer(), button("Mark all read", "ghost", p, PAPER, 26), icon("x", p),
-                gap=8, extra=f"padding: 9px 10px 9px 14px; background: {p['elev']}; box-shadow: inset 0 -0.5px 0 {p['line2']}")
-    frame = f'border-radius: 4px; background: {p["elev"]}; box-shadow: 0 0 0 1px {p["line2"]}; overflow: hidden; height: {h}px; display: flex; flex-direction: column'
+                gap=8, extra=f"padding: 9px 10px 9px 14px; background: {p['elev']}; ")
+    frame = f'border-radius: 20px; background: {p["elev"]}; box-shadow: 0 0 0 1px {p["line2"]}; overflow: hidden; height: {h}px; display: flex; flex-direction: column'
     return ground(p, f'<div style="{frame}">{head}{inner}</div>')
 
 
@@ -178,28 +181,27 @@ def a_panel(p, h=500):
 
 
 def phone_segmented(p, items, on=0):
-    cells = "".join(f'<span style="flex: 1; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; font-size: 12px; '
-                    f'font-weight: {600 if i == on else 400}; color: {p["ink"] if i == on else p["ink3"]}; background: {p["pane"] if i == on else "transparent"}; border-radius: 4px">'
+    cells = "".join(f'<span style="flex: 1; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; font-size: 14px; '
+                    f'font-weight: {600 if i == on else 400}; color: {p["ink"] if i == on else p["ink3"]}; background: {p["pane"] if i == on else "transparent"}; border-radius: 6px">'
                     f'{label}{mono(count, 11, p["ink"] if i == on else p["ink3"]) if count else ""}</span>'
                     for i, (label, count) in enumerate(items))
-    return f'<div style="display: flex; padding: 2px; background: {p["hover"]}; border-radius: 4px; margin: 0 16px">{cells}</div>'
+    return f'<div style="display: flex; padding: 4px; background: {p["hover"]}; border-radius: 12px; margin: 0 16px">{cells}</div>'
 
 
 def phone_row(p, r, swiped=False):
     weight, colour = (600, p["ink"]) if r["unread"] else (400, p["ink2"])
-    gutter = f'<span style="width: 6px; padding-top: 8px; display: inline-flex; flex-shrink: 0">{dot(p["ink"] if r["unread"] else "transparent", 6)}</span>'
-    line1 = flex(flex(mono("@" + r["who"], 12, colour), mono(f'· {r["conn"]}', 11, p["ink3"]), gap=6, extra="flex: 1; overflow: hidden"), mono(r["at"], 11, p["ink3"]), gap=8)
-    title = flex(level_pill(r["type"]), ell(row_title(r), 15, colour, weight, "flex: 1"), gap=8, extra="min-height: 22px")
-    summ = clamp(row_summary(r), 12, p["ink3"])
-    inner = (f'<div style="display: flex; gap: 8px; align-items: flex-start; padding: 10px 16px; background: {p["pane"]}; box-shadow: inset 0 -0.5px 0 {p["line"]}; '
-             f'{"transform: translateX(-152px);" if swiped else ""}">{gutter}<span style="padding-top: 2px; display: inline-flex">{mark(r["shape"], 20)}</span>'
+    line1 = flex(flex(text("@" + r["who"], 14, colour), text(f'· {r["conn"]}', 12, p["ink3"]), gap=8, extra="flex: 1; overflow: hidden"), unread_time(p, r, 12), gap=8)
+    title = flex(level_pill(r["type"]), ell(row_title(r), 16, colour, weight, "flex: 1"), gap=8, extra="min-height: 22px")
+    summ = clamp(row_summary(r), 14, p["ink3"])
+    inner = (f'<div style="display: flex; gap: 8px; align-items: flex-start; padding: 12px 16px; background: {p["pane"]}; '
+             f'{"transform: translateX(-152px);" if swiped else ""}"><span style="padding-top: 2px; display: inline-flex">{mark(r["shape"], 20)}</span>'
              f'{stack(line1, title, summ, gap=2, extra="flex: 1")}</div>')
     if not swiped:
         return inner
     toggle = "Read" if r["unread"] else "Unread"
     under = (f'<div style="position: absolute; top: 0; right: 0; bottom: 0; width: 152px; display: flex">'
-             f'<span style="flex: 1; display: flex; align-items: center; justify-content: center; background: {p["selected"]}; font-size: 12px; font-weight: 500; color: {p["ink"]}">{toggle}</span>'
-             f'<span style="flex: 1; display: flex; align-items: center; justify-content: center; background: {p["ink"]}; font-size: 12px; font-weight: 500; color: {p["pane"]}">Delete</span></div>')
+             f'<span style="flex: 1; display: flex; align-items: center; justify-content: center; background: {p["selected"]}; font-size: 14px; font-weight: 500; color: {p["ink"]}">{toggle}</span>'
+             f'<span style="flex: 1; display: flex; align-items: center; justify-content: center; background: {p["ink"]}; font-size: 14px; font-weight: 500; color: {p["pane"]}">Delete</span></div>')
     return f'<div style="position: relative; overflow: hidden">{under}{inner}</div>'
 
 
@@ -221,9 +223,9 @@ def phone_page_nav(p):
 
 
 def phone_reader(p):
-    who = flex(mark("plane", 20), text("@abby", 14, p["ink"], 500, f"font-family: {MONO}"), mono("· casa · Today 6:31 AM", 11, p["ink3"]), gap=6)
+    who = flex(mark("drop", 20), text("@abby", 14, p["ink"], 500, f"font-family: {MONO}"), mono("· casa · Today 6:31 AM", 11, p["ink3"]), gap=6)
     body = stack(who, text("Daily mail digest", 22, p["ink"], 600, "white-space: normal; letter-spacing: -0.018em; line-height: 1.3"), wrap(LEAD, 18, p["ink2"], lh=1.5), digest(p, 15, fyi=True), gap=12,
                  extra="padding: 16px; flex: 1; min-height: 0; overflow: hidden")
     bar = flex(button("Reply", "primary", p, PAPER, 48), button("Open job", "secondary", p, PAPER, 48), spacer(), phone_icon_button("eye", p, "Mark unread"),
-               phone_icon_button("trash-2", p, "Delete"), gap=8, extra=f"padding: 10px 12px 30px; background: {p['side']}; box-shadow: inset 0 0.5px 0 {p['line2']}")
+               phone_icon_button("trash-2", p, "Delete"), gap=8, extra=f"padding: 10px 12px 30px; background: {p['side']}; ")
     return f'<div style="flex: 1; min-height: 0; display: flex; flex-direction: column; background: {p["pane"]}">{body}{bar}</div>'

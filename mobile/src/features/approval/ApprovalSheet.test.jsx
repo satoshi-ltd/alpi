@@ -21,8 +21,8 @@ vi.mock('react-native', () => {
   return { View, Text, Pressable, ScrollView };
 });
 
-vi.mock('../../hooks/useDaemonData', () => ({ useProfileSummaries: () => ({ data: { profiles: [{ name: 'doc', fold: 'heart', accent: '#f36a8a' }] } }) }));
-vi.mock('../../components/Fold', () => ({ Fold: ({ fold, color }) => React.createElement('span', { 'data-fold': fold ?? 'none', 'data-color': color ?? '' }) }));
+vi.mock('../../hooks/useDaemonData', () => ({ useProfileSummaries: () => ({ data: { profiles: [{ name: 'doc', shape: 'heart', accent: '#f36a8a' }] } }) }));
+vi.mock('../../components/Fold', () => ({ Fold: ({ shape, color }) => React.createElement('span', { 'data-shape': shape ?? 'none', 'data-color': color ?? '' }) }));
 vi.mock('../../components/Icon', () => ({ Icon: ({ name, color }) => React.createElement('span', { 'data-icon': name, 'data-color': color }) }));
 vi.mock('../../components/Sheet', () => ({
   Sheet: ({ open, children, dismissible }) => (open ? React.createElement('div', { 'data-sheet': 'true', 'data-dismissible': String(dismissible ?? true) }, children) : null),
@@ -57,8 +57,8 @@ describe('ApprovalSheet alert eyebrow', () => {
 
   it('says who asks before it says danger: the asking profile\'s object and name in ink, no red ALERT', () => {
     const { container } = render(<ApprovalSheet />);
-    const object = container.querySelector('[data-fold]');
-    expect(object.getAttribute('data-fold')).toBe('heart');
+    const object = container.querySelector('[data-shape]');
+    expect(object.getAttribute('data-shape')).toBe('heart');
     expect(object.getAttribute('data-color')).toBe('#f36a8a');
     expect(screen.getByText('doc')).toBeTruthy();
     expect(screen.queryByText('ALERT')).toBeNull();

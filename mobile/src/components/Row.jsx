@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { Children, Fragment, isValidElement, useState } from 'react';
 import { Pressable, Text, View, Platform } from 'react-native';
-import { iconSizes, radii, space } from '../theme/tokens';
+import { iconSizes, radii, space, typeLeading } from '../theme/tokens';
 
 import { Eyebrow } from './Eyebrow';
 import { GroupToneContext, groupTone } from './groupTone';
@@ -10,13 +10,25 @@ import { useTheme } from '../theme/ThemeContext';
 
 export { groupTone };
 
+export const TILE_GAP = 0;
+export const SETTING_ROW_H = 56;
+
+const tiles = (children) =>
+  Children.toArray(children).flatMap((child) => {
+    if (!isValidElement(child)) return [];
+    if (child.type === Fragment) return tiles(child.props.children);
+    return child.type === RowSeparator ? [] : [child];
+  });
+
 export function RowGroup({ children, style }) {
   const { colors } = useTheme();
   const tone = groupTone(colors);
   return (
     <GroupToneContext.Provider value={tone}>
-      <View style={[{ marginHorizontal: space.s7, borderRadius: radii.xs, overflow: 'hidden', backgroundColor: tone }, style]}>
-        {children}
+      <View style={[{ marginHorizontal: space.s7, borderRadius: radii.surface, overflow: 'hidden', gap: TILE_GAP }, style]}>
+        {tiles(children).map((child, i) => (
+          <View key={child.key ?? i} testID="row-tile" style={{ backgroundColor: tone }}>{child}</View>
+        ))}
       </View>
     </GroupToneContext.Provider>
   );
@@ -24,7 +36,7 @@ export function RowGroup({ children, style }) {
 
 export function SectionHeader({ children, kicker, first = false, onLayout }) {
   return (
-    <View onLayout={onLayout} style={{ paddingHorizontal: space.s7, paddingTop: space.s9, paddingBottom: space.s3 }}>
+    <View onLayout={onLayout} style={{ paddingHorizontal: space.s7, paddingTop: first ? space.s2 : space.s9, paddingBottom: space.s3 }}>
       <Eyebrow>{children}{kicker ? ` · ${kicker}` : ''}</Eyebrow>
     </View>
   );
@@ -42,8 +54,8 @@ function pressable(body, { onPress, onLongPress, disabled, colors, spoken }) {
       accessibilityLabel={spoken}
       onPress={onPress}
       onLongPress={onLongPress}
-      android_ripple={{ color: colors.selected }}
-      style={({ pressed }) => ({ backgroundColor: pressed && Platform.OS !== 'android' ? colors.selected : 'transparent' })}
+      android_ripple={{ color: colors.pressed }}
+      style={({ pressed }) => ({ backgroundColor: pressed && Platform.OS !== 'android' ? colors.pressed : 'transparent' })}
     >
       {body}
     </Pressable>
@@ -63,7 +75,7 @@ export function Row({ label, helper, value, leading, trailing, onPress, onLongPr
     typeof value === 'string' ? (
       <Text
         style={{
-          fontFamily: stacked ? fonts.mono : fonts.sans.regular,
+          fontFamily: stacked ? fonts.sans.regular : fonts.sans.regular,
           fontSize: stacked ? fontSizes.sm : fontSizes.md,
           color: stacked ? colors.ink2 : colors.ink3,
           flexShrink: 1,
@@ -85,10 +97,10 @@ export function Row({ label, helper, value, leading, trailing, onPress, onLongPr
       numberOfLines={labelLines}
       ellipsizeMode="tail"
       style={{
-        fontFamily: fonts.sans.regular,
-        fontSize: fontSizes.lg,
+        fontFamily: fonts.sans.medium,
+        fontSize: fontSizes.md,
         color: danger ? colors.dangerText : disabled ? colors.ink3 : colors.ink,
-        lineHeight: fontSizes.lg * 1.3,
+        lineHeight: Math.round(fontSizes.md * typeLeading.ui),
       }}
     >
       {label}
@@ -98,8 +110,9 @@ export function Row({ label, helper, value, leading, trailing, onPress, onLongPr
     <Text
       numberOfLines={helperLines ?? 2}
       style={{
-        fontFamily: fonts.monoMedium,
-        fontSize: fontSizes.xs,
+        fontFamily: fonts.sans.regular,
+        fontSize: fontSizes.sm,
+        lineHeight: Math.round(fontSizes.sm * typeLeading.small),
         color: helperDanger ? colors.dangerText : colors.ink3,
       }}
     >
@@ -125,8 +138,9 @@ export function Row({ label, helper, value, leading, trailing, onPress, onLongPr
       style={{
         flexDirection: 'row',
         alignItems: 'center',
+        minHeight: SETTING_ROW_H,
         paddingHorizontal: space.s7,
-        paddingVertical: space.s6,
+        paddingVertical: space.s5,
         gap: space.s5,
       }}
     >
@@ -158,9 +172,8 @@ export function Row({ label, helper, value, leading, trailing, onPress, onLongPr
   return pressable(body, { onPress, onLongPress, disabled, colors, spoken: rowLabel(label, spokenValue ?? value, helper) });
 }
 
-export function RowSeparator({ indent = space.s7 }) {
-  const { colors } = useTheme();
-  return <View style={{ height: 0.5, backgroundColor: colors.line, marginLeft: indent }} />;
+export function RowSeparator() {
+  return <View testID="row-gap" style={{ height: TILE_GAP }} />;
 }
 
 export function SettingsBand({ children }) {

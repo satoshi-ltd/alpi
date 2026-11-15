@@ -6,7 +6,7 @@ import { pubkeyTail } from "../lib/pubkey.js";
 export default function AddMemberPopover({
   open,
   onClose,
-  candidates = [],   // [{ id, accent, fold, pubkey }]
+  candidates = [],   // [{ id, accent, shape, pubkey }]
   onPick,
 }) {
   return (
@@ -28,7 +28,7 @@ export default function AddMemberPopover({
             }}
             className={`row row-gap ${styles.item}`}
           >
-            <Fold fold={c.fold} color={c.accent} />
+            <Fold shape={c.shape} color={c.accent} />
             <Mono className={styles.label}>@{c.id}</Mono>
             <Mono className={styles.suffix}>
               {pubkeyTail(c.pubkey)}

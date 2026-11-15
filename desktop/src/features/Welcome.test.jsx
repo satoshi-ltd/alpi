@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { ALPACA_FOLD, foldPolygons } from "../../../common/folds.mjs";
+import { SHAPES } from "../../../common/agentMarks.mjs";
+import { TWIN } from "../lib/brandMark.js";
 import { LINK_SOURCE_ROWS } from "../../../common/onboarding.mjs";
 import Welcome, { ConnectElsewhere, FirstRunHint, firstRunHintSeen, markFirstRunHintSeen } from "./Welcome.jsx";
 
@@ -72,16 +73,20 @@ describe("Welcome", () => {
     expect(onCheckAgain).toHaveBeenCalledTimes(1);
   });
 
-  it("draws the alpaca as the 72 px tonal Fold with its ink, not its box, on the column edge", () => {
+  it("draws Twin as the 72 px brand mark with its ink, not its box, on the column edge", () => {
     const { container } = render(<Welcome localState="absent" onConnect={vi.fn()} />);
-    const mark = container.querySelector("[data-fold='alpaca']").parentElement;
+    const twin = container.querySelector("[data-mark='alpi-twin']");
+    expect(twin.dataset.shape).toBe(TWIN);
+    const mark = twin.parentElement;
     expect(mark.style.width).toBe("72px");
     expect(mark.style.height).toBe("72px");
     const [top, , bottom, left] = mark.style.margin.split(" ").map(parseFloat);
-    const polygons = foldPolygons(ALPACA_FOLD, "#808080", 72).flatMap((f) => f.points);
-    expect(-left).toBeCloseTo(Math.min(...polygons.map(([x]) => x)) * 0.72, 1);
-    expect(-top).toBeCloseTo(Math.min(...polygons.map(([, y]) => y)) * 0.72, 1);
-    expect(-bottom).toBeCloseTo((100 - Math.max(...polygons.map(([, y]) => y))) * 0.72, 1);
+    const numbers = SHAPES["alpi-twin"].d.match(/-?[\d.]+/g).map(Number);
+    const xs = numbers.filter((_, i) => i % 2 === 0);
+    const ys = numbers.filter((_, i) => i % 2 === 1);
+    expect(-left).toBeCloseTo(Math.min(...xs) * 0.72, 1);
+    expect(-top).toBeCloseTo(Math.min(...ys) * 0.72, 1);
+    expect(-bottom).toBeCloseTo((100 - Math.max(...ys)) * 0.72, 1);
   });
 
   it("stopped: Start alpi is the primary, with the ghost after it", () => {
@@ -142,7 +147,7 @@ describe("Welcome", () => {
 
   it("puts the BusyMark exactly where the Fold stands, so the title never moves between states", async () => {
     const { container, rerender } = render(<Welcome localState="stopped" phase="failed" error="boom" onStart={vi.fn()} />);
-    const fold = container.querySelector("[data-fold]").parentElement;
+    const fold = container.querySelector("[data-shape]").parentElement;
     rerender(<Welcome localState="stopped" phase="starting" />);
     await screen.findByRole("status", { hidden: true });
     const busy = container.querySelector("[role=status]").parentElement;
@@ -347,9 +352,9 @@ describe("ConnectElsewhere", () => {
 });
 
 describe("FirstRunHint", () => {
-  it("is one Mono line with the fact and where a phone gets its link, and no button", () => {
+  it("is one sans line with the fact and where a phone gets its link, and no button", () => {
     const { container } = render(<FirstRunHint />);
-    const line = container.querySelector("p .mono");
+    const line = container.querySelector("p > span");
     expect(line.textContent).toBe("This is alpi on this computer · To use it from a phone: Settings → Connections");
     expect(screen.queryByRole("button")).toBeNull();
   });

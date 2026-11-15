@@ -3,7 +3,7 @@ import { selection } from '../lib/haptics';
 import { space } from '../theme/tokens';
 
 import { useTheme } from '../theme/ThemeContext';
-import { PICKER_GAP, PickerLead, PICKER_TEXT_EDGE } from './PickerLead';
+import { PICKER_GAP, PickerLead } from './PickerLead';
 
 const S = StyleSheet.create({
   wrap: { flexDirection: 'row', alignItems: 'center' },
@@ -33,7 +33,7 @@ export function PickerRow({
   const { colors, fonts, fontSizes } = useTheme();
   const pressStyle = ({ pressed }) => [
     S.press,
-    { backgroundColor: selected || pressed ? colors.selected : 'transparent' },
+    { backgroundColor: pressed ? colors.pressed : selected ? colors.selected : 'transparent' },
   ];
   return (
     <View>
@@ -47,7 +47,7 @@ export function PickerRow({
         accessibilityState={{ selected }}
         accessibilityLabel={typeof label === 'string' ? label : undefined}
         accessibilityHint={typeof helper === 'string' ? helper : undefined}
-        android_ripple={{ color: colors.selected }}
+        android_ripple={{ color: colors.pressed }}
         style={pressStyle}
       >
         <PickerLead selected={selected} color={accent} />
@@ -71,8 +71,8 @@ export function PickerRow({
               <Text
                 numberOfLines={1}
                 style={{
-                  fontFamily: fonts.mono,
-                  fontSize: fontSizes.xs,
+                  fontFamily: fonts.sans.regular,
+                  fontSize: fontSizes.sm,
                   color: colors.ink3,
                 }}
               >
@@ -87,7 +87,7 @@ export function PickerRow({
       </Pressable>
       {right ?? null}
     </View>
-    {separator ? <View testID="picker-separator" style={{ height: 0.5, marginLeft: PICKER_TEXT_EDGE, backgroundColor: colors.line }} /> : null}
+      {separator ? <View testID="picker-separator" style={{ height: space.s1 }} /> : null}
     </View>
   );
 }

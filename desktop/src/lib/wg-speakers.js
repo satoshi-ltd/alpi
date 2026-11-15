@@ -42,7 +42,7 @@ export function speakerFromIndex(index, msg) {
       return {
         name: profileLabel(matchProfile.name),
         accent: matchProfile.accent ?? paletteFor(matchProfile.name),
-        fold: matchProfile.fold,
+        shape: matchProfile.shape,
         bio: memberBio || localBio,
       };
     }

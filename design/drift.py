@@ -9,12 +9,13 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
+GENERATED = ("common/agentMarks.mjs", "common/workgroupMark.mjs")
+
+
 def snapshot(root: Path) -> dict[str, str]:
-    return {
-        str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
-        for p in sorted((root / "design").rglob("*"))
-        if p.is_file() and "__pycache__" not in p.parts
-    }
+    files = [p for p in sorted((root / "design").rglob("*")) if p.is_file() and "__pycache__" not in p.parts]
+    files += [root / rel for rel in GENERATED if (root / rel).is_file()]
+    return {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest() for p in files}
 
 
 def main(root: Path = REPO_ROOT) -> int:

@@ -203,7 +203,7 @@ export function PeersField({ profile, profiles, onSaved, onRefresh, onLoadingCha
                         close?.();
                         setSelectedPeerId(p.id);
                       }}
-                      leading={<Fold fold={localProfile?.fold} color={accent} />}
+                      leading={<Fold shape={localProfile?.shape} color={accent} />}
                       caption={shortPubkey(p.pubkey)}
                       trailing={renderPeerStatusChip(status, reasonById[p.id])}
                     >

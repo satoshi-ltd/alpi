@@ -26,15 +26,34 @@ export function lastRunShort(iso, nowMs = Date.now()) {
   return clockOrAge(Math.floor(ms / 1000), nowMs);
 }
 
+export function daysAhead(ms, nowMs = Date.now()) {
+  const d = new Date(ms);
+  const now = new Date(nowMs);
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startTarget = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  return Math.round((startTarget - startToday) / 86400000);
+}
+
+const SOON_MS = 6 * 3600000;
+
+export function formatSoon(iso, nowMs = Date.now()) {
+  if (!iso) return "";
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return "";
+  const diff = ms - nowMs;
+  if (diff >= SOON_MS) return CLOCK.format(new Date(ms));
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return "now";
+  if (minutes < 60) return `in ${minutes}m`;
+  return `in ${Math.floor(minutes / 60)}h`;
+}
+
 export function formatNextFire(iso, nowMs = Date.now()) {
   if (!iso) return "—";
   const ms = Date.parse(iso);
   if (Number.isNaN(ms)) return "—";
   const d = new Date(ms);
-  const now = new Date(nowMs);
-  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const startTarget = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const days = Math.round((startTarget - startToday) / 86400000);
+  const days = daysAhead(ms, nowMs);
   const clock = CLOCK.format(d);
   if (days <= 0) return `today ${clock}`;
   if (days === 1) return `tomorrow ${clock}`;

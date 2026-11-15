@@ -17,6 +17,7 @@ import { useBack } from '../../../../src/hooks/useBack';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 import { ScopeToggles } from '../../../../src/features/peers/ScopeToggles';
+import { code } from '../../../../src/theme/code';
 
 export default function AcceptPendingPeer() {
   const { id, pubkey, address, suggested } = useLocalSearchParams();
@@ -65,7 +66,7 @@ export default function AcceptPendingPeer() {
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScreenHeader
         title="Accept peer"
-        subtitle={`@${id} · NAME · SCOPES`}
+        subtitle={`@${id} · name · scopes`}
         onBack={goBack}
         right={<Button title="Accept" size="md" disabled={!ready} loading={busy} onPress={accept} />}
       />
@@ -74,13 +75,13 @@ export default function AcceptPendingPeer() {
           <View style={{ gap: space.s2 }}>
             <Eyebrow>Pubkey</Eyebrow>
             <Text
-              style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink2 }}
+              style={{ ...code(fonts, fontSizes.sm), color: colors.ink2 }}
               numberOfLines={2}
             >
               {pubkeyStr}
             </Text>
             {addressStr ? (
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
+              <Text style={{ ...code(fonts, fontSizes.xs), color: colors.ink3 }}>
                 {addressStr}
               </Text>
             ) : null}

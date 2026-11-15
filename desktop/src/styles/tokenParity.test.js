@@ -1,4 +1,4 @@
-import { BRAND_INK } from "../../../common/folds.mjs";
+import { BRAND_INK } from "../../../common/shapes.mjs";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -16,6 +16,7 @@ import {
   lineHeights,
   palettes,
   radii,
+  veils,
 } from "../../../common/tokens.mjs";
 
 const CSS = readFileSync(join(import.meta.dirname, "tokens.css"), "utf8");
@@ -66,14 +67,15 @@ function normalizeColor(raw) {
   return `rgba(${fn[1].split(",").map((n) => String(Number(n))).join(",")})`;
 }
 
+const withoutVeil = ({ veil, ...rest }) => rest;
 const cssPalettes = () => {
-  const light = colorVars(ROOT);
-  return { light, dark: { ...light, ...colorVars(DARK_TOGGLE) } };
+  const light = withoutVeil(colorVars(ROOT));
+  return { light, dark: { ...light, ...withoutVeil(colorVars(DARK_TOGGLE)) } };
 };
 
 function expectedNumbers() {
   const out = {};
-  for (const name of ["xs", "lg", "xl", "xxl", "display"]) out[`text-${{ xs: "meta", lg: "chat", xl: "title", xxl: "detail", display: "display" }[name]}`] = fontSizes[name];
+  for (const name of ["xs", "sm", "md", "lg", "xl", "xxl", "display"]) out[`text-${{ xs: "meta", sm: "small", md: "ui", lg: "read", xl: "title", xxl: "detail", display: "display" }[name]}`] = fontSizes[name];
   for (const [name, value] of Object.entries(lineHeights)) out[`lh-${name}`] = value;
   for (const [name, value] of Object.entries(spaceScale)) out[`sp-${name}`] = value;
   for (const [name, value] of Object.entries(spaceMicro)) out[`space-${name}`] = value;
@@ -145,6 +147,14 @@ describe("tokens.css against the shared token module", () => {
   });
 });
 
+describe("veil", () => {
+  it("dims under a dialog with the shared veil of each mode", () => {
+    expect(normalizeColor(colorVars(ROOT).veil)).toBe(normalizeColor(veils.light));
+    expect(normalizeColor(colorVars(DARK_TOGGLE).veil)).toBe(normalizeColor(veils.dark));
+    expect(normalizeColor(colorVars(DARK_MEDIA).veil)).toBe(normalizeColor(veils.dark));
+  });
+});
+
 describe("accent palette", () => {
   it("offers twelve distinct six-digit hexes", () => {
     expect(ACCENT_HEXES).toHaveLength(12);
@@ -182,7 +192,7 @@ describe("accent palette", () => {
 
 describe("semantic typography roles", () => {
   it("maps every role to the ladder rung nearest mobile's size and the same leading", () => {
-    const rung = { xs: "meta", sm: "meta", base: "ui", md: "ui", lg: "chat", xl: "title", xxl: "detail", display: "display" };
+    const rung = { xs: "meta", sm: "small", base: "ui", md: "ui", lg: "chat", xl: "title", xxl: "detail", display: "display" };
     for (const [role, value] of Object.entries(typography)) {
       const cssRole = role.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
       expect(ROOT).toContain(`--text-${cssRole}-size: var(--text-${rung[value.size]});`);

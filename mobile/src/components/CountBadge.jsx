@@ -6,7 +6,7 @@ import { useTheme } from '../theme/ThemeContext';
 
 export function countBadgeText(fonts, color) {
   return {
-    fontFamily: fonts.monoSemibold,
+    fontFamily: fonts.sans.semibold,
     fontSize: countBadge.fontSize,
     lineHeight: countBadge.fontSize,
     includeFontPadding: false,

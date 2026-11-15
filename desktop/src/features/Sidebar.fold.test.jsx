@@ -19,6 +19,7 @@ vi.mock("../lib/updater.js", () => ({
 }));
 
 import Sidebar from "./Sidebar.jsx";
+import { trackedCount } from "../lib/gaze.js";
 
 const BASE = {
   workgroups: [],
@@ -28,46 +29,75 @@ const BASE = {
 
 const glyph = (name) => screen.getByText(name).closest("button").firstElementChild;
 
-describe("Sidebar profile folds", () => {
-  it("draws the profile's fold in its colour and the kite-base diamond for a profile without one", () => {
+describe("Sidebar profile marks", () => {
+  it("draws the profile's mark in its colour and the round shape for a profile without a fold", () => {
     render(
       <Sidebar
         {...BASE}
         profiles={[
-          { name: "doc", model: "a/b", accent: "#3899e2", fold: "shield" },
+          { name: "doc", model: "a/b", accent: "#3899e2", shape: "bell" },
           { name: "mind", model: "a/b", accent: "#3899e2" },
         ]}
       />,
     );
     const doc = glyph("doc");
-    expect(doc.dataset.fold).toBe("shield");
-    expect(doc.querySelector(".ds-diamond")).toBeNull();
-    const fills = [...doc.querySelectorAll("polygon")].map((p) => p.getAttribute("fill"));
-    expect(fills).toContain("#3899e2");
-    expect(glyph("mind").dataset.fold).toBe("diamond");
-    expect(glyph("mind").querySelector(".ds-diamond")).toBeNull();
-    expect(glyph("mind").querySelectorAll("polygon").length).toBeGreaterThan(1);
+    expect(doc.dataset.shape).toBe("bell");
+    expect(doc.dataset.mark).toBe("bell");
+    expect(doc.querySelector("path[data-body]").getAttribute("fill")).toBe("#3899e2");
+    expect(glyph("mind").dataset.shape).toBe("round");
+    expect(glyph("mind").dataset.mark).toBe("round");
+    expect(doc.getAttribute("aria-hidden")).toBe("true");
   });
 
-  it("keeps the slot 16px wide for both glyphs", () => {
+  it("draws the default profile as Twin in the brand ink, on its 48 px tile", () => {
+    render(<Sidebar {...BASE} profiles={[{ name: "default", model: "a/b", accent: "#3899e2", shape: "twin", is_default: true }]} />);
+    const twin = screen.getByText("alpi").closest("button").querySelector("[data-shape]");
+    expect(twin.dataset.mark).toBe("alpi-twin");
+    expect(twin.style.width).toBe("48px");
+    expect(twin.querySelector("path[data-body]").getAttribute("fill")).toBe("var(--accent)");
+  });
+
+  it("never lets a tile or a row follow the pointer, even the selected one", () => {
+    const add = vi.spyOn(window, "addEventListener");
+    const { container } = render(
+      <Sidebar
+        {...BASE}
+        view={{ kind: "profile", profile: "default", sessionId: null }}
+        pinned={{ profiles: ["doc"], workgroups: [] }}
+        profiles={[
+          { name: "default", model: "a/b", shape: "twin", is_default: true },
+          { name: "doc", model: "a/b", accent: "#3899e2", shape: "bell" },
+          { name: "mind", model: "a/b", accent: "#3899e2", shape: "drop" },
+        ]}
+      />,
+    );
+    expect(container.querySelectorAll("[data-shape]").length).toBeGreaterThanOrEqual(3);
+    expect(container.querySelector("[data-watch]")).toBeNull();
+    expect(trackedCount()).toBe(0);
+    expect(add.mock.calls.filter(([type]) => type === "mousemove")).toHaveLength(0);
+    add.mockRestore();
+  });
+
+  it("keeps the slot at row size for every mark", () => {
     render(
       <Sidebar
         {...BASE}
         profiles={[
-          { name: "doc", model: "a/b", accent: "#3899e2", fold: "heart" },
+          { name: "doc", model: "a/b", accent: "#3899e2", shape: "heart" },
           { name: "mind", model: "a/b", accent: "#3899e2" },
         ]}
       />,
     );
-    expect(glyph("doc").style.width).toBe("16px");
-    expect(glyph("mind").style.width).toBe("16px");
+    expect(glyph("doc").style.width).toBe("24px");
+    expect(glyph("mind").style.width).toBe("24px");
   });
 
-  it("outlines the fold of a profile that still needs a model", () => {
-    render(<Sidebar {...BASE} profiles={[{ name: "doc", accent: "#3899e2", fold: "rocket" }]} />);
-    const polygons = [...glyph("doc").querySelectorAll("polygon")];
-    expect(polygons.length).toBeGreaterThan(0);
-    expect(polygons.every((p) => p.getAttribute("fill-opacity") === "0.22")).toBe(true);
+  it("draws a profile that still needs a model in its needs state, filled, never dashed", () => {
+    render(<Sidebar {...BASE} profiles={[{ name: "doc", accent: "#3899e2", shape: "pill" }]} />);
+    const mark = screen.getByText("doc").closest("button").querySelector("[data-shape]");
+    expect(mark.dataset.state).toBe("needs");
+    expect(mark.querySelector("path[stroke-dasharray]")).toBeNull();
+    expect(mark.querySelector("path[data-body]").getAttribute("fill")).toBe("#3899e2");
   });
 });
 
@@ -78,10 +108,12 @@ describe("Sidebar roster state", () => {
     { name: "fresh", accent: "#3899e2" },
   ];
 
-  it("keeps the glyphs folded for a plain disconnect and unfolds only the paused profile", () => {
+  it("keeps the marks filled for a plain disconnect and draws only the paused profile dashed", () => {
     render(<Sidebar {...BASE} profiles={roster} daemonOffline />);
-    expect(glyph("doc").dataset.unfolded).toBeUndefined();
-    expect(glyph("napper").dataset.unfolded).toBeDefined();
+    expect(glyph("doc").dataset.state).toBe("idle");
+    expect(glyph("doc").querySelector("path[data-body]")).not.toBeNull();
+    expect(glyph("napper").dataset.state).toBe("paused");
+    expect(glyph("napper").querySelector("path[stroke-dasharray]")).not.toBeNull();
   });
 
   it("says paused and needs provider in words instead of fading the row", () => {
@@ -92,20 +124,24 @@ describe("Sidebar roster state", () => {
     expect(screen.getByText("napper").closest("button").style.opacity).toBe("");
   });
 
-  it("draws the selected row's accent bar in that profile's colour", () => {
+  it("marks the chosen row with aria-current and the neutral fill, never the profile's colour", () => {
     render(
       <Sidebar
         {...BASE}
         view={{ kind: "profile", profile: "doc" }}
         profiles={[
-          { name: "doc", model: "a/b", accent: "#3899e2", fold: "shield" },
+          { name: "doc", model: "a/b", accent: "#3899e2", shape: "bell" },
           { name: "abby", model: "a/b", accent: "#e8708a" },
         ]}
       />,
     );
     const selected = screen.getByText("doc").closest("button");
     expect(selected.hasAttribute("data-sel")).toBe(true);
-    expect(selected.style.getPropertyValue("--row-accent")).toBe("#3899e2");
-    expect(screen.getByText("abby").closest("button").style.getPropertyValue("--row-accent")).toBe("");
+    expect(selected.getAttribute("aria-current")).toBe("page");
+    expect(selected.style.getPropertyValue("--row-accent")).toBe("");
+    expect(selected.style.background).toBe("");
+    const other = screen.getByText("abby").closest("button");
+    expect(other.hasAttribute("aria-current")).toBe(false);
+    expect(other.hasAttribute("data-sel")).toBe(false);
   });
 });

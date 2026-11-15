@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../../src/theme/tokens';
 
 import { pairName } from '../../../../common/accents.mjs';
-import { FALLBACK_ACCENT } from '../../../../common/folds.mjs';
+import { FALLBACK_ACCENT } from '../../../../common/shapes.mjs';
 import { toUsageDays } from '../../../../common/usage.mjs';
 import { attentionHelper, attentionLabel, flagCount } from '../../../../common/attention.mjs';
 import { AttentionValue } from '../../../src/components/AttentionPill';
@@ -40,6 +40,7 @@ import {
   useScheduleList,
 } from '../../../src/hooks/useDaemonData';
 import { useProfile } from '../../../src/hooks/useSubject';
+import { applyEdits, saveOptimistic, useProfileEdits } from '../../../src/lib/optimisticProfiles';
 import { useEndpoint } from '../../../src/lib/EndpointContext';
 import { AppearanceSheet } from '../../../src/features/sheets/AppearanceSheet';
 import { FallbacksSheet } from '../../../src/features/sheets/FallbacksSheet';
@@ -65,8 +66,25 @@ import { FadeIn } from '../../../src/components/FadeIn';
 import { useSkeleton } from '../../../src/hooks/useSkeleton';
 import { useReveal } from '../../../src/hooks/useReveal';
 import { ListSkeleton } from '../../../src/components/ListSkeleton';
+import { code } from '../../../src/theme/code';
 
 const DEFAULT_ALP_PORT = 7423;
+
+const asText = (value) => value;
+const asCap = (value) => (String(value ?? '').trim() ? Number(String(value).trim()) : null);
+const OPTIMISTIC_FIELDS = {
+  model: ['model', asText],
+  'model_reasoning.effort': ['model_reasoning_effort', asText],
+  'tiers.fast.model': ['tiers.fast.model', asText],
+  'tiers.fast.effort': ['tiers.fast.effort', asText],
+  'tiers.deep.model': ['tiers.deep.model', asText],
+  'tiers.deep.effort': ['tiers.deep.effort', asText],
+  'tools.read_image.model': ['vision_model', asText],
+  'tui.shape': ['shape', asText],
+  'tui.accent': ['accent', asText],
+  'budget.daily_usd': ['budget_daily_usd', asCap],
+  paused: ['paused', (value) => value === 'true'],
+};
 const WIDE_LABEL_W = 96;
 
 function ChipRow({ items }) {
@@ -134,8 +152,10 @@ export default function ProfileSettings() {
   const { twoPane } = usePane();
   const snap = useProfileSnapshot(id);
   const detailPre = sectionData(snap.data?.detail);
-  const { profile: baseProfile, loading, error: profileError, refresh, refreshDetail } = useProfile(id, { skipDetail: !snap.unsupported });
-  const profile = detailPre ? { ...(baseProfile || {}), ...detailPre } : baseProfile;
+  const { profile: baseProfile, loading, error: profileError, refresh, invalidate: invalidateSummaries, refreshDetail } = useProfile(id, { skipDetail: !snap.unsupported });
+  useProfileEdits();
+  const merged = detailPre ? { ...(baseProfile || {}), ...detailPre } : baseProfile;
+  const profile = merged ? applyEdits(merged, endpoint?.id) : merged;
   const emailAccounts = useEmailAccounts(id, { skipWhen: !needsFallback(snap, 'email') });
   const schedule = useScheduleList(id, { skipWhen: !needsFallback(snap, 'schedules') });
   const { att } = useAttention(id);
@@ -209,7 +229,7 @@ export default function ProfileSettings() {
   if (!profile) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ScreenHeader title={`@${profileLabel(id)}`} subtitle="PROFILE · NOT FOUND" onBack={goBack} />
+        <ScreenHeader title={`@${profileLabel(id)}`} subtitle="Profile · not found" onBack={goBack} />
         <DeadEnd copy="missingProfile" error={profileError} onRetry={refresh} label="this profile" />
       </SafeAreaView>
     );
@@ -241,17 +261,34 @@ export default function ProfileSettings() {
   const settingsSyncing = snap.loading || emailAccounts.loading || schedule.loading || storage.loading;
 
   // Field keys are dotted paths into user.yaml (e.g. `tui.accent`); voice uses a dedicated RPC.
-  const saveField = (key, value) =>
-    call('host.config.set_field', { profile: id, key, value }).then(() => refreshSettings());
+  const refreshEdited = () =>
+    Promise.allSettled([
+      invalidateSummaries?.(),
+      snap.unsupported ? refreshDetail() : snap.invalidate?.(),
+    ]);
+  const saveOptimisticField = (key, value, run) => {
+    const [path, toValue] = OPTIMISTIC_FIELDS[key];
+    return saveOptimistic({ connectionId: endpoint?.id, name: id, patch: { [path]: toValue(value) }, run, refresh: refreshEdited })
+      .then(({ latest }) => {
+        if (latest) refreshEdited();
+      });
+  };
+  const saveField = (key, value) => {
+    const run = () => call('host.config.set_field', { profile: id, key, value });
+    if (OPTIMISTIC_FIELDS[key]) return saveOptimisticField(key, value, run);
+    return run().then(() => refreshSettings());
+  };
   const failing = (title) => (e) => {
     toast({ title, message: String(e) });
     throw e;
   };
-  const saveOrUnsetField = (key, value) =>
-    (String(value ?? '').trim()
+  const saveOrUnsetField = (key, value) => {
+    const run = () => (String(value ?? '').trim()
       ? call('host.config.set_field', { profile: id, key, value: String(value).trim() })
-      : call('host.config.unset_field', { profile: id, key })
-    ).then(() => refreshSettings());
+      : call('host.config.unset_field', { profile: id, key }));
+    if (OPTIMISTIC_FIELDS[key]) return saveOptimisticField(key, value, run);
+    return run().then(() => refreshSettings());
+  };
 
   const fallbacks = fallbackList(profile);
   const showFallbacks = hasFallbackModels(profile)
@@ -324,14 +361,14 @@ export default function ProfileSettings() {
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScreenHeader
         title={profileLabel(profile.name)}
-        subtitle={twoPane ? 'SETTINGS' : 'PROFILE · SETTINGS'}
+        subtitle={twoPane ? 'Settings' : 'Profile · settings'}
         onBack={goBack}
         accent={accent}
-        leadingGlyph={<Fold fold={profile.fold} color={accent} size="md" />}
+        leadingGlyph={<Fold shape={profile.shape} color={accent} size="md" />}
         meta={
           <>
             {profile.model ? (
-              <Text numberOfLines={1} style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink2, flexShrink: 1 }}>
+              <Text numberOfLines={1} style={{ ...code(fonts, fontSizes.sm), color: colors.ink2, flexShrink: 1 }}>
                 {modelLabel(profile.model)}
               </Text>
             ) : null}
@@ -347,7 +384,7 @@ export default function ProfileSettings() {
           </>
         }
       />
-      <SyncBar syncing={settingsSyncing} />
+      <SyncBar syncing={settingsSyncing} color={profile.accent ?? null} />
       <JumpChips current={section} onJump={jump} />
       <ScrollView
         ref={scrollRef}
@@ -476,15 +513,15 @@ export default function ProfileSettings() {
             label="Appearance"
             value={
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2, flexShrink: 1 }}>
-                <Fold fold={profile.fold} color={accent} size="md" />
+                <Fold shape={profile.shape} color={accent} size="md" />
                 <Text
                   numberOfLines={1}
                   style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.sm, color: colors.ink2, flexShrink: 1 }}
                 >
-                  {locked ? 'Alpaca' : pairName(profile.fold, accent)}
+                  {locked ? 'Twin' : pairName(profile.shape, accent)}
                 </Text>
-                <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.sm, color: colors.ink3 }}>
-                  {locked ? 'brand accent' : accent}
+                <Text style={{ ...code(fonts, fontSizes.sm, 'medium'), color: colors.ink3 }}>
+                  {locked ? 'brand mark' : accent}
                 </Text>
               </View>
             }
@@ -756,7 +793,7 @@ export default function ProfileSettings() {
           <RowSeparator />
           <Row
             label="Memories"
-            helper={attentionHelper(att, 'memory') ?? 'USER · MEMORY · AGENT'}
+            helper={attentionHelper(att, 'memory') ?? 'User · memory · agent'}
             helperDanger={flagCount(att, 'memory') > 0}
             value={flagged('memory', '3 files')}
             spokenValue={flagCount(att, 'memory') ? `${attentionLabel(att, 'memory')}, 3 files` : undefined}
@@ -940,11 +977,11 @@ export default function ProfileSettings() {
         onClose={() => setSheet(null)}
         profileName={profile.name}
         initialValue={accent}
-        initialFold={profile.fold}
-        onSave={async ({ fold, accent: next }) => {
-          if (fold) await saveField('tui.fold', fold);
-          if (next) await saveField('tui.accent', next.toLowerCase());
-        }}
+        initialShape={profile.shape}
+        onSave={({ shape, accent: next }) => Promise.all([
+          shape ? saveField('tui.shape', shape) : null,
+          next ? saveField('tui.accent', next.toLowerCase()) : null,
+        ])}
       />
       <VoiceSheet
         open={sheet === 'voice'}

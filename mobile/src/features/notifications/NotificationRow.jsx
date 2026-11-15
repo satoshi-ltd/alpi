@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 
-import { FALLBACK_ACCENT } from '../../../../common/folds.mjs';
+import { FALLBACK_ACCENT } from '../../../../common/shapes.mjs';
 import { notificationParts } from '../../../../common/notificationParts.mjs';
 import { notificationTime } from '../../../../common/notificationTime.mjs';
 import { Fold } from '../../components/Fold';
@@ -10,7 +10,6 @@ import { Pill } from '../../components/Pill';
 import { profileLabel } from '../../lib/profileName';
 import { tap } from '../../lib/haptics';
 import { useReduceMotion } from '../../lib/reduceMotion';
-import { dotShape } from '../../components/dotShape';
 import { useTheme } from '../../theme/ThemeContext';
 import { lineHeights, mobile, space } from '../../theme/tokens';
 
@@ -115,29 +114,24 @@ export function NotificationRow({ row, unread, multi, dayGroup = true, selected 
           paddingLeft: space.s7,
           paddingRight: space.s7,
           backgroundColor: pressed || selected ? colors.selected : colors.bgPane,
-          borderBottomWidth: 0.5,
-          borderBottomColor: colors.line,
         })}
       >
-        <View style={{ width: dotShape('sm').width, paddingTop: FOLD_TOP + (FOLD_SIZE - dotShape('sm').height) / 2 }}>
-          {unread ? <View style={{ ...dotShape('sm'), backgroundColor: colors.ink }} /> : null}
-        </View>
         <View style={{ paddingTop: FOLD_TOP }}>
-          <Fold fold={row.fold} color={accent} size={FOLD_SIZE} />
+          <Fold shape={row.shape} color={accent} size={FOLD_SIZE} />
         </View>
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <View testID="notification-meta" style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
             <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
-              <Text numberOfLines={1} style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: ink, flexShrink: 1 }}>
+              <Text numberOfLines={1} style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: ink, flexShrink: 1 }}>
                 @{profileLabel(row.profile)}
               </Text>
               {multi && row.connectionName ? (
-                <Text numberOfLines={1} style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3, flexShrink: 1 }}>
+                <Text numberOfLines={1} style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3, flexShrink: 1 }}>
                   · {row.connectionName}
                 </Text>
               ) : null}
             </View>
-            <Text numberOfLines={1} style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3, flexShrink: 0 }}>
+            <Text numberOfLines={1} style={{ fontFamily: unread ? fonts.sans.semibold : fonts.sans.regular, fontSize: fontSizes.xs, color: unread ? colors.ink : colors.ink3, flexShrink: 0 }}>
               {notificationTime(row.created_at, { dayGroup })}
             </Text>
           </View>

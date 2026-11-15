@@ -102,7 +102,7 @@ vi.mock('../src/theme/ThemeContext', () => ({
 }));
 
 vi.mock('../src/components/ActionSheet', () => ({ ActionSheet: () => null }));
-vi.mock('../src/components/Fold', () => ({ Fold: ({ fold, color }) => React.createElement('span', { 'data-mark': color, 'data-fold': String(fold) }) }));
+vi.mock('../src/components/Fold', () => ({ Fold: ({ shape, color, state }) => React.createElement('span', { 'data-mark': color, 'data-shape': String(shape), 'data-state': String(state) }) }));
 
 vi.mock('../src/components/Banner', () => ({ Banner: ({ children }) => React.createElement('div', {}, children) }));
 vi.mock('../src/components/Button', () => ({ Button: ({ title }) => React.createElement('button', { type: 'button' }, title) }));
@@ -238,6 +238,32 @@ describe('profile thread with nothing to load', () => {
     expect(document.querySelector('[data-mark]').getAttribute('data-mark')).toBe('#abc123');
   });
 
+  it('draws the empty hero in the session state, and paused when the profile is paused', async () => {
+    render(<ProfileChat />);
+    await settle();
+    expect(document.querySelector('[data-mark]').getAttribute('data-state')).toBe('idle');
+    cleanup();
+    _resetDaemonDataCache();
+    h.handlers['host.profile.summaries'] = () => ({ profiles: [{ ...DOC, paused: true }] });
+    render(<ProfileChat />);
+    await settle();
+    expect(hasText('Start a new thread')).toBe(true);
+    expect(document.querySelector('[data-mark]').getAttribute('data-state')).toBe('paused');
+  });
+
+  it('draws the needs-setup hero as needs, and paused when the profile is paused', async () => {
+    h.handlers['host.profile.summaries'] = () => ({ profiles: [{ ...DOC, model: null, provider_keys: [] }] });
+    render(<ProfileChat />);
+    await settle();
+    expect(document.querySelector('[data-mark]').getAttribute('data-state')).toBe('needs');
+    cleanup();
+    _resetDaemonDataCache();
+    h.handlers['host.profile.summaries'] = () => ({ profiles: [{ ...DOC, model: null, provider_keys: [], paused: true }] });
+    render(<ProfileChat />);
+    await settle();
+    expect(document.querySelector('[data-mark]').getAttribute('data-state')).toBe('paused');
+  });
+
   it('keeps the skeleton while a real transcript is still in flight', async () => {
     const read = deferred();
     h.handlers['host.profile.summaries'] = () => ({
@@ -330,8 +356,18 @@ describe('workgroup thread with nothing to load', () => {
     await settle();
     expect(hasText('No posts yet')).toBe(true);
     expect(hasText('Direct @scout to open a #task.')).toBe(true);
-    expect(document.querySelector('[data-fold="honeycomb"]')).not.toBeNull();
+    expect(document.querySelector('[data-shape="honeycomb"]')).not.toBeNull();
     expect(skeleton()).toBeNull();
+  });
+
+  it('draws the empty hero paused when the workgroup is paused', async () => {
+    h.handlers['host.workgroups.list'] = () => ({ workgroups: [{ ...WG, paused: true }] });
+    render(<WorkgroupChat />);
+    await settle();
+    expect(hasText('No posts yet')).toBe(true);
+    const marks = [...document.querySelectorAll('[data-shape="honeycomb"]')];
+    expect(marks.length).toBeGreaterThan(0);
+    expect(marks.every((el) => el.getAttribute('data-state') === 'paused')).toBe(true);
   });
 
   it('keeps the skeleton while the transcript is still in flight, then drops it', async () => {

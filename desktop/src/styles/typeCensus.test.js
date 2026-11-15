@@ -25,18 +25,18 @@ describe("type census", () => {
   });
 
   it("sizes text only from the ladder, the eyebrow size or a relative em", () => {
-    const allowed = /^(var\(--(text-(meta|ui|chat|title|detail|display|hero|[a-z-]+-size)|eyebrow-size)\)|inherit|[0-9.]+em|calc\(.*\))$/;
+    const allowed = /^(var\(--(text-(meta|small|ui|read|chat|title|detail|display|hero|mono|mono-ui|mono-read|[a-z-]+-size)|eyebrow-size|mono-scale)\)|inherit|[0-9.]+em|calc\(.*\)|max\(var\(--text-meta\), (var\(--mono-scale\)|[0-9.]+em)\))$/;
     expect(values("font-size").filter(({ value }) => !allowed.test(value))).toEqual([]);
   });
 
-  it("declares the ladder 11/13/15/18/22/28 and no other UI size token", () => {
+  it("declares the ladder 12/14/15/16/20/28 and no other UI size token", () => {
     const tokens = text(join(SRC, "styles/tokens.css"));
-    const sizes = [...tokens.matchAll(/--text-(meta|ui|chat|title|detail|display):\s*(\d+)px/g)].map((m) => Number(m[2]));
+    const sizes = [...tokens.matchAll(/--text-(meta|small|ui|read|title|display):\s*(\d+)px/g)].map((m) => Number(m[2]));
     expect(sizes.sort((a, b) => a - b)).toEqual([...Object.values(shared.typeLadder)].sort((a, b) => a - b));
   });
 
-  it("sets weights from 400, 500 and 600 only, bar the crease display face", () => {
-    const offenders = values("font-weight").filter(({ file, value }) => !/^(var\(--fw-(regular|medium|semibold)\)|400|500|600|inherit|normal)$/.test(value) && !file.endsWith("Crease.module.css"));
+  it("sets weights from 400, 500 and 600 only, bar the name face", () => {
+    const offenders = values("font-weight").filter(({ file, value }) => !/^(var\(--fw-(regular|medium|semibold)\)|400|500|600|inherit|normal)$/.test(value) && !(file.endsWith("design-system.css") && value === "800"));
     expect(offenders).toEqual([]);
     expect(text(join(SRC, "styles/tokens.css"))).not.toMatch(/--fw-bold/);
   });
@@ -56,20 +56,17 @@ describe("type census", () => {
     expect(wide).toEqual([]);
   });
 
-  it("collapses the eyebrow to the shared size and tracking", () => {
+  it("collapses the section label to 14 px sentence-case sans with no tracking", () => {
     const tokens = text(join(SRC, "styles/tokens.css"));
-    expect(tokens).toMatch(/--eyebrow-size:\s*11px;/);
-    expect(tokens).toMatch(/--eyebrow-tracking:\s*\.08em;/);
-    expect(shared.eyebrow).toMatchObject({ size: 11, tracking: 0.08, family: "mono" });
+    expect(tokens).toMatch(/--eyebrow-size:\s*14px;/);
+    expect(tokens).toMatch(/--eyebrow-tracking:\s*0em;/);
+    expect(shared.eyebrow).toMatchObject({ size: 14, tracking: 0, family: "sans", case: "sentence" });
   });
 
-  it("draws the crease face only at 22 px or more", () => {
-    const small = SOURCES.flatMap((file) =>
-      [...text(file).matchAll(/<Crease[^>]*\bsize=\{(\d+)\}/g)].filter((m) => Number(m[1]) < 22).map(() => relative(SRC, file)),
-    );
-    expect(small).toEqual([]);
-    expect(text(join(SRC, "primitives/SettingsLayout.jsx"))).not.toMatch(/<Crease/);
-    expect(text(join(SRC, "primitives/BrowseModal.jsx"))).not.toMatch(/<Crease/);
+  it("keeps the name face to headers and the wordmark", () => {
+    expect(SOURCES.filter((f) => /<Crease|creaseVars/.test(text(f))).map((f) => relative(SRC, f))).toEqual([]);
+    expect(text(join(SRC, "primitives/SettingsLayout.jsx"))).not.toMatch(/ds-name/);
+    expect(text(join(SRC, "primitives/BrowseModal.jsx"))).not.toMatch(/ds-name/);
     expect(text(join(SRC, "features/VersionButton.module.css"))).toMatch(/\.brandMark\s*\{\s*font-size:\s*var\(--text-detail\)/);
   });
 

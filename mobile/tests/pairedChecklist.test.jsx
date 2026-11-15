@@ -93,18 +93,18 @@ describe('paired checklist', () => {
     expect(screen.getByText('built on this phone from your daemon · no push service')).toBeTruthy();
     const rows = screen.getByText('Notifications').closest('[role="list"]');
     expect(style(rows).marginHorizontal).toBe(-16);
-    expect(container.querySelector('[data-fold]').dataset.size).toBe('72');
+    expect(container.querySelector('[data-shape]').dataset.size).toBe('72');
     expect(container.innerHTML).not.toContain('"backgroundColor":"#f4f4f4"');
   });
 
-  it('has one primary, Open inbox at 56 pt, and the Enable control is a secondary of 44 pt', async () => {
+  it('has one primary, Open inbox at 56 pt, and the Enable control is a secondary of 48 pt', async () => {
     render(<PairSuccess />);
     await ready();
     expect(primaries().map((b) => b.textContent)).toEqual(['Open inbox']);
     const open = screen.getByText('Open inbox');
     expect([open.dataset.size, open.dataset.height, open.dataset.full]).toEqual(['hero', '56', 'true']);
     const enable = screen.getByText('Enable');
-    expect([enable.dataset.variant, enable.dataset.size, enable.dataset.height]).toEqual(['secondary', 'md', '44']);
+    expect([enable.dataset.variant, enable.dataset.size, enable.dataset.height]).toEqual(['secondary', 'md', '48']);
     const toggle = screen.getByRole('switch');
     expect(style(toggle.parentElement)).toMatchObject({ minHeight: 44, minWidth: 44 });
   });
@@ -204,7 +204,7 @@ describe('alerts', () => {
     await waitFor(() => expect(screen.getByText('Open settings')).toBeTruthy());
     expect(screen.queryByText('Enable')).toBeNull();
     const open = screen.getByText('Open settings');
-    expect([open.dataset.variant, open.dataset.size, open.dataset.height]).toEqual(['secondary', 'md', '44']);
+    expect([open.dataset.variant, open.dataset.size, open.dataset.height]).toEqual(['secondary', 'md', '48']);
     fireEvent.click(open);
     expect(Linking.openSettings).toHaveBeenCalledTimes(1);
     expect(primaries().map((b) => b.textContent)).toEqual(['Open inbox']);

@@ -33,7 +33,7 @@ export default function SkillsRoute() {
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-      <PanelHeader profile={id} section="SKILLS" count={rows.length} onBack={goBack} />
+      <PanelHeader profile={id} section="Skills" count={rows.length} onBack={goBack} />
       {wide ? (
         <MasterDetail
           list={<SkillsList profile={id} selectedKey={selected ? skillKey(selected) : null} onOpen={setPicked} />}

@@ -3,9 +3,8 @@
   align-items: center;
   padding: var(--chip-pad);
   border-radius: var(--r-xs);
-  background: var(--hover);
-  border: .5px solid var(--line);
-  font-family: var(--font-mono);
+  background: var(--selected);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   font-weight: var(--fw-medium);
   line-height: var(--lh-tight);

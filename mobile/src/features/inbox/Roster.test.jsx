@@ -18,6 +18,7 @@ vi.mock('react-native', () => {
     'data-size': h.pick(style, 'fontSize'),
     'data-bg': h.pick(style, 'backgroundColor'),
     'data-border': h.pick(style, 'borderColor'),
+    'data-width': h.pick(style, 'width'),
   });
   const View = ({ children, ...p }) => React.createElement('div', plain(p), children);
   const Text = ({ children, ...p }) => React.createElement('span', plain(p), children);
@@ -74,11 +75,11 @@ vi.mock('react-native', () => {
 vi.mock('../../theme/ThemeContext', () => ({
   useTheme: () => ({
     colors: {
-      bg: '#fff', bgElev: '#ffffff', field: '#f1f3f5', line: '#eee', line2: '#ddd',
+      bg: '#fff', bgElev: '#ffffff', field: '#f1f3f5', fill: '#f1f3f5', line: '#eee', line2: '#ddd',
       ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999',
     },
-    fonts: { sans: { regular: 'r', semibold: 's' }, mono: 'mono', monoMedium: 'monoMedium' },
-    fontSizes: { xs: 11, sm: 12, md: 14, lg: 15, xxl: 22, display: 28 },
+    fonts: { sans: { regular: 'r', medium: 'm', semibold: 's' }, mono: 'mono', monoMedium: 'monoMedium' },
+    fontSizes: { xs: 12, sm: 14, md: 15, lg: 16, xxl: 20, display: 28 },
     lineHeights: { cozy: 1.3, normal: 1.5 },
     mobile: { inputH: 44 },
   }),
@@ -97,7 +98,6 @@ vi.mock('../../components/Button', () => ({
     React.createElement('button', { type: 'button', 'data-primary': String((variant ?? 'primary') === 'primary'), 'data-size': size, onClick: onPress }, title),
 }));
 
-vi.mock('./InboxRow', () => ({ SEPARATOR_INSET: 52 }));
 
 vi.mock('../../components/Busy', () => ({
   Busy: ({ label, size }) => React.createElement('span', { 'data-testid': 'busy', 'data-size': size }, label),
@@ -140,31 +140,50 @@ function rows() {
 }
 
 describe('Roster sections', () => {
-  it('draws pinned, profiles and workgroups in that order with mono eyebrow labels', () => {
+  it('draws the pinned tiles, then profiles and workgroups under 14 pt sentence-case labels in ink3', () => {
     render(<Roster items={ITEMS} query="" onQueryChange={() => {}} renderRow={plainRow} />);
-    expect(sections()).toEqual(['pinned', 'profiles', 'workgroups']);
+    expect(sections()).toEqual(['tiles', 'profiles', 'workgroups']);
     expect(rows()).toEqual(['alpi', 'wg2', 'pixel', 'wg1']);
-    for (const label of ['PINNED', 'PROFILES', 'WORKGROUPS']) {
+    for (const label of ['Profiles', 'Workgroups']) {
       const header = screen.getByText(label);
-      expect(header.getAttribute('data-font')).toBe('monoMedium');
+      expect(header.getAttribute('data-font')).toBe('m');
       expect(header.getAttribute('data-color')).toBe('#666');
-      expect(header.getAttribute('data-size')).toBe('11');
+      expect(header.getAttribute('data-size')).toBe('14');
     }
+    expect(screen.queryByText('Pinned')).toBeNull();
+    expect(screen.queryByText('PINNED')).toBeNull();
+  });
+
+  it('hands every pinned item to renderRow as a tile, in one wrapping row', () => {
+    const renderRow = vi.fn(plainRow);
+    render(<Roster items={ITEMS} query="" onQueryChange={() => {}} renderRow={renderRow} />);
+    const tiles = renderRow.mock.calls.filter(([arg]) => arg.tile).map(([arg]) => arg.item.id);
+    expect(tiles).toEqual(['alpi', 'wg2']);
+    const strip = document.querySelector('[testid="pinned-tiles"]');
+    expect(strip).toBeTruthy();
+    expect(strip.querySelectorAll('[data-row]')).toHaveLength(2);
+  });
+
+  it('gives every pinned tile a third of the strip, so the tiles fill the sidebar like the desktop grid', () => {
+    render(<Roster items={ITEMS} query="" onQueryChange={() => {}} renderRow={plainRow} />);
+    const cells = [...document.querySelector('[testid="pinned-tiles"]').children];
+    expect(cells).toHaveLength(2);
+    for (const cell of cells) expect(cell.getAttribute('data-width')).toBe('33.3333%');
   });
 
   it('narrows every section with one query and drops the sections left empty', () => {
     const { rerender } = render(<Roster items={ITEMS} query="" onQueryChange={() => {}} renderRow={plainRow} />);
     rerender(<Roster items={ITEMS} query="hotel" onQueryChange={() => {}} renderRow={plainRow} />);
-    expect(sections()).toEqual(['pinned', 'workgroups']);
+    expect(sections()).toEqual(['tiles', 'workgroups']);
     expect(rows()).toEqual(['wg2', 'wg1']);
-    expect(screen.queryByText('PROFILES')).toBeNull();
+    expect(screen.queryByText('Profiles')).toBeNull();
   });
 
   it('never renders a bare label for a section with no items', () => {
     render(<Roster items={[pixel]} query="" onQueryChange={() => {}} renderRow={plainRow} />);
     expect(sections()).toEqual(['profiles']);
-    expect(screen.queryByText('PINNED')).toBeNull();
-    expect(screen.queryByText('WORKGROUPS')).toBeNull();
+    expect(screen.queryByTestId('pinned-tiles')).toBeNull();
+    expect(screen.queryByText('Workgroups')).toBeNull();
   });
 
   it('reports what the reader typed', () => {
@@ -180,11 +199,11 @@ describe('Roster sections', () => {
     expect(screen.getByText('pixel')).toBeTruthy();
   });
 
-  it('draws the filter as a well on the elevated surface with a hairline edge, like every field', () => {
+  it('draws the filter as a well, the fill with no edge at rest, like every field', () => {
     render(<Roster items={ITEMS} query="" onQueryChange={() => {}} renderRow={plainRow} searchOpen />);
     const field = screen.getByLabelText('Filter list').parentElement;
-    expect(field.getAttribute('data-bg')).toBe('#ffffff');
-    expect(field.getAttribute('data-border')).toBe('#ddd');
+    expect(field.getAttribute('data-bg')).toBe('#f1f3f5');
+    expect(field.getAttribute('data-border')).toBe('transparent');
   });
 
   it('calls the entity a profile in the filter, so the @alpi row stays unambiguous', () => {
@@ -197,18 +216,24 @@ describe('Roster sections', () => {
 describe('Roster front door', () => {
   const host = { kind: 'profile', id: 'default', name: 'default', label: 'alpi', preview: 'quiet', raw: { name: 'default', is_default: true } };
 
-  it('draws the default profile first, above pinned, with no label and a seam under it', () => {
+  it('draws the default profile as the first tile, before the pinned ones, with no label and a seam under the tiles', () => {
     render(<Roster items={[pixel, roma, host, alpi]} query="" onQueryChange={() => {}} renderRow={plainRow} />);
-    expect(sections()).toEqual(['front', 'pinned', 'profiles']);
-    expect(rows()[0]).toBe('default');
-    const front = document.querySelector('[data-section="front"]');
-    expect(front.textContent).toBe('alpi');
-    expect(front.querySelector('[testid="front-seam"]')).toBeTruthy();
+    expect(sections()).toEqual(['tiles', 'profiles']);
+    expect(rows().slice(0, 3)).toEqual(['default', 'wg2', 'alpi']);
+    const tiles = document.querySelector('[data-section="tiles"]');
+    expect(tiles.querySelector('[testid="front-seam"]')).toBeTruthy();
+  });
+
+  it('parts the front row and the rows below by space alone, with no hairline anywhere', () => {
+    render(<Roster items={[host, pixel]} query="" onQueryChange={() => {}} renderRow={plainRow} />);
+    expect(h.list.ItemSeparatorComponent).toBeUndefined();
+    const seam = document.querySelector('[testid="front-seam"]');
+    expect(seam.getAttribute('data-bg') ?? undefined).toBeUndefined();
   });
 
   it('drops the seam when the default profile is the only row', () => {
     render(<Roster items={[host]} query="" onQueryChange={() => {}} renderRow={plainRow} />);
-    expect(sections()).toEqual(['front']);
+    expect(sections()).toEqual(['tiles']);
     expect(document.querySelector('[testid="front-seam"]')).toBeNull();
   });
 });
@@ -292,7 +317,7 @@ describe('Roster empty states', () => {
     expect(screen.queryByText('No profiles or workgroups yet')).toBeNull();
   });
 
-  it('keeps the small ink alpaca with its words under the rows while refreshing a non-empty roster', () => {
+  it('keeps the small ink Twin with its words under the rows while refreshing a non-empty roster', () => {
     render(<Roster items={ITEMS} query="" onQueryChange={() => {}} renderRow={plainRow} loading />);
     expect(screen.getByTestId('busy').textContent).toBe('Refreshing profiles and workgroups');
     expect(screen.getByTestId('busy').dataset.size).toBe('18');
@@ -328,11 +353,11 @@ describe('Roster row seam', () => {
 describe('Roster section add', () => {
   it('puts a labelled + on the profiles and workgroups headings', () => {
     render(<Roster items={ITEMS} query="" onQueryChange={() => {}} renderRow={plainRow} addActions={ADD_ACTIONS} />);
-    expect(header('PROFILES').querySelector('[aria-label="New profile"] [data-icon="plus"]')).toBeTruthy();
-    expect(header('WORKGROUPS').querySelector('[aria-label="New workgroup"] [data-icon="plus"]')).toBeTruthy();
+    expect(header('Profiles').querySelector('[aria-label="New profile"] [data-icon="plus"]')).toBeTruthy();
+    expect(header('Workgroups').querySelector('[aria-label="New workgroup"] [data-icon="plus"]')).toBeTruthy();
   });
 
-  it('leaves the pinned heading bare — a pin is not something you create', () => {
+  it('gives the pinned tiles no heading and no add — a pin is not something you create', () => {
     render(
       <Roster
         items={ITEMS}
@@ -342,13 +367,13 @@ describe('Roster section add', () => {
         addActions={{ ...ADD_ACTIONS, pinned: { label: 'New pin', onPress: () => {} } }}
       />,
     );
-    expect(header('PINNED').querySelector('button')).toBeNull();
+    expect(screen.queryByText('Pinned')).toBeNull();
     expect(screen.queryByLabelText('New pin')).toBeNull();
   });
 
   it('keeps every heading bare when no add action is handed in', () => {
     render(<Roster items={ITEMS} query="" onQueryChange={() => {}} renderRow={plainRow} />);
-    for (const label of ['PINNED', 'PROFILES', 'WORKGROUPS']) {
+    for (const label of ['Profiles', 'Workgroups']) {
       expect(header(label).querySelector('button')).toBeNull();
     }
   });
@@ -380,7 +405,7 @@ describe('Roster creation reachability', () => {
   it('holds both headings when every row is pinned', () => {
     const actions = addActions();
     render(<Roster items={[alpi, roma]} query="" onQueryChange={() => {}} renderRow={plainRow} addActions={actions} />);
-    expect(sections()).toEqual(['pinned', 'profiles', 'workgroups']);
+    expect(sections()).toEqual(['tiles', 'profiles', 'workgroups']);
     expect(rows()).toEqual(['alpi', 'wg2']);
     fireEvent.click(screen.getByLabelText('New profile'));
     fireEvent.click(screen.getByLabelText('New workgroup'));
@@ -441,11 +466,12 @@ describe('Roster creation reachability', () => {
 });
 
 describe('Roster section add targets', () => {
-  it('pads the New profile and New workgroup buttons to the 44 pt minimum', () => {
+  it('gives the New profile and New workgroup buttons a real 44 pt box around the 28 pt glyph, no slop', () => {
     render(<Roster items={[pixel]} paired renderRow={plainRow} addActions={{ profiles: { label: 'New profile', onPress: () => {} }, workgroups: { label: 'New workgroup', onPress: () => {} } }} />);
     for (const name of ['New profile', 'New workgroup']) {
       const button = screen.getByLabelText(name);
-      expect(Number(button.getAttribute('data-h')) + Number(button.getAttribute('data-slop')) * 2).toBe(44);
+      expect(Number(button.getAttribute('data-h'))).toBe(44);
+      expect(button.getAttribute('data-slop')).toBeNull();
       expect(button.getAttribute('accessibilityRole')).toBe('button');
     }
   });

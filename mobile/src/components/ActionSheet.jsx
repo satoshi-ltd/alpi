@@ -4,18 +4,20 @@ import { Dimensions, Modal, Pressable, ScrollView, Text, useWindowDimensions, Vi
 import { GestureDetector } from 'react-native-gesture-handler';
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { alpha, radii, space, lineHeights, typography, veil } from '../theme/tokens';
+import { alpha, nestInset, radii, space, lineHeights, typography, veil } from '../theme/tokens';
 
 import { selection } from '../lib/haptics';
 import { usePane } from '../nav/PaneContext';
 import { dotShape } from './dotShape';
 import { useTheme } from '../theme/ThemeContext';
-import { PICKER_GAP, PickerLead, PICKER_TEXT_EDGE } from './PickerLead';
+import { PICKER_GAP, PickerLead } from './PickerLead';
 import { SheetClose } from './SheetClose';
 import { Toggle } from './Toggle';
 import { useExitSnapshot } from './useExitSnapshot';
 import { useSheetGesture } from './useSheetGesture';
 
+
+export const ACTION_GUTTER = space.s3;
 
 
 // Action list caps at 60vh, scrolls internally above the cap.
@@ -61,7 +63,7 @@ export function ActionSheet({ open, onClose, title, subtitle, description, actio
             </Text>
           ) : null}
           {view.subtitle ? (
-            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes[typography.caption.size], color: colors.ink3 }}>
+            <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes[typography.caption.size], color: colors.ink3 }}>
               {view.subtitle}
             </Text>
           ) : null}
@@ -81,7 +83,6 @@ export function ActionSheet({ open, onClose, title, subtitle, description, actio
         </View>
         <SheetClose onPress={onClose} />
       </View>
-      <View style={{ height: 0.5, backgroundColor: colors.line }} />
     </View>
   );
 
@@ -105,17 +106,17 @@ export function ActionSheet({ open, onClose, title, subtitle, description, actio
                   position: 'absolute',
                   ...popover,
                   width: POPOVER_W,
-                  backgroundColor: colors.bgPane,
+                  backgroundColor: colors.bgElev,
                   ...shadow.popover,
-                  borderRadius: radii.xs,
+                  borderRadius: radii.surface,
                   overflow: 'hidden',
-                  paddingVertical: space.s1,
+                  padding: nestInset,
                 }
               : {
-                  backgroundColor: colors.bgPane,
+                  backgroundColor: colors.bgElev,
                   ...(twoPane ? shadow.dialog : shadow.sheet),
-                  borderTopLeftRadius: radii.xs,
-                  borderTopRightRadius: radii.xs,
+                  borderTopLeftRadius: radii.sheet,
+                  borderTopRightRadius: radii.sheet,
                   overflow: 'hidden',
                   ...dialog,
                 },
@@ -130,7 +131,7 @@ export function ActionSheet({ open, onClose, title, subtitle, description, actio
           >
             {view.actions.map((a, i) => {
               if (a.divider) {
-                return <View key={`d-${i}`} style={{ height: 0.5, backgroundColor: colors.line, marginLeft: pickable ? PICKER_TEXT_EDGE : 52 }} />;
+                return <View key={`d-${i}`} testID="action-group-gap" style={{ height: space.s3 }} />;
               }
               const isSwitch = a.kind === 'switch';
               return (
@@ -147,14 +148,16 @@ export function ActionSheet({ open, onClose, title, subtitle, description, actio
                     onClose?.();
                     a.onPress?.();
                   }}
-                  android_ripple={{ color: colors.selected }}
+                  android_ripple={{ color: colors.pressed }}
                   accessibilityState={isSwitch ? { disabled: !!a.disabled, checked: !!a.value } : { disabled: !!a.disabled, selected: !!a.selected }}
                   style={({ pressed }) => ({
                     flexDirection: 'row',
                     alignItems: 'center',
                     gap: PICKER_GAP,
-                    paddingHorizontal: space.s7,
+                    marginHorizontal: popover ? 0 : ACTION_GUTTER,
+                    paddingHorizontal: popover ? space.s7 - nestInset : space.s7 - ACTION_GUTTER,
                     paddingVertical: space.s6,
+                    borderRadius: radii.control,
                     backgroundColor: pressed || a.selected ? colors.selected : 'transparent',
                     opacity: a.disabled ? alpha.disabled : 1,
                   })}
@@ -175,14 +178,14 @@ export function ActionSheet({ open, onClose, title, subtitle, description, actio
                     style={{
                       flex: 1,
                       fontFamily: fonts.sans.regular,
-                      fontSize: fontSizes.lg,
+                      fontSize: fontSizes.md,
                       color: a.danger ? colors.dangerText : colors.ink,
                     }}
                   >
                     {a.label}
                   </Text>
                   {a.detail ? (
-                    <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.sm, color: a.detailDanger ? colors.dangerText : colors.ink3 }}>
+                    <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.sm, color: a.detailDanger ? colors.dangerText : colors.ink3 }}>
                       {a.detail}
                     </Text>
                   ) : null}

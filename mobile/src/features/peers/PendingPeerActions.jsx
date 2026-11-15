@@ -11,14 +11,14 @@ export function PendingPeerActions({ onDiscard, onAccept }) {
     <>
       <Pressable onPress={onDiscard} accessibilityRole="button" accessibilityLabel="Discard" style={TARGET}>
         {({ pressed }) => (
-          <View style={{ paddingHorizontal: space.s5, paddingVertical: space.s2, borderRadius: radii.xs, borderWidth: 0.5, borderColor: colors.line2, backgroundColor: pressed ? colors.selected : 'transparent' }}>
-            <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.xs, color: colors.ink3 }}>Discard</Text>
+          <View style={{ paddingHorizontal: space.s5, paddingVertical: space.s2, borderRadius: radii.control, backgroundColor: pressed ? colors.pressed : 'transparent' }}>
+            <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.xs, color: colors.ink3 }}>Discard</Text>
           </View>
         )}
       </Pressable>
       <Pressable onPress={onAccept} accessibilityRole="button" accessibilityLabel="Accept" style={TARGET}>
         {({ pressed }) => (
-          <View style={{ paddingHorizontal: space.s5, paddingVertical: space.s2, borderRadius: radii.xs, backgroundColor: pressed ? colors.ink2 : colors.ink }}>
+          <View style={{ paddingHorizontal: space.s5, paddingVertical: space.s2, borderRadius: radii.control, backgroundColor: pressed ? colors.ink2 : colors.ink }}>
             <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.xs, color: colors.bgPane }}>Accept</Text>
           </View>
         )}

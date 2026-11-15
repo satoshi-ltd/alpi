@@ -15,7 +15,6 @@ export { default as Checkbox } from "./Checkbox.jsx";
 export { default as Chip } from "./Chip.jsx";
 export { default as Composer } from "./Composer.jsx";
 export { default as ConfirmDelete, ConfirmDeleteAction, ConfirmSheet } from "./ConfirmDelete.jsx";
-export { default as Crease } from "./Crease.jsx";
 export { default as ConnPill } from "./ConnPill.jsx";
 export { default as ContextMenu, ContextMenuMount } from "./ContextMenu.jsx";
 export { default as DialogFooter } from "./DialogFooter.jsx";

@@ -1,6 +1,5 @@
 .head {
   padding: var(--sp-12) var(--sp-16);
-  border-bottom: .5px solid var(--line);
   background: var(--bg-side);
 }
 
@@ -21,13 +20,13 @@
 .item {
   width: 100%;
   padding: var(--sp-8) var(--sp-12);
-  border-radius: var(--r-xs);
+  border-radius: var(--r-control);
   gap: var(--sp-8);
   text-align: left;
   background: transparent;
   border: 0;
   cursor: pointer;
-  transition: background var(--dur-1) var(--ease);
+  transition: background-color var(--state-out);
 }
 
 .item:hover {

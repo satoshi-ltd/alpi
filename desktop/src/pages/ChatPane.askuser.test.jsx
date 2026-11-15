@@ -25,18 +25,18 @@ function answerGlyph(profile) {
       onRetryMessage={vi.fn()}
     />,
   );
-  return screen.getByText("the blue one").parentElement.querySelector("[data-fold]");
+  return screen.getByText("the blue one").parentElement.querySelector("[data-shape]");
 }
 
 describe("ChatPane — ask_user answer", () => {
-  it("marks the answer with the profile's own fold in its colour", () => {
-    const glyph = answerGlyph({ name: "doc", model: "x/y", fold: "shield", accent: "#3899e2" });
-    expect(glyph.dataset.fold).toBe("shield");
-    expect(glyph.querySelector("polygon")).toBeTruthy();
-    expect(document.querySelector(".ds-diamond")).toBeNull();
+  it("marks the answer with the profile's own mark in its colour", () => {
+    const glyph = answerGlyph({ name: "doc", model: "x/y", shape: "bell", accent: "#3899e2" });
+    expect(glyph.dataset.shape).toBe("bell");
+    expect(glyph.dataset.mark).toBe("bell");
+    expect(glyph.querySelector("path[data-body]").getAttribute("fill")).toBe("#3899e2");
   });
 
-  it("marks the default profile's answer with the alpaca", () => {
-    expect(answerGlyph({ name: "default", model: "x/y", fold: "alpaca", accent: null }).dataset.fold).toBe("alpaca");
+  it("marks the default profile's answer with Twin", () => {
+    expect(answerGlyph({ name: "default", model: "x/y", shape: "twin", accent: null }).dataset.mark).toMatch(/^alpi-twin/);
   });
 });

@@ -16,14 +16,17 @@ const settingsSources = [
 describe("settings rows", () => {
   const css = read("primitives/SettingsLayout.module.css");
 
-  it("pitches rows at 40 with a hairline between them", () => {
-    expect(css).toMatch(/\.fieldRow \{[^}]*min-height: var\(--ctl-40\);[^}]*border-bottom: \.5px solid var\(--line\)/);
-    expect(css).toMatch(/\.sectionBody > \.fieldRow:last-child \{\s*border-bottom: 0;/);
+  it("pitches rows at 56 with the label and its description left and the control right, parted by space, never a rule", () => {
+    expect(css).toMatch(/\.fieldRow \{[^}]*min-height: 56px;/);
+    expect(css).toMatch(/\.fieldLabel \{[^}]*font-size: var\(--text-ui\);[^}]*font-weight: var\(--fw-medium\);/);
+    expect(css).toMatch(/\.fieldHelper \{[^}]*font-family: var\(--font-sans\);[^}]*font-size: var\(--text-small\);[^}]*color: var\(--ink-3\);/);
+    expect(css).toMatch(/\.fieldControl \{[^}]*justify-content: flex-end;/);
+    expect(css).not.toMatch(/border(-bottom|-top)?:[^;]*var\(--line/);
+    expect(css).not.toMatch(/inset 0 \.5px 0/);
   });
 
-  it("rings in-row text actions so their box edge is the value column edge", () => {
-    expect(css).toMatch(/\.fieldControl > button\[data-variant="ghost"\][^{]*\{[^}]*box-shadow: var\(--ring-ctrl\)/);
-    expect(css).toMatch(/\.fieldControl > button\[data-variant="danger-ghost"\]/);
+  it("leaves in-row ghost actions without a ring", () => {
+    expect(css).not.toMatch(/--ring-ctrl|data-variant="ghost"\][^{]*\{[^}]*box-shadow/);
   });
 
   it("tags every button with its variant", () => {

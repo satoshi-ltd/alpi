@@ -34,8 +34,8 @@ export function JumpToLatest({ visible, onPress }) {
           gap: space.s3,
           paddingHorizontal: space.s6,
           height: mobile.tap,
-          borderRadius: radii.xs,
-          backgroundColor: pressed ? colors.selected : colors.bgPane,
+          borderRadius: radii.pill,
+          backgroundColor: pressed ? colors.selected : colors.bgElev,
           ...shadow.popover,
         })}
       >

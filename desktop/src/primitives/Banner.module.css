@@ -7,12 +7,17 @@
   flex-shrink: 0;
 }
 
+.glyph {
+  margin-inline: calc((var(--icon-md) - var(--icon-sm)) / 2);
+  flex-shrink: 0;
+}
+
 .body {
   flex: 1;
   min-width: 0;
   font-family: var(--font-sans);
-  font-size: var(--text-meta);
-  line-height: var(--sp-16);
+  font-size: var(--text-small);
+  line-height: var(--lh-small);
   color: var(--ink-2);
 }
 .body strong {
@@ -21,7 +26,9 @@
 }
 
 .action {
-  color: var(--ink);
-  font-size: var(--text-meta);
+  --alink-hover: var(--banner-text, var(--ink-2));
+  --alink-hover-fill: color-mix(in srgb, var(--banner-text, var(--ink-2)) 10%, transparent);
+  color: var(--banner-text, var(--ink-2));
+  font-size: var(--text-small);
   font-weight: var(--fw-semibold);
 }

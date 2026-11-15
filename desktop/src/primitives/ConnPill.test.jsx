@@ -57,3 +57,17 @@ describe("ConnPill", () => {
     expect(screen.queryByText("offline")).not.toBeInTheDocument();
   });
 });
+
+describe("ConnPill labelled by a visible or hidden caption", () => {
+  it("names the pill by the caption it is tied to, then its value", () => {
+    const { getByRole } = render(
+      <>
+        <span id="conn-cap">Connection</span>
+        <ConnPill name="This computer" host="host.sock" status="online" labelledBy="conn-cap" />
+      </>,
+    );
+    const button = getByRole("button", { name: "Connection This computer, online, host.sock" });
+    expect(button.getAttribute("aria-labelledby").split(" ")[0]).toBe("conn-cap");
+    expect(button.hasAttribute("aria-label")).toBe(false);
+  });
+});

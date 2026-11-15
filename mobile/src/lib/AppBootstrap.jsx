@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { radii, space } from '../theme/tokens';
 
-import { ALPACA_FOLD } from '../../../common/folds.mjs';
+import { TWIN_SHAPE } from '../../../common/shapes.mjs';
 import { Fold } from '../components/Fold';
 import { ensureRegistered as ensureAlnRegistered } from '../features/aln/backgroundTask';
 import { authenticate, biometricCapabilities, getBiometricPref } from './biometric';
@@ -82,7 +82,7 @@ export function AppBootstrap({ children }) {
           gap: space.s9,
         }}
       >
-        <Fold fold={ALPACA_FOLD} size={72} />
+        <Fold shape={TWIN_SHAPE} size={72} />
         <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.xxl, color: colors.ink }}>Locked</Text>
         <Text
           style={{
@@ -104,7 +104,7 @@ export function AppBootstrap({ children }) {
             paddingHorizontal: space.s9,
             paddingVertical: space.s6,
             backgroundColor: colors.ink,
-            borderRadius: radii.xs,
+            borderRadius: radii.pill,
           }}
         >
           <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.bgPane }}>

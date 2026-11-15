@@ -274,14 +274,14 @@ export default function CreateWorkgroupModal({
           </div>
           {isRecipe ? (
             <div className={styles.recipeHub}>
-              <Fold fold={hub?.fold} color={hub?.accent} /> @{profileLabel(recipeHub)}
+              <Fold shape={hub?.shape} color={hub?.accent} /> @{profileLabel(recipeHub)}
               <span className={styles.recipeName}>· {recipeMeta?.name}</span>
             </div>
           ) : (
             <>
               <Dropdown
                 trigger={{
-                  leading: hub && <Fold fold={hub.fold} color={hub.accent} />,
+                  leading: hub && <Fold shape={hub.shape} color={hub.accent} />,
                   label: hub ? `@${profileLabel(hub.name)}` : "Pick profile…",
                   trailing: hub?.model || undefined,
                 }}
@@ -296,7 +296,7 @@ export default function CreateWorkgroupModal({
                     <Dropdown.Row
                       key={p.name}
                       active={p.name === hubProfile}
-                      leading={<Fold fold={p.fold} color={p.accent} />}
+                      leading={<Fold shape={p.shape} color={p.accent} />}
                       caption={p.model || undefined}
                       onClick={() => {
                         setHubProfile(p.name);
@@ -364,7 +364,7 @@ export default function CreateWorkgroupModal({
                       </>
                     }
                   >
-                    <Fold fold={local?.fold} color={accent} /> @{p.id}
+                    <Fold shape={local?.shape} color={accent} /> @{p.id}
                   </Chip>
                 );
               })}

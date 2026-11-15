@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dateBucket, formatNextFire, groupByDate, lastRunShort, clockOrAge, relativeTime, shortDate } from "./time.js";
+import { dateBucket, daysAhead, formatNextFire, formatSoon, groupByDate, lastRunShort, clockOrAge, relativeTime, shortDate } from "./time.js";
 
 const NOW = new Date(2026, 5, 17, 12, 0, 0).getTime();
 const DAY = 86400000;
@@ -64,6 +64,33 @@ describe("formatNextFire", () => {
     const tomorrow = new Date(2026, 5, 18, 7, 0, 0);
     expect(formatNextFire(today.toISOString(), NOW)).toBe(`today ${CLOCK.format(today)}`);
     expect(formatNextFire(tomorrow.toISOString(), NOW)).toBe(`tomorrow ${CLOCK.format(tomorrow)}`);
+  });
+});
+
+describe("formatSoon", () => {
+  const at = (ms) => new Date(NOW + ms).toISOString();
+
+  it("counts down under six hours and shows the clock from six hours on", () => {
+    expect(formatSoon(at(25 * 60000), NOW)).toBe("in 25m");
+    expect(formatSoon(at(2 * 3600000 + 59 * 60000), NOW)).toBe("in 2h");
+    expect(formatSoon(at(6 * 3600000 - 60000), NOW)).toBe("in 5h");
+    const edge = new Date(NOW + 6 * 3600000);
+    expect(formatSoon(edge.toISOString(), NOW)).toBe(CLOCK.format(edge));
+  });
+
+  it("says now when due and nothing when the time is missing or invalid", () => {
+    expect(formatSoon(at(20000), NOW)).toBe("now");
+    expect(formatSoon(at(-60000), NOW)).toBe("now");
+    expect(formatSoon(null, NOW)).toBe("");
+    expect(formatSoon("nope", NOW)).toBe("");
+  });
+});
+
+describe("daysAhead", () => {
+  it("counts calendar days, not 24 h spans", () => {
+    expect(daysAhead(new Date(2026, 5, 17, 23, 59).getTime(), NOW)).toBe(0);
+    expect(daysAhead(new Date(2026, 5, 18, 0, 1).getTime(), NOW)).toBe(1);
+    expect(daysAhead(new Date(2026, 5, 20, 9, 0).getTime(), NOW)).toBe(3);
   });
 });
 

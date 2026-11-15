@@ -1,6 +1,7 @@
+from gen import ladder_px, section_label
 from loading_studies import BREATH, bone
 from notif_studies import MONO, ell, flex, spacer, stack, wrap
-from wg_settings_studies import (P, PIPELINES, WG_NAME, crease_name, glyph, mono, obj, phase_chip, phone, rippling)
+from wg_settings_studies import (P, PIPELINES, WG_NAME, name_text, glyph, mono, obj, phase_chip, phone)
 
 CHAIN = PIPELINES[0][1]
 STATES = {**{slug: "completed" for slug in CHAIN[:-1]}, "qa": "current"}
@@ -14,11 +15,11 @@ REPAIR_LINE = "restore the fr strings lens flagged…"
 
 
 def arrow_sep(size=11):
-    return f'<span style="font-size: {size}px; color: {P["ink3"]}; flex-shrink: 0" aria-hidden="true">→</span>'
+    return f'<span style="font-size: {ladder_px(size)}px; color: {P["ink3"]}; flex-shrink: 0" aria-hidden="true">→</span>'
 
 
 def sep(size=11):
-    return f'<span style="font-size: {size}px; color: {P["ink3"]}; flex-shrink: 0" aria-hidden="true">›</span>'
+    return f'<span style="font-size: {ladder_px(size)}px; color: {P["ink3"]}; flex-shrink: 0" aria-hidden="true">›</span>'
 
 
 def bullet():
@@ -40,30 +41,30 @@ def d_meta():
 
 
 def d_header(right):
-    left = stack(crease_name("mira", 17, WG_NAME), d_meta(), gap=6, extra="flex: 1; overflow: hidden")
+    left = stack(name_text("mira", 17, WG_NAME), d_meta(), gap=6, extra="flex: 1; overflow: hidden")
     more = f'<span style="width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">{glyph("more", 14, P["ink2"])}</span>'
-    return flex(left, right, wave(), more, gap=8, extra=f"padding: 12px 12px 10px 16px; box-shadow: inset 0 -0.5px 0 {P['line']}")
+    return flex(left, right, wave(), more, gap=8, extra="padding: 12px 12px 10px 16px; ")
 
 
 def ghost_button(inner, w=None):
     width = f"width: {w}px;" if w else ""
-    return (f'<span style="display: inline-flex; align-items: center; gap: 6px; {width} height: 28px; padding: 0 8px; border-radius: 4px; background: {P["hover"]}; '
+    return (f'<span style="display: inline-flex; align-items: center; gap: 6px; {width} height: 28px; padding: 0 8px; border-radius: 6px; background: {P["hover"]}; '
             f'box-sizing: border-box; min-width: 0; flex-shrink: 1">{inner}</span>')
 
 
 def progress_trigger(lead, phase_line, line, tone="ink"):
     top = flex(lead, phase_line, spacer(), mono("7 of 8", 11, P["ink"], 600), glyph("chevron-down", 11, P["ink3"]), gap=5)
     bottom = ell(line, 11.5, P["danger"] if tone == "danger" else P["ink3"])
-    return (f'<span style="display: flex; flex-direction: column; justify-content: center; gap: 3px; width: 196px; height: 44px; padding: 0 8px; border-radius: 4px; '
+    return (f'<span style="display: flex; flex-direction: column; justify-content: center; gap: 3px; width: 196px; height: 44px; padding: 0 8px; border-radius: 12px; '
             f'background: {P["hover"]}; box-sizing: border-box; flex-shrink: 0">{top}{bottom}</span>')
 
 
 def owner_trigger(key="hd"):
-    return progress_trigger(rippling("lens", 13, key), flex(mono("#qa", 11.5, P["ink"], 600), mono("@lens", 11, P["ink2"]), gap=5), QA_LINE)
+    return progress_trigger(obj("lens", 13, "working"), flex(mono("#qa", 11.5, P["ink"], 600), mono("@lens", 11, P["ink2"]), gap=5), QA_LINE)
 
 
 def repair_trigger(key="hr"):
-    return progress_trigger(rippling("lingua", 13, key), flex(mono("#qa", 11.5, P["ink"], 600), mono("@lingua", 11, P["ink2"]), gap=5), REPAIR_LINE)
+    return progress_trigger(obj("lingua", 13, "working"), flex(mono("#qa", 11.5, P["ink"], 600), mono("@lingua", 11, P["ink2"]), gap=5), REPAIR_LINE)
 
 
 def blocked_trigger():
@@ -71,11 +72,11 @@ def blocked_trigger():
 
 
 def eyebrow(value):
-    return mono(value, 10, P["ink3"], extra="letter-spacing: 0.08em; text-transform: uppercase; margin-right: 2px")
+    return section_label(value, P["ink3"], "margin-right: 2px")
 
 
 def strip_row(chips, pad="9px 16px"):
-    return (f'<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px 5px; padding: {pad}; box-shadow: inset 0 -0.5px 0 {P["line"]}">'
+    return (f'<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px 5px; padding: {pad}; ">'
             f'{eyebrow("pipeline")}{chips}</div>')
 
 
@@ -93,14 +94,14 @@ def strip(states, key, owner=True, assignee=None):
 
 def hub_task(slug, line, target):
     head = flex(obj("mira", 13), mono("mira", 11, P["ink2"], 600), mono("#231", 10, P["ink4"]), gap=5)
-    card = (f'<div style="padding: 9px 11px; border-radius: 4px; background: {P["pane"]}; box-shadow: 0 0 0 0.5px {P["line2"]}; display: flex; flex-direction: column; gap: 5px">'
-            f'{flex(mono("task", 9.5, P["ink3"], extra="letter-spacing: 0.08em; text-transform: uppercase"), mono("#" + slug, 11, P["ink"], 600), gap=6)}'
+    card = (f'<div style="padding: 9px 11px; border-radius: 20px; background: var(--card, #f4f4f4); display: flex; flex-direction: column; gap: 5px">'
+            f'{flex(section_label("task", P["ink3"], ""), mono("#" + slug, 11, P["ink"], 600), gap=6)}'
             f'{wrap(target + line, 12, P["ink2"], lh=1.45)}</div>')
     return f'<div style="padding: 12px 16px 14px; display: flex; flex-direction: column; gap: 6px; background: {P["bg"]}">{head}{card}</div>'
 
 
 def frame(*parts):
-    return (f'<div style="border-radius: 4px; background: {P["pane"]}; box-shadow: 0 0 0 1px {P["line2"]}; overflow: hidden; display: flex; flex-direction: column; min-width: 0">'
+    return (f'<div style="border-radius: 20px; background: {P["pane"]}; box-shadow: 0 0 0 1px {P["line2"]}; overflow: hidden; display: flex; flex-direction: column; min-width: 0">'
             f'{"".join(parts)}</div>')
 
 
@@ -121,7 +122,7 @@ def tooltip(slug, state, owner, word, seq, assignee=None):
     if assignee:
         who = stack(who, flex(obj(assignee, 13), mono("@" + assignee, 11, on_ink, 600), note("assigned by the hub"), gap=6), gap=5)
     rows = stack(wrap(TASK[slug], 11.5, on_ink, lh=1.45), note(f"{usd} · {tokens} tokens"), note("Click to jump to the post"), gap=6)
-    return (f'<div style="width: 280px; padding: 6px 10px; border-radius: 4px; background: {P["ink"]}; '
+    return (f'<div style="width: 280px; padding: 6px 10px; border-radius: 6px; background: {P["ink"]}; '
             f'display: flex; flex-direction: column; gap: 6px; box-sizing: border-box">{head}{who}{rows}</div>')
 
 
@@ -135,20 +136,20 @@ def hover_pair():
 
 def excerpt(states, key, assignee=None):
     tail = CHAIN[-3:]
-    return (f'<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px 5px; padding: 9px 12px; border-radius: 4px; background: {P["pane"]}; '
+    return (f'<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px 5px; padding: 9px 12px; border-radius: 20px; background: {P["pane"]}; '
             f'box-shadow: 0 0 0 1px {P["line2"]}">{mono("…", 11, P["ink4"])}{arrow_sep()}{chips(states, key, True, assignee, tail)}</div>')
 
 
 def m_header(right):
     back = f'<span style="width: 24px; height: 44px; display: inline-flex; align-items: center; flex-shrink: 0">{glyph("chevron-left", 20, P["ink2"])}</span>'
     meta = flex(obj("mira", 11), mono("@mira", 10.5, P["ink3"]), bullet(), mono("7", 10.5, P["ink3"]), bullet(), mono("$0.16/$5.00", 10.5, P["ink3"]), gap=4)
-    title = stack(crease_name("mira", 15, WG_NAME), meta, gap=4, extra="flex: 1; overflow: hidden")
+    title = stack(name_text("mira", 15, WG_NAME), meta, gap=4, extra="flex: 1; overflow: hidden")
     return flex(back, title, right, gap=6, extra=f"padding: 8px 10px 8px 6px; background: {P['bg']}")
 
 
 def m_owner_button(key="mh"):
-    return (f'<span style="display: inline-flex; align-items: center; gap: 5px; height: 44px; padding: 0 9px; border-radius: 4px; background: {P["hover"]}; flex-shrink: 0">'
-            f'{rippling("lens", 14, key)}{mono("7 of 8", 11, P["ink"], 600)}</span>')
+    return (f'<span style="display: inline-flex; align-items: center; gap: 5px; height: 44px; padding: 0 9px; border-radius: 6px; background: {P["hover"]}; flex-shrink: 0">'
+            f'{obj("lens", 14, "working")}{mono("7 of 8", 11, P["ink"], 600)}</span>')
 
 
 def fade(side):
@@ -162,14 +163,14 @@ def m_strip(key="ms"):
     current = phase_chip("qa", "current", f"{key}q", strong=True, height=30, size=12)
     left = f'<div style="display: flex; justify-content: flex-end; align-items: center; gap: 6px; overflow: hidden; white-space: nowrap; min-width: 0">{before}</div>'
     return (f'<div style="position: relative; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; column-gap: 6px; height: 46px; background: {P["pane"]}; '
-            f'box-shadow: inset 0 -0.5px 0 {P["line"]}">{left}{current}<span></span>{fade("left")}</div>')
+            f'">{left}{current}<span></span>{fade("left")}</div>')
 
 
 def m_chat(slug, line):
     return (f'<div style="flex: 1; padding: 12px; display: flex; flex-direction: column; gap: 8px; background: {P["bg"]}">'
             f'{flex(obj("mira", 14), mono("mira", 11.5, P["ink2"], 600), gap=6)}'
-            f'<div style="padding: 10px 12px; border-radius: 4px; background: {P["pane"]}; display: flex; flex-direction: column; gap: 5px">'
-            f'{flex(mono("task", 9.5, P["ink3"], extra="letter-spacing: 0.08em; text-transform: uppercase"), mono("#" + slug, 12, P["ink"], 600), gap=6)}'
+            f'<div style="padding: 10px 12px; border-radius: 20px; background: {P["pane"]}; display: flex; flex-direction: column; gap: 5px">'
+            f'{flex(section_label("task", P["ink3"], ""), mono("#" + slug, 12, P["ink"], 600), gap=6)}'
             f'{wrap(line, 13, P["ink2"], lh=1.45)}</div></div>')
 
 
@@ -180,8 +181,8 @@ def m_proposed():
 def sheet_button(label, primary=False):
     bg = P["ink"] if primary else P["hover"]
     fg = P["pane"] if primary else P["ink"]
-    return (f'<span style="flex: 1; height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; background: {bg}; '
-            f'font-size: 14px; font-weight: 600; color: {fg}">{label}</span>')
+    return (f'<span style="flex: 1; height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; background: {bg}; '
+            f'font-size: 15px; font-weight: 600; color: {fg}">{label}</span>')
 
 
 def m_sheet(key="sh"):
@@ -194,7 +195,7 @@ def m_sheet(key="sh"):
     scrim = "rgba(20,20,20,0.32)"
     return (f'<div style="flex: 1; position: relative; display: flex; flex-direction: column; justify-content: flex-end; background: {P["bg"]}">'
             f'<div style="position: absolute; inset: 0; background: {scrim}"></div>'
-            f'<div style="position: relative; padding: 10px 16px 18px; border-radius: 4px 4px 0 0; background: {P["elev"]}; box-shadow: 0 0 0 1px #8c8c8c">{body}</div></div>')
+            f'<div style="position: relative; padding: 10px 16px 18px; border-radius: 28px 28px 0 0; background: {P["elev"]}; box-shadow: 0 0 0 1px #8c8c8c">{body}</div></div>')
 
 
 def m_sheet_phone():
@@ -217,7 +218,7 @@ GHOST_WIDTHS = _widths(_source("desktop", "src", "primitives", "PipelineStages.j
 PLACEHOLDER_WIDTHS = _widths(_source("mobile", "src", "features", "chat", "PipelineStrip.jsx"), "PLACEHOLDER_WIDTHS")
 def ghost_chips(count):
     n = min(max(count, 1), len(GHOST_WIDTHS))
-    return BREATH + "".join((arrow_sep() if i else "") + bone(f"{GHOST_WIDTHS[i]}px", 21, 2, i, "pl-ghost") for i in range(n))
+    return BREATH + "".join((arrow_sep() if i else "") + bone(f"{GHOST_WIDTHS[i]}px", 21, 6, i, "pl-ghost") for i in range(n))
 
 
 def d_before_run():
@@ -233,7 +234,7 @@ def d_before_run():
 def m_pending_strip(key="mbr"):
     items = "".join((sep(12) if i else "") + phase_chip(slug, None, f"{key}{i}", True, None, True, 30, 12) for i, slug in enumerate(CHAIN))
     return (f'<div style="position: relative; display: flex; align-items: center; gap: 8px; height: 46px; padding: 0 16px; overflow: hidden; white-space: nowrap; background: {P["pane"]}; '
-            f'box-shadow: inset 0 -0.5px 0 {P["line"]}">{items}{fade("right")}</div>')
+            f'">{items}{fade("right")}</div>')
 
 
 def m_placeholder_strip():
@@ -241,7 +242,7 @@ def m_placeholder_strip():
     bars = "".join((sep(12) if i else "") + bone(f"{PLACEHOLDER_WIDTHS[i]}px", 30, 4, i, "pl-bar")
                    for i in range(n))
     return (f'<div style="display: flex; align-items: center; gap: 8px; height: 46px; padding: 0 16px; overflow: hidden; background: {P["pane"]}; '
-            f'box-shadow: inset 0 -0.5px 0 {P["line"]}">{BREATH}{bars}</div>')
+            f'">{BREATH}{bars}</div>')
 
 
 def m_before_run():

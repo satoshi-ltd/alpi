@@ -31,6 +31,11 @@ export function cycleTheme(current = getTheme()) {
   return next;
 }
 
+export function nextTheme(current = getTheme()) {
+  const i = ORDER.indexOf(current);
+  return ORDER[(i + 1) % ORDER.length];
+}
+
 export function applyStored() {
   apply(getTheme());
 }

@@ -4,14 +4,15 @@
   align-items: center;
   padding: var(--sp-8) var(--sp-12);
   margin-bottom: var(--sp-12);
-  background: color-mix(in srgb, var(--c-danger) 10%, var(--bg-pane));
-  border-radius: var(--r-xs);
-  box-shadow: var(--ring-ctrl);
+  background: color-mix(in srgb, var(--c-danger) var(--banner-tint), var(--bg-pane));
+}
+
+@media (forced-colors: active) {
+  .banner { border-block-end: 1px solid CanvasText; }
 }
 
 .icon {
   flex-shrink: 0;
-  color: var(--c-danger-text);
 }
 
 .text {
@@ -23,17 +24,27 @@
 }
 
 .lead {
-  font-size: var(--text-meta);
+  font-size: var(--text-small);
   font-weight: var(--fw-semibold);
   color: var(--ink);
 }
 
 .detail {
-  font-size: var(--text-meta);
+  font-size: var(--text-small);
   line-height: var(--lh-cozy);
-  color: var(--ink-3);
+  color: var(--ink-2);
 }
 
-.banner > button {
+.action {
+  --alink-hover: var(--c-danger-text);
+  --alink-hover-fill: color-mix(in srgb, var(--c-danger) 10%, transparent);
   flex-shrink: 0;
+  font-size: var(--text-small);
+  font-weight: var(--fw-semibold);
+  color: var(--c-danger-text);
+}
+
+.action:disabled {
+  opacity: var(--alpha-disabled);
+  cursor: default;
 }

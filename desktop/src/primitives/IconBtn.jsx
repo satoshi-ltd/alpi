@@ -1,9 +1,9 @@
 import { forwardRef } from "react";
 import Button from "./Button.jsx";
 
-const IconBtn = forwardRef(function IconBtn({ children, tip, tipSide = "down", ...rest }, ref) {
+const IconBtn = forwardRef(function IconBtn({ children, tip, tipSide = "down", size = "sm", ...rest }, ref) {
   return (
-    <Button ref={ref} variant="ghost" iconOnly tip={tip} tipSide={tipSide} {...rest}>
+    <Button ref={ref} variant="ghost" size={size} iconOnly tip={tip} tipSide={tipSide} {...rest}>
       {children}
     </Button>
   );

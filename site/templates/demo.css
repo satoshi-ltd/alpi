@@ -5,9 +5,9 @@
   --t-dim:var(--dim);
   --t-acc:var(--fg);
   --t-bot:var(--ink-2);
-  --t-border:var(--line);
   --t-ok:var(--fg);
-  font-family:"Geist Mono",ui-monospace,monospace;
+  font-family:var(--font-sans);
+  font-size:var(--t-small);
   color:var(--t-fg);
 }
 .alpi-demo[hidden]{display:none !important}
@@ -18,28 +18,25 @@
 
 .alpi-term{
   background:var(--t-bg);
-  border:var(--seam) solid var(--line-2);border-radius:var(--r-xs);
+  border-radius:var(--r-surface);
   overflow:hidden;display:flex;flex-direction:column;height:auto;min-height:220px;max-height:480px;
 }
 
 .alpi-term-top{
   display:flex;align-items:center;justify-content:space-between;
-  gap:12px;padding:12px 18px;border-bottom:var(--seam) solid var(--t-border);
-  font-size:12px;color:var(--t-muted);
+  gap:12px;padding:14px 18px 4px;
+  color:var(--t-muted);
   flex-wrap:wrap;
 }
 .alpi-term-top .left{display:flex;gap:14px;align-items:center;flex-wrap:wrap;min-width:0}
-.alpi-term-top .step{
-  font-size:13px;letter-spacing:.06em;text-transform:uppercase;
-  color:var(--t-acc);
-}
-.alpi-term-top .of{color:var(--t-muted)}
-.alpi-term-top .topinfo{color:var(--t-muted)}
+.alpi-term-top .step{font-weight:500;color:var(--ink-2)}
+.alpi-term-top .of{color:var(--t-muted);font-variant-numeric:tabular-nums}
+.alpi-term-top .topinfo{color:var(--t-muted);font-family:var(--font-mono);font-size:var(--t-mono)}
 .alpi-term-top .topinfo .acc{color:var(--t-acc);font-weight:600}
 .alpi-term-top .topinfo .sep{color:var(--t-dim)}
 
 .alpi-term-body{
-  padding:18px 20px;font-size:12.5px;line-height:1.7;
+  padding:14px 20px 18px;font-family:var(--font-mono);font-size:var(--t-mono);line-height:1.7;
   color:var(--t-fg);
   /* ``pre-wrap`` preserves leading whitespace + newlines for the
      wizard/doctor layouts, but wraps long bot responses at word
@@ -62,14 +59,9 @@
 .alpi-term-body .thinking{display:block}
 .alpi-term-status .pdot{display:inline-block;width:7px;height:7px;border-radius:50%}
 @media (prefers-reduced-motion:no-preference){
-  .alpi-term-body .thinking polygon{animation:alpi-fold 1.2s ease-in-out infinite}
-  .alpi-term-body .thinking polygon:nth-of-type(2){animation-delay:.15s}
-  .alpi-term-body .thinking polygon:nth-of-type(3){animation-delay:.3s}
-  .alpi-term-body .thinking polygon:nth-of-type(4){animation-delay:.45s}
-  .alpi-term-body .thinking polygon:nth-of-type(5){animation-delay:.6s}
-  .alpi-term-body .thinking polygon:nth-of-type(6){animation-delay:.75s}
+  .alpi-term-body .thinking svg{animation:alpi-think 1.2s ease-in-out infinite}
 }
-@keyframes alpi-fold{50%{opacity:.35}}
+@keyframes alpi-think{50%{opacity:.35}}
 .alpi-term-body .prompt{color:var(--t-acc);font-weight:600}
 .alpi-term-body .user{color:var(--t-acc);font-weight:600}
 .alpi-term-body .check{color:var(--t-ok)}
@@ -86,8 +78,8 @@
 @keyframes alpi-blink{50%{opacity:0}}
 
 .alpi-term-status{
-  padding:11px 18px;border-top:var(--seam) solid var(--t-border);
-  font-size:12px;color:var(--t-muted);
+  padding:4px 20px 12px;
+  font-family:var(--font-mono);font-size:var(--t-mono);color:var(--t-muted);
   display:flex;gap:14px;align-items:center;
   flex-wrap:wrap;
 }
@@ -97,10 +89,9 @@
 .alpi-term-status .sep{color:var(--t-dim)}
 
 .alpi-term-input{
-  padding:11px 18px;border-top:var(--seam) solid var(--t-border);
-  font-size:12.5px;color:var(--t-fg);
+  margin:0 8px 8px;padding:12px 16px;border-radius:var(--r-surface);background:var(--bg);
+  font-family:var(--font-mono);font-size:var(--t-mono);color:var(--t-fg);
   display:flex;align-items:center;gap:8px;
-  font-family:"Geist Mono",ui-monospace,monospace;
 }
 .alpi-term-input[hidden]{display:none !important}
 .alpi-term-input .prompt{color:var(--t-acc);font-weight:600}
@@ -109,34 +100,31 @@
 
 .alpi-term-foot{
   display:flex;align-items:center;justify-content:space-between;
-  padding:11px 16px;border-top:var(--seam) solid var(--t-border);
-  font-size:12px;letter-spacing:.03em;
+  padding:0 8px 8px;
 }
 .alpi-term-foot[hidden]{display:none}
-.alpi-term-foot .nav{display:flex;gap:8px}
+.alpi-term-foot .nav{display:flex;gap:4px}
 .alpi-term-foot button{
-  appearance:none;background:transparent;
-  border:var(--seam) solid var(--line-2);border-radius:var(--r-xs);
-  color:var(--t-muted);font:inherit;font-family:"Geist Mono",ui-monospace,monospace;
-  font-size:14px;padding:6px 14px;cursor:pointer;text-transform:lowercase;
-  transition:border-color .15s,color .15s;
+  appearance:none;background:transparent;border:0;border-radius:var(--r-pill);
+  color:var(--ink-2);font-family:var(--font-sans);font-size:var(--t-small);font-weight:500;
+  min-height:32px;padding:0 14px;cursor:pointer;
+  transition:background .15s,color .15s;
 }
-.alpi-term-foot button:hover:not(:disabled){color:var(--t-fg);background:var(--hover)}
+.alpi-term-foot button[data-act="next"]{background:var(--bg);color:var(--fg)}
+.alpi-term-foot button:hover:not(:disabled){color:var(--t-fg);background:var(--selected)}
 .alpi-term-foot button:disabled{opacity:.3;cursor:not-allowed}
 
 .alpi-term-caption{
   color:var(--muted);
-  font-family:"Instrument Sans",system-ui,sans-serif;
-  font-size:12.5px;line-height:1.6;
+  font-family:var(--font-sans);
+  font-size:var(--t-small);line-height:1.6;
   max-width:760px;margin:18px 4px 0;
 }
 
 @media (max-width:760px){
   .alpi-term{max-height:420px}
-  .alpi-term-body{font-size:11px;padding:14px 14px 18px;line-height:1.6}
-  .alpi-term-top,.alpi-term-foot,.alpi-term-input,.alpi-term-status{padding:9px 12px;font-size:11px;gap:8px}
-  .alpi-term-top .step{font-size:10px;letter-spacing:.05em}
-  .alpi-term-foot button{font-size:11px;padding:5px 10px}
+  .alpi-term-body{padding:12px 14px 16px;line-height:1.6}
+  .alpi-term-top,.alpi-term-status{padding-left:14px;padding-right:14px;gap:8px}
   /* Mirror the real TUI's narrow-mode behaviour: drop the label
      and keep the value (`profile alice` becomes `alice`). */
   .alpi-term-top .lbl,
@@ -145,5 +133,5 @@
 
 /* Quiet scrollbar — the console is a panel, not a document. */
 .alpi-term-body::-webkit-scrollbar{width:8px}
-.alpi-term-body::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:var(--r-tag)}
+.alpi-term-body::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:var(--r-pill)}
 .alpi-term-body::-webkit-scrollbar-track{background:transparent}

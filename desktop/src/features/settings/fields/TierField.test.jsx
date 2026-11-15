@@ -34,6 +34,7 @@ describe("TierField", () => {
       profile: "work",
       key: "tiers.deep.model",
       value: "openrouter/main",
+      connectionId: null,
     });
   });
 
@@ -47,6 +48,7 @@ describe("TierField", () => {
     expect(h.invoke).toHaveBeenCalledWith("unset_config_field", {
       profile: "work",
       key: "tiers.fast",
+      connectionId: null,
     });
     expect(onSaved).toHaveBeenCalled();
   });

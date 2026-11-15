@@ -5,7 +5,7 @@ import { Eyebrow } from '../../components/Eyebrow';
 import { Icon } from '../../components/Icon';
 import { useProfileSummaries } from '../../hooks/useDaemonData';
 import { useTheme } from '../../theme/ThemeContext';
-import { ActivityRow, activitySections } from '../shell/ActivityList';
+import { ActivityRow, activitySections, rowOwner } from '../shell/ActivityList';
 
 export const BAND_MAX = 3;
 
@@ -29,7 +29,7 @@ export function NeedsYouBand({ activity, onOpen, onRun, onOpenActivity, nowSec }
   if (!band) return null;
   const byName = Object.fromEntries((summaries.data?.profiles ?? []).map((p) => [p.name, p]));
   return (
-    <View accessibilityRole="list" style={{ backgroundColor: colors.hover, borderBottomWidth: 0.5, borderBottomColor: colors.line }}>
+    <View accessibilityRole="list" style={{ backgroundColor: colors.hover }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', paddingLeft: space.s7, paddingTop: space.s3 }}>
         <Eyebrow color={colors.warningText ?? colors.warning} style={{ flex: 1 }}>{`Needs you · ${band.total}`}</Eyebrow>
         {onOpenActivity ? (
@@ -39,12 +39,12 @@ export function NeedsYouBand({ activity, onOpen, onRun, onOpenActivity, nowSec }
             accessibilityLabel={`Activity, ${band.total} waiting`}
             style={{ minHeight: mobile.tap, flexDirection: 'row', alignItems: 'center', gap: space.s1, paddingHorizontal: space.s7, marginTop: -space.s3 }}
           >
-            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>Activity</Text>
+            <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>Activity</Text>
             <Icon name="chevron-right" size="xs" color={colors.ink4} />
           </Pressable>
         ) : null}
       </View>
-      {band.rows.map((row) => <ActivityRow key={row.key} row={row} onPress={onOpen} onRun={onRun} who={byName[row.profile]} />)}
+      {band.rows.map((row) => <ActivityRow key={row.key} row={row} onPress={onOpen} onRun={onRun} who={rowOwner(row, byName)} />)}
     </View>
   );
 }

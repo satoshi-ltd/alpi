@@ -12,11 +12,13 @@ import {
   iconStrokeFor,
   iconStrokeRendered,
   ladderDirection,
+  nestInset,
   motion,
   palettes,
   pulseDuration,
   radii,
   spaceScale,
+  stateFill,
   tracking,
   typeLadder,
 } from './tokens';
@@ -32,23 +34,40 @@ const contrast = (a, b) => {
 };
 
 describe('scales on the phone', () => {
-  it('declares the 4/8/12/16/24/32 spacing scale and the 24/28/32/40 control heights', () => {
-    expect(Object.values(spaceScale)).toEqual([4, 8, 12, 16, 24, 32]);
-    expect(Object.values(controlHeight)).toEqual([24, 28, 32, 40]);
+  it('declares the one 4 pt grid and the 32/40/48 control heights', () => {
+    expect(Object.values(spaceScale)).toEqual([4, 8, 12, 16, 24, 32, 48]);
+    expect(Object.values(controlHeight)).toEqual([32, 40, 48]);
+    expect(shared.controlRole).toEqual({ compact: 32, control: 40, touch: 48 });
+    expect(shared.touchTarget).toEqual({ min: 44, control: 48 });
   });
 
-  it('declares the type ladder 11/13/15/18/22/28, weights 400/500/600 and one 0.08 eyebrow', () => {
-    expect(Object.values(typeLadder)).toEqual([11, 13, 15, 18, 22, 28]);
+  it('declares the six-size ladder 12/14/15/16/20/28, weights 400/500/600 and the sentence-case section label', () => {
+    expect(Object.values(typeLadder)).toEqual([12, 14, 15, 16, 20, 28]);
     expect(Object.values(fontWeights)).toEqual([400, 500, 600]);
-    expect(eyebrow).toEqual({ size: 11, tracking: 0.08, family: 'mono', ink: 'ink3' });
-    expect(tracking.eyebrow).toBe(0.08);
+    expect(eyebrow).toEqual({ size: 14, tracking: 0, family: 'sans', weight: 500, ink: 'ink3', case: 'sentence' });
+    expect(tracking.eyebrow).toBe(0);
     for (const size of Object.values(typeLadder)) expect(Object.values(fontSizes)).toContain(size);
   });
 
-  it('keeps dots on a 6/8 ladder and the count badge on radii.xs', () => {
+  it('keeps dots on a 6/8 ladder and the count badge round, on radii.pill', () => {
     expect(dotScale).toEqual({ sm: 6, md: 8 });
     expect(countBadge.size).toBe(18);
-    expect(countBadge.radius).toBe(radii.xs);
+    expect(countBadge.radius).toBe(radii.pill);
+  });
+
+  it('declares the five radii by role and nothing else', () => {
+    expect(radii).toEqual({ xs: 6, control: 12, surface: 20, sheet: 28, pill: 999 });
+    expect(Object.keys(shared.radiusRole)).toEqual(Object.keys(radii));
+  });
+
+  it('nests an 8 pt inset child at its parent radius minus the inset', () => {
+    expect(nestInset).toBe(8);
+    expect(radii.surface - nestInset).toBe(radii.control);
+  });
+
+  it('steps hover under selected under pressed, one point darker in dark', () => {
+    expect(stateFill).toEqual({ hover: 0.04, selected: 0.08, pressed: 0.12 });
+    expect(shared.stateFills.dark).toEqual({ hover: 0.05, selected: 0.09, pressed: 0.13 });
   });
 });
 
@@ -67,35 +86,40 @@ describe('motion on the phone', () => {
 });
 
 describe('icons on the phone', () => {
-  it('renders every allowed size at no less than 1.33 pt', () => {
-    expect(iconStrokeRendered).toBe(1.33);
+  it('draws 16, 20 and 24 at a rendered 1.5 pt stroke', () => {
+    expect(iconStrokeRendered).toBe(1.5);
+    expect(shared.iconSizesAllowed.mobile).toEqual([16, 20, 24]);
     for (const size of shared.iconSizesAllowed.mobile) {
-      expect((iconStrokeFor(size) * size) / 24).toBeGreaterThanOrEqual(1.33 - 1e-9);
+      expect((iconStrokeFor(size) * size) / 24).toBeCloseTo(1.5, 9);
     }
-    expect(iconStrokeFor(24)).toBeCloseTo(1.33, 5);
   });
 });
 
 describe('surface ladder on the phone', () => {
-  it('lifts card over the ground at 1.10:1 and the field inside it at 1.07:1 in light', () => {
-    expect(Number(contrast(palettes.light.card, palettes.light.bg).toFixed(2))).toBeGreaterThanOrEqual(1.1);
-    expect(Number(contrast(palettes.light.field, palettes.light.card).toFixed(2))).toBeGreaterThanOrEqual(1.07);
+  it('draws one fill under bubbles, fields, chips and groups, a step off the pane in both modes', () => {
+    for (const mode of ['light', 'dark']) {
+      const p = palettes[mode];
+      expect(p.card).toBe(p.fill);
+      expect(p.field).toBe(p.fill);
+      expect(p.bgInput).toBe(p.fill);
+      expect(contrast(p.fill, p.bgPane)).toBeGreaterThan(1.08);
+    }
   });
 
-  it('keeps the dark ladder ascending with elev at #202020', () => {
-    expect(palettes.dark.bgElev).toBe('#202020');
-    expect(luminance(palettes.dark.card)).toBeGreaterThan(luminance(palettes.dark.bg));
-    expect(luminance(palettes.dark.field)).toBeGreaterThan(luminance(palettes.dark.card));
-    expect(luminance(palettes.dark.bgElev)).toBeGreaterThan(luminance(palettes.dark.card));
+  it('raises dark floats to #2c2c2c over the #262626 fill and keeps light raised white', () => {
+    expect(palettes.dark.bgElev).toBe('#2c2c2c');
+    expect(palettes.light.bgElev).toBe('#ffffff');
+    expect(luminance(palettes.dark.raised)).toBeGreaterThan(luminance(palettes.dark.fill));
   });
 
   it('writes the direction per mode and the palettes obey it', () => {
     expect(ladderDirection).toEqual({ light: 'descends', dark: 'ascends' });
-    expect(luminance(palettes.light.card)).toBeLessThan(luminance(palettes.light.bg));
-    expect(luminance(palettes.dark.card)).toBeGreaterThan(luminance(palettes.dark.bg));
+    expect(luminance(palettes.light.fill)).toBeLessThan(luminance(palettes.light.bg));
+    expect(luminance(palettes.dark.fill)).toBeGreaterThan(luminance(palettes.dark.bg));
   });
 
-  it('declares the focus ring as 2 pt at 60% with a 2 pt offset', () => {
+  it('declares the focus ring as 2 pt at 60% with a 2 pt offset and the field line as 1.5 pt ink3', () => {
     expect(focusRing).toEqual({ width: 2, offset: 2, alpha: 0.6 });
+    expect(shared.fieldFocus).toEqual({ width: 1.5, ink: 'ink3' });
   });
 });

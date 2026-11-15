@@ -53,15 +53,20 @@ beforeEach(() => {
 });
 
 describe("VersionButton", () => {
-  it("crowns the panel with the alpaca and a crease wordmark", () => {
+  it("crowns the panel with Twin in the brand ink and a solid ink wordmark", () => {
     const { container } = render(<VersionButton />);
     fireEvent.click(screen.getByText("0.0.0"));
-    const mark = container.querySelector("[data-fold='alpaca']");
-    expect(mark.getAttribute("aria-hidden")).not.toBeNull();
-    expect(mark.style.getPropertyValue("--alp-d")).toBe("#f3efe6");
+    const mark = container.querySelector("[data-mark='alpi-twin']");
+    expect(mark.getAttribute("aria-hidden")).toBe("true");
+    expect(mark.querySelector("path[data-body]").getAttribute("fill")).toBe("var(--accent)");
     expect(mark.style.width).toBe("26px");
-    expect(screen.getByText("alpi").className).toMatch(/crease/);
-    expect(container.querySelector("[class*='brand']").style.getPropertyValue("--crease-l1")).toMatch(/^#[0-9a-f]{6}$/);
+  });
+
+  it("sets the wordmark in the name face, in plain ink with no accent tone", () => {
+    render(<VersionButton />);
+    fireEvent.click(screen.getByText("0.0.0"));
+    expect(screen.getByText("alpi").className).toMatch(/ds-name/);
+    expect(screen.getByText("alpi").getAttribute("style")).toBeNull();
   });
 
   it("offers the update and starts the install from the popover", () => {

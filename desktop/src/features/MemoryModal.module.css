@@ -1,55 +1,15 @@
-.fileRow {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: var(--sp-8);
-}
-
-.fileHead {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-8);
-}
-
-.fileLabel {
-  font-size: var(--text-meta);
-  font-weight: var(--fw-medium);
-  color: var(--ink);
-}
-
-.fileLabelLg {
-  font-size: var(--text-chat);
-  font-weight: var(--fw-semibold);
-  color: var(--ink);
-}
-
-.fileName {
-  font-family: var(--font-mono);
-  font-size: var(--text-meta);
-  color: var(--ink-3);
-}
-
 .usage {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-8);
-  font-family: var(--font-mono);
-  font-size: var(--text-meta);
-  color: var(--ink-3);
-}
-
-.usageWide {
-  flex: 1;
-  max-width: 320px;
-  margin-left: auto;
+  font-variant-numeric: tabular-nums;
 }
 
 .meter {
-  flex: 1;
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: var(--sp-8);
+  width: 120px;
   height: 3px;
-  min-width: 60px;
-  border-radius: var(--r-xs);
-  background: var(--hover);
+  border-radius: var(--r-pill);
+  background: var(--line-2);
   overflow: hidden;
 }
 
@@ -66,18 +26,9 @@
   flex-shrink: 0;
 }
 
-.caption {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-12);
-  margin-bottom: var(--sp-16);
-  font-size: var(--text-meta);
-  color: var(--ink-3);
-}
-
 .entries {
   list-style: none;
-  margin: 0;
+  margin: var(--sp-4) 0 0;
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -91,27 +42,9 @@
 }
 
 .entryNote {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   color: var(--ink-3);
 }
 
 .emptyNote { color: var(--ink-3); }
-
-.over { color: var(--c-danger-text); }
-
-.detailInfo {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-8);
-  color: var(--ink-3);
-  font-family: var(--font-mono);
-  font-size: var(--text-meta);
-}
-
-.flagWord {
-  margin-left: auto;
-  font-family: var(--font-mono);
-  font-size: var(--text-meta);
-  color: var(--c-danger-text);
-}

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { contrastRatio } from "../../../common/crease.mjs";
+import { contrastRatio } from "../../../common/name.mjs";
 import { palettes } from "../../../common/tokens.mjs";
 
 const NEUTRAL_KEYS = ["bg", "bgPane", "bgSide", "bgElev", "bgInput", "ink", "ink2", "ink3", "ink4", "line", "line2", "hover", "selected"];
@@ -23,7 +23,7 @@ describe("neutral greys", () => {
     }
   });
 
-  it.each(["styles/tokens.css", "../../common/tokens.mjs", "../../common/crease.mjs"])("leaves no slate in %s", (file) => {
+  it.each(["styles/tokens.css", "../../common/tokens.mjs", "../../common/name.mjs"])("leaves no slate in %s", (file) => {
     const source = readFileSync(join(import.meta.dirname, "..", file), "utf8");
     expect(source).not.toMatch(SLATE);
   });

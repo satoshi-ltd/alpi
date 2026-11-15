@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { Text, View, useWindowDimensions } from 'react-native';
-import Svg, { Circle, Line, Polyline, Rect, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Line, Path, Polyline, Text as SvgText } from 'react-native-svg';
 
-import { chartCaption, chartLayout, chartLegend, describeChart } from '../../../common/chartSpec.mjs';
+import { barPath, chartCaption, chartLayout, chartLegend, describeChart } from '../../../common/chartSpec.mjs';
 import { mixHex } from '../../../common/color.mjs';
 import { BUBBLE_MAX_PANE, paneWidth } from '../lib/panes';
 import { usePane } from '../nav/PaneContext';
 import { useTheme } from '../theme/ThemeContext';
-import { space } from '../theme/tokens';
+import { radii, space } from '../theme/tokens';
 
 const COMPACT_WIDTH = 420;
 const BUBBLE_SHARE = parseFloat(BUBBLE_MAX_PANE) / 100;
@@ -42,10 +42,10 @@ export function Chart({ spec, accent = null }) {
               );
             }
             if (it.k === 'dot') return <Circle key={i} cx={it.cx} cy={it.cy} r={it.r} fill={colour} />;
-            if (it.k === 'bar') return <Rect key={i} x={it.x} y={it.y} width={it.w} height={Math.max(it.h, 0)} fill={colour} />;
+            if (it.k === 'bar') return <Path key={i} d={barPath(it)} fill={colour} />;
             const value = it.k === 'value';
             return (
-              <SvgText key={i} x={it.x} y={it.y} textAnchor={it.anchor} fontFamily={it.k === 'label' ? fonts.sans.regular : fonts.mono}
+              <SvgText key={i} x={it.x} y={it.y} textAnchor={it.anchor} fontFamily={fonts.sans.regular}
                 fontSize={it.k === 'label' ? 11 : 10} fill={value ? colors.ink : it.k === 'label' ? colors.ink2 : colors.ink3}>
                 {it.text}
               </SvgText>
@@ -59,9 +59,9 @@ export function Chart({ spec, accent = null }) {
             <View key={l.series} style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
               <View style={l.dashed
                 ? { width: 12, borderTopWidth: 1.5, borderStyle: 'dashed', borderColor: palette[l.series] }
-                : { width: 9, height: 9, borderRadius: 2, backgroundColor: palette[l.series] }}
+                : { width: 9, height: 9, borderRadius: radii.xs, backgroundColor: palette[l.series] }}
               />
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink2 }}>{l.name}</Text>
+              <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink2 }}>{l.name}</Text>
             </View>
           ))}
         </View>

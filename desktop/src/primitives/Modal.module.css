@@ -10,7 +10,9 @@
 
 .modal {
   background: var(--bg-elev);
-  border-radius: var(--r-xs);
+  --well: var(--well-float);
+  --well-focus: var(--well-float);
+  border-radius: var(--r-sheet);
   box-shadow: var(--shadow-edge-lg);
   padding: var(--dialog-pad) 0 0;
   overflow: hidden;
@@ -50,8 +52,8 @@
 .content [data-dialog-footer] {
   margin: var(--sp-16) calc(-1 * var(--dialog-pad)) 0;
   padding: var(--dialog-foot-pad);
-  background: var(--bg-side);
-  box-shadow: inset 0 .5px 0 var(--line);
+  padding-bottom: var(--dialog-pad);
+  background: transparent;
 }
 
 .title {

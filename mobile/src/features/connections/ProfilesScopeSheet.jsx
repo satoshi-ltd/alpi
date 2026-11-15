@@ -50,7 +50,7 @@ export function ProfilesScopeSheet({ open, onClose, connection, onSaved }) {
       primaryAction={{ label: 'Save', onPress: save, loading: busy }}
     >
       <ScrollView contentContainerStyle={{ paddingHorizontal: space.s7, paddingVertical: space.s5, gap: space.s5 }}>
-        <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
+        <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>
           none selected = every profile
         </Text>
         <ProfilePicker

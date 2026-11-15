@@ -1,95 +1,44 @@
-.toolRow {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-8);
-}
-
-.toolName {
-  flex: 1;
-  min-width: 0;
-  font-family: var(--font-mono);
-  font-size: var(--text-meta);
-  color: var(--ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.toolCount {
-  flex-shrink: 0;
-  font-family: var(--font-mono);
-  font-size: var(--text-meta);
-  color: var(--ink-3);
-}
-
-.toolMuted { color: var(--ink-3); }
-
-.toolNameLg {
-  display: inline-flex;
-  align-items: center;
-  font-family: var(--font-mono);
-  font-size: var(--text-chat);
-  font-weight: var(--fw-semibold);
-  color: var(--ink);
-  text-transform: lowercase;
-}
-
-.detailCat { color: var(--ink-3); font-weight: var(--fw-regular); }
-
 .params {
   width: 100%;
-  margin-top: var(--sp-16);
+  margin-top: var(--sp-8);
   border-collapse: collapse;
   font-family: var(--font-mono);
-  font-size: var(--text-meta);
+  font-size: var(--text-mono);
 }
 
 .params th {
   text-align: left;
-  font-family: var(--font-mono);
-  font-size: var(--eyebrow-size);
-  font-weight: var(--fw-medium);
-  text-transform: uppercase;
-  letter-spacing: var(--eyebrow-tracking);
+  font-family: var(--font-sans);
+  font-size: var(--text-small);
+  font-weight: var(--fw-regular);
   color: var(--ink-3);
-  padding: var(--sp-8) var(--sp-8);
-  border-bottom: 0.5px solid var(--line);
+  padding: var(--sp-4) var(--sp-8) var(--sp-4) 0;
 }
 
 .params td {
-  padding: var(--sp-8);
-  border-bottom: 0.5px solid var(--line);
+  padding: var(--sp-4) var(--sp-8) var(--sp-4) 0;
   vertical-align: top;
 }
 
-.paramName { color: var(--ink); white-space: nowrap; font-weight: var(--fw-medium); }
+.paramName { color: var(--ink); white-space: nowrap; }
 .paramType { color: var(--ink-2); white-space: nowrap; }
 .paramReq { color: var(--ink-3); }
 .paramDef { color: var(--ink-3); }
 
 .noParams {
-  margin-top: var(--sp-16);
+  margin-top: var(--sp-8);
   font-family: var(--font-sans);
-  font-size: var(--text-meta);
+  font-size: var(--text-small);
   color: var(--ink-3);
-  font-style: italic;
 }
 
-.denyBanner {
-  font-family: var(--font-sans);
-  font-size: var(--text-meta);
-  color: var(--c-warning-text);
-  background: color-mix(in srgb, var(--c-warning, var(--ink-3)) 12%, var(--bg-elev));
-  border: 0.5px solid color-mix(in srgb, var(--c-warning, var(--line-2)) 35%, var(--line));
-  border-radius: var(--r-xs);
-  padding: var(--sp-12) var(--sp-12);
+.deny {
   margin: 0 0 var(--sp-12);
-  line-height: var(--lh-normal);
 }
 
-.denyBanner code {
+.deny code {
   font-family: var(--font-mono);
-  font-size: var(--text-meta);
+  font-size: var(--text-mono);
   background: var(--hover);
   padding: 0 var(--sp-8);
   border-radius: var(--r-xs);

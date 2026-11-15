@@ -1,7 +1,7 @@
 import { Pressable } from 'react-native';
-import { mobile, radii, space } from '../theme/tokens';
+import { lineHeights, mobile, radii, space, typeLadder, typography } from '../theme/tokens';
 
-export const SHEET_CLOSE_BLEED = space.s4;
+export const SHEET_CLOSE_BLEED = Math.round((mobile.tap - typeLadder.title * lineHeights[typography.dialogTitle.leading]) / 2);
 
 import { Icon } from './Icon';
 import { useTheme } from '../theme/ThemeContext';
@@ -20,10 +20,10 @@ export function SheetClose({ onPress, color, hint = 'Dismisses this sheet — yo
         height: mobile.tap,
         marginTop: -SHEET_CLOSE_BLEED,
         marginRight: -SHEET_CLOSE_BLEED,
-        borderRadius: radii.xs,
+        borderRadius: radii.pill,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: pressed ? colors.selected : 'transparent',
+        backgroundColor: pressed ? colors.pressed : 'transparent',
         ...style,
       })}
     >

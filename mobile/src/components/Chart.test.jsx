@@ -6,10 +6,10 @@ afterEach(cleanup);
 
 vi.mock('react-native-svg', () => {
   const El = (tag) => ({ children, ...p }) => React.createElement(tag, {
-    'data-fill': p.fill, 'data-stroke': p.stroke, 'data-dash': p.strokeDasharray, 'data-points': p.points,
+    'data-fill': p.fill, 'data-d': p.d, 'data-stroke': p.stroke, 'data-dash': p.strokeDasharray, 'data-points': p.points,
   }, children);
   const Svg = El('svg');
-  return { default: Svg, Svg, Circle: El('circle'), Line: El('line'), Polyline: El('polyline'), Rect: El('rect'), Text: El('text') };
+  return { default: Svg, Svg, Circle: El('circle'), Line: El('line'), Path: El('path'), Polyline: El('polyline'), Rect: El('rect'), Text: El('text') };
 });
 const h = vi.hoisted(() => ({ width: 340, pane: { twoPane: false, sidebarOpen: true } }));
 
@@ -61,8 +61,17 @@ describe('Chart', () => {
   it('draws one bar per value and no legend for a single series', () => {
     const bars = parseChart({ type: 'bar', x: ['Mon', 'Tue', 'Wed'], series: [{ name: 'Bookings', values: [12, 15, 11] }] });
     const { container } = render(<Chart spec={bars} accent="#2e7d4f" />);
-    expect(container.querySelectorAll('rect')).toHaveLength(3);
+    expect(container.querySelectorAll('path')).toHaveLength(3);
     expect(container.textContent).not.toContain('Bookings');
+  });
+
+  it('rounds the top corners of a bar and keeps its baseline square', () => {
+    const bars = parseChart({ type: 'bar', x: ['Mon', 'Tue', 'Wed'], series: [{ name: 'Bookings', values: [12, 15, 11] }] });
+    const { container } = render(<Chart spec={bars} />);
+    const d = container.querySelector('path').getAttribute('data-d');
+    expect(d.match(/A4,4 /g)).toHaveLength(2);
+    expect(d).toMatch(/^M[\d.]+,[\d.]+V/);
+    expect(d.endsWith('Z')).toBe(true);
   });
 });
 

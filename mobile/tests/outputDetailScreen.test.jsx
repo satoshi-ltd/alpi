@@ -114,8 +114,8 @@ describe('notification page, failed run', () => {
     const { container } = render(<OutputDetailScreen />);
     expect(container.querySelector('[data-icon="triangle-alert"]').getAttribute('data-color')).toBe('#e00');
     expect(screen.getByText('failed', { normalizer: (t) => t.trim() })).toBeTruthy();
-    expect(screen.getByText('REASON')).toBeTruthy();
-    expect(screen.getByText('EXIT')).toBeTruthy();
+    expect(screen.getByText('Reason')).toBeTruthy();
+    expect(screen.getByText('Exit')).toBeTruthy();
     expect(screen.queryByText('ERROR')).toBeNull();
     expect(screen.queryByText(/Traceback/)).toBeNull();
     fireEvent.click(screen.getByLabelText('Details'));

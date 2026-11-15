@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { fileSize, flattenTree, statusLabel } from './skillDetail';
+import { flattenTree, skillVersion, statusLabel } from './skillDetail';
+import { sizeLabel } from '../../../common/panelRow.mjs';
 
 describe('statusLabel', () => {
   it.each([
@@ -52,6 +53,11 @@ describe('flattenTree', () => {
   it('carries each file name and size so the page can type and size it', () => {
     const flat = flattenTree([{ name: 'state', kind: 'dir', children: [{ name: 'db.sqlite', kind: 'file', size: 49152 }] }]);
     expect(flat).toEqual([{ path: 'state/db.sqlite', name: 'db.sqlite', kind: 'file', size: 49152 }]);
-    expect(fileSize(49152)).toBe('48.0kb');
+    expect(sizeLabel(49152)).toBe('48.0 KB');
+  });
+
+  it('moves version, origin and date into one Version fact', () => {
+    expect(skillVersion({ version: '1.2', origin: 'agent', created_at: '2026-09-14' })).toBe('v1.2 · agent · Sep 14');
+    expect(skillVersion({})).toBe('agent');
   });
 });

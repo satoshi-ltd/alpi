@@ -10,17 +10,16 @@
   display: inline-flex;
   align-items: center;
   gap: var(--sp-8);
-  height: var(--ctl-28);
+  height: var(--ctl-32);
   padding: 0 var(--sp-12);
-  border-radius: var(--r-xs);
+  border-radius: var(--r-pill);
   background: transparent;
   color: var(--ink-2);
   font: inherit;
   font-size: var(--text-ui);
   font-weight: var(--fw-medium);
   line-height: var(--lh-tight);
-  transition: background var(--dur-1) var(--ease),
-    color var(--dur-1) var(--ease);
+  transition: background-color var(--state-out), color var(--state-out);
   max-width: 320px;
 }
 .wrapFull .trigger {
@@ -37,32 +36,36 @@
 .trigger:hover {
   background: var(--hover);
   color: var(--ink);
+  transition: background-color var(--state-in), color var(--state-in);
 }
 
 .triggerField {
-  border: .5px solid transparent;
-  border-radius: var(--r-xs);
-  height: var(--ctl-32);
-  padding: 0 var(--sp-12);
-  background: var(--well);
-  box-shadow: var(--well-edge);
+  border: 0;
+  border-radius: var(--r-pill);
+  height: var(--ctl-40);
+  padding: 0 var(--sp-12) 0 var(--sp-16);
+  background: var(--fill);
+  color: var(--ink);
 }
 
 .triggerField.triggerField:hover {
-  background: var(--well);
-  color: inherit;
+  background: var(--fill);
+  box-shadow: var(--hover-wash);
+  color: var(--ink);
 }
 
-.triggerField.triggerField:focus,
-.triggerField.triggerField:focus-visible,
 .triggerField.triggerField.triggerOpen,
 .triggerField.triggerField.triggerOpen:hover {
-  outline: none;
-  border-color: transparent;
-  border-radius: var(--r-xs);
-  background: var(--well-focus);
+  border-radius: var(--r-pill);
+  background: var(--fill);
   color: var(--ink);
-  box-shadow: var(--well-ring);
+  box-shadow: var(--selected-wash);
+  outline: none;
+}
+
+.triggerField.triggerField:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-outline-offset);
 }
 
 .triggerOpen {
@@ -78,9 +81,8 @@
   gap: var(--sp-8);
   height: var(--ctl-40);
   padding: 0 var(--sp-12);
-  border-radius: var(--r-xs);
-  border: .5px solid var(--line);
-  background: var(--bg-elev);
+  border-radius: var(--r-control);
+  background: var(--well);
   max-width: none;
   line-height: var(--lh-cozy);
 }
@@ -121,7 +123,7 @@
 }
 
 .caption {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   color: var(--ink-3);
   line-height: var(--lh-cozy);
@@ -133,7 +135,7 @@
 
 .triggerTrailing {
   margin-left: auto;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   color: var(--ink-3);
   overflow: hidden;
@@ -169,7 +171,9 @@
   position: absolute;
   max-height: 420px;
   background: var(--bg-elev);
-  border-radius: var(--r-xs);
+  --well: var(--well-float);
+  --well-focus: var(--well-float);
+  border-radius: var(--r-surface);
   box-shadow: var(--shadow-edge-sm);
   display: flex;
   flex-direction: column;
@@ -188,16 +192,14 @@
 
 .searchWrap {
   padding: var(--sp-8);
-  border-bottom: .5px solid var(--line);
 }
 
 .search {
   width: 100%;
   padding: var(--sp-8) var(--sp-12);
-  border-radius: var(--r-xs);
+  border-radius: var(--r-control);
   border: .5px solid transparent;
   background: var(--well);
-  box-shadow: var(--well-edge);
   font: inherit;
   font-size: var(--text-meta);
   color: var(--ink);
@@ -206,15 +208,15 @@
 
 .search:focus,
 .search:focus-visible {
-  outline: none;
   background: var(--well-focus);
-  box-shadow: var(--well-ring);
+  box-shadow: var(--field-focus);
+  outline: none;
 }
 
 .list {
   flex: 1;
   overflow: auto;
-  padding: var(--sp-8);
+  padding: var(--nest-inset);
 }
 
 .emptyRow {
@@ -264,7 +266,7 @@
 .rowCaption {
   flex-shrink: 0;
   max-width: 50%;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   color: var(--ink-3);
   overflow: hidden;

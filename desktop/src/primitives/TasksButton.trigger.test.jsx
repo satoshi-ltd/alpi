@@ -15,10 +15,10 @@ function ruleBody(selector) {
 }
 
 describe("TasksButton trigger sheet", () => {
-  it("rests on the hover tone with 4 px corners", () => {
+  it("rests on the hover tone at the control radius", () => {
     const body = ruleBody(".root .trigger");
     expect(body).toMatch(/background:\s*var\(--hover\)/);
-    expect(body).toMatch(/border-radius:\s*var\(--r-xs\)/);
+    expect(body).toMatch(/border-radius:\s*var\(--r-control\)/);
   });
 
   it("steps to the selected tone on hover and while open", () => {

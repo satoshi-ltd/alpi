@@ -1,5 +1,5 @@
 import { chartSvg } from "./chartSpec.mjs";
-import { ALPACA_LOW_FOLD, foldPolygons } from "./folds.mjs";
+import { stillMarkPath } from "./markEyes.mjs";
 import { inlineSegments, parseNotificationBody } from "./notificationBody.mjs";
 import { fontStacks, palettes } from "./tokens.mjs";
 
@@ -96,10 +96,7 @@ function block(b) {
 }
 
 function mark(size) {
-  const polys = foldPolygons(ALPACA_LOW_FOLD, P.accent, size)
-    .map(({ points }) => `<polygon points="${points.map((p) => p.map((v) => v.toFixed(1)).join(",")).join(" ")}" fill="${P.accent}"/>`)
-    .join("");
-  return `<svg viewBox="0 0 100 100" width="${size}" height="${size}" aria-hidden="true">${polys}</svg>`;
+  return `<svg viewBox="0 0 100 100" width="${size}" height="${size}" aria-hidden="true"><path d="${stillMarkPath("alpi-twin-small", size)}" fill="${P.accent}" fill-rule="evenodd"/></svg>`;
 }
 
 const HEX = /^#[0-9a-fA-F]{6}$/;

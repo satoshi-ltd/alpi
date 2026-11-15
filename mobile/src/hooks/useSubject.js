@@ -5,11 +5,21 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useEndpoint } from '../lib/EndpointContext';
 import { useDebouncedCallback } from './useDebouncedCallback';
 import { useEventEffect } from './useEvents';
-import { useProfileSummaries, useWorkgroups } from './useDaemonData';
+import { releaseLandedRead, useProfileSummaries, useWorkgroups } from './useDaemonData';
+import { editClock } from '../lib/optimisticProfiles';
 
 export function useProfile(name, opts = {}) {
   const summaries = useProfileSummaries();
-  const { call } = useEndpoint();
+  const { call, endpoint } = useEndpoint();
+  const endpointId = endpoint?.id ?? null;
+  const readDetail = useCallback(() => {
+    const params = { profile: name };
+    const since = editClock();
+    return call('host.profile.detail', params).then((d) => {
+      releaseLandedRead(endpointId, 'host.profile.detail', params, d, since);
+      return d;
+    });
+  }, [call, name, endpointId]);
   const [detail, setDetail] = useState(null);
   // reset detail synchronously on name/endpoint flip — else prev endpoint's detail bleeds for one frame
   const [tracked, setTracked] = useState({ name, call });
@@ -26,15 +36,21 @@ export function useProfile(name, opts = {}) {
     if (opts.skipDetail) return undefined;
     if (!name) return undefined;
     let cancelled = false;
-    call('host.profile.detail', { profile: name })
-      .then((d) => { if (!cancelled) setDetail(d || null); })
+    const params = { profile: name };
+    const since = editClock();
+    call('host.profile.detail', params)
+      .then((d) => {
+        if (cancelled) return;
+        releaseLandedRead(endpointId, 'host.profile.detail', params, d, since);
+        setDetail(d || null);
+      })
       .catch(() => { if (!cancelled) setDetail(null); });
     return () => { cancelled = true; };
-  }, [name, call, opts.skipDetail]);
+  }, [name, call, endpointId, opts.skipDetail]);
 
   const refetchDetail = useDebouncedCallback(() => {
     if (!name) return;
-    call('host.profile.detail', { profile: name })
+    readDetail()
       .then((d) => setDetail(d || null))
       .catch(() => { /* */ });
   }, 300);
@@ -52,17 +68,18 @@ export function useProfile(name, opts = {}) {
     if (!name) return;
     if (opts.skipDetail) return;
     try {
-      const d = await call('host.profile.detail', { profile: name });
+      const d = await readDetail();
       setDetail(d || null);
     } catch {
       // keep stale snapshot on failure — never blank a populated UI.
     }
-  }, [name, call, opts.skipDetail]);
+  }, [name, readDetail, opts.skipDetail]);
   return {
     profile,
     loading: summaries.loading,
     error: summaries.error,
     refresh: summaries.refresh,
+    invalidate: summaries.invalidate,
     refreshDetail,
   };
 }

@@ -135,7 +135,7 @@ describe('camera not allowed', () => {
 
   it('puts the mark on the edge and anchors the actions 16 pt above the safe area', () => {
     const { container } = render(<Pair />);
-    expect(container.querySelector('[data-fold]').dataset.size).toBe('72');
+    expect(container.querySelector('[data-shape]').dataset.size).toBe('72');
     const bar = screen.getByText('Continue').parentElement.parentElement;
     expect(style(bar)).toEqual({ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 50 });
   });

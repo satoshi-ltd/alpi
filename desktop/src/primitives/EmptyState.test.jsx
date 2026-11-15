@@ -6,18 +6,18 @@ import EmptyState from "./EmptyState.jsx";
 const glyphOf = (heading) => screen.getByRole("heading", { name: heading }).parentElement.firstElementChild;
 
 describe("brand glyphs are folds", () => {
-  it("EmptyState shows the alpaca in the theme's brand ink by default", () => {
+  it("EmptyState shows Twin in the theme's brand ink by default", () => {
     render(<EmptyState heading="Nothing here" />);
     const glyph = glyphOf("Nothing here");
-    expect(glyph.dataset.fold).toBe("alpaca");
-    expect(glyph.style.getPropertyValue("--alp-l")).toBe("#14110c");
+    expect(glyph.dataset.mark).toBe("alpi-twin");
+    expect(glyph.querySelector("path[data-body]").getAttribute("fill")).toBe("var(--accent)");
     expect(glyph.style.width).toBe("72px");
   });
 
-  it("EmptyState draws the fold it is given in the given colour", () => {
-    render(<EmptyState fold="honeycomb" accent="#3388ff" heading="No workgroups" />);
+  it("EmptyState draws the workgroup it is given neutral at rest", () => {
+    render(<EmptyState shape="honeycomb" accent="#3388ff" heading="No workgroups" />);
     const glyph = glyphOf("No workgroups");
-    expect(glyph.dataset.fold).toBe("honeycomb");
-    expect([...glyph.querySelectorAll("polygon")].map((c) => c.getAttribute("fill"))).toContain("#3388ff");
+    expect(glyph.dataset.shape).toBe("honeycomb");
+    expect([...glyph.querySelectorAll("[data-cell]")].map((c) => c.getAttribute("fill"))).toEqual(["var(--ink-3)", "var(--ink-3)", "var(--ink-3)"]);
   });
 });

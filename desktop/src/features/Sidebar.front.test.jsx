@@ -52,25 +52,26 @@ const BASE = {
 
 const rowNames = () =>
   [...document.querySelectorAll("nav .ds-sb-row .sb-name")].map((el) => el.textContent);
-const navText = () => document.querySelector("nav").textContent;
+const tileNames = () =>
+  [...document.querySelectorAll("nav [role='group'][aria-label='Pinned'] button .ds-name")].map((el) => el.textContent);
 const rowOf = (label) => screen.getByText(label).closest("button");
 
 describe("Sidebar front door", () => {
-  it("draws the default profile as the unlabelled first row above Pinned", () => {
+  it("draws the default profile as the first tile, ahead of the pinned tiles and every row", () => {
     render(<Sidebar {...BASE} profiles={ROSTER} pinned={{ profiles: ["clonara"], workgroups: [] }} />);
-    expect(rowNames()).toEqual(["alpi", "clonara", "doc"]);
-    expect(navText().indexOf("alpi")).toBeLessThan(navText().indexOf("Pinned"));
-    expect(rowOf("alpi").closest("[class*='section']").textContent).toBe(rowOf("alpi").textContent);
+    expect(tileNames()).toEqual(["alpi", "clonara"]);
+    expect(rowNames()).toEqual(["doc"]);
+    expect(screen.queryByText("Pinned")).toBeNull();
   });
 
   it("stays first and dimmed when paused or without a provider", () => {
     const paused = { ...ALPI, paused: true };
     const { rerender } = render(<Sidebar {...BASE} profiles={[ROSTER[0], paused, ROSTER[2]]} />);
-    expect(rowNames()[0]).toBe("alpi");
+    expect(tileNames()[0]).toBe("alpi");
     expect(rowOf("alpi").getAttribute("data-state")).toBe("paused");
 
     rerender(<Sidebar {...BASE} profiles={[ROSTER[0], { ...ALPI, model: null }, ROSTER[2]]} />);
-    expect(rowNames()[0]).toBe("alpi");
+    expect(tileNames()[0]).toBe("alpi");
     expect(rowOf("alpi").getAttribute("data-state")).toBe("needs-provider");
   });
 
@@ -92,8 +93,8 @@ describe("Sidebar front door", () => {
 
   it("ignores a stale default pin", () => {
     render(<Sidebar {...BASE} profiles={ROSTER} pinned={{ profiles: ["default"], workgroups: [] }} />);
-    expect(rowNames()).toEqual(["alpi", "doc", "clonara"]);
-    expect(screen.queryByText("Pinned")).toBeNull();
+    expect(tileNames()).toEqual(["alpi"]);
+    expect(rowNames()).toEqual(["doc", "clonara"]);
   });
 
   it("never falls behind Show N more", () => {
@@ -105,17 +106,19 @@ describe("Sidebar front door", () => {
     }));
     render(<Sidebar {...BASE} profiles={[...many, { ...ALPI, paused: true }]} />);
     expect(screen.getByText(/Show \d+ more/)).toBeInTheDocument();
-    expect(rowNames()[0]).toBe("alpi");
+    expect(tileNames()).toEqual(["alpi"]);
   });
 
   it("shows under a filter only when it matches its name or its label", () => {
     render(<Sidebar {...BASE} profiles={ROSTER} searchOpen />);
     const input = screen.getByPlaceholderText(/Filter profiles/);
     fireEvent.change(input, { target: { value: "al" } });
-    expect(rowNames()).toEqual(["alpi"]);
+    expect(tileNames()).toEqual(["alpi"]);
+    expect(rowNames()).toEqual([]);
     fireEvent.change(input, { target: { value: "defa" } });
-    expect(rowNames()).toEqual(["alpi"]);
+    expect(tileNames()).toEqual(["alpi"]);
     fireEvent.change(input, { target: { value: "doc" } });
+    expect(tileNames()).toEqual([]);
     expect(rowNames()).toEqual(["doc"]);
     expect(screen.queryByText("No profiles or workgroups match")).toBeNull();
   });
@@ -128,7 +131,7 @@ describe("Sidebar front door", () => {
 
   it("keeps the Profiles heading and its + when the default is the only profile", () => {
     render(<Sidebar {...BASE} profiles={[ALPI]} onNewProfile={() => {}} />);
-    expect(rowNames()).toEqual(["alpi"]);
+    expect(tileNames()).toEqual(["alpi"]);
     expect(screen.getByRole("button", { name: "New profile" })).toBeInTheDocument();
   });
 });

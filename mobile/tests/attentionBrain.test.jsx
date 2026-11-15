@@ -94,14 +94,14 @@ beforeEach(() => {
 describe('skills list', () => {
   const lint = { name: 'review-digest', category: 'research', problem: 'lint', message: 'bad' };
 
-  it('lifts a flagged skill into a Needs you group with a danger dot and its word', () => {
+  it('lifts a flagged skill into a Needs you group with its word, no leading dot', () => {
     h.att = { skills: [lint] };
     const { container } = render(<SkillsList />);
     const headings = [...container.querySelectorAll('h2')].map((n) => n.textContent);
     expect(headings).toEqual(['Needs you · 1', 'Research', 'Uncategorized']);
     expect(screen.getAllByText('review-digest').length).toBe(1);
     expect(screen.getByText('lint')).toBeTruthy();
-    expect(container.querySelector('[data-dot="#f00"]')).toBeTruthy();
+    expect(container.querySelector('[data-dot]')).toBeNull();
     for (const b of container.querySelectorAll('button')) expect(Number(b.getAttribute('data-minheight'))).toBeGreaterThanOrEqual(44);
   });
 
@@ -167,12 +167,12 @@ describe('skill page', () => {
 });
 
 describe('memory list', () => {
-  it('lifts an over-limit file into Needs you with a danger dot and the word over', () => {
+  it('lifts an over-limit file into Needs you with the word over, no leading dot', () => {
     h.att = { memory: [{ file: 'MEMORY.md', used: 2400, limit: 2000, pct: 120, over: true }] };
     const { container } = render(<MemoryList />);
     expect([...container.querySelectorAll('h2')].map((n) => n.textContent)).toEqual(['Needs you · 1']);
     expect(screen.getByText('over')).toBeTruthy();
-    expect(container.querySelector('[data-dot="#f00"]')).toBeTruthy();
+    expect(container.querySelector('[data-dot]')).toBeNull();
     expect(screen.getByLabelText('Learned, MEMORY.md, over')).toBeTruthy();
     for (const b of container.querySelectorAll('button')) expect(Number(b.getAttribute('data-minheight'))).toBeGreaterThanOrEqual(44);
   });
@@ -216,7 +216,7 @@ describe('memory page', () => {
 });
 
 describe('memory page beside the list', () => {
-  const rowFor = (file) => screen.getByLabelText(new RegExp(`${file.replace('.', '\\.')}`));
+  const rowFor = (file) => screen.getByLabelText(new RegExp(`, ${file.replace('.', '\\.')}`));
 
   beforeEach(() => {
     globalThis.__wide = true;

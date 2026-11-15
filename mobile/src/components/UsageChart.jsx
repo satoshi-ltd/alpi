@@ -13,7 +13,7 @@ import {
   usageScale,
   usageTotals,
 } from '../../../common/usage.mjs';
-import { alpha, lineHeights, space, tracking } from '../theme/tokens';
+import { alpha, lineHeights, radii, space, tracking, typeLeading } from '../theme/tokens';
 import { Eyebrow } from './Eyebrow';
 import { useGroundTone } from './groupTone';
 import { useTheme } from '../theme/ThemeContext';
@@ -41,7 +41,7 @@ function MonoStat({ value, unit }) {
     <Text
       numberOfLines={1}
       style={{
-        fontFamily: fonts.monoMedium,
+        fontFamily: fonts.sans.medium,
         fontSize: fontSizes.xl,
         lineHeight: fontSizes.xl * lineHeights.tight,
         color: colors.ink,
@@ -50,14 +50,14 @@ function MonoStat({ value, unit }) {
     >
       {value}
       {unit ? (
-        <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>{` ${unit}`}</Text>
+        <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>{` ${unit}`}</Text>
       ) : null}
     </Text>
   );
 }
 
 function Swatch({ color }) {
-  return <View style={{ width: 9, height: 9, borderRadius: 2, backgroundColor: color }} />;
+  return <View style={{ width: 9, height: 9, borderRadius: radii.xs, backgroundColor: color }} />;
 }
 
 export const NARROW_TILES_W = 520;
@@ -65,7 +65,7 @@ export const LEGEND_LINE = 1.3;
 
 export function usageMetrics(fontSizes) {
   return {
-    label: fontSizes.xs * lineHeights.tight,
+    label: Math.round(fontSizes.sm * typeLeading.small),
     today: fontSizes.display * lineHeights.tight,
     mono: fontSizes.xl * lineHeights.tight,
     dayLabel: fontSizes.xs * lineHeights.tight,
@@ -140,8 +140,6 @@ export function UsageChart({ days = [], accent, capLine = null, total30 = null, 
         onLayout={(e) => setTilesW(e.nativeEvent.layout.width)}
         style={{
           paddingBottom: space.s6,
-          borderBottomWidth: 0.5,
-          borderBottomColor: colors.line2,
         }}
       >
         <View style={{ flexDirection: 'row', alignItems: narrow ? 'flex-end' : 'flex-start' }}>
@@ -161,7 +159,7 @@ export function UsageChart({ days = [], accent, capLine = null, total30 = null, 
       {empty ? (
         <Text
           accessibilityLabel="No usage"
-          style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3, marginTop: space.s6 }}
+          style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3, marginTop: space.s6 }}
         >
           {usageRangeEmpty(days.length)}
         </Text>
@@ -179,7 +177,7 @@ export function UsageChart({ days = [], accent, capLine = null, total30 = null, 
                   width: '100%',
                   maxWidth: BAR_MAX_W,
                   height: total,
-                  borderRadius: 3,
+                  borderRadius: radii.xs,
                   overflow: 'hidden',
                   opacity: dim ? alpha.faint : 1,
                 }}
@@ -202,7 +200,7 @@ export function UsageChart({ days = [], accent, capLine = null, total30 = null, 
                       width: '100%',
                       maxWidth: BAR_MAX_W + RING_W * 4,
                       padding: RING_W,
-                      borderRadius: 3 + RING_W * 2,
+                      borderRadius: radii.xs + RING_W * 2,
                       borderWidth: RING_W,
                       borderColor: tint,
                       backgroundColor: ground,
@@ -225,7 +223,7 @@ export function UsageChart({ days = [], accent, capLine = null, total30 = null, 
               style={{
                 flex: 1,
                 textAlign: 'center',
-                fontFamily: d.today ? fonts.monoSemibold : fonts.mono,
+                fontFamily: d.today ? fonts.sans.semibold : fonts.sans.regular,
                 fontSize: fontSizes.xs,
                 lineHeight: fontSizes.xs * lineHeights.tight,
                 color: d.today ? tint : colors.ink3,
@@ -243,7 +241,7 @@ export function UsageChart({ days = [], accent, capLine = null, total30 = null, 
           accessibilityLabel="Selected day"
           style={{ flexDirection: 'row', alignItems: 'baseline', gap: space.s4, marginTop: space.s5, flexWrap: 'wrap' }}
         >
-          <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
+          <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>
             {picked.day}
             {picked.today ? ' · today' : ''}
           </Text>
@@ -258,7 +256,7 @@ export function UsageChart({ days = [], accent, capLine = null, total30 = null, 
           >
             {formatUsd(costOf(picked))}
           </Text>
-          <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink2 }}>
+          <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink2 }}>
             {`${fmtTok(picked.tokIn || 0)} in / ${fmtTok(picked.tokOut || 0)} out`}
           </Text>
         </View>
@@ -282,7 +280,7 @@ export function UsageChart({ days = [], accent, capLine = null, total30 = null, 
           <Swatch color={tint} />
           <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, lineHeight: legendLine, color: colors.ink3 }}>output</Text>
         </View>
-        <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, lineHeight: legendLine, color: colors.ink3, fontVariant: ['tabular-nums'] }}>
+        <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, lineHeight: legendLine, color: colors.ink3, fontVariant: ['tabular-nums'] }}>
           {foot}
         </Text>
       </View>

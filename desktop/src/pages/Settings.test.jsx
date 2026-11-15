@@ -20,7 +20,7 @@ describe("Settings", () => {
 
     const busy = await screen.findByRole("status", { name: "Fetching latest settings" });
     expect(busy).toHaveTextContent("Fetching latest settings");
-    expect(busy.querySelector("[data-fold]").dataset.fold).toBe("alpaca");
+    expect(busy.querySelector("[data-shape]").dataset.shape).toBe("twin");
     expect(busy.innerHTML).not.toContain("#57a");
     expect(screen.queryByRole("progressbar")).toBeNull();
   });

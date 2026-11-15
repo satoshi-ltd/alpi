@@ -1,7 +1,7 @@
 .title {
   display: block;
   min-width: 0;
-  height: var(--ctl-24);
+  height: var(--ctl-32);
   line-height: 20px;
   cursor: text;
 }
@@ -9,12 +9,11 @@
 .input {
   min-width: 0;
   width: 100%;
-  height: var(--ctl-24);
+  height: var(--ctl-32);
   box-sizing: border-box;
   border: .5px solid transparent;
-  border-radius: var(--r-xs);
+  border-radius: var(--r-control);
   background: var(--well);
-  box-shadow: var(--well-edge);
   color: var(--ink);
   font: inherit;
   line-height: 18px;
@@ -24,5 +23,6 @@
 
 .input:focus {
   background: var(--well-focus);
-  box-shadow: var(--well-ring);
+  box-shadow: var(--field-focus);
+  outline: none;
 }

@@ -32,6 +32,7 @@ describe("VisionModelField", () => {
       profile: "work",
       key: "tools.read_image.model",
       value: "openrouter/deepseek/vision",
+      connectionId: null,
     });
   });
 
@@ -50,6 +51,7 @@ describe("VisionModelField", () => {
       profile: "work",
       key: "tools.read_image.model",
       value: "",
+      connectionId: null,
     });
     expect(onSaved).toHaveBeenCalled();
   });

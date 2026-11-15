@@ -55,7 +55,7 @@ function AlnTestScreenInner() {
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-      <ScreenHeader title="Test notifications" subtitle="DEV · LOCAL DISPATCH" />
+      <ScreenHeader title="Test notifications" subtitle="Dev · local dispatch" />
       <ScrollView contentContainerStyle={{ paddingBottom: space.s11 }}>
         <View style={{ paddingHorizontal: space.s8, paddingVertical: space.s6 }}>
           <Text style={{ color: colors.ink2, fontFamily: fonts.sans.regular, fontSize: fontSizes.sm }}>

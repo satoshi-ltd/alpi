@@ -6,6 +6,12 @@ import { afterEach, vi } from "vitest";
 
 configure({ asyncUtilTimeout: 10000 });
 
+if (typeof document !== "undefined") {
+  Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+  Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
+  document.hasFocus = () => true;
+}
+
 afterEach(() => {
   cleanup();
 });

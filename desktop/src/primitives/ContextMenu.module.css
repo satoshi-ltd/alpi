@@ -5,18 +5,18 @@
   max-width: min(var(--pop-lg), calc(100vw - 16px));
   max-height: calc(100vh - 16px);
   overflow-y: auto;
-  background: var(--bg-elev);
-  border-radius: var(--r-xs);
-  box-shadow: var(--shadow-edge-sm);
-  padding: var(--sp-4);
+  background: var(--raised);
+  border-radius: var(--r-surface);
+  box-shadow: var(--shadow-float);
+  padding: var(--nest-inset);
   transform-origin: top left;
 }
 
 .icon {
-  width: var(--icon-sm);
+  width: var(--icon-md);
   display: inline-flex;
   justify-content: center;
-  color: var(--ink-3);
+  color: var(--ink-2);
   flex-shrink: 0;
 }
 
@@ -30,7 +30,7 @@
 }
 
 .shortcut {
-  font-size: var(--text-meta);
+  font-size: var(--text-small);
   color: var(--ink-3);
   flex-shrink: 0;
 }

@@ -12,7 +12,7 @@
 .sectionTitle {
   margin: 0;
   font-family: var(--font-sans);
-  font-size: var(--text-chat);
+  font-size: var(--text-title);
   font-weight: var(--fw-semibold);
   letter-spacing: -0.005em;
   line-height: var(--lh-cozy);
@@ -20,7 +20,7 @@
 }
 
 .sectionKicker {
-  font-size: var(--text-meta);
+  font-size: var(--text-small);
   color: var(--ink-3);
 }
 
@@ -30,13 +30,9 @@
 
 .fieldRow {
   gap: var(--sp-24);
-  padding: var(--sp-4) 0;
-  min-height: var(--ctl-40);
-  border-bottom: .5px solid var(--line);
-}
-
-.sectionBody > .fieldRow:last-child {
-  border-bottom: 0;
+  padding: var(--sp-8) 0;
+  min-height: 56px;
+  box-sizing: border-box;
 }
 
 .fieldRowCenter {
@@ -47,9 +43,14 @@
   align-items: flex-start;
 }
 
+.fieldRowTop .fieldControl {
+  flex: 2 1 0;
+  justify-content: flex-start;
+}
+
 .fieldLabelCol {
-  width: 120px;
-  flex-shrink: 0;
+  flex: 1 1 0;
+  min-width: 160px;
 }
 
 .fieldLabelColTop {
@@ -59,47 +60,41 @@
 .fieldLabel {
   font-family: var(--font-sans);
   font-size: var(--text-ui);
-  color: var(--ink-2);
-  line-height: var(--lh-cozy);
+  font-weight: var(--fw-medium);
+  color: var(--ink);
+  line-height: var(--lh-ui);
 }
 
 .fieldLabel::first-letter {
-  text-transform: uppercase;
 }
 
 .fieldHelper {
-  font-size: var(--text-meta);
+  font-family: var(--font-sans);
+  font-size: var(--text-small);
   color: var(--ink-3);
-  margin-top: var(--sp-4);
-  line-height: var(--lh-cozy);
+  margin-top: 2px;
+  line-height: var(--lh-small);
 }
 
 .fieldControl {
-  flex: 1;
+  flex: 0 1 340px;
   min-width: 0;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--sp-8);
   flex-wrap: wrap;
-}
-
-.fieldControl > button[data-variant="ghost"],
-.fieldControl > button[data-variant="danger-ghost"],
-.fieldControl > span > button[data-variant="ghost"],
-.fieldControl > span > button[data-variant="danger-ghost"] {
-  box-shadow: var(--ring-ctrl);
 }
 
 .memberRow {
   position: relative;
   gap: var(--sp-8);
   padding: var(--sp-12) 0;
-  border-top: .5px solid var(--line);
 }
 
 .memberHead {
   align-items: center;
   gap: var(--sp-8);
-  min-height: var(--ctl-28);
+  min-height: var(--ctl-32);
 }
 
 .memberName {
@@ -161,17 +156,17 @@
 }
 
 .memberOwnsLabel {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   color: var(--ink-3);
 }
 
 .memberOwnsTag {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   color: var(--ink-2);
   padding: 0 var(--sp-8);
-  border-radius: var(--r-tag);
+  border-radius: var(--r-pill);
   background: var(--hover);
 }
 

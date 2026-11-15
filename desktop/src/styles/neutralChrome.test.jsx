@@ -34,20 +34,25 @@ describe("neutral chrome", () => {
   it.each([
     ["primitives/Panels.module.css", ".renameInput:focus"],
     ["primitives/EditableSessionTitle.module.css", ".input:focus"],
-    ["primitives/Composer.module.css", ".body:has(.input:focus)"],
-  ])("%s %s focuses with the shared focus token", (rel, selector) => {
+  ])("%s %s focuses with the shared field line", (rel, selector) => {
     const body = rule(rel, selector);
-    expect(body).toMatch(/var\(--focus-border\)|var\(--well-ring\)/);
+    expect(body).toMatch(/box-shadow:\s*var\(--field-focus\)/);
     expect(body).not.toMatch(/--accent|--ink\) 14%/);
+  });
+
+  it("keeps the composer pill free of any focus ring: the caret is its focus", () => {
+    const body = rule("primitives/Composer.module.css", ".body:has(.input:focus)");
+    expect(body).toMatch(/outline:\s*none/);
+    expect(body).toMatch(/box-shadow:\s*none/);
   });
 
   it.each(["primitives/Modal.module.css", "primitives/Panels.module.css", "primitives/BrowseModal.module.css", "features/sessions/ManageSessionsModal.module.css"])("%s scrims without blur", (rel) => {
     expect(read(rel)).not.toMatch(/backdrop-filter/);
   });
 
-  it("seams the toast and lifts the tooltip with tokens, never a literal shadow", () => {
-    expect(rule("primitives/Notification.module.css", ".toast")).toMatch(/box-shadow: var\(--shadow-edge-sm\);/);
-    expect(rule("styles/design-system.css", ".ds-tip-body")).toMatch(/box-shadow: var\(--shadow-edge-sm\);/);
+  it("floats the toast on the float shadow and lets the ink tooltip stand on its fill alone", () => {
+    expect(rule("primitives/Notification.module.css", ".toast")).toMatch(/box-shadow: var\(--shadow-float\);/);
+    expect(rule("styles/design-system.css", ".ds-tip-body")).not.toMatch(/box-shadow/);
   });
 
   it("paints a running step in the profile's colour, ink without one", () => {
@@ -58,8 +63,14 @@ describe("neutral chrome", () => {
     expect(container.firstElementChild.style.getPropertyValue("--c")).toBe("");
   });
 
-  it("tints the sidebar working chip with the row's profile colour", () => {
+  it("writes the sidebar state as a word in its kind's text colour, without a dot or the profile's colour", () => {
     render(<RowStateChip state="working" color="#3899e2" />);
-    expect(screen.getByText("working").style.getPropertyValue("--c")).toBe("#3899e2");
+    const word = screen.getByText("working");
+    expect(word.style.getPropertyValue("--c")).toBe("");
+    expect(word.children).toHaveLength(0);
+    expect(rule("features/Sidebar.module.css", '.stateChip[data-state="working"]')).toMatch(/color: var\(--ink-2\);/);
+    expect(rule("features/Sidebar.module.css", '.stateChip[data-state="needs-you"]')).toMatch(/color: var\(--c-warning-text\);/);
+    expect(rule("features/Sidebar.module.css", '.stateChip[data-state="failed"]')).toMatch(/color: var\(--c-danger-text\);/);
+    expect(read("features/Sidebar.module.css")).not.toMatch(/\.stateDot/);
   });
 });

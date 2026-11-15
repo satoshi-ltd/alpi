@@ -1,27 +1,19 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { AlertBanner, Eyebrow, Icon } from "../primitives/index.js";
+import { AlertBanner, Banner, Eyebrow, Icon } from "../primitives/index.js";
 import Markdown from "../primitives/Markdown.jsx";
 import CodeView from "../primitives/CodeView.jsx";
 import shell from "../primitives/BrowseModal.module.css";
-import { BrowseBody, BrowseShell } from "../primitives/BrowseModal.jsx";
+import { BrowseBody, BrowseDetailHead, BrowseRow, BrowseShell, FactTable } from "../primitives/BrowseModal.jsx";
 import { PROFILE_PANELS } from "../lib/profilePanels.js";
 import { SkeletonReader, SkeletonRows } from "../primitives/Skeleton.jsx";
 import styles from "./SkillsModal.module.css";
 import { skillBanner, skillItem, skillWord } from "../../../common/attention.mjs";
 import { EMPTY } from "../../../common/emptyCopy.mjs";
-import { statusDot, statusKind } from "../lib/statusVocab.js";
 import { skillFileIcon } from "../../../common/fileKind.mjs";
+import { factLabel, sizeLabel, skillMeta } from "../../../common/panelRow.mjs";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-export function formatBytes(n) {
-  const b = Number(n) || 0;
-  if (b < 1024) return `${b}b`;
-  const kb = b / 1024;
-  if (kb < 1024) return `${kb.toFixed(1)}kb`;
-  return `${(kb / 1024).toFixed(1)}mb`;
-}
 
 export function fileIconName(node) {
   return skillFileIcon(node);
@@ -216,7 +208,7 @@ export function SkillsPanel({ open = true, profile, connectionId, owner = null, 
         ) : null}
         {groups.map((g) => (
           <Fragment key={g.cat}>
-            <Eyebrow as="li" className={shell.groupHeader} role="presentation">{g.cat}</Eyebrow>
+            <Eyebrow as="li" className={shell.groupHeader} role="presentation">{factLabel(g.cat)}</Eyebrow>
             {g.skills.map((s) => (
               <SkillRow
                 key={`${s.category || ""}/${s.name}`}
@@ -266,60 +258,42 @@ export function SkillsPanel({ open = true, profile, connectionId, owner = null, 
   );
 }
 
-function StatusDot({ status }) {
-  const dot = statusDot(status);
-  const tone = dot === "filled" ? styles.dotActive : dot === "red" ? styles.dotInvalid : styles.dotInactive;
-  return <span aria-hidden className={`${styles.dot} ${tone}`} />;
-}
-
 function SkillRow({ skill, active, onSelect, flag = null }) {
+  const { meta, tone } = skillMeta(skill, flag ? skillWord(flag) : null);
   return (
-    <li>
-      <button
-        type="button"
-        className={`${shell.row} ${styles.skillRow} ${active ? shell.rowActive : ""} ${skill.status !== "active" ? shell.rowMuted : ""}`}
-        onClick={onSelect}
-        role="option"
-        aria-selected={active}
-      >
-        <span className={styles.rowHead}>
-          {flag ? <span aria-hidden className={`${styles.dot} ${styles.dotFlag}`} /> : <StatusDot status={skill.status} />}
-          <span className={styles.rowId}>{skill.name}</span>
-          {flag ? <span className={styles.rowStatus} data-status="invalid">{skillWord(flag)}</span> : skill.status !== "active" ? <span className={styles.rowStatus} data-status={skill.status}>{skill.status}</span> : null}
-          <span className={shell.sizeTag}>{formatBytes(skill.size)}</span>
-        </span>
-        {skill.description ? <span className={styles.rowBlurb}>{skill.description}</span> : null}
-      </button>
-    </li>
+    <BrowseRow
+      title={skill.name}
+      sub={skill.description || null}
+      meta={meta}
+      metaTone={tone}
+      off={skill.status !== "active"}
+      active={active}
+      onSelect={onSelect}
+    />
   );
 }
 
 function DetailPane({ detail, selectedPath, openDirs, onToggleDir, onSelectFile, file, fileLoading, flag = null }) {
   const inactive = detail.status === "inactive";
   const invalid = detail.status === "invalid";
+  const state = invalid ? "invalid" : inactive ? "inactive" : "active";
   return (
     <>
-      <div className={shell.detailMeta}>
-        <span className={styles.detailName}>
-          {detail.category ? <span className={styles.detailCat}>{detail.category}/</span> : null}
-          <span>{detail.name}</span>
-        </span>
-        <StatusPill status={detail.status} reason={detail.reason} />
-        <span className={shell.detailMetaSpacer} />
-        <SkillMeta detail={detail} />
-      </div>
+      <BrowseDetailHead
+        title={detail.name}
+        state={state}
+        stateTone={invalid ? "danger" : null}
+        id={detail.category ? `${detail.category}/${detail.name}` : detail.name}
+      />
 
       <div className={styles.article}>
         {flag ? <AlertBanner {...skillBanner(flag)} /> : null}
         {!flag && (inactive || invalid) ? (
-          <div className={`${styles.callout} ${invalid ? styles.calloutInvalid : ""}`}>
-            <span className={styles.calloutDot} aria-hidden />
-            <span>
-              {invalid ? "Invalid — " : "Inactive — "}
-              <span className={styles.calloutReason}>{detail.reason}</span>
-              {invalid ? "." : ". Resolve it and the skill activates next session."}
-            </span>
-          </div>
+          <Banner kind={invalid ? "danger" : "warning"}>
+            {invalid ? "Invalid — " : "Inactive — "}
+            <strong>{detail.reason}</strong>
+            {invalid ? "." : ". Resolve it and the skill activates next session."}
+          </Banner>
         ) : null}
 
         <Frontmatter detail={detail} />
@@ -343,91 +317,40 @@ function DetailPane({ detail, selectedPath, openDirs, onToggleDir, onSelectFile,
   );
 }
 
-function StatusPill({ status, reason }) {
-  const label = status === "active" ? "active" : status === "invalid" ? "invalid" : "inactive";
-  const kind = statusKind(status);
-  return (
-    <span className={styles.status} data-status={label} data-kind={kind} title={status === "active" ? undefined : reason || undefined}>
-      <StatusDot status={status} />
-      {label}
-    </span>
-  );
+export function skillVersion(detail) {
+  return [detail.version ? `v${detail.version}` : null, detail.origin || "agent", formatSkillDate(detail.created_at) || null].filter(Boolean).join(" · ");
 }
 
-function SkillMeta({ detail }) {
-  const parts = [];
-  if (detail.version) parts.push(<Fragment key="v">v{detail.version}</Fragment>);
-  parts.push(<Fragment key="o">{detail.origin || "agent"}</Fragment>);
-  const date = formatSkillDate(detail.created_at);
-  if (date) parts.push(<Fragment key="d">{date}</Fragment>);
-  return (
-    <span className={styles.detailInfo}>
-      {parts.map((p, i) => (
-        <Fragment key={i}>
-          {i > 0 ? <span className={styles.detailInfoDot} aria-hidden>·</span> : null}
-          {p}
-        </Fragment>
-      ))}
-    </span>
-  );
+function Ids({ items }) {
+  return items.map((it, i) => (
+    <Fragment key={it.key}>
+      {i > 0 ? ", " : null}
+      <code className={it.missing ? styles.idMissing : undefined}>{it.name}</code>
+      {it.missing ? <span className={styles.missing}> missing</span> : null}
+    </Fragment>
+  ));
 }
 
 function Frontmatter({ detail }) {
+  const requires = detail.requires || [];
   return (
-    <div className={styles.card}>
-      {detail.description ? (
-        <FmRow label="about"><span className={styles.about}>{detail.description}</span></FmRow>
-      ) : null}
-      {detail.requires?.length ? (
-        <FmRow label="requires">
-          <span className={styles.reqList}>
-            {detail.requires.map((r) => (
-              <span key={`${r.kind}:${r.name}`} className={styles.req}>
-                <span aria-hidden className={`${styles.reqDot} ${r.resolved ? styles.reqOk : styles.reqNo}`} />
-                <span className={`${styles.reqName} ${r.resolved ? "" : styles.reqMissing}`}>{r.name}</span>
-              </span>
-            ))}
-          </span>
-        </FmRow>
-      ) : null}
-      {detail.tools?.length ? (
-        <FmRow label="tools">
-          <span className={styles.kwFlow}>
-            {orderTools(detail.tools).map((t) => <span key={t} className={styles.kw}>{displayTool(t)}</span>)}
-          </span>
-        </FmRow>
-      ) : null}
-      {detail.platforms?.length ? (
-        <FmRow label="platforms">
-          <span className={styles.kwFlow}>
-            {detail.platforms.map((p) => <span key={p} className={styles.kw}>{p}</span>)}
-          </span>
-        </FmRow>
-      ) : null}
-      {detail.keywords?.length ? (
-        <FmRow label="keywords">
-          <span className={styles.kwFlow}>
-            {detail.keywords.map((k) => <span key={k} className={styles.kw}>{k}</span>)}
-          </span>
-        </FmRow>
-      ) : null}
-    </div>
-  );
-}
-
-function FmRow({ label, children }) {
-  return (
-    <div className={styles.fmRow}>
-      <Eyebrow className={styles.fmLabel}>{label}</Eyebrow>
-      <span className={styles.fmValue}>{children}</span>
-    </div>
+    <FactTable
+      rows={[
+        { label: "About", value: detail.description || null },
+        { label: "Requires", value: requires.length ? <Ids items={requires.map((r) => ({ key: `${r.kind}:${r.name}`, name: r.name, missing: !r.resolved }))} /> : null },
+        { label: "Tools", value: detail.tools?.length ? <Ids items={orderTools(detail.tools).map(displayTool).map((n) => ({ key: n, name: n, missing: false }))} /> : null },
+        { label: "Platforms", value: detail.platforms?.length ? detail.platforms.join(", ") : null },
+        { label: "Keywords", value: detail.keywords?.length ? detail.keywords.join(", ") : null },
+        { label: "Version", value: skillVersion(detail) },
+      ]}
+    />
   );
 }
 
 function SkillTree({ tree, selectedPath, openDirs, onToggle, onSelectFile }) {
   return (
     <div className={styles.tree}>
-      <Eyebrow className={styles.treeRoot}>files</Eyebrow>
+      <Eyebrow className={styles.treeRoot}>Files</Eyebrow>
       {tree.map((node) => {
         if (node.kind === "file") {
           return (
@@ -505,7 +428,7 @@ function FileViewer({ file, loading }) {
     return (
       <div className={styles.viewerBinary}>
         <Icon name={file.name ? fileIconName(file) : "file"} size="md" />
-        <span>binary · {formatBytes(file.size)}</span>
+        <span>binary · {sizeLabel(file.size)}</span>
       </div>
     );
   }

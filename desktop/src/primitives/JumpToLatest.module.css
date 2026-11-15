@@ -5,7 +5,7 @@
   transform: translateY(var(--sp-8));
   width: var(--ctl-32);
   height: var(--ctl-32);
-  border-radius: var(--r-xs);
+  border-radius: var(--r-control);
   background: var(--bg-elev);
   border: 0;
   color: var(--ink-2);
@@ -35,6 +35,6 @@
 }
 
 .btn:focus-visible {
-  outline: none;
-  box-shadow: var(--shadow-edge-sm), inset 0 0 0 1px var(--focus-border);
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-outline-offset);
 }

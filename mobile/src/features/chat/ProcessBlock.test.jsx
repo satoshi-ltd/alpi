@@ -10,10 +10,10 @@ vi.mock('react-native', () => ({
 }));
 
 vi.mock('./Reasoning', () => ({
-  Reasoning: ({ streaming, seconds, timeline, fold, accent }) =>
+  Reasoning: ({ streaming, seconds, timeline, shape, accent }) =>
     React.createElement('section', {
       'data-step': 'reasoning',
-      'data-fold': fold ?? '',
+      'data-shape': shape ?? '',
       'data-accent': accent ?? '',
       'data-streaming': String(!!streaming),
       'data-seconds': seconds,
@@ -101,9 +101,9 @@ describe('ProcessBlock', () => {
 
 describe('ProcessBlock hands the profile to its reasoning', () => {
   it('passes the profile fold and colour to the thinking row', () => {
-    renderTurn({ reasoning: 'plan', reasoned_s: 3 }, { fold: 'shield', accent: '#3899e2' });
+    renderTurn({ reasoning: 'plan', reasoned_s: 3 }, { shape: 'bell', accent: '#3899e2' });
     const reasoning = document.querySelector('[data-step="reasoning"]');
-    expect(reasoning.getAttribute('data-fold')).toBe('shield');
+    expect(reasoning.getAttribute('data-shape')).toBe('bell');
     expect(reasoning.getAttribute('data-accent')).toBe('#3899e2');
   });
 });

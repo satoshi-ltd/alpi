@@ -60,7 +60,7 @@ function EditBriefing() {
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScreenHeader
         title="Briefing"
-        subtitle={`#${id} · WHAT THIS DECIDES`}
+        subtitle={`#${id} · what this decides`}
         onBack={askBack}
         right={<Button title="Save" size="md" onPress={save} />}
       />

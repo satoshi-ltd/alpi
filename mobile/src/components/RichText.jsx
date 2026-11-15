@@ -11,6 +11,7 @@ import { useEndpoint } from '../lib/EndpointContext';
 import { useTheme } from '../theme/ThemeContext';
 import { parseChart } from '../../../common/chartSpec.mjs';
 import { Chart } from './Chart';
+import { code } from '../theme/code';
 
 function MarkdownImage({ path, alt, note, profile, theme }) {
   const { colors, fonts, fontSizes } = theme;
@@ -31,17 +32,17 @@ function MarkdownImage({ path, alt, note, profile, theme }) {
         {uri ? (
           <Image
             source={{ uri }}
-            style={{ width: '100%', aspectRatio: aspect, borderRadius: radii.xs, borderWidth: 0.5, borderColor: colors.line, backgroundColor: colors.hover }}
+            style={{ width: '100%', aspectRatio: aspect, borderRadius: radii.surface, backgroundColor: colors.hover }}
             resizeMode="cover"
             accessibilityLabel={alt}
           />
         ) : (
-          <View style={{ height: 160, borderRadius: radii.xs, borderWidth: 0.5, borderColor: colors.line, backgroundColor: colors.hover, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ height: 160, borderRadius: radii.surface, backgroundColor: colors.hover, alignItems: 'center', justifyContent: 'center' }}>
             <Spinner color={colors.ink3} />
           </View>
         )}
       </Pressable>
-      <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3, marginTop: space.s2 }}>
+      <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3, marginTop: space.s2 }}>
         {caption}
       </Text>
       <Modal
@@ -60,7 +61,7 @@ function MarkdownImage({ path, alt, note, profile, theme }) {
           <LightboxClose onPress={() => setOpen(false)} />
           {uri ? <Image source={{ uri }} style={{ width: '100%', height: '80%' }} resizeMode="contain" /> : null}
           {caption ? (
-            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: 'rgba(255,255,255,0.82)', marginTop: space.s4 }}>
+            <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: 'rgba(255,255,255,0.82)', marginTop: space.s4 }}>
               {caption}
             </Text>
           ) : null}
@@ -107,8 +108,7 @@ function parseInline(text, key, theme, opts = {}) {
       <Text
         key={seg.key}
         style={{
-          fontFamily: theme.fonts.mono,
-          fontSize: theme.fontSizes.md,
+          ...code(theme.fonts, theme.fontSizes.md),
           backgroundColor: codeBackground,
           color: codeColor,
         }}
@@ -122,15 +122,13 @@ function parseInline(text, key, theme, opts = {}) {
   );
 }
 
-function CodeBlock({ lang, code, theme }) {
+function CodeBlock({ lang, code: source, theme }) {
   const { colors, fonts, fontSizes } = theme;
   return (
     <View
       style={{
         marginVertical: space.s3,
-        borderRadius: radii.xs,
-        borderWidth: 0.5,
-        borderColor: colors.line,
+        borderRadius: radii.surface,
         backgroundColor: colors.hover,
         overflow: 'hidden',
       }}
@@ -139,17 +137,15 @@ function CodeBlock({ lang, code, theme }) {
         style={{
           paddingHorizontal: space.s4,
           paddingVertical: space.s2,
-          borderBottomWidth: 0.5,
-          borderBottomColor: colors.line,
         }}
       >
-        <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
+        <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>
           {lang || 'text'}
         </Text>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ padding: space.s5 }}>
-        <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.md, color: colors.ink, lineHeight: fontSizes.md * lineHeights.normal }}>
-          {code}
+        <Text style={{ ...code(fonts, fontSizes.md), color: colors.ink, lineHeight: fontSizes.md * lineHeights.normal }}>
+          {source}
         </Text>
       </ScrollView>
     </View>
@@ -173,15 +169,13 @@ function MdTable({ header, rows, theme, inlineOpts }) {
     <View
       style={{
         marginVertical: space.s3,
-        borderRadius: radii.xs,
-        borderWidth: 0.5,
-        borderColor: colors.line2,
+        borderRadius: radii.surface,
         overflow: 'hidden',
       }}
     >
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View>
-          <View style={{ flexDirection: 'row', backgroundColor: colors.hover, borderBottomWidth: 0.5, borderBottomColor: colors.line }}>
+          <View style={{ flexDirection: 'row', backgroundColor: colors.hover }}>
             {header.map((c, j) => (
               <Text
                 key={j}
@@ -197,8 +191,6 @@ function MdTable({ header, rows, theme, inlineOpts }) {
               style={{
                 flexDirection: 'row',
                 backgroundColor: colors.bg,
-                borderBottomWidth: r < rows.length - 1 ? 0.5 : 0,
-                borderBottomColor: colors.line,
               }}
             >
               {Array.from({ length: cols }).map((_, j) => (

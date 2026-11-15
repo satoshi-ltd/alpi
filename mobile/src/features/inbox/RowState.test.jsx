@@ -65,7 +65,7 @@ describe('RowState', () => {
     expect(screen.getByText('needs you').getAttribute('data-color')).toBe('#warn');
   });
 
-  it('says working with the word alone, leaving the motion to the object', async () => {
+  it('says every state with the word alone in the trailing slot, no dot, leaving the motion to the mark', async () => {
     render(<RowState state="working" />);
     await act(async () => {});
     expect(screen.queryByTestId('state-pulse')).toBeNull();
@@ -73,7 +73,8 @@ describe('RowState', () => {
     expect(h.loops).toBe(0);
     cleanup();
     render(<RowState state="needs-you" />);
-    expect(screen.getByTestId('state-dot')).toBeTruthy();
+    expect(screen.queryByTestId('state-dot')).toBeNull();
+    expect(screen.getByText('needs you')).toBeTruthy();
   });
 
   it('shows the phase count of a running pipeline in place of the word', () => {

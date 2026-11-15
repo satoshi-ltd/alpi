@@ -10,7 +10,9 @@
 
 .modal {
   background: var(--bg-elev);
-  border-radius: var(--r-xs);
+  --well: var(--well-float);
+  --well-focus: var(--well-float);
+  border-radius: var(--r-sheet);
   box-shadow: var(--shadow-edge-lg);
   width: min(820px, calc(100vw - var(--sp-32)));
   max-height: min(720px, calc(100vh - var(--sp-32)));
@@ -50,7 +52,7 @@
 }
 
 .meta {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   color: var(--ink-3);
 }
@@ -95,18 +97,15 @@
 }
 
 .sortLabel {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--eyebrow-size);
   letter-spacing: var(--eyebrow-tracking);
-  text-transform: uppercase;
   color: var(--ink-3);
 }
 
 .tableWrap {
   flex: 1;
   overflow: auto;
-  border-top: 0.5px solid var(--line);
-  border-bottom: 0.5px solid var(--line);
 }
 
 .table {
@@ -120,19 +119,16 @@
   top: 0;
   background: var(--bg-elev);
   padding: var(--sp-8) var(--sp-12);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--eyebrow-size);
   letter-spacing: var(--eyebrow-tracking);
   color: var(--ink-3);
   font-weight: var(--fw-regular);
   text-align: left;
-  border-bottom: 0.5px solid var(--line);
-  text-transform: uppercase;
 }
 
 .row td {
   padding: var(--sp-8) var(--sp-12);
-  border-bottom: 0.5px solid var(--line);
   vertical-align: middle;
   color: var(--ink);
 }
@@ -166,7 +162,7 @@
 .cellTurns,
 .cellSize {
   white-space: nowrap;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
   width: 1%;
@@ -211,7 +207,7 @@
   align-items: center;
   gap: var(--sp-8);
   margin-top: var(--sp-4);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   color: var(--ink-2);
   letter-spacing: 0.02em;
@@ -223,7 +219,7 @@
   justify-content: space-between;
   gap: var(--sp-12);
   padding: var(--dialog-foot-pad);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   color: var(--ink-3);
 }

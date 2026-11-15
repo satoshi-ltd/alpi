@@ -42,10 +42,10 @@ describe('pairing copy vocabulary', () => {
     expect(container.textContent).not.toMatch(/alpis\b/i);
   });
 
-  it('greets with the alpaca fold in the theme ink', () => {
+  it('greets with Twin in the theme ink', () => {
     const { container } = render(<Onboarding />);
-    const mark = container.querySelector('[data-fold]');
-    expect(mark.getAttribute('data-fold')).toBe('alpaca');
+    const mark = container.querySelector('[data-shape]');
+    expect(mark.getAttribute('data-shape')).toBe('alpaca');
     expect(mark.getAttribute('data-size')).toBe('72');
   });
 

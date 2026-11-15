@@ -31,13 +31,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   color: var(--ink-3);
 }
 
 .deadline {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   color: var(--ink-3);
 }
@@ -59,11 +59,10 @@
 
 .command {
   font-family: var(--font-mono);
-  font-size: var(--text-chat);
+  font-size: var(--text-mono-read);
   color: var(--ink);
-  background: var(--bg-input);
-  border: 0.5px solid var(--line-2);
-  border-radius: var(--r-xs);
+  background: var(--card);
+  border-radius: var(--r-surface);
   padding: var(--sp-12) var(--sp-16);
   margin: 0;
   overflow-x: auto;
@@ -74,7 +73,7 @@
 
 .cwd {
   font-family: var(--font-mono);
-  font-size: var(--text-meta);
+  font-size: var(--text-mono);
   color: var(--ink-3);
   margin-top: var(--sp-4);
 }
@@ -93,13 +92,13 @@
   text-align: left;
   background: transparent;
   border: 0;
-  border-radius: var(--r-xs);
+  border-radius: var(--r-control);
   padding: var(--sp-12) var(--sp-12);
   cursor: pointer;
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
-  transition: background var(--dur-1) var(--ease);
+  transition: background-color var(--state-out);
   font-family: var(--font-sans);
 }
 

@@ -39,7 +39,7 @@ function FetchedImage({ path, profile, name, colors, fonts }) {
   useEffect(() => { if (uri) Image.getSize(uri, (w, h) => h && setAspect(w / h), () => {}); }, [uri]);
   if (!uri) {
     return (
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3, padding: space.s3, borderRadius: radii.xs, backgroundColor: colors.hover }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3, padding: space.s3, borderRadius: radii.surface, backgroundColor: colors.hover }}>
         {err ? <Icon name="file" size="md" color={colors.ink3} /> : <Spinner color={colors.ink3} />}
         <Text numberOfLines={2} style={{ flexShrink: 1, fontFamily: fonts.sans.regular, color: colors.ink3 }}>
           {name}{err ? `  ·  ${err}` : ''}
@@ -50,7 +50,7 @@ function FetchedImage({ path, profile, name, colors, fonts }) {
   return (
     <Image
       source={{ uri }}
-      style={{ width: '100%', aspectRatio: aspect, borderRadius: radii.xs, borderWidth: 0.5, borderColor: colors.line, backgroundColor: colors.hover }}
+      style={{ width: '100%', aspectRatio: aspect, borderRadius: radii.surface, backgroundColor: colors.hover }}
       resizeMode="cover"
       accessibilityLabel={name}
     />
@@ -59,10 +59,10 @@ function FetchedImage({ path, profile, name, colors, fonts }) {
 
 function Glyph({ kind, localUri, name, colors }) {
   if (kind === 'image' && localUri) {
-    return <Image source={{ uri: localUri }} style={{ width: BOX, height: BOX, borderRadius: radii.xs }} accessibilityLabel={name} />;
+    return <Image source={{ uri: localUri }} style={{ width: BOX, height: BOX, borderRadius: radii.control }} accessibilityLabel={name} />;
   }
   return (
-    <View style={{ width: BOX, height: BOX, borderRadius: radii.xs, backgroundColor: colors.hover, alignItems: 'center', justifyContent: 'center' }}>
+    <View style={{ width: BOX, height: BOX, borderRadius: radii.control, backgroundColor: colors.hover, alignItems: 'center', justifyContent: 'center' }}>
       <Icon name={ICON[kind] || 'file'} size="md" color={colors.ink3} />
     </View>
   );
@@ -108,10 +108,8 @@ export function AttachmentCards({ items, onRemove, variant = 'composer', profile
             style={{
               flexDirection: 'row', alignItems: 'center', gap: space.s3,
               paddingVertical: space.s2, paddingHorizontal: space.s4,
-              borderRadius: radii.xs,
+              borderRadius: radii.control,
               backgroundColor: message ? colors.hover : colors.bgPane,
-              borderWidth: message ? 0 : 0.5,
-              borderColor: colors.line2,
               maxWidth: message ? undefined : 240,
               flexGrow: message ? 1 : 0,
             }}
@@ -119,7 +117,7 @@ export function AttachmentCards({ items, onRemove, variant = 'composer', profile
             <Glyph kind={kind} localUri={a.localUri} name={a.name} colors={colors} />
             <View style={{ flexShrink: 1, flexGrow: 1 }}>
               <Text numberOfLines={1} style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink }}>{a.name}</Text>
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3 }}>{subtitle}</Text>
+              <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}>{subtitle}</Text>
             </View>
             {!message && onRemove ? (
               <Pressable onPress={() => onRemove(i)} hitSlop={REMOVE_SLOP} accessibilityRole="button" accessibilityLabel={`Remove ${a.name}`}>

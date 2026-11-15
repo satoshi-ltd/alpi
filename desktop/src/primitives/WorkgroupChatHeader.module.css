@@ -17,6 +17,6 @@
 .divider {
   width: 1px;
   height: var(--ctrl-2xs);
-  background: var(--line);
+  background: none;
   margin: 0 var(--sp-4);
 }

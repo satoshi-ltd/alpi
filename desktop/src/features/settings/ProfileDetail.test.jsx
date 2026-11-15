@@ -1,5 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { nameTone } from "../../../../common/name.mjs";
+import { palettes } from "../../../../common/tokens.mjs";
 
 const { stableDetail, refreshProfileDetail } = vi.hoisted(() => ({
   stableDetail: {},
@@ -74,6 +76,9 @@ vi.mock("./fields/maintenance.jsx", () => ({
 }));
 
 import ProfileDetail from "./ProfileDetail.jsx";
+import { _resetProfileEdits } from "../../lib/optimisticProfiles.js";
+
+beforeEach(() => _resetProfileEdits());
 
 describe("ProfileDetail", () => {
   it("matches the chat header model and budget treatment", () => {
@@ -116,8 +121,7 @@ describe("ProfileDetail", () => {
     );
 
     const bar = screen.getByRole("progressbar", { name: "Fetching latest settings" });
-    expect(bar.getAttribute("style")).toBeNull();
-    expect(bar.outerHTML).not.toContain("#10b981");
+    expect(bar.style.getPropertyValue("--c-light")).toBe(nameTone("#10b981", palettes.light.bgPane));
   });
 
   it("offers the theme control on the default profile only", () => {
@@ -371,73 +375,84 @@ describe("ProfileDetail unsaved state", () => {
 });
 
 describe("ProfileDetail appearance", () => {
-  const profile = { name: "doc", model: "a/b", accent: "#3899e2", fold: "shield" };
+  const profile = { name: "doc", model: "a/b", accent: "#3899e2", shape: "bell" };
   const mount = () =>
     render(<ProfileDetail profile={profile} profiles={[]} activeConnection={{ id: "local", kind: "local" }} />);
 
-  it("shows the profile's current object and colour", async () => {
+  it("shows the profile's current shape and colour", async () => {
     const { invoke } = await import("@tauri-apps/api/core");
     invoke.mockImplementation(async () => null);
     mount();
     expect(screen.getByText("appearance")).toBeInTheDocument();
     expect(screen.queryByText("accent")).toBeNull();
-    expect(screen.getByRole("button", { name: "blue shield" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "blue bell" })).toBeInTheDocument();
     invoke.mockReset();
   });
 
-  it("shows the default profile's alpaca as read-only text, with no picker", async () => {
+  it("shows the default profile's Twin brand mark as read-only text, with no picker", async () => {
     const { invoke } = await import("@tauri-apps/api/core");
     invoke.mockImplementation(async () => null);
     const { container } = render(
-      <ProfileDetail profile={{ name: "default", fold: "alpaca", accent: null }} profiles={[]} activeConnection={{ id: "local", kind: "local" }} />,
+      <ProfileDetail profile={{ name: "default", shape: "twin", accent: null }} profiles={[]} activeConnection={{ id: "local", kind: "local" }} />,
     );
-    expect(screen.getByText("alpaca · brand accent")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /alpaca|diamond/ })).toBeNull();
-    expect([...container.querySelectorAll("[data-fold='alpaca']")].length).toBeGreaterThan(0);
+    expect(screen.getByText("Twin · brand mark")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /round|bell|twin/i })).toBeNull();
+    const twin = container.querySelector("[data-mark='alpi-twin']");
+    expect(twin).not.toBeNull();
+    expect(twin.querySelector("path[data-body]").getAttribute("fill")).toBe("var(--accent)");
     invoke.mockReset();
   });
 
-  it("falls back to the diamond when the daemon reports no fold", async () => {
+  it("reads only the shape field and draws a profile that carries only a fold as the round", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    invoke.mockImplementation(async () => null);
+    render(<ProfileDetail profile={{ name: "doc", accent: "#3899e2", fold: "shield" }} profiles={[]} activeConnection={{ id: "local", kind: "local" }} />);
+    expect(screen.getByRole("button", { name: "blue round" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "blue bell" })).toBeNull();
+    invoke.mockReset();
+  });
+
+  it("falls back to the round shape when the daemon reports no shape", async () => {
     const { invoke } = await import("@tauri-apps/api/core");
     invoke.mockImplementation(async () => null);
     render(<ProfileDetail profile={{ name: "doc", accent: "#3899e2" }} profiles={[]} activeConnection={{ id: "local", kind: "local" }} />);
-    expect(screen.getByRole("button", { name: "blue diamond" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "blue round" })).toBeInTheDocument();
     invoke.mockReset();
   });
 
-  it("saves a picked object to tui.fold and leaves the accent unwritten", async () => {
+  it("saves a picked shape to tui.shape by name and leaves the accent unwritten", async () => {
     const { invoke } = await import("@tauri-apps/api/core");
     const { waitFor } = await import("@testing-library/react");
     invoke.mockImplementation(async () => null);
     mount();
-    fireEvent.click(screen.getByRole("button", { name: "blue shield" }));
+    fireEvent.click(screen.getByRole("button", { name: "blue bell" }));
     fireEvent.click(screen.getByRole("button", { name: "heart" }));
     expect(screen.getByRole("button", { name: "blue heart" })).toBeInTheDocument();
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith("set_config_field", { profile: "doc", key: "tui.fold", value: "heart", connectionId: "local" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("set_config_field", { profile: "doc", key: "tui.shape", value: "heart", connectionId: "local" }));
     expect(invoke).not.toHaveBeenCalledWith("set_config_field", expect.objectContaining({ key: "tui.accent" }));
     invoke.mockReset();
   });
 
-  it("saves a picked colour to tui.accent and leaves the fold unwritten", async () => {
+  it("saves a picked colour to tui.accent and leaves the shape unwritten", async () => {
     const { invoke } = await import("@tauri-apps/api/core");
     const { waitFor } = await import("@testing-library/react");
     invoke.mockImplementation(async () => null);
     mount();
-    fireEvent.click(screen.getByRole("button", { name: "blue shield" }));
+    fireEvent.click(screen.getByRole("button", { name: "blue bell" }));
     fireEvent.click(screen.getByRole("button", { name: "rose #f36a8a" }));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("set_config_field", { profile: "doc", key: "tui.accent", value: "#f36a8a", connectionId: "local" }));
-    expect(invoke).not.toHaveBeenCalledWith("set_config_field", expect.objectContaining({ key: "tui.fold" }));
+    expect(invoke).not.toHaveBeenCalledWith("set_config_field", expect.objectContaining({ key: "tui.shape" }));
     invoke.mockReset();
   });
 
-  it("saves the reset as the diamond", async () => {
+  it("saves the reset to round by name", async () => {
     const { invoke } = await import("@tauri-apps/api/core");
     const { waitFor } = await import("@testing-library/react");
     invoke.mockImplementation(async () => null);
     mount();
-    fireEvent.click(screen.getByRole("button", { name: "blue shield" }));
-    fireEvent.click(screen.getByRole("button", { name: "Reset to diamond" }));
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith("set_config_field", { profile: "doc", key: "tui.fold", value: "diamond", connectionId: "local" }));
+    fireEvent.click(screen.getByRole("button", { name: "blue bell" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset to round" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("set_config_field", { profile: "doc", key: "tui.shape", value: "round", connectionId: "local" }));
     invoke.mockReset();
   });
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { ACCENTS, pairName, selectedAccent } from '../../../../common/accents.mjs';
-import { DEFAULT_FOLD, FOLD_IDS, normaliseFold } from '../../../../common/folds.mjs';
+import { DEFAULT_SHAPE, SHAPE_IDS, shapeOf } from '../../../../common/shapes.mjs';
 import { radii, space } from '../../theme/tokens';
 
 import { Eyebrow } from '../../components/Eyebrow';
@@ -13,44 +13,46 @@ import { useTheme } from '../../theme/ThemeContext';
 
 const HEX = /^#[0-9a-f]{6}$/i;
 
-export function AppearanceSheet({ open, onClose, profileName, initialValue, initialFold, onSave }) {
+export function AppearanceSheet({ open, onClose, profileName, initialValue, initialShape, onSave }) {
   const { colors, fonts, fontSizes } = useTheme();
   const toast = useToast();
-  const startFold = normaliseFold(initialFold);
+  const startShape = shapeOf(initialShape);
   const [picked, setPicked] = useState(String(initialValue ?? ACCENTS[0][1]));
-  const [pickedFold, setPickedFold] = useState(startFold);
-  const [saving, setSaving] = useState(false);
+  const [pickedShape, setPickedShape] = useState(startShape);
   const error = HEX.test(picked.trim()) ? null : 'Use a 6-digit #hex colour';
   const tint = error ? String(initialValue ?? ACCENTS[0][1]) : picked.trim().toLowerCase();
-  const pair = pairName(pickedFold, tint);
+  const pair = pairName(pickedShape, tint);
 
   useEffect(() => {
     if (open && initialValue) setPicked(String(initialValue));
   }, [open, initialValue]);
 
   useEffect(() => {
-    if (open) setPickedFold(startFold);
-  }, [open, startFold]);
+    if (open) setPickedShape(startShape);
+  }, [open, startShape]);
 
   const handleSave = async () => {
     if (error) return;
     const accent = picked.trim().toLowerCase();
     const changes = {};
-    if (pickedFold !== startFold) changes.fold = pickedFold;
+    if (pickedShape !== startShape) changes.shape = pickedShape;
     if (accent !== String(initialValue ?? '').trim().toLowerCase()) changes.accent = accent;
     if (!Object.keys(changes).length) {
       onClose?.();
       return;
     }
-    setSaving(true);
+    let saved;
     try {
-      await onSave?.(changes);
+      saved = Promise.resolve(onSave?.(changes));
+    } catch (e) {
+      saved = Promise.reject(e);
+    }
+    onClose?.();
+    try {
+      await saved;
       toast({ title: 'Appearance saved' });
-      onClose?.();
     } catch (e) {
       toast({ title: 'Save failed', message: String(e) });
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -59,36 +61,35 @@ export function AppearanceSheet({ open, onClose, profileName, initialValue, init
       open={open}
       onClose={onClose}
       title="Appearance"
-      subtitle={`@${profileName ?? ''} · object and colour`}
-      primaryAction={{ label: 'Save appearance', onPress: handleSave, disabled: !!error, loading: saving }}
+      subtitle={`@${profileName ?? ''} · shape and colour`}
+      primaryAction={{ label: 'Save appearance', onPress: handleSave, disabled: !!error }}
     >
       <ScrollView keyboardShouldPersistTaps="handled">
         <View style={{ paddingHorizontal: space.s7, paddingTop: space.s3, gap: space.s3 }}>
-          <Eyebrow>Object</Eyebrow>
+          <Eyebrow>Shape</Eyebrow>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-            {FOLD_IDS.map((id) => {
-              const sel = pickedFold === id;
+            {SHAPE_IDS.map((id) => {
+              const sel = pickedShape === id;
               return (
                 <Pressable
                   key={id}
                   accessibilityRole="button"
                   accessibilityLabel={id}
                   accessibilityState={{ selected: sel }}
-                  onPress={() => setPickedFold(id)}
+                  onPress={() => setPickedShape(id)}
                   style={{ width: `${100 / 6}%`, minHeight: 56, alignItems: 'center', justifyContent: 'center' }}
                 >
                   <View
                     style={{
                       width: 48,
                       height: 48,
-                      borderRadius: radii.xs,
+                      borderRadius: radii.control,
                       alignItems: 'center',
                       justifyContent: 'center',
-                      borderWidth: sel ? 2 : 0.5,
-                      borderColor: sel ? colors.ink : colors.line2,
+                      backgroundColor: sel ? colors.selected : 'transparent',
                     }}
                   >
-                    <Fold fold={id} color={tint} size={28} />
+                    <Fold shape={id} color={tint} size={28} />
                   </View>
                 </Pressable>
               );
@@ -113,14 +114,13 @@ export function AppearanceSheet({ open, onClose, profileName, initialValue, init
                     style={{
                       width: 48,
                       height: 48,
-                      borderRadius: radii.xs,
+                      borderRadius: radii.control,
                       alignItems: 'center',
                       justifyContent: 'center',
-                      borderWidth: sel ? 2 : 0.5,
-                      borderColor: sel ? colors.ink : colors.line2,
+                      backgroundColor: sel ? colors.selected : 'transparent',
                     }}
                   >
-                    <View style={{ width: 28, height: 28, borderRadius: radii.xs, backgroundColor: hex }} />
+                    <View style={{ width: 28, height: 28, borderRadius: radii.pill, backgroundColor: hex }} />
                   </View>
                 </Pressable>
               );
@@ -136,25 +136,25 @@ export function AppearanceSheet({ open, onClose, profileName, initialValue, init
             gap: space.s6,
           }}
         >
-          <Fold fold={pickedFold} color={tint} size={40} />
+          <Fold shape={pickedShape} color={tint} size={40} />
           <View style={{ flex: 1, gap: 2 }}>
             <Text
               style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.ink }}
             >
               {pair.charAt(0).toUpperCase() + pair.slice(1)}
             </Text>
-            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
-              {`fold: ${pickedFold} · accent: ${tint}`}
+            <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>
+              {`shape: ${pickedShape} · accent: ${tint}`}
             </Text>
           </View>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Reset to ${DEFAULT_FOLD}`}
-            onPress={() => setPickedFold(DEFAULT_FOLD)}
+            accessibilityLabel={`Reset to ${DEFAULT_SHAPE}`}
+            onPress={() => setPickedShape(DEFAULT_SHAPE)}
             style={{ minHeight: 44, minWidth: 44, justifyContent: 'center', paddingHorizontal: space.s3 }}
           >
-            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink2 }}>
-              {`Reset to ${DEFAULT_FOLD}`}
+            <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink2 }}>
+              {`Reset to ${DEFAULT_SHAPE}`}
             </Text>
           </Pressable>
         </View>

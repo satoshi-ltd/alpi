@@ -1,5 +1,5 @@
-import folds
-from brand_boards import PAL, PAIR_COLOUR
+from gen import ladder_px
+import marks
 from conversation_boards import mono
 from desktop_boards import INK, INK3
 
@@ -15,20 +15,20 @@ NEUTRAL = {
 }
 
 NOW = {"radius": 8, "card": 12, "edge": "ring", "pop": "shadow", "button": "soft", "field": "box", "select": "fill", "chip": "pill"}
-PAPER = {"radius": 4, "card": 4, "edge": "tone", "pop": "seam", "button": "crisp", "field": "well", "select": "tab", "chip": "tag"}
+PAPER = {"radius": 12, "card": 20, "edge": "tone", "pop": "seam", "button": "crisp", "field": "well", "select": "tab", "chip": "tag"}
 
 def object_mark(shape, size):
-    return folds.fold(shape, PAL[PAIR_COLOUR[shape]], size)
+    return marks.shape_mark(shape, marks.accent_of(shape), size)
 
 def text(value, size, color, weight=400, extra=""):
-    return f'<span style="font-size: {size}px; font-weight: {weight}; line-height: 1.3; color: {color}; white-space: nowrap; {extra}">{value}</span>'
+    return f'<span style="font-size: {ladder_px(size)}px; font-weight: {weight}; line-height: 1.3; color: {color}; white-space: nowrap; {extra}">{value}</span>'
 
 def caption(value):
     return mono(value, 11, INK3)
 
 def note(title, body):
-    return (f'<div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 14px; font-weight: 600; color: {INK}">{title}</span>'
-            f'<span style="font-size: 12px; line-height: 1.5; color: {INK3}; max-width: 520px">{body}</span></div>')
+    return (f'<div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 15px; font-weight: 600; color: {INK}">{title}</span>'
+            f'<span style="font-size: 14px; line-height: 1.5; color: {INK3}; max-width: 520px">{body}</span></div>')
 
 def column(*items, gap=10):
     return f'<div style="display: flex; flex-direction: column; gap: {gap}px">{"".join(items)}</div>'
@@ -45,9 +45,9 @@ def clip(kind, r):
 
 def button(label, kind, p, s, height=32, icon=False):
     filled = kind in ("primary", "danger")
-    bg = {"primary": p["ink"], "danger": "#C14545", "secondary": p["selected"] if s["button"] != "soft" else p["hover"], "ghost": "transparent"}[kind]
+    bg = {"primary": "#14110c" if not p["dark"] else "#f3efe6", "danger": "#C14545", "secondary": p["selected"] if s["button"] != "soft" else p["hover"], "ghost": "transparent"}[kind]
     fg = {"primary": p["pane"], "danger": "#FFFFFE", "secondary": p["ink"], "ghost": p["ink2"]}[kind]
-    radius = s["radius"] if s["button"] != "soft" else 8
+    radius = 999
     shape = clip(s["button"], radius) if filled or s["button"] != "dogear" else f"border-radius: {radius}px;"
     width = f"width: {height}px; padding: 0;" if icon else f"padding: 0 {12 if height <= 32 else 16}px;"
     flap = ""
@@ -56,7 +56,7 @@ def button(label, kind, p, s, height=32, icon=False):
                 f'clip-path: polygon(0 0, 0 100%, 100% 100%)"></span>')
     body = "+" if icon else label
     return (f'<span style="position: relative; display: inline-flex; flex-shrink: 0"><span style="display: inline-flex; align-items: center; justify-content: center; height: {height}px; {width} '
-            f'{shape} background: {bg}; color: {fg}; font-size: {12 if height < 32 else 13}px; font-weight: 500; line-height: 1; white-space: nowrap; box-sizing: border-box">{body}</span>{flap}</span>')
+            f'{shape} background: {bg}; color: {fg}; font-size: {14 if height <= 32 else 15}px; font-weight: 500; line-height: 1; white-space: nowrap; box-sizing: border-box">{body}</span>{flap}</span>')
 
 def field(placeholder, p, s, width=None, focus=False):
     w = f"width: {width}px;" if width else "flex: 1; min-width: 0;"
@@ -65,11 +65,12 @@ def field(placeholder, p, s, width=None, focus=False):
         if focus:
             edge += f" box-shadow: 0 0 0 4px {p['hover']};"
     elif s["field"] == "well":
-        edge = f"background: {p['pane']}; box-shadow: inset 0 0 0 1px {'#8c8c8c' if focus else p['line2']}; border-radius: {s['radius']}px;"
+        ring = " box-shadow: inset 0 0 0 1.5px #6b6b6b;" if focus else ""
+        edge = f"background: var(--well, #f2f2f2); border-radius: {s['radius']}px;{ring}"
     else:
         edge = f"background: transparent; border-bottom: {'1.5px' if focus else '1px'} solid {p['ink'] if focus else p['line2']};"
     return (f'<span style="{w} height: 32px; padding: 0 10px; box-sizing: border-box; display: inline-flex; align-items: center; {edge} '
-            f'font-size: 13px; color: {p["ink3"]}; white-space: nowrap">{placeholder}</span>')
+            f'font-size: 15px; color: {p["ink3"]}; white-space: nowrap">{placeholder}</span>')
 
 def themed(title, body, render):
     return column(note(title, body), caption("light"), render("light"), caption("dark"), render("dark"), gap=8)

@@ -9,7 +9,6 @@
   user-select: none;
 
   flex-shrink: 0;
-  border-right: .5px solid var(--line);
   height: 100%;
   min-height: 0;
 }
@@ -20,7 +19,6 @@
 }
 
 .inner {
-  --sb-bleed: var(--sp-12);
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -33,11 +31,92 @@
 }
 
 .actionSection {
+  display: flex;
+  align-items: center;
+  gap: 2px;
   margin-bottom: var(--sp-8);
 }
 
 .connectionSlot {
+  flex: 1;
+  min-width: 0;
   padding: 0;
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-4);
+  padding: var(--sp-4) 0 var(--sp-8);
+  margin: 0;
+}
+
+.tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-4);
+  min-width: 0;
+  padding: var(--sp-8) var(--sp-4);
+  border: 0;
+  border-radius: var(--r-surface);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color var(--state-out);
+}
+
+.tile:hover {
+  background: var(--hover);
+  transition: background-color var(--state-in);
+}
+
+.tile:active {
+  background: var(--pressed);
+  transition: none;
+}
+
+.tile[data-sel],
+.tile[data-sel]:hover {
+  background: var(--selected);
+}
+
+.tile[data-dim] {
+  opacity: var(--alpha-muted);
+}
+
+.tileMark {
+  position: relative;
+  display: inline-flex;
+  width: var(--tile-mark);
+  height: var(--tile-mark);
+  align-items: center;
+  justify-content: center;
+}
+
+.tileName {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-small);
+}
+
+.tilePip {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--c-warning);
+  box-shadow: 0 0 0 2px var(--bg-side);
+}
+
+.tilePip[data-pip="failed"] {
+  background: var(--c-danger);
 }
 
 .nav {
@@ -136,11 +215,10 @@
   display: flex;
   align-items: center;
   gap: var(--sp-8);
-  height: var(--ctl-32);
+  height: var(--ctl-40);
   padding: 0 var(--sp-12);
-  border-radius: var(--r-xs);
+  border-radius: var(--r-control);
   background: var(--well);
-  box-shadow: var(--well-edge);
 }
 
 .searchIcon {
@@ -173,7 +251,7 @@
 
 .searchEmpty {
   padding: var(--sp-8) var(--sp-12);
-  font-size: var(--text-meta);
+  font-size: var(--text-small);
   color: var(--ink-3);
 }
 
@@ -182,8 +260,8 @@
 }
 
 .footer :global(.ds-tip) .footerIcon {
-  width: var(--ctl-24);
-  height: var(--ctl-24);
+  width: var(--ctl-32);
+  height: var(--ctl-32);
 }
 
 .sectionAdd {
@@ -208,14 +286,13 @@
 }
 
 .workgroupLeading {
-  width: 16px;
+  width: var(--icon-lg);
   display: inline-flex;
   justify-content: center;
 }
 
 .footer {
   padding: var(--sp-12) calc(var(--sp-12) + var(--space-tight));
-  border-top: .5px solid var(--line);
   display: flex;
   align-items: center;
   gap: var(--sp-4);
@@ -263,8 +340,8 @@
 .loadingRow {
   display: flex;
   align-items: center;
-  gap: var(--sp-8);
-  height: var(--ctl-32);
+  gap: var(--sp-12);
+  height: var(--row-h);
   padding: 0 var(--sp-12);
 }
 
@@ -285,14 +362,6 @@
   flex-shrink: 0;
 }
 
-.stateDot {
-  width: var(--dot-sm);
-  height: var(--dot-sm);
-  border-radius: 50%;
-  background: currentColor;
-  flex-shrink: 0;
-}
-
 .stateChip[data-state="needs-you"] {
   color: var(--c-warning-text);
 }
@@ -302,7 +371,7 @@
 }
 
 .stateChip[data-state="working"] {
-  color: color-mix(in srgb, var(--c, var(--ink-2)) 50%, var(--ink));
+  color: var(--ink-2);
 }
 
 .phaseCount {
@@ -310,12 +379,14 @@
   font-weight: var(--fw-medium);
   font-variant-numeric: tabular-nums slashed-zero;
   font-size: var(--text-meta);
-  color: var(--c, var(--ink-2));
+  color: var(--name-light, var(--ink-2));
 }
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-mode="light"])) .phaseCount { color: var(--name-dark, var(--ink-2)); }
+}
+:global([data-mode="dark"]) .phaseCount { color: var(--name-dark, var(--ink-2)); }
 
 .searchRow:focus-within {
+  box-shadow: var(--field-focus);
   outline: none;
-  border-color: transparent;
-  background: var(--well-focus);
-  box-shadow: var(--well-ring);
 }

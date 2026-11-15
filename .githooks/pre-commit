@@ -24,6 +24,7 @@ fi
 run_alpi=false
 run_desktop=false
 run_mobile=false
+run_marks=false
 
 while IFS= read -r f; do
   case "$f" in
@@ -33,6 +34,14 @@ while IFS= read -r f; do
       ;;
     alpi/*|tests/*|pyproject.toml|uv.lock|deploy/umbrel/*)
       run_alpi=true
+      ;;
+    design/src/agent_marks.py)
+      run_marks=true
+      ;;
+    common/agentMarks.mjs|common/workgroupMark.mjs|common/markEyes.mjs|common/shapes.mjs|common/name.mjs|common/accents.mjs)
+      run_marks=true
+      run_desktop=true
+      run_mobile=true
       ;;
     desktop/*|mobile/*|common/*)
       run_desktop=true
@@ -48,6 +57,11 @@ if $run_alpi; then
   if ! uv run pytest -q --ignore=tests/llm --ignore=tests/integration; then
     ec=1
   fi
+fi
+
+if $run_marks && ! $run_alpi; then
+  echo "[pre-commit] shared mark or colour changes detected → console mark and icon tests (alpi/mark_shapes.py staleness, parity, generated icons)"
+  if ! uv run pytest -q tests/core/test_fold_art.py tests/core/test_appearance.py tests/test_icons.py; then ec=1; fi
 fi
 
 if $run_desktop; then

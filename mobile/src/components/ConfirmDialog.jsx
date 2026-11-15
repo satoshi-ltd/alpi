@@ -12,7 +12,8 @@ import { selection, warning } from '../lib/haptics';
 import { useTheme } from '../theme/ThemeContext';
 import { Button } from './Button';
 import { useExitSnapshot } from './useExitSnapshot';
-import { useWell } from './well';
+import { recess, useWell } from './well';
+import { code } from '../theme/code';
 const EASE_IN = EASE_ENTER;
 const EASE_OUT = EASE_EXIT;
 const DURATION_IN = motion.enter;
@@ -23,10 +24,9 @@ export function Code({ children }) {
   return (
     <Text
       style={{
-        fontFamily: fonts.monoMedium,
-        fontSize: fontSizes.sm,
+        ...code(fonts, fontSizes.sm, 'medium'),
         color: colors.ink,
-        backgroundColor: colors.field,
+        backgroundColor: recess(colors),
         borderRadius: radii.xs,
         paddingHorizontal: space.s2,
       }}
@@ -58,7 +58,7 @@ export function ConfirmDialog({
   onAlternate,
 }) {
   const { colors, fonts, fontSizes, shadow } = useTheme();
-  const [well, focus] = useWell(colors);
+  const [well, focus] = useWell(colors, false, false, true);
   const [value, setValue] = useState('');
   const [kbHeight, setKbHeight] = useState(0);
   const danger = tone === 'danger';
@@ -129,8 +129,8 @@ export function ConfirmDialog({
                 width: '100%',
                 maxWidth: 420,
                 maxHeight: '100%',
-                backgroundColor: colors.bgPane,
-                borderRadius: radii.xs,
+                backgroundColor: colors.bgElev,
+                borderRadius: radii.sheet,
                 ...shadow.dialog,
               },
               dialogStyle,
@@ -168,13 +168,12 @@ export function ConfirmDialog({
             {typedField ? <View style={{ gap: space.s3 }}>
               <Text
                 style={{
-                  fontFamily: fonts.mono,
-                  fontSize: fontSizes.xs,
+                  fontFamily: fonts.sans.regular,
+                  fontSize: fontSizes.sm,
                   color: colors.ink3,
-                  letterSpacing: 0.6,
                 }}
               >
-                TYPE <Code>{view.expected}</Code> TO CONFIRM
+                Type <Code>{view.expected}</Code> to confirm
               </Text>
               <TextInput
                 value={value}
@@ -193,7 +192,7 @@ export function ConfirmDialog({
                   ...well,
                   paddingHorizontal: space.s5,
                   minHeight: 44,
-                  fontFamily: fonts.mono,
+                  fontFamily: fonts.sans.regular,
                   fontSize: fontSizes.md,
                   color: colors.ink,
                 }}

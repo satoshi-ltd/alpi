@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { ScrollView, Text, View } from 'react-native';
-import { ALPACA_FOLD, FOLD_SIZES } from '../../common/folds.mjs';
+import { TWIN_SHAPE } from '../../common/shapes.mjs';
+import { MARK_SIZES } from '../../common/agentMarks.mjs';
 import { LINK_SOURCE_ROWS } from '../../common/onboarding.mjs';
 import { space } from '../src/theme/tokens';
 import { firstRun, firstRunActions, firstRunBottom, firstRunColumn, firstRunScroll, firstRunType, foldMarkStyle } from '../src/lib/firstRun';
@@ -23,7 +24,7 @@ export default function Onboarding() {
       <ScrollView style={{ flex: 1 }} contentContainerStyle={firstRunScroll(insets, edge)}>
         <View style={firstRunColumn}>
           <View style={foldMarkStyle}>
-            <Fold fold={ALPACA_FOLD} size={FOLD_SIZES.hero} />
+            <Fold shape={TWIN_SHAPE} size={MARK_SIZES.hero} />
           </View>
           <Text accessibilityRole="header" style={type.title}>Pair with your alpi</Text>
           <Text style={type.sentence}>

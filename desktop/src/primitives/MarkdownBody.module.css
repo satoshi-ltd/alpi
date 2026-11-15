@@ -51,12 +51,11 @@
 .body pre {
   margin: 0 0 var(--sp-12);
   padding: var(--sp-12) var(--sp-16);
-  background: var(--hover);
-  border: .5px solid var(--line);
-  border-radius: var(--r-xs);
+  background: var(--card);
+  border-radius: var(--r-surface);
   overflow: auto;
   font-family: var(--font-mono);
-  font-size: var(--text-meta);
+  font-size: var(--text-mono);
 }
 
 .body pre code {
@@ -68,8 +67,9 @@
 
 .body blockquote {
   margin: 0 0 var(--sp-8);
-  padding-left: var(--sp-12);
-  border-left: 2px solid var(--line-2);
+  padding: var(--sp-8) var(--sp-12);
+  border-radius: var(--r-control);
+  background: var(--card);
   color: var(--ink-2);
 }
 

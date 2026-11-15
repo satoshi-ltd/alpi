@@ -56,7 +56,7 @@ function ConnectionsScreen() {
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScreenHeader
         title="Connections"
-        subtitle="DAEMON · PAIRED APPS"
+        subtitle="Daemon · paired apps"
         onBack={goBack}
         right={<Button title="New" size="md" onPress={() => setCreating(true)} />}
       />

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { orderConnections, readLastActive } from "../lib/connection-recency.js";
 import { ConnPill } from "../primitives/index.js";
 import { ConnectionPanel } from "../primitives/Panels.jsx";
@@ -72,6 +72,7 @@ export default function ConnectionSwitcher({
     connections.find((c) => c.id === activeId) ??
     connections.find((c) => c.kind === "local");
   const label = active?.kind === "remote" ? active.name : "This computer";
+  const labelId = useId();
   const caption = connectionEndpoint(active);
   const activeStatus = active?.status ?? "unknown";
 
@@ -103,8 +104,9 @@ export default function ConnectionSwitcher({
 
   return (
     <div className={`${styles.root} ${className}`}>
-      <Eyebrow className={styles.label}>Connection</Eyebrow>
+      <Eyebrow id={labelId} className={styles.label}>Connection</Eyebrow>
       <ConnPill
+        labelledBy={labelId}
         kind={active?.kind === "remote" ? "remote" : "local"}
         name={label}
         host={caption}

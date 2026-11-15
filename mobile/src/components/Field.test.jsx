@@ -13,9 +13,9 @@ vi.mock('react-native', () => {
 vi.mock('./Eyebrow', () => ({ Eyebrow: ({ children }) => React.createElement('label', null, children) }));
 vi.mock('../theme/ThemeContext', () => ({
   useTheme: () => ({
-    colors: { field: '#eee', bgPane: '#fff', bgElev: '#fefefe', edge: '#8c8c8c', line2: '#ddd', ink: '#000', ink2: '#222', ink3: '#666', danger: '#c14545', dangerText: '#b73737' },
+    colors: { field: '#eee', fill: '#f2f2f2', bgPane: '#fff', bgElev: '#fefefe', edge: '#8c8c8c', line2: '#ddd', ink: '#000', ink2: '#222', ink3: '#666', danger: '#c14545', dangerText: '#b73737' },
     fonts: { mono: 'mono', sans: { regular: 'sans' } },
-    fontSizes: { xs: 11, sm: 12, lg: 16 },
+    fontSizes: { xs: 12, sm: 14, md: 15, lg: 16 },
     mobile: { inputH: 44 },
   }),
 }));
@@ -23,12 +23,13 @@ vi.mock('../theme/ThemeContext', () => ({
 import { Field } from './Field';
 
 describe('Field', () => {
-  it('greys a read-only field with no edge and fades it by the shared alpha', () => {
+  it('rests as a fill with no edge and fades a read-only field by the shared alpha', () => {
     const well = (container) => JSON.parse([...container.querySelectorAll('[data-style]')].find((n) => n.getAttribute('data-style').includes('borderColor')).getAttribute('data-style'));
     const { container, rerender } = render(<Field value="a" onChangeText={() => {}} />);
-    expect(well(container)).toMatchObject({ backgroundColor: '#fefefe', borderColor: '#ddd' });
+    expect(well(container)).toMatchObject({ backgroundColor: '#f2f2f2', borderColor: 'transparent', borderRadius: 12 });
+    expect(well(container).opacity).toBeUndefined();
     rerender(<Field value="a" onChangeText={() => {}} editable={false} />);
-    expect(well(container)).toMatchObject({ backgroundColor: '#eee', borderColor: 'transparent', opacity: 0.45 });
+    expect(well(container)).toMatchObject({ backgroundColor: '#f2f2f2', borderColor: 'transparent', opacity: 0.45 });
   });
 
   it('shows the error in place of the helper and tints the border', () => {
@@ -36,14 +37,14 @@ describe('Field', () => {
     expect(screen.getByRole('alert').textContent).toBe('Enter a number, or leave it empty');
     expect(screen.queryByText('a number')).toBeNull();
     const box = [...container.querySelectorAll('[data-style]')].find((n) => n.getAttribute('data-style').includes('borderColor'));
-    expect(JSON.parse(box.getAttribute('data-style')).borderColor).toBe('#c14545');
+    expect(JSON.parse(box.getAttribute('data-style')).borderColor).toBe('#b73737');
   });
 
-  it('draws the error and the helper at 12 pt in the regular sans face', () => {
+  it('draws the error and the helper at the 14 pt description size in the regular sans face', () => {
     const { rerender } = render(<Field value="" onChangeText={() => {}} helper="a number" />);
     const styleOf = (text) => JSON.parse(screen.getByText(text).getAttribute('data-style'));
-    expect(styleOf('a number')).toMatchObject({ fontFamily: 'sans', fontSize: 12, color: '#666' });
+    expect(styleOf('a number')).toMatchObject({ fontFamily: 'sans', fontSize: 14, color: '#666' });
     rerender(<Field value="" onChangeText={() => {}} error="Enter a number" />);
-    expect(styleOf('Enter a number')).toMatchObject({ fontFamily: 'sans', fontSize: 12, color: '#b73737' });
+    expect(styleOf('Enter a number')).toMatchObject({ fontFamily: 'sans', fontSize: 14, color: '#b73737' });
   });
 });

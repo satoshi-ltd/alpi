@@ -24,6 +24,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import { Busy } from '../../components/Busy';
 import { ListSkeleton } from '../../components/ListSkeleton';
 import { Spinner } from '../../components/Spinner';
+import { code } from '../../theme/code';
 
 export function budgetError(value) {
   const text = String(value ?? '').trim();
@@ -313,25 +314,25 @@ export function ModelSheet({
                 No models available for @{profileName}
               </Text>
               <View style={{ gap: space.s1 }}>
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
+                <Text style={{ ...code(fonts, fontSizes.xs), color: colors.ink3 }}>
                   daemon profile.models: {profileModels.length}
                 </Text>
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
+                <Text style={{ ...code(fonts, fontSizes.xs), color: colors.ink3 }}>
                   provider_keys: {providerKeys.length} ({providerKeys.map((k) => k.env).join(', ') || '—'})
                 </Text>
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
+                <Text style={{ ...code(fonts, fontSizes.xs), color: colors.ink3 }}>
                   ollama configured: {ollamaNames.length}, reachable: {ollama.data?.models?.length ?? 0}
                 </Text>
               </View>
               {ollamaErrors.map((e) => (
                 <Text
                   key={e.name}
-                  style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.dangerText, lineHeight: fontSizes.xs * 1.5 }}
+                  style={{ ...code(fonts, fontSizes.xs), color: colors.dangerText, lineHeight: fontSizes.xs * 1.5 }}
                 >
                   ollama/{e.name} · {e.url} — {e.detail}
                 </Text>
               ))}
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3, marginTop: space.s1 }}>
+              <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3, marginTop: space.s1 }}>
                 Go to Settings → Providers to fix.
               </Text>
             </View>
@@ -366,8 +367,7 @@ export function ModelSheet({
               <Text
                 key={e.name}
                 style={{
-                  fontFamily: fonts.mono,
-                  fontSize: fontSizes.xs,
+                  ...code(fonts, fontSizes.xs),
                   color: colors.ink3,
                   lineHeight: fontSizes.xs * 1.5,
                 }}
@@ -572,17 +572,15 @@ export function VoiceSheet({ open, onClose, profileName, accent, initialValue, o
                     style={({ pressed }) => ({
                       paddingHorizontal: space.s5,
                       paddingVertical: space.s2,
-                      borderRadius: radii.xs,
-                      borderWidth: 0.5,
-                      borderColor: isPlaying ? colors.ink : colors.line2,
-                      backgroundColor: pressed ? colors.selected : isPlaying ? colors.field : 'transparent',
+                      borderRadius: radii.pill,
+                      backgroundColor: pressed ? colors.pressed : isPlaying ? colors.field : 'transparent',
                       flexDirection: 'row',
                       alignItems: 'center',
                       gap: space.s2,
                     })}
                   >
                     {isLoading ? <Spinner color={colors.ink3} /> : null}
-                    <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.xs, color: isPlaying ? colors.ink : colors.ink2 }}>
+                    <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.xs, color: isPlaying ? colors.ink : colors.ink2 }}>
                       {isPlaying ? 'stop' : 'preview'}
                     </Text>
                   </Pressable>

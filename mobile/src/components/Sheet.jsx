@@ -85,7 +85,7 @@ export function Sheet({
               {view.subtitle ? (
                 <Text
                   style={{
-                    fontFamily: fonts.mono,
+                    fontFamily: fonts.sans.regular,
                     fontSize: fontSizes.sm,
                     lineHeight: fontSizes.sm * lineHeights.cozy,
                     color: colors.ink3,
@@ -124,9 +124,9 @@ export function Sheet({
           style={[
             {
               maxHeight: view.maxHeight,
-              backgroundColor: colors.bgPane,
-              borderTopLeftRadius: radii.xs,
-              borderTopRightRadius: radii.xs,
+              backgroundColor: colors.bgElev,
+              borderTopLeftRadius: radii.sheet,
+              borderTopRightRadius: radii.sheet,
               overflow: 'hidden',
               ...(twoPane ? shadow.dialog : shadow.sheet),
               ...dialog,
@@ -156,7 +156,7 @@ export function Sheet({
                 paddingHorizontal: space.s7,
                 paddingTop: space.s8,
                 paddingBottom: bottomPad,
-                backgroundColor: colors.bgPane,
+                backgroundColor: colors.bgElev,
               }}
             >
               <View style={{ flexDirection: 'row', gap: space.s4 }}>

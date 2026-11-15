@@ -37,7 +37,9 @@ const Animated = {
   View: wrap('View'),
   Text: wrap('Text'),
   ScrollView: wrap('ScrollView'),
-  createAnimatedComponent: (C) => C,
+  createAnimatedComponent: (C) => function AnimatedComponent({ animatedProps, ...props }) {
+    return React.createElement(C, { ...props, ...animatedProps });
+  },
 };
 
 export default Animated;
@@ -52,6 +54,7 @@ const keyboardState = { get value() { return state.keyboardState; } };
 export const useAnimatedKeyboard = () => ({ height: { value: state.keyboardHeight }, state: keyboardState });
 export const useAnimatedReaction = (prepare, react) => react(prepare());
 export const useAnimatedStyle = (fn) => fn();
+export const useAnimatedProps = (fn) => fn();
 export const useSharedValue = (initial) => React.useRef({ value: initial }).current;
 export const useDerivedValue = (fn) => ({ value: fn() });
 export const withTiming = (v, config, done) => {

@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import ActivityPanel from "./ActivityPanel.jsx";
+import { nameTone } from "../../../common/name.mjs";
+import { palettes } from "../../../common/tokens.mjs";
 import { ICON_ROLES } from "../../../common/iconRoles.mjs";
 
 const now = Math.floor(Date.now() / 1000);
@@ -12,7 +14,7 @@ const ACTIVITY = {
   needs_you: [{ kind: "approval", request_id: "r1", profile: "builder", title: "run a shell command", ts: now - 12 }],
   running: [
     { kind: "turn", profile: "alpi", session_id: "s1", title: "deploy summary", started_at: now - 42, source: "schedule" },
-    { kind: "workgroup", profile: "alpi", workgroup_id: "wg1", name: "launch-crew", phase: "analyze", phases_done: 1, phases_total: 4 },
+    { kind: "workgroup", profile: "alpi", workgroup_id: "wg1", hub_id: "alpi", name: "launch-crew", phase: "analyze", phases_done: 1, phases_total: 4 },
   ],
   scheduled: [
     { profile: "doc", job_id: "j1", title: "daily brief", next_fire: future(7200), last_run_status: "ok" },
@@ -96,10 +98,11 @@ describe("ActivityPanel sections", () => {
   });
 
   it("leads every row with the profile's object", () => {
-    mount({ foldByProfile: { builder: "box", doc: "heart", alpi: "alpaca" }, accentByProfile: { builder: "#3ac9f3", doc: "#f36a8a" } });
-    const folds = [...document.querySelectorAll("[data-fold]")].map((n) => n.dataset.fold);
-    expect(folds).toEqual(expect.arrayContaining(["box", "heart", "honeycomb"]));
-    expect(document.querySelector("[data-fold='box']").querySelector("polygon[class*='cell']")).toBeNull();
+    mount({ shapeByProfile: { builder: "squircle", doc: "heart", alpi: "twin" }, accentByProfile: { builder: "#3ac9f3", doc: "#f36a8a" } });
+    const shapes = [...document.querySelectorAll("[data-shape]")].map((n) => n.dataset.shape);
+    expect(shapes).toEqual(expect.arrayContaining(["squircle", "heart", "honeycomb"]));
+    expect(document.querySelector("[data-shape='squircle']").dataset.state).toBe("idle");
+    expect(document.querySelector("[data-shape='twin']").dataset.mark).toMatch(/^alpi-twin/);
   });
 
   it("paints the word failed red and the rest of the meta line plain", () => {
@@ -368,14 +371,34 @@ describe("ActivityPanel iconography", () => {
     expect(screen.getByText("Activity").parentElement.querySelector("svg").getAttribute("data-icon")).toBe(ICON_ROLES.activity);
   });
 
-  it("draws a running workgroup as the rippling honeycomb in its hub's colour", () => {
+  it("draws a running workgroup neutral with only its current phase's cell in the hub's colour", () => {
     mount({ accentByProfile: { alpi: "#3899e2" } });
     const running = screen.getByRole("region", { name: "Running" });
-    const glyph = within(running).getByText("launch-crew · #analyze").closest("button").querySelector("[data-fold]");
-    expect(glyph.dataset.fold).toBe("honeycomb");
-    const cells = [...glyph.querySelectorAll("polygon")];
-    expect(cells.map((c) => c.getAttribute("fill"))).toContain("#3899e2");
-    expect(cells.every((c) => c.style.animationDelay !== "")).toBe(true);
+    const glyph = within(running).getByText("launch-crew · #analyze").closest("button").querySelector("[data-shape]");
+    expect(glyph.dataset.shape).toBe("honeycomb");
+    expect(glyph.dataset.state).toBe("running");
+    expect([...glyph.querySelectorAll("[data-cell]")].map((c) => c.getAttribute("fill"))).toEqual(["var(--wg-lit)", "none", "none"]);
+    expect(glyph.style.getPropertyValue("--wg-lit-light")).toBe(nameTone("#3899e2", palettes.light.bgPane));
+    expect([...glyph.querySelectorAll("[data-cell]")].map((c) => c.getAttribute("stroke"))).toEqual([null, "var(--ink-3)", "var(--ink-3)"]);
+  });
+});
+
+describe("ActivityPanel workgroup hub colour", () => {
+  const member = (extra) => ({ needs_you: [], scheduled: [], running: [{ kind: "workgroup", profile: "alice", workgroup_id: "wg1", name: "crew", phase: "fetch", phases_done: 0, phases_total: 3, ...extra }] });
+  const glyphOf = () => within(screen.getByRole("region", { name: "Running" })).getByText("crew · #fetch").closest("button").querySelector("[data-shape]");
+
+  it("lights a joined workgroup in its hub's colour, never the local member's", () => {
+    mount({ activity: member({ hub_id: "doc" }), accentByProfile: { alice: "#f36a8a", doc: "#2cb3b5" } });
+    const glyph = glyphOf();
+    expect(glyph.style.getPropertyValue("--wg-lit-light")).toBe(nameTone("#2cb3b5", palettes.light.bgPane));
+    expect(glyph.outerHTML).not.toContain(nameTone("#f36a8a", palettes.light.bgPane));
+  });
+
+  it.each([[{ hub_id: "remote-hub" }], [{}]])("falls back to the brand ink when the hub is not on this device (%j)", (extra) => {
+    mount({ activity: member(extra), accentByProfile: { alice: "#f36a8a" } });
+    const glyph = glyphOf();
+    expect(glyph.querySelector("[data-lead]").getAttribute("fill")).toBe("var(--accent)");
+    expect(glyph.style.getPropertyValue("--wg-lit-light")).toBe("");
   });
 });
 

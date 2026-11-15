@@ -126,6 +126,26 @@ describe("ScheduleModal", () => {
     expect(screen.getByText("Wind-down checklist")).toBeTruthy();
   });
 
+  it("starts every row with the job's title, a paused job keeps an ink-2 title and its word as the meta, never a dot", async () => {
+    open();
+    await waitFor(() => expect(screen.getByText("Run the whoop skill")).toBeTruthy());
+    const options = screen.getAllByRole("option");
+    expect(options.map((o) => o.firstElementChild.firstElementChild.textContent)).toEqual(["WHOOP sync", "Wind-down checklist"]);
+    expect(options[1].querySelector("[class*=rowMeta]").textContent).toBe("paused");
+    expect(options[1].querySelector("[class*=rowTitle]").className).toMatch(/rowOff/);
+    expect(options[1].getAttribute("style")).toBeNull();
+    const head = screen.getByRole("heading", { name: "WHOOP sync" }).parentElement;
+    expect(head.textContent).toBe("WHOOP syncactive");
+    expect(screen.getByRole("button", { name: "Copy 45188eab" })).toBeTruthy();
+  });
+
+  it("puts Run now, Pause and Delete in the detail header", async () => {
+    open();
+    await waitFor(() => expect(screen.getByText("Run the whoop skill")).toBeTruthy());
+    const head = screen.getByRole("heading", { name: "WHOOP sync" }).closest("[class*=detailHeadText]").parentElement;
+    for (const name of ["Run now", "Pause", "Delete"]) expect(within(head).getByRole("button", { name, exact: true })).toBeTruthy();
+  });
+
   it("fires the selected job via schedule_fire", async () => {
     open();
     await waitFor(() => expect(screen.getByText("Run the whoop skill")).toBeTruthy());
@@ -219,13 +239,14 @@ describe("ScheduleModal reads like the profile's page", () => {
     ]);
     open();
     await waitFor(() => expect(screen.getAllByText("failed").length).toBeGreaterThan(0));
-    expect(screen.getAllByText("failed").some((el) => /failed/.test(el.className))).toBe(true);
+    expect(screen.getAllByText("failed").every((el) => el.getAttribute("data-tone") === "danger")).toBe(true);
+    expect(screen.getByRole("option").querySelector("[class*=rowMeta]").textContent).toBe("failed");
     await waitFor(() => expect(screen.getByText(/must be a whole number of seconds/)).toBeTruthy());
   });
 
   it("heads the window with the profile and switches to a sibling panel", async () => {
     const onSection = vi.fn();
-    render(<ScheduleModal open onClose={vi.fn()} profile="scout" connectionId={null} owner={{ name: "scout", fold: "house", accent: "#cc4422" }} onSection={onSection} />);
+    render(<ScheduleModal open onClose={vi.fn()} profile="scout" connectionId={null} owner={{ name: "scout", shape: "arch", accent: "#cc4422" }} onSection={onSection} />);
     await waitFor(() => expect(screen.getByRole("tab", { name: /Schedules/ })).toBeTruthy());
     expect(screen.getByRole("tab", { name: /Schedules/ }).getAttribute("aria-selected")).toBe("true");
     expect(screen.getByText("scout")).toBeTruthy();
@@ -281,26 +302,34 @@ describe("ScheduleModal grouped list and reader", () => {
     expect(invokeMock).toHaveBeenCalledWith("schedule_fire", { profile: "lens", id: "bad1" });
   });
 
-  it("lays the reader out as About, When with the cron chip, Next, Last run, Runs, Notify and a PROMPT box", async () => {
+  it("lays the reader out as About, When with the cron in mono, Next, Last run, Runs, Notify and a Prompt box", async () => {
     invokeMock.mockResolvedValue(MIX);
     open();
     await waitFor(() => expect(screen.getAllByRole("option").length).toBe(4));
     fireEvent.click(screen.getAllByRole("option").find((r) => /Weekly refresh/.test(r.textContent)));
     await waitFor(() => expect(screen.getByText("Compares every listing", { selector: "dd" })).toBeTruthy());
     const labels = Array.from(document.querySelectorAll("dt")).map((d) => d.textContent);
-    expect(labels).toEqual(["about", "when", "next", "last run", "runs", "notify"]);
-    expect(screen.getByText("0 6 * * 1")).toBeTruthy();
-    expect(screen.getByText("prompt")).toBeTruthy();
-    expect(screen.getByText("Prompt")).toBeTruthy();
+    expect(labels).toEqual(["About", "When", "Next", "Last run", "Runs", "Notify"]);
+    expect(screen.getByText("0 6 * * 1").tagName).toBe("CODE");
+    expect(screen.getAllByText("Prompt")).toHaveLength(2);
     expect(screen.getAllByRole("option")).toHaveLength(4);
     expect(screen.queryByRole("button", { name: /edit/i })).toBeNull();
     expect(screen.queryByRole("group", { name: /Last run failed/ })).toBeNull();
+  });
+
+  it("shows only the countdown beside the next fire time of a failed job, never a state word", async () => {
+    invokeMock.mockResolvedValue([MIX[1]]);
+    open();
+    await waitFor(() => expect(document.querySelectorAll("dt").length).toBeGreaterThan(0));
+    const next = Array.from(document.querySelectorAll("dt")).find((d) => d.textContent === "Next").nextElementSibling;
+    expect(next.textContent).toMatch(/ · in (23h|1d)$/);
+    expect(next.textContent).not.toMatch(/failed|paused/);
   });
 
   it("omits About for a job without a description", async () => {
     invokeMock.mockResolvedValue([MIX[2]]);
     open();
     await waitFor(() => expect(document.querySelectorAll("dt").length).toBeGreaterThan(0));
-    expect(Array.from(document.querySelectorAll("dt")).map((d) => d.textContent)).not.toContain("about");
+    expect(Array.from(document.querySelectorAll("dt")).map((d) => d.textContent)).not.toContain("About");
   });
 });

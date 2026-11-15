@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { ALPACA_FOLD } from '../../../../common/folds.mjs';
+import { TWIN_SHAPE } from '../../../../common/shapes.mjs';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { Fold } from '../../components/Fold';
@@ -37,10 +37,10 @@ export function HomePane({ empty = false }) {
             left: space.s5,
             width: CHROME_BTN,
             height: CHROME_BTN,
-            borderRadius: radii.xs,
+            borderRadius: radii.pill,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: pressed ? colors.selected : 'transparent',
+            backgroundColor: pressed ? colors.pressed : 'transparent',
             zIndex: 1,
           })}
         >
@@ -60,7 +60,7 @@ export function HomePane({ empty = false }) {
         <EmptyState
           mark={(
             <View style={{ opacity: MARK_OPACITY }}>
-              <Fold fold={ALPACA_FOLD} size={MARK_SIZE} />
+              <Fold shape={TWIN_SHAPE} size={MARK_SIZE} />
             </View>
           )}
           title="Pick a profile or a workgroup"

@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { AlertBanner, Button, ConfirmDelete, Eyebrow, IconBtn } from "../primitives/index.js";
 import { I } from "../primitives/icons.jsx";
 import shell from "../primitives/BrowseModal.module.css";
-import { BrowseBody, BrowseShell } from "../primitives/BrowseModal.jsx";
+import { BrowseBody, BrowseDetailHead, BrowseRow, BrowseShell, FactTable } from "../primitives/BrowseModal.jsx";
 import { PROFILE_PANELS } from "../lib/profilePanels.js";
 import { SkeletonReader, SkeletonRows } from "../primitives/Skeleton.jsx";
 import MarkdownBody from "../primitives/MarkdownBody.jsx";
@@ -11,11 +11,10 @@ import { subscribeDaemonEvent } from "../lib/daemon-bus.js";
 import { useNotify } from "../primitives/Notification.jsx";
 import { formatLastRun } from "./settings/util.js";
 import { describeTimeout, describeWhen, rawWhen } from "../../../common/schedule.mjs";
-import { jobBanner, jobGroups, jobItem, nextRunWord } from "../../../common/attention.mjs";
+import { jobBanner, jobGroups, jobItem, nextRunCountdown, nextRunWord } from "../../../common/attention.mjs";
 import { formatNextFire, lastRunShort } from "../lib/time.js";
 import styles from "./ScheduleModal.module.css";
 import { EMPTY } from "../../../common/emptyCopy.mjs";
-import { statusDot } from "../lib/statusVocab.js";
 import { toEpochSeconds, useActivity } from "../hooks/useActivity.js";
 
 const REFRESH_EVENTS = new Set(["schedule.changed", "schedule.done", "schedule.failed"]);
@@ -28,16 +27,6 @@ function jobState(j, running = false) {
   if (running) return "running";
   if (j.paused) return "paused";
   return j.last_run_status === "error" ? "failed" : "active";
-}
-
-function JobStatus({ job, running }) {
-  const state = jobState(job, running);
-  return (
-    <span className={styles.status} data-state={state}>
-      <span className={styles.dot} data-on={{ filled: "on", hollow: "off", red: "fail" }[statusDot(state)]} aria-hidden />
-      {state}
-    </span>
-  );
 }
 
 function matchesJob(j, query) {
@@ -229,22 +218,16 @@ export function SchedulePanel({ open = true, profile, connectionId, openJob = nu
             const state = jobState(j, isRunning(j.id));
             const word = state === "running" ? "running" : nextRunWord(j);
             return (
-              <li key={j.id}>
-                <button
-                  type="button"
-                  className={`${shell.row} ${styles.jobRow} ${j.id === selectedId ? shell.rowActive : ""}`}
-                  onClick={() => setSelectedId(j.id)}
-                  role="option"
-                  aria-selected={j.id === selectedId}
-                >
-                  <span className={styles.jobHead}>
-                    <span className={styles.dot} data-on={{ filled: "on", hollow: "off", red: "fail" }[statusDot(state)]} aria-hidden />
-                    <span className={styles.jobTitle}>{jobTitle(j)}</span>
-                    {word ? <span className={`${styles.jobWhen} ${state === "failed" ? styles.failed : ""}`.trim()}>{word}</span> : null}
-                  </span>
-                  {j.description ? <span className={styles.jobDesc}>{j.description}</span> : null}
-                </button>
-              </li>
+              <BrowseRow
+                key={j.id}
+                title={jobTitle(j)}
+                sub={j.description || null}
+                meta={word || null}
+                metaTone={state === "failed" ? "danger" : null}
+                off={state === "paused"}
+                active={j.id === selectedId}
+                onSelect={() => setSelectedId(j.id)}
+              />
             );
           })}
         </Fragment>
@@ -268,58 +251,51 @@ export function SchedulePanel({ open = true, profile, connectionId, openJob = nu
     >
       {active ? (
         <>
-          <div className={shell.detailMeta}>
-            <span className={styles.detailTitle}>{jobTitle(active)}</span>
-            <JobStatus job={active} running={activeRunning} />
-            <span className={shell.detailMetaSpacer} />
-            <span className={styles.detailId}>{active.id}</span>
-          </div>
-          <div className={shell.detailScroll}>
+          <BrowseDetailHead
+            title={jobTitle(active)}
+            state={jobState(active, activeRunning)}
+            stateTone={jobState(active, activeRunning) === "failed" ? "danger" : null}
+            id={String(active.id)}
+            actions={(
+              <>
+                {banner ? null : <Button size="sm" variant="secondary" onClick={() => fire(active.id)} disabled={busy || activeRunning}>{runLabel}</Button>}
+                <Button size="sm" variant="ghost" onClick={() => setPaused(active.id, !active.paused)} disabled={busy || activeRunning}>
+                  {active.paused ? "Resume" : "Pause"}
+                </Button>
+                <span className={styles.deleteWrap}>
+                  <IconBtn tip="Delete" className={styles.deleteBtn} onClick={() => setConfirm(true)} disabled={busy || activeRunning}>
+                    <I.Trash />
+                  </IconBtn>
+                  <ConfirmDelete
+                    anchored={false}
+                    open={confirm}
+                    onClose={() => setConfirm(false)}
+                    onConfirm={() => remove(active.id)}
+                    title={`Delete "${jobTitle(active)}"?`}
+                    consequence="The job stops firing and is removed. The agent can recreate it later from chat."
+                  />
+                </span>
+              </>
+            )}
+          />
+          <div className={shell.detailBody}>
             {banner ? (
               <AlertBanner lead={banner.lead} detail={banner.detail} action={runLabel} onAction={() => fire(active.id)} disabled={busy || activeRunning} />
             ) : null}
-            <div className={styles.actions}>
-              {banner ? null : <Button size="sm" variant="secondary" onClick={() => fire(active.id)} disabled={busy || activeRunning}>{runLabel}</Button>}
-              <Button size="sm" variant="ghost" onClick={() => setPaused(active.id, !active.paused)} disabled={busy || activeRunning}>
-                {active.paused ? "Resume" : "Pause"}
-              </Button>
-              <span className={styles.deleteWrap}>
-                <IconBtn tip="Delete" className={styles.deleteBtn} onClick={() => setConfirm(true)} disabled={busy || activeRunning}>
-                  <I.Trash />
-                </IconBtn>
-                <ConfirmDelete
-                  anchored={false}
-                  open={confirm}
-                  onClose={() => setConfirm(false)}
-                  onConfirm={() => remove(active.id)}
-                  title={`Delete "${jobTitle(active)}"?`}
-                  consequence="The job stops firing and is removed. The agent can recreate it later from chat."
-                />
-              </span>
-            </div>
-            <dl className={`${styles.fields} ${active.paused ? styles.paused : ""}`}>
-              {active.description ? <div><dt>about</dt><dd>{active.description}</dd></div> : null}
-              <div>
-                <dt>when</dt>
-                <dd>{describeWhen(active)}{rawWhen(active) ? <span className={styles.chip}>{rawWhen(active)}</span> : null}</dd>
-              </div>
-              {!active.paused && active.next_fire ? <div><dt>next</dt><dd>{formatNextFire(active.next_fire)}</dd></div> : null}
-              <div>
-                <dt>last run</dt>
-                <dd className={failed && !activeRunning ? styles.failed : ""}>{activeRunning ? "running now" : formatLastRun(active.last_run_at, active.last_run_status)}</dd>
-              </div>
-              <div>
-                <dt>runs</dt>
-                <dd>{[active.no_agent ? "shell script" : "agent", describeTimeout(active)].filter(Boolean).join(" · ")}</dd>
-              </div>
-              {active.timeout_error ? (
-                <div><dt>timeout</dt><dd className={styles.failed}>{active.timeout_error}</dd></div>
-              ) : null}
-              <div><dt>notify</dt><dd>{active.notify ? "pushes to your apps" : "silent — failures still alert"}</dd></div>
-            </dl>
+            <FactTable
+              rows={[
+                { label: "About", value: active.description || null },
+                { label: "When", value: <>{describeWhen(active)}{rawWhen(active) ? <> · <code>{rawWhen(active)}</code></> : null}</> },
+                { label: "Next", value: !active.paused && active.next_fire ? [formatNextFire(active.next_fire), nextRunCountdown(active)].filter(Boolean).join(" · ") : null },
+                { label: "Last run", value: activeRunning ? "running now" : formatLastRun(active.last_run_at, active.last_run_status), tone: failed && !activeRunning ? "danger" : null },
+                { label: "Runs", value: [active.no_agent ? "shell script" : "agent", describeTimeout(active)].filter(Boolean).join(" · ") },
+                { label: "Timeout", value: active.timeout_error || null, tone: "danger" },
+                { label: "Notify", value: active.notify ? "pushes to your apps" : "silent — failures still alert" },
+              ]}
+            />
             <div className={styles.promptBox}>
               <div className={styles.promptRail}>
-                <Eyebrow className={styles.promptLabel}>prompt</Eyebrow>
+                <Eyebrow className={styles.promptLabel}>Prompt</Eyebrow>
                 <div className={styles.promptItem}>Prompt</div>
               </div>
               <div className={styles.promptBody}>

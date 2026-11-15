@@ -9,14 +9,24 @@ import { skillBanner, skillItem } from '../../../../common/attention.mjs';
 import { Icon } from '../../components/Icon';
 import { RichText } from '../../components/RichText';
 import { PanelHeader } from '../profile/PanelHeader';
-import { StatusWord } from '../profile/StatusWord';
 import { useEndpoint } from '../../lib/EndpointContext';
-import { fileSize, flattenTree, statusLabel } from '../../lib/skillDetail';
+import { flattenTree, skillVersion, statusLabel } from '../../lib/skillDetail';
+import { sizeLabel } from '../../../../common/panelRow.mjs';
+import { DetailHead } from '../../components/DetailHead';
+import { FactCode, FactTable } from '../../components/FactTable';
 import { skillFileIcon } from '../../../../common/fileKind.mjs';
 import { useTheme } from '../../theme/ThemeContext';
 import { Busy } from '../../components/Busy';
 import { useBusyVisible } from '../../hooks/useBusyVisible';
-import { detailTitleStyle } from '../../components/detailTitle';
+import { code } from '../../theme/code';
+
+function idList(names, missing = () => false) {
+  return names.flatMap((n, i) => [
+    i > 0 ? ', ' : null,
+    <FactCode key={n} quiet={missing(n)}>{n}</FactCode>,
+    missing(n) ? ' missing' : null,
+  ]).filter(Boolean);
+}
 
 export function SkillDetail({ profile: id, name, category, embedded = false, onBack }) {
   const router = useRouter();
@@ -59,11 +69,11 @@ export function SkillDetail({ profile: id, name, category, embedded = false, onB
   const requires = Array.isArray(detail?.requires) ? detail.requires : [];
   const tools = Array.isArray(detail?.tools) ? detail.tools : [];
   const files = useMemo(() => flattenTree(detail?.tree).filter((f) => f.path !== 'SKILL.md'), [detail?.tree]);
-  const meta = { fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 };
+  const meta = { fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 };
 
   return (
     <View style={{ flex: 1 }}>
-      {embedded ? null : <PanelHeader profile={id} section={category ? `SKILLS · ${String(category).toUpperCase()}` : 'SKILLS'} onBack={onBack} />}
+      {embedded ? null : <PanelHeader profile={id} section={category ? `Skills · ${String(category)}` : 'Skills'} onBack={onBack} />}
       {loading || holding ? (
         <Busy fill visible={holding} label="Opening the skill" />
       ) : !detail ? (
@@ -75,14 +85,12 @@ export function SkillDetail({ profile: id, name, category, embedded = false, onB
       ) : (
         <ScrollView contentContainerStyle={{ padding: space.s8, gap: space.s6, paddingBottom: space.s10 }}>
           {banner ? <AlertBanner {...banner} /> : null}
-          <View style={{ gap: space.s3 }}>
-            <Text accessibilityRole="header" style={detailTitleStyle(theme)}>{detail.name ?? String(name)}</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s4, flexWrap: 'wrap' }}>
-              <StatusWord word={status} on={status === 'active'} danger={status === 'invalid'} />
-              {detail.version ? <Text style={meta}>v{detail.version}</Text> : null}
-              <Text style={meta}>{detail.origin || 'agent'}</Text>
-            </View>
-          </View>
+          <DetailHead
+            title={detail.name ?? String(name)}
+            state={status}
+            stateTone={status === 'invalid' ? 'danger' : null}
+            id={detail.category ? `${detail.category}/${detail.name ?? String(name)}` : detail.name ?? String(name)}
+          />
 
           {status !== 'active' && reason && !banner ? (
             <Text
@@ -93,35 +101,18 @@ export function SkillDetail({ profile: id, name, category, embedded = false, onB
             </Text>
           ) : null}
 
-          {detail.description ? (
-            <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink, lineHeight: fontSizes.md * lineHeights.normal }}>
-              {detail.description}
-            </Text>
-          ) : null}
-
-          {tools.length > 0 ? (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.s2 }}>
-              {tools.map((t) => (
-                <View key={t} style={{ paddingHorizontal: space.s3, paddingVertical: 2, borderRadius: radii.xs, backgroundColor: colors.hover }}>
-                  <Text style={meta}>{String(t).replace('__', '.')}</Text>
-                </View>
-              ))}
-            </View>
-          ) : null}
-
-          {requires.length > 0 ? (
-            <View style={{ gap: space.s2 }}>
-              {requires.map((r) => (
-                <View key={`${r.kind}:${r.name}`} style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
-                  <StatusWord word={r.name} on={!!r.resolved} danger={!r.resolved} />
-                  <Text style={meta}>{r.resolved ? r.kind : `${r.kind} · missing`}</Text>
-                </View>
-              ))}
-            </View>
-          ) : null}
+          <FactTable
+            rows={[
+              { label: 'About', value: detail.description || null },
+              { label: 'Requires', value: requires.length ? idList(requires.map((r) => r.name), (n) => requires.some((r) => r.name === n && !r.resolved)) : null },
+              { label: 'Tools', value: tools.length ? idList(tools.map((t) => String(t).replace('__', '.'))) : null },
+              { label: 'Keywords', value: Array.isArray(detail.keywords) && detail.keywords.length ? detail.keywords.join(', ') : null },
+              { label: 'Version', value: skillVersion(detail) },
+            ]}
+          />
 
           {files.length > 0 ? (
-            <View style={{ borderRadius: radii.xs, backgroundColor: colors.bgPane ?? colors.hover, overflow: 'hidden' }}>
+            <View style={{ borderRadius: radii.surface, backgroundColor: colors.bgPane ?? colors.hover, overflow: 'hidden' }}>
               {files.map((f, i) => {
                 const openable = f.kind === 'file';
                 const Wrapper = openable ? Pressable : View;
@@ -134,11 +125,11 @@ export function SkillDetail({ profile: id, name, category, embedded = false, onB
                       pathname: `/profile/${id}/brain/skill-file`,
                       params: { name: String(name), category: category ? String(category) : '', file: f.path },
                     }) : undefined}
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3, minHeight: 44, paddingHorizontal: space.s5, borderTopWidth: i ? 0.5 : 0, borderTopColor: colors.line }}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3, minHeight: 44, paddingHorizontal: space.s5 }}
                   >
                     <Icon name={skillFileIcon(f)} size="xs" color={colors.ink2} />
-                    <Text style={{ flex: 1, fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink }} numberOfLines={1}>{f.path}</Text>
-                    <Text style={meta}>{f.locked ? `${f.count} · ${f.mode ?? ''}` : f.kind === 'file' ? fileSize(f.size) : ''}</Text>
+                    <Text style={{ flex: 1, ...code(fonts, fontSizes.sm), color: colors.ink }} numberOfLines={1}>{f.path}</Text>
+                    <Text style={meta}>{f.locked ? `${f.count} · ${f.mode ?? ''}` : f.kind === 'file' ? sizeLabel(f.size) : ''}</Text>
                     {openable ? <Icon name="chevron-right" size="xs" color={colors.ink4 ?? colors.ink3} /> : null}
                   </Wrapper>
                 );

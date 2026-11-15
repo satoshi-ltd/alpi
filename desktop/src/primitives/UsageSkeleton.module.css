@@ -6,7 +6,6 @@
   display: flex;
   align-items: flex-start;
   padding-bottom: var(--sp-16);
-  border-bottom: 0.5px solid var(--line-2);
 }
 
 .stat {

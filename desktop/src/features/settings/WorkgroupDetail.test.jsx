@@ -1,5 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { nameTone } from "../../../../common/name.mjs";
+import { palettes } from "../../../../common/tokens.mjs";
 import { invoke } from "@tauri-apps/api/core";
 
 const hubDetail = vi.hoisted(() => ({ value: {} }));
@@ -32,8 +34,7 @@ describe("WorkgroupDetail", () => {
     );
 
     const bar = screen.getByRole("progressbar", { name: "Fetching latest workgroup settings" });
-    expect(bar.getAttribute("style")).toBeNull();
-    expect(bar.outerHTML).not.toContain("#446");
+    expect(bar.style.getPropertyValue("--c-light")).toBe(nameTone("#446", palettes.light.bgPane));
   });
 
   it("lists its sections in the searchable settings rail", async () => {
@@ -134,28 +135,29 @@ describe("WorkgroupDetail — pipelines", () => {
       }
       return null;
     });
-    const profiles = [...PROFILES, { name: "pixel", pubkey_b64: "px", accent: "#2cb3b5", fold: "rocket" }];
+    const profiles = [...PROFILES, { name: "pixel", pubkey_b64: "px", accent: "#2cb3b5", shape: "pill" }];
     render(<WorkgroupDetail workgroup={PIPELINE_WG} profiles={profiles} connectionId="casa" />);
 
     await waitFor(() => expect(screen.getByText("last run blocked · 1 of 2 · $0.42")).toBeInTheDocument());
     const setupChip = within(pipelineRow("setup")).getByText("#setup").closest("[data-state]");
     expect(setupChip.dataset.state).toBe("completed");
-    expect(setupChip.querySelector('[data-fold="rocket"]')).not.toBeNull();
+    expect(setupChip.querySelector('[data-shape="pill"]')).not.toBeNull();
     const enrichChip = within(pipelineRow("setup")).getByText("#enrich").closest("[data-state]");
     expect(enrichChip.dataset.state).toBe("blocked");
-    expect(enrichChip.querySelector("[data-fold]")).toBeNull();
+    expect(enrichChip.querySelector("[data-shape]")).toBeNull();
     const mediaChip = within(pipelineRow("media-update")).getByText("#media-update").closest("[data-state]");
     expect(mediaChip.dataset.state).toBe("pending");
     expect(within(pipelineRow("media-update")).queryByText(/last run/)).toBeNull();
   });
 
-  it("draws an owner that is not a local profile as the grey unfolded object", async () => {
+  it("draws an owner that is not a local profile as the grey dashed mark", async () => {
     mockHost();
     render(<WorkgroupDetail workgroup={PIPELINE_WG} profiles={PROFILES} connectionId="casa" />);
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Pipelines" })).toBeInTheDocument());
     const chip = within(pipelineRow("setup")).getByText("#setup").closest("[data-state]");
-    expect(chip.querySelector("[data-unfolded]")).not.toBeNull();
+    expect(chip.querySelector("[data-shape]").dataset.state).toBe("paused");
+    expect(chip.querySelector("[data-shape] path[stroke-dasharray]")).not.toBeNull();
   });
 
   it("offers no control at all inside the pipelines section", async () => {
@@ -423,8 +425,8 @@ describe("WorkgroupDetail — waits for members", () => {
 
 describe("WorkgroupDetail — members", () => {
   const PROFILES_WITH_MEMBERS = [
-    { name: "mira", pubkey_b64: "hub", accent: "#6572e4", fold: "crown" },
-    { name: "pixel", pubkey_b64: "px", accent: "#2cb3b5", fold: "rocket", bio: "Builds the site." },
+    { name: "mira", pubkey_b64: "hub", accent: "#6572e4", shape: "dome" },
+    { name: "pixel", pubkey_b64: "px", accent: "#2cb3b5", shape: "pill", bio: "Builds the site." },
   ];
 
   function mockMembers() {

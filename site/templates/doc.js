@@ -49,22 +49,11 @@
 
 
 (function(){
+  const template = document.createElement('template');
+  template.innerHTML = '__COPY_BUTTON__';
   document.querySelectorAll('.md pre').forEach(pre => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'copy';
-    button.textContent = 'copy';
-    button.setAttribute('aria-label', 'Copy code');
-    button.addEventListener('click', async () => {
-      const code = pre.querySelector('code') || pre;
-      try {
-        await navigator.clipboard.writeText(code.innerText.replace(/\n$/, ''));
-        button.textContent = 'copied';
-      } catch {
-        button.textContent = 'press ⌘C';
-      }
-      setTimeout(() => { button.textContent = 'copy'; }, 1600);
-    });
+    const button = template.content.firstElementChild.cloneNode(true);
+    button.dataset.copy = (pre.querySelector('code') || pre).innerText.replace(/\n$/, '');
     pre.appendChild(button);
   });
 })();

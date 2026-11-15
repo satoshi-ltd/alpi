@@ -9,7 +9,7 @@ function CrashScreen({ error, retry }) {
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.s10, gap: space.s5, backgroundColor: colors.bg }}>
       <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.ink, textAlign: 'center' }}>Something broke on screen</Text>
-      <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3, textAlign: 'center' }}>{String(error?.message ?? error)}</Text>
+      <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3, textAlign: 'center' }}>{String(error?.message ?? error)}</Text>
       <View style={{ marginTop: space.s5 }}>
         <Button title="Reload" onPress={retry} />
       </View>

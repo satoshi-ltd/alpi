@@ -31,8 +31,8 @@ vi.mock('../../theme/ThemeContext', () => ({
 }));
 
 vi.mock('../../components/Fold', () => ({
-  Fold: ({ fold, unfolded, pulse }) =>
-    React.createElement('i', { 'data-fold': fold, 'data-unfolded': unfolded ? '1' : undefined, 'data-pulse': pulse ? '1' : undefined }),
+  Fold: ({ shape, unfolded, pulse }) =>
+    React.createElement('i', { 'data-shape': shape, 'data-unfolded': unfolded ? '1' : undefined, 'data-pulse': pulse ? '1' : undefined }),
 }));
 
 vi.mock('../../components/Icon', () => ({
@@ -58,7 +58,7 @@ vi.mock('../../components/Row', () => ({
 
 import { PipelinesSection } from './PipelinesSection';
 
-const PROFILES = { scout: { fold: 'house', accent: '#f05940' }, pixel: { fold: 'rocket', accent: '#2cb3b5' } };
+const PROFILES = { scout: { shape: 'arch', accent: '#f05940' }, pixel: { shape: 'pill', accent: '#2cb3b5' } };
 const profileOf = (name) => PROFILES[name] ?? null;
 
 const WG = {
@@ -105,13 +105,13 @@ describe('PipelinesSection', () => {
     const { container } = render(<PipelinesSection workgroup={WG} run={run} profileOf={profileOf} />);
     expect(screen.getByText('last run running · 1 of 4 · $1.50')).toBeTruthy();
     const setupChip = container.querySelector('[testID="phase-setup"]');
-    expect(setupChip.querySelector('[data-fold="house"]')).toBeTruthy();
+    expect(setupChip.querySelector('[data-shape="arch"]')).toBeTruthy();
     expect(setupChip.querySelector('[data-icon="check"]')).toBeNull();
     expect(setupChip.textContent).toBe('#setup');
     expect(JSON.parse(setupChip.dataset.style).backgroundColor).toBe(phaseGround('completed', COLORS));
     expect(container.querySelector('[testID="phase-enrich"]').getAttribute('aria-label')).toContain('running');
-    expect(container.querySelector('[testID="phase-enrich"]').querySelector('[data-fold]')).toBeNull();
-    expect(container.querySelector('[testID="phase-media-update"]').querySelector('[data-fold="rocket"]')).toBeTruthy();
+    expect(container.querySelector('[testID="phase-enrich"]').querySelector('[data-shape]')).toBeNull();
+    expect(container.querySelector('[testID="phase-media-update"]').querySelector('[data-shape="pill"]')).toBeTruthy();
     expect(screen.getAllByText(/^last run/)).toHaveLength(1);
   });
 

@@ -63,7 +63,7 @@ vi.mock('../src/theme/ThemeContext', async () => {
 });
 
 vi.mock('../src/components/Diamond', () => ({ Diamond: () => React.createElement('span', {}) }));
-vi.mock('../src/components/Fold', () => ({ Fold: ({ fold, color, size, outlined }) => React.createElement('span', { 'data-fold': fold ?? 'diamond', 'data-color': color, 'data-size': size, 'data-outlined': String(!!outlined) }) }));
+vi.mock('../src/components/Fold', () => ({ Fold: ({ shape, color, size, outlined }) => React.createElement('span', { 'data-shape': shape ?? 'diamond', 'data-color': color, 'data-size': size, 'data-outlined': String(!!outlined) }) }));
 vi.mock('../src/components/Icon', () => ({ Icon: () => React.createElement('span', {}) }));
 vi.mock('../src/components/RichText', () => ({
   RichText: ({ children }) => React.createElement('span', { 'data-body': 'true' }, children),
@@ -121,7 +121,7 @@ const SURFACES = [
 
 describe.each([['phone', false], ['two-pane', true]])('chat pane left edge on a %s', (_name, twoPane) => {
   it('starts header, transcript and composer on the very same inset', () => {
-    const insets = SURFACES.map(([, node, pick]) => {
+    const insets = SURFACES.filter(([name]) => twoPane || name !== 'header').map(([, node, pick]) => {
       const { container } = mount(node(), twoPane);
       const inset = edge(pick(container));
       cleanup();
@@ -159,8 +159,10 @@ describe('chat pane top edge', () => {
     expect(chatHeaderTop(true)).toBeLessThan(space.s11);
   });
 
-  it('gives the phone the same trimmed top as the tablet', () => {
-    expect(chatHeaderTop(false)).toBe(space.s2);
-    expect(chatHeaderTop(false)).toBe(chatHeaderTop(true));
+  it('centres the phone title in a 56 pt bar instead of trimming its top', () => {
+    const { container } = mount(<ChatHeader kind="profile" title="doc" />, false);
+    expect(rootStyle(container).minHeight).toBe(56);
+    expect(rootStyle(container).alignItems).toBe('center');
+    expect(chatHeaderTop(true)).toBe(space.s2);
   });
 });

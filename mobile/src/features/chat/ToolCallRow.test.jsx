@@ -103,7 +103,7 @@ describe('tool rows open their detail', () => {
     expect(Number(row.getAttribute('data-slop'))).toBe(PROCESS_GAP);
   });
 
-  it('sets names in ink-2 and labels in ink-3, all in the same mono size', () => {
+  it('sets names in ink-2 and labels in ink-3, all in the same 14 pt sans', () => {
     render(<ToolModule tools={[
       { name: 'read_file', args: { path: 'a.log' }, ok: true, tool_id: 't1' },
       { name: 'grep', args: { pattern: 'x' }, ok: true, tool_id: 't2' },
@@ -115,7 +115,7 @@ describe('tool rows open their detail', () => {
     expect(name.getAttribute('data-color')).toBe('#333');
     expect(screen.getByText('a.log').getAttribute('data-color')).toBe('#666');
     for (const el of [label, name, screen.getByText('a.log')]) {
-      expect(el.getAttribute('data-font')).toBe('m');
+      expect(el.getAttribute('data-font')).toBe('r');
       expect(Number(el.getAttribute('data-size'))).toBe(fontSizes.sm);
     }
     expect(Number(name.closest('[data-indent]').getAttribute('data-indent'))).toBe(PROCESS_INDENT);

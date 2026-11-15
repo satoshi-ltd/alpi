@@ -1,7 +1,7 @@
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { mobile, radii, space } from '../../theme/tokens';
 
-import { FALLBACK_ACCENT } from '../../../../common/folds.mjs';
+import { FALLBACK_ACCENT } from '../../../../common/shapes.mjs';
 import { Fold } from '../../components/Fold';
 import { Pill } from '../../components/Pill';
 import { useProfileSummaries } from '../../hooks/useDaemonData';
@@ -9,6 +9,7 @@ import { PANE_PAD_X } from '../../lib/panes';
 import { modelLabel } from '../../lib/modelLabel';
 import { profileLabel } from '../../lib/profileName';
 import { useTheme } from '../../theme/ThemeContext';
+import { code } from '../../theme/code';
 
 const VISIBLE_ROWS = 4;
 
@@ -24,7 +25,7 @@ export function MentionPopover({ candidates = [], token = '', onPick }) {
         marginHorizontal: PANE_PAD_X,
         marginBottom: space.s3,
         backgroundColor: colors.bgElev,
-        borderRadius: radii.xs,
+        borderRadius: radii.surface,
         overflow: 'hidden',
         ...shadow.popover,
       }}
@@ -47,25 +48,23 @@ export function MentionPopover({ candidates = [], token = '', onPick }) {
                 onPress={() => onPick?.(c)}
                 accessibilityRole="button"
                 accessibilityLabel={`Mention @${profileLabel(c.id)}`}
-                android_ripple={{ color: colors.selected }}
+                android_ripple={{ color: colors.pressed }}
                 style={({ pressed }) => ({
                   flexDirection: 'row',
                   alignItems: 'center',
                   gap: space.s4,
                   minHeight: mobile.tap,
                   paddingHorizontal: space.s6,
-                  backgroundColor: pressed ? colors.selected : 'transparent',
-                  borderTopWidth: i === 0 ? 0 : 0.5,
-                  borderTopColor: colors.line,
+                  backgroundColor: pressed ? colors.pressed : 'transparent',
                 })}
               >
-                <Fold fold={profile?.fold} color={accent} />
-                <Text style={{ flex: 1, fontFamily: fonts.mono, fontSize: fontSizes.md, color: colors.ink }}>
+                <Fold shape={profile?.shape} color={accent} />
+                <Text style={{ flex: 1, fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink }}>
                   @{profileLabel(c.id)}
                 </Text>
                 {isHub ? <Pill tone="on">hub</Pill> : null}
                 {profile?.model ? (
-                  <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3 }}>
+                  <Text style={{ ...code(fonts, fontSizes.sm), color: colors.ink3 }}>
                     {modelLabel(profile.model)}
                   </Text>
                 ) : null}

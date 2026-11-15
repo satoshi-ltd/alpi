@@ -14,7 +14,7 @@ function paragraphs(text) {
   return String(text || "").split("\n").map((s) => s.trim()).filter(Boolean);
 }
 
-export default function Reasoning({ text, seconds, streaming = false, answered = false, timeline = null, accent, fold }) {
+export default function Reasoning({ text, seconds, streaming = false, answered = false, timeline = null, accent, shape }) {
   const [open, setOpen] = useState(false);
   const bodyRef = useRef(null);
   const hasText = !!String(text || "").trim();
@@ -33,7 +33,7 @@ export default function Reasoning({ text, seconds, streaming = false, answered =
   const livePeek = lastLine(text);
   const label = streaming ? "Thinking…" : thoughtLabel(seconds);
   const labelNode = <span className={styles.label}>{label}</span>;
-  const mark = <Fold fold={fold} color={accent} size={14} pulse={streaming} />;
+  const mark = <Fold shape={shape} color={accent} size={14} pulse={streaming} />;
   const tone = accent ? { "--c": accent } : undefined;
   const peekNode = streaming && !open && livePeek ? <span className={styles.peek}>{livePeek}</span> : null;
 

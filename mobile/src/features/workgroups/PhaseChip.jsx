@@ -13,7 +13,7 @@ const STYLES = StyleSheet.create({
     alignItems: 'center',
     gap: space.s2,
     paddingHorizontal: space.s4,
-    borderRadius: radii.xs,
+    borderRadius: radii.pill,
   },
 });
 
@@ -25,8 +25,8 @@ export function phaseLabel(chip) {
 export function PhaseMark({ name, profileOf, pulse = false, size = 12 }) {
   if (!name) return null;
   const profile = profileOf?.(name);
-  if (!profile) return <Fold fold="diamond" size={size} unfolded />;
-  return <Fold fold={profile.fold} color={profile.accent} size={size} pulse={pulse} />;
+  if (!profile) return <Fold shape="round" size={size} unfolded />;
+  return <Fold shape={profile.shape} color={profile.accent} size={size} pulse={pulse} />;
 }
 
 export function PhaseChip({ chip, profileOf, height = 28, onPress, hint, testID }) {
@@ -48,7 +48,7 @@ export function PhaseChip({ chip, profileOf, height = 28, onPress, hint, testID 
       <PhaseMark name={chip.owner} profileOf={profileOf} pulse={working && !chip.assignee} />
       <Text
         style={{
-          fontFamily: working || blocked ? fonts.monoSemibold : fonts.mono,
+          fontFamily: working || blocked ? fonts.sans.semibold : fonts.sans.regular,
           fontSize: fontSizes.sm,
           color: chip.state === 'pending' ? colors.ink2 : chip.state === 'skipped' ? colors.ink3 : colors.ink,
           textDecorationLine: chip.state === 'skipped' ? 'line-through' : 'none',
@@ -58,9 +58,9 @@ export function PhaseChip({ chip, profileOf, height = 28, onPress, hint, testID 
       </Text>
       {chip.assignee ? (
         <>
-          <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>→</Text>
+          <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>→</Text>
           <PhaseMark name={chip.assignee} profileOf={profileOf} pulse={working} />
-          <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink }}>@{chip.assignee}</Text>
+          <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink }}>@{chip.assignee}</Text>
         </>
       ) : null}
     </Wrapper>

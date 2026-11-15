@@ -142,7 +142,7 @@ describe('RichText image lightbox close', () => {
     return view;
   };
 
-  it.each([59, 47, 0])('starts the 44 pt box 8 pt under a %i pt top inset and keeps the right edge at 6 pt', (top) => {
+  it.each([59, 47, 0])('starts the 44 pt box 8 pt under a %i pt top inset and bleeds it off the 16 pt gutter like a sheet close', async (top) => {
     h.insets = { top, bottom: 0, left: 0, right: 0 };
     openLightbox();
     const close = screen.getByRole('button', { name: 'Close' });
@@ -150,6 +150,8 @@ describe('RichText image lightbox close', () => {
     expect(style.position).toBe('absolute');
     expect(style.height).toBe(44);
     expect(style.top + style.marginTop).toBe(top + 8);
-    expect(style.right + style.marginRight).toBe(6);
+    const { space } = await import('../theme/tokens');
+    const { SHEET_CLOSE_BLEED } = await import('./SheetClose');
+    expect(style.right + style.marginRight).toBe(space.s7 - SHEET_CLOSE_BLEED);
   });
 });

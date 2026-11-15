@@ -1,6 +1,7 @@
 import { Text, View } from 'react-native';
 import { radii, space } from '../theme/tokens';
 
+import { code } from '../theme/code';
 import { useTheme } from '../theme/ThemeContext';
 
 const TRACK_W = 56;
@@ -21,7 +22,7 @@ export function Meter({ label, value, tail, pct = 0, color, showPercent = true, 
       <Text
         numberOfLines={1}
         accessibilityLabel={`${label} ${value}${tail ?? ''}`}
-        style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink2 }}
+        style={{ ...code(fonts, fontSizes.xs), color: colors.ink2 }}
       >
         {compactText}
       </Text>
@@ -29,7 +30,7 @@ export function Meter({ label, value, tail, pct = 0, color, showPercent = true, 
   }
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
-      <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink2 }}>
+      <Text style={{ ...code(fonts, fontSizes.xs), color: colors.ink2 }}>
         {value}
         {tail ? <Text style={{ color: colors.ink3 }}>{tail}</Text> : null}
       </Text>
@@ -55,7 +56,7 @@ export function Meter({ label, value, tail, pct = 0, color, showPercent = true, 
         />
       </View>
       {showPercent ? (
-        <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
+        <Text style={{ ...code(fonts, fontSizes.xs), color: colors.ink3 }}>
           {percent}%
         </Text>
       ) : null}

@@ -36,3 +36,20 @@ test('unterminated front-matter is left as body, not swallowed', () => {
   assert.deepEqual(meta, {});
   assert.equal(body, src);
 });
+
+test('every post title is in sentence case, never Title Case', async () => {
+  const { readdirSync, readFileSync } = await import('node:fs');
+  const dir = new URL('../posts/', import.meta.url);
+  const titleCase = (title) => {
+    const long = title.split(/\s+/).slice(1).filter((w) => /^[A-Za-z][a-z'’]{3,}/.test(w));
+    return long.length >= 3 && long.filter((w) => /^[A-Z]/.test(w)).length / long.length > 0.6;
+  };
+  assert.ok(titleCase("Agents Don't Know Who They're Talking To"));
+  assert.ok(!titleCase('Agents don’t know who they’re talking to'));
+  for (const name of readdirSync(dir).filter((n) => n.endsWith('.md'))) {
+    const { meta, body } = parseFrontmatter(readFileSync(new URL(name, dir), 'utf8'));
+    assert.ok(!titleCase(meta.title || ''), name);
+    const h1 = body.match(/^#\s+(.+)$/m);
+    if (h1) assert.ok(!titleCase(h1[1]), name);
+  }
+});

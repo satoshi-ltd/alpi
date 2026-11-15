@@ -92,6 +92,10 @@ const UNITS = [[86400, "d"], [3600, "h"], [60, "m"]];
 export function nextRunWord(job, now = Date.now()) {
   if (job.paused) return "paused";
   if (job.last_run_status === "error") return "failed";
+  return nextRunCountdown(job, now);
+}
+
+export function nextRunCountdown(job, now = Date.now()) {
   const at = Date.parse(job.next_fire || "");
   if (!Number.isFinite(at)) return "";
   const secs = Math.max(0, Math.round((at - now) / 1000));

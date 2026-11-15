@@ -30,7 +30,6 @@ vi.mock('../../theme/ThemeContext', () => ({
 }));
 
 import { FOLD_SIZE, FOLD_TOP, NotificationRow } from './NotificationRow';
-import { dotScale } from '../../theme/tokens';
 
 const ROW = {
   profile: 'sentinel',
@@ -81,13 +80,27 @@ describe('NotificationRow header', () => {
   });
 });
 
-describe('NotificationRow unread dot', () => {
-  it('shares its vertical centre with the fold beside it', () => {
-    const { container } = render(<NotificationRow row={ROW} unread />);
-    const [lane, foldBox] = container.querySelector('button').children;
-    const dotCentre = styleOf(lane).paddingTop + dotScale.sm / 2;
-    const foldCentre = styleOf(foldBox).paddingTop + FOLD_SIZE / 2;
-    expect(styleOf(foldBox).paddingTop).toBe(FOLD_TOP);
-    expect(dotCentre).toBe(foldCentre);
+describe('NotificationRow unread', () => {
+  it('starts every row with its mark, no dot or gutter before it', () => {
+    for (const unread of [true, false]) {
+      const { container } = render(<NotificationRow row={ROW} unread={unread} />);
+      const [foldBox] = container.querySelector('button').children;
+      expect(styleOf(foldBox).paddingTop).toBe(FOLD_TOP);
+      expect(foldBox.querySelector('i')).toBeTruthy();
+      cleanup();
+    }
+  });
+
+  it('sets an unread title and time in semibold ink and a read one regular, and says Unread aloud', () => {
+    const { container, rerender } = render(<NotificationRow row={ROW} unread />);
+    const title = () => styleOf(screen.getByText(ROW.title));
+    const time = () => styleOf(container.querySelector('[data-testid="notification-meta"]').lastElementChild);
+    expect(title().fontFamily).toBe('s');
+    expect(time()).toMatchObject({ fontFamily: 's', color: '#000' });
+    expect(container.querySelector('button').getAttribute('aria-label')).toMatch(/^Unread/);
+    rerender(<NotificationRow row={ROW} unread={false} />);
+    expect(title().fontFamily).toBe('r');
+    expect(time()).toMatchObject({ fontFamily: 'r', color: '#666' });
+    expect(container.querySelector('button').getAttribute('aria-label')).not.toMatch(/Unread/);
   });
 });

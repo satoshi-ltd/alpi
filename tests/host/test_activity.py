@@ -188,9 +188,28 @@ def test_running_workgroup_reports_phase_progress(monkeypatch, tmp_path: Path) -
     rows = [r for r in activity.snapshot()["running"] if r["kind"] == "workgroup"]
 
     assert rows == [{
-        "kind": "workgroup", "profile": "hub", "workgroup_id": wg.meta.id, "name": "factory",
+        "kind": "workgroup", "profile": "hub", "workgroup_id": wg.meta.id, "hub_id": "hub", "name": "factory",
         "pipeline": "intake", "phase": "content", "phases_done": 1, "phases_total": 4,
     }]
+
+
+def test_a_member_row_names_its_hub_not_the_local_member_profile(monkeypatch, tmp_path: Path) -> None:
+    from types import SimpleNamespace
+
+    from alpi.alp import subscription as sub_mod
+    from alpi.host import workgroup as host_workgroup
+
+    sub = SimpleNamespace(wg_id="w1", name="factory", hub_id="doc", pipeline_mode=True)
+    monkeypatch.setattr(sub_mod, "load", lambda _home: [sub])
+    monkeypatch.setattr(sub_mod, "get", lambda _home, _wg_id: sub)
+    run = {"pipeline": "intake", "status": "running", "current_phase": "content",
+           "phases": [{"state": "completed"}, {"state": "current"}]}
+    monkeypatch.setattr(host_workgroup, "fold_task_state", lambda _home, _wg_id: {"pipeline_run": run})
+
+    [(_, row)] = activity._member_rows(tmp_path, "alice")
+
+    assert (row["profile"], row["hub_id"]) == ("alice", "doc")
+    assert activity._member_row(tmp_path, "alice", "w1")["hub_id"] == "doc"
 
 
 def _two_rows_for_one_workgroup(monkeypatch, tmp_path: Path) -> None:

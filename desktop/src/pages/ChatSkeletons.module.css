@@ -12,9 +12,9 @@
 .userBubble {
   min-width: 220px;
   max-width: 70%;
-  padding: var(--sp-12) var(--sp-16);
-  border-radius: var(--r-xs);
-  background: var(--selected);
+  padding: var(--sp-8) var(--sp-16);
+  border-radius: var(--r-surface);
+  background: var(--fill);
 }
 
 .pending {
@@ -32,7 +32,7 @@
 }
 
 .thinkingLabel {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   color: var(--ink-3);
 }

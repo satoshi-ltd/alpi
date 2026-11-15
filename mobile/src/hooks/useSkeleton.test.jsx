@@ -30,6 +30,16 @@ describe('useSkeleton', () => {
     expect(result.current).toBe(false);
   });
 
+  it('never shows when the delay timer fires after the load ended but before its cleanup ran', () => {
+    const { result, rerender } = mount(true);
+    tick(100);
+    const clear = vi.spyOn(globalThis, 'clearTimeout').mockImplementation(() => {});
+    rerender({ on: false });
+    clear.mockRestore();
+    tick(1000);
+    expect(result.current).toBe(false);
+  });
+
   it('stays at least 400 ms once shown', () => {
     const { result, rerender } = mount(true);
     tick(150);

@@ -21,11 +21,12 @@ describe("one chip rule", () => {
     expect(existsSync(join(import.meta.dirname, "StatusPill.jsx"))).toBe(false);
   });
 
-  it("sizes the count badge from --badge-size, mono 600, as the shared spec says", () => {
+  it("sizes the count badge from --badge-size, sans 600, as the shared spec says", () => {
     const flag = read("primitives/BrowseModal.module.css").match(/\.flag \{([^}]*)\}/)[1];
     expect(flag).toMatch(/min-width: var\(--badge-size\)/);
     expect(flag).toMatch(/height: var\(--badge-size\)/);
-    expect(flag).toMatch(/font-family: var\(--font-mono\)/);
+    expect(flag).toMatch(/border-radius: var\(--r-pill\)/);
+    expect(flag).toMatch(/font-family: var\(--font-sans\)/);
     expect(flag).toMatch(new RegExp(`font-weight: ${countBadgeSpec.weight}`));
     expect(read("styles/tokens.css")).toMatch(new RegExp(`--badge-size: ${countBadgeSpec.size.desktop}px`));
   });

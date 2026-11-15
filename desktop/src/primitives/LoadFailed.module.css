@@ -15,7 +15,7 @@
 
 .detail {
   max-width: 520px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   color: var(--ink-3);
   word-break: break-word;

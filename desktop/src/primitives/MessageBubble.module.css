@@ -32,8 +32,8 @@
 }
 
 .bubble {
-  padding: var(--sp-12) var(--sp-16);
-  border-radius: var(--r-xs);
+  padding: var(--sp-8) var(--sp-16);
+  border-radius: var(--r-surface);
   color: var(--ink);
   line-height: var(--text-chat-leading);
   font-size: var(--text-chat-size);

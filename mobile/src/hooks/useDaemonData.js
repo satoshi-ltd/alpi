@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
-import { defaultAsAlpaca } from '../../../common/folds.mjs';
+import { defaultAsTwin } from '../../../common/shapes.mjs';
 import { useEndpoint } from '../lib/EndpointContext';
 import { useTheme } from '../theme/ThemeContext';
 import { quiet } from '../lib/settled';
+import { DETAIL_ONLY_FIELDS, applyEditsToRows, editClock, releaseLanded, useProfileEdits } from '../lib/optimisticProfiles';
 
 const cache = new Map();
 
@@ -40,6 +41,29 @@ function notify(entry) {
 
 function keyFor(endpointId, method, params) {
   return `${endpointId ?? '∅'}|${method}|${JSON.stringify(params || {})}`;
+}
+
+function endpointOf(key, method) {
+  const id = key.slice(0, key.indexOf(`|${method}|`));
+  return id === '∅' ? null : id;
+}
+
+function landedDetail(detail, params) {
+  if (!detail || typeof detail !== 'object' || detail.error || !params?.profile) return [null, null];
+  return [[{ ...detail, name: params.profile }], DETAIL_ONLY_FIELDS];
+}
+
+const LANDED_PROFILES = {
+  'host.profile.summaries': (result) => [result?.profiles, null],
+  'host.settings.profile_snapshot': (result, params) => landedDetail(result?.detail, params),
+  'host.profile.detail': landedDetail,
+};
+
+export function releaseLandedRead(endpointId, method, params, result, since) {
+  const landed = LANDED_PROFILES[method];
+  if (!landed) return;
+  const [profiles, fields] = landed(result, params);
+  releaseLanded(endpointId, since, profiles, fields);
 }
 
 function isAuthFailure(error) {
@@ -96,6 +120,7 @@ function startFetch(key, call, method, params, { background = false } = {}) {
     entry.loading = true;
     notify(entry);
   }
+  const since = editClock();
   let request;
   try {
     request = Promise.resolve(call(method, params || {}));
@@ -108,6 +133,7 @@ function startFetch(key, call, method, params, { background = false } = {}) {
       entry.loading = false;
       entry.error = null;
       entry.updatedAt = Date.now();
+      releaseLandedRead(endpointOf(key, method), method, params, result, since);
       return result;
     })
     .catch((e) => {
@@ -270,10 +296,14 @@ export const RECONCILE_MS = 60000;
 export function useProfileSummaries() {
   const inner = usePolledCall('host.profile.summaries', {}, [], { reconcileMs: RECONCILE_MS });
   const { colors } = useTheme();
+  const { endpoint } = useEndpoint();
+  const editsVersion = useProfileEdits();
+  const endpointId = endpoint?.id ?? null;
   const data = useMemo(() => {
     const profiles = inner.data?.profiles;
-    return Array.isArray(profiles) ? { ...inner.data, profiles: profiles.map(defaultAsAlpaca(colors.accent)) } : inner.data;
-  }, [inner.data, colors.accent]);
+    if (!Array.isArray(profiles)) return inner.data;
+    return { ...inner.data, profiles: applyEditsToRows(profiles.map(defaultAsTwin(colors.accent)), endpointId) };
+  }, [inner.data, colors.accent, endpointId, editsVersion]);
   return { ...inner, data };
 }
 

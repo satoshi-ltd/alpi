@@ -29,7 +29,7 @@ vi.mock('react-native', () => {
 vi.mock('../theme/ThemeContext', () => ({
   useTheme: () => ({
     colors: { ink2: '#333', ink3: '#666', line2: '#ddd', accent: '#c90' },
-    fonts: { mono: 'mono' },
+    fonts: { mono: 'mono', sans: { regular: 'sans', medium: 'sans-medium' } },
     fontSizes: { xs: 11 },
   }),
 }));
@@ -43,6 +43,15 @@ function track() {
 function fillStyle() {
   return JSON.parse(track().firstChild.getAttribute('data-style'));
 }
+
+describe('Meter value face', () => {
+  it('sets the value and percent in the mono face, as the desktop meter chip does', () => {
+    render(<Meter label="Context" value="31K" pct={0.03} />);
+    const value = screen.getByText(/31K/);
+    expect(JSON.parse(value.getAttribute('data-style')).fontFamily).toBe('mono');
+    expect(JSON.parse(screen.getByText((_, el) => el.tagName === 'SPAN' && el.textContent === '3%').getAttribute('data-style')).fontFamily).toBe('mono');
+  });
+});
 
 describe('clampFraction', () => {
   it('passes a fraction through untouched', () => {

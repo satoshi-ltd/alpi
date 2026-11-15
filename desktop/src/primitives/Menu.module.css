@@ -1,33 +1,35 @@
 .row {
   display: flex;
   align-items: center;
-  gap: var(--sp-8);
+  gap: var(--sp-12);
   width: 100%;
-  min-height: var(--ctl-32);
+  min-height: var(--row-h);
   padding: var(--sp-8) var(--sp-12);
   border: 0;
-  border-radius: var(--r-xs);
+  border-radius: var(--r-control);
   background: transparent;
   color: var(--ink);
   font: inherit;
   font-size: var(--text-ui);
-  line-height: var(--sp-16);
+  line-height: var(--lh-ui);
   text-align: left;
   cursor: pointer;
-  transition: background var(--dur-1) var(--ease);
+  transition: background-color var(--state-out);
 }
 
-.row:not(:disabled):hover,
-.row:focus-visible {
+.row:not(:disabled):hover {
   background: var(--hover);
+  transition: background-color var(--state-in);
 }
 
 .row:focus-visible {
-  outline-offset: calc(var(--focus-outline-offset) * -1);
+  background: var(--selected);
+  outline: none;
 }
 
 .row:not(:disabled):active {
-  background: var(--selected);
+  background: var(--pressed);
+  transition: none;
 }
 
 .row:disabled {
@@ -61,11 +63,11 @@
 }
 
 .sep {
-  height: 1px;
-  margin: var(--sp-4) var(--sp-12);
-  background: var(--line);
+  height: var(--sp-8);
+  margin: 0;
+  background: none;
 }
 
 .sepInset {
-  margin-left: calc(var(--sp-12) + var(--icon-md) + var(--sp-8));
+  margin: 0;
 }

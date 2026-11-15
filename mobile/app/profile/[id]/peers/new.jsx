@@ -63,7 +63,7 @@ export default function AddPeer() {
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScreenHeader
         title="Add peer"
-        subtitle={`@${id} · TRUST ANOTHER ALPI`}
+        subtitle={`@${id} · trust another alpi`}
         onBack={goBack}
         right={<Button title="Add" size="md" disabled={!ready} loading={busy} onPress={save} />}
       />

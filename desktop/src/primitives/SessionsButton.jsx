@@ -5,7 +5,6 @@ import {
   ChevDownIcon,
   Eyebrow,
   Kbd,
-  Mono,
   Pill,
   PlusIcon,
   Tip,
@@ -165,9 +164,9 @@ export default function SessionsButton({
                     <span className={styles.preview}>
                       {displaySessionTitle(s, { connectionId, profile, max: 56 })}
                     </span>
-                    <Mono className="tnum">
+                    <span className="tnum">
                       {s.turn_count} turn{s.turn_count === 1 ? "" : "s"}
-                    </Mono>
+                    </span>
                   </button>
                 );
               })}
@@ -176,9 +175,9 @@ export default function SessionsButton({
         </div>
         {sessions.length > 0 && (
           <div className={styles.popFooter}>
-            <Mono className={styles.popCount}>
+            <span className={styles.popCount}>
               {sessions.length} session{sessions.length === 1 ? "" : "s"}
-            </Mono>
+            </span>
             <Button
               variant="ghost"
               onClick={() => {

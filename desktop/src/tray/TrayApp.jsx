@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { ALPACA_FOLD } from "../../../common/folds.mjs";
+import { TWIN } from "../lib/brandMark.js";
 import { ICON_ROLES } from "../../../common/iconRoles.mjs";
 import { Button, Fold, Icon, IconBtn } from "../primitives/index.js";
+import { nameVars } from "../lib/nameVars.js";
 import { safeUnlisten } from "../lib/tauri-listen.js";
 import { trayModel } from "./trayModel.js";
 import { useTrayTheme } from "./useTrayTheme.js";
@@ -54,11 +55,37 @@ function useClock(shown) {
 function CountRow({ item, onOpen }) {
   return (
     <button type="button" className={styles.line} onClick={onOpen} aria-label={`${item.label}, ${item.value}. Open alpi`}>
-      <span className={styles.lineIcon} data-tone={item.danger ? "danger" : undefined}><Icon name={item.icon} /></span>
+      <span className={styles.lineIcon}><Icon name={item.icon} /></span>
       <span className={styles.lineLabel}>{item.label}</span>
-      <span className={styles.lineValue} data-tone={item.danger ? "danger" : undefined}>{item.value}</span>
+      <span className={styles.lineValue}>{item.value}</span>
       <span className={styles.chev}><Icon name="chevron-right" size="sm" /></span>
     </button>
+  );
+}
+
+const HEAD_MARK = { needs: "needs", running: "working", failing: "failed", offline: "offline", starting: "busy", connecting: "busy" };
+
+const whereOf = (row) => [row.name, row.connection, row.meta].filter(Boolean).join(" · ");
+
+function RowBody({ row, mark, time }) {
+  const live = mark !== "idle";
+  const tail = [row.connection, row.meta].filter(Boolean).join(" · ");
+  return (
+    <>
+      <span className={styles.mark}>
+        <Fold shape={row.shape} color={row.accent || undefined} size={24} state={mark} still={!live} seed={row.key} />
+      </span>
+      <span className={styles.text}>
+        <span className={styles.who}>
+          <span className={styles.whoText}>
+            <span className={`ds-name ${styles.name}`} style={nameVars(row.accent) ?? undefined}>{row.name}</span>
+            {tail ? <span className={styles.meta}>{` · ${tail}`}</span> : null}
+          </span>
+          {time ? <span className={`tnum ${styles.time}`}>{time}</span> : null}
+        </span>
+        <span className={styles.rowTitle} title={row.title}>{row.title}</span>
+      </span>
+    </>
   );
 }
 
@@ -66,15 +93,9 @@ function NeedsRow({ row, onReview }) {
   return (
     <li className={styles.row} data-kind={row.kind}>
       <span className={styles.rowMain} onClick={() => onReview(row)}>
-        <span className={styles.glyph}>
-          <Fold fold={row.fold} color={row.accent || undefined} />
-        </span>
-        <span className={styles.text}>
-          <span className={styles.rowTitle} title={row.title}>{row.title}</span>
-          <span className={styles.rowSub}>{row.sub}</span>
-        </span>
+        <RowBody row={row} mark="needs" />
       </span>
-      <Button size="sm" variant="secondary" aria-label={`Review: ${row.title}, ${row.sub}`} onClick={() => onReview(row)}>
+      <Button size="sm" variant="secondary" aria-label={`Review: ${row.title}, ${whereOf(row)}`} onClick={() => onReview(row)}>
         Review
       </Button>
     </li>
@@ -84,15 +105,8 @@ function NeedsRow({ row, onReview }) {
 function NextRow({ row, onOpen }) {
   return (
     <li className={styles.row} data-kind="next">
-      <button type="button" className={styles.rowMain} onClick={() => onOpen(row)} aria-label={`${row.title}, ${row.sub}, ${row.when}. Open schedule`}>
-        <span className={styles.glyph}>
-          <Fold fold={row.fold} color={row.accent || undefined} />
-        </span>
-        <span className={styles.text}>
-          <span className={styles.rowTitle} title={row.title}>{row.title}</span>
-          <span className={styles.rowSub}>{row.sub}</span>
-        </span>
-        <span className={styles.lineValue}>{row.when}</span>
+      <button type="button" className={styles.rowMain} onClick={() => onOpen(row)} aria-label={`${row.title}, ${whereOf(row)}, ${row.when}. Open schedule`}>
+        <RowBody row={row} mark="idle" time={row.when} />
       </button>
     </li>
   );
@@ -101,17 +115,28 @@ function NextRow({ row, onOpen }) {
 function RunRow({ row, onOpen }) {
   return (
     <li className={styles.row} data-kind="running">
-      <button type="button" className={styles.rowMain} onClick={() => onOpen(row)} aria-label={`${row.title}, ${row.sub}. Open`}>
-        <span className={styles.glyph}>
-          <Fold fold={row.fold} color={row.accent || undefined} />
-        </span>
-        <span className={styles.text}>
-          <span className={styles.rowTitle} title={row.title}>{row.title}</span>
-          <span className={styles.rowSub}>{row.sub}</span>
-        </span>
-        {row.elapsed ? <span className={styles.lineValue}>{row.elapsed}</span> : null}
+      <button type="button" className={styles.rowMain} onClick={() => onOpen(row)} aria-label={`${row.title}, ${whereOf(row)} · running${row.elapsed ? `, ${row.elapsed}` : ""}. Open`}>
+        <RowBody row={row} mark="working" time={row.elapsed} />
       </button>
     </li>
+  );
+}
+
+function Section({ label, children }) {
+  return (
+    <section className={styles.section} aria-label={label}>
+      <p className={styles.sectionLabel}>{label}</p>
+      {children}
+    </section>
+  );
+}
+
+function MoreLine({ n, onOpen }) {
+  return (
+    <button type="button" className={styles.line} onClick={onOpen}>
+      <span className={styles.lineLabel}>{n} more · Open alpi</span>
+      <span className={styles.chev}><Icon name="chevron-right" size="sm" /></span>
+    </button>
   );
 }
 
@@ -183,51 +208,50 @@ export default function TrayApp() {
     <div className={styles.frame} ref={frameRef} tabIndex={-1}>
       <main className={styles.pop} aria-label="Alpi status" data-state={state}>
         <header className={styles.head}>
-          <Fold fold={ALPACA_FOLD} size={28} />
+          <Fold shape={TWIN} size={40} state={HEAD_MARK[state] ?? "idle"} seed="tray-head" />
           <div className={styles.headText}>
             <h1 className={styles.title} aria-live="polite">{title}</h1>
             <p className={styles.sub}>{sub}</p>
           </div>
-          {model.start && !starting ? (
-            <Button size="sm" variant="primary" onClick={start}>Start alpi</Button>
-          ) : null}
         </header>
+        {model.start && !starting ? (
+          <div className={styles.start}>
+            <Button variant="primary" fullWidth onClick={start}>Start alpi</Button>
+          </div>
+        ) : null}
         {model.rows.length > 0 ? (
-          <section className={styles.section} aria-label="Needs you">
-            {model.labels ? <p className={styles.sectionLabel}>Needs you</p> : null}
+          <Section label="Needs you">
             <ul className={styles.list}>
               {model.rows.map((row) => <NeedsRow key={row.key} row={row} onReview={review} />)}
             </ul>
-            {model.more > 0 ? (
-              <button type="button" className={styles.line} onClick={() => openAlpi()}>
-                <span className={styles.lineLabel}>{model.more} more · Open alpi</span>
-                <span className={styles.chev}><Icon name="chevron-right" size="sm" /></span>
-              </button>
-            ) : null}
-          </section>
+            {model.more > 0 ? <MoreLine n={model.more} onOpen={() => openAlpi()} /> : null}
+          </Section>
+        ) : null}
+        {model.failing ? (
+          <button type="button" className={styles.banner} data-tone="danger" onClick={() => openAlpi()} aria-label={`${model.failing.title}${model.failing.detail ? `, ${model.failing.detail}` : ""}. Open alpi`}>
+            <span className={styles.bannerIcon}><Icon name="triangle-alert" size="md" /></span>
+            <span className={styles.bannerText}>
+              <span className={styles.bannerTitle}>{model.failing.title}</span>
+              {model.failing.detail ? <span className={styles.bannerDetail}>{model.failing.detail}</span> : null}
+            </span>
+            <span className={styles.chev}><Icon name="chevron-right" size="sm" /></span>
+          </button>
         ) : null}
         {model.runs.length > 0 ? (
-          <section className={styles.section} aria-label="Running">
-            {model.labels ? <p className={styles.sectionLabel}>Running</p> : null}
+          <Section label="Running">
             <ul className={styles.list}>
               {model.runs.map((row) => <RunRow key={row.key} row={row} onOpen={review} />)}
             </ul>
-            {model.runsMore > 0 ? (
-              <button type="button" className={styles.line} onClick={() => openAlpi()}>
-                <span className={styles.lineLabel}>{model.runsMore} more · Open alpi</span>
-                <span className={styles.chev}><Icon name="chevron-right" size="sm" /></span>
-              </button>
-            ) : null}
-          </section>
+            {model.runsMore > 0 ? <MoreLine n={model.runsMore} onOpen={() => openAlpi()} /> : null}
+          </Section>
         ) : null}
-        {model.nextRows.length > 0 ? (
-          <section className={styles.section} aria-label="Next">
-            {model.labels ? <p className={styles.sectionLabel}>Coming up</p> : null}
+        {model.nextGroups.map((group) => (
+          <Section key={group.day} label={group.day}>
             <ul className={styles.list}>
-              {model.nextRows.map((row) => <NextRow key={row.key} row={row} onOpen={review} />)}
+              {group.rows.map((row) => <NextRow key={row.key} row={row} onOpen={review} />)}
             </ul>
-          </section>
-        ) : null}
+          </Section>
+        ))}
         {model.counts.length > 0 ? (
           <section className={styles.section} aria-label="Counts">
             {model.counts.map((item) => <CountRow key={item.key} item={item} onOpen={() => openAlpi()} />)}
@@ -240,11 +264,13 @@ export default function TrayApp() {
           </div>
         ) : null}
         {model.update ? (
-          <div className={styles.update}>
-            <span className={styles.lineIcon} data-tone="success"><Icon name="download" /></span>
-            <span className={styles.updateText}>{model.update.text}</span>
-            <Button size="sm" variant="secondary" loading={model.update.busy} onClick={() => call("restart_to_update")}>
-              Restart to update
+          <div className={styles.banner} data-tone="success">
+            <span className={styles.bannerIcon}><Icon name="download" size="md" /></span>
+            <span className={styles.bannerText}>
+              <span className={styles.updateText}>{model.update.text}</span>
+            </span>
+            <Button size="sm" variant="secondary" aria-label="Restart to update" loading={model.update.busy} onClick={() => call("restart_to_update")}>
+              Restart
             </Button>
           </div>
         ) : null}

@@ -4,9 +4,11 @@ import { Animated, View } from 'react-native';
 import { useReduceMotion } from '../lib/reduceMotion';
 import { motion } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeContext';
+import { nameColor } from '../theme/name';
 
-export function SyncBar({ syncing }) {
+export function SyncBar({ syncing, color = null }) {
   const { colors } = useTheme();
+  const tint = color ? nameColor(color, colors) : colors.accent;
   const x = useRef(new Animated.Value(-1)).current;
   const reduceMotion = useReduceMotion();
 
@@ -29,13 +31,13 @@ export function SyncBar({ syncing }) {
   return (
     <View style={{ height: 2, overflow: 'hidden', backgroundColor: colors.line }}>
       {syncing && reduceMotion ? (
-        <View style={{ width: '100%', height: 2, backgroundColor: colors.accent, opacity: 0.5 }} />
+        <View style={{ width: '100%', height: 2, backgroundColor: tint, opacity: 0.5 }} />
       ) : syncing ? (
         <Animated.View
           style={{
             width: '44%',
             height: 2,
-            backgroundColor: colors.accent,
+            backgroundColor: tint,
             transform: [{
               translateX: x.interpolate({
                 inputRange: [-1, 1],

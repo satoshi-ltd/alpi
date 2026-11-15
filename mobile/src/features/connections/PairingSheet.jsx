@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Share, Text, View } from 'react-native';
 import { radii, space } from '../../theme/tokens';
+import { recess } from '../../components/well';
 
 import { PickerRow } from '../../components/PickerRow';
 import { Pill } from '../../components/Pill';
@@ -12,6 +13,7 @@ import { useEndpoint } from '../../lib/EndpointContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { pairingLink } from './format';
 import { EMPTY } from '../../../../common/emptyCopy.mjs';
+import { code } from '../../theme/code';
 
 const POLL_MS = 2500;
 
@@ -110,21 +112,18 @@ export function PairingSheet({ open, onClose, payload, onSettled }) {
       <View style={{ paddingHorizontal: space.s7, paddingTop: space.s5, gap: space.s3 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
           <Pill tone={tone}>{status}</Pill>
-          <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
+          <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>
             {status === 'pending' ? 'one use · expires in 10 minutes' : status === 'consumed' ? 'the device holds its token now' : 'generate a new link'}
           </Text>
         </View>
         <Text
           selectable
           style={{
-            fontFamily: fonts.mono,
-            fontSize: fontSizes.sm,
+            ...code(fonts, fontSizes.sm),
             color: colors.ink2,
             padding: space.s5,
-            borderRadius: radii.xs,
-            backgroundColor: colors.field,
-            borderWidth: 0.5,
-            borderColor: colors.line2,
+            borderRadius: radii.surface,
+            backgroundColor: recess(colors),
           }}
         >
           {link || (status === 'pending' ? `${EMPTY.endpoint.title}. ${EMPTY.endpoint.hint}` : SPENT_LINK_NOTE)}

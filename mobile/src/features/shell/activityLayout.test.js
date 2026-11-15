@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { FOLD_SIZES } from '../../../../common/folds.mjs';
+import { MARK_SIZES } from '../../../../common/agentMarks.mjs';
 import { LIST_COLUMN_W, MASTER_DETAIL_MIN_W, SIDEBAR_W, paneWidth } from '../../lib/panes';
 import { TEXT_SCALES, scaleFontSizes } from '../../theme/textScale';
 import { iconSizes, mobile, space } from '../../theme/tokens';
@@ -10,7 +10,6 @@ import { CHIP_H, CHIP_ROW_H, GROUP_H, JOB_INDENT, JOB_ROW_H, RETRY_W, SECTION_H,
 
 const ROOT = join(import.meta.dirname, '..', '..', '..');
 const read = (path) => readFileSync(join(ROOT, path), 'utf8');
-const MONO_EM = 0.62;
 const SANS_EM = 0.58;
 const PHONES = [320, 360, 390, 430];
 const FOLD_DETAIL = [MASTER_DETAIL_MIN_W - LIST_COLUMN_W, 520];
@@ -47,8 +46,8 @@ describe('activity text room', () => {
     for (const width of [...PHONES, ...FOLD_DETAIL]) {
       const title = textRoom(width, { left: JOB_INDENT, right: retryBox + space.s3 });
       expect(title, `job title at ${width}`).toBeGreaterThanOrEqual(130);
-      const trailing = 'NN jobs · NNm ago'.length * MONO_EM * sizes.sm;
-      const name = textRoom(width, { left: space.s7 + iconSizes.xs + space.s3 + FOLD_SIZES.row + space.s3, right: space.s3 + trailing + space.s7 });
+      const trailing = 'NN jobs · NNm ago'.length * SANS_EM * sizes.xs;
+      const name = textRoom(width, { left: space.s7 + iconSizes.xs + space.s3 + MARK_SIZES.row + space.s3, right: space.s3 + trailing + space.s7 });
       expect(name, `group name at ${width}`).toBeGreaterThanOrEqual(width >= 360 ? 64 : 48);
     }
   });

@@ -1,9 +1,9 @@
 const NO_ANSWER_TAGS = [
-  ['User cancelled clarification.', 'CANCELLED'],
-  ['No response received', 'EXPIRED'],
-  ['This run has no live user', 'NO ANSWER'],
-  ['No user-facing surface accepted', 'NO ANSWER'],
-  ['Clarification handler failed', 'FAILED'],
+  ['User cancelled clarification.', 'Cancelled'],
+  ['No response received', 'Expired'],
+  ['This run has no live user', 'No answer'],
+  ['No user-facing surface accepted', 'No answer'],
+  ['Clarification handler failed', 'Failed'],
 ];
 
 export function askUserNoAnswerTag(result) {

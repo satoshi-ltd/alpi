@@ -14,7 +14,7 @@ function mount(props = {}) {
 
 describe("ModelPicker effort", () => {
   it("caps the label with an ellipsis on the model and never on the effort", () => {
-    expect(css).toMatch(/\.modelPickerLabel\s*\{[^}]*max-width:\s*160px/);
+    expect(css).toMatch(/\.modelPickerLabel\s*\{[^}]*max-width:\s*200px/);
     expect(css).toMatch(/\.modelPickerLabelModel\s*\{[^}]*text-overflow:\s*ellipsis/);
     expect(css).toMatch(/\.modelPickerLabelEffort\s*\{[^}]*flex:\s*none/);
   });

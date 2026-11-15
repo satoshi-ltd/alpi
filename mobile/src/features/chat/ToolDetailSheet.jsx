@@ -5,8 +5,10 @@ import { useToast } from '../../components/Toast';
 import { copyText } from '../../lib/clipboard';
 import { useTheme } from '../../theme/ThemeContext';
 import { lineHeights, radii, space } from '../../theme/tokens';
+import { recess } from '../../components/well';
 import { prettyArgs, toolCommand, toolOutput, toolTitle } from './toolDetail';
 import { EMPTY } from '../../../../common/emptyCopy.mjs';
+import { code } from '../../theme/code';
 
 function Block({ label, tag, children, danger = false }) {
   const { colors, fonts, fontSizes } = useTheme();
@@ -14,14 +16,13 @@ function Block({ label, tag, children, danger = false }) {
     <View style={{ gap: space.s3 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
         <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.sm, color: colors.ink3 }}>{label}</Text>
-        {tag ? <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3 }}>{tag}</Text> : null}
+        {tag ? <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}>{tag}</Text> : null}
       </View>
-      <View style={{ borderRadius: radii.xs, backgroundColor: colors.field, paddingHorizontal: space.s6, paddingVertical: space.s5 }}>
+      <View style={{ borderRadius: radii.surface, backgroundColor: recess(colors), paddingHorizontal: space.s6, paddingVertical: space.s5 }}>
         <Text
           selectable
           style={{
-            fontFamily: fonts.mono,
-            fontSize: fontSizes.md,
+            ...code(fonts, fontSizes.md),
             lineHeight: fontSizes.md * lineHeights.relaxed,
             color: danger ? colors.dangerText : colors.ink,
           }}

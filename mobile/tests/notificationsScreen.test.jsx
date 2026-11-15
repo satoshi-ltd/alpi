@@ -101,7 +101,7 @@ import { notificationKey } from '../../common/notificationTriage.mjs';
 const NOW = Date.now() / 1000;
 const START_OF_TODAY = new Date(new Date().setHours(0, 0, 0, 0)).getTime() / 1000;
 const row = (id, profile, connectionId, extra = {}) => ({
-  id, profile, connectionId, connectionName: connectionId, fold: 'plane', accent: '#df4b9d', created_at: Math.max(NOW - 60, START_OF_TODAY + 1), type: 'info', status: 'read', title: `${profile} ${id}`, body: 'Body line.', ...extra,
+  id, profile, connectionId, connectionName: connectionId, shape: 'plane', accent: '#df4b9d', created_at: Math.max(NOW - 60, START_OF_TODAY + 1), type: 'info', status: 'read', title: `${profile} ${id}`, body: 'Body line.', ...extra,
 });
 const ROWS = () => [
   row('e1', 'abby', 'casa', { type: 'error', status: 'unread', title: 'Mail digest failed' }),

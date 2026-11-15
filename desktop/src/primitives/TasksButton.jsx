@@ -82,7 +82,7 @@ function PhaseTrigger({ phase }) {
         <span className={styles.phaseTop}>
           <CheckIcon size="sm" style={{ color: "var(--ink)" }} />
           <span className={styles.phaseOwner}>{idle}</span>
-          <Mono className={`tnum ${styles.phaseCount}`}>{count}</Mono>
+          <span className={`tnum ${styles.phaseCount}`}>{count}</span>
         </span>
       </span>
     );
@@ -92,11 +92,11 @@ function PhaseTrigger({ phase }) {
     <span className={styles.phaseBody} data-phase-trigger={chip.state}>
       <span className={styles.phaseTop}>
         {name && (worker
-          ? <Fold fold={worker.fold} color={worker.accent} size={13} pulse={chip.state === "current"} />
-          : <Fold fold="diamond" size={13} unfolded />)}
+          ? <Fold shape={worker.shape} color={worker.accent} size={13} pulse={chip.state === "current"} />
+          : <Fold shape="diamond" size={13} unfolded />)}
         <Mono className={styles.phaseSlug}>#{chip.slug}</Mono>
         {name && <Mono className={styles.phaseOwner}>@{name}</Mono>}
-        <Mono className={`tnum ${styles.phaseCount}`}>{count}</Mono>
+        <span className={`tnum ${styles.phaseCount}`}>{count}</span>
       </span>
       {line && <span className={chip.state === "blocked" ? styles.phaseLineBlocked : styles.phaseLine}>{line}</span>}
     </span>
@@ -178,9 +178,9 @@ export default function TasksButton({
           )}
           {!phase && <span className={styles.triggerLabel}>{triggerLabel}</span>}
           {!phase && total > 0 && (
-            <Mono className={`tnum ${styles.triggerCount}`}>
+            <span className={`tnum ${styles.triggerCount}`}>
               {closedCount}/{total}
-            </Mono>
+            </span>
           )}
           <ChevDownIcon className={styles.chev} />
         </Button>
@@ -217,9 +217,9 @@ export default function TasksButton({
                   {t.contributions != null && (
                     <>
                       <span className={styles.metaSep}>·</span>
-                      <Mono className="tnum">
+                      <span className="tnum">
                         {t.contributions} msg{t.contributions === 1 ? "" : "s"}
-                      </Mono>
+                      </span>
                     </>
                   )}
                   <span className={styles.metaSep}>·</span>

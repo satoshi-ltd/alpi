@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { subscribeDaemonEvent } from "../lib/daemon-bus.js";
+import { DETAIL_ONLY_FIELDS, editClock, releaseLanded } from "../lib/optimisticProfiles.js";
 
 // SWR `host.profile.detail` cache keyed by (connectionId, name) — two daemons with the same profile name must not bleed peers/models/mcps. Invalidate on connection switch via `invalidateProfileDetailCache(prev)`.
 
@@ -11,6 +12,7 @@ function makeKey(connectionId, name) {
 const _cache = new Map();    // key -> detail
 const _inflight = new Map(); // key -> Promise<detail>
 const _subs = new Set();     // setters notified on cache changes
+const _inflightSince = new Map();
 
 function notify(key) {
   for (const fn of _subs) {
@@ -21,6 +23,9 @@ function notify(key) {
 function load(connectionId, name, { force = false } = {}) {
   if (!name) return Promise.resolve(null);
   const key = makeKey(connectionId, name);
+  if (force && _inflight.has(key) && _inflightSince.get(key) < editClock()) {
+    return _inflight.get(key).then(() => _startFetch(key, connectionId, name));
+  }
   if (!force && _cache.has(key)) {
     // SWR: hand back the cached detail synchronously but still revalidate — a missed daemon event (offline restart) must not leave ChatPane stale forever.
     _startFetch(key, connectionId, name);
@@ -29,22 +34,31 @@ function load(connectionId, name, { force = false } = {}) {
   return _startFetch(key, connectionId, name);
 }
 
+function forget(key, p) {
+  if (_inflight.get(key) !== p) return;
+  _inflight.delete(key);
+  _inflightSince.delete(key);
+}
+
 function _startFetch(key, connectionId, name) {
   if (_inflight.has(key)) return _inflight.get(key);
+  const since = editClock();
   const p = invoke("profile_detail", { profile: name, connectionId })
     .then((d) => {
       _cache.set(key, d || {});
-      _inflight.delete(key);
+      if (d && typeof d === "object") releaseLanded(connectionId, since, [{ ...d, name }], DETAIL_ONLY_FIELDS);
+      forget(key, p);
       notify(key);
       return _cache.get(key);
     })
     .catch(() => {
-      _inflight.delete(key);
+      forget(key, p);
       if (!_cache.has(key)) _cache.set(key, {});
       notify(key);
       return _cache.get(key);
     });
   _inflight.set(key, p);
+  _inflightSince.set(key, since);
   return p;
 }
 
@@ -130,12 +144,20 @@ export function invalidateProfileDetailCache(connectionId) {
   for (const k of Array.from(_inflight.keys())) {
     if (k.startsWith(prefix)) _inflight.delete(k);
   }
+  for (const k of Array.from(_inflightSince.keys())) {
+    if (k.startsWith(prefix)) _inflightSince.delete(k);
+  }
+}
+
+export function _profileDetailInflightSinceKeys() {
+  return Array.from(_inflightSince.keys());
 }
 
 // Test-only.
 export function _clearProfileDetailCache() {
   _cache.clear();
   _inflight.clear();
+  _inflightSince.clear();
   for (const t of _invalidateTimers.values()) clearTimeout(t);
   _invalidateTimers.clear();
   if (_unsub) { _unsub(); _unsub = null; }

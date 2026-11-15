@@ -1,5 +1,5 @@
 import { ACTIVITY_FILTERS, groupActivity } from '../../../../common/activityGroups.mjs';
-import { mobile, space } from '../../theme/tokens';
+import { controlRole, mobile, space } from '../../theme/tokens';
 
 export { ACTIVITY_FILTERS };
 
@@ -11,9 +11,9 @@ export const FILTER_EMPTY = {
   upcoming: 'Nothing upcoming',
 };
 
-export const CHIP_H = space.s10 + space.s1;
+export const CHIP_H = controlRole.compact;
 export const CHIP_ROW_H = mobile.tap;
-export const SECTION_H = space.s10 + space.s1;
+export const SECTION_H = controlRole.compact;
 export const GROUP_H = mobile.tap + space.s1;
 export const JOB_ROW_H = mobile.tap + space.s5;
 export const JOB_INDENT = space.s7 + space.s7;

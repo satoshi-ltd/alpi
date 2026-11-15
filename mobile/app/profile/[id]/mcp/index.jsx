@@ -21,6 +21,7 @@ import { usePullRefresh } from '../../../../src/hooks/usePullRefresh';
 import { EMPTY } from '../../../../../common/emptyCopy.mjs';
 import { ListSkeleton } from '../../../../src/components/ListSkeleton';
 import { Busy } from '../../../../src/components/Busy';
+import { code } from '../../../../src/theme/code';
 
 export default function McpList() {
   const { id } = useLocalSearchParams();
@@ -66,7 +67,7 @@ export default function McpList() {
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScreenHeader
         title="MCP servers"
-        subtitle={`@${id} · ${servers.length} REGISTERED`}
+        subtitle={`@${id} · ${servers.length} registered`}
         onBack={goBack}
         right={<Button title="+ Add" size="md" variant="ghost" onPress={() => router.push(`/profile/${id}/mcp/new`)} />}
       />
@@ -88,12 +89,12 @@ export default function McpList() {
                     <Pressable
                       onPress={() => setTarget(s)}
                       accessibilityRole="button"
-                      android_ripple={{ color: colors.selected }}
+                      android_ripple={{ color: colors.pressed }}
                       style={({ pressed }) => ({
                         paddingHorizontal: space.s7,
                         paddingVertical: space.s6,
                         gap: space.s1,
-                        backgroundColor: pressed ? colors.selected : 'transparent',
+                        backgroundColor: pressed ? colors.pressed : 'transparent',
                       })}
                     >
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
@@ -107,7 +108,7 @@ export default function McpList() {
                       <Text
                         numberOfLines={1}
                         ellipsizeMode="tail"
-                        style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}
+                        style={{ ...code(fonts, fontSizes.xs), color: colors.ink3 }}
                       >
                         {s.command} {argLine}
                       </Text>
@@ -176,7 +177,7 @@ export default function McpList() {
           ) : (
             tools.map((t) => (
               <View key={t.name} style={{ paddingHorizontal: space.s7, paddingVertical: space.s3, gap: 2 }}>
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink }}>{t.name}</Text>
+                <Text style={{ ...code(fonts, fontSizes.sm), color: colors.ink }}>{t.name}</Text>
                 {t.description ? (
                   <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3, lineHeight: fontSizes.xs * 1.4 }}>
                     {t.description}

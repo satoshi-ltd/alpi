@@ -73,6 +73,7 @@ import { useOtherActivity } from "./hooks/useOtherActivity.js";
 import Welcome, { WelcomeFrame, FirstRunHint, localEverOnlineSeen, markLocalEverOnline, firstRunHintSeen, markFirstRunHintSeen } from "./features/Welcome.jsx";
 import { useDelayedFlag } from "./lib/useDelayedFlag.js";
 import { hasDirtySettings } from "./lib/settingsDirty.js";
+import { useSessionMark } from "./lib/sessionMark.js";
 import styles from "./App.module.css";
 
 function isChatSessionSummary(session) {
@@ -845,7 +846,7 @@ export default function App() {
   }, [view, profiles, settingsTarget]);
   const activeProfileName = activeProfile?.name ?? null;
   const panelOwner = useMemo(
-    () => (activeProfile ? { name: activeProfile.name, fold: activeProfile.fold, accent: activeProfile.accent } : null),
+    () => (activeProfile ? { name: activeProfile.name, shape: activeProfile.shape, accent: activeProfile.accent } : null),
     [activeProfile],
   );
   const historyKind = activeWorkgroup || activeSettingsWorkgroup
@@ -926,9 +927,9 @@ export default function App() {
     for (const p of profiles) out[p.name] = p.accent ?? null;
     return out;
   }, [profiles]);
-  const foldByProfile = useMemo(() => {
+  const shapeByProfile = useMemo(() => {
     const out = {};
-    for (const p of profiles) out[p.name] = p.fold;
+    for (const p of profiles) out[p.name] = p.shape;
     return out;
   }, [profiles]);
   const onReviewActivity = useCallback((item) => {
@@ -998,6 +999,13 @@ export default function App() {
   }), [view, pendingTurnForCurrentView]);
   const approvalSplit = useMemo(() => splitInline(approval.queue, inlineScope), [approval.queue, inlineScope]);
   const clarificationSplit = useMemo(() => splitInline(clarification.queue, inlineScope), [clarification.queue, inlineScope]);
+  const sessionMark = useSessionMark({
+    turn: pendingTurnForCurrentView,
+    needs: (!!activeProfile && !activeProfile.model) || approvalSplit.inline.length > 0 || clarificationSplit.inline.length > 0,
+    paused: !!activeProfile?.paused,
+    scope: view.kind === "profile" ? `${hostConnections.active_id ?? ""}:${view.profile ?? ""}` : "",
+    session: view.kind === "profile" ? view.sessionId ?? null : null,
+  });
   const pendingProfiles = useMemo(() => {
     const s = new Set();
     for (const t of Object.values(pendingTurns)) {
@@ -1336,7 +1344,7 @@ export default function App() {
     activitySupported,
     member: !canManageProfileSurfaces,
     unread: notificationsUnread,
-    foldByProfile,
+    shapeByProfile,
     accentByProfile,
     otherActivity,
   });
@@ -1403,6 +1411,7 @@ export default function App() {
           taskByWorkgroup={taskByWorkgroup}
           activityByWorkgroup={activityByWorkgroup}
           pendingProfiles={pendingProfiles}
+          activeMarkState={view.kind === "profile" ? sessionMark : null}
           rosterState={rosterState}
           view={view}
           settingsTarget={settingsTarget}
@@ -1507,6 +1516,7 @@ export default function App() {
                   onRefresh={reload}
                   taskByWorkgroup={taskByWorkgroup}
                   activityByWorkgroup={activityByWorkgroup}
+                  runByWorkgroup={rosterState?.workgroups ?? null}
                   onOpenWorkgroup={onOpenWorkgroup}
                   onNewWorkgroup={adminOnNewWorkgroup}
                 />
@@ -1563,6 +1573,7 @@ export default function App() {
                   onRetryLoad={() => setSessionRetryTick((t) => t + 1)}
                   daemonOffline={daemonOffline}
                   pendingTurn={pendingTurnForCurrentView}
+                  markState={sessionMark}
                   inlineApprovals={approvalSplit.inline}
                   inlineClarifications={clarificationSplit.inline}
                   onApprovalResolved={approval.resolve}
@@ -1628,7 +1639,7 @@ export default function App() {
         canRetry={canAdminEarly}
         onRetry={(profile, id) => invoke("schedule_fire", { profile, id, ...(hostConnections.active_id ? { connectionId: hostConnections.active_id } : {}) })}
         accentByProfile={accentByProfile}
-        foldByProfile={foldByProfile}
+        shapeByProfile={shapeByProfile}
         onReview={onReviewActivity}
         onOpenSession={(profile, sessionId) => {
           setRewriteDraft(null);

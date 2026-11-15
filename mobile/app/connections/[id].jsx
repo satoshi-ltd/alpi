@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { DeadEnd } from '../../src/components/DeadEnd';
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { radii, space } from '../../src/theme/tokens';
+import { mobile, radii, space } from '../../src/theme/tokens';
 
 import { formatUsd } from '../../../common/format.mjs';
 import { toUsageDays } from '../../../common/usage.mjs';
@@ -42,14 +42,14 @@ function RevokeButton({ label, onPress }) {
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
-      hitSlop={space.s2}
+      hitSlop={0}
       style={({ pressed }) => ({
-        width: 40,
-        height: 40,
-        borderRadius: radii.xs,
+        width: mobile.tap,
+        height: mobile.tap,
+        borderRadius: radii.pill,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: pressed ? colors.selected : 'transparent',
+        backgroundColor: pressed ? colors.pressed : 'transparent',
       })}
     >
       <Icon name="x" size="md" color={colors.ink2} />
@@ -115,7 +115,7 @@ function ConnectionDetail() {
   if (!row || opening) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ScreenHeader title="Connection" subtitle={summary.loading || opening ? <SubtitleSkeleton /> : 'NOT FOUND'} onBack={goBack} />
+        <ScreenHeader title="Connection" subtitle={summary.loading || opening ? <SubtitleSkeleton /> : 'Not found'} onBack={goBack} />
         {opening ? <Busy fill visible label="Opening the connection" /> : null}
         {!opening && !summary.loading ? (
           <DeadEnd copy="missingConnection" error={summary.error} onRetry={summary.refresh} label="this connection" />
@@ -132,7 +132,7 @@ function ConnectionDetail() {
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScreenHeader
         title={row.label || row.id}
-        subtitle={`CONNECTION · ${String(row.role || 'member').toUpperCase()}`}
+        subtitle={`Connection · ${String(row.role || 'member')}`}
         onBack={goBack}
       />
       <SyncBar syncing={summary.loading} />

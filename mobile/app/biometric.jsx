@@ -46,7 +46,7 @@ export default function BiometricSettings() {
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-      <ScreenHeader title="Biometric unlock" subtitle="THIS PHONE · LOCK ON COLD START" onBack={goBack} />
+      <ScreenHeader title="Biometric unlock" subtitle="This phone · lock on cold start" onBack={goBack} />
       <ScrollView>
         <SectionHeader>Capability</SectionHeader>
         <RowGroup>
@@ -70,20 +70,20 @@ export default function BiometricSettings() {
             accessibilityRole="switch"
             accessibilityLabel={`Require ${caps.label} on cold start`}
             accessibilityState={{ checked: !!on }}
-            android_ripple={{ color: colors.selected }}
+            android_ripple={{ color: colors.pressed }}
             style={({ pressed }) => ({
               paddingHorizontal: space.s7,
               paddingVertical: space.s6,
               flexDirection: 'row',
               alignItems: 'center',
-              backgroundColor: pressed ? colors.selected : 'transparent',
+              backgroundColor: pressed ? colors.pressed : 'transparent',
             })}
           >
             <View style={{ flex: 1, gap: space.s1 }}>
               <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.lg, color: colors.ink }}>
                 Require {caps.label} on cold start
               </Text>
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
+              <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>
                 {on ? 'on' : 'off'}
               </Text>
             </View>

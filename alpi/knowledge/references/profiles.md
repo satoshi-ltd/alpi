@@ -70,8 +70,8 @@ Answer profile-versioning questions with this policy:
 
 ```bash
 alpi profile create work   # bootstrap tree with defaults
-alpi profile list          # all profiles + model, disk size, active marker (the profile's object glyph, a diamond without truecolor/UTF-8)
-alpi profile show [work]   # the profile's object drawn as half-block art, with model, size and path
+alpi profile list          # all profiles + model, disk size, active marker (the glyph of the profile's shape, ⍥ for Twin; a diamond without truecolor/UTF-8)
+alpi profile show [work]   # the profile's mark as half-block art beside its name in the name tone, its pair ("blue bell", "twin (brand mark)"), model, size and path
 alpi profile remove work   # archives home to ~/.alpi/.trash/<name>-<timestamp>/ after confirm
 alpi -p work               # launch TUI for the work profile
 alpi -p work setup         # configure (services + email); setup → Delete profile = remove

@@ -4,7 +4,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { space } from '../../../src/theme/tokens';
+import { alpha, space } from '../../../src/theme/tokens';
 
 import { Fold } from '../../../src/components/Fold';
 import { InboxSkeleton } from '../../../src/features/inbox/InboxSkeleton';
@@ -13,11 +13,12 @@ import { useToast } from '../../../src/components/Toast';
 import { useBack } from '../../../src/hooks/useBack';
 import { useProfileSummaries, useWorkgroupMembers } from '../../../src/hooks/useDaemonData';
 import { useProfile, useWorkgroup } from '../../../src/hooks/useSubject';
-import { accentForPubkey, foldForPubkey } from '../../../src/lib/localFold';
+import { accentForPubkey, shapeForPubkey } from '../../../src/lib/localShape';
 import { useEndpoint } from '../../../src/lib/EndpointContext';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { AdminGuard } from '../../../src/components/AdminGuard';
 import { Spinner } from '../../../src/components/Spinner';
+import { code } from '../../../src/theme/code';
 
 export default function AddMemberRoute() {
   return (
@@ -68,7 +69,7 @@ function AddMember() {
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScreenHeader
         title="Add member"
-        subtitle={`#${id} · PICK FROM @${wg?.hub_id ?? '…'} PEERS`}
+        subtitle={`#${id} · pick from @${wg?.hub_id ?? '…'} peers`}
         onBack={goBack}
       />
       {peersLoading ? (
@@ -84,23 +85,23 @@ function AddMember() {
                 onPress={() => add(item)}
                 accessibilityRole="button"
                 disabled={!!busy}
-                android_ripple={{ color: colors.selected }}
+                android_ripple={{ color: colors.pressed }}
                 style={({ pressed }) => ({
                   flexDirection: 'row',
                   alignItems: 'center',
                   gap: space.s5,
                   paddingHorizontal: space.s7,
                   paddingVertical: space.s6,
-                  backgroundColor: pressed ? colors.selected : 'transparent',
-                  opacity: busy && !isBusy ? 0.4 : 1,
+                  backgroundColor: pressed ? colors.pressed : 'transparent',
+                  opacity: busy && !isBusy ? alpha.disabled : 1,
                 })}
               >
-                <Fold fold={foldForPubkey(summaries, item.pubkey)} color={accentForPubkey(summaries, item.pubkey)} size="md" />
+                <Fold shape={shapeForPubkey(summaries, item.pubkey)} color={accentForPubkey(summaries, item.pubkey)} size="md" />
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.md, color: colors.ink }}>
+                  <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink }}>
                     @{item.alias || item.id}
                   </Text>
-                  <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
+                  <Text style={{ ...code(fonts, fontSizes.xs), color: colors.ink3 }}>
                     {(item.pubkey || '').slice(0, 16)}…
                   </Text>
                 </View>
@@ -108,7 +109,6 @@ function AddMember() {
               </Pressable>
             );
           }}
-          ItemSeparatorComponent={() => <View style={{ height: 0.5, backgroundColor: colors.line, marginLeft: 52 }} />}
           ListEmptyComponent={() => (
             <View style={{ padding: space.s10, alignItems: 'center' }}>
               <Text style={{ color: colors.ink3, textAlign: 'center', fontFamily: fonts.sans.regular, fontSize: fontSizes.md }}>

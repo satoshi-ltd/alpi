@@ -90,7 +90,7 @@ export function ConnectionSheet({ open, onClose }) {
                       style={{
                         width: 40,
                         height: 40,
-                        borderRadius: radii.xs,
+                        borderRadius: radii.control,
                         backgroundColor: colors.bgSide,
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -189,7 +189,7 @@ export function ConnectionSheet({ open, onClose }) {
         open={!!renameTarget}
         onClose={() => setRenameTarget(null)}
         title="Rename connection"
-        label="NAME ON THIS PHONE ONLY"
+        label="Name on this phone only"
         initialValue={renameTarget?.name ?? ''}
         placeholder={renameTarget?.name ?? ''}
         onSubmit={async (name) => {

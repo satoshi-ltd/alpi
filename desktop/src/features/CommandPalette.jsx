@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { WORKGROUP_FOLD } from "../../../common/folds.mjs";
+import { WORKGROUP_SHAPE } from "../../../common/shapes.mjs";
 import { Palette } from "../primitives/Panels.jsx";
 import { Fold, Icon } from "../primitives/index.js";
 import { I } from "../primitives/icons.jsx";
@@ -144,7 +144,7 @@ export function entityGroups({
         keywords: [p.name, p.bio || ""].filter(Boolean),
         sub: "profile",
         shortcut: hint(jumpHints[`profile:${p.name}`]),
-        glyph: <Fold fold={p.fold} color={p.accent || undefined} />,
+        glyph: <Fold shape={p.shape} color={p.accent || undefined} />,
         onSelect: onOpenProfile ? () => onOpenProfile(p) : undefined,
       })),
     },
@@ -157,7 +157,7 @@ export function entityGroups({
         keywords: [String(w.id ?? ""), w.profile].filter(Boolean),
         sub: `#${profileLabel(w.profile)}`,
         shortcut: hint(jumpHints[`workgroup:${w.profile}/${w.id}`]),
-        glyph: <Fold fold={WORKGROUP_FOLD} color={hubAccent[w.hub_id ?? w.profile] || undefined} unfolded={!!w.paused} />,
+        glyph: <Fold shape={WORKGROUP_SHAPE} color={hubAccent[w.hub_id ?? w.profile] || undefined} unfolded={!!w.paused} />,
         onSelect: onOpenWorkgroup ? () => onOpenWorkgroup(w) : undefined,
       })),
     },

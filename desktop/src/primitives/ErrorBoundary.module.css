@@ -51,22 +51,21 @@
   flex-direction: column;
   gap: var(--sp-8);
   padding: var(--sp-12) var(--sp-16);
-  border-radius: var(--r-xs);
+  border-radius: var(--r-surface);
   background: var(--bg-pane);
   text-align: left;
 }
 
 .errorName {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--eyebrow-size);
   font-weight: var(--fw-medium);
   letter-spacing: var(--eyebrow-tracking);
-  text-transform: uppercase;
   color: var(--c-danger-text);
 }
 
 .errorMessage {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   line-height: var(--lh-normal);
   color: var(--ink);
@@ -82,8 +81,9 @@
 
 .primary,
 .secondary {
-  padding: var(--sp-8) var(--sp-24);
-  border-radius: var(--r-xs);
+  height: var(--ctl-40);
+  padding: 0 var(--sp-16);
+  border-radius: var(--r-pill);
   font-size: var(--text-ui);
   cursor: pointer;
   transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
@@ -101,8 +101,7 @@
 }
 
 .secondary {
-  border: .5px solid var(--line-2);
-  background: transparent;
+  background: var(--selected);
   color: var(--ink-2);
 }
 
@@ -118,10 +117,9 @@
 
 .summary {
   cursor: pointer;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--eyebrow-size);
   letter-spacing: var(--eyebrow-tracking);
-  text-transform: uppercase;
   color: var(--ink-3);
   padding: var(--sp-8) 0;
   list-style: none;
@@ -150,11 +148,10 @@
   white-space: pre-wrap;
   word-break: break-word;
   font-family: var(--font-mono);
-  font-size: var(--text-meta);
+  font-size: var(--text-mono);
   line-height: var(--lh-normal);
   color: var(--ink-3);
-  background: var(--bg-elev);
-  border: .5px solid var(--line);
-  border-radius: var(--r-xs);
+  background: var(--card);
+  border-radius: var(--r-surface);
   padding: var(--sp-12);
 }

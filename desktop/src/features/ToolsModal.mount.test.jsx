@@ -32,6 +32,24 @@ describe("ToolsModal (mounted)", () => {
     expect(screen.queryByText("No tools registered")).toBeNull();
   });
 
+  it("reads each tool's first sentence under its sans name, denied as the meta, and heads the detail with the id to copy", async () => {
+    h.invoke.mockImplementation(() => Promise.resolve([
+      { ...TOOLS[0], description: "Targeted edit of a file. Use it for small changes." },
+      TOOLS[1],
+    ]));
+    render(<ToolsModal open onClose={() => {}} profile="muse" connectionId="c2" />);
+    const options = await screen.findAllByRole("option");
+    expect(options[0].querySelector("[class*=rowTitle]").textContent).toBe("edit_file");
+    expect(options[0].querySelector("[class*=rowSub]").textContent).toBe("Targeted edit of a file.");
+    expect(options[0].querySelector("[class*=rowMeta]")).toBeNull();
+    expect(options[1].querySelector("[class*=rowMeta]").textContent).toBe("denied");
+    expect(options[1].querySelector("[class*=rowTitle]").className).toMatch(/rowOff/);
+    expect(await screen.findByRole("heading", { name: "edit_file" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Copy edit_file" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Copy filesystem/edit_file" })).toBeNull();
+    expect(Array.from(document.querySelectorAll("dt")).map((d) => d.textContent)).toEqual(["About", "Category"]);
+  });
+
   it("loads tools pinned to the active connection", async () => {
     render(<ToolsModal open onClose={() => {}} profile="muse" connectionId="c2" />);
     await waitFor(() => expect(h.invoke).toHaveBeenCalledWith("profile_tools", { profile: "muse", connectionId: "c2" }));

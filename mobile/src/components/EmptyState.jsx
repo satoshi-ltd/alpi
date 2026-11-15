@@ -30,7 +30,7 @@ export function EmptyState({ title, detail, action, mark, hero = false, monoDeta
         {detail ? (
           <Text
             style={{
-              fontFamily: monoDetail ? fonts.mono : fonts.sans.regular,
+              fontFamily: monoDetail ? fonts.sans.regular : fonts.sans.regular,
               fontSize: monoDetail ? fontSizes.xs : fontSizes.md,
               lineHeight: (monoDetail ? fontSizes.xs : fontSizes.md) * lineHeights.cozy,
               color: colors.ink3,

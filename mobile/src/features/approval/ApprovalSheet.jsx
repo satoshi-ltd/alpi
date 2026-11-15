@@ -5,12 +5,14 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { Icon } from '../../components/Icon';
 import { Sheet } from '../../components/Sheet';
 import { warning } from '../../lib/haptics';
-import { lineHeights, radii, space } from '../../theme/tokens';
+import { lineHeights, radii, space, alpha } from '../../theme/tokens';
+import { recess } from '../../components/well';
 import { useTheme } from '../../theme/ThemeContext';
 import { useApprovalQueue } from './useApprovalQueue';
 import { Fold } from '../../components/Fold';
 import { useProfileSummaries } from '../../hooks/useDaemonData';
 import { profileLabel } from '../../lib/profileName';
+import { code } from '../../theme/code';
 
 const ALLOW_CHOICES = [
   { value: 'once',    label: 'Allow once',        hint: 'just this invocation' },
@@ -49,8 +51,8 @@ export function ApprovalSheet() {
   const eyebrow = useMemo(() => {
     if (!current) return null;
     return {
-      sev: severity.toUpperCase(),
-      tail: remaining !== null ? `AUTO-DENY IN ${remaining}S` : null,
+      sev: severity,
+      tail: remaining !== null ? `auto-deny in ${remaining}s` : null,
     };
   }, [current, remaining, severity]);
 
@@ -65,13 +67,13 @@ export function ApprovalSheet() {
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
                 {current.profile ? (
                   <>
-                    <Fold fold={asker?.fold} color={asker?.accent ?? undefined} />
+                    <Fold shape={asker?.shape} color={asker?.accent ?? undefined} />
                     <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, color: colors.ink }}>
                       {profileLabel(current.profile)}
                     </Text>
                   </>
                 ) : null}
-                <Text numberOfLines={1} style={{ flexShrink: 1, fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3 }}>
+                <Text numberOfLines={1} style={{ flexShrink: 1, fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}>
                   wants to run a command
                 </Text>
                 <View accessible accessibilityRole="image" accessibilityLabel="needs your approval">
@@ -79,7 +81,7 @@ export function ApprovalSheet() {
                 </View>
               </View>
               {eyebrow.tail ? (
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3 }}>{eyebrow.tail.toLowerCase()}</Text>
+                <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}>{eyebrow.tail.toLowerCase()}</Text>
               ) : null}
               <Text
                 style={{
@@ -98,20 +100,18 @@ export function ApprovalSheet() {
             <ScrollView
               style={{
                 maxHeight: 160,
-                backgroundColor: colors.field,
-                borderRadius: radii.xs,
-                borderWidth: 0.5,
-                borderColor: colors.line2,
+                backgroundColor: recess(colors),
+                borderRadius: radii.surface,
               }}
               contentContainerStyle={{ paddingVertical: space.s5, paddingHorizontal: space.s6 }}
             >
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.lg, color: colors.ink }}>
+              <Text style={{ ...code(fonts, fontSizes.lg), color: colors.ink }}>
                 {current.command}
               </Text>
             </ScrollView>
 
             {current.cwd ? (
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
+              <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>
                 cwd <Text style={{ color: colors.ink2 }}>{current.cwd}</Text>
               </Text>
             ) : null}
@@ -129,9 +129,9 @@ export function ApprovalSheet() {
                 style={({ pressed }) => ({
                   paddingVertical: space.s5,
                   paddingHorizontal: space.s5,
-                  borderRadius: radii.xs,
-                  backgroundColor: pressed ? colors.hover : 'transparent',
-                  opacity: busy ? 0.5 : 1,
+                  borderRadius: radii.pill,
+                  backgroundColor: pressed ? colors.pressed : 'transparent',
+                  opacity: busy ? alpha.disabled : 1,
                 })}
               >
                 <Text
@@ -144,7 +144,7 @@ export function ApprovalSheet() {
                 >
                   {c.label}
                 </Text>
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3 }}>
+                <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}>
                   {c.hint}
                 </Text>
               </Pressable>
@@ -160,10 +160,10 @@ export function ApprovalSheet() {
             style={({ pressed }) => ({
               alignSelf: 'stretch',
               paddingVertical: space.s6,
-              borderRadius: radii.xs,
+              borderRadius: radii.pill,
               backgroundColor: pressed && !busy ? mixHex(colors.danger, 0.82, '#000000') : colors.danger,
               alignItems: 'center',
-              opacity: busy ? 0.4 : 1,
+              opacity: busy ? alpha.disabled : 1,
             })}
           >
             <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.bgPane }}>
@@ -172,7 +172,7 @@ export function ApprovalSheet() {
           </Pressable>
 
           {error ? (
-            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.danger }}>
+            <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.danger }}>
               {error}
             </Text>
           ) : null}

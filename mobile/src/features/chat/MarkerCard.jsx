@@ -12,7 +12,7 @@ import { usePane } from '../../nav/PaneContext';
 import { useTheme } from '../../theme/ThemeContext';
 
 const TINTS = { task: 0.1, working: 0.1, done: 0.1, skip: 0.12 };
-const LABELS = { task: 'TASK', working: 'WORKING', done: 'DONE', skip: 'SKIP' };
+const LABELS = { task: 'Task', working: 'Working', done: 'Done', skip: 'Skip' };
 
 const S = StyleSheet.create({
   wrapLeft: { alignItems: 'flex-start', paddingHorizontal: space.s7, gap: space.s1 },
@@ -29,7 +29,7 @@ const S = StyleSheet.create({
   title: { marginBottom: space.s2 },
   skipDot: { width: 10, height: 10, borderRadius: radii.pill, borderWidth: 1.5, overflow: 'hidden' },
   skipBar: { position: 'absolute', width: 14, height: 1.5, top: 3.5, left: -2.5, transform: [{ rotate: '45deg' }] },
-  taskDot: { width: 6, height: 6, borderRadius: 3 },
+  taskDot: { width: 6, height: 6, borderRadius: radii.pill },
 });
 
 
@@ -52,7 +52,7 @@ function MarkerIcon({ variant, color, stale }) {
   return <View style={[S.taskDot, { backgroundColor: color }]} />;
 }
 
-export function MarkerCard({ variant = 'task', hubColor, hubFold, speakerName, isFromHub, seq, cost, title, children, label, stale = false, onLongPress }) {
+export function MarkerCard({ variant = 'task', hubColor, hubShape, speakerName, isFromHub, seq, cost, title, children, label, stale = false, onLongPress }) {
   const { colors, fonts, fontSizes } = useTheme();
   const { twoPane } = usePane();
   const pct = TINTS[variant] ?? TINTS.task;
@@ -60,16 +60,16 @@ export function MarkerCard({ variant = 'task', hubColor, hubFold, speakerName, i
   const tint = mixHex(baseAccent, pct, colors.bgPane);
   const hasBody = Boolean(children);
   const compact = !title && !hasBody;
-  const corner = { borderRadius: radii.xs };
+  const corner = { borderRadius: radii.surface };
   const Card = onLongPress ? Pressable : View;
 
   const costStr = cost?.tokens > 0 || cost?.usd > 0 ? formatCostLine(cost) : null;
 
-  const metaStyle = { fontFamily: fonts.monoMedium, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * lineHeights.cozy, color: colors.ink3 };
+  const metaStyle = { fontFamily: fonts.sans.medium, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * lineHeights.cozy, color: colors.ink3 };
 
   const SpeakerEl = speakerName ? (
     <View style={S.row}>
-      <Fold fold={hubFold} color={baseAccent} />
+      <Fold shape={hubShape} color={baseAccent} />
       <Text style={metaStyle}>{speakerName}</Text>
     </View>
   ) : null;
@@ -88,7 +88,7 @@ export function MarkerCard({ variant = 'task', hubColor, hubFold, speakerName, i
           <View style={S.iconSlot}>
             <MarkerIcon variant={variant} color={baseAccent} stale={stale} />
           </View>
-          <Text style={{ fontFamily: fonts.monoSemibold, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * lineHeights.cozy, letterSpacing: fontSizes.sm * tracking.wider, color: baseAccent }}>
+          <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * lineHeights.cozy, color: baseAccent }}>
             {label || LABELS[variant]}
           </Text>
         </View>

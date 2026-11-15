@@ -1,6 +1,8 @@
 import { Profiler } from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { nameTone } from "../../../common/name.mjs";
+import { palettes } from "../../../common/tokens.mjs";
 
 const invokeMock = vi.fn();
 const fetchWorkgroupTranscriptMock = vi.fn();
@@ -181,9 +183,10 @@ describe("WorkgroupView pipeline strip", () => {
     expect(strip.hasAttribute("data-pending")).toBe(true);
     expect(screen.queryByTestId("pipeline-loading")).toBeNull();
     expect(["setup", "enrich", "qa"].map((slug) => phaseEl(slug).dataset.state)).toEqual(["pending", "pending", "pending"]);
-    expect(phaseEl("setup").querySelector("[data-fold]")).not.toBeNull();
-    expect(phaseEl("enrich").querySelector("[data-fold]").dataset.unfolded).toBe("");
-    expect(phaseEl("setup").querySelector("polygon").getAttribute("class") ?? "").toBe("");
+    expect(phaseEl("setup").querySelector("[data-shape]")).not.toBeNull();
+    expect(phaseEl("enrich").querySelector("[data-shape]").dataset.state).toBe("paused");
+    expect(phaseEl("setup").querySelector("[data-shape]").dataset.state).toBe("idle");
+    expect(phaseEl("setup").querySelector("animate")).toBeNull();
     expect(strip.textContent).not.toMatch(/Loading/);
     expect(strip.textContent).toContain("pipeline");
 
@@ -209,6 +212,44 @@ describe("WorkgroupView pipeline strip", () => {
     expect(strip.hasAttribute("data-pending")).toBe(false);
     expect(phaseEl("enrich").dataset.state).toBe("current");
     expect(phaseEl("qa").dataset.state).toBe("pending");
+  });
+
+  it("leans the header honeycomb toward the running phase in the hub's colour and names the owner in the meta", async () => {
+    invokeMock.mockImplementation((cmd) => {
+      if (cmd === "workgroup_tasks") {
+        return Promise.resolve({
+          active: { slug: "enrich", title: "go", opened_seq: 42 },
+          closed: [],
+          blocked: null,
+          pipeline_run: {
+            pipeline: "setup",
+            status: "running",
+            current_phase: "enrich",
+            phases: [
+              { slug: "setup", state: "completed", seq: 41 },
+              { slug: "enrich", state: "current", seq: 42 },
+              { slug: "qa", state: "pending", seq: null },
+            ],
+          },
+        });
+      }
+      return Promise.resolve("");
+    });
+    const single = {
+      ...workgroup,
+      pipeline_status: "running",
+      pipelines: { setup: ["setup", "enrich", "qa"] },
+      phase_map: { setup: { owner: "hub" }, enrich: { owner: "pixel" }, qa: { owner: "hub" } },
+    };
+    render(<WorkgroupView workgroup={single} profiles={[...profiles, { name: "pixel", accent: "#f36a8a" }]} connectionId="local" />);
+    const header = () => document.querySelector(".ds-chat-header [data-shape='honeycomb']");
+    await waitFor(() => expect(header().dataset.cell).toBe("top"));
+    expect(header().dataset.state).toBe("running");
+    expect(header().querySelector("[data-lead]").getAttribute("fill")).toBe("var(--wg-lit)");
+    expect(header().style.getPropertyValue("--wg-lit-light")).toBe(nameTone("#5588ff", palettes.light.bgPane));
+    expect(header().querySelector("[data-cell='left']").getAttribute("fill")).toBe("var(--ink-3)");
+    expect(header().innerHTML).not.toContain("#f36a8a");
+    expect(document.querySelector(".ds-chat-header [data-status]").textContent).toBe("Working · enrich · @pixel");
   });
 
   it.each([
@@ -422,8 +463,7 @@ describe("WorkgroupView pipeline strip", () => {
 
     const bar = document.querySelector(".refresh-bar");
     expect(bar).not.toBeNull();
-    expect(bar.getAttribute("style")).toBeNull();
-    expect(bar.outerHTML).not.toContain(profiles[0].accent);
+    expect(bar.style.getPropertyValue("--c-light")).toBe(nameTone(profiles[0].accent, palettes.light.bgPane));
     await waitFor(() => expect(phaseEl("media-update")).not.toBeNull());
     expect(phaseEl("enrich")).toBeNull();
     expect(document.querySelector('[data-phase][data-state="completed"]')).toBeNull();
@@ -814,7 +854,7 @@ describe("WorkgroupView canonical state availability", () => {
 });
 
 describe("WorkgroupView task pill", () => {
-  it("reads the canonical fold, never the loaded transcript tail", async () => {
+  it("reads the canonical shape, never the loaded transcript tail", async () => {
     fetchWorkgroupTranscriptMock.mockResolvedValue([
       { seq: 900, from_pubkey: "hub-pubkey", body: "carry on" },
     ]);
@@ -924,9 +964,9 @@ describe("WorkgroupView pipeline strip owners", () => {
   };
   const crew = [
     ...profiles,
-    { name: "pixel", accent: "#119988", fold: "rocket" },
-    { name: "scout", accent: "#cc4422", fold: "house" },
-    { name: "lingua", accent: "#bb2299", fold: "plane" },
+    { name: "pixel", accent: "#119988", shape: "pill" },
+    { name: "scout", accent: "#cc4422", shape: "arch" },
+    { name: "lingua", accent: "#bb2299", shape: "drop" },
   ];
   const running = (active) => ({
     active,
@@ -949,8 +989,8 @@ describe("WorkgroupView pipeline strip owners", () => {
     render(<WorkgroupView workgroup={owned} profiles={crew} connectionId="local" />);
 
     await waitFor(() => expect(phaseEl("enrich")).not.toBeNull());
-    expect(phaseEl("setup").querySelector('[data-fold="rocket"]')).not.toBeNull();
-    expect(phaseEl("enrich").querySelector('[data-fold="house"]')).not.toBeNull();
+    expect(phaseEl("setup").querySelector('[data-shape="pill"]')).not.toBeNull();
+    expect(phaseEl("enrich").querySelector('[data-shape="arch"]')).not.toBeNull();
     expect(within(phaseEl("enrich")).queryByText(/→/)).toBeNull();
     const trigger = document.querySelector("[data-phase-trigger]");
     expect(trigger).toHaveTextContent("#enrich");
@@ -965,7 +1005,7 @@ describe("WorkgroupView pipeline strip owners", () => {
     render(<WorkgroupView workgroup={owned} profiles={crew} connectionId="local" />);
 
     await waitFor(() => expect(within(phaseEl("enrich")).getByText("@lingua")).toBeInTheDocument());
-    expect(phaseEl("enrich").querySelector('[data-fold="plane"]')).not.toBeNull();
+    expect(phaseEl("enrich").querySelector('[data-shape="drop"]')).not.toBeNull();
     expect(phaseEl("enrich").closest(".ds-tip")).toHaveTextContent("assigned by the hub");
     expect(document.querySelector("[data-phase-trigger]")).toHaveTextContent("@lingua");
   });
@@ -987,7 +1027,7 @@ describe("WorkgroupView pipeline strip owners", () => {
     const trigger = document.querySelector('[data-phase-trigger="blocked"]');
     expect(trigger).toHaveTextContent("blocked · no source photos");
     expect(trigger).toHaveTextContent("1 of 2");
-    expect(trigger.querySelector('[data-fold="house"]')).not.toBeNull();
+    expect(trigger.querySelector('[data-shape="arch"]')).not.toBeNull();
   });
 
   it("gives a phase its state as its ground, with no check and no state word, and never names the pipeline twice", async () => {
@@ -1024,7 +1064,7 @@ describe("WorkgroupView pipeline strip owners", () => {
     render(<WorkgroupView workgroup={workgroup} profiles={crew} connectionId="local" />);
 
     await waitFor(() => expect(phaseEl("enrich")).not.toBeNull());
-    expect(phaseEl("enrich").querySelector("[data-fold]")).toBeNull();
+    expect(phaseEl("enrich").querySelector("[data-shape]")).toBeNull();
     expect(document.querySelector("[data-phase-trigger]")).toHaveTextContent("1 of 2");
   });
 });

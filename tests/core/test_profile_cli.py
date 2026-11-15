@@ -50,9 +50,9 @@ def test_profile_create_bootstraps_directory(monkeypatch, tmp_path: Path) -> Non
     result = CliRunner().invoke(cli.main, ["profile", "create", "experiment"])
     assert result.exit_code == 0, result.output
     assert "created profile 'experiment'" in result.output
-    assert "it wears the amber diamond" in result.output
+    assert "it wears the amber round" in result.output
     second = CliRunner().invoke(cli.main, ["profile", "create", "second"])
-    assert "it wears the blue shield" in second.output
+    assert "it wears the blue bell" in second.output
     exp = tmp_path / "profiles" / "experiment"
     assert (exp / "memories").is_dir()
     assert (exp / "schedule" / "output").is_dir()
@@ -182,14 +182,14 @@ def _alpi_root(monkeypatch, tmp_path: Path) -> Path:
     return root
 
 
-def _styled_profile(root: Path, name: str, fold: str, accent: str) -> Path:
+def _styled_profile(root: Path, name: str, shape: str, accent: str) -> Path:
     from alpi import config
 
     path = root / "profiles" / name
     path.mkdir(parents=True)
     cli._bootstrap(path)
     cfg = config.load(path)
-    cfg.tui = {"fold": fold, "accent": accent}
+    cfg.tui = {"shape": shape, "accent": accent}
     config.save(cfg)
     return path
 
@@ -200,42 +200,97 @@ def _fold_art_on(monkeypatch, supported: bool) -> None:
     monkeypatch.setattr(fold_art, "supports_fold_art", lambda *a, **k: supported)
 
 
-def test_profile_show_draws_the_alpaca_for_the_default_profile(monkeypatch, tmp_path: Path) -> None:
+def test_profile_show_draws_twin_for_the_default_profile(monkeypatch, tmp_path: Path) -> None:
     _alpi_root(monkeypatch, tmp_path)
     _fold_art_on(monkeypatch, True)
 
     result = CliRunner().invoke(cli.main, ["profile", "show"])
 
     assert result.exit_code == 0, result.output
-    assert "▀" in result.output
+    from alpi import fold_art, palette
+
+    twin = ["".join(" " if not (top or bottom) else "x" for top, bottom in line) for line in fold_art.grid(palette.TWIN_SHAPE, "#f3efe6", eye=palette.eye_ink({}))]
+    drawn = [row[:16].replace("█", "x").replace("▀", "x").replace("▄", "x") for row in result.output.split("\n")[:8]]
+    assert drawn == twin
     assert "default" in result.output
-    assert "alpaca (brand accent)" in result.output
+    assert "twin (brand mark)" in result.output and "alpaca" not in result.output
     assert result.output.count("\n") == 8
 
 
 def test_profile_show_draws_a_named_profile_object(monkeypatch, tmp_path: Path) -> None:
     root = _alpi_root(monkeypatch, tmp_path)
-    _styled_profile(root, "work", "shield", "#3899e2")
+    _styled_profile(root, "work", "bell", "#3899e2")
     _fold_art_on(monkeypatch, True)
 
     result = CliRunner().invoke(cli.main, ["profile", "show", "work"])
 
     assert result.exit_code == 0, result.output
     assert "▀" in result.output
-    assert "blue shield" in result.output
+    assert "blue bell" in result.output
     assert "work" in result.output
+
+
+def test_profile_show_draws_the_shape_and_names_the_profile_in_its_name_tone(monkeypatch, tmp_path: Path) -> None:
+    import io
+
+    from rich.console import Console
+
+    from alpi import fold_art, palette, ui
+
+    root = _alpi_root(monkeypatch, tmp_path)
+    _styled_profile(root, "work", "bell", "#f0b447")
+    _fold_art_on(monkeypatch, True)
+    buffer = io.StringIO()
+    monkeypatch.setattr(ui, "_console", Console(file=buffer, width=120, force_terminal=True, color_system="truecolor"))
+
+    result = CliRunner().invoke(cli.main, ["profile", "show", "work"])
+
+    assert result.exit_code == 0, result.output
+    tone = fold_art.name_colour("#f0b447", {})
+    assert tone != "#f0b447"
+    red, green, blue = (int(tone[i:i + 2], 16) for i in (1, 3, 5))
+    assert f"38;2;{red};{green};{blue}m" in buffer.getvalue()
+    from rich.text import Text
+
+    drawn = Text.from_ansi(buffer.getvalue()).plain.split("\n")
+    bell = ["".join(" " if not (top or bottom) else "x" for top, bottom in line) for line in fold_art.grid("bell", "#f0b447", eye=palette.eye_ink({}))]
+    assert "48;2;0;0;0m" in buffer.getvalue()
+    assert [row[:16].replace("█", "x").replace("▀", "x").replace("▄", "x") for row in drawn[:8]] == bell
+
+
+def test_profile_show_paints_a_pale_body_in_its_mark_tone_on_a_light_terminal(monkeypatch, tmp_path: Path) -> None:
+    import io
+
+    from rich.console import Console
+
+    from alpi import config, ui
+
+    root = _alpi_root(monkeypatch, tmp_path)
+    path = _styled_profile(root, "work", "bell", "#f0b447")
+    cfg = config.load(path)
+    cfg.tui = {**cfg.tui, "theme": "light"}
+    config.save(cfg)
+    _fold_art_on(monkeypatch, True)
+    buffer = io.StringIO()
+    monkeypatch.setattr(ui, "_console", Console(file=buffer, width=120, force_terminal=True, color_system="truecolor"))
+
+    result = CliRunner().invoke(cli.main, ["profile", "show", "work"])
+
+    assert result.exit_code == 0, result.output
+    assert "38;2;192;137;21m" in buffer.getvalue()
+    assert "38;2;240;180;71m" not in buffer.getvalue()
 
 
 def test_profile_show_falls_back_to_the_diamond_without_truecolor(monkeypatch, tmp_path: Path) -> None:
     root = _alpi_root(monkeypatch, tmp_path)
-    _styled_profile(root, "work", "shield", "#3899e2")
+    _styled_profile(root, "work", "bell", "#3899e2")
     _fold_art_on(monkeypatch, False)
 
     result = CliRunner().invoke(cli.main, ["profile", "show", "work"])
 
     assert result.exit_code == 0, result.output
     assert "◆ work" in result.output
-    assert "blue shield" in result.output
+    assert "blue bell" in result.output
     assert "▀" not in result.output and "▄" not in result.output
 
 
@@ -269,7 +324,7 @@ def test_profile_list_marks_the_active_profile_with_its_glyph(monkeypatch, tmp_p
     result = CliRunner().invoke(cli.main, ["profile", "list"])
     marks = {line.split()[1]: line.split()[0] for line in result.output.strip().split("\n")}
 
-    assert marks == {"default": "❖", "work": "◇"}
+    assert marks == {"default": "⍥", "work": "◇"}
 
     result = CliRunner().invoke(cli.main, ["-p", "work", "profile", "list"])
     marks = {line.split()[1]: line.split()[0] for line in result.output.strip().split("\n")}

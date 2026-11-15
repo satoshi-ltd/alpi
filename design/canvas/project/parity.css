@@ -1,4 +1,4 @@
 
-.m-chrome{width:36px;height:36px;border:0;border-radius:4px;background:transparent;display:inline-flex;align-items:center;justify-content:center;padding:0;cursor:pointer;color:#454545}
-.m-chrome:hover{background:rgba(20,20,20,0.06)}
+.m-chrome{width:44px;height:44px;flex-shrink:0;border:0;border-radius:999px;background:transparent;display:inline-flex;align-items:center;justify-content:center;padding:0;cursor:pointer;color:#454545}
+.m-chrome:hover{background:rgba(20,20,20,0.04)}
 button,input{font-family:inherit}

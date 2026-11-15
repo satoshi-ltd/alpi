@@ -868,23 +868,23 @@ class AlpiApp(App):
     def _marker_for(self, home_dir: Path) -> str:
         from alpi import fold_art
 
-        fold, _accent = fold_art.identity(home_dir, self.cfg.tui)
-        return fold_art.glyph(fold) if self._fold_art else fold_art.FALLBACK_GLYPH
+        shape, _accent = fold_art.identity(home_dir, self.cfg.tui)
+        return fold_art.glyph(shape) if self._fold_art else fold_art.FALLBACK_GLYPH
 
-    def _cmd_fold(self, arg: str = "") -> None:
+    def _cmd_shape(self, arg: str = "") -> None:
         from alpi import appearance
 
         if not arg.strip():
             if appearance.is_default(self.home):
-                self._mount_message(DimLine(f"fold: {appearance.pair_name(self.cfg.tui, self.home)}\n{appearance.LOCKED_MESSAGE}"))
+                self._mount_message(DimLine(f"shape: {appearance.pair_name(self.cfg.tui, self.home)}\n{appearance.LOCKED_MESSAGE}"))
                 return
-            self._mount_message(DimLine(f"fold: {appearance.pair_name(self.cfg.tui)}\n{appearance.listing()}"))
+            self._mount_message(DimLine(f"shape: {appearance.pair_name(self.cfg.tui)}\n{appearance.listing()}"))
             return
         try:
-            fold, colour = appearance.parse(arg)
-            if fold is None and colour is None:
-                raise ValueError("name an object, a colour or both")
-            name = appearance.apply(self.home, fold, colour)
+            shape, colour = appearance.parse(arg)
+            if shape is None and colour is None:
+                raise ValueError("name a shape, a colour or both")
+            name = appearance.apply(self.home, shape, colour)
         except ValueError as exc:
             self._mount_message(DimLine(str(exc)))
             return
@@ -893,7 +893,7 @@ class AlpiApp(App):
         from alpi.tui import list_row
         self._fold_marker = self._marker_for(self.home)
         list_row.set_marker(self._fold_marker)
-        self._mount_message(DimLine(f"fold set: {name} (the apps pick it up on their next refresh)"))
+        self._mount_message(DimLine(f"shape set: {name} (the apps pick it up on their next refresh)"))
 
     def _cmd_activity(self, _arg: str = "") -> None:
         from alpi.tui.activity import ActivityPanel

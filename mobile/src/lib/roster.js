@@ -5,7 +5,7 @@ import { splitDefaultProfile } from '../../../common/rosterOrder.mjs';
 const MATCH_FIELDS = ['label', 'name', 'id', 'preview'];
 const CREATABLE_SECTIONS = ['profiles', 'workgroups'];
 
-export const SECTION_LABELS = { front: '', pinned: 'PINNED', profiles: 'PROFILES', workgroups: 'WORKGROUPS' };
+export const SECTION_LABELS = { front: '', pinned: 'Pinned', profiles: 'Profiles', workgroups: 'Workgroups' };
 
 const profileOf = (item) => (item?.kind === 'profile' ? item.raw ?? item : null);
 
@@ -47,4 +47,15 @@ export function useSettledOnce(loading, key) {
   if (seen.current.key !== key) seen.current = { key, settled: false };
   if (!loading) seen.current.settled = true;
   return loading && !seen.current.settled;
+}
+
+export const TILES_KEY = 'tiles';
+
+export function tileSections(sections) {
+  const front = sections.find((section) => section.key === 'front')?.data ?? [];
+  const pinned = sections.find((section) => section.key === 'pinned')?.data ?? [];
+  const tiles = [...front, ...pinned];
+  const rest = sections.filter((section) => section.key !== 'front' && section.key !== 'pinned');
+  if (tiles.length === 0) return rest;
+  return [{ key: TILES_KEY, label: '', data: [{ kind: TILES_KEY, id: TILES_KEY, items: tiles }] }, ...rest];
 }

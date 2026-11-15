@@ -55,7 +55,7 @@ const RANK = { 'needs-you': 3, failed: 2, working: 1 };
 function raise(map, key, next) {
   const prev = map.get(key);
   if (!prev || RANK[next.state] > RANK[prev.state]) map.set(key, { ...prev, ...next });
-  else if (next.phases && !prev.phases) map.set(key, { ...prev, phases: next.phases });
+  else if (next.phases && !prev.phases) map.set(key, { ...prev, phases: next.phases, phase: next.phase });
 }
 
 export function rowStates(activity, nowSec = Date.now() / 1000) {
@@ -74,7 +74,7 @@ export function rowStates(activity, nowSec = Date.now() / 1000) {
       const total = Number(run.phases_total);
       const done = Number(run.phases_done);
       const phases = Number.isFinite(total) && total > 0 && Number.isFinite(done) ? `${done}/${total}` : null;
-      raise(map, workgroupKey(run.workgroup_id), { state: 'working', phases });
+      raise(map, workgroupKey(run.workgroup_id), { state: 'working', phases, phase: typeof run.phase === 'string' ? run.phase : null });
     } else if (run.profile) {
       raise(map, profileKey(run.profile), { state: 'working' });
     }

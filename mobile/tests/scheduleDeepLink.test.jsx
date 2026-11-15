@@ -144,16 +144,15 @@ describe('schedule list as the board draws it', () => {
     expect(container.textContent).not.toMatch(/0 6/);
   });
 
-  it('draws no empty line for a job without a description', () => {
+  it('draws no empty line for a job without a description and no last-result line', () => {
     render(<ScheduleList />);
     const row = screen.getByLabelText(/^Nudge,/);
-    expect([...row.querySelectorAll('span')].map((n) => n.textContent)).toEqual(['Nudge', 'paused', 'never run']);
+    expect([...row.querySelectorAll('span')].map((n) => n.textContent)).toEqual(['Nudge', 'paused']);
   });
 
-  it('colours the dot and the word by state and keeps every row at 44', () => {
+  it('colours the word by state, draws no leading dot and keeps every row at 44', () => {
     render(<ScheduleList />);
-    const dots = [...document.querySelectorAll('[data-dot]')].map((n) => n.getAttribute('data-dot'));
-    expect(dots).toEqual(['#f00', '#000', '#000', '#999']);
+    expect(document.querySelectorAll('[data-dot]').length).toBe(0);
     expect(screen.getByText('failed').getAttribute('data-color')).toBe('#a00');
     for (const b of document.querySelectorAll('button')) expect(Number(b.getAttribute('data-minheight'))).toBeGreaterThanOrEqual(44);
   });
@@ -164,12 +163,13 @@ describe('schedule job page as the board draws it', () => {
   beforeEach(() => { h.params = { id: 'abby', job: 'j-mail' }; h.jobs = [job]; h.att = null; });
   afterEach(() => { h.jobs = base; h.att = null; });
 
-  it('opens on the failure banner and lays out ABOUT, WHEN, NEXT, LAST RUN, RUNS, NOTIFY, PROMPT', () => {
+  it('opens on the failure banner and lays out About, When, Next, Last run, Runs, Notify, Prompt', () => {
     const { container } = render(<ScheduleJob />);
     expect(screen.getByRole('alert').textContent).toMatch(/^Last run failed \| smtp refused\. Last good run:/);
     expect(container.firstChild.querySelector('[role=alert]')).toBeTruthy();
     const text = container.textContent;
-    const order = ['ABOUT', 'WHEN', 'NEXT', 'LAST RUN', 'RUNS', 'NOTIFY', 'PROMPT'].map((l) => text.indexOf(l));
+    const start = text.indexOf('About');
+    const order = ['About', 'When', 'Next', 'Last run', 'Runs', 'Notify', 'Prompt'].map((l) => text.indexOf(l, start));
     expect(order.every((n) => n >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     expect(screen.getByText('Digest of the inbox')).toBeTruthy();
@@ -196,18 +196,19 @@ describe('schedule job page as the board draws it', () => {
   it('omits ABOUT without a description and shows no banner for a healthy job', () => {
     h.jobs = [{ ...job, description: undefined, last_run_status: 'ok', last_run_message: undefined }];
     const { container } = render(<ScheduleJob />);
-    expect(container.textContent).not.toContain('ABOUT');
+    expect(container.textContent).not.toContain('About');
     expect(screen.queryByRole('alert')).toBeNull();
   });
 });
 
 describe('schedule job page', () => {
-  it('leads with status and words, keeps the cron as a fact and shows a broken timeout', () => {
+  it('leads with the shared header, keeps the cron in mono inside the When fact and shows a broken timeout', () => {
     h.params = { id: 'abby', job: 'j-mail' };
     render(<ScheduleJob />);
-    expect(screen.getAllByText('every day at 07:30').length).toBe(2);
+    expect(screen.getByText('When').nextSibling.textContent).toBe('every day at 07:30 · 30 7 * * *');
     expect(screen.getByText('30 7 * * *')).toBeTruthy();
-    expect(screen.getByText('PROMPT')).toBeTruthy();
+    expect(screen.getByText('j-mail')).toBeTruthy();
+    expect(screen.getByText('Prompt')).toBeTruthy();
     expect(screen.getByText("'timeout' must be a whole number of seconds").getAttribute('data-color')).toBe('#a00');
     expect(screen.getByText('mail prompt')).toBeTruthy();
   });

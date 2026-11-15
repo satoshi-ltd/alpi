@@ -53,11 +53,11 @@ describe("Sidebar with nothing to list", () => {
 
 describe("Sidebar while the daemon is away", () => {
   it("keeps the roster and leaves every profile and workgroup folded", () => {
-    const profiles = [{ name: "default", is_default: true, model: "m" }, { name: "doc", fold: "heart", accent: "#f36a8a", model: "m" }];
+    const profiles = [{ name: "default", is_default: true, model: "m" }, { name: "doc", shape: "heart", accent: "#f36a8a", model: "m" }];
     const workgroups = [{ profile: "doc", id: "crew", name: "crew" }];
     const { container, rerender } = render(<Sidebar {...BASE} profiles={profiles} workgroups={workgroups} rosterAnswered daemonOffline />);
-    const folds = [...container.querySelectorAll("[data-fold]")];
-    expect(folds.length).toBeGreaterThanOrEqual(3);
+    const shapes = [...container.querySelectorAll("[data-shape]")];
+    expect(shapes.length).toBeGreaterThanOrEqual(3);
     expect(container.querySelector("[data-unfolded]")).toBeNull();
     rerender(<Sidebar {...BASE} profiles={profiles} workgroups={workgroups} rosterAnswered />);
     expect(container.querySelector("[data-unfolded]")).toBeNull();

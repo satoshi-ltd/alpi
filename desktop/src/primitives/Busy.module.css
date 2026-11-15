@@ -9,34 +9,9 @@
   flex-direction: row;
 }
 
-.mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.svg {
-  display: block;
-  overflow: visible;
-}
-
-.facet {
-  animation: busyWave var(--dur-loop) linear infinite;
-}
-
-@keyframes busyWave {
-  0%, 100% { opacity: 1; }
-  50% { opacity: var(--busy-dim); }
-}
-
 .label {
   font-family: var(--font-sans);
   font-size: var(--text-meta);
   line-height: var(--lh-tight);
   color: var(--ink-2);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .facet { animation: none; }
 }

@@ -479,6 +479,6 @@ async def test_a_remote_stream_never_carries_the_text_of_a_crash(
     assert str(tmp_path) not in json.dumps(sent)
 
 
-@pytest.mark.parametrize("key", ["alp.max_active_workgroups", "alp.link_idle_timeout_s", "tools.deny", "tui.fold", "hostname"])
+@pytest.mark.parametrize("key", ["alp.max_active_workgroups", "alp.link_idle_timeout_s", "tools.deny", "tui.shape", "hostname"])
 def test_sibling_keys_of_local_only_settings_stay_open_remotely(key: str) -> None:
     assert not host_server._touches_local_only_config(key)

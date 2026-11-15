@@ -1,4 +1,4 @@
-import { fontSizes } from './tokens';
+import { fontSizes, typeFloor } from './tokens';
 
 export const DEFAULT_TEXT_SCALE = 1;
 
@@ -33,13 +33,13 @@ export function clampTextScale(value) {
 
 export function scaleFontSizes(value) {
   const scale = clampTextScale(value);
-  const scaled = {};
+  const rungs = new Map();
   let prev = 0;
-  for (const [key, size] of Object.entries(fontSizes)) {
-    prev = Math.max(Math.round(size * scale), prev + 1);
-    scaled[key] = prev;
+  for (const size of [...new Set(Object.values(fontSizes))].sort((a, b) => a - b)) {
+    prev = Math.max(Math.round(size * scale), prev + 1, typeFloor);
+    rungs.set(size, prev);
   }
-  return scaled;
+  return Object.fromEntries(Object.entries(fontSizes).map(([key, size]) => [key, rungs.get(size)]));
 }
 
 export const CHROME_FONT_CAP = 1.3;

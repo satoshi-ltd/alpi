@@ -42,10 +42,19 @@ describe("menu roles", () => {
 });
 
 describe("menu primitive", () => {
-  it("sizes every row at 32 px with 8/12 padding and a 16 px check slot", () => {
-    expect(css).toMatch(/\.row \{[^}]*min-height: var\(--ctl-32\);[^}]*padding: var\(--sp-8\) var\(--sp-12\);/);
+  it("sizes every row at 40 px with 8/12 padding at the control radius and a 20 px check slot", () => {
+    expect(css).toMatch(/\.row \{[^}]*min-height: var\(--row-h\);[^}]*padding: var\(--sp-8\) var\(--sp-12\);[^}]*border-radius: var\(--r-control\);/);
     expect(css).toMatch(/\.check \{[^}]*width: var\(--icon-md\);/);
-    expect(css).toMatch(/\.sepInset \{[^}]*margin-left: calc\(var\(--sp-12\) \+ var\(--icon-md\) \+ var\(--sp-8\)\);/);
+  });
+
+  it("parts groups by 8 px of space, never a rule", () => {
+    expect(css).toMatch(/\.sep \{\s*height: var\(--sp-8\);\s*margin: 0;\s*background: none;/);
+    expect(css).not.toMatch(/var\(--line(-2)?\)/);
+  });
+
+  it("highlights the keyboard item with the chosen fill and no ring, a pointer hover with the hover fill", () => {
+    expect(css).toMatch(/\.row:not\(:disabled\):hover \{\s*background: var\(--hover\);/);
+    expect(css).toMatch(/\.row:focus-visible \{\s*background: var\(--selected\);\s*outline: none;/);
   });
 
   it("marks a dropdown choice with a check, weight and aria-checked, not tint alone", () => {

@@ -21,7 +21,7 @@ function Row() {
         style={{
           width: 40,
           height: 40,
-          borderRadius: radii.xs,
+          borderRadius: radii.control,
           backgroundColor: colors.hover,
         }}
       />
@@ -34,14 +34,10 @@ function Row() {
 }
 
 export function InboxSkeleton({ rows = 6, label }) {
-  const { colors } = useTheme();
   return (
     <View accessible={!!label} accessibilityRole={label ? 'progressbar' : undefined} accessibilityLabel={label} style={{ flex: 1 }}>
       {Array.from({ length: rows }).map((_, i) => (
         <View key={i}>
-          {i > 0 ? (
-            <View style={{ height: 0.5, backgroundColor: colors.line, marginLeft: 64 }} />
-          ) : null}
           <Row />
         </View>
       ))}

@@ -135,7 +135,7 @@ const chartHeight = (w) => {
 const expected = (m, narrow) => {
   const tile = (value) => m.label + space.s2 + value;
   const tiles = narrow ? tile(m.today) + space.s6 + tile(m.mono) : tile(m.today);
-  return tiles + space.s6 + 0.5 + space.s8 + CHART_H + space.s3 + m.dayLabel + space.s6 + m.legend;
+  return tiles + space.s6 + space.s8 + CHART_H + space.s3 + m.dayLabel + space.s6 + m.legend;
 };
 
 describe.each([

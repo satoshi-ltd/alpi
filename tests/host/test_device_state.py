@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 import pytest
+import yaml
 
 from alpi import __version__ as alpi_version
 from alpi import config as cfg_mod
@@ -1782,7 +1783,7 @@ def _fold_server(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[host_
 
 
 @pytest.mark.asyncio
-async def test_a_profile_is_a_diamond_until_it_names_a_fold(
+async def test_a_profile_is_a_round_until_it_names_a_shape(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     srv, _root, home = _fold_server(tmp_path, monkeypatch)
@@ -1790,40 +1791,75 @@ async def test_a_profile_is_a_diamond_until_it_names_a_fold(
     before = config_path.read_bytes() if config_path.exists() else None
 
     profile = await _fold_summary(srv)
-    assert profile["fold"] == "diamond" and "accent" in profile
+    assert profile["shape"] == "round" and "accent" in profile and "fold" not in profile
     assert (config_path.read_bytes() if config_path.exists() else None) == before
 
     async def _call(method: str, **params):
         return await srv._dispatch({"id": method, "method": method, "params": {"profile": "doc", **params}})
 
-    assert (await _call("host.config.set_field", key="tui.fold", value="Shield"))["result"] == {"ok": True}
-    assert (await _fold_summary(srv))["fold"] == "shield"
-    assert cfg_mod.load(home).tui["fold"] == "shield"
+    assert (await _call("host.config.set_field", key="tui.shape", value="Bell"))["result"] == {"ok": True}
+    assert (await _fold_summary(srv))["shape"] == "bell"
+    assert cfg_mod.load(home).tui["shape"] == "bell"
 
-    await _call("host.config.unset_field", key="tui.fold")
-    assert (await _fold_summary(srv))["fold"] == "diamond"
+    await _call("host.config.unset_field", key="tui.shape")
+    assert (await _fold_summary(srv))["shape"] == "round"
 
 
 @pytest.mark.asyncio
-async def test_an_unknown_fold_is_refused_and_a_hand_edited_one_reads_as_the_diamond(
+async def test_set_field_refuses_a_legacy_id_and_the_old_fold_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    srv, _root, home = _fold_server(tmp_path, monkeypatch)
+    (home / "config.yaml").write_text("tui:\n  shape: bell\n")
+    before = (home / "config.yaml").read_text()
+
+    async def _call(method: str, **params):
+        return await srv._dispatch({"id": method, "method": method, "params": {"profile": "doc", **params}})
+
+    for value in ("shield", "crown", "alpaca", "twin"):
+        resp = await _call("host.config.set_field", key="tui.shape", value=value)
+        assert resp["error"]["code"] == -32602 and "round" in resp["error"]["data"]["detail"]
+    for value in ("Crown", "dome"):
+        resp = await _call("host.config.set_field", key="tui.fold", value=value)
+        assert resp["error"]["code"] == -32602 and "tui.shape" in resp["error"]["data"]["detail"]
+    resp = await _call("host.config.unset_field", key="tui.fold")
+    assert resp["error"]["code"] == -32602 and "tui.shape" in resp["error"]["data"]["detail"]
+    assert (home / "config.yaml").read_text() == before
+    assert (await _fold_summary(srv))["shape"] == "bell"
+
+
+@pytest.mark.asyncio
+async def test_an_unknown_shape_is_refused_and_a_hand_edited_one_reads_as_the_round(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     srv, _root, home = _fold_server(tmp_path, monkeypatch)
 
     resp = await srv._dispatch({
         "id": "bad", "method": "host.config.set_field",
-        "params": {"profile": "doc", "key": "tui.fold", "value": "pencil"},
+        "params": {"profile": "doc", "key": "tui.shape", "value": "pencil"},
     })
-    assert resp["error"]["code"] == -32602 and "diamond" in resp["error"]["data"]["detail"]
-    assert cfg_mod.load(home).tui["fold"] == "diamond"
+    assert resp["error"]["code"] == -32602 and "round" in resp["error"]["data"]["detail"]
+    assert "shape" not in cfg_mod.load(home).tui
 
-    (home / "config.yaml").write_text("tui:\n  fold: pencil\n")
+    (home / "config.yaml").write_text("tui:\n  shape: pencil\n")
     host_device_state.invalidate_summary()
-    assert (await _fold_summary(srv))["fold"] == "diamond"
+    assert (await _fold_summary(srv))["shape"] == "round"
 
 
 @pytest.mark.asyncio
-async def test_the_default_profile_always_wears_the_alpaca_and_the_theme_accent(
+async def test_a_legacy_fold_on_disk_reaches_the_apps_as_its_shape(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    srv, _root, home = _fold_server(tmp_path, monkeypatch)
+    (home / "config.yaml").write_text("tui:\n  fold: plane\n  accent: '#df4b9d'\n")
+    host_device_state.invalidate_summary()
+    summary = await _fold_summary(srv)
+    assert summary["shape"] == "drop" and summary["accent"] == "#df4b9d" and "fold" not in summary
+    assert (home / "config.yaml").read_text() == "tui:\n  fold: plane\n  accent: '#df4b9d'\n"
+
+
+@pytest.mark.asyncio
+async def test_the_default_profile_always_reports_twin_and_no_accent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     srv, root, _profile = _fold_server(tmp_path, monkeypatch)
@@ -1831,10 +1867,13 @@ async def test_the_default_profile_always_wears_the_alpaca_and_the_theme_accent(
     host_device_state.invalidate_summary()
 
     default = await _fold_summary(srv, "default")
-    assert default["fold"] == "alpaca" and default["accent"] is None
-    assert (await _fold_summary(srv, "doc"))["fold"] == "diamond"
+    assert default["shape"] == "twin" and default["accent"] is None and "fold" not in default
+    assert (await _fold_summary(srv, "doc"))["shape"] == "round"
 
-    for key, value in (("tui.fold", "heart"), ("tui.accent", "#f36a8a"), ("tui..fold", "heart"), ("tui.fold.", "heart"), ("tui", {"fold": "heart"})):
+    for key, value in (
+        ("tui.shape", "heart"), ("tui.fold", "heart"), ("tui.accent", "#f36a8a"), ("tui..shape", "heart"),
+        ("tui.shape.", "heart"), ("tui", {"shape": "heart"}),
+    ):
         resp = await srv._dispatch({
             "id": key, "method": "host.config.set_field",
             "params": {"profile": "default", "key": key, "value": value},
@@ -1842,12 +1881,13 @@ async def test_the_default_profile_always_wears_the_alpaca_and_the_theme_accent(
         detail = resp["error"]["data"]["detail"]
         malformed = ".." in key or key.endswith(".")
         assert resp["error"]["code"] == -32602
-        assert ("empty or padded" if malformed else "alpaca") in detail
-    unset = await srv._dispatch({
-        "id": "u", "method": "host.config.unset_field", "params": {"profile": "default", "key": "tui.fold"},
-    })
-    assert unset["error"]["code"] == -32602
-    assert cfg_mod.load(root).tui["fold"] == "shield"
+        assert ("empty or padded" if malformed else "tui.shape" if key == "tui.fold" else "brand mark") in detail
+    for key in ("tui.shape", "tui.fold"):
+        unset = await srv._dispatch({
+            "id": "u", "method": "host.config.unset_field", "params": {"profile": "default", "key": key},
+        })
+        assert unset["error"]["code"] == -32602
+    assert cfg_mod.load(root).tui["shape"] == "twin"
 
     ok = await srv._dispatch({
         "id": "t", "method": "host.config.set_field",
@@ -1856,13 +1896,33 @@ async def test_the_default_profile_always_wears_the_alpaca_and_the_theme_accent(
     assert ok["result"] == {"ok": True}
 
 
-def test_an_unknown_or_missing_fold_resolves_to_the_diamond() -> None:
-    from alpi import palette
+@pytest.mark.asyncio
+async def test_saving_a_shape_over_a_stored_fold_drops_the_fold_and_keeps_every_other_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    srv, _root, home = _fold_server(tmp_path, monkeypatch)
+    (home / "config.yaml").write_text("model: x/y\ncustom_key: kept\ntui:\n  fold: box\n  theme: light\n")
+    host_device_state.invalidate_summary()
+    assert (await _fold_summary(srv))["shape"] == "squircle"
 
-    assert len(palette.FOLDS) == 12 and palette.DEFAULT_FOLD == "diamond"
-    assert palette.resolve_fold(None) == palette.resolve_fold("") == palette.resolve_fold("pencil") == "diamond"
-    assert palette.resolve_fold(["heart"]) == palette.resolve_fold(0) == "diamond"
-    assert palette.resolve_fold(" HEART ") == "heart"
+    resp = await srv._dispatch({
+        "id": "pill", "method": "host.config.set_field",
+        "params": {"profile": "doc", "key": "tui.shape", "value": "pill"},
+    })
+    assert resp["result"] == {"ok": True}
+    host_device_state.invalidate_summary()
+    summary = await _fold_summary(srv)
+    assert summary["shape"] == "pill" and "fold" not in summary
+    raw = yaml.safe_load((home / "config.yaml").read_text())
+    assert raw == {"model": "x/y", "custom_key": "kept", "tui": {"theme": "light", "shape": "pill"}}
+
+    (home / "config.yaml").write_text("tui:\n  fold: box\n  shape: pill\n")
+    await srv._dispatch({
+        "id": "u", "method": "host.config.unset_field", "params": {"profile": "doc", "key": "tui.shape"},
+    })
+    host_device_state.invalidate_summary()
+    assert (yaml.safe_load((home / "config.yaml").read_text()) or {}).get("tui") in (None, {})
+    assert (await _fold_summary(srv))["shape"] == "round"
 
 
 @pytest.mark.asyncio

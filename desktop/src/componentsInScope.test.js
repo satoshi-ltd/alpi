@@ -26,7 +26,7 @@ export function componentsOutOfScope(source) {
 
 describe('every component a screen renders is in scope', () => {
   it('catches a component rendered without its import', () => {
-    expect(componentsOutOfScope("import { Text } from 'react-native';\nconst A = () => <><Text /><Fold fold=\"x\" /></>;")).toEqual(['Fold']);
+    expect(componentsOutOfScope("import { Text } from 'react-native';\nconst A = () => <><Text /><Fold shape=\"x\" /></>;")).toEqual(['Fold']);
   });
 
   it.each(['src'])('holds for %s', (dir) => {

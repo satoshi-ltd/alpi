@@ -46,6 +46,6 @@ describe('SheetClose geometry', () => {
     expect(glyphFromRight).toBe(sheetStyles.header.paddingLeft);
     expect(style.marginTop).toBe(-SHEET_CLOSE_BLEED);
     expect(style.marginRight).toBe(-SHEET_CLOSE_BLEED);
-    expect(space.s4).toBe(SHEET_CLOSE_BLEED);
+    expect(SHEET_CLOSE_BLEED).toBe(Math.round((mobile.tap - fontSizes[typography.dialogTitle.size] * lineHeights[typography.dialogTitle.leading]) / 2));
   });
 });

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import Popover from "./Popover.jsx";
-import { ActionLink, Button, Eyebrow, Field, Mono } from "./index.js";
+import { ActionLink, Button, Eyebrow, Field } from "./index.js";
 import styles from "./AddPeerPopover.module.css";
 
 export default function AddPeerPopover({ open, onClose, onPair }) {
@@ -9,10 +9,10 @@ export default function AddPeerPopover({ open, onClose, onPair }) {
     <Popover open={open} onClose={onClose} width="var(--pop-lg)">
       <div className={styles.body}>
         <Eyebrow>Add peer</Eyebrow>
-        <Mono className={styles.help}>
+        <span className={styles.help}>
           Paste an <code className="mono">alpi://link</code> invite or scan
           their QR from the host.
-        </Mono>
+        </span>
         <Field
           multiline
           mono

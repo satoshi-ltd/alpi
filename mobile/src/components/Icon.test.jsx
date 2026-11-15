@@ -30,11 +30,11 @@ describe('Icon defaults', () => {
 });
 
 describe('Icon size scale', () => {
-  it('offers only xs 12 and md 16', () => {
-    expect(iconSizes).toEqual({ xs: 12, md: 16 });
+  it('offers only xs 16, md 20 and lg 24', () => {
+    expect(iconSizes).toEqual({ xs: 16, md: 20, lg: 24 });
   });
 
-  it.each([[16], ['sm'], ['lg'], ['xl'], ['jumbo']])('draws an unknown size %s at the md step', (size) => {
+  it.each([[16], ['sm'], ['xl'], ['jumbo']])('draws an unknown size %s at the md step', (size) => {
     expect(draw({ name: 'check', size }).getAttribute('width')).toBe(String(iconSizes.md));
   });
 
@@ -42,28 +42,28 @@ describe('Icon size scale', () => {
     expect(draw({ name: 'check', size: step }).getAttribute('width')).toBe(String(px));
   });
 
-  it.each(['sm', 'lg', 'xl', 'hero', 20, 33, 'jumbo'])('folds %s onto md', (size) => {
+  it.each(['sm', 'xl', 'hero', 20, 33, 'jumbo'])('folds %s onto md', (size) => {
     expect(draw({ name: 'check', size }).getAttribute('width')).toBe(String(iconSizes.md));
   });
 });
 
 describe('Icon stroke', () => {
-  it.each(Object.values(iconSizes))('renders a constant 1.33 pt stroke at %i pt', (px) => {
-    const step = px === iconSizes.xs ? 'xs' : 'md';
+  it.each(Object.values(iconSizes))('renders a constant 1.5 pt stroke at %i pt', (px) => {
+    const step = Object.keys(iconSizes).find((k) => iconSizes[k] === px);
     for (const name of ['search', 'gear', 'plus', 'chevron-down']) {
       const sw = Number(draw({ name, size: step }).getAttribute('stroke-width'));
       expect(sw).toBeCloseTo(iconStrokeFor(px), 5);
-      expect((sw * px) / 24).toBeCloseTo(1.33, 5);
+      expect((sw * px) / 24).toBeCloseTo(1.5, 5);
       cleanup();
     }
   });
 
   it('ignores a stroke override', () => {
     const svg = draw({ name: 'check', size: 'md', strokeWidth: 3 });
-    expect(Number(svg.getAttribute('stroke-width'))).toBeCloseTo(iconStrokeFor(16), 5);
+    expect(Number(svg.getAttribute('stroke-width'))).toBeCloseTo(iconStrokeFor(iconSizes.md), 5);
   });
 
-  it('allows no size other than xs and md in any source', async () => {
+  it('allows no size other than xs, md and lg in any source', async () => {
     const { readdirSync, readFileSync, statSync } = await import('node:fs');
     const { join } = await import('node:path');
     const root = join(import.meta.dirname, '../..');
@@ -74,7 +74,7 @@ describe('Icon stroke', () => {
         if (statSync(path).isDirectory()) walk(path);
         else if (/\.jsx$/.test(name) && !/\.test\./.test(name)) {
           const text = readFileSync(path, 'utf8');
-          for (const m of text.matchAll(/<Icon\b[^>]*?\bsize=(\S+)/gs)) if (!/^"(xs|md)"$/.test(m[1])) hits.push(`${path}:${m[1]}`);
+          for (const m of text.matchAll(/<Icon\b[^>]*?\bsize=(\S+)/gs)) if (!/^"(xs|md|lg)"$/.test(m[1])) hits.push(`${path}:${m[1]}`);
         }
       }
     };

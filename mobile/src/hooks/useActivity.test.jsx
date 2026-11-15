@@ -88,7 +88,7 @@ describe('row states', () => {
     expect(rowStateFor(states, { kind: 'profile', id: 'builder' })).toEqual({ state: 'needs-you' });
     expect(rowStateFor(states, { kind: 'profile', id: 'doc' })).toEqual({ state: 'failed' });
     expect(rowStateFor(states, { kind: 'profile', id: 'alpi' })).toEqual({ state: 'working' });
-    expect(rowStateFor(states, { kind: 'workgroup', id: 'launch-crew' })).toEqual({ state: 'working', phases: '2/4' });
+    expect(rowStateFor(states, { kind: 'workgroup', id: 'launch-crew' })).toEqual({ state: 'working', phases: '2/4', phase: 'analyze' });
     expect(rowStateFor(states, { kind: 'profile', id: 'abby' })).toBeNull();
   });
 

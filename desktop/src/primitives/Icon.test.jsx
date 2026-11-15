@@ -18,16 +18,17 @@ const svgOf = (props) => render(<Icon name="search" {...props} />).container.que
 
 describe("Icon sizes", () => {
   it.each([
-    ["sm", 14],
-    ["md", 16],
+    ["sm", 16],
+    ["md", 20],
+    ["lg", 24],
     [undefined, 16],
-    [11, 14],
-    [12, 14],
-    [13, 14],
-    [14, 14],
+    [11, 16],
+    [14, 16],
     [16, 16],
-    [18, 16],
-    ["lg", 16],
+    [18, 20],
+    [20, 20],
+    [22, 24],
+    [24, 24],
   ])("draws size %s at %s px", (size, px) => {
     expect(iconPx(size)).toBe(px);
     const svg = svgOf(size === undefined ? {} : { size });
@@ -35,8 +36,9 @@ describe("Icon sizes", () => {
     expect(svg.getAttribute("height")).toBe(String(px));
   });
 
-  it("renders the same 1.33 px line at both sizes", () => {
-    for (const size of ["sm", "md"]) {
+  it("renders the same 1.5 px line at every size", () => {
+    expect(iconStrokeRendered).toBe(1.5);
+    for (const size of ["sm", "md", "lg"]) {
       const svg = svgOf({ size });
       const rendered = (Number(svg.getAttribute("stroke-width")) * Number(svg.getAttribute("width"))) / 24;
       expect(rendered).toBeCloseTo(iconStrokeRendered, 5);
@@ -45,7 +47,7 @@ describe("Icon sizes", () => {
 
   it("ignores a stroke override so no icon thickens", () => {
     const svg = svgOf({ size: "md", strokeWidth: 3 });
-    expect(Number(svg.getAttribute("stroke-width"))).toBeCloseTo((iconStrokeRendered * 24) / 16, 5);
+    expect(Number(svg.getAttribute("stroke-width"))).toBeCloseTo((iconStrokeRendered * 24) / 20, 5);
   });
 
   it("fills only the profile identity glyph", () => {

@@ -10,7 +10,7 @@ import {
   scaleFontSizes,
   TEXT_SCALES,
 } from './textScale';
-import { fontSizes } from './tokens';
+import { fontSizes, typeFloor } from './tokens';
 
 const KEYS = Object.keys(fontSizes);
 
@@ -68,23 +68,30 @@ describe('scaleFontSizes', () => {
     expect(Object.keys(larger)).toEqual(KEYS);
     for (const key of KEYS) expect(larger[key]).toBeGreaterThan(fontSizes[key]);
     const smaller = scaleFontSizes(MIN_TEXT_SCALE);
-    for (const key of KEYS) expect(smaller[key]).toBeLessThan(fontSizes[key]);
+    for (const key of KEYS) {
+      if (fontSizes[key] > typeFloor) expect(smaller[key]).toBeLessThan(fontSizes[key]);
+      else expect(smaller[key]).toBe(typeFloor);
+    }
   });
 
-  it('keeps the scale strictly ordered at every step so roles never collide', () => {
-    const ordered = KEYS.map((key) => fontSizes[key]).every((size, i, all) => i === 0 || size > all[i - 1]);
-    expect(ordered).toBe(true);
+  it('keeps the six rungs strictly ordered at every step and every alias on its rung', () => {
+    const rungs = [...new Set(Object.values(fontSizes))].sort((a, b) => a - b);
+    expect(rungs).toEqual([12, 14, 15, 16, 20, 28]);
     for (const { value } of TEXT_SCALES) {
-      const sizes = KEYS.map((key) => scaleFontSizes(value)[key]);
+      const scaled = scaleFontSizes(value);
+      const byRung = rungs.map((rung) => new Set(KEYS.filter((k) => fontSizes[k] === rung).map((k) => scaled[k])));
+      for (const set of byRung) expect(set.size).toBe(1);
+      const sizes = byRung.map((set) => [...set][0]);
       expect(sizes.every((size, i) => i === 0 || size > sizes[i - 1])).toBe(true);
     }
   });
 
-  it('rounds to whole pixels and never below the legibility floor', () => {
+  it('rounds to whole pixels and never below the 12 pt type floor, Small included', () => {
+    expect(typeFloor).toBe(12);
     for (const { value } of TEXT_SCALES) {
       for (const size of Object.values(scaleFontSizes(value))) {
         expect(Number.isInteger(size)).toBe(true);
-        expect(size).toBeGreaterThanOrEqual(10);
+        expect(size).toBeGreaterThanOrEqual(typeFloor);
       }
     }
   });

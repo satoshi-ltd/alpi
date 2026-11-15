@@ -58,7 +58,7 @@ export default function EmailConfig() {
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScreenHeader
         title={address}
-        subtitle={`@${id} · ${(typeLabel || 'EMAIL').toUpperCase()}`}
+        subtitle={`@${id} · ${typeLabel || 'email'}`}
         onBack={goBack}
       />
       <ScrollView contentContainerStyle={{ padding: space.s8, gap: space.s7 }}>
@@ -80,7 +80,7 @@ export default function EmailConfig() {
                 ) : null,
               )
             ) : (
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3, lineHeight: fontSizes.xs * 1.6 }}>
+              <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3, lineHeight: fontSizes.xs * 1.6 }}>
                 Gmail accounts are managed through the OAuth grant on the alpi desktop app.
                 You can remove this account here.
               </Text>

@@ -3,13 +3,14 @@
 // Reads docs at HEAD from the repo and bakes a static site into site/dist/.
 
 import { ICONS } from '../../common/iconPaths.mjs';
-import { palettes, radii } from '../../common/tokens.mjs';
+import { fontStacks, monoScale, palettes, radii, typeLadder } from '../../common/tokens.mjs';
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync, copyFileSync, existsSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { renderMarkdown, parseFrontmatter } from './markdown.mjs';
-import { FONT_FILE, brandCss, cardSvg, demoProfiles, favicon, lockup, profileName } from './brand.mjs';
+import { copyButton, copyCss, copyScript } from './copy.mjs';
+import { FONT_FILE, brandCss, cardSvg, castCss, castHtml, castScript, demoProfiles, familyRow, favicon, honeycomb, liveMark, lockup, profileName, statesHtml, themeScript, thumbnailSvg, twinBadge } from './brand.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SITE = resolve(__dirname, '..');
@@ -33,7 +34,7 @@ const VERSION = (pyproject.match(/^version\s*=\s*"([^"]+)"/m) || [null, '0.0.0']
 
 const DEMO_JS = readFileSync(join(TPL, 'demo.js'), 'utf8')
   .replace(/\bv?\d+\.\d+\.\d+\b/g, m => (m.startsWith('v') ? 'v' : '') + VERSION)
-  .replace('__PROFILES__', () => JSON.stringify(demoProfiles({ reviewer: 'shield', builder: 'rocket', librarian: 'tree' })));
+  .replace('__PROFILES__', () => JSON.stringify(demoProfiles({ reviewer: 'bell', builder: 'pill', librarian: 'pebble' })));
 const DEMO_CSS = readFileSync(join(TPL, 'demo.css'), 'utf8');
 const contentVersion = (text) => createHash('sha256').update(text).digest('hex').slice(0, 10);
 const DEMO_JS_V = contentVersion(DEMO_JS);
@@ -45,6 +46,10 @@ const DEMO_CSS_V = contentVersion(DEMO_CSS);
 // gate verifies they're aligned.
 const tauriConf = readFileSync(join(REPO, 'desktop/src-tauri/tauri.conf.json'), 'utf8');
 const DESKTOP_VERSION = JSON.parse(tauriConf).version;
+const INSTALL_CMD = 'uv tool install alpi-agent';
+const DOCKER_CMD = 'docker pull satoshiltd/alpi:latest';
+const APPLE_GLYPH = '<svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true"><path d="M16.1 12.7c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.15-2.8.85-3.5.85-.7 0-1.85-.83-3-.81-1.55.02-3 .9-3.8 2.29-1.62 2.81-.41 6.97 1.16 9.25.77 1.11 1.68 2.36 2.88 2.32 1.16-.05 1.6-.75 3-.75s1.79.75 3.01.72c1.24-.02 2.03-1.13 2.79-2.25.88-1.29 1.24-2.54 1.26-2.6-.03-.01-2.41-.93-2.4-3.71zM13.9 5.6c.63-.77 1.06-1.83.94-2.9-.91.04-2.02.61-2.67 1.37-.58.68-1.09 1.77-.95 2.81 1.02.08 2.05-.52 2.68-1.28z"/></svg>';
+const ANDROID_GLYPH = '<svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true"><path d="M16.6 9.5l1.6-2.8c.1-.2 0-.4-.1-.5-.2-.1-.4 0-.5.1l-1.6 2.8c-1.2-.55-2.6-.86-4-.86s-2.8.3-4 .86L6.4 6.3c-.1-.2-.3-.2-.5-.1-.2.1-.2.3-.1.5l1.6 2.8C4.7 11 3 13.5 3 16.4h18c0-2.9-1.7-5.4-4.4-6.9zM8 14c-.4 0-.8-.4-.8-.8s.4-.8.8-.8.8.4.8.8-.4.8-.8.8zm8 0c-.4 0-.8-.4-.8-.8s.4-.8.8-.8.8.4.8.8-.4.8-.8.8z"/></svg>';
 const DESKTOP_DOWNLOAD_URL = 'https://github.com/satoshi-ltd/alpi/releases/download/desktop-latest/alpi-latest.dmg';
 const DESKTOP_RELEASES_URL = `https://github.com/satoshi-ltd/alpi/releases/tag/desktop-v${DESKTOP_VERSION}`;
 
@@ -246,25 +251,30 @@ function renderJsonLd({ kind, title, description, canonical, date }) {
   return `<script type="application/ld+json">${JSON.stringify(data)}</script>`;
 }
 
-function siteTokens(p) {
+function siteTokens(p, lift) {
   const rgb = p.bg.match(/\w\w/g).map(h => parseInt(h, 16)).join(',');
   return {
     '--bg': p.bg, '--bg-rgb': rgb, '--fg': p.ink, '--ink-2': p.ink2, '--muted': p.ink3, '--dim': p.ink4,
     '--line': p.line, '--line-2': p.line2, '--hover': p.hover, '--selected': p.selected,
-    '--soft': p.bgPane, '--pane': p.bgPane, '--band': p.bgSide, '--panel-bg': p.bgPane, '--panel-soft': p.bgPane,
+    '--soft': p.fill, '--pane': p.fill, '--band': p.bgSide, '--panel-bg': p.fill, '--panel-soft': p.fill,
     '--nav-bg': p.bg, '--drawer-bg': p.bg, '--ctrl-bg': p.bgPane,
-    '--accent': p.ink, '--accent-line': p.line2, '--accent-wash': p.hover, '--warn': p.dangerText,
+    '--accent': p.ink, '--accent-wash': p.hover, '--warn': p.dangerText,
     '--prose': p.ink2, '--prose-lead': p.ink, '--code-fg': p.ink, '--code-bg': p.hover,
-    '--term-bg': p.bgPane, '--term-line': p.line2, '--term-fg': p.ink, '--term-muted': p.ink3,
+    '--term-bg': p.fill, '--term-fg': p.ink, '--term-muted': p.ink3,
     '--term-cmd': p.ink, '--term-flag': p.ink2, '--term-string': p.ink2,
+    '--mark-eye': p.markEye, '--focus': p.focus, '--lift': lift,
   };
 }
 const block = (vars) => Object.entries(vars).map(([k, v]) => `${k}:${v}`).join(';');
+const px = (n) => `${n}px`;
+const DISPLAY = { hero: 'clamp(44px,4.9vw,68px)', headline: 'clamp(34px,4vw,52px)' };
 const SHAPE = {
-  '--radius': `${radii.xs}px`, '--radius-in': `${radii.xs}px`, '--radius-btn': `${radii.xs}px`, '--radius-sm': `${radii.tag}px`,
-  '--r-xs': `${radii.xs}px`, '--r-tag': `${radii.tag}px`, '--seam': '.5px',
+  '--r-xs': px(radii.xs), '--r-control': px(radii.control), '--r-surface': px(radii.surface), '--r-sheet': px(radii.sheet), '--r-pill': px(radii.pill),
+  ...Object.fromEntries(Object.entries(typeLadder).map(([k, v]) => [`--t-${k}`, px(v)])),
+  '--t-hero': DISPLAY.hero, '--t-headline': DISPLAY.headline, '--t-mono': `${monoScale}em`,
+  '--font-sans': fontStacks.sans, '--font-mono': fontStacks.mono,
 };
-const TOKENS_CSS = `:root{${block(SHAPE)};${block(siteTokens(palettes.dark))}}\n:root[data-theme="light"]{${block(siteTokens(palettes.light))}}\n.hero [data-alpi-demo]{${block(siteTokens(palettes.dark))}}\n`;
+const TOKENS_CSS = `:root{${block(SHAPE)};${block(siteTokens(palettes.dark, 'rgba(0,0,0,.55)'))}}\n:root[data-theme="light"]{${block(siteTokens(palettes.light, 'rgba(20,20,20,.16)'))}}\n`;
 
 const TOKENS_V = contentVersion(TOKENS_CSS);
 const FAVICON = 'alpi-favicon.svg';
@@ -344,21 +354,21 @@ function renderNav(kind, opts = {}) {
     brandHref = '../index.html';
     // On /docs/ the DOCS crumb is current AND keeps the bold+highlight
     // "docs-link" treatment so the section label always reads the same way.
-    crumbs.push({ label: 'DOCS', current: true, docs: true });
+    crumbs.push({ label: 'Docs', current: true, docs: true });
   } else if (kind === 'doc') {
     brandHref = '../index.html';
-    crumbs.push({ label: 'DOCS', href: 'index.html', docs: true });
+    crumbs.push({ label: 'Docs', href: 'index.html', docs: true });
     crumbs.push({ label: opts.current, current: true });
   } else if (kind === 'apps') {
     // Subpage at the site root — brand goes to landing, crumb shows the section.
     brandHref = 'index.html';
-    crumbs.push({ label: 'APPS', current: true, docs: true });
+    crumbs.push({ label: 'Apps', current: true, docs: true });
   } else if (kind === 'blog-index') {
     brandHref = '../index.html';
-    crumbs.push({ label: 'BLOG', current: true, docs: true });
+    crumbs.push({ label: 'Blog', current: true, docs: true });
   } else if (kind === 'blog') {
     brandHref = '../index.html';
-    crumbs.push({ label: 'BLOG', href: 'index.html', docs: true });
+    crumbs.push({ label: 'Blog', href: 'index.html', docs: true });
     if (opts.current) crumbs.push({ label: opts.current, current: true });
   }
 
@@ -386,17 +396,15 @@ function renderNav(kind, opts = {}) {
   const burgerHtml = showMenu
     ? `<button class="burger" aria-label="Menu" aria-controls="nav-drawer" aria-expanded="false"><span></span><span></span><span></span></button>`
     : '';
+  const getHref = kind === 'landing' ? '#apps' : '../index.html#apps';
   const drawerHtml = showMenu
     ? `<div class="nav-drawer" id="nav-drawer" hidden>
     <ul>${menuLinks.map(([h, l]) => `<li><a href="${h}">${l}</a></li>`).join('')}</ul>
-    <a href="#apps" class="nav-cta">$ uv tool install alpi-agent →</a>
+    <a href="${getHref}" class="drawer-get">Get alpi</a>
   </div>`
     : '';
 
-  // CTA install anchor lives on the landing — point at it correctly from each surface.
-  const ctaHref = kind === 'landing' ? '#apps' : '../index.html#apps';
-
-  return `<nav class="top">
+  return `<nav class="top${showMenu ? ' has-menu' : ''}">
   <div class="shell row">
     <div class="brand-lockup">
       <a class="brand" href="${brandHref}" aria-label="alpi — home">
@@ -405,8 +413,8 @@ function renderNav(kind, opts = {}) {
     </div>
     ${menuHtml}
     <div class="nav-actions">
-      <a href="${ctaHref}" class="nav-cta">$ uv tool install alpi-agent →</a>
       <button class="theme-btn" type="button" aria-label="Switch theme">${lucide('sun', 'sun')}${lucide('moon', 'moon')}</button>
+      <a href="${getHref}" class="nav-get">Get alpi</a>
       ${burgerHtml}
     </div>
   </div>
@@ -427,36 +435,43 @@ document.addEventListener('click', function (e) {
 // The footer is a shared component, so it carries its own styles — the landing
 // keeps them inline and doc.css never had them, which left 37 pages unstyled.
 const FOOTER_CSS = `<style>
-footer{border-top:var(--seam) solid var(--line);padding:64px 0 48px;margin-top:80px;position:relative;z-index:5}
-footer .row{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:40px}
+footer{background:var(--band);padding:64px 0 48px;margin-top:80px;position:relative;z-index:5}
+footer .row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:40px;max-width:960px}
 @media(max-width:760px){footer .row{grid-template-columns:1fr 1fr}}
-footer h5{font-family:"Geist Mono",ui-monospace,monospace;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;margin-bottom:16px}
+footer h5{font-family:var(--font-sans);font-size:var(--t-small);font-weight:500;color:var(--muted);margin-bottom:16px}
 footer ul{list-style:none}
 footer li{margin-bottom:10px}
-footer a{color:var(--fg);text-decoration:none;font-size:14px}
-footer a:hover{color:var(--muted)}
-footer .sig{
-    margin-top:48px;padding-top:30px;border-top:var(--seam) solid var(--line);
-    display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;
-  }
+footer a{color:var(--ink-2);text-decoration:none;font-size:var(--t-ui)}
+footer a:hover{color:var(--fg)}
+footer .sig{margin-top:48px;display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap}
 footer .sig .brand{display:inline-block;color:var(--fg);line-height:1}
 footer .sig .brand .logo{gap:10px}
 footer .sig .brand .logo-mark{height:28px;width:auto}
-footer .sig .brand .logo-word{font-size:25px}
+footer .sig .brand .logo-word{font-size:var(--t-display)}
 footer .sig .who{display:flex;align-items:center;gap:13px}
-footer .sig .ver{font-family:"Geist Mono",ui-monospace,monospace;font-size:11px;color:var(--muted);letter-spacing:.02em}
-footer .sig .attr{font-size:11px;color:var(--muted);font-family:"Geist Mono",ui-monospace,monospace}
-footer .sig .attr a{font-size:inherit}
-footer .sig .attr{margin-left:auto}
-.theme-btn{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:var(--r-xs);border:var(--seam) solid var(--line-2);background:var(--pane);color:var(--muted);cursor:pointer;transition:background .15s,color .15s}
+footer .sig .ver{font-family:var(--font-mono);font-size:var(--t-mono);color:var(--muted);background:var(--hover);padding:2px 8px;border-radius:var(--r-control)}
+footer .attr{margin-top:20px;font-size:var(--t-small);color:var(--muted)}
+footer .attr a{font-size:inherit;color:var(--fg)}
+footer .attr a.source{color:var(--muted);text-decoration:underline;text-decoration-color:var(--dim);text-underline-offset:3px}
+footer .attr a.source:hover{color:var(--fg)}
+@media(max-width:760px){footer .family{gap:6px}}
+.theme-btn{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:var(--r-pill);border:0;background:transparent;color:var(--ink-2);cursor:pointer;transition:background .15s,color .15s}
 .theme-btn:hover{background:var(--hover);color:var(--fg)}
-.theme-btn svg{width:16px;height:16px;display:block}
+.theme-btn svg{width:20px;height:20px;display:block}
 .theme-btn .moon{display:none}
 :root[data-theme="light"] .theme-btn .sun{display:none}
 :root[data-theme="light"] .theme-btn .moon{display:block}
-/* Last: a media query adds no specificity, so the base rules above would win. */
-@media(max-width:720px){footer h5,footer .sig .attr,footer .sig .attr a,footer .sig .ver{font-size:12.5px}}
 </style>`;
+
+const NAV_CSS = [
+  '.nav-get,.drawer-get{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:0 18px;border-radius:var(--r-pill);background:var(--fg);color:var(--bg);font-family:var(--font-sans);font-size:var(--t-ui);font-weight:500;text-decoration:none;white-space:nowrap;transition:background .15s}',
+  '.nav-get{margin-left:8px}',
+  '.drawer-get{display:flex;min-height:48px}',
+  '.nav-get:hover,.drawer-get:hover{background:var(--ink-2)}',
+  '.nav-get:focus-visible,.drawer-get:focus-visible{outline:2px solid var(--focus);outline-offset:2px}',
+  '@media (max-width:760px){nav.has-menu .nav-get{display:none}}',
+  '',
+].join('\n');
 
 // ── table of contents — built from the rendered h2s, shown only when a document
 // is long enough that scrolling blind is a real cost.
@@ -481,10 +496,9 @@ function renderFooter(base = '') {
     return base + h;
   };
   const cols = [
-    ['Product', [['#what','What alpi is'], ['#how','How it works'], ['#alp','ALP protocol'], ['#apps','Get it'], ['blog/index.html','Writing']]],
     ['Guides', [['docs/INSTALL.html','Install'], ['docs/QUICKSTART.html','Quickstart'], ['docs/PROFILES.html','Profiles'], ['docs/SKILLS.html','Skills'], ['docs/MODELS.html','Models'], ['docs/INTEGRATIONS.html','Integrations']]],
-    ['Reference', [['docs/ARCHITECTURE.html','Architecture'], ['docs/ALP.html','ALP protocol'], ['docs/CONFIG.html','Configuration'], ['docs/SECURITY.html','Security'], ['docs/OPERATIONS.html','Operations'], ['docs/DEPLOYMENTS.html','Deployments']]],
-    ['Meta', [['https://github.com/satoshi-ltd/alpi/blob/main/CHANGELOG.md','Changelog'], [ROADMAP_URL,'Roadmap'], ['https://github.com/satoshi-ltd/alpi/blob/main/LICENSE','Licence'], ['mailto:info@satoshi-ltd.com','Commercial use'], ['https://github.com/satoshi-ltd/alpi','GitHub']]],
+    ['Reference', [['docs/ARCHITECTURE.html','Architecture'], ['docs/ALP.html','ALP specification'], ['docs/CONFIG.html','Configuration'], ['docs/SECURITY.html','Security'], ['docs/OPERATIONS.html','Operations'], ['docs/DEPLOYMENTS.html','Deployments']]],
+    ['Project', [['blog/index.html','Blog'], [REPO_FILES.changelog,'Changelog'], [ROADMAP_URL,'Roadmap'], ['docs/LICENSE.html','Licence'], ['mailto:info@satoshi-ltd.com','Commercial use']]],
   ];
   const colHtml = cols.map(([head, links]) => `<div>
         <h5>${head}</h5>
@@ -500,8 +514,9 @@ function renderFooter(base = '') {
         <a class="brand" href="${base || ''}index.html">${lockup({ height: 28 })}</a>
         <span class="ver">v${VERSION}</span>
       </div>
-      <span class="attr">By <a href="https://www.satoshi-ltd.com/">Satoshi Ltd.</a> &middot; no telemetry</span>
+      ${familyRow(20)}
     </div>
+    <p class="attr">By <a href="https://www.satoshi-ltd.com/">Satoshi Ltd.</a> &middot; no telemetry &middot; <a class="source" href="${GITHUB_URL}">source on GitHub</a></p>
   </div>
 </footer>`;
 }
@@ -602,7 +617,7 @@ ${renderHead({
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=Geist+Mono:wght@400..700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400..700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../doc.css?v=${VERSION}" />
 <link rel="stylesheet" href="../demo.css?v=${DEMO_CSS_V}" />
 </head>
@@ -618,10 +633,10 @@ ${toc}
     <nav aria-label="Documentation">${renderDocRail(doc.slug)}</nav>
   </details>
   <header class="dochead">
-    <h1 class="crease crease-heading">${doc.title}</h1>
+    <h1 class="display display-heading">${doc.title}</h1>
     <p class="sub">${doc.sub}</p>
-    <div class="meta mono">
-      <span>${doc.group}</span><span class="d">·</span><span>${doc.minutes} min</span><span class="d">·</span><span>v${VERSION}</span>
+    <div class="meta">
+      <span>${doc.group}</span><span class="d">·</span><span>${doc.minutes} min read</span><span class="d">·</span><code class="ver">v${VERSION}</code>
     </div>
   </header>
 ${tocItems ? `  <details class="toc-m"><summary>On this page</summary>${tocItems}</details>\n` : ''}
@@ -631,11 +646,11 @@ ${bodyHtml}
 
   <nav class="pager">
     ${prev
-      ? `<a class="pg prev" href="${prev.slug}.html"><span class="lbl">← previous</span><span class="tt">${prev.title}</span></a>`
-      : `<a class="pg prev" href="index.html"><span class="lbl">← back</span><span class="tt">All docs</span></a>`}
+      ? `<a class="pg prev" href="${prev.slug}.html"><span class="lbl">Previous</span><span class="tt">${prev.title}</span></a>`
+      : `<a class="pg prev" href="index.html"><span class="lbl">Back</span><span class="tt">All docs</span></a>`}
     ${next
-      ? `<a class="pg next" href="${next.slug}.html"><span class="lbl">next →</span><span class="tt">${next.title}</span></a>`
-      : `<a class="pg next" href="index.html"><span class="lbl">index →</span><span class="tt">All docs</span></a>`}
+      ? `<a class="pg next" href="${next.slug}.html"><span class="lbl">Next</span><span class="tt">${next.title}</span></a>`
+      : `<a class="pg next" href="index.html"><span class="lbl">Index</span><span class="tt">All docs</span></a>`}
   </nav>
 </main>
 
@@ -663,7 +678,7 @@ ${renderHead({
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=Geist+Mono:wght@400..700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400..700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../doc.css?v=${VERSION}" />
 </head>
 <body>
@@ -672,12 +687,12 @@ ${renderNav('docs-index')}
 
 <main class="shell shell-wide docs-index">
   <div class="eyebrow">v${VERSION} · ${DOCS.length} documents</div>
-  <h1 class="index-title crease crease-heading">Documentation</h1>
+  <h1 class="index-title display display-heading">Documentation</h1>
   <p class="sub">Start with Install and Quickstart; the rest is grouped by what you are doing.</p>
   <nav class="docs-start" aria-label="Start using alpi">
-    <a href="INSTALL.html"><span>01 · install</span><strong>Put alpi on your machine <span aria-hidden="true">→</span></strong></a>
-    <a href="QUICKSTART.html"><span>02 · first run</span><strong>Talk to your first agent <span aria-hidden="true">→</span></strong></a>
-    <a href="PROFILES.html"><span>03 · make it yours</span><strong>Give each agent a role <span aria-hidden="true">→</span></strong></a>
+    <a href="INSTALL.html"><span>01 · Install</span><strong>Put alpi on your machine <span aria-hidden="true">→</span></strong></a>
+    <a href="QUICKSTART.html"><span>02 · First run</span><strong>Talk to your first agent <span aria-hidden="true">→</span></strong></a>
+    <a href="PROFILES.html"><span>03 · Make it yours</span><strong>Give each agent a role <span aria-hidden="true">→</span></strong></a>
   </nav>
 ${renderDocGroups('')}
 </main>
@@ -745,7 +760,7 @@ function renderPostList(posts) {
   if (!posts.length) return `    <p class="sub">No posts yet.</p>`;
   const [lead, ...rest] = posts;
   const leadHtml = `<a class="post-lead" href="${lead.slug}.html">
-      <span class="lead-m">latest · ${escapeHtml(formatPostDate(lead.date))} · ${lead.minutes} min read</span>
+      <span class="lead-m">Latest · ${escapeHtml(formatPostDate(lead.date))} · ${lead.minutes} min read</span>
       <h2>${escapeHtml(lead.title)}</h2>
       <p>${escapeHtml(lead.description)}</p>
     </a>`;
@@ -777,16 +792,16 @@ ${renderHead({
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=Geist+Mono:wght@400..700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400..700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../doc.css?v=${VERSION}" />
 </head>
 <body>
 
 ${renderNav(tag ? 'blog' : 'blog-index', tag ? { current: escapeHtml(tag) } : {})}
 
-<main class="shell shell-wide docs-index blog-index">
+<main class="shell docs-index blog-index">
   <div class="eyebrow">${posts.length} post${posts.length === 1 ? '' : 's'}</div>
-  <h1 class="index-title crease crease-heading">${heading}</h1>
+  <h1 class="index-title display display-heading">${heading}</h1>
   <p class="sub">On building, running and keeping control of your own agents.</p>
   <nav class="chips" aria-label="Topics">${tag ? '<a class="chip" href="index.html">All</a>' : '<span class="chip on" aria-current="page">All</span>'}${tagChips(tag && !POST_TAGS.slice(0, TOPIC_CHIPS).includes(tag) ? [...POST_TAGS.slice(0, TOPIC_CHIPS), tag] : POST_TAGS.slice(0, TOPIC_CHIPS), tag)}</nav>
 ${renderPostList(posts)}
@@ -815,7 +830,7 @@ ${renderHead({
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=Geist+Mono:wght@400..700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400..700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../doc.css?v=${VERSION}" />
 </head>
 <body>
@@ -824,9 +839,9 @@ ${renderNav('blog', { current: escapeHtml(post.title) })}
 
 <main class="shell doc">
   <header class="dochead">
-    <h1 class="crease crease-heading">${escapeHtml(post.title)}</h1>
+    <h1 class="display display-heading">${escapeHtml(post.title)}</h1>
     ${post.description ? `<p class="sub">${escapeHtml(post.description)}</p>` : ''}
-    <div class="meta mono"><span>${escapeHtml(formatPostDate(post.date))}</span><span class="d">·</span><span>${post.minutes} min read</span>${post.tags.length ? `<span class="chips">${tagChips(post.tags)}</span>` : ''}</div>
+    <div class="meta"><span>${escapeHtml(formatPostDate(post.date))}</span><span class="d">·</span><span>${post.minutes} min read</span>${post.tags.length ? `<span class="chips">${tagChips(post.tags)}</span>` : ''}</div>
   </header>
 
   <article id="md-target" class="md">
@@ -834,23 +849,24 @@ ${bodyHtml}
   </article>
 
   <aside class="post-cta">
+    ${twinBadge(40)}
     <div class="eyebrow">Get started</div>
     <h2 class="post-cta-h">Run your own private agent network.</h2>
-    <p class="post-cta-sub">One command. Local-first, source-available, no telemetry — your agents run on the machines you already own.</p>
+    <p class="post-cta-sub">Local-first, source-available, no telemetry. Your agents run on machines you already own.</p>
     <div class="cta-row">
-      <a class="btn btn-primary" href="../index.html#apps">$ uv tool install alpi-agent <span class="arr">→</span></a>
-      <a class="btn btn-ghost" href="https://github.com/satoshi-ltd/alpi">View source <span class="arr">→</span></a>
+      <a class="btn btn-primary" href="${DESKTOP_DOWNLOAD_URL}">${APPLE_GLYPH}Download for macOS</a>
+      ${copyButton({ text: INSTALL_CMD, shown: INSTALL_CMD, label: `Copy the install command: ${INSTALL_CMD}`, className: 'btn btn-ghost post-copy' })}
     </div>
-    <p class="post-cta-meta">BUSL-1.1 → Apache-2.0 (rolling)</p>
+    <p class="post-cta-meta">Free for individuals &middot; <a class="link-inline" href="../docs/LICENSE.html">Read the licence &#8594;</a></p>
   </aside>
 
   <nav class="pager">
     ${prev
-      ? `<a class="pg prev" href="${prev.slug}.html"><span class="lbl">← newer</span><span class="tt">${escapeHtml(prev.title)}</span></a>`
-      : `<a class="pg prev" href="index.html"><span class="lbl">← back</span><span class="tt">all posts</span></a>`}
+      ? `<a class="pg prev" href="${prev.slug}.html"><span class="lbl">Newer</span><span class="tt">${escapeHtml(prev.title)}</span></a>`
+      : `<a class="pg prev" href="index.html"><span class="lbl">Back</span><span class="tt">All posts</span></a>`}
     ${next
-      ? `<a class="pg next" href="${next.slug}.html"><span class="lbl">older →</span><span class="tt">${escapeHtml(next.title)}</span></a>`
-      : `<a class="pg next" href="index.html"><span class="lbl">index →</span><span class="tt">all posts</span></a>`}
+      ? `<a class="pg next" href="${next.slug}.html"><span class="lbl">Older</span><span class="tt">${escapeHtml(next.title)}</span></a>`
+      : `<a class="pg next" href="index.html"><span class="lbl">Index</span><span class="tt">All posts</span></a>`}
   </nav>
 </main>
 
@@ -862,12 +878,24 @@ ${renderFooter('../')}
 `;
 }
 
+const STAGE = [
+  ['desktop', 'stage-desk', 1280, 680, 'The alpi desktop app: a chat with doc, one approval waiting'],
+  ['phone', 'stage-phone', 410, 864, 'The alpi phone app: the profiles and workgroups on the roster'],
+];
+
+function stageHtml() {
+  const shots = STAGE.flatMap(([name, cls, w, h, alt]) => ['light', 'dark'].map(mode =>
+    `<img class="${cls} shot-${mode}" src="assets/stage-${name}-${mode}.png" width="${w}" height="${h}" alt="${alt}" loading="lazy" decoding="async">`));
+  return `<div class="stage">\n      ${shots.join('\n      ')}\n    </div>`;
+}
+
 // ── runtime JS (drops renderDoc — docs are pre-rendered at build) ──────────
 const runtimeJs = (() => {
   const full = readFileSync(join(TPL, 'doc.js'), 'utf8');
   // Keep everything up to the async function renderDoc declaration.
   const idx = full.indexOf('async function renderDoc');
-  return idx === -1 ? full : full.slice(0, idx).trimEnd() + '\n';
+  const runtime = idx === -1 ? full : full.slice(0, idx).trimEnd();
+  return `${runtime.replace("'__COPY_BUTTON__'", JSON.stringify(copyButton({ shown: 'Copy', label: 'Copy code' })))}\n${copyScript()}\n`;
 })();
 
 // ── build ────────────────────────────────────────────────────────────────────
@@ -883,16 +911,17 @@ writeFileSync(join(SITE, 'assets', 'alpi-brand.svg'), cardSvg({ height: 520, fon
 writeFileSync(join(SITE, 'assets', 'alpi-social.svg'), cardSvg({ height: OG_IMAGE_H, fontData }));
 
 copyTree(join(SITE, 'assets'), join(DIST, 'assets'));
-writeFileSync(join(DIST, 'brand.css'), brandCss());
+writeFileSync(join(DIST, 'brand.css'), brandCss() + copyCss() + '\n' + NAV_CSS);
 writeFileSync(join(DIST, 'tokens.css'), TOKENS_CSS);
 
-copyFileSync(join(TPL, 'theme.js'), join(DIST, 'theme.js'));
+writeFileSync(join(DIST, 'theme.js'), themeScript(readFileSync(join(TPL, 'theme.js'), 'utf8')));
 
 // Shared doc.css + baked doc.js
 copyFileSync(join(TPL, 'doc.css'), join(DIST, 'doc.css'));
 writeFileSync(join(DIST, 'doc.js'), runtimeJs);
 
 writeFileSync(join(DIST, 'demo.css'), DEMO_CSS);
+writeFileSync(join(DIST, 'gaze.js'), readFileSync(join(REPO, 'common', 'gaze.mjs'), 'utf8'));
 writeFileSync(join(DIST, 'demo.js'), DEMO_JS);
 
 // Landing — inject head, shared nav + docs grid, rewrite version refs
@@ -906,16 +935,35 @@ const landingHead = renderHead({
 const landing = readFileSync(join(TPL, 'landing.html'), 'utf8')
   .replace('<meta charset="utf-8" />\n<!-- SEO_HEAD (injected by build.mjs) -->', landingHead)
   .replace('<!-- NAV (injected by build.mjs) -->', renderNav('landing'))
+  .replace('</head>', `<style>\n${castCss()}\n</style>\n</head>`)
+  .replace('<!-- HERO_CAST -->', castHtml())
+  .replace('<!-- CAST_SCRIPT -->', castScript())
+  .replace('<!-- STATES -->', statesHtml())
+  .replace('<!-- STAGE -->', stageHtml())
+  .replace('<!-- RUNG 1 -->', `<span class="rung-pair inside">${liveMark({ shape: 'bell', state: 'working', size: 32, seed: 'rung1a' })}${liveMark({ shape: 'pebble', state: 'busy', size: 32, seed: 'rung1b' })}</span>`)
+  .replace('<!-- RUNG 2 -->', `<span class="rung-pair">${liveMark({ shape: 'bell', state: 'working', size: 32, seed: 'rung2a' })}<span aria-hidden="true">&#8644;</span>${liveMark({ shape: 'clover', state: 'busy', size: 32, seed: 'rung2b' })}</span>`)
+  .replace('<!-- RUNG 3 -->', honeycomb('bell', 44))
+  .replaceAll('<!-- CHECK -->', lucide('check', 'check'))
+  .replace('<!-- ICON clock -->', lucide('clock', 'clock'))
+  .replace(/<!-- MARK (\w+) (\d+) (\w+) -->/g, (_, shape, size, state) => liveMark({ shape, state, size: Number(size) }))
+  .replaceAll('<!-- APPLE -->', APPLE_GLYPH)
+  .replace('<!-- ANDROID -->', ANDROID_GLYPH)
+  .replace('<!-- COPY_HERO -->', copyButton({ text: INSTALL_CMD, shown: INSTALL_CMD, label: `Copy the install command: ${INSTALL_CMD}`, className: 'btn btn-ghost hero-copy' }))
+  .replace('<!-- COPY_PULL_UV -->', copyButton({ text: INSTALL_CMD, shown: INSTALL_CMD, label: `Copy the install command: ${INSTALL_CMD}`, className: 'pullcmd' }))
+  .replace('<!-- COPY_PULL_DOCKER -->', copyButton({ text: DOCKER_CMD, shown: DOCKER_CMD, label: `Copy the container command: ${DOCKER_CMD}`, className: 'pullcmd' }))
+  .replace('<!-- COPY_SCRIPT -->', copyScript())
+  .replace('<!-- BUNDLER_THUMBNAIL -->', `<template id="__bundler_thumbnail" data-bg-color="${palettes.light.bg}">${thumbnailSvg()}</template>`)
   // Match any v<semver> in the landing template so the hero, terminal
   // chrome, and footer all track pyproject.toml regardless of which
   // version the template was last saved with.
   .replace(/\bv\d+\.\d+\.\d+\b/g, `v${VERSION}`)
   .replace('src="demo.js"', `src="demo.js?v=${DEMO_JS_V}"`)
+  .replace('gaze.js?v=__VERSION__', `gaze.js?v=${VERSION}`)
   .replace('href="demo.css"', `href="demo.css?v=${DEMO_CSS_V}"`)
   // Desktop version goes AFTER the alpi-version sweep so the regex
   // above doesn't clobber it (desktop ships on its own track).
   .replace('<!-- FOOTER (injected by build.mjs) -->', renderFooter(''))
-  .replace(/<!-- PROFILE (\w+) (\d+) (\w+) -->/g, (_, fold, size, name) => profileName(fold, name, Number(size)))
+  .replace(/<!-- PROFILE (\w+) (\d+) (\w+)(?: (\w+))? -->/g, (_, shape, size, name, state) => profileName(shape, name, Number(size), state || ''))
   .replaceAll('<!-- DESKTOP_DOWNLOAD_URL -->', DESKTOP_DOWNLOAD_URL)
   .replaceAll('<!-- DESKTOP_RELEASES_URL -->', DESKTOP_RELEASES_URL)
   .replaceAll('<!-- DESKTOP_RELEASES_URL -->', DESKTOP_RELEASES_URL)

@@ -8,6 +8,7 @@ import {
   exportHtml,
   exportMarkdown,
 } from "../../../common/messageExport.mjs";
+import { SHAPES } from "../../../common/agentMarks.mjs";
 import { PRINT_ROOT_CLASS, clearPrintSheet, downloadMarkdown, mountPrintSheet, printMessage } from "./messageExport.js";
 
 const NOON = new Date(2026, 9, 25, 12).getTime() / 1000;
@@ -69,6 +70,15 @@ describe("common/messageExport", () => {
     expect(html).toContain("<strong>8 %</strong>");
     expect(html).not.toMatch(/position:\s*absolute/);
     expect(html.indexOf('<footer class="ax-foot">')).toBeGreaterThan(html.indexOf("<strong>8 %</strong>"));
+  });
+
+  it("signs the footer with Twin in the brand ink, one evenodd path and no polygons", () => {
+    const foot = exportArticle(MESSAGE).split('<footer class="ax-foot">')[1];
+    const svg = foot.slice(0, foot.indexOf("</svg>"));
+    expect(svg).toContain(`d="${SHAPES["alpi-twin-small"].d}M`);
+    expect(svg).toContain('fill="#14110c" fill-rule="evenodd"');
+    expect(svg.match(/<path/g)).toHaveLength(1);
+    expect(exportArticle(MESSAGE)).not.toContain("<polygon");
   });
 
   it("keeps the numbers of an ordered list, even when it starts past 1 or skips", () => {

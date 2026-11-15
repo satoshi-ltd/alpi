@@ -22,7 +22,9 @@ describe("Activity panel finish", () => {
   it("gives job rows exactly 40 px and group heads and chips 32 and 24 px", () => {
     expect(rule(".row")).toMatch(/height:\s*var\(--ctl-40\)/);
     expect(rule(".groupHead")).toMatch(/height:\s*var\(--ctl-32\)/);
-    expect(rule(".filter")).toMatch(/height:\s*var\(--ctl-24\)/);
+    expect(rule(".filter")).toMatch(/height:\s*var\(--ctl-32\)/);
+    expect(rule(".filter")).toMatch(/border-radius:\s*var\(--r-pill\)/);
+    expect(rule(".filter[data-on]")).toMatch(/background:\s*var\(--accent\)/);
   });
 
   it("stacks title and meta on two 16 px line boxes so the pair is 32 px in a 40 px row", () => {
@@ -31,11 +33,11 @@ describe("Activity panel finish", () => {
     expect(rule(".text")).not.toMatch(/gap:/);
   });
 
-  it("draws a timed run on one 32 px line under a 24 px day heading", () => {
+  it("draws a timed run on one 32 px line under a 32 px day heading, its time in sans", () => {
     expect(rule(".timedRow")).toMatch(/height:\s*var\(--ctl-32\)/);
-    expect(rule(".dayHead")).toMatch(/height:\s*var\(--ctl-24\)/);
-    expect(rule(".time")).toMatch(/font-family:\s*var\(--font-mono\)/);
-    expect(rule(".timedMain:focus-visible")).toMatch(/outline-offset:\s*calc\(var\(--focus-outline-offset\) \* -1\)/);
+    expect(rule(".dayHead")).toMatch(/height:\s*var\(--ctl-32\)/);
+    expect(rule(".time")).toMatch(/font-family:\s*var\(--font-sans\)/);
+    expect(rule(".timedMain:focus-visible")).toMatch(/outline-offset:\s*var\(--focus-inset\)/);
   });
 
   it("keeps the filters on one line and reveals Open and Retry on hover and focus", () => {
@@ -46,7 +48,7 @@ describe("Activity panel finish", () => {
 
   it("insets the focus ring on rows, group heads and chips like the menu rows", () => {
     for (const selector of [".filter:focus-visible", ".groupHead:focus-visible", "button.rowMain:focus-visible"]) {
-      expect(rule(selector)).toMatch(/outline-offset:\s*calc\(var\(--focus-outline-offset\) \* -1\)/);
+      expect(rule(selector)).toMatch(/outline-offset:\s*var\(--focus-inset\)/);
     }
   });
 
@@ -60,7 +62,7 @@ describe("Activity panel finish", () => {
     expect(sheet).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(sheet).not.toMatch(/\brgba?\(|\bhsla?\(/);
     expect(sheet).not.toMatch(/blur\(|gradient\(|backdrop-filter/);
-    expect(sheet).not.toMatch(/border-radius:\s+(?!var\(--r-xs\)|0)/);
+    expect(sheet).not.toMatch(/border-radius:\s+(?!var\(--r-(xs|control|surface|sheet|pill)\)|0)/);
     const px = [...sheet.matchAll(/:\s*[^;{]*?(\d+(?:\.\d+)?)px/g)].map((m) => m[0]);
     expect(px.filter((m) => !/(?:^|\s)(?:\.5|1)px$/.test(m))).toEqual([]);
   });

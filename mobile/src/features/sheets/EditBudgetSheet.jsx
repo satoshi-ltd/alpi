@@ -44,7 +44,7 @@ export function EditBudgetSheet({ open, onClose, workgroup, onSaved }) {
       open={open}
       onClose={onClose}
       title="Budget cap"
-      subtitle={`#${workgroup?.id ?? ''} · WEEKLY USD`}
+      subtitle={`#${workgroup?.id ?? ''} · weekly USD`}
       primaryAction={{ label: 'Save', onPress: save, disabled: !!error, loading: saving }}
     >
       <ScrollView contentContainerStyle={{ padding: space.s8 }} keyboardShouldPersistTaps="handled">

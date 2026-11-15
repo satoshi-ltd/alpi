@@ -7,6 +7,7 @@ import { isLaunchless } from '../../lib/workgroupPipelines';
 import { chainChips, orderedPipelines, pipelineTrigger, runSummary, runSummaryLine } from '../../../../common/pipelinePhases.mjs';
 import { useTheme } from '../../theme/ThemeContext';
 import { EMPTY } from '../../../../common/emptyCopy.mjs';
+import { code } from '../../theme/code';
 
 const STYLES = StyleSheet.create({
   head: {
@@ -55,7 +56,7 @@ function Phases({ chips, profileOf }) {
       {chips.map((chip, i) => (
         <View key={chip.slug} style={STYLES.step}>
           <PhaseChip chip={chip} profileOf={profileOf} />
-          {i < chips.length - 1 ? <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>→</Text> : null}
+          {i < chips.length - 1 ? <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>→</Text> : null}
         </View>
       ))}
     </View>
@@ -81,13 +82,13 @@ export function PipelinesSection({ workgroup, run = null, profileOf = null }) {
             <View key={chain.key}>
               {i > 0 ? <RowSeparator /> : null}
               <View style={STYLES.head}>
-                <Text style={{ fontFamily: fonts.monoSemibold, fontSize: fontSizes.md, color: colors.ink }}>{chain.key}</Text>
+                <Text style={{ ...code(fonts, fontSizes.md, 'semibold'), color: colors.ink }}>{chain.key}</Text>
                 <Text style={[STYLES.key, { fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }]}>
                   {pipelineTrigger(chain.isLaunch)}
                 </Text>
               </View>
               {runSummary(run, chain.key) ? (
-                <Text style={{ paddingHorizontal: space.s7, paddingTop: space.s2, fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink2 }}>
+                <Text style={{ paddingHorizontal: space.s7, paddingTop: space.s2, fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink2 }}>
                   {runSummaryLine(runSummary(run, chain.key))}
                 </Text>
               ) : null}

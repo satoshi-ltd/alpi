@@ -5,7 +5,7 @@ import { useNotify } from "../primitives/Notification.jsx";
 import { subscribeDaemonEvent } from "../lib/daemon-bus.js";
 import CodeView from "../primitives/CodeView.jsx";
 import shell from "../primitives/BrowseModal.module.css";
-import { BrowseBody, BrowseShell, useBrowseCloseGuard } from "../primitives/BrowseModal.jsx";
+import { BrowseBody, BrowseDetailHead, BrowseRow, BrowseShell, FactTable, useBrowseCloseGuard } from "../primitives/BrowseModal.jsx";
 import { PROFILE_PANELS } from "../lib/profilePanels.js";
 import { SkeletonReader, SkeletonRows } from "../primitives/Skeleton.jsx";
 import MarkdownBody from "../primitives/MarkdownBody.jsx";
@@ -14,19 +14,13 @@ import styles from "./MemoryModal.module.css";
 import { EMPTY } from "../../../common/emptyCopy.mjs";
 import { memoryBanner, memoryItem, memoryWord } from "../../../common/attention.mjs";
 import { MEMORY_FILES, entryNote, memoryEntries } from "../../../common/memoryEntries.mjs";
+import { memoryMeta, memoryShare } from "../../../common/panelRow.mjs";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export function entryDate(iso) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
   return m ? `${MONTHS[Number(m[2]) - 1]} ${Number(m[3])}` : String(iso || "");
-}
-
-export function humanBytes(n) {
-  const b = Number(n) || 0;
-  if (b < 1024) return `${b}b`;
-  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)}kb`;
-  return `${(b / (1024 * 1024)).toFixed(1)}mb`;
 }
 
 // `§` on its own line is alpi's v2 memory entry delimiter (alpi/memory.py).
@@ -40,13 +34,13 @@ export function matchesFile(file, query) {
   return [file.name, file.label, file.caption, file.content].filter(Boolean).join(" ").toLowerCase().includes(needle);
 }
 
-function Usage({ file, wide = false }) {
-  if (file.used == null || !file.limit) return <span className={shell.sizeTag}>{file.size}</span>;
-  const pct = Math.min(100, Math.round((file.used / file.limit) * 100));
+function Usage({ file }) {
+  const pct = memoryShare(file.used, file.limit);
+  if (pct == null) return null;
   return (
-    <span className={`${styles.usage} ${wide ? styles.usageWide : ""}`.trim()} data-over={file.over ? "" : undefined}>
-      <span className={styles.meter} aria-hidden><span style={{ width: `${pct}%` }} /></span>
-      <span className={styles.usageText}>{`${file.used.toLocaleString("en-US")} / ${file.limit.toLocaleString("en-US")}`}{wide ? ` · ${pct}%` : ""}</span>
+    <span className={styles.usage} data-over={file.over ? "" : undefined}>
+      <span className={styles.meter} aria-hidden><span style={{ width: `${Math.min(100, pct)}%` }} /></span>
+      <span className={styles.usageText}>{`${file.used.toLocaleString("en-US")} / ${file.limit.toLocaleString("en-US")} · ${pct}%`}</span>
     </span>
   );
 }
@@ -85,7 +79,7 @@ export function MemoryPanel({ open = true, profile, connectionId, canEdit = fals
           const u = usage?.[name];
           return {
             name, label, caption: caption(ownerName), raw, content: stripMemoryDelimiters(raw), entries: memoryEntries(raw),
-            size: humanBytes(raw.length), used: u?.used ?? null, limit: u?.limit ?? null,
+            used: u?.used ?? null, limit: u?.limit ?? null,
             pct: u?.pct ?? null, over: u?.over ?? false, updatedAt: u?.updated_at ?? null,
           };
         }));
@@ -204,23 +198,20 @@ export function MemoryPanel({ open = true, profile, connectionId, canEdit = fals
         </li>
       ) : filtered.map((f) => {
         const item = memoryItem(attention, f.name);
+        const { meta, tone } = memoryMeta(f.used, f.limit, item ? memoryWord(item) : f.over ? "over" : null);
+        const pct = memoryShare(f.used, f.limit);
         return (
-        <li key={f.name}>
-          <button
-            type="button"
-            className={`${shell.row} ${styles.fileRow} ${f.name === selected?.name ? shell.rowActive : ""}`}
-            onClick={() => pickFile(f)}
-            role="option"
-            aria-selected={f.name === selected?.name}
-          >
-            <span className={styles.fileHead}>
-              <span className={styles.fileLabel}>{f.label}</span>
-              <span className={styles.fileName}>{f.name}</span>
-              {item ? <span className={styles.flagWord}>{memoryWord(item)}</span> : null}
-            </span>
-            <Usage file={f} />
-          </button>
-        </li>
+          <BrowseRow
+            key={f.name}
+            title={f.label}
+            sub={f.caption}
+            meta={meta}
+            metaTone={tone}
+            bar={pct == null ? null : { pct, over: !!f.over || !!item?.over }}
+            active={f.name === selected?.name}
+            onSelect={() => pickFile(f)}
+            label={[f.label, f.name, meta].filter(Boolean).join(", ")}
+          />
         );
       })}
     </ul>
@@ -242,25 +233,19 @@ export function MemoryPanel({ open = true, profile, connectionId, canEdit = fals
     >
       {active ? (
         <>
-          <div className={shell.detailMeta}>
-            <span className={styles.fileLabelLg}>{active.label}</span>
-            <span className={styles.fileName}>{active.name}</span>
-            <span className={shell.detailMetaSpacer} />
-            {editing ? (
+          <BrowseDetailHead
+            title={active.label}
+            state={flagged ? memoryWord(flagged) : active.over ? "over" : null}
+            stateTone={flagged || active.over ? "danger" : null}
+            id={active.name}
+            actions={editing ? (
               <>
                 <IconBtn tip={conflicted ? "Overwrite" : "Save"} onClick={save} disabled={saving}><I.Check /></IconBtn>
                 <IconBtn tip="Cancel" onClick={cancelEdit} disabled={saving}><I.X /></IconBtn>
               </>
-            ) : (
-              <>
-                {active.updatedAt ? (
-                  <span className={styles.detailInfo}>{shortDate(active.updatedAt)}</span>
-                ) : null}
-                {canEdit ? <IconBtn tip="Edit" onClick={startEdit}><EditIcon /></IconBtn> : null}
-              </>
-            )}
-          </div>
-          <div className={shell.detailScroll}>
+            ) : canEdit ? <IconBtn tip="Edit" onClick={startEdit}><EditIcon /></IconBtn> : null}
+          />
+          <div className={shell.detailBody}>
             {banner && !editing ? (
               <AlertBanner lead={banner.lead} detail={banner.detail} action={canEdit ? "Edit" : null} onAction={startEdit} />
             ) : null}
@@ -268,10 +253,7 @@ export function MemoryPanel({ open = true, profile, connectionId, canEdit = fals
               <CodeView editable text={draft} onChange={setDraft} ariaLabel={`Edit ${active.name}`} />
             ) : active.entries.length ? (
               <>
-                <div className={styles.caption}>
-                  <span>{active.caption}</span>
-                  <Usage file={active} wide />
-                </div>
+                <MemoryFacts file={active} />
                 <ol className={styles.entries}>
                   {active.entries.map((entry, i) => (
                     <li key={i} className={styles.entry}>
@@ -282,7 +264,10 @@ export function MemoryPanel({ open = true, profile, connectionId, canEdit = fals
                 </ol>
               </>
             ) : (
-              <em className={styles.emptyNote}>(empty)</em>
+              <>
+                <MemoryFacts file={active} />
+                <em className={styles.emptyNote}>(empty)</em>
+              </>
             )}
           </div>
         </>
@@ -292,6 +277,19 @@ export function MemoryPanel({ open = true, profile, connectionId, canEdit = fals
         <div className={shell.detailEmpty}>Select a file.</div>
       )}
     </BrowseBody>
+  );
+}
+
+function MemoryFacts({ file }) {
+  return (
+    <FactTable
+      rows={[
+        { label: "About", value: file.caption },
+        { label: "Usage", value: memoryShare(file.used, file.limit) == null ? null : <Usage file={file} /> },
+        { label: "Entries", value: String(file.entries.length) },
+        { label: "Updated", value: file.updatedAt ? shortDate(file.updatedAt) : null },
+      ]}
+    />
   );
 }
 

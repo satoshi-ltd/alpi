@@ -32,13 +32,13 @@
   text-align: left;
   background: transparent;
   border: 0;
-  border-radius: var(--r-xs);
+  border-radius: var(--r-control);
   padding: var(--sp-12) var(--sp-12);
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: var(--sp-12);
-  transition: background var(--dur-1) var(--ease);
+  transition: background-color var(--state-out);
   font-family: var(--font-sans);
 }
 
@@ -65,8 +65,8 @@
 }
 
 .rowIcon {
-  width: var(--ctl-24);
-  height: var(--ctl-24);
+  width: var(--ctl-32);
+  height: var(--ctl-32);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -75,17 +75,17 @@
 }
 
 .radio {
-  width: var(--ctl-24);
-  height: var(--ctl-24);
+  width: var(--ctl-32);
+  height: var(--ctl-32);
   border-radius: 50%;
   border: 1.5px solid var(--ink-3);
   flex-shrink: 0;
 }
 
 .checkbox {
-  width: var(--ctl-24);
-  height: var(--ctl-24);
-  border-radius: var(--r-xs);
+  width: var(--ctl-32);
+  height: var(--ctl-32);
+  border-radius: var(--r-pill);
   border: 1.5px solid var(--ink-3);
   flex-shrink: 0;
   display: inline-flex;
@@ -108,9 +108,8 @@
   margin-top: var(--sp-8);
   padding: var(--sp-12) var(--sp-16);
   border: .5px solid transparent;
-  border-radius: var(--r-xs);
+  border-radius: var(--r-control);
   background: var(--well);
-  box-shadow: var(--well-edge);
 }
 
 .otherInput {
@@ -140,8 +139,8 @@
 }
 
 .otherBlock:focus-within {
-  outline: none;
   border-color: transparent;
   background: var(--well-focus);
-  box-shadow: var(--well-ring);
+  box-shadow: var(--field-focus);
+  outline: none;
 }

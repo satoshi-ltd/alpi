@@ -3,7 +3,7 @@ import { formatCostLine } from "../../../../common/format.mjs";
 import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
-import { mobile, radii, space, typography } from '../../theme/tokens';
+import { mobile, radii, space, typeLeading, typography } from '../../theme/tokens';
 
 import { Fold } from '../../components/Fold';
 import { Icon } from '../../components/Icon';
@@ -72,7 +72,7 @@ function Stamp({ ts }) {
   const { colors, fonts, fontSizes } = useTheme();
   if (!ts) return null;
   return (
-    <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.sm, lineHeight: fontSizes.sm, color: colors.ink3 }}>{ts}</Text>
+    <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, lineHeight: Math.round(fontSizes.xs * typeLeading.meta), color: colors.ink3 }}>{ts}</Text>
   );
 }
 
@@ -83,11 +83,11 @@ const S = StyleSheet.create({
   bubble: {
     maxWidth: '82%',
     paddingHorizontal: space.s7,
-    paddingVertical: space.s5,
-    borderTopLeftRadius: radii.xs,
-    borderTopRightRadius: radii.xs,
-    borderBottomRightRadius: radii.xs,
-    borderBottomLeftRadius: radii.xs,
+    paddingVertical: space.s4,
+    borderTopLeftRadius: radii.surface,
+    borderTopRightRadius: radii.surface,
+    borderBottomRightRadius: radii.surface,
+    borderBottomLeftRadius: radii.surface,
   },
   wgBubble: {
     maxWidth: '90%',
@@ -108,9 +108,9 @@ export function ProfileUserMessage({ text, ts, attachments, onLongPress, profile
     () => [
       S.bubble,
       twoPane ? S.paneCap : null,
-      { backgroundColor: colors.selected },
+      { backgroundColor: colors.fill },
     ],
-    [colors.selected, twoPane],
+    [colors.fill, twoPane],
   );
   return (
     <View style={S.userWrap}>
@@ -158,7 +158,7 @@ export function ProfileAssistantMessage({ text, ts, attachments, onLongPress, on
   );
 }
 
-export function WorkgroupMessage({ body, speakerName, speakerAccent, speakerFold, isFromHub, seq, cost, onLongPress, profile }) {
+export function WorkgroupMessage({ body, speakerName, speakerAccent, speakerShape, isFromHub, seq, cost, onLongPress, profile }) {
   const { colors, fonts, fontSizes } = useTheme();
   const { twoPane } = usePane();
   const bg = mixHex(speakerAccent ?? colors.ink3, 0.11, colors.bgPane);
@@ -167,12 +167,12 @@ export function WorkgroupMessage({ body, speakerName, speakerAccent, speakerFold
   const seqStr = seq != null ? `#${seq}` : null;
   const costStr = cost ? formatCostLine(cost) : null;
 
-  const metaStyle = { fontFamily: fonts.monoMedium, fontSize: fontSizes.sm, lineHeight: fontSizes.sm, color: colors.ink3 };
+  const metaStyle = { fontFamily: fonts.sans.medium, fontSize: fontSizes.sm, lineHeight: fontSizes.sm, color: colors.ink3 };
   const SpeakerEl = (
     <View style={S.speakerRow}>
-      {!isFromHub ? <Fold fold={speakerFold} color={speakerAccent} /> : null}
+      {!isFromHub ? <Fold shape={speakerShape} color={speakerAccent} /> : null}
       <Text style={metaStyle}>{speakerName}</Text>
-      {isFromHub ? <Fold fold={speakerFold} color={speakerAccent} /> : null}
+      {isFromHub ? <Fold shape={speakerShape} color={speakerAccent} /> : null}
     </View>
   );
   const SeqEl = seqStr ? <Text style={metaStyle}>{seqStr}</Text> : null;
@@ -182,7 +182,7 @@ export function WorkgroupMessage({ body, speakerName, speakerAccent, speakerFold
     () => [
       S.wgBubble,
       twoPane ? S.paneCap : null,
-      { borderRadius: radii.xs },
+      { borderRadius: radii.surface },
       { backgroundColor: bg },
     ],
     [bg, right, twoPane],

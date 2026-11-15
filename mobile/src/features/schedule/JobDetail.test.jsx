@@ -49,7 +49,6 @@ vi.mock('../../hooks/useActivity', async (importOriginal) => ({ ...(await import
 vi.mock('../../lib/EndpointContext', () => ({ useEndpoint: () => ({ call: h.call }) }));
 vi.mock('../../lib/clipboard', () => ({ copyText: async (text) => { h.copied.push(text); return true; } }));
 vi.mock('../profile/PanelHeader', () => ({ PanelHeader: ({ right }) => React.createElement('header', {}, right) }));
-vi.mock('../profile/StatusWord', () => ({ StatusWord: ({ word, danger }) => React.createElement('i', { 'data-status': word, 'data-danger': String(!!danger) }) }));
 vi.mock('../../theme/ThemeContext', async () => {
   const tokens = await import('../../theme/tokens');
   return {
@@ -112,10 +111,13 @@ describe('job page status', () => {
     expect(statusOf(JOB, true).word).toBe('running');
   });
 
-  it('draws the word and leaves the raw id off the page', () => {
+  it('heads the page with the title, the state word and the id to copy', async () => {
     mount();
-    expect(document.querySelector('[data-status]').getAttribute('data-status')).toBe('failed');
-    expect(screen.queryByText(JOB.id)).toBeNull();
+    expect(screen.getByText('failed', { selector: 'span' })).toBeTruthy();
+    expect(screen.getByText(JOB.id)).toBeTruthy();
+    await act(async () => { fireEvent.click(screen.getByLabelText(`Copy ${JOB.id}`)); });
+    expect(h.copied).toContain(JOB.id);
+    expect(document.querySelector('[data-status]')).toBeNull();
   });
 });
 
@@ -124,7 +126,7 @@ describe('running', () => {
     h.activity = { running: [{ kind: 'turn', profile: 'scout', source: 'schedule', job_id: JOB.id, started_at: NOW / 1000 - 42 }] };
     mount();
     expect(screen.getByText(/^Running · 0:4\d$/).disabled).toBe(true);
-    expect(document.querySelector('[data-status]').getAttribute('data-status')).toBe('running');
+    expect(screen.getByText('running', { selector: 'span' })).toBeTruthy();
     expect(screen.getByText('Pause').disabled).toBe(true);
   });
 
@@ -179,6 +181,15 @@ describe('running', () => {
     fireEvent.click(screen.getByText('Run now'));
     await waitFor(() => expect(h.toast).toHaveBeenCalledWith(expect.objectContaining({ kind: 'danger' })));
     expect(screen.getByText('Run now').disabled).toBe(false);
+  });
+});
+
+describe('next run', () => {
+  it('adds only the countdown to the next fire time of a failed job, never a state word', () => {
+    mount();
+    const text = document.body.textContent;
+    expect(text).toMatch(/ · in (19|20)h/);
+    expect(text).not.toMatch(/ · failed/);
   });
 });
 

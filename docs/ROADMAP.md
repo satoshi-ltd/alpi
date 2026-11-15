@@ -90,18 +90,6 @@ _None._
 
 ### Decisions
 
-- **FLOAT.D1** — How the phone's floating surfaces step up in dark
-  `decision · mobile · creator · normal`
-  note: moving sheets, dialogs, prompts and toasts to `bgElev` (#202020 in dark, board DS.FLOATING) leaves
-  everything inside them without a step: wells already fill with `bgElev` (#202020 on #202020, only a
-  1.6:1 edge), and `field` blocks (#1f1f1f: tool-detail code, the typed-confirm chip, the approval command,
-  the pairing link) read 1.01:1. Desktop leaves its wells on `bg-elev` inside modals (1.5:1 accepted by `uxTokens.test.js:101`) and
-  recesses only the approval command to `bgInput`. The board's edge (`ink4` / `line2`,
-  2.07:1 / 1.6:1) is also below the phone's own 3:1 rule in `tokens.test.js`, which desktop relaxes to 2:1 / 1.5:1.
-  accept: decide (1) whether wells and field blocks inside a floating surface recess to `bgPane` in dark, and
-  (2) the edge: keep 0.5 pt `ink3` (3:1) or take desktop's 1 px `ink4` / `line2` and relax the phone test.
-  Then DS.FLOATING returns to Queue with that spec.
-
 - **SCOPE.D1** — Does `session_scope: device` bind an admin connection?
   `decision · alpi · creator · high`
   note: `can_read_session` retains the admin bypass, so a remote admin with
@@ -220,8 +208,6 @@ _None._
 ## Proposed
 
 ### Client review 2026-11-05
-
-The purely visual part of this review still open is board DS.BANNERS on the design kit's Proposals page.
 
 - **DESK.WORKGROUP-GONE** — The open workgroup falls back to the list when it leaves the roster
   `bug · desktop · agent · normal`
@@ -518,6 +504,18 @@ The purely visual part of this review still open is board DS.BANNERS on the desi
   note: `Segmented.jsx` sends `accessibilityState={{ selected: on }}` with `accessibilityRole="radio"`; Android
   TalkBack reads a radio's state from `checked`, so the chosen theme or text size is not announced.
   accept: `Segmented.test.jsx` asserts the selected cell carries `accessibilityState.checked: true` and the others `false`.
+
+### Found while shipping the new identity
+
+- **CI.GENERATED-DRIFT** — A push to main fails when a generated file is stale
+  `chore · alpi · agent · normal`
+  note: `alpi/mark_shapes.py` (`scripts/sync_marks.py --check`), the app icons (`scripts/gen_icons.py --check`)
+  and the design kit (`design/drift.py`) are generated from `common/*.mjs`, but only a local `scripts/validate.py`
+  checks them. A push that changes only `common/*.mjs` runs `clients.yml` (the JS suites) and skips `publish.yml`,
+  whose path filter needs `alpi/**`, so a stale console mark, icon or board reaches main unseen. Build tooling
+  only: no product bump.
+  accept: a workflow that runs on pushes and PRs touching `common/**`, `design/**` or the generators runs the three
+  checks and fails on drift; a release-script test asserts the workflow's path filter and commands.
 
 ### Harness, demand-gated
 

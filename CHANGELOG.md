@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.19.0 — 2026-11-15 — a new identity
+
+- Every profile is drawn as one of twelve shapes with eyes, in the profile's colour, on the console banner and in `alpi profile show`; workgroups are neutral.
+- The console palette is flatter: a single background, a subtle fill for raised surfaces and slightly lighter secondary text.
+
 ## v0.18.10 — 2026-11-13 — reports are replies you export to PDF
 
 - Asked in the desktop or phone app for a report, summary or analysis as a PDF, the agent now writes it as its reply, with headings, tables and charts, and tells you to export it (Download → PDF on desktop, the long-press menu on the phone), so it prints styled by alpi instead of as a hand-made file.

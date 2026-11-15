@@ -521,8 +521,18 @@ the primary interactive surface. Replies stream in and settle as Markdown;
 each turn's tool calls collapse into one `N steps · Xs` row that opens to
 per-call cards, reasoning collapses into a `Thought for Xs` row, and the
 layout collapses labels below 60 columns. `tui.accent` recolours highlights
-and the profile name, and `tui.fold` names the origami model that marks the profile
-in the apps and the console beside its colour (the diamond until you choose one; set it with `/fold` in the TUI or `alpi setup → Appearance`; the default profile is always the alpaca in the brand accent and ignores both). The console draws the object as half-block art in `alpi profile show` and the `alpi setup` header and as a one-cell glyph on the active entry of profile and TUI lists, only on a truecolor UTF-8 terminal; elsewhere it keeps the diamond. `tui.theme` picks dark or light.
+and the profile name, and `tui.shape` is the shape that marks the profile
+in the apps and the console beside its colour: one of round, squircle, drop, dome, pill, clover, cloud, bean, pebble,
+arch, heart, bell; `round` until you choose one. The pair is named by colour and shape (`blue bell`). Set it with
+`/shape [shape] [colour]` in the TUI, with `alpi setup → Appearance` or from the apps; each takes the shape names only
+(an old origami id such as `shield` is refused) and saves `tui.shape`. An older config that still stores `tui.fold`
+reads as its shape (diamond round, shield bell, house arch, heart heart, plane drop, rocket pill, star clover, box
+squircle, bulb bean, tree pebble, crown dome, feather cloud; anything else round) and is not rewritten by loading it;
+saving the shape writes `tui.shape` and drops `tui.fold`, keeping every other key. The default profile is always Twin, alpi's brand
+mark, in the brand ink (`twin (brand mark)`), ignores both keys and refuses to change them. The console draws the mark,
+flat half-block art with two eyes filled in the theme's paper ink, beside the name in `alpi profile show` and in the `alpi setup` header, and a
+one-cell shape glyph on the active entry of profile and TUI lists, only on a truecolor UTF-8 terminal; elsewhere it
+keeps the diamond. `tui.theme` picks dark or light.
 
 **What the top bar shows (left to right):**
 
@@ -553,7 +563,7 @@ current context. Hints drop first when the terminal is narrow.
 | `tui.show_tokens` | `true` | bool | next session |
 | `tui.show_reasoning` | `true` | bool | next session |
 | `tui.accent` | `#f0b447` (the amber profile colour; the brand accent is ink, `#f3efe6` dark and `#14110c` light, for the default profile) | CSS color (hex / named / rgb) | next session |
-| `tui.fold` | `diamond` | `diamond` \| `house` \| `heart` \| `plane` \| `shield` \| `rocket` \| `star` \| `tree` \| `box` \| `crown` \| `feather` \| `bulb` | next client refresh |
+| `tui.shape` | `round` | `round` \| `squircle` \| `drop` \| `dome` \| `pill` \| `clover` \| `cloud` \| `bean` \| `pebble` \| `arch` \| `heart` \| `bell` (a legacy `tui.fold` is read as its shape) | next client refresh |
 | `tui.theme` | `dark` | `dark` \| `light` | next session |
 | `tui.auto_resume` | `false` | bool | next launch |
 

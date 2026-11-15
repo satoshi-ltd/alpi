@@ -12,7 +12,7 @@ export function PanelHeader({ profile, section, count = null, onBack, right }) {
       subtitle={count != null ? `${section} · ${count}` : section}
       onBack={onBack}
       accent={accent}
-      leadingGlyph={<Fold fold={summary?.fold} color={accent} size="md" />}
+      leadingGlyph={<Fold shape={summary?.shape} color={accent} size="md" />}
       right={right}
     />
   );

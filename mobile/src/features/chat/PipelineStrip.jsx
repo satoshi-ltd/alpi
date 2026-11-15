@@ -91,7 +91,7 @@ function Who({ name, note, profileOf }) {
   return (
     <View style={STYLES.who}>
       <PhaseMark name={name} profileOf={profileOf} size={16} />
-      <Text style={{ fontFamily: fonts.monoSemibold, fontSize: fontSizes.md, color: colors.ink }}>@{name}</Text>
+      <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, color: colors.ink }}>@{name}</Text>
       <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}>{note}</Text>
     </View>
   );
@@ -100,7 +100,7 @@ function Who({ name, note, profileOf }) {
 function PhaseDetail({ chip, profileOf, jumpable }) {
   const { colors, fonts, fontSizes } = useTheme();
   const cost = phaseCostLine(chip.cost);
-  const meta = { fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink2 };
+  const meta = { fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink2 };
   return (
     <View style={STYLES.detail}>
       {chip.owner ? <Who name={chip.owner} note="declared owner" profileOf={profileOf} /> : null}

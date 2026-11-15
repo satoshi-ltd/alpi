@@ -10,12 +10,13 @@ vi.mock('react-native', () => ({
 }));
 vi.mock('../theme/ThemeContext', () => ({
   useTheme: () => ({
-    colors: { hover: 'HOVER', ink: 'INK', ink2: 'INK2', ink3: 'INK3', success: '#00aa00', successText: 'GREEN', danger: '#aa0000', dangerText: 'RED', warning: '#ff8800', warningText: 'ORANGE' },
-    fonts: { monoMedium: 'm' },
-    fontSizes: { xs: 11, sm: 12 },
+    colors: { hover: 'HOVER', fill: 'FILL', card: 'CARD', bgPane: 'PANE', ink: 'INK', ink2: 'INK2', ink3: 'INK3', success: '#00aa00', successText: 'GREEN', danger: '#aa0000', dangerText: 'RED', warning: '#ff8800', warningText: 'ORANGE' },
+    fonts: { monoMedium: 'm', sans: { medium: 'sm' } },
+    fontSizes: { xs: 12, sm: 14 },
   }),
 }));
-vi.mock('./groupTone', () => ({ useGroundTone: () => '#ffffff' }));
+const ground = vi.hoisted(() => ({ tone: '#ffffff' }));
+vi.mock('./groupTone', () => ({ useGroundTone: () => ground.tone }));
 
 import { Pill } from './Pill';
 
@@ -26,27 +27,37 @@ const parts = (container) => {
 };
 
 describe('Pill', () => {
-  it('keeps the desktop Chip metrics: 24 pt tall, an 8 pt dot and the 11 pt mono label', async () => {
+  it('recesses a plain chip to the pane when it sits on a card or a fill, so fill never sits on fill', () => {
+    for (const tone of ['CARD', 'FILL']) {
+      ground.tone = tone;
+      expect(parts(render(<Pill>12 KB</Pill>).container).bg).toBe('PANE');
+      cleanup();
+    }
+    ground.tone = '#ffffff';
+    expect(parts(render(<Pill>12 KB</Pill>).container).bg).toBe('FILL');
+  });
+
+  it('draws the chip at the 32 pt compact height with an 8 pt dot and a 14 pt sans label', async () => {
     const { dotScale } = await import('../theme/tokens');
     const { container } = render(<Pill tone="on">running</Pill>);
     const [pill, ...rest] = container.querySelectorAll('div');
-    expect(pill.getAttribute('data-h')).toBe('24');
+    expect(pill.getAttribute('data-h')).toBe('32');
     expect(rest.find((el) => el.getAttribute('data-w')).getAttribute('data-w')).toBe(String(dotScale.md));
     const label = container.querySelector('span');
-    expect(label.getAttribute('data-size')).toBe('11');
-    expect(label.getAttribute('data-font')).toBe('m');
+    expect(label.getAttribute('data-size')).toBe('14');
+    expect(label.getAttribute('data-font')).toBe('sm');
   });
 
-  it('draws warn like the desktop Chip: neutral ground, ink text, a warning dot', () => {
+  it('draws warn like the desktop Chip: neutral fill, ink text, a warning dot', () => {
     const { container } = render(<Pill tone="warn">warning</Pill>);
-    expect(parts(container)).toEqual({ bg: 'HOVER', fg: 'INK', dot: '#ff8800' });
+    expect(parts(container)).toEqual({ bg: 'FILL', fg: 'INK', dot: '#ff8800' });
   });
 
   it('tints the ground for on and err and puts their colour in the dot', () => {
     const on = parts(render(<Pill tone="on">on</Pill>).container);
     expect(on.fg).toBe('GREEN');
     expect(on.dot).toBe('#00aa00');
-    expect(on.bg).not.toBe('HOVER');
+    expect(on.bg).not.toBe('FILL');
     cleanup();
     const err = parts(render(<Pill tone="err">error</Pill>).container);
     expect(err.fg).toBe('RED');
@@ -56,6 +67,6 @@ describe('Pill', () => {
   it('gives off a grey dot and a plain pill none', () => {
     expect(parts(render(<Pill off>off</Pill>).container).dot).toBe('INK3');
     cleanup();
-    expect(parts(render(<Pill>12 KB</Pill>).container)).toEqual({ bg: 'HOVER', fg: 'INK2', dot: null });
+    expect(parts(render(<Pill>12 KB</Pill>).container)).toEqual({ bg: 'FILL', fg: 'INK2', dot: null });
   });
 });

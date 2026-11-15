@@ -19,10 +19,9 @@
   display: block;
   width: 100%;
   padding: 0;
-  border: .5px solid var(--line);
-  border-radius: var(--r-xs);
+  border-radius: var(--r-surface);
   overflow: hidden;
-  background: none;
+  background: var(--card);
   cursor: pointer;
 }
 

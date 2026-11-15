@@ -135,7 +135,7 @@ older daemons that contain a final `token` remain readable.
   `mobile`) live in `tokens.js` and are imported directly. Theme-
   dependent values (`colors`, `shadow`) come from `useTheme()`.
   Profile colours come only from `host.profile.summaries`; a profile
-  without one falls back to `FALLBACK_ACCENT` from `common/folds.mjs`.
+  without one falls back to `FALLBACK_ACCENT` from `common/shapes.mjs`.
 
 ## Performance notes
 

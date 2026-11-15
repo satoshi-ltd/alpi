@@ -11,6 +11,12 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.10.0 — 2026-11-15 — a new identity
+
+- Profiles are twelve shapes with eyes in one palette, workgroups are neutral, and banners are flat.
+- Surfaces, buttons, chips, panel rows and charts follow the new flat design system, in light and dark.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.9.23 — 2026-11-12 — one chip rule
 
 - State pills (a peer online, auto-read on) are drawn by the same chip as every other state, with its dot; the count badge is mono semibold at the shared badge size.

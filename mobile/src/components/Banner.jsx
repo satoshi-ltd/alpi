@@ -2,17 +2,9 @@ import { Pressable, Text, View } from 'react-native';
 import { mobile, space } from '../theme/tokens';
 
 import { useTheme } from '../theme/ThemeContext';
+import { LEAD_DOT, bannerTones } from './bannerTones';
 import { Dot } from './Dot';
 import { Icon } from './Icon';
-
-const TONE = {
-  danger: 'danger',
-  warning: 'warning',
-  info: 'ink3',
-  success: 'success',
-};
-
-const ICON_KINDS = new Set(['danger', 'warning']);
 
 function BannerAction({ label, onPress, color }) {
   const { fonts, fontSizes } = useTheme();
@@ -29,12 +21,11 @@ function BannerAction({ label, onPress, color }) {
 }
 
 export function Banner({ kind = 'info', children, action, onAction, secondaryAction, onSecondaryAction }) {
-  const { colors, fonts, fontSizes } = useTheme();
-  const tint = colors[TONE[kind]] ?? colors.ink3;
-  const textTint = colors[`${TONE[kind]}Text`] ?? colors.ink3;
+  const { colors, fonts, fontSizes, mode } = useTheme();
+  const { tone, surface, text, lead } = bannerTones(kind, colors, mode);
   return (
     <View
-      accessibilityRole={kind === 'danger' ? 'alert' : undefined}
+      accessibilityRole={tone === 'danger' ? 'alert' : undefined}
       style={{
         flexDirection: 'row',
         alignItems: 'center',
@@ -42,10 +33,10 @@ export function Banner({ kind = 'info', children, action, onAction, secondaryAct
         paddingLeft: space.s7,
         paddingRight: space.s4,
         paddingVertical: space.s2,
-        backgroundColor: `${tint}1f`,
+        backgroundColor: surface,
       }}
     >
-      {ICON_KINDS.has(kind) ? <Icon name="triangle-alert" size="xs" color={tint} /> : <Dot color={tint} />}
+      {LEAD_DOT[tone] ? <Dot color={lead} /> : <Icon name="triangle-alert" size="xs" color={lead} />}
       <Text
         style={{
           flex: 1,
@@ -57,7 +48,7 @@ export function Banner({ kind = 'info', children, action, onAction, secondaryAct
         {children}
       </Text>
       {secondaryAction ? <BannerAction label={secondaryAction} onPress={onSecondaryAction} color={colors.ink2} /> : null}
-      {action ? <BannerAction label={action} onPress={onAction} color={textTint} /> : null}
+      {action ? <BannerAction label={action} onPress={onAction} color={text} /> : null}
     </View>
   );
 }

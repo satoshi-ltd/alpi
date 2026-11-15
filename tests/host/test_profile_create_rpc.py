@@ -88,4 +88,4 @@ async def test_each_profile_created_from_an_app_wears_the_next_pair(monkeypatch,
         assert resp["result"]["ok"] is True
         worn.append(config.load(tmp_path / "profiles" / name).tui)
     assert [appearance.accent_name(t["accent"]) for t in worn] == list(appearance.ROULETTE[:3])
-    assert [t["fold"] for t in worn] == [appearance.FOLD_OF[c] for c in appearance.ROULETTE[:3]]
+    assert [t["shape"] for t in worn] == [appearance.SHAPE_OF[c] for c in appearance.ROULETTE[:3]]

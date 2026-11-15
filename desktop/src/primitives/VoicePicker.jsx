@@ -1,6 +1,6 @@
 import { useState } from "react";
 import Popover from "./Popover.jsx";
-import { Selectish, Mono, CheckIcon } from "./index.js";
+import { Selectish, CheckIcon } from "./index.js";
 import styles from "./VoicePicker.module.css";
 
 export default function VoicePicker({
@@ -38,7 +38,7 @@ export default function VoicePicker({
                 </span>
                 <span className={styles.body}>
                   <span className={styles.name}>{v.name}</span>
-                  <Mono className={styles.desc}>{v.desc}</Mono>
+                  <span className={styles.desc}>{v.desc}</span>
                 </span>
               </button>
             );

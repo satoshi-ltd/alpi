@@ -39,12 +39,11 @@
   max-width: 92vw;
   max-height: 82vh;
   object-fit: contain;
-  border-radius: var(--r-xs);
-  box-shadow: var(--shadow);
+  border-radius: var(--r-surface);
 }
 
 .caption {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
   color: rgba(255, 255, 255, 0.82);
   text-align: center;

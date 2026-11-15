@@ -23,7 +23,7 @@ import {
   SettingsHero,
   Tip,
 } from "../../primitives/index.js";
-import { ALPACA_FOLD } from "../../../../common/folds.mjs";
+import { TWIN } from "../../lib/brandMark.js";
 import { profileLabel } from "../../lib/profile-display.js";
 import { modelLabel } from "../../lib/modelLabel.js";
 import RefreshBar from "../../primitives/RefreshBar.jsx";
@@ -71,10 +71,18 @@ import styles from "./Settings.module.css";
 import { copyText } from "../../lib/clipboard.js";
 import { useSettingsDirty } from "../../lib/settingsDirty.js";
 import { emptyLine } from "../../../../common/emptyCopy.mjs";
-import { normaliseFold } from "../../../../common/folds.mjs";
+import { profileShape } from "../../../../common/shapes.mjs";
+import { applyEdits, saveOptimistic, useProfileEdits } from "../../lib/optimisticProfiles.js";
 
 // storage stays out: its os.walk dominates snapshot latency, so StorageField fetches it independently.
 const SNAPSHOT_SECTIONS = ["detail", "usage", "workgroups", "email"];
+
+const CHOICE_PATHS = {
+  model: "model",
+  accent: "accent",
+  shape: "shape",
+  reasoningEffort: "model_reasoning_effort",
+};
 
 function initialDraft(profile) {
   return {
@@ -82,7 +90,7 @@ function initialDraft(profile) {
     workspace: profile.workspace ?? "",
     model: profile.model ?? "",
     accent: (profile.accent ?? "").toLowerCase(),
-    fold: normaliseFold(profile.fold),
+    shape: profileShape(profile),
     reasoningEffort: profile.model_reasoning_effort ?? "",
   };
 }
@@ -117,15 +125,16 @@ export default function ProfileDetail({
     connId, name, { refreshOnMount: true, prefetched: detailPre, defer: snapPending },
   );
   const refreshDetail = detailPre !== undefined ? snap.refresh : refresh;
+  const editsVersion = useProfileEdits();
   const profile = useMemo(
-    () => ({
+    () => applyEdits({
       ...profileSummary,
       ...(detail || {}),
       ...(profileSummary?.model_reasoning_effort !== undefined
         ? { model_reasoning_effort: profileSummary.model_reasoning_effort }
         : {}),
-    }),
-    [profileSummary, detail],
+    }, connId),
+    [profileSummary, detail, connId, editsVersion],
   );
   const usage = useUsageDaily(name, connId, usagePre, snapPending);
   const { show: showUsageSkeleton, revealed: usageRevealed } = useSkeletonPhase(usage.loading && usage.days.length === 0);
@@ -158,13 +167,9 @@ export default function ProfileDetail({
   const prevProfileKeyRef = useRef(profileKey);
 
   useEffect(() => {
-    setDraft((d) => mergeProfileDraft({
-      draft: d,
-      baseline,
-      prevBaseline: prevBaselineRef.current,
-      profileKey,
-      prevProfileKey: prevProfileKeyRef.current,
-    }));
+    const prevBaseline = prevBaselineRef.current;
+    const prevProfileKey = prevProfileKeyRef.current;
+    setDraft((d) => mergeProfileDraft({ draft: d, baseline, prevBaseline, profileKey, prevProfileKey }));
     prevBaselineRef.current = baseline;
     prevProfileKeyRef.current = profileKey;
   }, [baseline, profileKey]);
@@ -196,6 +201,36 @@ export default function ProfileDetail({
           duration: 4000,
         });
       });
+  }
+
+  function fail(field) {
+    return (e) => notify({ message: `${field}: ${String(e)}`, variant: "error", duration: 4000 });
+  }
+
+  function choose(field, value) {
+    setDraft((d) => ({ ...d, [field]: value }));
+    clearTimeout(timersRef.current[field]);
+    delete timersRef.current[field];
+    delete pendingRef.current[field];
+    const path = CHOICE_PATHS[field];
+    const detailField = path === "model_reasoning_effort";
+    saveOptimistic({
+      connectionId: connId,
+      name: profile.name,
+      patch: { [path]: value },
+      run: () => invoke("set_config_field", {
+        profile: profile.name,
+        key: FIELD_KEYS[field],
+        value,
+        connectionId: connId,
+      }),
+      onFailed: fail(field),
+      refresh: () => Promise.all([detailField ? refreshDetail() : null, onSaved?.()]),
+    }).then(({ latest }) => {
+      if (!latest) return;
+      onSaved?.();
+      if (detailField) refreshDetail();
+    }, () => {});
   }
 
   function update(field, value) {
@@ -286,7 +321,7 @@ export default function ProfileDetail({
         kind="profile"
         id={profileLabel(profile.name)}
         accent={accent}
-        fold={profile.fold}
+        shape={profile.shape}
         bio={profile.bio || profile.public_bio}
         meta={heroMeta}
         paused={!!profile.paused}
@@ -298,6 +333,7 @@ export default function ProfileDetail({
           active={syncing}
           controlled
           label="Fetching latest settings"
+          color={profile.accent || null}
         />
       </div>
       <div ref={bodyRef} className={styles.body}>
@@ -340,7 +376,7 @@ export default function ProfileDetail({
                 <ModelField
                   profile={profile}
                   value={draft.model}
-                  onChange={(v) => update("model", v)}
+                  onChange={(v) => choose("model", v)}
                   onLoadingChange={setModelLoading}
                   onOllamaErrors={setOllamaErrors}
                 />
@@ -350,7 +386,7 @@ export default function ProfileDetail({
               {profile.model_reasoning_supported && (
                 <ReasoningEffortField
                   value={draft.reasoningEffort}
-                  onChange={(v) => update("reasoningEffort", v)}
+                  onChange={(v) => choose("reasoningEffort", v)}
                 />
               )}
             </span>
@@ -362,14 +398,16 @@ export default function ProfileDetail({
                 <TierField
                   profile={profile}
                   name="fast"
-                  onSaved={() => { refreshDetail(); onSaved?.(); }}
+                  connectionId={connId}
+                  onSaved={() => { const landed = refreshDetail(); onSaved?.(); return landed; }}
                 />
               </Row>
               <Row label="deep model">
                 <TierField
                   profile={profile}
                   name="deep"
-                  onSaved={() => { refreshDetail(); onSaved?.(); }}
+                  connectionId={connId}
+                  onSaved={() => { const landed = refreshDetail(); onSaved?.(); return landed; }}
                 />
               </Row>
             </>
@@ -378,7 +416,8 @@ export default function ProfileDetail({
             <Row label="vision model">
               <VisionModelField
                 profile={profile}
-                onSaved={() => { refreshDetail(); onSaved?.(); }}
+                connectionId={connId}
+                onSaved={() => { const landed = refreshDetail(); onSaved?.(); return landed; }}
               />
             </Row>
           )}
@@ -390,7 +429,7 @@ export default function ProfileDetail({
               />
             </Row>
           )}
-          <BudgetField profile={profile} onSaved={onSaved} />
+          <BudgetField profile={profile} connectionId={connId} onSaved={onSaved} />
           <Row label="workspace">
             <WorkspaceField
               value={draft.workspace}
@@ -398,17 +437,17 @@ export default function ProfileDetail({
               isLocal={activeConnection?.kind === "local"}
             />
           </Row>
-          <Row label="appearance" keywords="accent colour color fold origami">
+          <Row label="appearance" keywords="accent colour color shape mark">
             {profile.name === "default" ? (
               <span className={styles.lockedAppearance}>
-                <Fold fold={ALPACA_FOLD} color={accent} size={28} />
-                <Mono>alpaca · brand accent</Mono>
+                <Fold shape={TWIN} color={accent} size={28} />
+                <span>Twin · brand mark</span>
               </span>
             ) : (
               <AppearancePicker
-                fold={draft.fold}
+                shape={draft.shape}
                 accent={draft.accent}
-                onChange={(patch) => Object.entries(patch).forEach(([field, value]) => update(field, value))}
+                onChange={(patch, { typed = false } = {}) => Object.entries(patch).forEach(([field, value]) => (typed ? update : choose)(field, value))}
               />
             )}
           </Row>

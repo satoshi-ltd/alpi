@@ -1,4 +1,4 @@
-import { defaultAsAlpaca } from '../../../common/folds.mjs';
+import { defaultAsTwin } from '../../../common/shapes.mjs';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useEndpoint } from '../lib/EndpointContext';
@@ -9,6 +9,7 @@ import { useEventEffect } from './useEvents';
 import { onInboxSignal } from '../features/aln/inboxSignal';
 import { useTheme } from '../theme/ThemeContext';
 import { EMPTY } from '../../../common/emptyCopy.mjs';
+import { applyEdits, useProfileEdits } from '../lib/optimisticProfiles';
 
 const LIMIT = 100;
 const PER_CALL_TIMEOUT_MS = 8000;
@@ -34,11 +35,11 @@ export async function fetchConnectionOutputs(connection, status, rpc = rpcCall, 
   let profiles;
   try {
     const res = await rpc(connection, 'host.profile.summaries', {}, { timeoutMs: PER_CALL_TIMEOUT_MS });
-    profiles = (res?.profiles ?? []).map(defaultAsAlpaca(defaultAccent)).map((p) => ({ name: p.name, accent: p.accent ?? null, fold: p.fold }));
+    profiles = (res?.profiles ?? []).map(defaultAsTwin(defaultAccent)).map((p) => ({ name: p.name, accent: p.accent ?? null, shape: p.shape }));
   } catch {
     return { rows: [], ok: false };
   }
-  if (profiles.length === 0) profiles = [defaultAsAlpaca(defaultAccent)({ name: 'default' })];
+  if (profiles.length === 0) profiles = [defaultAsTwin(defaultAccent)({ name: 'default' })];
   const lists = await Promise.all(
     profiles.map((p) =>
       rpc(
@@ -52,7 +53,7 @@ export async function fetchConnectionOutputs(connection, status, rpc = rpcCall, 
             ...o,
             profile: o.profile || p.name,
             accent: p.accent,
-            fold: p.fold,
+            shape: p.shape,
             connectionId: connection.id,
             connectionName: connection.name,
           })),
@@ -80,6 +81,17 @@ export function settledStatuses(previous, probeState) {
     next.set(id, seen === undefined || seen === 'probing' ? previous?.get(id) ?? '' : seen);
   }
   return next;
+}
+
+export function overlayProfileEdits(rows) {
+  let touched = false;
+  const next = rows.map((row) => {
+    const shown = applyEdits({ name: row.profile, accent: row.accent, shape: row.shape }, row.connectionId, { existingOnly: true });
+    if (shown.accent === row.accent && shown.shape === row.shape) return row;
+    touched = true;
+    return { ...row, accent: shown.accent, shape: shown.shape };
+  });
+  return touched ? next : rows;
 }
 
 export function useUnifiedOutputs({ status } = {}) {
@@ -136,8 +148,11 @@ export function useUnifiedOutputs({ status } = {}) {
   useEventEffect(['output.created', 'output.updated'], debouncedRefresh);
   useEffect(() => onInboxSignal(() => debouncedRefresh()), [debouncedRefresh]);
 
+  const editsVersion = useProfileEdits();
+  const shownRows = useMemo(() => overlayProfileEdits(rows), [rows, editsVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return {
-    rows,
+    rows: shownRows,
     loading,
     refresh,
     hasAdmin: adminConnections.length > 0,
@@ -154,10 +169,10 @@ export function outputsSubtitle({
   unreadCount = 0,
   hasRows,
 }) {
-  if (memberOnly) return 'MEMBER';
-  if (unreachable && !hasRows && unreachableCount >= connectionCount) return 'UNREACHABLE';
-  if (unreachable) return unreadCount > 0 ? `${unreadCount} UNREAD · PARTIAL` : 'PARTIAL';
-  return unreadCount > 0 ? `${unreadCount} UNREAD` : 'INBOX ZERO';
+  if (memberOnly) return 'Member';
+  if (unreachable && !hasRows && unreachableCount >= connectionCount) return 'Unreachable';
+  if (unreachable) return unreadCount > 0 ? `${unreadCount} unread · partial` : 'Partial';
+  return unreadCount > 0 ? `${unreadCount} unread` : 'Inbox zero';
 }
 
 export function outputsEmptyState({

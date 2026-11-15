@@ -1,4 +1,4 @@
-import { Icon, Mono } from "./index.js";
+import { Icon } from "./index.js";
 import styles from "./StepLadder.module.css";
 
 export default function StepLadder({ steps }) {
@@ -10,7 +10,7 @@ export default function StepLadder({ steps }) {
             {state === "done" ? <Icon name="check" size="sm" /> : state === "fail" ? <Icon name="x" size="sm" /> : <span className={styles.dot} />}
           </span>
           <span className={styles.label}>{label}</span>
-          {detail ? <Mono className={styles.detail}>{detail}</Mono> : null}
+          {detail ? <span className={styles.detail}>{detail}</span> : null}
         </li>
       ))}
     </ol>

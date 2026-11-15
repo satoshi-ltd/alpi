@@ -30,20 +30,23 @@ describe("Reasoning", () => {
     expect(status.textContent).toContain("Thinking…");
   });
 
-  it("leads the live row with the profile's object rippling and no tinted bar", () => {
-    render(<Reasoning text="" streaming fold="shield" accent="#3899e2" />);
+  it("leads the live row with the profile's inline mark in its still working face and no tinted bar", () => {
+    render(<Reasoning text="" streaming shape="bell" accent="#3899e2" />);
     const status = screen.getByRole("status");
     expect(status.className).toContain("rowStatic");
-    const object = status.querySelector("[data-fold]");
-    expect(object.dataset.fold).toBe("shield");
-    expect(object.querySelectorAll("polygon[class*='cell']").length).toBeGreaterThan(0);
+    const object = status.querySelector("[data-shape]");
+    expect(object.dataset.shape).toBe("bell");
+    expect(object.dataset.state).toBe("working");
+    expect(object.style.width).toBe("14px");
+    expect(object.querySelector("animate")).toBeNull();
     expect(status.closest("[style]").style.getPropertyValue("--c")).toBe("#3899e2");
   });
 
   it("a settled span with no text shows the still object and no toggle", () => {
-    render(<Reasoning text="" seconds={4} fold="shield" accent="#3899e2" />);
+    render(<Reasoning text="" seconds={4} shape="bell" accent="#3899e2" />);
     const row = screen.getByText("Thought for 4s").parentElement;
-    expect(row.querySelector("polygon[class*='cell']")).toBeNull();
+    expect(row.querySelector("[data-shape]").dataset.state).toBe("idle");
+    expect(row.querySelector("animate")).toBeNull();
     expect(row.querySelector("[class*='chev']")).toBeNull();
   });
 
