@@ -36,6 +36,7 @@ ICON_EXPONENT = 5.0
 ICON_STEPS = 96
 ICON_FILL = 0.6
 CLOSE_SCALE = 1.05
+TILE_CLOSE_SCALE = 1.15
 CLOSE_TOP = 16.0
 CLOSE_MIN = 128
 SHADOWS = ((1.6, 1.8, 0.22), (0.3, 0.3, 0.18))
@@ -200,9 +201,9 @@ def fit_pose(pose, fill):
     return scale, 50 - scale * ((left + right) / 2 - 50), 50 - scale * ((top + bottom) / 2 - 50)
 
 
-def close_pose():
+def close_pose(scale=CLOSE_SCALE):
     left, right, top, bottom = bounds(turned_parts(100, held_pose())[0])
-    return CLOSE_SCALE, 50 - CLOSE_SCALE * ((left + right) / 2 - 50), CLOSE_TOP - CLOSE_SCALE * (top - 50)
+    return scale, 50 - scale * ((left + right) / 2 - 50), CLOSE_TOP - scale * (top - 50)
 
 
 def full_pose():
@@ -383,7 +384,7 @@ def mark_coverage(size, pose_angles, placement, clip=None):
 
 def tile_icon(size):
     close = size >= CLOSE_MIN
-    placement = close_pose() if close else full_pose()
+    placement = close_pose(TILE_CLOSE_SCALE) if close else full_pose()
     half = ICON_SIDE / 2
     tile = superellipse(size, half)
     tile_cov = coverage(Region([tile]).scan(size), size, size)

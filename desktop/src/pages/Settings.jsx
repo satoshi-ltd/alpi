@@ -20,6 +20,7 @@ export default function Settings({
   connectionSyncing = false,
   refreshTick = 0,
   onSelectTarget,
+  onReplaceTarget,
   onRefresh,
   onDeleteProfile,
   onOpenChat,
@@ -27,6 +28,7 @@ export default function Settings({
   onCloseConnections,
 }) {
   const setTarget = onSelectTarget ?? (() => {});
+  const replaceTarget = onReplaceTarget ?? setTarget;
   const canManageConnections = (
     activeConnection?.kind === "local" || activeConnection?.role === "admin"
   );
@@ -49,9 +51,9 @@ export default function Settings({
   useEffect(() => {
     if (!target || (target.kind === "profile" && !target.id)) {
       const first = profiles[0]?.name ?? null;
-      if (first) setTarget({ kind: "profile", id: first });
+      if (first) replaceTarget({ kind: "profile", id: first });
     }
-  }, [profiles, target, setTarget]);
+  }, [profiles, target, replaceTarget]);
 
   return (
     <div className={styles.wrap}>
@@ -90,7 +92,7 @@ export default function Settings({
           onSaved={onRefresh}
           onGone={() => {
             const first = profiles[0]?.name ?? null;
-            setTarget(first ? { kind: "profile", id: first } : null);
+            replaceTarget(first ? { kind: "profile", id: first } : null);
           }}
           onOpenChat={onOpenChat}
           onNavigate={setTarget}

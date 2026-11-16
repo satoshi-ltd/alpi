@@ -142,13 +142,47 @@ export function settingsTargetForChatView(view, selectedProfile = null) {
   return { kind: "profile", id: selectedProfile };
 }
 
+const SETTINGS_DIRTY = "Save or discard your settings changes first";
+const WORKGROUP_GONE = "That workgroup is no longer on this daemon.";
+
 export default function App() {
   const notify = useNotify();
-  const [view, setView] = useState(LANDING_VIEW);
-  const [settingsTarget, setSettingsTarget] = useState({
+  const [view, setRawView] = useState(LANDING_VIEW);
+  const [settingsTarget, setRawSettingsTarget] = useState({
     kind: "profile",
     id: null,
   });
+  const inSettingsRef = useRef(false);
+  inSettingsRef.current = view.kind === "settings";
+  const warnedAtRef = useRef(0);
+  const warnSettingsDirty = useCallback(() => {
+    const now = Date.now();
+    if (now - warnedAtRef.current < 300) return;
+    warnedAtRef.current = now;
+    window.notify?.(SETTINGS_DIRTY, { variant: "info" });
+  }, []);
+  const settingsLocked = () => inSettingsRef.current && hasDirtySettings();
+  const setView = useCallback((next) => {
+    setRawView((current) => {
+      const target = typeof next === "function" ? next(current) : next;
+      if (current.kind === "settings" && target?.kind !== "settings" && hasDirtySettings()) {
+        queueMicrotask(warnSettingsDirty);
+        return current;
+      }
+      return target;
+    });
+  }, [warnSettingsDirty]);
+  const setSettingsTarget = useCallback((next) => {
+    setRawSettingsTarget((current) => {
+      const target = typeof next === "function" ? next(current) : next;
+      const same = target?.kind === current?.kind && target?.id === current?.id;
+      if (!same && settingsLocked()) {
+        queueMicrotask(warnSettingsDirty);
+        return current;
+      }
+      return target;
+    });
+  }, [warnSettingsDirty]);
   const settingsBeforeConnectionsRef = useRef(null);
   const openConnections = useCallback(() => {
     if (settingsTarget?.kind !== "connections") {
@@ -343,7 +377,7 @@ export default function App() {
   // Member devices have no Settings surface — snap back to the landing if state ever points there (deeplink, nav event, ⌘, race).
   useEffect(() => {
     if (!canAdminEarly && view.kind === "settings") {
-      setView(LANDING_VIEW);
+      setRawView(LANDING_VIEW);
     }
   }, [canAdminEarly, view.kind]);
   const leavingSettingsView = (target = settingsTargetRef.current) =>
@@ -370,7 +404,9 @@ export default function App() {
     setView({ kind: "settings" });
   }, []);
   const adminOpenSettingsFor = canAdminEarly ? openSettingsFor : null;
-  useNavListener(setView);
+  const toggleSettingsRef = useRef(null);
+  toggleSettingsRef.current = onOpenSettings;
+  useNavListener(setView, toggleSettingsRef);
 
   const connectionOnlineRef = useRef(true);
   const { pendingTurns, pendingTurnsRef, startTurn, removeTurn, clearTurnsForConnection, detachNewChatTurns } = useChatStream({
@@ -413,6 +449,13 @@ export default function App() {
     setView,
     notify,
   });
+  const switchConnection = useCallback((id) => {
+    if (settingsLocked()) {
+      warnSettingsDirty();
+      return;
+    }
+    onSetHostConnection(id);
+  }, [onSetHostConnection, warnSettingsDirty]);
 
   useEffect(() => {
     activeConnectionIdRef.current = hostConnections.active_id;
@@ -421,7 +464,7 @@ export default function App() {
   const startNewThread = useCallback((name) => {
     if (!name) return;
     if (viewRef.current?.kind === "settings" && hasDirtySettings()) {
-      window.notify?.("Save or discard your settings changes first", { variant: "info" });
+      window.notify?.(SETTINGS_DIRTY, { variant: "info" });
       return;
     }
     detachNewChatTurns(hostConnectionsRef.current?.active_id ?? null, name);
@@ -448,6 +491,10 @@ export default function App() {
   }, [approval, clarification]);
   const openScheduleFor = useCallback((profile) => {
     if (!panelsMayLeave()) return;
+    if (settingsLocked()) {
+      warnSettingsDirty();
+      return;
+    }
     if (viewRef.current?.kind !== "profile" || viewRef.current.profile !== profile) {
       setView({ kind: "profile", profile, sessionId: null });
     }
@@ -464,7 +511,7 @@ export default function App() {
     setView,
     setSettingsTarget,
     openNotifications: openNotificationsForDeeplink,
-    onSwitchConnection: onSetHostConnection,
+    onSwitchConnection: switchConnection,
     activeConnectionId: hostConnections.active_id,
     focusRequest: focusPendingRequest,
     openSchedule: openScheduleFor,
@@ -485,8 +532,9 @@ export default function App() {
       && current.id === wgId
     ) {
       setView({ kind: "workgroups" });
+      notify({ message: WORKGROUP_GONE, variant: "info" });
     }
-  }, [dropWorkgroup, hostConnectionsRef]);
+  }, [dropWorkgroup, hostConnectionsRef, notify]);
 
   const { rows: unreadOutputs } = useAllOutputs({
     connections: hostConnections.connections,
@@ -556,7 +604,7 @@ export default function App() {
     const viewingDeleted =
       (v?.kind === "profile" && v.profile === name) ||
       (v?.kind === "settings" && t?.kind === "profile" && t.id === name);
-    if (viewingDeleted) setView(LANDING_VIEW);
+    if (viewingDeleted) setRawView(LANDING_VIEW);
     try {
       await invoke("profile_delete", { name, connectionId: hostConnectionsRef.current?.active_id ?? null });
       window.notify?.(`Profile @${name} deleted`, { variant: "success" });
@@ -856,6 +904,10 @@ export default function App() {
     : activeProfileName ? "sessions" : null;
   const canReadAloud = view.kind === "profile" && (sessionData?.turns ?? []).some((t) => t?.assistant);
   const onOpenHistory = useCallback(() => {
+    if (settingsLocked()) {
+      warnSettingsDirty();
+      return;
+    }
     if (activeWorkgroup) {
       setTaskHistoryOpenTick((n) => n + 1);
       return;
@@ -945,7 +997,7 @@ export default function App() {
 
   const newSessionAvailable = profiles.length > 0;
   const bareRef = useRef(false);
-  const unlessBare = (action) => (action ? () => { if (!bareRef.current) action(); } : action);
+  const unlessBare = (action) => (action ? (...args) => { if (!bareRef.current) action(...args); } : action);
   useWindowChrome({
     viewRef,
     onNewSession: unlessBare(newSessionAvailable ? onNewSession : null),
@@ -1320,6 +1372,28 @@ export default function App() {
     setView((v) => (v.kind === "profile" && v.profile === view.profile ? LANDING_VIEW : v));
   }, [rosterAnswered, connectionSwitching, view.kind, view.profile, profiles, rosterGeneration, reload]);
 
+  const workgroupGenerationRef = useRef({ key: null, generation: 0 });
+  useEffect(() => {
+    if (view.kind !== "workgroup") {
+      workgroupGenerationRef.current = { key: null, generation: 0 };
+      return;
+    }
+    const key = `${view.profile}/${view.id}`;
+    if (workgroupGenerationRef.current.key !== key) workgroupGenerationRef.current = { key, generation: rosterGeneration };
+  }, [view.kind, view.profile, view.id, rosterGeneration]);
+  const workgroupIds = workgroups.map((w) => `${w.profile}/${w.id}`).join("\n");
+  const activeOnline = hostConnections.connections.find((c) => c.id === hostConnections.active_id)?.status === "online";
+  useEffect(() => {
+    if (!rosterAnswered || connectionSwitching || !activeOnline || view.kind !== "workgroup") return;
+    if (workgroupIds.split("\n").includes(`${view.profile}/${view.id}`)) return;
+    if (rosterGeneration <= workgroupGenerationRef.current.generation) {
+      reload();
+      return;
+    }
+    setView((v) => (v.kind === "workgroup" && v.id === view.id && v.profile === view.profile ? { kind: "workgroups" } : v));
+    notify({ message: WORKGROUP_GONE, variant: "info" });
+  }, [rosterAnswered, connectionSwitching, activeOnline, view.kind, view.profile, view.id, workgroupIds, rosterGeneration, reload]);
+
   const lastProfileByConnectionRef = useRef({});
   useEffect(() => {
     if (view.kind === "profile" && view.profile) {
@@ -1436,7 +1510,7 @@ export default function App() {
           onOpenSettingsTarget={adminOpenSettingsFor}
           onTogglePin={onTogglePin}
           onTogglePauseProfile={adminOnTogglePauseProfile}
-          onSetHostConnection={onSetHostConnection}
+          onSetHostConnection={switchConnection}
           onAddHostConnection={onAddHostConnection}
           onForgetHostConnection={onForgetHostConnection}
           onRenameHostConnection={onRenameHostConnection}
@@ -1490,12 +1564,13 @@ export default function App() {
               jumpHints={jumpHints}
               onTogglePin={onTogglePin}
               onSelectTarget={setSettingsTarget}
+              onReplaceTarget={setRawSettingsTarget}
               onRefresh={onSettingsRefresh}
               onDeleteProfile={adminOnDeleteProfile}
               onOpenChat={closeSettings}
               onOpenConnections={openConnections}
               onCloseConnections={closeConnections}
-              onSetHostConnection={onSetHostConnection}
+              onSetHostConnection={switchConnection}
               onAddHostConnection={onAddHostConnection}
               onForgetHostConnection={onForgetHostConnection}
               onRefreshHostConnectionStatus={onRefreshHostConnectionStatus}
@@ -1651,7 +1726,7 @@ export default function App() {
         onOpenJob={(profile, jobId) => {
           if (!panelsMayLeave()) return;
           if (viewRef.current?.kind === "settings" && hasDirtySettings()) {
-            window.notify?.("Save or discard your settings changes first", { variant: "info" });
+            window.notify?.(SETTINGS_DIRTY, { variant: "info" });
             return;
           }
           setView({ kind: "profile", profile, sessionId: null });
@@ -1714,7 +1789,7 @@ export default function App() {
         onOpenChat={(profile, sessionId, connId) => {
           if (!panelsMayLeave()) return;
           if (viewRef.current?.kind === "settings" && hasDirtySettings()) {
-            window.notify?.("Save or discard your settings changes first", { variant: "info" });
+            window.notify?.(SETTINGS_DIRTY, { variant: "info" });
             return;
           }
           if (connId && connId !== hostConnections.active_id) onSetHostConnection(connId);
@@ -1724,7 +1799,7 @@ export default function App() {
           if (!panelsMayLeave()) return;
           if (activeProfileName !== profile) {
             if (viewRef.current?.kind === "settings" && hasDirtySettings()) {
-              window.notify?.("Save or discard your settings changes first", { variant: "info" });
+              window.notify?.(SETTINGS_DIRTY, { variant: "info" });
               return;
             }
             const target = profiles.find((p) => p.name === profile);
@@ -1736,7 +1811,7 @@ export default function App() {
         onSendToChat={(profile, connId, attachment) => {
           if (!panelsMayLeave()) return;
           if (viewRef.current?.kind === "settings" && hasDirtySettings()) {
-            window.notify?.("Save or discard your settings changes first", { variant: "info" });
+            window.notify?.(SETTINGS_DIRTY, { variant: "info" });
             return;
           }
           setPendingAttachment({ profile, connectionId: connId ?? null, attachment, consumed: false });

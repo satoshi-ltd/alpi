@@ -160,8 +160,33 @@ function toolStart(tool) {
   return typeof tool.at === "number" && Number.isFinite(tool.at) ? tool.at : null;
 }
 
-export const ProcessBlock = memo(function ProcessBlock({ entries, accent, shape, thinking = false, answered = false, running = false, writing = false }) {
-  const [open, setOpen] = useState(false);
+const OPEN_LINES = new Map();
+const OPEN_LINES_MAX = 200;
+
+export function _resetOpenLines() {
+  OPEN_LINES.clear();
+}
+
+function rememberOpen(key, value) {
+  if (!key) return;
+  OPEN_LINES.delete(key);
+  OPEN_LINES.set(key, value);
+  if (OPEN_LINES.size > OPEN_LINES_MAX) OPEN_LINES.delete(OPEN_LINES.keys().next().value);
+}
+
+export const ProcessBlock = memo(function ProcessBlock({ entries, accent, shape, thinking = false, answered = false, running = false, writing = false, memoryKey = null }) {
+  const keys = memoryKey == null ? [] : Array.isArray(memoryKey) ? memoryKey : [memoryKey];
+  const [open, setOpenState] = useState(() => keys.map((k) => OPEN_LINES.get(k)).find((v) => v != null) ?? false);
+  const setOpen = (value) => {
+    setOpenState(value);
+    rememberOpen(keys[0], value);
+  };
+  const adoptFrom = keys.length > 1 ? keys[1] : null;
+  useEffect(() => {
+    if (!adoptFrom || !OPEN_LINES.has(adoptFrom)) return;
+    if (!OPEN_LINES.has(keys[0])) rememberOpen(keys[0], OPEN_LINES.get(adoptFrom));
+    OPEN_LINES.delete(adoptFrom);
+  }, [adoptFrom]);
   const [overrides, setOverrides] = useState({});
   const toggles = useRef(new Map());
   const toggleFor = (key) => {

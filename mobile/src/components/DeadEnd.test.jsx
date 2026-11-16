@@ -30,6 +30,7 @@ vi.mock('../hooks/useDaemonData', () => ({ useTools: () => h.tools, useOllamaMod
 vi.mock('../hooks/useBusyVisible', () => ({ useBusyVisible: () => false }));
 vi.mock('./ScreenHeader', () => ({ ScreenHeader: ({ subtitle }) => React.createElement('header', {}, subtitle) }));
 vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: ({ children }) => React.createElement('div', {}, children) }));
+vi.mock('../hooks/useDirtyBack', () => ({ useDirtyBack: (_dirty, back) => Object.assign(() => back(), { leave: back }) }));
 vi.mock('./KeyboardPane', () => ({ KeyboardPane: ({ children }) => React.createElement('div', {}, children) }));
 vi.mock('./Toast', () => ({ useToast: () => vi.fn() }));
 vi.mock('../hooks/useBack', () => ({ useBack: () => vi.fn() }));

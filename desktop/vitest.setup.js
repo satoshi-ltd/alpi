@@ -12,8 +12,10 @@ if (typeof document !== "undefined") {
   document.hasFocus = () => true;
 }
 
-afterEach(() => {
+afterEach(async () => {
   cleanup();
+  const { _resetOpenLines } = await import("./src/features/ToolSteps.jsx");
+  _resetOpenLines();
 });
 
 vi.mock("@tauri-apps/api/core", () => ({

@@ -14,6 +14,7 @@ import { Eyebrow } from '../../../../src/components/Eyebrow';
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useToast } from '../../../../src/components/Toast';
 import { useBack } from '../../../../src/hooks/useBack';
+import { useDirtyBack } from '../../../../src/hooks/useDirtyBack';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 import { ScopeToggles } from '../../../../src/features/peers/ScopeToggles';
@@ -29,6 +30,8 @@ export default function AcceptPendingPeer() {
   const [handle, setHandle] = useState(String(suggested ?? '').replace(/[^a-z0-9_-]/g, ''));
   const [scopes, setScopes] = useState(new Set(['link.ping', 'link.ask']));
   const [busy, setBusy] = useState(false);
+  const initialHandle = String(suggested ?? '').replace(/[^a-z0-9_-]/g, '');
+  const askBack = useDirtyBack(handle !== initialHandle || scopes.size !== 2 || !scopes.has('link.ping') || !scopes.has('link.ask'), goBack);
 
   const pubkeyStr = String(pubkey ?? '');
   const addressStr = String(address ?? '');
@@ -54,7 +57,7 @@ export default function AcceptPendingPeer() {
         allow: Array.from(scopes),
       });
       toast({ title: 'Peer added', message: `@${handle}` });
-      goBack();
+      askBack.leave();
     } catch (e) {
       toast({ title: 'Accept failed', message: String(e) });
     } finally {
@@ -67,7 +70,7 @@ export default function AcceptPendingPeer() {
       <ScreenHeader
         title="Accept peer"
         subtitle={`@${id} · name · scopes`}
-        onBack={goBack}
+        onBack={askBack}
         right={<Button title="Accept" size="md" disabled={!ready} loading={busy} onPress={accept} />}
       />
       <KeyboardPane>

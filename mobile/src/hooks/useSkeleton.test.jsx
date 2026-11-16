@@ -40,6 +40,19 @@ describe('useSkeleton', () => {
     expect(result.current).toBe(false);
   });
 
+  it('never hides loaded rows when the hide timer fires after a new load started but before its cleanup ran', () => {
+    const { result, rerender } = mount(true);
+    tick(150);
+    expect(result.current).toBe(true);
+    rerender({ on: false });
+    tick(100);
+    const clear = vi.spyOn(globalThis, 'clearTimeout').mockImplementation(() => {});
+    rerender({ on: true });
+    clear.mockRestore();
+    tick(400);
+    expect(result.current).toBe(true);
+  });
+
   it('stays at least 400 ms once shown', () => {
     const { result, rerender } = mount(true);
     tick(150);

@@ -4037,7 +4037,7 @@ fn install_app_menu(app: &AppHandle) -> tauri::Result<()> {
                 let _ = window.show();
                 let _ = window.unminimize();
                 let _ = window.set_focus();
-                let _ = window.emit("nav", "settings");
+                let _ = window.emit("nav", "settings-toggle");
             }
         }
     });

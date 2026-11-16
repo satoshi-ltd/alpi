@@ -9,6 +9,7 @@ vi.mock("../lib/clipboard.js", () => ({ copyText: vi.fn(async () => true) }));
 import { copyText } from "../lib/clipboard.js";
 import { ProcessBlock, ToolStep } from "./ToolSteps.jsx";
 import { processTimeline } from "../lib/reasoningTimeline.js";
+import { workLineKeys } from "../pages/ChatPane.jsx";
 
 function ToolModule({ tools, reasoning, seconds, ...rest }) {
   return <ProcessBlock entries={processTimeline(tools, reasoning, seconds)} {...rest} />;
@@ -278,6 +279,28 @@ describe("work line while the turn runs", () => {
     rerender(<ToolModule tools={[{ ...tools[0], ok: true, duration_s: 2 }]} />);
     expect(screen.getByRole("status")).toBe(status);
     expect(status).toHaveTextContent("Worked for 2s · 1 step");
+  });
+
+  it("stays open when the streaming turn becomes a history turn with the same memory key", () => {
+    const tools = [{ tool_id: "a", name: "grep", args: {}, ok: null }];
+    const first = render(<ToolModule tools={tools} running memoryKey="local|doc|what moved?" />);
+    fireEvent.click(screen.getByRole("button", { name: /^Working/ }));
+    first.unmount();
+    render(<ToolModule tools={[{ ...tools[0], ok: true, duration_s: 1 }]} memoryKey="local|doc|what moved?" />);
+    expect(screen.getByRole("button", { name: /^Worked/ })).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("carries the open state from a new chat's pending turn to its history turn, and not to another session", () => {
+    const tools = [{ tool_id: "a", name: "grep", args: {}, ok: null }];
+    const pending = render(<ToolModule tools={tools} running memoryKey={workLineKeys("local", "doc", null, 3, "hi")} />);
+    fireEvent.click(screen.getByRole("button", { name: /^Working/ }));
+    pending.unmount();
+    const done = [{ ...tools[0], ok: true, duration_s: 1 }];
+    const history = render(<ToolModule tools={done} memoryKey={workLineKeys("local", "doc", "s-1", 3, "hi")} />);
+    expect(screen.getByRole("button", { name: /^Worked/ })).toHaveAttribute("aria-expanded", "true");
+    history.unmount();
+    render(<ToolModule tools={done} memoryKey={workLineKeys("local", "doc", "s-2", 3, "hi")} />);
+    expect(screen.getByRole("button", { name: /^Worked/ })).toHaveAttribute("aria-expanded", "false");
   });
 });
 

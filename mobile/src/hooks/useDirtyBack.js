@@ -37,8 +37,14 @@ export function useDirtyBack(isDirty, onConfirmLeave) {
     return sub;
   }, [navigation, confirm]);
 
-  return useCallback(() => {
+  const leave = useCallback(() => {
+    discardingRef.current = true;
+    onConfirmLeave();
+  }, [onConfirmLeave]);
+  const ask = useCallback(() => {
     onConfirmLeave();
     return true;
   }, [onConfirmLeave]);
+  ask.leave = leave;
+  return ask;
 }

@@ -36,6 +36,16 @@ beforeEach(() => {
 });
 
 describe("useDirtyBack", () => {
+  it("leaves without prompting after a save, even while the form still reads dirty", () => {
+    const back = vi.fn();
+    const { result } = renderHook(() => useDirtyBack(true, back));
+    act(() => result.current.leave());
+    expect(back).toHaveBeenCalledTimes(1);
+    const e = fireBeforeRemove();
+    expect(e.preventDefault).not.toHaveBeenCalled();
+    expect(confirmMock).not.toHaveBeenCalled();
+  });
+
   it("lets a clean back through without prompting", () => {
     renderHook(() => useDirtyBack(false, () => {}));
     const e = fireBeforeRemove();

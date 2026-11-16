@@ -595,6 +595,7 @@ const Transcript = memo(function Transcript({
               <PendingTurn
                 key={streamingTurn.requestId}
                 turn={streamingTurn}
+                memoryScope={{ connectionId, profileName, sessionId, turnIndex: turnBase + renderTurns.length }}
                 accent={accent}
                 shape={shape}
                 profiles={profiles}
@@ -654,6 +655,17 @@ const HistoryTurns = memo(function HistoryTurns({
     </>
   );
 });
+
+export function textHash(text) {
+  let h = 5381;
+  for (const ch of String(text ?? "")) h = ((h * 33) ^ ch.codePointAt(0)) >>> 0;
+  return h.toString(36);
+}
+
+export function workLineKeys(connectionId, profileName, sessionId, turnIndex, user) {
+  const at = (session) => `${connectionId ?? ""}|${profileName ?? ""}|${session}|${turnIndex ?? ""}|${textHash(user)}`;
+  return sessionId ? [at(sessionId), at("new")] : [at("new")];
+}
 
 const Turn = memo(function Turn({
   turn,
@@ -754,7 +766,7 @@ const Turn = memo(function Turn({
       )}
       {(process.length > 0 || parts.askUsers.length > 0) && (
         <div className={styles.steps}>
-          {process.length > 0 && <ProcessBlock entries={process} accent={accent} shape={shape} />}
+          {process.length > 0 && <ProcessBlock entries={process} accent={accent} shape={shape} memoryKey={workLineKeys(connectionId, profileName, sessionId, turnIndex, turn.user)} />}
           {parts.askUsers.map((a, i) => (
             <AskUserAnswer key={`a-${a.tool_id ?? i}`} result={a.result} question={a.question} accent={accent} shape={shape} />
           ))}
@@ -971,7 +983,7 @@ function turnMeta(turn, baseModel) {
   );
 }
 
-function PendingTurn({ turn, accent, shape, profiles, fresh = false, inline = null }) {
+function PendingTurn({ turn, accent, shape, profiles, fresh = false, inline = null, memoryScope = {} }) {
   const allTools = turn.tools ?? [];
   const parts = turnParts({
     tools: allTools,
@@ -1001,7 +1013,7 @@ function PendingTurn({ turn, accent, shape, profiles, fresh = false, inline = nu
       {(process.length > 0 || parts.askUsers.length > 0 || thinking) && (
         <div className={styles.steps}>
           {(process.length > 0 || thinking) && (
-            <ProcessBlock entries={process} accent={accent} shape={shape} thinking={thinking} answered={answered} running={!closed && !turn.interrupted} writing={answered} />
+            <ProcessBlock entries={process} accent={accent} shape={shape} thinking={thinking} answered={answered} running={!closed && !turn.interrupted} writing={answered} memoryKey={workLineKeys(memoryScope.connectionId, memoryScope.profileName, memoryScope.sessionId, memoryScope.turnIndex, turn.user)} />
           )}
           {parts.askUsers.map((a, i) => (
             <AskUserAnswer key={`a-${a.tool_id ?? i}`} result={a.result} question={a.question} accent={accent} shape={shape} />

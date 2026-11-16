@@ -209,26 +209,6 @@ _None._
 
 ### Client review 2026-11-05
 
-- **DESK.WORKGROUP-GONE** — The open workgroup falls back to the list when it leaves the roster
-  `bug · desktop · agent · normal`
-  note: `App.jsx:1514` renders the workgroup view only while `activeWorkgroup` resolves; the profile view has a
-  guard back to the landing (`App.jsx:1315`), the workgroup view has none, and `onWorkgroupGone` fires only from a
-  fetch 404 inside the component that is already unmounted. Delete the open workgroup from the console or another
-  client and `<main>` shows only the banners.
-  accept: when the roster answered, no connection switch is in flight and the view's workgroup is missing, the view
-  becomes the workgroups list with a notice like `profile_delete`; a test rerenders App without the workgroup and
-  asserts the list.
-
-- **DESK.EXIT-MOTION** — Panels, the palette and browse shells leave with the modal's fade
-  `feature · desktop · agent · normal`
-  note: `Modal.jsx:30-48` runs `--dur-exit`/`--ease-exit` with a fallback timer; the palette (`Panels.jsx:322`),
-  Activity (`ActivityPanel.jsx:185`), the shortcuts sheet, the connection panel, `BrowseShell` and the Scrim
-  unmount instantly, so Escape cuts to the page on one family and fades on the other. Menus (Popover, Dropdown,
-  ContextMenu) stay instant. No new look: the same tokens, already collapsed by the reduced-motion rule.
-  accept: `Scrim`, `PanelShell` and `BrowseShell` keep the closing children until `animationend` or the fallback,
-  with the Modal's classes; tests like Modal's assert the element is still present with `data-closing` after
-  `open=false` and gone after the event.
-
 - **DESK.FILTERS** — One filter control for Notifications, Activity, Workgroups and Sessions
   `chore · desktop · agent · normal`
   note: the same "All / Needs you / …" row is four implementations: `NotificationsModal.jsx:449-465` (buttons with
@@ -362,27 +342,12 @@ _None._
 
 ### Client review 2026-11-02
 
-- **DESK.SETTINGS-LEAVE** — Leaving Settings by any route asks before dropping an unsaved bio or briefing
-  `bug · desktop · agent · normal`
-  note: only ⌘N, Activity and Notifications check `hasDirtySettings`; ⌘, (close), "Open chat", switching
-  target in SettingsNav, ⌘1–9, the tray "Open", the menu "Settings…" and a connection switch (the detail key
-  carries the connection) drop the draft silently. The menu's `CmdOrCtrl+,` emits `nav:"settings"`, which only
-  opens, so ⌘, may never close Settings although the shortcuts sheet says it does (confirm by hand).
-  accept: one `leaveSettings()` guard serves every exit, nav events and connection switch included; a test per
-  route fails without it.
-
 - **DESK.PLATFORM-KEYS** — Shortcuts use the platform's modifier
   `bug · desktop · agent · normal`
   note: `useWindowChrome.js:59` treats Ctrl as ⌘ on macOS in the capture phase, so Ctrl+K/N/F/O/1–9 in the
   composer trigger app shortcuts instead of editing text (same in `useTranscriptSearch.js:44`,
   `ManageSessionsModal.jsx:198`); `lib/shortcuts.js` shows ⌘ on Windows and Linux, which the release builds.
   accept: macOS matches `metaKey` only, Windows/Linux `ctrlKey`; labels say Ctrl off macOS; tests per platform.
-
-- **MOB.DIRTY-FORMS** — Every phone form warns before back drops what was typed
-  `bug · mobile · agent · normal`
-  note: `providers/[key]`, `mcp/new`, `email/new`, `peers/new` and `peers/accept` skip `useDirtyBack`, so a
-  pasted API key is lost on back; identity, briefing and memory already warn.
-  accept: those forms use `useDirtyBack`; a test per form fails without it.
 
 - **COMMON.RELATIVE-TIME** — Both clients write the same relative time
   `chore · common · agent · low`
@@ -401,15 +366,6 @@ _None._
   accept: they fall back to `/profile/X/settings`; test.
 
 ### Found while fixing CI.CLIENTS-RED
-
-- **MOB.SKELETON-RACE** — A loaded list on the phone never flashes back to its loading placeholder
-  `bug · mobile · agent · normal`
-  note: `mobile/src/hooks/useSkeleton.js` has the race desktop 0.9.10 fixed in `desktop/src/hooks/useSkeleton.js`:
-  its 150 ms show timer and its minShown hide timer can fire after the render that changed `loading` commits and
-  before the effect cleanup clears them, so the placeholder covers loaded rows for 0.4 s (or blanks a refreshing
-  cell for 150 ms).
-  accept: both timers check the latest committed `loading` (a ref set in a layout effect) before changing state;
-  two tests fire each captured timer callback after the rerender that flips `loading` and fail without the fix.
 
 ### Security audit 2026-10-28
 
@@ -484,18 +440,6 @@ _None._
   `invalid_recipes` shows nothing extra; a component test renders one valid and one refused recipe.
 
 ### Found while shipping mobile 0.9.14
-
-- **SEC.MOBILE-IDENTITY** — A daemon cannot pass itself off as another one on the phone
-  `bug · mobile · alpi · agent · high`
-  note: left from SEC.MOBILE-TRUST (audit MOB-2). `connection.deviceId` holds the phone's own device id from
-  the pairing exchange until the first probe overwrites it with the daemon's id from `host.version`; that daemon
-  id keys the notification state (`aln/state.js`), groups routes for the background poll
-  (`backgroundTask.js`) and names OS notifications (`notify.js`). A daemon the user paired can claim another
-  daemon's id and suppress its notifications, approvals included. Keying by local connection id alone breaks
-  the dedupe of two routes to one daemon (duplicate notifications), and any id a daemon reports can be forged.
-  accept: a design the creator approves (for example a daemon public key pinned at pairing and proven on each
-  probe) that keeps one notification per event across routes of the same daemon and makes a second daemon
-  unable to share that state; tests for a lying daemon and for two honest routes.
 
 ### Found while shipping mobile 0.9.16
 
@@ -674,6 +618,7 @@ Each names the condition that promotes it; none is worked on before.
 
 | Decision | Reason |
 |---|---|
+| Proving a daemon's identity to the phone (SEC.MOBILE-IDENTITY) | The phone trusts the id `host.version` reports, so a daemon the user pairs could claim another one's id and share its notification state. Closing it needs a host key, a signing RPC, verification in JS with new dependencies and a migration of the notification state, for an attack that requires the user to pair a malicious daemon; alpi's users pair only daemons they run. Reopen if pairing third-party daemons becomes a supported use. |
 | Vendor subscription OAuth | alpi respects every provider's ToS: a subscription tied to a vendor's own client is for that client, and reversing its private OAuth flow is a ToS violation and an account-ban risk. Users pay per token with their own keys; an official, documented third-party OAuth flow would be adopted. |
 | Remote push to a closed phone (Live Activity, approval pushes; MOB.LIVE-ACTIVITY) | alpi puts no relay or third-party service between a daemon and its apps. APNs and FCM only take messages signed with the app's own keys, so reaching a closed phone needs a relay (Expo's push service or one the creator runs) between every daemon and every phone. The phone hears from its daemons through its own stream and poll, while the app runs and when the OS wakes it. |
 | Chat-app gateways (Telegram, Matrix, Signal, WhatsApp, Discord, …) | Retired in v0.10 — third-party chat bridges add attack surface and upkeep; the desktop/mobile/terminal apps are the surface, and email is an on-demand tool. |

@@ -28,6 +28,7 @@ vi.mock("./lib/updater.js", () => ({
 
 import { _resetDaemonBus } from "./lib/daemon-bus.js";
 import App from "./App.jsx";
+import { NotificationProvider } from "./primitives/Notification.jsx";
 
 configure({ asyncUtilTimeout: 10000 });
 
@@ -76,7 +77,7 @@ function daemon({ profiles = [ALPI, DOC], workgroups = [CREW], role = "admin", l
       return null;
     }
     if (cmd === "profiles") return [];
-    if (cmd === "workgroups") return args.connectionId === "remote" ? [] : workgroups;
+    if (cmd === "workgroups") return args.connectionId === "remote" ? [] : [...workgroups];
     return null;
   });
   return state;
@@ -267,6 +268,91 @@ describe("App landing", () => {
     }
   });
 
+  it("keeps an unsaved Settings draft on every way out: ⌘, the menu, the tray, Back to chat, ⌘1–9 and a connection switch", async () => {
+    const notify = vi.fn();
+    window.notify = notify;
+    daemon({ remote: { profiles: [SCOUT] } });
+    render(<App />);
+    await waitFor(() => expect(selected("alpi")).toBe(true));
+    await waitFor(() => expect(listeners.nav).toBeTruthy());
+    openSettings();
+    await waitFor(() => expect(inSettingsView()).toBe(true));
+    setSettingsDirty("profile:default:bio", true);
+    try {
+      const routes = [
+        () => openSettings(),
+        () => act(() => listeners.nav({ payload: "settings-toggle" })),
+        () => act(() => listeners.nav({ payload: "home" })),
+        () => fireEvent.click(screen.getByRole("button", { name: "Back to chat" })),
+        () => act(() => { window.dispatchEvent(new KeyboardEvent("keydown", { key: "2", metaKey: true, bubbles: true, cancelable: true })); }),
+      ];
+      for (const [i, route] of routes.entries()) {
+        notify.mockClear();
+        route();
+        await act(async () => { await new Promise((r) => setTimeout(r, 350)); });
+        expect(inSettingsView(), `route ${i}`).toBe(true);
+        expect(notify, `route ${i}`).toHaveBeenCalledWith("Save or discard your settings changes first", { variant: "info" });
+      }
+      expect(screen.getByRole("heading", { level: 1 }).textContent).toMatch(/alpi/);
+      notify.mockClear();
+      fireEvent.click(screen.getByText("This computer"));
+      fireEvent.click(await screen.findByText("mirai"));
+      await act(async () => { await new Promise((r) => setTimeout(r, 350)); });
+      expect(invoke.mock.calls.some(([cmd]) => cmd === "host_connection_set_active")).toBe(false);
+      expect(notify).toHaveBeenCalled();
+    } finally {
+      setSettingsDirty("profile:default:bio", false);
+      delete window.notify;
+    }
+  });
+
+  it("jumps to the second roster row on ⌘2", async () => {
+    daemon();
+    render(<App />);
+    await waitFor(() => expect(selected("alpi")).toBe(true));
+    act(() => { window.dispatchEvent(new KeyboardEvent("keydown", { key: "2", metaKey: true, bubbles: true, cancelable: true })); });
+    await waitFor(() => expect(selected("alpi")).toBe(false));
+  });
+
+  it("closes Settings from the menu's Settings… when nothing is unsaved, while the tray's Settings only opens", async () => {
+    daemon();
+    render(<App />);
+    await waitFor(() => expect(selected("alpi")).toBe(true));
+    await waitFor(() => expect(listeners.nav).toBeTruthy());
+    act(() => listeners.nav({ payload: "settings-toggle" }));
+    await waitFor(() => expect(inSettingsView()).toBe(true));
+    act(() => listeners.nav({ payload: "settings" }));
+    await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+    expect(inSettingsView()).toBe(true);
+    act(() => listeners.nav({ payload: "settings-toggle" }));
+    await waitFor(() => expect(inSettingsView()).toBe(false));
+  });
+
+  it("lands on the first row after deleting a profile from Settings while its bio is unsaved", async () => {
+    window.notify = vi.fn();
+    daemon();
+    render(<App />);
+    await waitFor(() => expect(selected("alpi")).toBe(true));
+    fireEvent.click(row("doc"));
+    await waitFor(() => expect(selected("doc")).toBe(true));
+    openSettings();
+    await waitFor(() => expect(inSettingsView()).toBe(true));
+    setSettingsDirty("profile:doc:bio", true);
+    try {
+      fireEvent.contextMenu(row("doc"));
+      fireEvent.click(screen.getByText("Delete profile…"));
+      const dialog = await screen.findByRole("dialog");
+      const field = dialog.querySelector("input");
+      fireEvent.change(field, { target: { value: "doc" } });
+      fireEvent.keyDown(field, { key: "Enter" });
+      await waitFor(() => expect(inSettingsView()).toBe(false));
+      expect(window.notify).not.toHaveBeenCalledWith("Save or discard your settings changes first", { variant: "info" });
+    } finally {
+      setSettingsDirty("profile:doc:bio", false);
+      delete window.notify;
+    }
+  });
+
   it("lands on the first roster row after deleting the open profile", async () => {
     daemon();
     render(<App />);
@@ -282,6 +368,28 @@ describe("App landing", () => {
     await waitFor(() => expect(selected("alpi")).toBe(true));
     expect(inSettingsView()).toBe(false);
     await waitFor(() => expect(screen.queryAllByText("doc").filter((el) => el.closest(".ds-sb-row"))).toHaveLength(0));
+  });
+
+  it("falls back to the workgroups list with a notice when the open workgroup leaves the roster", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+    const workgroups = [CREW];
+    daemon({ workgroups });
+    render(<NotificationProvider><App /></NotificationProvider>);
+    await waitFor(() => expect(selected("alpi")).toBe(true));
+    fireEvent.click(row("crew"));
+    await waitFor(() => expect(selected("crew")).toBe(true));
+    await waitFor(() => expect(listeners["daemon-event"]).toBeTruthy());
+    workgroups.splice(0);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(61000);
+    });
+    await waitFor(() => expect(screen.getByText("That workgroup is no longer on this daemon.")).toBeInTheDocument());
+    expect(screen.queryAllByText("crew").filter((el) => el.closest(".ds-sb-row"))).toHaveLength(0);
+    expect(screen.getByText("No workgroups yet")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("lands a member snapped out of Settings on the first roster row", async () => {

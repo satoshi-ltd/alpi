@@ -13,6 +13,7 @@ import { Eyebrow } from '../../../../src/components/Eyebrow';
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useToast } from '../../../../src/components/Toast';
 import { useBack } from '../../../../src/hooks/useBack';
+import { useDirtyBack } from '../../../../src/hooks/useDirtyBack';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 import { ScopeToggles } from '../../../../src/features/peers/ScopeToggles';
@@ -29,6 +30,7 @@ export default function AddPeer() {
   const [address, setAddress] = useState('');
   const [scopes, setScopes] = useState(new Set(['link.ping', 'link.ask']));
   const [busy, setBusy] = useState(false);
+  const askBack = useDirtyBack(!!(handle.trim() || pubkey.trim() || address.trim()), goBack);
 
   const ready = handle.trim() && pubkey.trim() && scopes.size > 0 && !busy;
 
@@ -51,7 +53,7 @@ export default function AddPeer() {
         allow: Array.from(scopes),
       });
       toast({ title: 'Peer added', message: handle });
-      goBack();
+      askBack.leave();
     } catch (e) {
       toast({ title: 'Add failed', message: String(e) });
     } finally {
@@ -64,7 +66,7 @@ export default function AddPeer() {
       <ScreenHeader
         title="Add peer"
         subtitle={`@${id} · trust another alpi`}
-        onBack={goBack}
+        onBack={askBack}
         right={<Button title="Add" size="md" disabled={!ready} loading={busy} onPress={save} />}
       />
       <KeyboardPane>

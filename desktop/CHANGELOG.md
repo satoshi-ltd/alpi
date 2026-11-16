@@ -11,6 +11,15 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.10.5 — 2026-11-16 — nothing lost on the way out
+
+- Settings never drops an unsaved bio or briefing: every way out (⌘,, the menu, the tray, Back to chat, ⌘1–9, a connection switch) asks you to save or discard first, and the menu's Settings… also closes Settings.
+- ⌘1–9 jump to the roster rows again.
+- A workgroup deleted elsewhere while open returns you to the workgroups list with a notice instead of a blank page.
+- An opened work line stays open when the answer lands.
+- The app icon's mark reaches both sides of its tile.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.10.4 — 2026-11-16 — one line of work
 
 - A turn's thinking and tool calls are one line above the answer: the profile's mark, "Working" with what it is doing now and a clock, then "Worked for 34s · 6 steps" with any failures.

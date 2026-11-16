@@ -12,6 +12,7 @@ import { Field } from '../../../../src/components/Field';
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useToast } from '../../../../src/components/Toast';
 import { useBack } from '../../../../src/hooks/useBack';
+import { useDirtyBack } from '../../../../src/hooks/useDirtyBack';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 import { code } from '../../../../src/theme/code';
@@ -51,6 +52,7 @@ export default function NewMcp() {
   const [argsRaw, setArgsRaw] = useState('');
   const [envRaw, setEnvRaw] = useState('');
   const [busy, setBusy] = useState(false);
+  const askBack = useDirtyBack(!!(name.trim() || command.trim() || argsRaw.trim() || envRaw.trim()), goBack);
 
   const trimmedName = name.trim();
   const trimmedCmd = command.trim();
@@ -69,7 +71,7 @@ export default function NewMcp() {
         env: parseEnv(envRaw),
       });
       toast({ title: 'MCP added', message: trimmedName });
-      goBack();
+      askBack.leave();
     } catch (e) {
       toast({ title: 'Add failed', message: String(e) });
     } finally {
@@ -82,7 +84,7 @@ export default function NewMcp() {
       <ScreenHeader
         title="Add MCP server"
         subtitle={`@${id} · connect toolset`}
-        onBack={goBack}
+        onBack={askBack}
         right={<Button title="Add" size="md" disabled={!ready} loading={busy} onPress={save} />}
       />
       <KeyboardPane>

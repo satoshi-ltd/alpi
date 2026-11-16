@@ -9,6 +9,7 @@ import { Field } from '../../../../src/components/Field';
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useToast } from '../../../../src/components/Toast';
 import { useBack } from '../../../../src/hooks/useBack';
+import { useDirtyBack } from '../../../../src/hooks/useDirtyBack';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
 import { IMAP_FIELDS, buildAddPayload, isAddReady } from '../../../../src/lib/emailAccounts';
 import { space } from '../../../../src/theme/tokens';
@@ -22,6 +23,7 @@ export default function NewEmail() {
   const { colors, fonts, fontSizes } = useTheme();
   const [draft, setDraft] = useState({});
   const [busy, setBusy] = useState(false);
+  const askBack = useDirtyBack(Object.values(draft).some((v) => String(v ?? '').trim()), goBack);
 
   const ready = isAddReady(draft) && !busy;
   const setField = (key, value) => setDraft((d) => ({ ...d, [key]: value }));
@@ -32,7 +34,7 @@ export default function NewEmail() {
     try {
       await call('host.email.add', buildAddPayload(id, draft));
       toast({ title: 'Email added', message: (draft.address || '').trim() });
-      goBack();
+      askBack.leave();
     } catch (e) {
       toast({ title: 'Add failed', message: String(e) });
     } finally {
@@ -45,7 +47,7 @@ export default function NewEmail() {
       <ScreenHeader
         title="Add IMAP account"
         subtitle={`@${id} · IMAP / SMTP`}
-        onBack={goBack}
+        onBack={askBack}
         right={<Button title="Add" size="md" disabled={!ready} loading={busy} onPress={save} />}
       />
       <KeyboardPane>

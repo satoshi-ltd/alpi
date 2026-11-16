@@ -16,6 +16,7 @@ import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useToast } from '../../../../src/components/Toast';
 import { Bold, Code, ConfirmDialog } from '../../../../src/components/ConfirmDialog';
 import { useBack } from '../../../../src/hooks/useBack';
+import { useDirtyBack } from '../../../../src/hooks/useDirtyBack';
 import { useOllamaModels } from '../../../../src/hooks/useDaemonData';
 import { useProfile } from '../../../../src/hooks/useSubject';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
@@ -24,6 +25,8 @@ import { useTheme } from '../../../../src/theme/ThemeContext';
 import { SkeletonBar } from '../../../../src/components/SkeletonBar';
 import { ListSkeleton } from '../../../../src/components/ListSkeleton';
 import { code } from '../../../../src/theme/code';
+
+const OLLAMA_DEFAULT_URL = 'http://127.0.0.1:11434';
 
 export default function ProviderKey() {
   const { id, key } = useLocalSearchParams();
@@ -46,7 +49,7 @@ export default function ProviderKey() {
 
   const [value, setValue] = useState('');
   const [show, setShow] = useState(false);
-  const [url, setUrl] = useState('http://127.0.0.1:11434');
+  const [url, setUrl] = useState(OLLAMA_DEFAULT_URL);
   const [name, setName] = useState('');
   const [confirmRemove, setConfirmRemove] = useState(false);
 
@@ -60,6 +63,10 @@ export default function ProviderKey() {
       setUrl(existingOllama.url);
     }
   }, [existingOllama]);
+  const dirty = !info ? false : info.isOllama
+    ? (isNewOllama ? !!name.trim() || url !== OLLAMA_DEFAULT_URL : !!existingOllama && (name !== existingOllama.name || url !== existingOllama.url))
+    : value.trim().length > 0;
+  const askBack = useDirtyBack(dirty, goBack);
 
   if (!info) {
     return (
@@ -83,12 +90,13 @@ export default function ProviderKey() {
         onUrlChange={setUrl}
         onSaved={async () => {
           await refresh().catch(() => {});
-          goBack();
+          askBack.leave();
         }}
         onRemoved={async () => {
           await refresh().catch(() => {});
-          goBack();
+          askBack.leave();
         }}
+        onBack={askBack}
         call={call}
         toast={toast}
         colors={colors}
@@ -112,7 +120,7 @@ export default function ProviderKey() {
       await call('host.providers.set_key', { profile: id, key: info.env, value: trimmed });
       await refresh().catch(() => {});
       toast({ title: isExisting ? 'Updated' : 'Saved', message: info.env });
-      goBack();
+      askBack.leave();
     } catch (e) {
       toast({ title: 'Save failed', message: String(e) });
     }
@@ -123,7 +131,7 @@ export default function ProviderKey() {
       await call('host.providers.unset_key', { profile: id, key: info.env });
       await refresh().catch(() => {});
       toast({ title: 'Removed', message: info.env });
-      goBack();
+      askBack.leave();
     } catch (e) {
       toast({ title: 'Remove failed', message: String(e) });
     }
@@ -134,7 +142,7 @@ export default function ProviderKey() {
       <ScreenHeader
         title={info.label}
         subtitle={`@${id} · ${info.env}${isExisting ? ' · set' : ''}`}
-        onBack={goBack}
+        onBack={askBack}
       />
       <KeyboardPane>
         <ScrollView contentContainerStyle={{ paddingHorizontal: space.s7, paddingVertical: space.s8, gap: space.s8 }} keyboardShouldPersistTaps="handled">
@@ -218,6 +226,7 @@ function OllamaScreen({
   onUrlChange,
   onSaved,
   onRemoved,
+  onBack,
   call,
   toast,
   colors,
@@ -257,7 +266,7 @@ function OllamaScreen({
       <ScreenHeader
         title={info.label}
         subtitle={`@${id} · ${isNew ? 'new instance' : 'local models'}`}
-        onBack={() => onSaved()}
+        onBack={onBack}
       />
       <KeyboardPane>
         <ScrollView contentContainerStyle={{ paddingBottom: space.s10 }} keyboardShouldPersistTaps="handled">

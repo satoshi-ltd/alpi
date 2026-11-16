@@ -414,3 +414,13 @@ def test_the_offline_slash_runs_from_top_left_to_bottom_right(size):
 def test_the_tray_assets_are_the_committed_bytes():
     for rel, data in gen.tray_files().items():
         assert (REPO / rel).read_bytes() == data
+
+
+def test_the_desktop_close_up_reaches_both_sides_of_its_tile_and_keeps_both_eyes_inside_it():
+    polys = gen.twin_polygons(100, gen.held_pose(), *gen.close_pose(gen.TILE_CLOSE_SCALE))
+    body, eyes = polys[0], polys[1:]
+    half = gen.ICON_SIDE / 2
+    left, right = min(x for x, _ in body), max(x for x, _ in body)
+    assert left <= 50 - half and right >= 50 + half
+    for eye in eyes:
+        assert all(gen.tile_distance(x, y, 100) < -1 for x, y in eye)

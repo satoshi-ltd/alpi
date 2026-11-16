@@ -18,7 +18,9 @@ export function useSkeleton(loading, { delay = 150, minShown = 400 } = {}) {
     }
     if (!loading && show) {
       const wait = Math.max(0, minShown - (Date.now() - shownAt.current));
-      const timer = setTimeout(() => setShow(false), wait);
+      const timer = setTimeout(() => {
+        if (!loadingNow.current) setShow(false);
+      }, wait);
       return () => clearTimeout(timer);
     }
     return undefined;

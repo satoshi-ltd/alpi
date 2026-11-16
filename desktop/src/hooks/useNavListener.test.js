@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { renderHook, act } from "@testing-library/react";
+import { renderHook, act, waitFor } from "@testing-library/react";
 import { listen } from "@tauri-apps/api/event";
 import { useNavListener } from "./useNavListener.js";
 
@@ -73,4 +73,17 @@ describe("useNavListener", () => {
     act(() => registered({ payload: "settings" }));
     expect(setView).toHaveBeenCalledWith({ kind: "settings" });
   });
+
+  it("toggles Settings only for the menu's settings-toggle, and only opens for the tray's settings", async () => {
+    const setView = vi.fn();
+    const toggle = { current: vi.fn() };
+    renderHook(() => useNavListener(setView, toggle));
+    await waitFor(() => expect(registered).toBeTruthy());
+    act(() => registered({ payload: "settings" }));
+    expect(setView).toHaveBeenCalledWith({ kind: "settings" });
+    expect(toggle.current).not.toHaveBeenCalled();
+    act(() => registered({ payload: "settings-toggle" }));
+    expect(toggle.current).toHaveBeenCalledTimes(1);
+  });
 });
+
