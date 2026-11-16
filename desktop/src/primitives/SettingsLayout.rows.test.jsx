@@ -28,6 +28,7 @@ describe("settings rows share one trailing edge", () => {
       [<>{ghost("Add")}<span>chip</span></>, null],
       [<>{ghost("Primary")}<button data-variant="primary">Save</button></>, null],
       [<button data-variant="ghost" data-size="sm" aria-label="Close"></button>, null],
+      [<><span>none</span><button data-variant="ghost" data-size="md" data-filled="">Add</button></>, null],
     ];
     for (const [children, expected] of cases) {
       const { container, unmount } = render(<Field label="Row">{children}</Field>);
@@ -71,6 +72,7 @@ describe("settings rows share one trailing edge", () => {
     expect(rule(".fieldRowStacked .fieldControl")).toMatch(/flex-direction:\s*column[\s\S]*align-items:\s*flex-end/);
     expect(rule(".fieldRowStacked .fieldLabelCol")).toMatch(/padding-top:\s*calc\(\(var\(--ctl-32\) - var\(--text-ui\) \* var\(--lh-ui\)\) \/ 2\)/);
     expect(rule(".fieldLine")).toMatch(/justify-content:\s*flex-end/);
+    expect(rule(".fieldLine:empty")).toMatch(/display:\s*none/);
   });
 
   it("renders a stacked field as right-aligned lines and forwards the helper from Row", () => {

@@ -38,7 +38,7 @@ export function trailingGhost(group) {
   };
   const buttons = [...group.querySelectorAll("button")].filter((b) => !b.hidden && getComputedStyle(b).display !== "none" && !inFloat(b));
   const last = buttons.at(-1);
-  if (!last || !/ghost$/.test(last.dataset.variant ?? "") || !last.textContent.trim()) return null;
+  if (!last || !/ghost$/.test(last.dataset.variant ?? "") || last.hasAttribute("data-filled") || !last.textContent.trim()) return null;
   for (let node = last; node && node !== group; node = node.parentElement) {
     for (let next = node.nextElementSibling; next; next = next.nextElementSibling) if (!floating(next)) return null;
   }

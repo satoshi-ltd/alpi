@@ -65,6 +65,7 @@ export default function ModelPicker({
           variant="ghost"
           size={variant === "field" ? "md" : "sm"}
           className={variant === "field" ? styles.modelPickerTriggerField : undefined}
+          data-filled={variant === "field" ? "" : undefined}
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
         >
@@ -84,7 +85,7 @@ export default function ModelPicker({
         <div
           ref={popRef}
           inert={closing || undefined}
-          style={{ "--menu-dy": mode === "default" ? "-4px" : "4px", transformOrigin: mode === "default" ? "top left" : "bottom left" }}
+          style={{ "--menu-dy": mode === "default" ? "-4px" : "4px", transformOrigin: mode === "default" ? "top right" : "bottom left" }}
           onKeyDown={(event) => navigateMenu(event, popRef.current)}
           className={`${closing ? "anim-menu-out" : "anim-menu"} ${styles.modelPickerPop} ${
             mode === "default" ? styles.modelPickerPopDown : styles.modelPickerPopUp

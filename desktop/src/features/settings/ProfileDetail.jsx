@@ -51,7 +51,7 @@ import { EmailCell } from "./fields/services.jsx";
 import { DaemonField } from "./fields/DaemonField.jsx";
 import { ThemeField } from "./fields/ThemeField.jsx";
 import { canSelfUpdate } from "../../../../common/updateHint.mjs";
-import { fallbackList, hasFallbackModels } from "../../../../common/fallbackModels.mjs";
+import { FALLBACK_HINT, fallbackList, hasFallbackModels } from "../../../../common/fallbackModels.mjs";
 import {
   NetworkAddressField,
   PairingNameField,
@@ -389,7 +389,7 @@ export default function ProfileDetail({
             </Row>
           )}
           {hasFallbackModels(profile) && (hasModels || fallbackList(profile).length > 0) && (
-            <Row label="Fallbacks" keywords="fallback models outage provider" alignTop>
+            <Row label="Fallbacks" keywords="fallback models outage provider" helper={FALLBACK_HINT} stacked>
               <FallbackModelsField
                 profile={profile}
                 onSaved={() => { const landed = refreshDetail(); onSaved?.(); return landed; }}

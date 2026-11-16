@@ -58,7 +58,7 @@
 }
 .modelPickerPopDown {
   top: calc(100% + var(--sp-8));
-  left: 0;
+  right: 0;
 }
 .modelPickerPopUp {
   bottom: calc(100% + var(--sp-8));

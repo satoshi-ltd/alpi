@@ -969,9 +969,17 @@
   display: none;
 }
 
-.stackedField {
-  display: flex;
-  flex-direction: column;
+.fallbackLabel {
+  display: inline-block;
+  max-width: 224px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.fallbackActions {
+  display: inline-flex;
+  flex: none;
   gap: var(--sp-4);
-  min-width: 0;
 }

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -27,16 +29,50 @@ const saved = (list) => ["set_config_field", {
 }];
 
 describe("FallbackModelsField", () => {
-  it("lists the fallbacks in order with the hint", () => {
-    render(<FallbackModelsField profile={PROFILE} />);
-    expect(screen.getByText("1 · sonnet")).toBeTruthy();
-    expect(screen.getByText("2 · gpt-x")).toBeTruthy();
-    expect(screen.getByText("Tried in order when the main model's provider fails.")).toBeTruthy();
+  it("lists the fallbacks in order, one right-aligned line each", () => {
+    const { container } = render(<FallbackModelsField profile={PROFILE} />);
+    const lines = [...container.querySelectorAll("[data-field-line]")];
+    expect(lines).toHaveLength(3);
+    expect(lines[0].contains(screen.getByText("1 · sonnet"))).toBe(true);
+    expect(lines[1].contains(screen.getByText("2 · gpt-x"))).toBe(true);
+    expect(lines[2].childNodes).toHaveLength(0);
+    expect(lines.every((l) => l.parentElement === container)).toBe(true);
+    expect(container.querySelector("[class*=stackedField]")).toBeNull();
   });
 
-  it("reads none when the list is empty", () => {
+  it("reads none beside Add on one line when the list is empty", () => {
+    const { container } = render(<FallbackModelsField profile={{ ...PROFILE, fallback_models: [] }} />);
+    const lines = [...container.querySelectorAll("[data-field-line]")];
+    expect(lines).toHaveLength(1);
+    expect(lines[0].contains(screen.getByText("none"))).toBe(true);
+    expect(lines[0].contains(screen.getByRole("button", { name: /Add/ }))).toBe(true);
+  });
+
+  it("keeps Add on the row's edge and opens its list leftwards from it", () => {
     render(<FallbackModelsField profile={{ ...PROFILE, fallback_models: [] }} />);
-    expect(screen.getByText("none")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Add/ }).hasAttribute("data-filled")).toBe(true);
+    const css = readFileSync(join(import.meta.dirname, "..", "..", "..", "primitives", "ModelPicker.module.css"), "utf8");
+    const down = css.match(/\.modelPickerPopDown\s*\{([^}]*)\}/)[1];
+    expect(down).toMatch(/right:\s*0/);
+    expect(down).not.toMatch(/left:/);
+    fireEvent.click(screen.getByRole("button", { name: /Add/ }));
+    expect(screen.getByRole("listbox").parentElement.style.transformOrigin).toBe("top right");
+  });
+
+  it("keeps a model's buttons together beside a label that truncates", () => {
+    render(<FallbackModelsField profile={PROFILE} />);
+    const label = screen.getByText("1 · sonnet");
+    expect(label.className).toMatch(/fallbackLabel/);
+    const actions = screen.getByRole("button", { name: "Remove sonnet" }).closest("[class*=fallbackActions]");
+    expect(actions.querySelectorAll("button")).toHaveLength(3);
+    const settings = readFileSync(join(import.meta.dirname, "..", "Settings.module.css"), "utf8");
+    expect(settings.match(/\.fallbackLabel\s*\{([^}]*)\}/)[1]).toMatch(/text-overflow:\s*ellipsis/);
+    expect(settings.match(/\.fallbackActions\s*\{([^}]*)\}/)[1]).toMatch(/flex:\s*none/);
+  });
+
+  it("leaves the hint to the row's label", () => {
+    render(<FallbackModelsField profile={PROFILE} />);
+    expect(screen.queryByText("Tried in order when the main model's provider fails.")).toBeNull();
   });
 
   it("adds from the model picker without offering the main model or listed ones", async () => {
@@ -109,7 +145,6 @@ describe("FallbackModelsField", () => {
   it("offers no Add once every model is the main one or listed", () => {
     render(<FallbackModelsField profile={PROFILE} />);
     expect(screen.queryByRole("button", { name: /Add/ })).toBeNull();
-    expect(screen.getByText("Tried in order when the main model's provider fails.")).toBeTruthy();
   });
 
   it("leaves the main model out of every save after a fallback was promoted", async () => {

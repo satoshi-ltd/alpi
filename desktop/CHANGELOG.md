@@ -11,6 +11,13 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.10.6 — 2026-11-16 — fallbacks on the edge
+
+- The Fallbacks row in a profile's settings ends on the same right edge as every other row: each model and its reorder buttons on one line, Add on the last.
+- What fallbacks do is written under the label, and an empty list reads "none" beside Add instead of on a line of its own.
+- A model picker that ends a settings row stays on that edge instead of sticking out past it, and its list opens leftwards from the picker so none of it is cut off.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.10.5 — 2026-11-16 — nothing lost on the way out
 
 - Settings never drops an unsaved bio or briefing: every way out (⌘,, the menu, the tray, Back to chat, ⌘1–9, a connection switch) asks you to save or discard first, and the menu's Settings… also closes Settings.

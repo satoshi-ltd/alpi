@@ -7,7 +7,6 @@ import Tip from "../../../primitives/Tip.jsx";
 import { modelLabel } from "../../../lib/modelLabel.js";
 import ModelPicker from "../../ModelPicker.jsx";
 import {
-  FALLBACK_HINT,
   FALLBACK_KEY,
   MAX_FALLBACKS,
   addFallback,
@@ -15,6 +14,7 @@ import {
   moveFallback,
   removeFallback,
 } from "../../../../../common/fallbackModels.mjs";
+import { FieldLine } from "../primitives.jsx";
 import styles from "../Settings.module.css";
 
 export function FallbackModelsField({ profile, onSaved }) {
@@ -37,40 +37,42 @@ export function FallbackModelsField({ profile, onSaved }) {
   };
 
   return (
-    <span className={styles.stackedField}>
-      {list.length === 0 && <span className={styles.muted}>none</span>}
+    <>
       {list.map((model, i) => (
-        <span key={model} className={styles.inlineRow}>
+        <FieldLine key={model}>
           <Tip text={model} side="up">
-            <span className={styles.mono}>{`${i + 1} · ${modelLabel(model)}`}</span>
+            <span className={`${styles.mono} ${styles.fallbackLabel}`}>{`${i + 1} · ${modelLabel(model)}`}</span>
           </Tip>
-          <Button
-            size="sm"
-            variant="ghost"
-            icon={<Icon name="chevron-up" size="sm" />}
-            tip={`Move ${modelLabel(model)} up`}
-            disabled={busy || i === 0}
-            onClick={() => persist(moveFallback(list, i, -1))}
-          />
-          <Button
-            size="sm"
-            variant="ghost"
-            icon={<Icon name="chevron-down" size="sm" />}
-            tip={`Move ${modelLabel(model)} down`}
-            disabled={busy || i === list.length - 1}
-            onClick={() => persist(moveFallback(list, i, 1))}
-          />
-          <Button
-            size="sm"
-            variant="ghost"
-            icon={<Icon name="x" size="sm" />}
-            tip={`Remove ${modelLabel(model)}`}
-            disabled={busy}
-            onClick={() => persist(removeFallback(list, i))}
-          />
-        </span>
+          <span className={styles.fallbackActions}>
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<Icon name="chevron-up" size="sm" />}
+              tip={`Move ${modelLabel(model)} up`}
+              disabled={busy || i === 0}
+              onClick={() => persist(moveFallback(list, i, -1))}
+            />
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<Icon name="chevron-down" size="sm" />}
+              tip={`Move ${modelLabel(model)} down`}
+              disabled={busy || i === list.length - 1}
+              onClick={() => persist(moveFallback(list, i, 1))}
+            />
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<Icon name="x" size="sm" />}
+              tip={`Remove ${modelLabel(model)}`}
+              disabled={busy}
+              onClick={() => persist(removeFallback(list, i))}
+            />
+          </span>
+        </FieldLine>
       ))}
-      <span className={styles.inlineRow}>
+      <FieldLine>
+        {list.length === 0 && <span className={styles.muted}>none</span>}
         {list.length >= MAX_FALLBACKS ? (
           <span className={styles.muted}>{`${MAX_FALLBACKS} is the most a profile can list.`}</span>
         ) : (
@@ -87,8 +89,7 @@ export function FallbackModelsField({ profile, onSaved }) {
             onChange={(id) => persist(addFallback(list, id, main))}
           />
         )}
-        <span className={styles.muted}>{FALLBACK_HINT}</span>
-      </span>
-    </span>
+      </FieldLine>
+    </>
   );
 }

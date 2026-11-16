@@ -274,6 +274,8 @@ describe("ProfileDetail — fallback models row", () => {
     const first = renderDetail();
     expect(screen.getByText("Fallbacks")).toBeInTheDocument();
     expect(screen.getByText("fallbacks field")).toBeInTheDocument();
+    expect(screen.getByText("fallbacks field").closest("[data-settings-row]").className).toMatch(/fieldRowStacked/);
+    expect(screen.getByText("Tried in order when the main model's provider fails.").className).toMatch(/fieldHelper/);
     first.unmount();
 
     delete stableDetail.fallback_models;

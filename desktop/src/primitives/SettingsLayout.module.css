@@ -110,6 +110,10 @@
   min-height: var(--ctl-32);
 }
 
+.fieldLine:empty {
+  display: none;
+}
+
 .fieldControl [data-trailing][data-size="sm"] {
   margin-inline-end: calc(-1 * var(--sp-12));
 }
