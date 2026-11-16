@@ -304,13 +304,13 @@ def process(*rows, gap=2):
 
 def desktop_conversation():
     body = f"""<div style="padding: 40px 48px; display: flex; flex-direction: column; gap: 24px; box-sizing: border-box">
-{h1("Conversation · desktop", "Messages, alpi’s process and the composer as ChatPane paints them. The user writes in a tinted bubble; alpi answers full width in sans. Reasoning and tool steps are alpi’s process: one mono block at 11 px, in the order they happened, 8 px above the answer; every row opens with one chevron after its label that turns 90°. Both footers keep a faint time, with the action row flush with the bubble edge; usage lives in a tooltip on the time. Turns sit 32 px apart. The header controls centre on the title line; a usage bar below 1 % is not drawn and its figure reads —.")}
+{h1("Conversation · desktop", "Messages, alpi’s process and the composer as ChatPane paints them. The user writes in a tinted bubble; alpi answers full width in sans. A turn’s work is one line above the answer: the profile’s mark, Working with the current step, or Worked for and its steps; it opens into the steps in order, and every row opens with one chevron after its label that turns 90°. Both footers keep a faint time, with the action row flush with the bubble edge; usage lives in a tooltip on the time. Turns sit 32 px apart. The header controls centre on the title line; a usage bar below 1 % is not drawn and its figure reads —.")}
 {spec("Chat header · profile", d_header("profile", 1184), 1184, 0)}
 {spec("Chat header · workgroup", d_header("workgroup", 1184), 1184, 0)}
 {row(spec("User message · neutral selected tone, radius 4, faint time then actions flush with the bubble’s right edge, on hover or focus within", d_user("Can you summarize yesterday’s deploy logs and flag anything that failed?"), 580), spec("Peer reply · peer accent 11%, radius 6 14 14 14", d_peer(), 580))}
 {spec("Alpi message · markdown body, actions flush with the left edge then the faint time, on hover or focus within and at rest on the last message, usage in a tooltip on the time", d_assistant("<strong>Deploy summary</strong>: 14 jobs ran; 2 failed.<ul style='margin: 8px 0; padding-left: 22px'><li>" + code_inline("api-migrate") + " timed out after 300s</li><li>" + code_inline("web-build") + " hit a lint error</li></ul>" + d_code_block("bash", "alpi logs api-migrate --tail 50") + d_table() + "Want me to open a fix?"), 1184)}
-{row(spec("Process block · collapsed: the thinking row leads with the profile’s mark, tool rows in mono, 24 px rows 2 px apart, in order", process(d_thought(secs="3s"), d_bucket("2 tool calls")), 380), spec("Process block · streaming: the running step and Thinking… (static under reduced motion)", process(d_thought(secs="3s"), d_step("read_file", "deploy.log · first 200 lines", "0.2s"), d_step("web_fetch", "status.example.com", "3s", "running"), d_thinking()), 380), spec("Process block · opened: reasoning in mono, spans between the steps", process(d_thought(True, secs="3s", lines=("The user wants yesterday’s deploys.", "Read the log first.")), d_step("read_file", "deploy.log · first 200 lines", "0.2s"), d_thought(secs="2s"), d_step("grep", "3 matches for exit=1", "0.1s")), 380))}
-{row(spec("Process block · steps open to arguments and output; failures open themselves", process(d_bucket("+3 previous tool calls", 1), d_step("shell", "npm run lint", "4.1s", "failed", step_body(["$ npm run lint", '<span style="color: #c14545">src/app.ts:14  no-unused-vars</span>', "1 error, 0 warnings"])), d_step("grep", "3 matches for exit=1", "0.1s")), 580), spec("Inline approval · the open chat asks in the flow on a card with an ink-4 ring; one primary action and three ghost alternatives; a question uses the same card", inline_request() + inline_ask(), 580))}
+{row(spec("Work line · after the answer: the profile’s mark at the 24 px row size, how long the turn worked, its steps and any failures, one chevron after the label", process(work_line("done", secs="34s", steps=6, failed=1)), 380), spec("Work line · while it works: the mark working, the newest step in plain words, a clock at the right (still under reduced motion)", process(work_line("running", action="Fetching status.example.com", secs="8s")), 380), spec("Work line · opened: every step in the order it happened, indented under the mark, each still closed", process(work_line("done", secs="34s", steps=4, open_=True), work_steps(d_thought(secs="3s"), d_step("read_file", "deploy.log · first 200 lines", "0.2s"), d_thought(secs="2s"), d_step("grep", "3 matches for exit=1", "0.1s"))), 380))}
+{row(spec("Work line · a step opens to its arguments and output", process(work_line("done", secs="34s", steps=6, failed=1, open_=True), work_steps(d_step("shell", "npm run lint", "4.1s", "failed", step_body(["$ npm run lint", '<span style="color: #c14545">src/app.ts:14  no-unused-vars</span>', "1 error, 0 warnings"])), d_step("grep", "3 matches for exit=1", "0.1s"))), 580), spec("Inline approval · the open chat asks in the flow on a card with an ink-4 ring; one primary action and three ghost alternatives; a question uses the same card", inline_request() + inline_ask(), 580))}
 {spec("Load skeleton · after 450 ms", d_skeleton(), 580)}
 {row(spec("Attachments · composer and message variants", d_attachment("deploy-report.pdf", "1.2 MB") + d_attachment("chart.png", "png · 240 KB", "message"), 380), spec("Produced images · 2-column grid, 4:3", d_images(), 380), spec("Ask user · answered and unanswered", d_ask_answered() + d_ask_missing(), 380))}
 {row(spec("Composer · idle", d_composer(), 580), spec("Composer · ready to send", d_composer("Open a fix for the lint error", "ready"), 580))}
@@ -540,7 +540,7 @@ def mobile_conversation():
 {h1("Conversation · phone and Fold", "The phone draws the same conversation with touch rules: bubbles at radius 4, chat text at 16, actions behind a long press (with Select text), steps that open into a sheet, and a composer where Return adds a line and the model chip sits beside attach.")}
 {row(spec("Chat header · profile", m_header("profile"), 420, 0), spec("Chat header · workgroup", m_header("workgroup"), 420, 0), spec("Empty thread", m_empty(), 300))}
 {row(spec("User message · neutral selected tone, radius 4, long press for actions", phone(m_user("Can you summarize yesterday’s deploy logs?")), 420, 16), spec("Alpi message · rich text: heading, quote, list, code, routed model", phone(m_assistant()), 420, 16))}
-{row(spec("Process block · the thinking row leads with the profile’s mark, tool rows in mono at 12 pt, flush with the answer, in order; tap a step for its sheet", phone(m_process(m_reasoning(secs="3s"), m_tool("read_file", "deploy.log · 200 lines"), m_bucket("2 tool calls", 1), m_reasoning(True, "2s"), thinking("reading the log", 12, 20, 16, 12, label=12))), 420, 16), spec("Attachments · composer and message", m_attachment("deploy-report.pdf", "1.2 MB") + m_attachment("chart.png", "png · 240 KB", "message"), 420))}
+{row(spec("Work line · one 36 pt line with the 24 pt mark; a tap opens the steps in place and a step still opens its sheet", phone(work_line("done", secs="34s", steps=5, failed=1, open_=True, phone=True) + work_steps(m_reasoning(secs="3s"), m_tool("read_file", "deploy.log · 200 lines"), m_tool("shell", "npm run lint", "failed"), m_reasoning(True, "2s"), phone=True) + work_line("running", action="Reading deploy.log", secs="6s", phone=True)), 420, 16), spec("Attachments · composer and message", m_attachment("deploy-report.pdf", "1.2 MB") + m_attachment("chart.png", "png · 240 KB", "message"), 420))}
 {row(spec("Composer · idle", phone(m_composer()), 420, 0), spec("Composer · ready", phone(m_composer("Open a fix", "ready")), 420, 0))}
 {row(spec("Composer · busy (Stop on the accent)", phone(m_composer("Open a fix", "busy")), 420, 0), spec("Jump to latest · floating, edged in the edge ink", m_jump(), 300))}
 {row(spec("Composer · daemon unreachable (controls dim, the reason stays readable on an edged well)", phone(m_composer(state="offline")), 420, 0), spec("Composer · paused (no Resume here; the banner above is the one place that offers it)", phone(m_composer(state="paused")), 420, 0))}
@@ -584,3 +584,32 @@ def mobile_workgroup():
 
 
 CONVERSATION = {"desktop": desktop_conversation, "desktop_wg": desktop_workgroup, "mobile": mobile_conversation, "mobile_wg": mobile_workgroup}
+
+
+def work_mark(state="idle", px=24):
+    import marks
+    return marks.shape_mark("bell", DOC_ACCENT, px, state=state, seed=f"work-{state}")
+
+
+def work_line(state="done", action="Reading deploy.log", secs="12s", steps=6, failed=0, open_=False, phone=False):
+    h, size, pad = (36, 16, 16) if phone else (32, 15, 0)
+    glyph = (mi("chev-r", 16, INK3) if phone else ic("chev-r", 14, INK3))
+    glyph = glyph.replace('style="', 'style="margin-left: -4px; transform: rotate(90deg); ', 1) if open_ else glyph.replace('style="', 'style="margin-left: -4px; ', 1)
+    if state == "running":
+        lead = f'<span style="font-size: {size}px; font-weight: 500; color: {INK}; flex: none">Working</span>'
+        detail = f'<span style="min-width: 0; font-size: {size}px; color: {INK3}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{action}…</span>'
+        tail = f'<span style="margin-left: auto; font-size: 14px; font-variant-numeric: tabular-nums; color: {INK3}">{secs}</span>'
+        mark = work_mark("working")
+    else:
+        lead = f'<span style="font-size: {size}px; font-weight: 500; color: {INK2}; flex: none">Worked for {secs}</span>'
+        fail = (f'<span style="display: inline-flex; align-items: center; gap: 4px">{ic("alert", 14, DANGER_FILL)}<span style="color: {DANGER}">{failed} failed</span></span>' if failed else "")
+        detail = f'<span style="min-width: 0; display: inline-flex; align-items: center; gap: 8px; font-size: {size}px; color: {INK3}; white-space: nowrap">· {steps} {"step" if steps == 1 else "steps"}{fail}</span>'
+        tail = ""
+        mark = work_mark("idle")
+    return (f'<div role="button" aria-expanded="{"true" if open_ else "false"}" style="display: flex; align-items: center; gap: {12 if phone else 8}px; height: {h}px; padding: 0 {pad}px">'
+            f'{mark}{lead}{detail}{glyph}{tail}</div>')
+
+
+def work_steps(*rows, phone=False):
+    inset = "0 0 0 52px" if phone else "2px 0 0 24px"
+    return f'<div style="padding: {inset}; display: flex; flex-direction: column; gap: 2px">{"".join(rows)}</div>'

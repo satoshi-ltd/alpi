@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 
 import ChatPane from "./ChatPane.jsx";
@@ -76,13 +76,18 @@ describe("ChatPane — reasoning while streaming", () => {
 
   it("shows the Thinking label with a live peek while the model reasons", () => {
     render(pane({ sessionData: history, pendingTurn: { requestId: "r", user: "q", tools: [], assistantPreview: "", reasoningPreview: "reading the deploy log" } }));
+    const line = screen.getByRole("button", { name: "Working · Thinking" });
+    expect(line).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(line);
     const row = screen.getByRole("button", { name: /Thinking…/ });
-    expect(row).toHaveAttribute("aria-expanded", "false");
     expect(row.textContent).toContain("reading the deploy log");
   });
 
-  it("collapses to the Thought row once reasoning_done lands", () => {
+  it("keeps the line Working after reasoning_done while the turn still runs, and the thought collapses to its row", () => {
     render(pane({ sessionData: history, pendingTurn: { requestId: "r", user: "q", tools: [], assistantPreview: "", reasoningPreview: "plan", reasoned_s: 7, reasoningDone: true } }));
+    const line = screen.getByRole("button", { name: "Working · Thinking" });
+    expect(line).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(line);
     expect(screen.getByRole("button", { name: "Thought for 7s" })).toHaveAttribute("aria-expanded", "false");
   });
 });

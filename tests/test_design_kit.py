@@ -64,7 +64,7 @@ def test_design_system_covers_conversation_and_workgroups_on_both_clients(tmp_pa
     for client in ("Desktop", "Mobile"):
         assert {f"System-{client}Components.dc.html", f"System-{client}Conversation.dc.html", f"System-{client}Workgroup.dc.html"} <= system
     conversation = (tmp_path / "canvas" / "project" / "System-DesktopConversation.dc.html").read_text()
-    assert all(label in conversation for label in ("User message", "Alpi message", "Peer reply", "Process block", "Composer"))
+    assert all(label in conversation for label in ("User message", "Alpi message", "Peer reply", "Work line", "Composer"))
     workgroup = (tmp_path / "canvas" / "project" / "System-DesktopWorkgroup.dc.html").read_text()
     assert all(f"Marker · {state}" in workgroup for state in ("task", "working", "done", "skip"))
 
@@ -79,7 +79,7 @@ def test_design_kit_draws_what_desktop_0_7_and_mobile_0_6_shipped(tmp_path):
     chat = read("Desktop-Chat.dc.html")
     assert all(f'data-state="{s}"' in chat for s in ("needs-you", "failed", "working"))
     assert "Pinned" in chat and 'aria-label="phase 2 of 4"' in chat and "Activity · 2 need you" in chat
-    assert "Thought for 4s" in chat and "wants to run a command" in chat
+    assert "Worked for 5s" in chat and "wants to run a command" in chat
     overlays = read("Desktop-Overlays.dc.html")
     assert all(group in overlays for group in ("Needs you · 2", "Failing · 3", "Running · 2", "Upcoming · 2", "Keyboard shortcuts", 'data-keys="⌘K"', "Sessions"))
     assert "Tooltip" not in overlays and "was: raw" not in overlays

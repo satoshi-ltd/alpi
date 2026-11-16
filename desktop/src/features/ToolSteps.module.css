@@ -135,12 +135,13 @@
   color: var(--ink-3);
 }
 
-.bucket {
-  display: inline-flex;
+.workLine {
+  display: flex;
   align-items: center;
   gap: var(--sp-8);
   align-self: stretch;
   width: calc(100% + 2 * var(--sp-12));
+  min-width: 0;
   height: var(--ctl-32);
   margin: 0 calc(-1 * var(--sp-12));
   appearance: none;
@@ -150,14 +151,50 @@
   padding: 0 var(--sp-12);
   cursor: pointer;
   font-family: var(--font-sans);
-  font-size: var(--text-small);
+  font-size: var(--text-ui);
   line-height: var(--lh-tight);
   color: var(--ink-3);
   text-align: left;
   transition: background-color var(--dur-1) var(--ease);
 }
-.bucket:hover { background: var(--hover); color: var(--ink-2); }
-.bucket:focus-visible { outline-offset: var(--focus-inset); }
+.workLine:hover { background: var(--hover); }
+.workLine:focus-visible { outline-offset: var(--focus-inset); }
+
+.workLead {
+  flex: none;
+  font-weight: var(--fw-medium);
+  color: var(--ink);
+}
+.workLine[data-work-state="done"] .workLead { color: var(--ink-2); }
+
+.workDetail {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-8);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-3);
+}
+
+.workFailed {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sp-4);
+  flex-shrink: 0;
+  color: var(--c-danger-text);
+}
+
+.workClock {
+  flex: none;
+  margin-left: auto;
+  font-size: var(--text-small);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
 
 .bucketChev {
   flex: none;
@@ -167,34 +204,27 @@
 }
 .bucketChevOpen { transform: rotate(90deg); }
 
-.bucketLabel { white-space: nowrap; }
-
-.bucketFailed {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-4);
-  flex-shrink: 0;
-  color: var(--c-danger-text);
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
-.group {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-}
-
-.bucketReveal {
+.workReveal {
   margin: 0 calc(-1 * var(--sp-12));
 }
 
-.bucketList {
+.workRail {
   display: flex;
   flex-direction: column;
   gap: var(--space-tight);
-  padding: var(--space-tight) var(--sp-12) 0 calc(var(--sp-16) + var(--sp-12));
+  padding: var(--space-tight) var(--sp-12) 0 calc(var(--sp-24) + var(--sp-12));
 }
 
 @media (prefers-reduced-motion: reduce) {
   .step_running .icon { animation: none; }
-  .head, .chev, .bucket, .bucketChev { transition: none; }
+  .head, .chev, .workLine, .bucketChev { transition: none; }
 }

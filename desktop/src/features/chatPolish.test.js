@@ -38,9 +38,9 @@ describe("one disclosure affordance", () => {
   const steps = read("features/ToolSteps.jsx");
   const reasoning = read("primitives/Reasoning.jsx");
 
-  it("places the chevron right after the label in tool rows, reasoning and the bucket", () => {
+  it("places the chevron right after the label in tool rows, reasoning and the work line", () => {
     expect(steps).toMatch(/styles\.name\}>\{tool\.name\}<\/span>\s*<Icon name="chevron-right"/);
-    expect(steps).toMatch(/styles\.bucketLabel\}>[^\n]*<\/span>\s*<Icon name="chevron-right"/);
+    expect(steps).toMatch(/\)\}\n\s*<Icon name="chevron-right" size="sm" className=\{`\$\{styles\.bucketChev\}/);
     expect(reasoning).toMatch(/\{labelNode\}\s*<Icon name="chevron-right"[^\n]*\s*\{peekNode\}/);
     expect(steps).not.toMatch(/CaretIcon/);
   });

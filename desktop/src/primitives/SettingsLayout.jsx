@@ -26,8 +26,9 @@ export const Section = forwardRef(function Section({ label, children, kicker, id
 });
 
 function floating(el) {
-  const position = el.style?.position || getComputedStyle(el).position;
-  return position === "absolute" || position === "fixed" || el.hidden || el.matches('[role="dialog"], [role="menu"], [role="tooltip"]');
+  const style = getComputedStyle(el);
+  const position = el.style?.position || style.position;
+  return position === "absolute" || position === "fixed" || style.display === "none" || el.hidden || el.matches('[role="dialog"], [role="menu"], [role="tooltip"]');
 }
 
 export function trailingGhost(group) {
@@ -35,7 +36,7 @@ export function trailingGhost(group) {
     for (let n = b.parentElement; n && n !== group; n = n.parentElement) if (floating(n)) return true;
     return false;
   };
-  const buttons = [...group.querySelectorAll("button")].filter((b) => !inFloat(b));
+  const buttons = [...group.querySelectorAll("button")].filter((b) => !b.hidden && getComputedStyle(b).display !== "none" && !inFloat(b));
   const last = buttons.at(-1);
   if (!last || !/ghost$/.test(last.dataset.variant ?? "") || !last.textContent.trim()) return null;
   for (let node = last; node && node !== group; node = node.parentElement) {
@@ -52,14 +53,14 @@ function useTrailingEdge(ref) {
       const groups = control.querySelectorAll(":scope > [data-field-line]");
       const marked = new Set([...(groups.length ? groups : [control])].map(trailingGhost).filter(Boolean));
       for (const b of control.querySelectorAll("[data-trailing]")) if (!marked.has(b)) b.removeAttribute("data-trailing");
-      for (const b of marked) b.setAttribute("data-trailing", "");
+      for (const b of marked) if (!b.hasAttribute("data-trailing")) b.setAttribute("data-trailing", "");
     };
     mark();
     if (typeof MutationObserver !== "function") return undefined;
     const observer = new MutationObserver(mark);
-    observer.observe(control, { childList: true, subtree: true });
+    observer.observe(control, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden", "style", "class", "data-variant"] });
     return () => observer.disconnect();
-  });
+  }, [ref]);
 }
 
 export function Field({ label, children, helper, align = "center", stacked = false, hidden = false, searchable = false }) {

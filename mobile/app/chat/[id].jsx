@@ -130,6 +130,7 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profil
         reasoningLive={reasoningLive}
         answered={showAssistant}
         showReasoning={!!parts.reasoning || active}
+        running={!!turn.pending}
         accent={accent}
         shape={shape}
       />

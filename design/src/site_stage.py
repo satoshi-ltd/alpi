@@ -1,4 +1,4 @@
-from conversation_boards import d_assistant, d_composer, d_step, d_thought, d_user, inline_request, process
+from conversation_boards import d_assistant, d_composer, d_user, inline_request, process, work_line
 from desktop_boards import DOC_ACCENT, chat_actions, d_hero, d_sidebar, h1, stream_shell
 from gen import identity_glyph, m_conn_header, m_roster, m_shell_footer, m_tiles, page
 
@@ -13,7 +13,7 @@ def root(html):
 
 def desk():
     header = d_hero(h1("doc", identity_glyph("doc", DOC_ACCENT, 28), DOC_ACCENT), "", chat_actions(), DOC_ACCENT)
-    steps = process(d_thought(secs="2s"), d_step("memory", "ferritin follow-up · 2 results", "0.3s"), d_step("read_file", "labs/2026-10-panel.pdf", "0.2s"), d_step("web_fetch", "labs.example.com/availability", "1.1s"))
+    steps = process(work_line("done", secs="4s", steps=4))
     stream = (f'<div style="display: flex; flex-direction: column; gap: 14px">{d_assistant("Filed the October panel under labs/2026-10 and added the ferritin result to your health notes.", meta=False, hover=False)}{d_user("Book a follow-up draw for early November.", DOC_ACCENT)}{steps}'
               f'{d_assistant("Your October ferritin came back at 18 ng/mL, and Dr. Ruiz asked for a recheck four weeks later. The lab has an opening on Tuesday the 4th at 8:10, fasting from midnight. I can book it once you allow the page.", meta=False, hover=False)}'
               f'{inline_request("@doc", "open https://labs.example.com/book?date=2026-11-04")}</div>')

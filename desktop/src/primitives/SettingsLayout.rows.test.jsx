@@ -44,6 +44,18 @@ describe("settings rows share one trailing edge", () => {
     expect(container.querySelector("[data-trailing]")).toHaveTextContent("Delete");
   });
 
+  it("moves the mark when something solid appears after the button, and skips a hidden last button", async () => {
+    const { container } = render(<Field label="Row"><span id="host"><button data-variant="ghost" data-size="sm">Edit</button></span></Field>);
+    expect(container.querySelector("[data-trailing]")).toHaveTextContent("Edit");
+    const chip = document.createElement("span");
+    chip.textContent = "chip";
+    container.querySelector("#host").appendChild(chip);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(container.querySelector("[data-trailing]")).toBeNull();
+    const hidden = render(<Field label="Row"><button data-variant="ghost" data-size="sm">Shown</button><button data-variant="ghost" data-size="sm" hidden>Gone</button></Field>);
+    expect([...hidden.container.querySelectorAll("[data-trailing]")].map((b) => b.textContent)).toEqual(["Shown"]);
+  });
+
   it("marks the trailing button of each line in a stacked row", () => {
     const { container } = render(
       <Field label="Logs" stacked>

@@ -593,6 +593,7 @@ const Transcript = memo(function Transcript({
             />
             {streamingTurn ? (
               <PendingTurn
+                key={streamingTurn.requestId}
                 turn={streamingTurn}
                 accent={accent}
                 shape={shape}
@@ -1000,7 +1001,7 @@ function PendingTurn({ turn, accent, shape, profiles, fresh = false, inline = nu
       {(process.length > 0 || parts.askUsers.length > 0 || thinking) && (
         <div className={styles.steps}>
           {(process.length > 0 || thinking) && (
-            <ProcessBlock entries={process} accent={accent} shape={shape} thinking={thinking} answered={answered} />
+            <ProcessBlock entries={process} accent={accent} shape={shape} thinking={thinking} answered={answered} running={!closed && !turn.interrupted} writing={answered} />
           )}
           {parts.askUsers.map((a, i) => (
             <AskUserAnswer key={`a-${a.tool_id ?? i}`} result={a.result} question={a.question} accent={accent} shape={shape} />

@@ -88,98 +88,78 @@ describe("ToolStep", () => {
 });
 
 describe("ProcessBlock", () => {
-  it("keeps a clean group collapsed until clicked", () => {
-    const tools = [
-      { tool_id: "a", name: "read_file", args: { path: "a" }, ok: true },
-      { tool_id: "b", name: "grep", args: { pattern: "x" }, ok: true },
-    ];
-    render(<ToolModule tools={tools} />);
-    expect(screen.getByText("2 tool calls")).toBeTruthy();
-    expect(screen.queryByText("read_file")).toBeNull();
-    fireEvent.click(screen.getByLabelText(/Show 2 tool calls/));
-    expect(screen.getByText("read_file")).toBeTruthy();
-  });
+  const line = () => screen.getByRole("button", { name: /^(Working|Worked)/ });
 
-  it("keeps the group and the failed call closed, and counts the failure", () => {
+  it("is one closed line once the work is done: how long, how many steps, how many failed", () => {
     const tools = [
-      { tool_id: "a", name: "read_file", args: { path: "a" }, ok: true },
-      { tool_id: "b", name: "terminal", args: { command: "lint" }, ok: false, output: "1 error" },
+      { tool_id: "a", name: "read_file", args: { path: "a" }, ok: true, duration_s: 0.4 },
+      { tool_id: "b", name: "terminal", args: { command: "lint" }, ok: false, output: "1 error", duration_s: 2 },
     ];
-    render(<ToolModule tools={tools} />);
-    expect(screen.getByText("1 failed")).toBeTruthy();
-    expect(screen.getByLabelText("Show 2 tool calls")).toHaveAttribute("aria-expanded", "false");
-    fireEvent.click(screen.getByLabelText("Show 2 tool calls"));
-    expect(screen.getByRole("button", { name: /terminal/ })).toHaveAttribute("aria-expanded", "false");
+    render(<ToolModule tools={tools} reasoning="check it" seconds={3} />);
+    expect(line()).toHaveAttribute("aria-expanded", "false");
+    expect(line()).toHaveAccessibleName("Worked for 5s · 3 steps · 1 failed");
+    expect(screen.queryByText("read_file")).toBeNull();
     expect(screen.queryByText("1 error")).toBeNull();
   });
 
-  it("keeps a step the user opened open and visible when the next call starts", () => {
+  it("opens into every step in the order it happened, each step still closed", () => {
+    const tools = [
+      { tool_id: "a", name: "read_file", args: {}, ok: true, reasoning: "check the log", reasoned_s: 2 },
+      { tool_id: "b", name: "grep", args: {}, ok: true },
+    ];
+    const { container } = render(<ToolModule tools={tools} reasoning={"check the log\n\nsummarize"} seconds={6} />);
+    fireEvent.click(line());
+    expect(line()).toHaveAttribute("aria-expanded", "true");
+    const text = container.textContent;
+    expect(text.indexOf("Thought for 2s")).toBeLessThan(text.indexOf("read_file"));
+    expect(text.indexOf("read_file")).toBeLessThan(text.indexOf("grep"));
+    expect(text.indexOf("grep")).toBeLessThan(text.indexOf("Thought for 4s"));
+    expect(screen.getByRole("button", { name: /grep/ })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("names the running step in plain words while it works", () => {
+    const tools = [
+      { tool_id: "a", name: "read_file", args: { path: "deploy.log" }, ok: true },
+      { tool_id: "b", name: "web_fetch", args: { url: "status.example.com" }, ok: null },
+    ];
+    render(<ToolModule tools={tools} />);
+    expect(line()).toHaveAccessibleName("Working · Fetching status.example.com");
+    expect(line()).toHaveAttribute("data-work-state", "running");
+  });
+
+  it("says Thinking while the model thinks after its last step", () => {
+    const tools = [{ tool_id: "a", name: "grep", args: {}, ok: true }];
+    render(<ToolModule tools={tools} thinking />);
+    expect(line()).toHaveAccessibleName("Working · Thinking");
+  });
+
+  it("leads with the profile's mark at the row size, working while it runs and idle once done", () => {
+    const running = render(<ToolModule tools={[{ tool_id: "a", name: "grep", args: {}, ok: null }]} shape="bell" accent="#3899e2" />);
+    const mark = running.container.querySelector("button [data-shape]");
+    expect(mark.dataset.shape).toBe("bell");
+    expect(mark.getAttribute("width") ?? mark.style.width).toMatch(/24/);
+    running.unmount();
+    render(<ToolModule tools={[{ tool_id: "a", name: "grep", args: {}, ok: true }]} shape="bell" accent="#3899e2" />);
+    expect(line()).toHaveAttribute("data-work-state", "done");
+  });
+
+  it("keeps a step the user opened open when the next call starts", () => {
     const first = { tool_id: "a", name: "read_file", args: { path: "a" }, ok: null };
     const { rerender } = render(<ToolModule tools={[first]} />);
+    fireEvent.click(line());
     fireEvent.click(screen.getByRole("button", { name: /read_file/ }));
     rerender(<ToolModule tools={[{ ...first, ok: true }, { tool_id: "b", name: "grep", args: {}, ok: null }]} />);
     expect(screen.getByRole("button", { name: /read_file/ })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("button", { name: /grep/ })).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("lays reasoning and steps out in the order they happened, thought first when it led", () => {
-    const tools = [
-      { tool_id: "a", name: "read_file", args: {}, ok: true, reasoning: "check the log", reasoned_s: 2 },
-      { tool_id: "b", name: "grep", args: {}, ok: true },
-    ];
-    const { container } = render(<ToolModule tools={tools} reasoning={"check the log\n\nsummarize"} seconds={6} />);
-    const text = container.textContent;
-    expect(text.indexOf("Thought for 2s")).toBe(0);
-    expect(text.indexOf("Thought for 2s")).toBeLessThan(text.indexOf("2 tool calls"));
-    expect(text.indexOf("2 tool calls")).toBeLessThan(text.indexOf("Thought for 4s"));
-  });
-
-  it("keeps mid-run reasoning inside the bucket, between the steps", () => {
-    const tools = [
-      { tool_id: "a", name: "read_file", args: {}, ok: true },
-      { tool_id: "b", name: "grep", args: {}, ok: true, reasoning: "narrow it" },
-    ];
-    const { container } = render(<ToolModule tools={tools} reasoning="narrow it" />);
-    expect(screen.queryByText("Thought")).toBeNull();
-    expect(screen.getByText("2 tool calls · 1 thought")).toBeTruthy();
-    fireEvent.click(screen.getByLabelText(/Show 2 tool calls/));
-    const text = container.textContent;
-    expect(text.indexOf("read_file")).toBeLessThan(text.indexOf("Thought"));
-    expect(text.indexOf("Thought")).toBeLessThan(text.indexOf("grep"));
-  });
-
-  it("shows the running call with the thought that led to it outside the bucket", () => {
-    const tools = [
-      { tool_id: "a", name: "read_file", args: {}, ok: true },
-      { tool_id: "b", name: "terminal", args: {}, ok: null, reasoning: "run the tests" },
-    ];
-    render(<ToolModule tools={tools} />);
-    expect(screen.getByText("+1 previous tool call")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Thought" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /terminal/ })).toBeTruthy();
-  });
-
-  it("adds the live Thinking row at the end of the block", () => {
-    const tools = [{ tool_id: "a", name: "grep", args: {}, ok: true }];
-    const { container } = render(<ToolModule tools={tools} thinking />);
-    const text = container.textContent;
-    expect(text.indexOf("grep")).toBeLessThan(text.indexOf("Thinking…"));
-  });
-
-  it("keeps an opened live thought open when its tool starts", () => {
-    const { rerender } = render(<ToolModule tools={[]} reasoning="plan it" thinking />);
-    fireEvent.click(screen.getByRole("button", { name: /Thinking…/ }));
-    rerender(<ToolModule tools={[{ tool_id: "a", name: "grep", args: {}, ok: null, reasoning: "plan it" }]} reasoning="" />);
-    expect(screen.getByRole("button", { name: "Thought" })).toHaveAttribute("aria-expanded", "true");
-  });
-
-  it("never counts an empty sub-second stored span as a thought", () => {
+  it("never counts an empty sub-second stored span as a step", () => {
     const tools = [
       { tool_id: "a", name: "grep", args: {}, ok: true },
       { tool_id: "b", name: "read_file", args: {}, ok: true },
     ];
     render(<ProcessBlock entries={processTimeline(tools, "", 2, [{ seconds: 0.4, before_tool: 1 }])} />);
-    expect(screen.getByText("2 tool calls")).toBeTruthy();
+    expect(line().getAttribute("aria-label")).toMatch(/· 2 steps$/);
   });
 
   it("renders nothing when there is no process", () => {
@@ -200,7 +180,7 @@ describe("process block typography", () => {
     expect(rule).toMatch(/font-family: var\(--font-sans\)/);
   });
 
-  it.each([[steps, "head"], [steps, "bucket"]])("every tool row is a 14 px sans line of 32 px", (css, sel) => {
+  it.each([[steps, "head"]])("every tool row is a 14 px sans line of 32 px", (css, sel) => {
     const rule = block(css, sel);
     expect(rule).toMatch(/height: var\(--ctl-32\)/);
     expect(rule).toMatch(/font-family: var\(--font-sans\)/);
@@ -224,25 +204,80 @@ describe("process block typography", () => {
     expect(block(steps, "module")).toMatch(/gap: var\(--space-tight\)/);
   });
 
-  it.each([[steps, "head"], [steps, "bucket"], [reasoning, "row"]])("pulls each row into the gutter by its own padding so glyphs sit flush with the answer", (css, sel) => {
+  it.each([[steps, "head"], [steps, "workLine"], [reasoning, "row"]])("pulls each row into the gutter by its own padding so glyphs sit flush with the answer", (css, sel) => {
     const rule = block(css, sel);
     expect(rule).toMatch(/margin: 0 calc\(-1 \* var\(--sp-12\)\)/);
     expect(rule).toMatch(/padding: 0 var\(--sp-12\)/);
     expect(rule).toMatch(/width: calc\(100% \+ 2 \* var\(--sp-12\)\)/);
   });
 
-  it("keeps the opened bodies' indent relative to the row and lets the bucket's rows reach the gutter", () => {
+  it("keeps the opened bodies' indent relative to the row and indents the steps under the mark, with no rule", () => {
     expect(block(steps, "detail")).toMatch(/padding: var\(--sp-8\) 0 var\(--sp-8\) calc\(var\(--icon-sm\) \+ var\(--sp-12\)\)/);
     expect(block(reasoning, "body")).toMatch(/margin: var\(--sp-4\) 0 var\(--sp-4\) calc\(var\(--sp-16\) - var\(--sp-12\)\)/);
-    expect(block(steps, "bucketReveal")).toMatch(/margin: 0 calc\(-1 \* var\(--sp-12\)\)/);
-    expect(block(steps, "bucketList")).toMatch(/calc\(var\(--sp-16\) \+ var\(--sp-12\)\)/);
+    expect(block(steps, "workReveal")).toMatch(/margin: 0 calc\(-1 \* var\(--sp-12\)\)/);
+    expect(block(steps, "workRail")).toMatch(/padding: var\(--space-tight\) var\(--sp-12\) 0 calc\(var\(--sp-24\) \+ var\(--sp-12\)\)/);
+    expect(block(steps, "workRail")).not.toMatch(/border/);
+  });
+
+  it("sets the work line in 15 px sans, the lead in ink, the detail in ink-3", () => {
+    expect(block(steps, "workLine")).toMatch(/font-size: var\(--text-ui\)/);
+    expect(block(steps, "workLead")).toMatch(/color: var\(--ink\)/);
+    expect(block(steps, "workDetail")).toMatch(/color: var\(--ink-3\)/);
   });
 });
 
 describe("ProcessBlock hands the profile to its reasoning", () => {
-  it("leads the thinking row with the profile's mark in its colour", () => {
+  it("leads the opened thinking row with the profile's mark in its colour", () => {
     render(<ProcessBlock entries={[{ kind: "reasoning", key: "r0", text: "plan", seconds: 3 }]} shape="bell" accent="#3899e2" />);
-    expect(document.querySelector("[data-shape]").dataset.shape).toBe("bell");
-    expect(document.querySelector("[data-shape] path[data-body]").getAttribute("fill")).toBe("#3899e2");
+    fireEvent.click(screen.getByRole("button", { name: /^Worked/ }));
+    const marks = document.querySelectorAll("[data-shape]");
+    expect(marks[marks.length - 1].dataset.shape).toBe("bell");
+    expect(marks[marks.length - 1].querySelector("path[data-body]").getAttribute("fill")).toBe("#3899e2");
   });
 });
+
+describe("work line while the turn runs", () => {
+  it("stays Working between rounds, when no tool runs and the model is not streaming reasoning", () => {
+    render(<ToolModule tools={[{ tool_id: "a", name: "read_file", args: { path: "a" }, ok: true }]} running />);
+    expect(screen.getByRole("button", { name: /^Working/ })).toHaveAccessibleName("Working · Thinking");
+    expect(screen.getByRole("status")).toHaveTextContent("Thinking");
+  });
+
+  it("counts the clock from the earliest tool start in whole seconds, and stops once done", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(100_000);
+    const tools = [{ tool_id: "a", name: "grep", args: {}, ok: null, started_at: 90 }];
+    const { rerender, container } = render(<ToolModule tools={tools} running />);
+    expect(container.textContent).toContain("10s");
+    act(() => vi.advanceTimersByTime(3000));
+    expect(container.textContent).toContain("13s");
+    rerender(<ToolModule tools={[{ ...tools[0], ok: true, duration_s: 4 }]} />);
+    expect(screen.getByRole("button", { name: /^Worked/ })).toHaveAccessibleName("Worked for 4s · 1 step");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("reports the wall span of the tools once done, not their summed durations", () => {
+    const tools = [
+      { tool_id: "a", name: "grep", args: {}, ok: true, started_at: 10, duration_s: 5 },
+      { tool_id: "b", name: "read_file", args: {}, ok: true, started_at: 11, duration_s: 5 },
+      { tool_id: "c", name: "terminal", args: {}, ok: true, started_at: 30, duration_s: 2 },
+    ];
+    render(<ToolModule tools={tools} />);
+    expect(screen.getByRole("button", { name: /^Worked/ })).toHaveAccessibleName("Worked for 22s · 3 steps");
+  });
+
+  it("says Writing while the model streams text before its next step, and stays Working", () => {
+    render(<ToolModule tools={[{ tool_id: "a", name: "grep", args: {}, ok: true }]} running writing />);
+    expect(screen.getByRole("button", { name: /^Working/ })).toHaveAccessibleName("Working · Writing");
+  });
+
+  it("keeps the status region mounted and hands it the settled line once done", () => {
+    const tools = [{ tool_id: "a", name: "grep", args: {}, ok: null }];
+    const { rerender } = render(<ToolModule tools={tools} running />);
+    const status = screen.getByRole("status");
+    rerender(<ToolModule tools={[{ ...tools[0], ok: true, duration_s: 2 }]} />);
+    expect(screen.getByRole("status")).toBe(status);
+    expect(status).toHaveTextContent("Worked for 2s · 1 step");
+  });
+});
+

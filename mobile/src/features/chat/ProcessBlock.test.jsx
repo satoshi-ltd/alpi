@@ -1,13 +1,23 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, fireEvent, render } from '@testing-library/react';
 
 afterEach(cleanup);
 
 vi.mock('react-native', () => ({
   View: ({ children, style, testID }) =>
     React.createElement('div', { 'data-testid': testID, 'data-pad': style?.paddingHorizontal, 'data-gap': style?.gap }, children),
+  Text: ({ children }) => React.createElement('span', {}, children),
+  Pressable: ({ children, onPress, accessibilityLabel, accessibilityState, accessibilityLiveRegion, testID }) =>
+    React.createElement('button', { type: 'button', onClick: onPress, 'aria-label': accessibilityLabel, 'aria-expanded': String(!!accessibilityState?.expanded), 'aria-live': accessibilityLiveRegion, 'data-testid': testID }, children),
 }));
+vi.mock('../../components/Expand', () => ({ Expand: ({ open, children }) => React.createElement('div', { 'data-open': String(!!open) }, children) }));
+vi.mock('../../components/Icon', () => ({ Icon: () => null }));
+vi.mock('../../components/Fold', () => ({ Fold: ({ shape, size, state }) => React.createElement('i', { 'data-mark': shape ?? '', 'data-size': size, 'data-state': state }) }));
+vi.mock('../../theme/ThemeContext', async () => {
+  const tokens = await import('../../theme/tokens');
+  return { useTheme: () => ({ colors: { ink: '#000', ink2: '#333', ink3: '#666', danger: '#f00', dangerText: '#c00' }, fonts: tokens.fonts, fontSizes: tokens.fontSizes }) };
+});
 
 vi.mock('./Reasoning', () => ({
   Reasoning: ({ streaming, seconds, timeline, shape, accent }) =>
@@ -27,7 +37,8 @@ vi.mock('./ToolCallRow', () => ({
 
 import { PANE_PAD_X } from '../../lib/panes';
 import { PROCESS_GAP, PROCESS_ROW_H, TURN_GAP } from './processRow';
-import { ProcessBlock } from './ProcessBlock';
+import { ProcessBlock, WORK_LINE_H, WORK_MARK } from './ProcessBlock';
+import { MARK_SIZES } from '../../../../common/agentMarks.mjs';
 
 const steps = () => [...document.querySelectorAll('[data-step]')].map((n) => n.getAttribute('data-step'));
 
@@ -54,6 +65,45 @@ describe('ProcessBlock', () => {
     expect(PROCESS_GAP).toBeGreaterThanOrEqual(2);
     expect(PROCESS_GAP).toBeLessThanOrEqual(4);
     expect(block.querySelectorAll('[data-step]').length).toBe(2);
+  });
+
+  it('leads with one work line: the profile mark at the row size, how long it worked and how many steps', () => {
+    renderTurn({ tools: [{ name: 'read', reasoning: 'plan', at: 1, ok: true, duration_s: 1 }, { name: 'grep', at: 2, ok: false, duration_s: 1 }], reasoning: 'plan', reasoned_s: 3 }, { shape: 'bell' });
+    const line = document.querySelector('[data-testid="work-line"]');
+    expect(line.getAttribute('aria-label')).toBe('Worked for 5s · 3 steps · 1 failed');
+    expect(line.getAttribute('aria-expanded')).toBe('false');
+    expect(document.querySelector('[data-open]').getAttribute('data-open')).toBe('false');
+    const mark = line.querySelector('[data-mark]');
+    expect(mark.getAttribute('data-mark')).toBe('bell');
+    expect(Number(mark.getAttribute('data-size'))).toBe(MARK_SIZES.row);
+    expect(WORK_MARK).toBe(MARK_SIZES.row);
+    expect(WORK_LINE_H).toBe(36);
+    fireEvent.click(line);
+    expect(document.querySelector('[data-open]').getAttribute('data-open')).toBe('true');
+  });
+
+  it('stays Working between rounds while the turn runs, and announces the step politely', () => {
+    renderTurn({ req: 'm-1', pending: true, tools: [{ name: 'read_file', at: 1, ok: true, reasoning: 'plan' }], reasoning: 'plan' }, { running: true });
+    const line = document.querySelector('[data-testid="work-line"]');
+    expect(line.getAttribute('aria-label')).toBe('Working · Thinking');
+    expect(line.getAttribute('aria-live')).toBe('polite');
+    cleanup();
+    renderTurn({ tools: [{ name: 'grep', at: 10, ok: true, duration_s: 5 }, { name: 'read_file', at: 11, ok: true, duration_s: 5 }, { name: 'lint', at: 30, ok: true, duration_s: 2 }] });
+    expect(document.querySelector('[data-testid="work-line"]').getAttribute('aria-label')).toBe('Worked for 22s · 3 steps');
+  });
+
+  it('says Writing while answer text streams before the next step, and stays Working', () => {
+    renderTurn({ req: 'm-1', pending: true, assistant: 'Let me check', tools: [{ name: 'grep', at: 1, ok: true }] }, { running: true, answered: true });
+    expect(document.querySelector('[data-testid="work-line"]').getAttribute('aria-label')).toBe('Working · Writing');
+  });
+
+  it('names the running step while it works and says Thinking while it thinks', () => {
+    renderTurn({ req: 'm-1', pending: true, tools: [{ name: 'web_fetch', args: { url: 'status.example.com' }, at: 1 }] });
+    expect(document.querySelector('[data-testid="work-line"]').getAttribute('aria-label')).toBe('Working · Fetching status.example.com');
+    expect(document.querySelector('[data-testid="work-line"] [data-mark]').getAttribute('data-state')).toBe('working');
+    cleanup();
+    renderTurn({ req: 'm-1', pending: true, tools: [] }, { showReasoning: true, reasoningLive: true });
+    expect(document.querySelector('[data-testid="work-line"]').getAttribute('aria-label')).toBe('Working · Thinking');
   });
 
   it('sits about 12 pt off the answer with 20 pt rows, so it reads as a block and not as the reply', () => {

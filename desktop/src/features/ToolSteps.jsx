@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 
 import CodeView from "../primitives/CodeView.jsx";
 import IconBtn from "../primitives/IconBtn.jsx";
@@ -8,6 +8,8 @@ import Tip from "../primitives/Tip.jsx";
 import { CheckIcon, CopyIcon, Icon } from "../primitives/icons.jsx";
 import { useNotify } from "../primitives/Notification.jsx";
 import { pluralize } from "../../../common/pluralize.mjs";
+import { workClock, workSummary } from "../../../common/workLine.mjs";
+import Fold from "../primitives/Fold.jsx";
 import { copyText } from "../lib/clipboard.js";
 import { fmtToolDuration, prettyArgs, toolIcon, toolResult, toolSummary } from "../lib/toolSteps.js";
 import styles from "./ToolSteps.module.css";
@@ -127,23 +129,64 @@ export const ToolStep = memo(function ToolStep({ tool, accent, open: openProp, o
   );
 });
 
-export const ProcessBlock = memo(function ProcessBlock({ entries, accent, shape, thinking = false, answered = false }) {
-  const [bucketChoice, setBucketChoice] = useState(null);
+function useWorkStart(running, earliest) {
+  const start = useRef(null);
+  if (running && start.current == null) start.current = Date.now();
+  if (earliest != null && (start.current == null || earliest < start.current)) start.current = earliest;
+  return start.current;
+}
+
+function useTicking(active) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return undefined;
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [active]);
+  return now;
+}
+
+export function WorkClock({ begun }) {
+  const now = useTicking(begun != null);
+  const seconds = begun == null ? 0 : Math.floor(Math.max(0, now - begun) / 1000);
+  const text = seconds >= 1 ? workClock(seconds) : "";
+  return text ? <span className={styles.workClock}>{text}</span> : null;
+}
+
+function toolStart(tool) {
+  const ms = startMs(tool);
+  if (ms != null) return ms / 1000;
+  return typeof tool.at === "number" && Number.isFinite(tool.at) ? tool.at : null;
+}
+
+export const ProcessBlock = memo(function ProcessBlock({ entries, accent, shape, thinking = false, answered = false, running = false, writing = false }) {
+  const [open, setOpen] = useState(false);
   const [overrides, setOverrides] = useState({});
-  const setStep = useCallback((key, value) => setOverrides((prev) => ({ ...prev, [key]: value })), []);
+  const toggles = useRef(new Map());
+  const toggleFor = (key) => {
+    if (!toggles.current.has(key)) toggles.current.set(key, (value) => setOverrides((prev) => ({ ...prev, [key]: value })));
+    return toggles.current.get(key);
+  };
   const base = Array.isArray(entries) ? entries : [];
   const list = thinking && !base[base.length - 1]?.tail
     ? [...base, { kind: "reasoning", key: `r${base.filter((e) => e.kind === "reasoning").length}`, text: "", tail: true }]
     : base;
+  const summary = workSummary(list.map((e) => (e.kind === "tool"
+    ? { kind: "tool", name: e.tool.name, target: toolSummary(e.tool), ok: e.tool.ok, seconds: e.tool.duration_s, start: toolStart(e.tool) ?? undefined }
+    : { kind: "thought", text: e.text, seconds: e.seconds, live: thinking && !!e.tail })), { thinking, running, writing });
+  const starts = list.filter((e) => e.kind === "tool").map((e) => startMs(e.tool)).filter((v) => v != null);
+  const begun = useWorkStart(summary.running, starts.length ? Math.min(...starts) : null);
   if (!list.length) return null;
-  const isOpen = (e) => overrides[e.key] ?? false;
+
+  const clock = summary.running ? "" : workClock(summary.seconds);
   const row = (e) => (e.kind === "tool" ? (
     <ToolStep
       key={e.key}
       tool={e.tool}
       accent={accent}
-      open={isOpen(e)}
-      onToggle={(value) => setStep(e.key, value)}
+      open={overrides[e.key] ?? false}
+      onToggle={toggleFor(e.key)}
     />
   ) : (
     <Reasoning
@@ -157,58 +200,43 @@ export const ProcessBlock = memo(function ProcessBlock({ entries, accent, shape,
       answered={answered}
     />
   ));
-
-  const toolAt = list.flatMap((e, i) => (e.kind === "tool" ? [i] : []));
-  if (toolAt.length < 2) {
-    return <div className={styles.module}>{list.map(row)}</div>;
-  }
-
-  const first = toolAt[0];
-  const last = toolAt[toolAt.length - 1];
-  const runningAt = toolAt.find((i) => list[i].tool.ok == null);
-  const active = runningAt !== undefined;
-  const live = new Set();
-  if (active) {
-    live.add(runningAt);
-    if (runningAt - 1 > first && list[runningAt - 1].kind === "reasoning") live.add(runningAt - 1);
-  }
-  const bucket = [];
-  for (let i = first; i <= last; i += 1) if (!live.has(i)) bucket.push(list[i]);
-  const bucketTools = bucket.filter((e) => e.kind === "tool");
-  const n = bucketTools.length;
-  const noun = pluralize(n, "tool call");
-  const failed = bucketTools.filter((e) => toolStatus(e.tool) === "fail").length;
-  const expanded = bucketChoice ?? bucketTools.some(isOpen);
-  const thoughts = bucket.filter((e) => e.kind === "reasoning").length;
-  const thoughtNote = thoughts ? ` · ${thoughts} ${pluralize(thoughts, "thought")}` : "";
-  const collapsedLabel = `${active ? `+${n} previous ${noun}` : `${n} ${noun}`}${thoughtNote}`;
-  const expandedLabel = active ? "Hide previous tool calls" : "Hide tool calls";
+  const stepsText = `${summary.steps} ${pluralize(summary.steps, "step")}`;
+  const lead = summary.running ? "Working" : clock ? `Worked for ${clock}` : "Worked";
+  const label = summary.running
+    ? `Working · ${summary.phrase}`
+    : `${lead} · ${stepsText}${summary.failed ? ` · ${summary.failed} failed` : ""}`;
   return (
-    <div className={styles.module}>
-      {list.slice(0, first).map(row)}
-      <div className={styles.group}>
-        <button
-          type="button"
-          className={styles.bucket}
-          onClick={() => setBucketChoice(!expanded)}
-          aria-expanded={expanded}
-          aria-label={expanded ? expandedLabel : `Show ${collapsedLabel.replace(/^\+/, "")}`}
-        >
-          <span className={styles.bucketLabel}>{expanded ? expandedLabel : collapsedLabel}</span>
-          <Icon name="chevron-right" size="sm" className={`${styles.bucketChev} ${expanded ? styles.bucketChevOpen : ""}`} />
-          {failed > 0 && (
-            <span className={styles.bucketFailed}>
-              <Icon name="triangle-alert" size="sm" color="var(--c-danger)" />
-              {failed} failed
-            </span>
-          )}
-        </button>
-        <Reveal open={expanded} className={styles.bucketReveal}>
-          <div className={styles.bucketList}>{bucket.map(row)}</div>
-        </Reveal>
-      </div>
-      {[...live].sort((a, b) => a - b).map((i) => row(list[i]))}
-      {list.slice(last + 1).map(row)}
+    <div className={styles.module} style={accent ? { "--c": accent } : undefined}>
+      <button
+        type="button"
+        className={styles.workLine}
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-label={label}
+        data-work-state={summary.running ? "running" : "done"}
+      >
+        <Fold shape={shape} color={accent} size="row" state={summary.running ? "working" : "idle"} />
+        <span className={styles.workLead}>{lead}</span>
+        {summary.running ? (
+          <span className={styles.workDetail}>{summary.phrase}…</span>
+        ) : (
+          <>
+            <span className={styles.workDetail}>· {stepsText}</span>
+            {summary.failed > 0 && (
+              <span className={styles.workFailed}>
+                <Icon name="triangle-alert" size="sm" color="var(--c-danger)" />
+                {summary.failed} failed
+              </span>
+            )}
+          </>
+        )}
+        <Icon name="chevron-right" size="sm" className={`${styles.bucketChev} ${open ? styles.bucketChevOpen : ""}`} />
+        {summary.running && <WorkClock begun={begun} />}
+      </button>
+      <span className={styles.srOnly} role="status" aria-live="polite">{summary.running ? summary.phrase : label}</span>
+      <Reveal open={open} className={styles.workReveal}>
+        <div className={styles.workRail}>{list.map(row)}</div>
+      </Reveal>
     </div>
   );
 });

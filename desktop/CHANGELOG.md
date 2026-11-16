@@ -11,6 +11,13 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.10.4 — 2026-11-16 — one line of work
+
+- A turn's thinking and tool calls are one line above the answer: the profile's mark, "Working" with what it is doing now and a clock, then "Worked for 34s · 6 steps" with any failures.
+- The line opens into every step in order, each still opening to its details.
+- The mark on that line is the row size, so it moves while the turn works.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.10.3 — 2026-11-16 — settings rows on one edge
 
 - Every settings row ends on the same right edge: chips, text and button labels line up, instead of buttons stopping short.

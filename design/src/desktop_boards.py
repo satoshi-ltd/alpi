@@ -361,12 +361,12 @@ def chat_actions():
 
 
 def desktop_chat():
-    from conversation_boards import d_assistant, d_composer, d_step, d_user, inline_request, process, d_thought
+    from conversation_boards import d_assistant, d_composer, d_step, d_user, inline_request, process, d_thought, work_line
     header = d_hero(h1("doc", identity_glyph("doc", DOC_ACCENT, 28), DOC_ACCENT), "", chat_actions(), DOC_ACCENT)
     turn = lambda *parts: f'<div style="display: flex; flex-direction: column; gap: 12px">{"".join(parts)}</div>'
     first = turn(
         d_user("Pull my last three lipid panels and tell me what moved.", DOC_ACCENT),
-        process(d_thought(secs="4s"), d_step("memory", "lipid panels · 3 results", "0.4s"), d_step("read_file", "labs/2026-08-lipids.pdf", "0.3s")),
+        process(work_line("done", secs="5s", steps=3)),
         d_assistant("Triglycerides moved most: <strong>142 → 88 mg/dL</strong> since March. LDL-P eased to 1,180 nmol/L; HDL held at 68.", hover=False),
     )
     second = turn(

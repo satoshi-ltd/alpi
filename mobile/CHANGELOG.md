@@ -14,6 +14,12 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.10.2 — 2026-11-16 — one line of work
+
+- A turn's thinking and tool calls are one line above the answer: the profile's mark, "Working" with what it is doing now and a clock, then "Worked for 34s · 6 steps" with any failures.
+- A tap opens the steps in place; a step still opens its detail sheet.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.10.1 — 2026-11-16 — a fuller icon
 
 - The app icon fills its tile edge to edge instead of showing a white margin around the mark.

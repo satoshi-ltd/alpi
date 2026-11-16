@@ -42,7 +42,7 @@ describe("focus", () => {
   });
 
   it("insets the focus outline on rows that sit inside a clipping scroller", () => {
-    for (const [file, selector] of [["features/ToolSteps.module.css", ".head:focus-visible"], ["features/ToolSteps.module.css", ".bucket:focus-visible"], ["primitives/Reasoning.module.css", ".row:focus-visible"]]) {
+    for (const [file, selector] of [["features/ToolSteps.module.css", ".head:focus-visible"], ["features/ToolSteps.module.css", ".workLine:focus-visible"], ["primitives/Reasoning.module.css", ".row:focus-visible"]]) {
       expect(find(read(file), selector), selector).toMatch(/outline-offset:\s*var\(--focus-inset\)/);
     }
   });

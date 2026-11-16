@@ -57,7 +57,7 @@ describe("ChatPane — a paused profile is read-only", () => {
 });
 
 describe("ChatPane — consolidated tool module and reasoning", () => {
-  it("puts reasoning that only followed the calls below the bucket", () => {
+  it("opens the work line onto reasoning that only followed the calls, below them", () => {
     const profile = { name: "a", model: "x/y" };
     const turn = {
       at: 0,
@@ -81,12 +81,10 @@ describe("ChatPane — consolidated tool module and reasoning", () => {
         onRetryMessage={vi.fn()}
       />,
     );
+    fireEvent.click(screen.getByRole("button", { name: /^Worked for/ }));
     const text = container.textContent;
-    expect(text).toContain("2 tool calls");
-    const bucketIdx = text.indexOf("2 tool calls");
-    const reasoningIdx = text.indexOf("Thought for 5s");
-    expect(bucketIdx).toBeGreaterThanOrEqual(0);
-    expect(reasoningIdx).toBeGreaterThan(bucketIdx);
+    expect(text.indexOf("read_file")).toBeGreaterThanOrEqual(0);
+    expect(text.indexOf("Thought for 5s")).toBeGreaterThan(text.indexOf("read_file"));
   });
 
   it("puts reasoning that led the first call at the top of the process block", () => {
@@ -113,10 +111,11 @@ describe("ChatPane — consolidated tool module and reasoning", () => {
         onRetryMessage={vi.fn()}
       />,
     );
+    fireEvent.click(screen.getByRole("button", { name: /^Worked for/ }));
     const text = container.textContent;
     expect(text.indexOf("Thought for 5s")).toBeGreaterThanOrEqual(0);
-    expect(text.indexOf("Thought for 5s")).toBeLessThan(text.indexOf("2 tool calls"));
-    expect(text.indexOf("2 tool calls")).toBeLessThan(text.indexOf("answer"));
+    expect(text.indexOf("Thought for 5s")).toBeLessThan(text.indexOf("knowledge"));
+    expect(text.indexOf("read_file")).toBeLessThan(text.indexOf("answer"));
   });
 
   it("a reloaded turn shows each stored reasoning span where it happened", () => {
@@ -144,13 +143,14 @@ describe("ChatPane — consolidated tool module and reasoning", () => {
         onRetryMessage={vi.fn()}
       />,
     );
+    fireEvent.click(screen.getByRole("button", { name: /^Worked for/ }));
     const text = container.textContent;
-    expect(text.indexOf("Thought for 3s")).toBeLessThan(text.indexOf("2 tool calls"));
-    expect(text.indexOf("2 tool calls")).toBeLessThan(text.indexOf("Thought for 6s"));
+    expect(text.indexOf("Thought for 3s")).toBeLessThan(text.indexOf("knowledge"));
+    expect(text.indexOf("read_file")).toBeLessThan(text.indexOf("Thought for 6s"));
     expect(text).not.toContain("Thought for 20s");
   });
 
-  it("a running turn keeps the active call out of the bucket", () => {
+  it("a running turn names its active call on the work line", () => {
     const profile = { name: "a", model: "x/y" };
     const turn = {
       user: "hi",
@@ -172,11 +172,10 @@ describe("ChatPane — consolidated tool module and reasoning", () => {
         onRetryMessage={vi.fn()}
       />,
     );
-    expect(screen.getByText("+1 previous tool call")).toBeTruthy();
-    expect(screen.getByText("terminal")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Working · Running b" })).toBeTruthy();
   });
 
-  it("the finished-tools bucket exposes aria-expanded and toggles it", () => {
+  it("the work line exposes aria-expanded and toggles it", () => {
     const profile = { name: "a", model: "x/y" };
     const turn = {
       at: 0,
@@ -198,13 +197,13 @@ describe("ChatPane — consolidated tool module and reasoning", () => {
         onRetryMessage={vi.fn()}
       />,
     );
-    const btn = screen.getByLabelText(/Show 2 tool calls/);
+    const btn = screen.getByRole("button", { name: /^Worked for .* · 2 steps$/ });
     expect(btn).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(btn);
     expect(btn).toHaveAttribute("aria-expanded", "true");
   });
 
-  it("a single tool shows inline, no bucket", () => {
+  it("a single tool is one step behind the work line", () => {
     const profile = { name: "a", model: "x/y" };
     const turn = {
       at: 0, user: "hi", assistant: "ok",
@@ -221,8 +220,9 @@ describe("ChatPane — consolidated tool module and reasoning", () => {
         onRetryMessage={vi.fn()}
       />,
     );
+    expect(screen.getByRole("button", { name: /^Worked for .* · 1 step$/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^Worked for/ }));
     expect(screen.getByText("read")).toBeTruthy();
-    expect(screen.queryByText(/tool calls?$/)).toBeNull();
   });
 });
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 
 import ChatPane from "./ChatPane.jsx";
 
@@ -46,8 +46,9 @@ describe("ChatPane — @mention peer reply card", () => {
     expect(screen.queryByText(/tokens:/)).toBeNull();
   });
 
-  it("keeps the peer tool-call row (the card does not replace it)", () => {
+  it("keeps the peer tool-call row behind the work line (the card does not replace it)", () => {
     renderWithTurn(PEER_TURN);
+    fireEvent.click(screen.getByRole("button", { name: /^Worked/ }));
     expect(screen.getByText("peer")).toBeTruthy();
   });
 

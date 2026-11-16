@@ -661,10 +661,10 @@ def m_chat_header(title, accent, meta_html, two_pane=False, back=True, meta_item
 
 
 def m_thread(accent, pane=False):
-    from conversation_boards import m_agent_text, m_process, m_reasoning, m_tool, m_user
+    from conversation_boards import m_agent_text, m_user, work_line
     return f"""<div style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; gap: 10px; padding-bottom: 12px">
 {m_user("Pull my last three lipid panels and tell me what moved.", accent, pane)}
-{m_process(m_reasoning(secs="4s"), m_tool("memory", "lipid panels · 3 results"), m_tool("read_file", "labs/2026-08-lipids.pdf"))}
+{work_line("done", secs="5s", steps=3, phone=True)}
 {m_agent_text("Triglycerides moved most: <strong>142 → 88 mg/dL</strong> since March. LDL-P eased to 1,180 nmol/L; HDL held at 68.", more=True)}
 </div>"""
 

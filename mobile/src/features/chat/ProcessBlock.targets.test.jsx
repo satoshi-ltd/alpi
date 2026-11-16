@@ -13,13 +13,14 @@ vi.mock('react-native', () => {
       'data-gap': style?.gap,
     }, children);
   const Text = ({ children }) => React.createElement('span', {}, children);
-  const Pressable = ({ children, onPress, accessibilityLabel, style, hitSlop }) => {
+  const Pressable = ({ children, onPress, accessibilityLabel, style, hitSlop, testID }) => {
     const resolved = typeof style === 'function' ? style({ pressed: false }) : style;
     return React.createElement('button', {
       type: 'button',
       onClick: onPress,
       'aria-label': accessibilityLabel,
       'data-row': 'true',
+      'data-testid': testID,
       'data-min-h': resolved?.minHeight,
       'data-slop-top': hitSlop?.top ?? 0,
       'data-slop-bottom': hitSlop?.bottom ?? 0,
@@ -49,24 +50,30 @@ vi.mock('../../theme/ThemeContext', async () => {
   };
 });
 vi.mock('../../components/Icon', () => ({ Icon: () => null }));
+vi.mock('../../components/Fold', () => ({ Fold: () => null }));
 vi.mock('./ToolDetailSheet', () => ({
   ToolDetailSheet: ({ tool }) => (tool ? React.createElement('div', { 'data-sheet': tool.name }) : null),
 }));
 
 import { mobile } from '../../theme/tokens';
 import { PROCESS_EDGE, PROCESS_GAP, PROCESS_ROW_H } from './processRow';
-import { ProcessBlock } from './ProcessBlock';
+import { ProcessBlock, WORK_LINE_H } from './ProcessBlock';
+
+const line = () => document.querySelector('[data-testid="work-line"]');
 
 function targets() {
   const rows = [...document.querySelectorAll('[data-row]')];
+  let y = 0;
   return rows.map((row, k) => {
-    const y = k * (PROCESS_ROW_H + PROCESS_GAP);
-    expect(Number(row.getAttribute('data-min-h'))).toBe(PROCESS_ROW_H);
-    return {
+    const h = k === 0 ? WORK_LINE_H : PROCESS_ROW_H;
+    expect(Number(row.getAttribute('data-min-h'))).toBe(h);
+    const rect = {
       top: y - Number(row.getAttribute('data-slop-top')),
-      bottom: y + PROCESS_ROW_H + Number(row.getAttribute('data-slop-bottom')),
-      visualBottom: y + PROCESS_ROW_H,
+      bottom: y + h + Number(row.getAttribute('data-slop-bottom')),
+      visualBottom: y + h,
     };
+    y += h + PROCESS_GAP;
+    return rect;
   });
 }
 
@@ -96,9 +103,10 @@ function renderBlock(turn, extra = {}) {
 describe('process block touch targets', () => {
   it('gives every row its own target: neighbours touch, never overlap, and the outer slop stays inside the block', () => {
     renderBlock(failingTurn);
+    fireEvent.click(line());
     fireEvent.click(screen.getByText('3 tool calls').closest('button'));
     const rects = targets();
-    expect(rects.length).toBe(6);
+    expect(rects.length).toBe(7);
     for (let k = 1; k < rects.length; k += 1) {
       expect(rects[k].top).toBe(rects[k - 1].bottom);
     }
@@ -107,7 +115,7 @@ describe('process block touch targets', () => {
     expect(Number(block.getAttribute('data-margin-v'))).toBe(-pad);
     expect(rects[0].top).toBeGreaterThanOrEqual(-pad);
     expect(rects[rects.length - 1].bottom).toBeLessThanOrEqual(rects[rects.length - 1].visualBottom + pad);
-    expect(rects[0].bottom - rects[0].top).toBe(PROCESS_ROW_H + PROCESS_EDGE + PROCESS_GAP / 2);
+    expect(rects[0].bottom - rects[0].top).toBe(WORK_LINE_H + (mobile.tap - WORK_LINE_H) / 2 + PROCESS_GAP / 2);
     expect(PROCESS_ROW_H + 2 * PROCESS_EDGE).toBe(mobile.tap);
   });
 
@@ -117,11 +125,12 @@ describe('process block touch targets', () => {
       reasoning_spans: [{ seconds: 3, before_tool: 0, text: 'plan' }, { seconds: 0.4, before_tool: 1 }],
       tools: [{ name: 'read', tool_id: 't1', ok: true }],
     });
+    fireEvent.click(line());
     const rows = [...document.querySelectorAll('[data-row]')];
     expect(Number(rows[rows.length - 1].getAttribute('data-slop-bottom'))).toBe(PROCESS_EDGE);
   });
 
-  it('keeps a lone row at the full 44 pt target', () => {
+  it('keeps the closed work line at the full 44 pt target', () => {
     renderBlock({ tools: [{ name: 'read', tool_id: 't1', ok: true }] });
     const [only] = targets();
     expect(only.bottom - only.top).toBe(mobile.tap);
@@ -136,6 +145,7 @@ describe('process block state across the first reasoning_done', () => {
     ];
     const live = { req: 'm-1', pending: true, reasoning: '', tools };
     const { rerender } = render(<ProcessBlock turn={live} tools={tools} reasoning="plan" showReasoning />);
+    fireEvent.click(line());
     expect(screen.getByText('Thought')).toBeTruthy();
     fireEvent.click(screen.getByText('2 tool calls').closest('button'));
     fireEvent.click(screen.getByLabelText('grep. Show details'));
