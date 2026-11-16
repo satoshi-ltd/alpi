@@ -816,9 +816,13 @@ test('alpi in the hero follows the pointer like the desktop hero mark, only with
   const css = landingCss();
   assert.ok(css.includes('.cast-gaze{display:block;width:100%;height:100%;transform-style:preserve-3d;transform-origin:50% 55%;transform:rotateY(calc(var(--gx, 0) * 21.6deg)) rotateX(calc(var(--gy, 0) * -14.4deg))}'));
   assert.ok(css.includes('.cast-look{transform:translate(calc(var(--gx, 0) * 6px), calc(var(--gy, 0) * 4px))}'));
+  assert.ok(css.includes('.cast-gaze.is-following .vt-a{animation:none;transform:none!important}'));
+  assert.match(twin, /vt-turn-idle/);
   const script = html.match(/<script type="module">([\s\S]*?)<\/script>/)[1];
   assert.match(script, /import \{ followPointer \} from '\.\/gaze\.js\?v=\d+\.\d+\.\d+'/);
   assert.match(script, /matchMedia\('\(pointer: fine\)'\)/);
   assert.match(script, /prefers-reduced-motion: reduce/);
   assert.match(script, /is-away/);
+  assert.match(script, /stop = followPointer\(twin\); twin\.classList\.add\('is-following'\);/);
+  assert.match(script, /stop\(\); stop = null; twin\.classList\.remove\('is-following'\);/);
 });

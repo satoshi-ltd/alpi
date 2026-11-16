@@ -79,6 +79,7 @@
   .cast-twin .mark-body{fill:var(--brand-ink)}
   .cast-gaze{display:block;width:100%;height:100%;transform-style:preserve-3d;transform-origin:50% 55%;transform:rotateY(calc(var(--gx, 0) * 21.6deg)) rotateX(calc(var(--gy, 0) * -14.4deg))}
   .cast-look{transform:translate(calc(var(--gx, 0) * 6px), calc(var(--gy, 0) * 4px))}
+  .cast-gaze.is-following .vt-a{animation:none;transform:none!important}
   .cast-break{display:none}
   .cast-tip{position:absolute;top:calc(100% + 10px);left:50%;translate:-50% 0;z-index:6;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .15s;font-size:var(--t-small);color:var(--muted);background:var(--bg);padding:4px 10px;border-radius:var(--r-control)}
   .cast-tip .display-name{font-weight:800;letter-spacing:-.02em}
@@ -719,8 +720,8 @@ const still = matchMedia('(prefers-reduced-motion: reduce)');
 let stop = null;
 const sync = () => {
   const on = fine.matches && !still.matches && !hero.classList.contains('is-away');
-  if (on && !stop) stop = followPointer(twin);
-  if (!on && stop) { stop(); stop = null; }
+  if (on && !stop) { stop = followPointer(twin); twin.classList.add('is-following'); }
+  if (!on && stop) { stop(); stop = null; twin.classList.remove('is-following'); }
 };
 if (twin && hero) {
   new MutationObserver(sync).observe(hero, { attributes: true, attributeFilter: ['class'] });

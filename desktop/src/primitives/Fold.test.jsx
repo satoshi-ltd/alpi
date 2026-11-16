@@ -10,7 +10,7 @@ import { contrastRatio, nameTone } from "../../../common/name.mjs";
 import { markTone } from "../../../common/markTone.mjs";
 import { palettes } from "../../../common/tokens.mjs";
 import Fold from "./Fold.jsx";
-import { trackedCount } from "../lib/gaze.js";
+import { GAZE_REST_MS, trackedCount } from "../lib/gaze.js";
 
 const draw = (props) => render(<Fold {...props} />).container.firstChild;
 const body = (root) => root.querySelector("path[data-body]");
@@ -273,6 +273,75 @@ describe("Fold profile marks", () => {
     window.dispatchEvent(new MouseEvent("mousemove", { clientX: 0, clientY: 0 }));
     settle();
     expect(Number(hero.style.getPropertyValue("--gy"))).toBeLessThan(0.5);
+  });
+
+  it("lets the mouse win over a focused composer and looks back down at the next keystroke", () => {
+    const frames = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((fn) => frames.push(fn));
+    let t = 0;
+    const settle = () => { for (let i = 0; i < 80; i += 1) frames.splice(0).forEach((fn) => fn((t += 16))); };
+    const field = document.createElement("textarea");
+    document.body.appendChild(field);
+    try {
+      field.focus();
+      const { container } = render(<Fold shape="heart" color="#f36a8a" size={72} watch />);
+      const hero = container.querySelector("[data-shape] > span");
+      window.dispatchEvent(new MouseEvent("mousemove", { clientX: 900, clientY: 0 }));
+      settle();
+      expect(Number(hero.style.getPropertyValue("--gx"))).toBeGreaterThan(0.5);
+      expect(Number(hero.style.getPropertyValue("--gy"))).toBeLessThan(0.1);
+      field.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
+      settle();
+      expect(Number(hero.style.getPropertyValue("--gy"))).toBeGreaterThan(0.9);
+    } finally {
+      field.remove();
+    }
+  });
+
+  it("gives the focused composer the look back once the mouse rests or another field takes focus", () => {
+    vi.useFakeTimers();
+    const frames = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((fn) => frames.push(fn));
+    let t = 0;
+    const settle = () => { for (let i = 0; i < 80; i += 1) frames.splice(0).forEach((fn) => fn((t += 16))); };
+    const field = document.createElement("textarea");
+    const other = document.createElement("textarea");
+    document.body.append(field, other);
+    try {
+      field.focus();
+      const { container } = render(<Fold shape="heart" color="#f36a8a" size={72} watch />);
+      const hero = container.querySelector("[data-shape] > span");
+      const gy = () => Number(hero.style.getPropertyValue("--gy"));
+      window.dispatchEvent(new MouseEvent("mousemove", { clientX: 900, clientY: 0 }));
+      settle();
+      expect(gy()).toBeLessThan(0.1);
+      vi.advanceTimersByTime(GAZE_REST_MS);
+      settle();
+      expect(gy()).toBeGreaterThan(0.9);
+      window.dispatchEvent(new MouseEvent("mousemove", { clientX: 900, clientY: 0 }));
+      settle();
+      expect(gy()).toBeLessThan(0.1);
+      other.focus();
+      settle();
+      expect(gy()).toBeGreaterThan(0.9);
+    } finally {
+      field.remove();
+      other.remove();
+      vi.useRealTimers();
+    }
+  });
+
+  it("faces front with no turn of its own while following, so only the pointer turns it", () => {
+    window.matchMedia = vi.fn(() => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
+    for (const state of ["idle", "working", "busy"]) {
+      const root = draw({ shape: "heart", color: "#f36a8a", size: 72, state, watch: true });
+      const svg = root.querySelector("svg");
+      expect(root.dataset.watch).toBe("");
+      expect(svg.style.transform).toBe(FRONT);
+      expect(svg.getAttribute("class")).toBeNull();
+      expect(root.querySelector("[class*='vt-eyes']")).toBeNull();
+      cleanup();
+    }
   });
 
   it("carries no stylesheet of its own beyond the slot", () => {

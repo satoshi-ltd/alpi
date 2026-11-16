@@ -11,6 +11,12 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.10.7 — 2026-11-16 — eyes on the pointer
+
+- The profile on a new chat turns to the mouse again: while it follows the pointer it faces front and drops its own turn, so only the pointer turns it.
+- Moving the mouse wins over a focused composer; the profile looks back down at the composer on the next keystroke or once the mouse rests.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.10.6 — 2026-11-16 — fallbacks on the edge
 
 - The Fallbacks row in a profile's settings ends on the same right edge as every other row: each model and its reorder buttons on one line, Add on the last.

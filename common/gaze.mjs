@@ -8,6 +8,7 @@ const marks = new Map();
 let pointer = null;
 let typing = false;
 let resting = false;
+let pointerWins = false;
 let dirty = false;
 let frame = 0;
 let last = 0;
@@ -71,16 +72,18 @@ function mark() {
 }
 
 function retarget() {
-  typing = isField(document.activeElement);
+  typing = isField(document.activeElement) && !pointerWins;
   mark();
 }
 
 function onMove(event) {
   pointer = { x: event.clientX, y: event.clientY };
   resting = false;
+  pointerWins = true;
   clearTimeout(restTimer);
   restTimer = setTimeout(() => {
     resting = true;
+    pointerWins = false;
     retarget();
   }, GAZE_REST_MS);
   retarget();
@@ -88,6 +91,15 @@ function onMove(event) {
 
 function onFocusIn(event) {
   if (!isField(event.target)) return;
+  pointerWins = false;
+  typing = true;
+  mark();
+}
+
+function onKey(event) {
+  if (!isField(event.target)) return;
+  pointerWins = false;
+  if (typing) return;
   typing = true;
   mark();
 }
@@ -109,6 +121,7 @@ function listen(on) {
   window[method]("blur", onBlur);
   document[method]("focusin", onFocusIn);
   document[method]("focusout", onFocusOut);
+  document[method]("keydown", onKey);
 }
 
 export function followPointer(el, { look = false } = {}) {
@@ -130,6 +143,7 @@ export function followPointer(el, { look = false } = {}) {
     pointer = null;
     typing = false;
     resting = false;
+    pointerWins = false;
     dirty = false;
   };
 }

@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.19.2 — 2026-11-16 — eyes on the pointer
+
+- The site's alpi mark in the landing hero turns to the mouse again: while it follows the pointer it faces front and drops its own turn, and keeps it on phones and under reduced motion, where it does not follow.
+- The agent's own reference on the apps describes the same rule: the desktop hero faces the pointer, and the mouse wins over a focused composer until the next keystroke.
+
 ## v0.19.1 — 2026-11-16 — a skill call without its name says which to resend
 
 - A `skill` call that leaves `name` out is refused with the name to resend: the profile's only skill, or its skills with the most recent first. Before, the refusal said only that `name` is required, and a small model often repeated the same call.

@@ -134,8 +134,8 @@ function Mark({ id, color, px, state, seed, watch, still, className, style }) {
   const gazeRef = useRef(null);
   useEffect(() => (follow ? followPointer(gazeRef.current, { look: true }) : undefined), [follow]);
   if (animate) ensureMotion();
-  const pose = turning ? stillPose(state, px) : [0, 0, 0];
-  const liveTurn = animate && turning && TURN.live.includes(state);
+  const pose = turning && !follow ? stillPose(state, px) : [0, 0, 0];
+  const liveTurn = animate && turning && !follow && TURN.live.includes(state);
   let inner;
   if (state === "paused") {
     const thin = px < SMALL;
@@ -152,7 +152,7 @@ function Mark({ id, color, px, state, seed, watch, still, className, style }) {
     inner = (
       <>
         <path data-body="" d={spec.d} fill={fill} />
-        <g className={liveTurn ? `vt-a vt-eyes-${state}` : undefined} style={{ transformOrigin: `${spec.eyeX}px ${spec.eyeY}px`, transform: parallax(pose) }}>
+        <g className={liveTurn ? `vt-a vt-eyes-${state}` : undefined} style={{ transformOrigin: `${spec.eyeX}px ${spec.eyeY}px`, transform: parallax(pose), transition: liveTurn ? undefined : `transform ${EASE}` }}>
           <Eyes spec={spec} size={px} state={state} still={!animate} fill={EYE} follow={follow} seed={seed ?? id} />
         </g>
         {animate ? <Signature spec={spec} state={state} /> : null}

@@ -1597,8 +1597,10 @@ hand, `design/drift.py` fails when they drift). Both clients, the site and the i
   `common/workgroupMarkState.mjs`.
 - **Motion policy**: only the hero-size profile mark of an empty thread follows the pointer on desktop (`watch` on `Fold`, which
   refuses it below `MARK_SIZES.hero`, for a paused or offline mark and under reduce motion; `common/gaze.mjs` runs one shared
-  listener and looks down while a text field has focus), and on the site Twin in the landing hero cast follows it the same way
-  (the same `common/gaze.mjs`, copied to `dist/`; only with a fine pointer, motion allowed and the hero on screen). Rows, the chat header and every other mark never follow the pointer.
+  listener; a focused text field draws the look down until the mouse moves, and a keystroke, focusing a field or 2.6 s of a
+  resting mouse give it back), and on the site Twin in the landing hero cast follows it the same way (the same `common/gaze.mjs`,
+  copied to `dist/`; only with a fine pointer, motion allowed and the hero on screen). A following mark faces front and drops
+  its own turn, so only the pointer turns it; the site does this with `is-following` on `.cast-gaze` while it follows. Rows, the chat header and every other mark never follow the pointer.
   Marks are alive (SMIL eyes, CSS turn and body loops, pointer following) only while the app is in front: desktop reads window
   focus and visibility once (`lib/windowFocus.js`, focus, blur and `visibilitychange`), mobile reads `AppState`
   (`lib/appActive.js`, live only while `active`); otherwise every mark draws the still pose of its real state and resumes when
