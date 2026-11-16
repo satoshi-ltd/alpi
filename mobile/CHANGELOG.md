@@ -14,6 +14,11 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.10.1 — 2026-11-16 — a fuller icon
+
+- The app icon fills its tile edge to edge instead of showing a white margin around the mark.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.10.0 — 2026-11-15 — a new identity
 
 - Profiles are twelve shapes with eyes in one palette, workgroups are neutral, and banners are flat.

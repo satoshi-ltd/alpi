@@ -1,3 +1,4 @@
+import useExit from "../hooks/useExit.js";
 import { navigateMenu } from "../lib/menuNavigation.js";
 import { OverlayScope, useOverlay } from "../hooks/useOverlay.js";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -7,10 +8,14 @@ import styles from "./ContextMenu.module.css";
 
 export function ContextMenuMount() {
   const [menu, setMenu] = useState(null);
+  const last = useRef(menu);
+  const serial = useRef(0);
+  if (menu) last.current = menu;
+  const { mounted, closing } = useExit(!!menu);
   useEffect(() => {
     window.openContextMenu = (e, items) => {
       e.preventDefault();
-      setMenu({ x: e.clientX, y: e.clientY, items });
+      setMenu({ x: e.clientX, y: e.clientY, items, id: (serial.current += 1) });
     };
     window.closeContextMenu = () => setMenu(null);
     return () => {
@@ -18,26 +23,29 @@ export function ContextMenuMount() {
       delete window.closeContextMenu;
     };
   }, []);
-  if (!menu) return null;
+  if (!mounted) return null;
+  const shown = menu ?? last.current;
   return (
     <ContextMenu
-      x={menu.x}
-      y={menu.y}
-      items={menu.items}
+      key={shown.id}
+      x={shown.x}
+      y={shown.y}
+      items={shown.items}
+      closing={closing}
       onClose={() => setMenu(null)}
     />
   );
 }
 
-export default function ContextMenu({ x, y, items, onClose }) {
+export default function ContextMenu({ x, y, items, onClose, closing = false }) {
   const ref = useRef(null);
   const [pos, setPos] = useState({ x, y });
-  const isTop = useOverlay({ open: true, onClose, ref });
+  const isTop = useOverlay({ open: !closing, onClose, ref });
 
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const r = el.getBoundingClientRect();
+    const r = { width: el.offsetWidth, height: el.offsetHeight };
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     let nx = x;
@@ -65,8 +73,9 @@ export default function ContextMenu({ x, y, items, onClose }) {
     <OverlayScope overlay={isTop}>
       <div
         ref={ref}
-        className={`anim-pop ${styles.root}`}
+        className={`${closing ? "anim-menu-out" : "anim-menu"} ${styles.root}`}
         role="menu"
+        inert={closing || undefined}
         onKeyDown={(event) => navigateMenu(event, ref.current)}
         style={{ top: pos.y, left: pos.x }}
       >

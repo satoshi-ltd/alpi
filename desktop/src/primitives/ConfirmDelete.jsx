@@ -98,9 +98,11 @@ function ConfirmBody({
 
 export default function ConfirmDelete({ open, onClose, anchored = true, width, ...request }) {
   const [round, setRound] = useState(0);
-  useEffect(() => {
-    if (!open) setRound((r) => r + 1);
-  }, [open]);
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) setRound((r) => r + 1);
+  }
   const insideOverlay = useInsideOverlay();
   const asModal = !anchored || !!request.typeToConfirm || insideOverlay;
   const resolvedWidth = width ?? (asModal ? "var(--pop-xl)" : "var(--pop-md)");

@@ -117,12 +117,8 @@ describe("motion", () => {
     expect(find(css, ".modalClosing")).toMatch(/var\(--dur-exit\) var\(--ease-exit\)/);
   });
 
-  it("fades floats in and out on opacity alone, with no scale on either side", () => {
-    for (const name of ["ds-pop-in", "ds-dialog-in", "ds-notif-in", "ds-notif-out"]) {
-      const body = DS.match(new RegExp(`@keyframes ${name}\\s*\\{([^@]*?)\\}\\s*(?=@|\\n\\.)`))?.[1] ?? DS.match(new RegExp(`@keyframes ${name}[^\\n]*`))[0];
-      expect(body, name).not.toMatch(/transform|scale/);
-    }
-    expect(read("primitives/Modal.module.css")).not.toMatch(/scale\(/);
+  it("keeps the tooltip and lightbox pop on opacity alone", () => {
+    expect(DS.match(/@keyframes ds-pop-in[^\n]*/)[0]).not.toMatch(/transform|scale/);
     expect(read("primitives/Notification.jsx")).toMatch(/ds-notif-out var\(--dur-exit\) var\(--ease-exit\)/);
     expect(read("primitives/Notification.jsx")).toMatch(/ds-notif-in var\(--dur-enter\) var\(--ease-enter\)/);
   });

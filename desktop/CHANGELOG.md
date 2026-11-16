@@ -11,6 +11,13 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.10.1 — 2026-11-16 — surfaces that move
+
+- Dialogs, menus, popovers, dropdowns and toasts rise a few pixels as they open and settle as they close; menus used to vanish in one frame.
+- The app icon fills its tile edge to edge instead of showing a white margin around the mark.
+- Nothing moves under reduced motion.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.10.0 — 2026-11-15 — a new identity
 
 - Profiles are twelve shapes with eyes in one palette, workgroups are neutral, and banners are flat.

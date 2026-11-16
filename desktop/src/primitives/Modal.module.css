@@ -84,6 +84,6 @@
 }
 
 @keyframes modalOut {
-  from { opacity: 1; }
-  to { opacity: 0; }
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(4px) scale(0.98); }
 }

@@ -661,12 +661,14 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
 }
 
 @keyframes ds-pop-in   { from { opacity: 0; } to { opacity: 1; } }
-@keyframes ds-dialog-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ds-dialog-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes ds-menu-in { from { opacity: 0; transform: translateY(var(--menu-dy, -4px)) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes ds-menu-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: scale(0.98); } }
 @keyframes ds-fade-in  { from { opacity: 0; } to { opacity: 1; } }
 @keyframes ds-slide-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes ds-pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: var(--alpha-faint); } }
-@keyframes ds-notif-in  { from { opacity: 0; } to { opacity: 1; } }
-@keyframes ds-notif-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes ds-notif-in  { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes ds-notif-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(4px); } }
 @keyframes ds-refresh-bar {
   0%   { transform: translateX(-100%); }
   50%  { transform: translateX(0); }
@@ -678,6 +680,8 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
 .anim-up   { animation: ds-slide-up var(--dur-4) var(--ease) both; }
 .anim-overlay { animation: ds-fade-in var(--dur-enter) var(--ease-enter) both; }
 .anim-dialog  { animation: ds-dialog-in var(--dur-enter) var(--ease-enter) both; }
+.anim-menu { animation: ds-menu-in var(--dur-fast) var(--ease-enter) both; }
+.anim-menu-out { animation: ds-menu-out var(--dur-exit) var(--ease-exit) both; pointer-events: none; }
 .pulse-dot { animation: ds-pulse-dot var(--dur-loop) ease-in-out infinite; }
 .pulse-glyph { animation: ds-pulse-glyph var(--dur-loop) ease-in-out infinite; }
 @keyframes ds-pulse-glyph {

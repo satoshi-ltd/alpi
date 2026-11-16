@@ -1,5 +1,6 @@
 import { navigateMenu } from "../lib/menuNavigation.js";
 import { OverlayScope, useInsideOverlay, useOverlay } from "../hooks/useOverlay.js";
+import useExit from "../hooks/useExit.js";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CaretIcon } from "./icons.jsx";
@@ -34,6 +35,7 @@ export default function Dropdown({
   const menuRef = useRef(null);
   const onOpenChangeRef = useRef(onOpenChange);
   const isTop = useOverlay({ open, onClose: () => setOpen(false), ref: menuRef });
+  const { mounted, closing } = useExit(open);
 
   useEffect(() => {
     onOpenChangeRef.current = onOpenChange;
@@ -55,13 +57,16 @@ export default function Dropdown({
 
   useEffect(() => {
     onOpenChangeRef.current?.(open);
-    if (!open) setResolved((r) => ({ ...r, ready: false }));
   }, [open]);
+
+  useEffect(() => {
+    if (!mounted) setResolved((r) => ({ ...r, ready: false }));
+  }, [mounted]);
 
   useLayoutEffect(() => {
     if (!open || !triggerRef.current || !menuRef.current) return;
     const t = triggerRef.current.getBoundingClientRect();
-    const m = menuRef.current.getBoundingClientRect();
+    const m = { width: menuRef.current.offsetWidth, height: menuRef.current.offsetHeight };
     const vh = window.innerHeight;
     const vw = window.innerWidth;
     const margin = 12;
@@ -102,23 +107,27 @@ export default function Dropdown({
   const al = resolved.ready ? resolved.align : align;
 
   const menuWidth = fullWidth ? "100%" : width;
+  const motion = { "--menu-dy": dir === "up" ? "4px" : "-4px", transformOrigin: `${dir === "up" ? "bottom" : "top"} ${al}` };
   const menu =
-    open && (
+    mounted && (
       <div
         ref={menuRef}
         id={menuId}
         role="menu"
+        inert={closing || undefined}
         onKeyDown={(event) => navigateMenu(event, menuRef.current)}
-        className={`anim-pop ${styles.menu} ${searchable ? styles.menuLarge : ""} ${portaled ? styles.menuPortal : ""}`}
+        className={`${closing ? "anim-menu-out" : "anim-menu"} ${styles.menu} ${searchable ? styles.menuLarge : ""} ${portaled ? styles.menuPortal : ""}`}
         style={
           portaled
             ? {
+                ...motion,
                 width: fullWidth ? (resolved.triggerWidth ?? width) : width,
                 top: resolved.top ?? 0,
                 left: resolved.left ?? 0,
                 visibility: resolved.ready ? "visible" : "hidden",
               }
             : {
+                ...motion,
                 width: menuWidth,
                 [dir === "up" ? "bottom" : "top"]: "calc(100% + 6px)",
                 [al]: 0,

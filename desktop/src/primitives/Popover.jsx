@@ -1,4 +1,5 @@
 import { OverlayScope, useOverlay } from "../hooks/useOverlay.js";
+import useExit from "../hooks/useExit.js";
 import { navigateMenu } from "../lib/menuNavigation.js";
 import { useEffect, useRef } from "react";
 import { ConfirmSheet } from "./ConfirmDelete.jsx";
@@ -20,6 +21,7 @@ export default function Popover({
 }) {
   const ref = useRef(null);
   const isTop = useOverlay({ open, onClose, ref });
+  const { mounted, closing } = useExit(open);
 
   let resolvedAlign = align;
   let resolvedSide = side;
@@ -46,16 +48,19 @@ export default function Popover({
     if (open && navigable) ref.current?.querySelector("button:not(:disabled)")?.focus();
   }, [open, navigable]);
 
-  if (!open) return null;
+  if (!mounted) return null;
   return (
     <OverlayScope overlay={isTop}>
       <div
         ref={ref}
         role={role}
+        inert={closing || undefined}
         onKeyDown={navigable ? (event) => navigateMenu(event, ref.current) : undefined}
-        className={`anim-pop ${className}`.trim()}
+        className={`${closing ? "anim-menu-out" : "anim-menu"} ${className}`.trim()}
         style={{
           position: "absolute",
+          "--menu-dy": resolvedSide === "top" ? "4px" : "-4px",
+          transformOrigin: `${resolvedSide === "top" ? "bottom" : "top"} ${resolvedAlign}`,
           [resolvedSide === "top" ? "bottom" : "top"]: "calc(100% + 8px)",
           [resolvedAlign]: 0,
           width,
