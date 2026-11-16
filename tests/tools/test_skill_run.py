@@ -302,3 +302,91 @@ def test_invoke_returns_structured_json_for_scripted_skill(isolated_home: Path) 
 
     assert r.ok, r.error
     assert r.output == '{"items": [1, 2, 3]}'
+
+
+def test_a_call_without_name_names_the_only_skill(isolated_home: Path) -> None:
+    _create(name="lobby-enrichment", body="steps")
+    for action in ("run", "view", "validate", "test", "invoke"):
+        r = Skill().run(action=action, args=["site", "read"])
+        assert not r.ok
+        assert r.error == "'name' is required: resend the same call with name=\"lobby-enrichment\"", action
+    for name in (None, [], 5, "  "):
+        assert 'name="lobby-enrichment"' in Skill().run(action="run", name=name).error, name
+
+
+def test_an_authoring_call_without_name_is_shown_the_skills_but_not_told_to_resend(isolated_home: Path) -> None:
+    _create(name="lobby-enrichment", body="steps")
+    for action in ("edit", "patch", "delete", "reset_state", "set_meta", "add_file", "remove_file"):
+        r = Skill().run(action=action, body="new body")
+        assert not r.ok
+        assert r.error == f"'name' is required: {action} changes one skill, so name it — skills here: lobby-enrichment", action
+    assert (isolated_home / "skills" / "personal" / "lobby-enrichment" / "SKILL.md").exists()
+
+
+def test_a_call_without_name_lists_the_skills_with_the_most_recent_first(isolated_home: Path) -> None:
+    _create(name="zeta-skill", body="steps")
+    _create(name="alpha-skill", body="steps")
+    assert Skill().run(action="run", name="zeta-skill").ok
+    r = Skill().run(action="run", args=["gaps", "check"])
+    assert not r.ok
+    assert r.error == (
+        "'name' is required: resend the same call with name set to the skill you mean — "
+        "zeta-skill (most recent), alpha-skill"
+    )
+
+
+def test_a_missing_name_with_no_skills_keeps_the_plain_error(isolated_home: Path) -> None:
+    r = Skill().run(action="run")
+    assert not r.ok and r.error == "'name' is required"
+
+
+def test_create_without_name_is_never_offered_an_existing_skill(isolated_home: Path) -> None:
+    _create(name="only-skill", body="steps")
+    r = Skill().run(action="create", category="personal", description="d", body="steps")
+    assert not r.ok and "only-skill" not in r.error
+
+
+def test_the_missing_name_hint_is_capped(isolated_home: Path) -> None:
+    for i in range(10):
+        _create(name=f"skill-{chr(97 + i)}x", body="steps")
+    (isolated_home / "skills" / ".usage.json").unlink()
+    r = Skill().run(action="run")
+    assert r.error.endswith("the skill you mean — " + ", ".join(f"skill-{c}x" for c in "abcdefgh") + ", +2 more")
+
+
+def test_a_broken_usage_file_does_not_break_the_hint(isolated_home: Path) -> None:
+    _create(name="alpha-skill", body="steps")
+    _create(name="beta-skill", body="steps")
+    usage = isolated_home / "skills" / ".usage.json"
+    for raw in ('{"skills": {"beta-skill": {"last_seen": "soon"}, "alpha-skill": 3}}',
+                '{"skills": {"beta-skill": {"last_seen": 1' + "0" * 400 + '}}}',
+                '{"skills": {"beta-skill": {"last_seen": NaN}, "alpha-skill": {"last_seen": -Infinity}}}'):
+        usage.write_text(raw)
+        r = Skill().run(action="run")
+        assert r.error.endswith("the skill you mean — alpha-skill, beta-skill"), raw
+
+
+def test_the_hint_names_only_skills_the_prompt_index_shows(isolated_home: Path) -> None:
+    _create(name="good-skill", body="steps")
+    _create(name="needs-key", body="steps", requires_env=["MISSING_KEY_FOR_THIS_TEST"])
+    category = isolated_home / "skills" / "personal"
+    (category / "__pycache__").mkdir()
+    (category / "no-skill-md").mkdir()
+    broken = category / "broken-skill"
+    broken.mkdir()
+    (broken / "SKILL.md").write_text("no frontmatter here")
+    r = Skill().run(action="run")
+    assert r.error == "'name' is required: resend the same call with name=\"good-skill\""
+    for hidden in ("needs-key", "pycache", "no-skill-md", "broken-skill"):
+        assert hidden not in r.error
+
+
+def test_a_denied_list_does_not_leak_through_the_hint_beyond_the_index(isolated_home: Path) -> None:
+    from alpi.tools import execute
+
+    _create(name="good-skill", body="steps")
+    hidden = isolated_home / "skills" / "personal" / "hidden-skill"
+    hidden.mkdir()
+    (hidden / "SKILL.md").write_text("no frontmatter here")
+    r = execute("skill", {"action": "run"}, deny={"skill:list"})
+    assert not r.ok and "good-skill" in r.error and "hidden-skill" not in r.error

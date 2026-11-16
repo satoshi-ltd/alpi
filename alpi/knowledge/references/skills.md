@@ -84,6 +84,7 @@ Notes:
 - Bulk cleanup is CLI-only: `alpi curator review` flags stale/cold skills, `alpi curator apply` archives non-pinned ones after preview + confirm (idempotent; pinned untouched).
 - `reset_state` wipes only `<skill>/state/`.
 - `view(file=...)` returns `absolute_path`; use it to run scripts.
+- Every action but `list` takes the skill's `name`. A call on an existing skill without it fails with the names it can take, the ones the skills index shows: the profile's only skill, or its skills with the most recent first. For `run`, `view`, `validate`, `test` and `invoke`, resend the same call with `name` added, never unchanged; a mutation is only shown the names, so pick the skill deliberately.
 
 ## Validation and eligibility
 

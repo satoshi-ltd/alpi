@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 import re
 import shutil
@@ -27,6 +28,8 @@ CATEGORIES = {
 ALLOWED_SUBDIRS = {"scripts", "references", "assets", "secrets", "state"}
 
 _SCOPED_WRITE_ACTIONS = SKILL_AUTHORING_ACTIONS
+_NAMED_SKILL_ACTIONS = (SKILL_AUTHORING_ACTIONS - {"create"}) | {"view", "validate", "run", "test", "invoke"}
+_NAME_HINT_MAX = 8
 
 NO_SCAN_SUBDIRS = {"secrets", "state"}
 
@@ -121,6 +124,53 @@ def skills_index_block(home: Path, cfg_raw: dict[str, Any] | None = None) -> str
             lines.append(f"    - {name}: {desc}" if desc else f"    - {name}")
 
     return "\n".join(lines)
+
+
+def _prompt_visible_skill_names(home: Path) -> list[str]:
+    from alpi.home import effective_profile_env
+    from alpi.tools import _skill_schema as _schema
+
+    cfg_raw = _load_cfg_raw(home)
+    env = effective_profile_env(home)
+    names = []
+    for path in all_skills(home):
+        meta = _frontmatter(path / "SKILL.md")
+        if _schema.errors(_schema.validate_frontmatter(meta, categories=CATEGORIES)):
+            continue
+        if skill_eligibility(meta, env=env, cfg_raw=cfg_raw)[0] and _NAME_RE.match(path.name):
+            names.append(path.name)
+    return names
+
+
+def _last_seen(entry: object) -> float:
+    try:
+        value = float(entry.get("last_seen") or 0.0) if isinstance(entry, dict) else 0.0
+    except (TypeError, ValueError, OverflowError):
+        return 0.0
+    return value if math.isfinite(value) and value > 0 else 0.0
+
+
+# Names only what the prompt's skills index already shows, so a refusal never lists a skill that action=list would have to be allowed to reveal.
+def _missing_name_error(home: Path, action: str) -> str:
+    plain = "'name' is required"
+    try:
+        used = _skills_usage.load_all(home)
+        seen = {name: _last_seen(used.get(name)) for name in _prompt_visible_skill_names(home)}
+    except Exception:  # noqa: BLE001
+        return plain
+    names = sorted(seen, key=lambda n: (-seen[n], n))
+    if not names:
+        return plain
+    shown = names[:_NAME_HINT_MAX]
+    if len(names) > 1 and seen[shown[0]] > 0:
+        shown[0] = f"{shown[0]} (most recent)"
+    more = f", +{len(names) - len(shown)} more" if len(names) > len(shown) else ""
+    listed = ", ".join(shown) + more
+    if action in SKILL_AUTHORING_ACTIONS:
+        return f"{plain}: {action} changes one skill, so name it — skills here: {listed}"
+    if len(names) == 1:
+        return f"{plain}: resend the same call with name=\"{names[0]}\""
+    return f"{plain}: resend the same call with name set to the skill you mean — {listed}"
 
 
 def _find_skill(home: Path, name: str):
@@ -792,6 +842,8 @@ class Skill(Tool):
             )
         if action == "list":
             return _list(home)
+        if action in _NAMED_SKILL_ACTIONS and not (isinstance(name, str) and name.strip()):
+            return ToolResult(ok=False, output="", error=_missing_name_error(home, action))
         if action == "view":
             return _view(home, name, file)
         if action == "create":

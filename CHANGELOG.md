@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.19.1 — 2026-11-16 — a skill call without its name says which to resend
+
+- A `skill` call that leaves `name` out is refused with the name to resend: the profile's only skill, or its skills with the most recent first. Before, the refusal said only that `name` is required, and a small model often repeated the same call.
+
 ## v0.19.0 — 2026-11-15 — a new identity
 
 - Every profile is drawn as one of twelve shapes with eyes, in the profile's colour, on the console banner and in `alpi profile show`; workgroups are neutral.

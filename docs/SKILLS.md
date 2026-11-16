@@ -391,6 +391,13 @@ in its prose and let the agent make the call. Without a script, `run` returns
 SKILL.md with a directive so the agent follows the prose with the real tools
 instead of improvising. Pass `args=[…]` to forward CLI arguments.
 
+A call on an existing skill that leaves `name` out is refused with the names it
+can take: the profile's only skill, or its skills with the most recent first,
+limited to the ones the prompt's skills index shows. `run`, `view`, `validate`,
+`test` and `invoke` are told to resend the same call with the name; an authoring
+action is only shown the names. Small models drop `name` in the later calls of a
+long turn, and a bare "required" made them repeat the same call.
+
 If the frontmatter declares `output_schema` (a one-line JSON object using
 `type` / `properties` / `required` / `items` / `enum`), `run` validates
 stdout against it. `test` runs the same path as a minimal harness for
