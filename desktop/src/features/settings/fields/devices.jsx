@@ -110,7 +110,7 @@ export function DevicesField({
 
   if (devices === null || showSkeleton) {
     return (
-      <Row label="paired">
+      <Row label="Paired">
         {showSkeleton ? <Skeleton width="112px" height="22px" radius="var(--r-pill)" delay={0} /> : null}
       </Row>
     );
@@ -125,7 +125,7 @@ export function DevicesField({
   }).length;
 
   return (
-    <Row label="paired">
+    <Row label="Paired">
       <span className={styles.inlineRow}>
         {devices.length === 0 ? (
           <span className={styles.muted}>{emptyLine("devices")}</span>

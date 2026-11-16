@@ -672,9 +672,17 @@
    "title": "Brand \u00b7 gate",
    "page": "brand"
   },
-  "Proposals-SHAPE.VOLUME.dc.html": {
+  "Proposals-CHAT.WORKLINE.dc.html": {
    "x": 0,
    "y": 240,
+   "w": 1280,
+   "h": 2440,
+   "title": "Proposals \u00b7 chat.workline \u00b7 a turn\u2019s work is one line that names what it is doing and opens into the steps",
+   "page": "proposals"
+  },
+  "Proposals-SHAPE.VOLUME.dc.html": {
+   "x": 0,
+   "y": 2920,
    "w": 1280,
    "h": 3100,
    "title": "Proposals \u00b7 shape.volume \u00b7 a soft, moving highlight makes the twelve shapes read as 3d solids",
@@ -762,6 +770,7 @@
   "Brand-Names.dc.html",
   "Brand-Workgroups.dc.html",
   "Brand-Gate.dc.html",
+  "Proposals-CHAT.WORKLINE.dc.html",
   "Proposals-SHAPE.VOLUME.dc.html"
  ],
  "notes": {
@@ -1125,9 +1134,17 @@
    "maxW": 2600,
    "page": "brand"
   },
-  "p-SHAPE.VOLUME \u00b7 A soft, moving highlight makes the twelve shapes read as 3D solids": {
+  "p-CHAT.WORKLINE \u00b7 A turn\u2019s work is one line that names what it is doing and opens into the steps": {
    "x": 0,
    "y": 17,
+   "text": "CHAT.WORKLINE \u00b7 A turn\u2019s work is one line that names what it is doing and opens into the steps",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "proposals"
+  },
+  "p-SHAPE.VOLUME \u00b7 A soft, moving highlight makes the twelve shapes read as 3D solids": {
+   "x": 0,
+   "y": 2697,
    "text": "SHAPE.VOLUME \u00b7 A soft, moving highlight makes the twelve shapes read as 3D solids",
    "kind": "title1",
    "maxW": 2600,

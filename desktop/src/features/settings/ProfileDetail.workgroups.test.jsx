@@ -42,6 +42,6 @@ describe("ProfileDetail — workgroups row with the real loader", () => {
     await new Promise((resolve) => setTimeout(resolve, 60));
 
     expect(invoke.mock.calls.filter(([cmd]) => cmd === "workgroups")).toHaveLength(1);
-    expect(screen.queryByText("workgroups")).not.toBeVisible();
+    expect(screen.queryByText("Workgroups")).not.toBeVisible();
   });
 });

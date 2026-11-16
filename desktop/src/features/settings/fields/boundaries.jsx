@@ -31,7 +31,7 @@ export function BudgetField({ profile, connectionId = null, onSaved }) {
   const triggerLabel = usd != null ? `$${usd.toFixed(2)}/day` : "unlimited";
 
   return (
-    <Row label="budget">
+    <Row label="Budget">
       <BudgetEdit value={value} triggerLabel={triggerLabel} onSave={save} />
     </Row>
   );
@@ -96,7 +96,7 @@ export function SandboxField({ profile, onSaved }) {
 
   return (
     <>
-      <Row label="terminal">
+      <Row label="Terminal">
         <span className={styles.inlineRow}>
           <Chip
             state={sandbox ? "on" : "off"}
@@ -121,7 +121,7 @@ export function SandboxField({ profile, onSaved }) {
           </Button>
         </span>
       </Row>
-      <Row label="network">
+      <Row label="Network">
         <span className={styles.inlineRow}>
           <Chip
             state={!sandbox ? "off" : network ? "on" : "error"}

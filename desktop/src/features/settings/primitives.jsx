@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import Button from "../../primitives/Button.jsx";
 import { useNotify } from "../../primitives/Notification.jsx";
 import { Section as DSSection, Field as DSField } from "../../primitives/SettingsLayout.jsx";
+export { FieldLine } from "../../primitives/SettingsLayout.jsx";
 import { SectionHitProvider, sectionId, settingsMatch, useSectionTitleHit, useSettingsQuery } from "./SettingsNav.jsx";
 import { copyText } from "../../lib/clipboard.js";
 
@@ -33,12 +34,12 @@ export function Section({ title, tooltip, kicker, children }) {
   );
 }
 
-export function Row({ label, keywords, alignTop, hidden = false, children }) {
+export function Row({ label, keywords, alignTop, stacked = false, helper, hidden = false, children }) {
   const query = useSettingsQuery();
   const titleHit = useSectionTitleHit();
   const filtered = !!query && !titleHit && !settingsMatch(label, query) && !settingsMatch(keywords, query);
   return (
-    <DSField label={label} align={alignTop ? "top" : "center"} hidden={hidden || filtered} searchable>
+    <DSField label={label} helper={helper} align={alignTop ? "top" : "center"} stacked={stacked} hidden={hidden || filtered} searchable>
       {children}
     </DSField>
   );

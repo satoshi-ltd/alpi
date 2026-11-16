@@ -6,7 +6,7 @@ import Button from "../../../primitives/Button.jsx";
 import Chip from "../../../primitives/Chip.jsx";
 import Skeleton from "../../../primitives/Skeleton.jsx";
 import { useSkeleton } from "../../../hooks/useSkeleton.js";
-import { Row } from "../primitives.jsx";
+import { FieldLine, Row } from "../primitives.jsx";
 import { ConfirmDelete, LoadFailed } from "../../../primitives/index.js";
 import { useNotify } from "../../../primitives/Notification.jsx";
 import { STORAGE_GROUPS, RECLAIM_NOTES, DELETE_TARGETS, formatBytes } from "../util.js";
@@ -145,20 +145,21 @@ export function StorageField({ profile, activeConnection, prefetched, onLoadingC
   const showStorageSkeleton = useSkeleton(storagePending);
 
   if (storagePending) {
-    return <Row label="storage">{showStorageSkeleton ? <Skeleton width="112px" height="22px" radius="var(--r-pill)" delay={0} label="Loading storage" /> : null}</Row>;
+    return <Row label="Storage">{showStorageSkeleton ? <Skeleton width="112px" height="22px" radius="var(--r-pill)" delay={0} label="Loading storage" /> : null}</Row>;
   }
   if (usageOverride == null && usage == null && error) {
-    return <Row label="storage"><LoadFailed inline label="storage" onRetry={refreshUsage} /></Row>;
+    return <Row label="Storage"><LoadFailed inline label="storage" onRetry={refreshUsage} /></Row>;
   }
   if (groups.length === 0) {
-    return <Row label="storage"><span className={styles.muted}>{emptyLine("storage")}</span></Row>;
+    return <Row label="Storage"><span className={styles.muted}>{emptyLine("storage")}</span></Row>;
   }
 
   return (
     <>
-      {groups.map((g) => (
-        <Row key={g.key} label={g.label}>
-          <span className={styles.inlineRow}>
+      {groups.map((g) => {
+        const destructive = canClean ? g.destructive : [];
+        const facts = (
+          <>
             <Chip size="sm" tooltip={g.desc}>{formatBytes(g.size)}</Chip>
             <Chip size="sm">{g.count} {g.count === 1 ? "file" : "files"}</Chip>
             {canClean && g.safe.length > 0 && (
@@ -172,35 +173,43 @@ export function StorageField({ profile, activeConnection, prefetched, onLoadingC
                 {busyId === `group:${g.key}` ? "Cleaning…" : "Clean"}
               </Button>
             )}
-            {canClean && g.destructive.map((m) => {
-              const note = RECLAIM_NOTES[m.key] ?? m.label.toLowerCase();
-              const target = DELETE_TARGETS[m.key] ?? m.label.toLowerCase();
-              return (
-                <span key={m.key} className={styles.confirmAnchor}>
-                  <Button
-                    size="sm"
-                    variant="danger-ghost"
-                    disabled={busy}
-                    onClick={() => setConfirmKey(m.key)}
-                  >
-                    {busyId === `member:${m.key}` ? "Deleting…" : `Delete ${target}`}
-                  </Button>
-                  <ConfirmDelete
-                    open={confirmKey === m.key}
-                    onClose={() => setConfirmKey(null)}
-                    onConfirm={() => { setConfirmKey(null); doClean([m.key], m.label, `member:${m.key}`); }}
-                    title={`Delete ${note}?`}
-                    consequence={`This permanently deletes ${note}. It cannot be undone.`}
-                  />
-                </span>
-              );
-            })}
-          </span>
-        </Row>
-      ))}
+          </>
+        );
+        if (!destructive.length) return <Row key={g.key} label={g.label}>{facts}</Row>;
+        return (
+          <Row key={g.key} label={g.label} stacked>
+            <FieldLine>{facts}</FieldLine>
+            <FieldLine>
+              {destructive.map((m) => {
+                const note = RECLAIM_NOTES[m.key] ?? m.label.toLowerCase();
+                const target = DELETE_TARGETS[m.key] ?? m.label.toLowerCase();
+                return (
+                  <span key={m.key} className={styles.confirmAnchor}>
+                    <Button
+                      size="sm"
+                      variant="danger-ghost"
+                      disabled={busy}
+                      onClick={() => setConfirmKey(m.key)}
+                    >
+                      {busyId === `member:${m.key}` ? "Deleting…" : `Delete ${target}`}
+                    </Button>
+                    <ConfirmDelete
+                      open={confirmKey === m.key}
+                      onClose={() => setConfirmKey(null)}
+                      onConfirm={() => { setConfirmKey(null); doClean([m.key], m.label, `member:${m.key}`); }}
+                      title={`Delete ${note}?`}
+                      consequence={`This permanently deletes ${note}. It cannot be undone.`}
+                    />
+                  </span>
+                );
+              })}
+            </FieldLine>
+          </Row>
+        );
+      })}
 
       {canClean && cleanable.length > 1 && (
-        <Row label="everything">
+        <Row label="Everything">
           <Button size="sm" disabled={busy} onClick={() => doClean(safeKeys, "Clean", "all")}>
             {busyId === "all" ? "Cleaning…" : `Clean everything safe · ${formatBytes(safeSize)} · ${countLabel(safeCount)}`}
           </Button>
@@ -227,17 +236,10 @@ export function DeleteProfileAction({ profile, onDelete, autoConfirm = false, on
   }, [autoConfirm]);
 
   return (
-    <span className={styles.inlineRow}>
-      <Button
-        variant="danger-ghost"
-        onClick={() => setOpen(true)}
-      >
+    <span className={styles.confirmAnchor}>
+      <Button size="sm" variant="danger-ghost" onClick={() => setOpen(true)}>
         Delete profile
       </Button>
-      <span className={styles.muted}>
-        moves ~/.alpi/profiles/{profile.name}/ to ~/.alpi/.trash/ — daemon
-        picks up the change on its next restart
-      </span>
       <ConfirmDelete
         open={open}
         onClose={() => setOpen(false)}

@@ -10,14 +10,14 @@ function Page() {
     <div ref={ref} data-testid="scroller">
       <SettingsNav scrollRef={ref}>
         <Section title="Overview">
-          <Row label="home">~/.alpi</Row>
-          <Row label="vision model">none</Row>
+          <Row label="Home">~/.alpi</Row>
+          <Row label="Vision model">none</Row>
         </Section>
         <Section title="MCP Servers">
-          <Row label="servers">github</Row>
+          <Row label="Servers">github</Row>
         </Section>
         <Section title="Email">
-          <Row label="accounts">none</Row>
+          <Row label="Accounts">none</Row>
         </Section>
       </SettingsNav>
     </div>
@@ -38,12 +38,12 @@ describe("settings rail", () => {
     const search = screen.getByRole("searchbox", { name: "Search settings" });
     fireEvent.change(search, { target: { value: "vision" } });
     await waitFor(() => expect(railItems()).toEqual(["Overview"]));
-    expect(screen.getByText("vision model").closest("[data-settings-row]").hidden).toBe(false);
-    expect(screen.getByText("home").closest("[data-settings-row]").hidden).toBe(true);
+    expect(screen.getByText("Vision model").closest("[data-settings-row]").hidden).toBe(false);
+    expect(screen.getByText("Home").closest("[data-settings-row]").hidden).toBe(true);
 
     fireEvent.change(search, { target: { value: "mcp" } });
     await waitFor(() => expect(railItems()).toEqual(["MCP Servers"]));
-    expect(screen.getByText("servers").closest("[data-settings-row]").hidden).toBe(false);
+    expect(screen.getByText("Servers").closest("[data-settings-row]").hidden).toBe(false);
 
     fireEvent.change(search, { target: { value: "zzz" } });
     await waitFor(() => expect(screen.getByText(/No settings match/)).toBeInTheDocument());

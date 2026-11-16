@@ -124,7 +124,7 @@ describe("ProfileDetail", () => {
     const view = render(
       <ProfileDetail profile={{ name: "default" }} profiles={[]} activeConnection={{ id: "local", kind: "local" }} />,
     );
-    expect(screen.getByText("theme")).toBeInTheDocument();
+    expect(screen.getByText("Theme")).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Theme" })).toBeInTheDocument();
     view.rerender(
       <ProfileDetail profile={{ name: "pulse" }} profiles={[]} activeConnection={{ id: "local", kind: "local" }} />,
@@ -195,9 +195,9 @@ describe("ProfileDetail — routing tiers gating", () => {
         activeConnection={{ id: "remote" }}
       />,
     );
-    expect(screen.getByText("providers")).toBeInTheDocument();
-    expect(screen.getByText("fast model")).toBeInTheDocument();
-    expect(screen.getByText("deep model")).toBeInTheDocument();
+    expect(screen.getByText("Providers")).toBeInTheDocument();
+    expect(screen.getByText("Fast model")).toBeInTheDocument();
+    expect(screen.getByText("Deep model")).toBeInTheDocument();
     first.unmount();
 
     // Old daemon: detail has models but no tiers key — rows must not render.
@@ -209,7 +209,7 @@ describe("ProfileDetail — routing tiers gating", () => {
         activeConnection={{ id: "remote" }}
       />,
     );
-    expect(screen.queryByText("fast model")).toBeNull();
+    expect(screen.queryByText("Fast model")).toBeNull();
     delete stableDetail.models;
   });
 });
@@ -224,7 +224,7 @@ describe("ProfileDetail — vision model gating", () => {
         activeConnection={{ id: "remote" }}
       />,
     );
-    expect(screen.getByText("vision model")).toBeInTheDocument();
+    expect(screen.getByText("Vision model")).toBeInTheDocument();
     expect(screen.getByText("vision field")).toBeInTheDocument();
     first.unmount();
 
@@ -236,7 +236,7 @@ describe("ProfileDetail — vision model gating", () => {
         activeConnection={{ id: "remote" }}
       />,
     );
-    expect(screen.queryByText("vision model")).toBeNull();
+    expect(screen.queryByText("Vision model")).toBeNull();
     delete stableDetail.models;
   });
 
@@ -252,7 +252,7 @@ describe("ProfileDetail — vision model gating", () => {
         activeConnection={{ id: "remote" }}
       />,
     );
-    expect(screen.getByText("vision model")).toBeInTheDocument();
+    expect(screen.getByText("Vision model")).toBeInTheDocument();
     expect(screen.getByText("vision field")).toBeInTheDocument();
     delete stableDetail.models;
     delete stableDetail.vision_model;
@@ -272,13 +272,13 @@ describe("ProfileDetail — fallback models row", () => {
   it("shows the row only when the daemon sends the list", () => {
     Object.assign(stableDetail, { models: ["openrouter/main"], fallback_models: [] });
     const first = renderDetail();
-    expect(screen.getByText("fallbacks")).toBeInTheDocument();
+    expect(screen.getByText("Fallbacks")).toBeInTheDocument();
     expect(screen.getByText("fallbacks field")).toBeInTheDocument();
     first.unmount();
 
     delete stableDetail.fallback_models;
     renderDetail();
-    expect(screen.queryByText("fallbacks")).toBeNull();
+    expect(screen.queryByText("Fallbacks")).toBeNull();
     delete stableDetail.models;
   });
 
@@ -298,14 +298,14 @@ describe("ProfileDetail — workgroups row", () => {
       <ProfileDetail profile={{ name: "mira", accent: "#10b981" }} profiles={[]} activeConnection={{ id: "local" }} />,
     );
     expect(screen.getByText("workgroups probe")).not.toBeVisible();
-    expect(screen.getByText("workgroups")).not.toBeVisible();
+    expect(screen.getByText("Workgroups")).not.toBeVisible();
 
     workgroupsProbe.count = 3;
     rerender(
       <ProfileDetail profile={{ name: "mira", accent: "#10b981" }} profiles={[]} activeConnection={{ id: "local" }} refreshTick={1} />,
     );
     expect(screen.getByText("workgroups probe")).toBeVisible();
-    expect(screen.getByText("workgroups")).toBeInTheDocument();
+    expect(screen.getByText("Workgroups")).toBeInTheDocument();
   });
 });
 
@@ -313,7 +313,7 @@ describe("ProfileDetail — workgroups row", () => {
 describe("ProfileDetail — concurrency gating", () => {
   it("hides the concurrency row when the daemon does not report the cap", () => {
     render(<ProfileDetail profile={{ name: "mira", accent: "#10b981" }} profiles={[]} activeConnection={{ id: "local" }} />);
-    expect(screen.queryByText("concurrency")).toBeNull();
+    expect(screen.queryByText("Concurrency")).toBeNull();
     expect(screen.queryByText("pipeline limit")).toBeNull();
   });
 
@@ -325,7 +325,7 @@ describe("ProfileDetail — concurrency gating", () => {
         activeConnection={{ id: "local" }}
       />,
     );
-    expect(screen.getByText("concurrency")).toBeInTheDocument();
+    expect(screen.getByText("Concurrency")).toBeInTheDocument();
     expect(screen.getByText("pipeline limit")).toBeInTheDocument();
   });
 });
@@ -379,7 +379,7 @@ describe("ProfileDetail appearance", () => {
     const { invoke } = await import("@tauri-apps/api/core");
     invoke.mockImplementation(async () => null);
     mount();
-    expect(screen.getByText("appearance")).toBeInTheDocument();
+    expect(screen.getByText("Appearance")).toBeInTheDocument();
     expect(screen.queryByText("accent")).toBeNull();
     expect(screen.getByRole("button", { name: "blue bell" })).toBeInTheDocument();
     invoke.mockReset();

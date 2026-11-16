@@ -306,7 +306,7 @@ export default function ProfileDetail({
       <div ref={bodyRef} className={styles.body}>
         <SettingsNav scrollRef={bodyRef}>
         <Section title="Overview">
-          <Row label="home">
+          <Row label="Home">
             <span className={styles.inlineRow}>
               <span className={styles.mono}>{profile.home}</span>
               {activeConnection?.kind === "local" && (
@@ -319,7 +319,7 @@ export default function ProfileDetail({
               )}
             </span>
           </Row>
-          <Row label="providers">
+          <Row label="Providers">
             <span className={styles.inlineRow}>
               {providers.length > 0 ? (
                 providers.map((p) => (
@@ -337,7 +337,7 @@ export default function ProfileDetail({
               <AddProviderField profile={profile} onSaved={onSaved} />
             </span>
           </Row>
-          <Row label="model">
+          <Row label="Model">
             <span className={styles.inlineRow}>
               {hasModels ? (
                 <ModelField
@@ -361,7 +361,7 @@ export default function ProfileDetail({
           {/* profile.tiers missing = daemon predates routing tiers — hide the rows instead of rendering pickers that can't read state back. */}
           {profile.tiers && hasModels && (
             <>
-              <Row label="fast model">
+              <Row label="Fast model">
                 <TierField
                   profile={profile}
                   name="fast"
@@ -369,7 +369,7 @@ export default function ProfileDetail({
                   onSaved={() => { const landed = refreshDetail(); onSaved?.(); return landed; }}
                 />
               </Row>
-              <Row label="deep model">
+              <Row label="Deep model">
                 <TierField
                   profile={profile}
                   name="deep"
@@ -380,7 +380,7 @@ export default function ProfileDetail({
             </>
           )}
           {profile.vision_model !== undefined && (hasModels || profile.vision_model) && (
-            <Row label="vision model">
+            <Row label="Vision model">
               <VisionModelField
                 profile={profile}
                 connectionId={connId}
@@ -389,7 +389,7 @@ export default function ProfileDetail({
             </Row>
           )}
           {hasFallbackModels(profile) && (hasModels || fallbackList(profile).length > 0) && (
-            <Row label="fallbacks" keywords="fallback models outage provider" alignTop>
+            <Row label="Fallbacks" keywords="fallback models outage provider" alignTop>
               <FallbackModelsField
                 profile={profile}
                 onSaved={() => { const landed = refreshDetail(); onSaved?.(); return landed; }}
@@ -397,14 +397,14 @@ export default function ProfileDetail({
             </Row>
           )}
           <BudgetField profile={profile} connectionId={connId} onSaved={onSaved} />
-          <Row label="workspace">
+          <Row label="Workspace">
             <WorkspaceField
               value={draft.workspace}
               onChange={(v) => update("workspace", v)}
               isLocal={activeConnection?.kind === "local"}
             />
           </Row>
-          <Row label="appearance" keywords="accent colour color shape mark">
+          <Row label="Appearance" keywords="accent colour color shape mark">
             {profile.name === "default" ? (
               <span className={styles.lockedAppearance}>
                 <Fold shape={TWIN} color={accent} size={28} />
@@ -419,7 +419,7 @@ export default function ProfileDetail({
             )}
           </Row>
           {profile.name === "default" && (
-            <Row label="theme" keywords="light dark system appearance mode">
+            <Row label="Theme" keywords="light dark system appearance mode">
               <ThemeField />
             </Row>
           )}
@@ -444,7 +444,7 @@ export default function ProfileDetail({
 
         {(activeConnection?.kind === "local" || activeConnection?.role === "admin") && (
           <Section title="Service" tooltip="daemon + network">
-            <Row label="daemon">
+            <Row label="Daemon">
               <DaemonField connectionId={activeConnection.id} selfUpdate={canSelfUpdate(activeConnection.self_update)} />
             </Row>
             {profile.name === "default" && activeConnection?.kind === "local" && (
@@ -462,7 +462,7 @@ export default function ProfileDetail({
 
         <Section title="ALP" tooltip="peers + workgroups">
           {profile.pubkey_b64 && (
-            <Row label="pubkey">
+            <Row label="Public key" keywords="pubkey public key ed25519">
               <span className={styles.inlineRow}>
                 <code className={`${styles.codeChip} ${styles.truncate}`}>
                   {profile.pubkey_b64}
@@ -486,7 +486,7 @@ export default function ProfileDetail({
               </span>
             </Row>
           )}
-          <Row label="identity" alignTop>
+          <Row label="Identity" alignTop>
             <div className={`${styles.briefingWrap} ${styles.identityBlock}`}>
               <Textarea
                 className={styles.textarea}
@@ -526,7 +526,7 @@ export default function ProfileDetail({
               )}
             </div>
           </Row>
-          <Row label="port">
+          <Row label="Port">
             <span className={styles.inlineRow}>
               <Chip
                 state="on"
@@ -544,7 +544,7 @@ export default function ProfileDetail({
               <TcpPortField profile={profile} onSaved={onSaved} />
             </span>
           </Row>
-          <Row label="peers">
+          <Row label="Peers">
             <LazyMount>
               <PeersField
                 profile={profile}
@@ -554,7 +554,7 @@ export default function ProfileDetail({
               />
             </LazyMount>
           </Row>
-          <Row label="workgroups" hidden={!workgroupsLoading && workgroupCount === 0}>
+          <Row label="Workgroups" hidden={!workgroupsLoading && workgroupCount === 0}>
             <WorkgroupsField
               profile={profile}
               profiles={profiles}
@@ -569,7 +569,7 @@ export default function ProfileDetail({
             />
           </Row>
           {profile.max_active_workgroups !== undefined && (
-            <Row label="concurrency">
+            <Row label="Concurrency">
               <PipelineLimitField profile={profile} onSaved={onSaved} />
             </Row>
           )}
@@ -591,7 +591,7 @@ export default function ProfileDetail({
         </Section>
 
         <Section title="Email" tooltip="IMAP + Gmail accounts">
-          <Row label="accounts">
+          <Row label="Accounts">
             <EmailCell
               profile={profile}
               connectionId={activeConnection?.id ?? null}
@@ -617,7 +617,7 @@ export default function ProfileDetail({
         {profile.name !== "default"
           && (activeConnection?.kind === "local" || activeConnection?.role === "admin") && (
           <Section title="Danger zone">
-            <Row label="delete">
+            <Row label="Delete" helper={`Moves ~/.alpi/profiles/${profile.name}/ to ~/.alpi/.trash/. The daemon picks up the change on its next restart.`}>
               <DeleteProfileAction
                 profile={profile}
                 onDelete={onDelete}

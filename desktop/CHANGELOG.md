@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.10.3 — 2026-11-16 — settings rows on one edge
+
+- Every settings row ends on the same right edge: chips, text and button labels line up, instead of buttons stopping short.
+- A row with two lines (Logs with its delete action) keeps both lines right-aligned with the label on the first line.
+- Delete profile is a small button on that edge, with what it does written under the label.
+- Row labels are sentence case.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.10.2 — 2026-11-16 — windows that move
 
 - Every window that opens over the app (search, Activity, notifications, shortcuts, sessions, image preview) rises in and sinks out, like dialogs and menus.

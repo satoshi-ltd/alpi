@@ -55,7 +55,7 @@ export function VoiceField({ profile, onSaved }) {
 
   return (
     <>
-      <Row label="voice">
+      <Row label="Voice">
         <span className={styles.inlineRow}>
           <VoicePicker
             voices={VOICE_SHORTLIST}
@@ -76,7 +76,7 @@ export function VoiceField({ profile, onSaved }) {
           </Button>
         </span>
       </Row>
-      <Row label="auto-read">
+      <Row label="Auto-read">
         <span className={styles.inlineRow}>
           <Chip
             state={autoRead ? "on" : "off"}

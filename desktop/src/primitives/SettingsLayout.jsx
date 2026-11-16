@@ -1,4 +1,4 @@
-import { forwardRef, useState } from "react";
+import { forwardRef, useLayoutEffect, useRef, useState } from "react";
 import Button from "./Button.jsx";
 import ConfirmDelete from "./ConfirmDelete.jsx";
 import Fold from "./Fold.jsx";
@@ -25,8 +25,47 @@ export const Section = forwardRef(function Section({ label, children, kicker, id
   );
 });
 
-export function Field({ label, children, helper, align = "center", hidden = false, searchable = false }) {
-  const rowAlign = align === "center" ? styles.fieldRowCenter : styles.fieldRowTop;
+function floating(el) {
+  const position = el.style?.position || getComputedStyle(el).position;
+  return position === "absolute" || position === "fixed" || el.hidden || el.matches('[role="dialog"], [role="menu"], [role="tooltip"]');
+}
+
+export function trailingGhost(group) {
+  const inFloat = (b) => {
+    for (let n = b.parentElement; n && n !== group; n = n.parentElement) if (floating(n)) return true;
+    return false;
+  };
+  const buttons = [...group.querySelectorAll("button")].filter((b) => !inFloat(b));
+  const last = buttons.at(-1);
+  if (!last || !/ghost$/.test(last.dataset.variant ?? "") || !last.textContent.trim()) return null;
+  for (let node = last; node && node !== group; node = node.parentElement) {
+    for (let next = node.nextElementSibling; next; next = next.nextElementSibling) if (!floating(next)) return null;
+  }
+  return last;
+}
+
+function useTrailingEdge(ref) {
+  useLayoutEffect(() => {
+    const control = ref.current;
+    if (!control) return undefined;
+    const mark = () => {
+      const groups = control.querySelectorAll(":scope > [data-field-line]");
+      const marked = new Set([...(groups.length ? groups : [control])].map(trailingGhost).filter(Boolean));
+      for (const b of control.querySelectorAll("[data-trailing]")) if (!marked.has(b)) b.removeAttribute("data-trailing");
+      for (const b of marked) b.setAttribute("data-trailing", "");
+    };
+    mark();
+    if (typeof MutationObserver !== "function") return undefined;
+    const observer = new MutationObserver(mark);
+    observer.observe(control, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  });
+}
+
+export function Field({ label, children, helper, align = "center", stacked = false, hidden = false, searchable = false }) {
+  const controlRef = useRef(null);
+  useTrailingEdge(controlRef);
+  const rowAlign = stacked ? styles.fieldRowStacked : align === "center" ? styles.fieldRowCenter : styles.fieldRowTop;
   // `hidden` keeps the same element so children stay mounted while the row is out of view.
   return (
     <div
@@ -40,9 +79,13 @@ export function Field({ label, children, helper, align = "center", hidden = fals
         <div className={styles.fieldLabel}>{label}</div>
         {helper && <div className={styles.fieldHelper}>{helper}</div>}
       </div>
-      <div className={`row ${styles.fieldControl}`}>{children}</div>
+      <div ref={controlRef} className={`row ${styles.fieldControl}`}>{children}</div>
     </div>
   );
+}
+
+export function FieldLine({ children }) {
+  return <div className={styles.fieldLine} data-field-line="">{children}</div>;
 }
 
 export function MemberRow({ member, isHub, note, owns = null, onRemove, onOpen, onCopyId, copyLabel = "Copy profile id" }) {

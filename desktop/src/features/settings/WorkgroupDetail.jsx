@@ -348,13 +348,13 @@ export default function WorkgroupDetail({
       <div ref={bodyRef} className={styles.body}>
         <SettingsNav scrollRef={bodyRef}>
           <Section title="Overview">
-            <Row label="hub">
+            <Row label="Hub">
               <span className={styles.inlineRow}>
                 <Fold shape={hub?.shape} color={hub?.accent} />
                 <span className={styles.mono}>@{profileLabel(hubName)}</span>
               </span>
             </Row>
-            <Row label="status">
+            <Row label="Status">
               <span className={styles.inlineRow}>
                 {workgroup.paused ? (
                   <Chip state="off" activity={busyAction === "resume"}>paused</Chip>
@@ -385,7 +385,7 @@ export default function WorkgroupDetail({
               </span>
             </Row>
             {workgroup.is_hub && (
-              <Row label="auto-read">
+              <Row label="Auto-read">
                 <span className={styles.inlineRow}>
                   <Chip
                     state={autoRead ? "on" : "off"}
@@ -405,11 +405,11 @@ export default function WorkgroupDetail({
               </Row>
             )}
             {waitLabel && (
-              <Row label="waits for members">
+              <Row label="Waits for members">
                 <span className={styles.mono}>{waitLabel}, then the round goes on</span>
               </Row>
             )}
-            <Row label="id">
+            <Row label="ID">
               <span className={styles.inlineRow}>
                 <span className={styles.mono}>{workgroup.id}</span>
                 <CopyButton value={workgroup.id} message="Workgroup id copied" />
@@ -420,7 +420,7 @@ export default function WorkgroupDetail({
           {/* Budget — hero metric ($X.XX display 28 + sublabel + Edit cap) + bar.
               1:1 with v2 §8 Budget section in WorkgroupDetail. */}
           <Section title="Budget" tooltip="workgroup spend cap">
-            <Row label="used" alignTop>
+            <Row label="Used" alignTop>
               <div className={styles.budgetHero}>
                 <div className={styles.budgetHeroLine}>
                   <span className={`${styles.budgetUsed} tnum`}>
@@ -499,7 +499,7 @@ export default function WorkgroupDetail({
 
           {/* Briefing — textarea with draft tag pattern (v2 §12.5). */}
           <Section title="Briefing" tooltip="what this workgroup decides">
-            <Row label="brief" alignTop>
+            <Row label="Brief" alignTop>
               {workgroup.is_hub ? (
                 <div className={styles.briefingWrap}>
                   <Textarea
@@ -546,14 +546,14 @@ export default function WorkgroupDetail({
               />
             ))}
             {pipelineEntries.length > 0 && !launchPipeline && (
-              <Row label="no launch" alignTop>
+              <Row label="No launch" alignTop>
                 <span className={styles.muted}>
                   {EMPTY.launchPipeline.title}. {EMPTY.launchPipeline.hint}
                 </span>
               </Row>
             )}
             {pipelineEntries.length === 0 && (
-              <Row label="stages" alignTop>
+              <Row label="Stages" alignTop>
                 <span className={styles.muted}>
                   {workgroup.needs_relaunch
                     ? `${EMPTY.retiredPipelines.title}. ${EMPTY.retiredPipelines.hint}`
@@ -591,7 +591,7 @@ export default function WorkgroupDetail({
               );
               if (candidates.length === 0) return null;
               return (
-                <Row label="add">
+                <Row label="Add">
                   <Dropdown
                     trigger={{ label: "Add member…" }}
                     direction="down"
@@ -631,7 +631,7 @@ export default function WorkgroupDetail({
           {members && members.some((m) => !m.joined) && (
             <Section title="Invitations" tooltip="pending member invites" alignTop>
               {workgroup.is_hub && (
-                <Row label="join command" alignTop>
+                <Row label="Join command" alignTop>
                   <span className={styles.inlineRow}>
                     <code className={styles.mono}>
                       alpi workgroup join {hubName} {workgroup.id}
@@ -651,7 +651,7 @@ export default function WorkgroupDetail({
 
           {workgroup.is_hub && (
             <Section title="Danger zone">
-              <Row label="delete">
+              <Row label="Delete">
                 <ActionLink
                   danger
                   onClick={() => setDeleteOpen(true)}

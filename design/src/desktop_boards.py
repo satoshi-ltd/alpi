@@ -1,3 +1,4 @@
+import re
 from gen import BANNER_DOT, BANNER_TEXT, HOVER_FILL, SELECTED_FILL, R_XS, R_CONTROL, R_SURFACE, R_SHEET, banner_surface, app_version, button_heights, ALPI_ACCENT, DANGER, DOC_ACCENT, FRONT, PROFILES, di as ic, identity_glyph, profile_mark, page, usage_chart
 
 INK, INK2, INK3, INK4 = "#141414", "#454545", "#6b6b6b", "#b4b4b4"
@@ -31,7 +32,7 @@ def iconbtn(name, label, size=32, icon=16, color=INK2, width=None):
 def button(label, variant="ghost", size="md", icon=None, icon_only=False):
     h = button_heights("desktop")[size]
     fs = 14 if h <= 32 else 15
-    padx = {32: 14, 40: 18, 48: 22}.get(h, 16)
+    padx = {32: 12, 40: 16, 48: 24}.get(h, 16)
     if variant == "primary":
         bg, fg = AMBER, PANE
     elif variant == "secondary":
@@ -298,12 +299,32 @@ def fallbacks_field(models=("claude-sonnet-5-5",)):
     return f'<span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">{entries}{add}</span>'
 
 
-def row(label, control, align_top=False, desc=""):
+def bleed(control):
+    at = control.rfind("<button ")
+    if at < 0 or not control.rstrip().endswith("</button>"):
+        return control
+    tail = control[at:]
+    pad = re.search(r"padding: 0 (\d+)px", tail)
+    if "background: transparent" not in tail or not pad:
+        return control
+    return control[:at] + tail.replace('flex-shrink: 0">', f'flex-shrink: 0; margin-right: -{pad.group(1)}px">', 1)
+
+
+def row(label, control, align_top=False, desc="", lines=None):
     text = label[:1].upper() + label[1:]
     note = f'<span style="font-size: 14px; line-height: 1.45; color: {INK3}">{desc}</span>' if desc else ""
-    return (f'<div data-row="" style="display: flex; align-items: {"flex-start" if align_top else "center"}; gap: 24px; min-height: 56px; padding: 8px 0; box-sizing: border-box">'
-            f'<div style="width: 200px; flex-shrink: 0; display: flex; flex-direction: column; gap: 2px; {"padding-top: 8px;" if align_top else ""}"><span style="font-size: 15px; font-weight: 500; line-height: 1.4; color: {INK}">{text}</span>{note}</div>'
-            f'<div style="flex: 1; min-width: 0; display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px">{control}</div></div>')
+    stacked = lines is not None
+    top = "flex-start" if align_top or stacked else "center"
+    label_pad = "padding-top: 8px;" if align_top else "padding-top: 5.5px;" if stacked else ""
+    if stacked:
+        control = "".join(f'<div style="display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; min-height: 32px">{bleed(line)}</div>' for line in lines)
+        body = f'<div style="flex: 0 1 340px; min-width: 0; display: flex; flex-direction: column; align-items: flex-end; row-gap: 8px">{control}</div>'
+    else:
+        body = f'<div style="flex: 0 1 340px; min-width: 0; display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px">{bleed(control)}</div>'
+    pad = "12px 0" if stacked else "8px 0"
+    return (f'<div data-row="" style="display: flex; align-items: {top}; gap: 24px; min-height: 56px; padding: {pad}; box-sizing: border-box">'
+            f'<div style="flex: 1 1 0; min-width: 160px; display: flex; flex-direction: column; gap: 2px; {label_pad}"><span style="font-size: 15px; font-weight: 500; line-height: 1.4; color: {INK}">{text}</span>{note}</div>'
+            f'{body}</div>')
 
 
 def d_body(inner, pad_bottom=80):
@@ -375,7 +396,10 @@ def desktop_profile_settings():
     hero = d_hero(h1("doc", identity_glyph("doc", DOC_ACCENT, 28), DOC_ACCENT) + '<span style="font-size: 20px; font-weight: 400; color: #6b6b6b; margin-left: 2px">Settings</span>', "", button("Connections", "ghost", "sm", "globe") + iconbtn("arrow-left", "Back to chat"), DOC_ACCENT)
     clean = lambda: button("Clean", "ghost", "sm")
     delete = lambda text: button(text, "danger-ghost", "sm")
-    group = lambda name, size, files, *actions: row(name, chip(size, "plain", "sm") + chip(files, "plain", "sm") + "".join(actions))
+    def group(name, size, files, *actions):
+        facts = chip(size, "plain", "sm") + chip(files, "plain", "sm") + "".join(a for a in actions if "Delete" not in a)
+        deletes = "".join(a for a in actions if "Delete" in a)
+        return row(name, facts, lines=(facts, deletes)) if deletes else row(name, facts)
     storage_rows = (
         group("Conversations", "6.5 MB", "56 files", delete("Delete sessions"), delete("Delete workgroup transcripts"), delete("Delete @-mention threads"))
         + group("Skills", "133 KB", "22 files") + group("Memories", "15 KB", "5 files")
@@ -413,7 +437,7 @@ def desktop_profile_settings():
         + section("MCP servers", "external tool servers", row("servers", muted("No MCP servers yet") + button("Add MCP", "ghost", "sm", "plus")))
         + section("Email", "IMAP + Gmail accounts", row("accounts", button("Add account", "ghost", "sm", "plus")))
         + section("Storage", "disk + data usage", storage_rows)
-        + section("Danger zone", "", row("delete", button("Delete profile", "danger-ghost", "md") + muted("removes identity, memory, skills, schedule from disk. Cannot be undone.")))
+        + section("Danger zone", "", row("Delete", button("Delete profile", "danger-ghost", "sm"), desc="Moves ~/.alpi/profiles/doc/ to ~/.alpi/.trash/. The daemon picks up the change on its next restart."))
     )
     body = f"""<div style="display: flex; height: 100%">
 {d_sidebar(2420, settings_mode=True)}

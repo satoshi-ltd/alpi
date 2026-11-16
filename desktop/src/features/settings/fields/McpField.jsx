@@ -19,7 +19,7 @@ export function McpField({ profile, connectionId, onSaved }) {
   const mcps = profile.mcps ?? [];
 
   return (
-    <Row label="mcps">
+    <Row label="Servers" keywords="mcp mcps">
       <span className={styles.chipRow}>
         {mcps.length === 0 && <span className={styles.muted}>{emptyLine("mcp")}</span>}
         {mcps.map((m) => (

@@ -408,7 +408,7 @@ describe("WorkgroupDetail — waits for members", () => {
 
   it("shows the wait the workgroup was created with", () => {
     renderWith({ quorum_timeout_seconds: 1200 });
-    expect(screen.getByText("waits for members")).toBeTruthy();
+    expect(screen.getByText("Waits for members")).toBeTruthy();
     expect(screen.getByText("20 min, then the round goes on")).toBeTruthy();
   });
 
@@ -419,7 +419,7 @@ describe("WorkgroupDetail — waits for members", () => {
 
   it("hides the row when the daemon does not report the wait", () => {
     renderWith({});
-    expect(screen.queryByText("waits for members")).toBeNull();
+    expect(screen.queryByText("Waits for members")).toBeNull();
   });
 });
 

@@ -59,6 +59,7 @@ const Button = forwardRef(function Button({
   const button = (
     <button
       data-variant={variant}
+      data-size={size}
       {...rest}
       ref={ref}
       type={type}

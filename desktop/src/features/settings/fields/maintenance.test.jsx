@@ -236,7 +236,7 @@ describe("StorageField — one inventory", () => {
     await screen.findByText("Conversations");
 
     expect(screen.queryByText("reclaim")).toBeNull();
-    expect(screen.queryByText("delete")).toBeNull();
+    expect(screen.queryByText("Delete")).toBeNull();
     expect(screen.getByRole("button", { name: "Delete sessions" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Delete workgroup transcripts" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Delete @-mention threads" })).toBeInTheDocument();
@@ -249,7 +249,7 @@ describe("StorageField — one inventory", () => {
   it("has one row per non-empty group plus one, with no repeated label", async () => {
     renderFull();
     await screen.findByText("Conversations");
-    const labels = ["Conversations", "Files", "Logs", "everything"];
+    const labels = ["Conversations", "Files", "Logs", "Everything"];
     for (const label of labels) expect(screen.getAllByText(label)).toHaveLength(1);
   });
 
@@ -302,10 +302,10 @@ describe("StorageField — one inventory", () => {
     render(<StorageField profile={{ name: "doc" }} activeConnection={local} />);
     await screen.findByText("Conversations");
 
-    const labels = ["Conversations", "Skills", "Memories", "Files", "Knowledge", "Caches", "Logs", "everything"];
+    const labels = ["Conversations", "Skills", "Memories", "Files", "Knowledge", "Caches", "Logs", "Everything"];
     for (const label of labels) expect(screen.getAllByText(label)).toHaveLength(1);
     expect(screen.queryByText("reclaim")).toBeNull();
-    expect(screen.queryByText("delete")).toBeNull();
+    expect(screen.queryByText("Delete")).toBeNull();
   });
 
   it("keeps the delete confirm on the row that owns it", async () => {
@@ -326,7 +326,7 @@ describe("StorageField — one inventory", () => {
     renderFull(FULL_PLAN, { id: "casa", kind: "remote", role: "member" });
     await screen.findByText("Conversations");
     expect(screen.queryByRole("button", { name: /Clean|Delete/ })).toBeNull();
-    expect(screen.queryByText("everything")).toBeNull();
+    expect(screen.queryByText("Everything")).toBeNull();
   });
 });
 
@@ -379,5 +379,17 @@ describe("StorageField — the destructive confirm has a positioned anchor", () 
     await screen.findByRole("alert");
     expect(screen.getByRole("alert")).toHaveTextContent("Couldn't load storage");
     expect(screen.queryByText(/Nothing stored yet/)).toBeNull();
+  });
+
+  it("stacks a group with a destructive action: facts and Clean first, the delete under them", async () => {
+    mockAll({ plan: withMentions() });
+    render(<StorageField profile="doc" activeConnection={local} />);
+    const del = await screen.findByRole("button", { name: /Delete @-mention threads|Delete .*mention/i });
+    const row = del.closest("[data-settings-row]");
+    expect(row.className).toMatch(/fieldRowStacked/);
+    const lines = row.querySelectorAll("[class*=fieldLine]");
+    expect(lines).toHaveLength(2);
+    expect(lines[0].textContent).toMatch(/files/);
+    expect(lines[1]).toContainElement(del);
   });
 });

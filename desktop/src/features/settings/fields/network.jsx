@@ -93,7 +93,7 @@ export function PrivateRouteField({ onLoadingChange = null }) {
     && !endpoint;
 
   return (
-    <Row label="private route">
+    <Row label="Private route">
       <Chip
         state={endpoint ? "on" : "off"}
         tooltip="Direct private-network route derived from the address and listen port"
@@ -173,7 +173,7 @@ export function PublicRouteField({ onLoadingChange = null }) {
   }
 
   return (
-    <Row label="public route">
+    <Row label="Public route">
       <span ref={wrapRef} className={styles.popoverAnchor}>
         <span className={styles.inlineRow}>
           <Chip state={current ? "on" : "off"} tooltip="Optional certificate-validated Internet route">
@@ -339,7 +339,7 @@ export function NetworkAddressField({ profile, onSaved, onLoadingChange = null }
   }
 
   return (
-    <Row label="address">
+    <Row label="Address">
       <span ref={wrapRef} className={styles.popoverAnchor}>
         <span className={styles.inlineRow}>
           <Chip
@@ -443,7 +443,7 @@ export function PairingNameField({ onLoadingChange = null }) {
   }
 
   return (
-    <Row label="name">
+    <Row label="Name">
       <span ref={wrapRef} className={styles.popoverAnchor}>
         <span className={styles.inlineRow}>
           <Chip state="on" tooltip="Instance name shown to new devices">

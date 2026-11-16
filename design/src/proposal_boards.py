@@ -1,6 +1,7 @@
 import re
 
 import volume_cap_proposal
+import work_line_proposal
 from desktop_boards import INK3, MONO
 
 
@@ -24,4 +25,4 @@ def labelled(text, inner):
     return stack(f'<span style="font-family: {MONO}; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: {INK3}">{text}</span>', inner, gap=6)
 
 
-PROPOSALS = [volume_cap_proposal.PROPOSAL]
+PROPOSALS = [work_line_proposal.PROPOSAL, volume_cap_proposal.PROPOSAL]

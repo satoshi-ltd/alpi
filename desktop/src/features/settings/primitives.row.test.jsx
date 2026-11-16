@@ -6,7 +6,7 @@ import { Row } from "./primitives.jsx";
 const draw = (query) =>
   render(
     <QueryCtx.Provider value={query}>
-      <Row label="appearance" keywords="accent colour color shape">
+      <Row label="Appearance" keywords="accent colour color shape">
         <span>control</span>
       </Row>
     </QueryCtx.Provider>,
