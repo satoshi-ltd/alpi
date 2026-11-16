@@ -3,7 +3,8 @@ import ConfirmDelete from "./ConfirmDelete.jsx";
 import Icon from "./Icon.jsx";
 import IconBtn from "./IconBtn.jsx";
 import { OverlayScope, useOverlay } from "../hooks/useOverlay.js";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
+import useExit from "../hooks/useExit.js";
 import { createPortal } from "react-dom";
 import { I } from "./icons.jsx";
 import KeyHint from "./KeyHint.jsx";
@@ -13,16 +14,20 @@ import styles from "./Panels.module.css";
 import ConnectElsewhere from "./ConnectElsewhere.jsx";
 import { isComposing } from "../lib/composition.js";
 
-export function Scrim({ onClose, children, align = "flex-start", top = 96, dismissable = true }) {
+const ClosingContext = createContext(false);
+
+export function Scrim({ onClose, children, align = "flex-start", top = 96, dismissable = true, closing = false }) {
   const ref = useRef(null);
   // Launcher panels (palette, activity, shortcuts sheet) hand app shortcuts on; a dialog modal swallows them.
-  const isTop = useOverlay({ open: true, onClose: dismissable ? onClose : undefined, ref, modal: true, blocksShortcuts: false });
+  const isTop = useOverlay({ open: !closing, onClose: dismissable ? onClose : undefined, ref, modal: true, blocksShortcuts: false });
   return createPortal(
     <OverlayScope overlay={isTop}>
+      <ClosingContext.Provider value={closing}>
       <div
         ref={ref}
         tabIndex={-1}
-        className={`anim-fade ${styles.scrim}`}
+        inert={closing || undefined}
+        className={`${closing ? "anim-overlay-out" : "anim-fade"} ${styles.scrim}`}
         onClick={(e) => {
           if (isTop() && dismissable && e.target === e.currentTarget) onClose();
         }}
@@ -33,14 +38,16 @@ export function Scrim({ onClose, children, align = "flex-start", top = 96, dismi
       >
         {children}
       </div>
+      </ClosingContext.Provider>
     </OverlayScope>,
     document.body,
   );
 }
 
 export function PanelShell({ children, width = 880, maxHeight = "70vh", label }) {
+  const closing = useContext(ClosingContext);
   return (
-    <div role="dialog" aria-modal="true" aria-label={label} className={`anim-pop ${styles.shell}`} style={{ width, maxHeight }}>
+    <div role="dialog" aria-modal="true" aria-label={label} className={`${closing ? "anim-dialog-out" : "anim-dialog"} ${styles.shell}`} style={{ width, maxHeight }}>
       {children}
     </div>
   );
@@ -81,9 +88,10 @@ export function ConnectionPanel({
     if (!name || name === r.name) return;
     await onRename?.(r, name);
   }
-  if (!open) return null;
+  const { mounted, closing } = useExit(open);
+  if (!mounted) return null;
   return (
-    <Scrim onClose={onClose} top={80} dismissable={!locked}>
+    <Scrim onClose={onClose} top={80} dismissable={!locked} closing={closing}>
       <PanelShell width={560} maxHeight="auto" label="Connection">
         <div className={`row between ${styles.panelHeader}`}>
           <div className={`row row-gap ${styles.headerRow}`}>
@@ -320,10 +328,11 @@ export function Palette({ open, onClose, groups = [], placeholder = "Search prof
     }
   }
 
-  if (!open) return null;
+  const { mounted, closing } = useExit(open);
+  if (!mounted) return null;
   const listId = `${baseId}-list`;
   return (
-    <Scrim onClose={onClose} top={120}>
+    <Scrim onClose={onClose} top={120} closing={closing}>
       <PanelShell width={560} maxHeight="60vh" label="Command palette">
         <div className={styles.paletteInputWrap}>
           <I.Search className={styles.paletteSearchIcon} />

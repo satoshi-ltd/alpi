@@ -14,7 +14,7 @@ import { profileLabel } from "../../lib/profile-display.js";
 import { Section, Row, CopyButton } from "./primitives.jsx";
 import { ConfirmDelete, ConfirmDeleteAction } from "../../primitives/index.js";
 import { RefreshBar, SettingsHero } from "../../primitives/index.js";
-import { Fold, Dot, LoadFailed, Mono } from "../../primitives/index.js";
+import { Fold, LoadFailed } from "../../primitives/index.js";
 import { BudgetEdit } from "../../primitives/index.js";
 import { useProfileDetail } from "../../hooks/useProfileDetail.js";
 import { useWorkgroupUsageDaily } from "../../hooks/useUsage.js";
@@ -29,7 +29,8 @@ import { workgroupWaitLabel } from "../../../../common/runLimits.mjs";
 import { useSettingsDirty } from "../../lib/settingsDirty.js";
 import { copyText } from "../../lib/clipboard.js";
 import { chainChips, hasPhaseOwners, orderedPipelines, ownedPhases, pipelineTrigger, runSummary, runSummaryLine, sameName } from "../../../../common/pipelinePhases.mjs";
-import { pipelineRunMark } from "../../../../common/workgroupMarkState.mjs";
+import { pipelineRunMark, workgroupStatusLine } from "../../../../common/workgroupMarkState.mjs";
+import { WorkgroupDetails } from "../../primitives/HeaderDetails.jsx";
 import { settingsMatch, useSectionTitleHit, useSettingsQuery } from "./SettingsNav.jsx";
 
 function renderMemberRow(m, profiles, workgroup, hub, { onRemove, onOpen, notify } = {}) {
@@ -296,30 +297,17 @@ export default function WorkgroupDetail({
   }
   const busy = !!busyAction;
 
-  const statusKind = workgroup.paused ? "paused" : "active";
-  const statusDotColor = workgroup.paused ? "var(--c-warning)" : "var(--c-success)";
+  const heroMark = pipelineRunMark({ workgroup, pipelineRun: run });
   const heroMeta = (
-    <>
-      <span className={styles.heroMetaGroup}>
-        <span className={styles.heroMetaLabel}>hub</span>
-        <Fold shape={hub?.shape} color={hub?.accent || "var(--accent)"} />
-        <Mono className={styles.heroMetaValue}>@{profileLabel(hubName)}</Mono>
-      </span>
-      <span aria-hidden className={styles.heroMetaSep} />
-      <span>
-        <span className={styles.heroMetaLabel}>members </span>
-        <Mono className={`tnum ${styles.heroMetaValue}`}>
-          {members?.length ?? workgroup.members?.length ?? 0}
-        </Mono>
-      </span>
-      <span aria-hidden className={styles.heroMetaSep} />
-      <span className={styles.heroMetaGroup}>
-        <Dot color={statusDotColor} pulse />
-        <span className={styles.heroMetaValue}>{statusKind}</span>
-      </span>
-      <span aria-hidden className={styles.heroMetaSep} />
-      <Mono className={styles.heroMetaMuted}>{workgroup.id}</Mono>
-    </>
+    <WorkgroupDetails
+      hubName={hubName}
+      hubShape={hub?.shape}
+      hubBio={hub?.bio || hub?.public_bio}
+      memberCount={members?.length ?? workgroup.members?.length ?? 0}
+      status={workgroup.paused ? null : workgroupStatusLine(heroMark)}
+      budget={workgroup.budget_usd > 0 ? { used: workgroup.spent_usd ?? 0, cap: workgroup.budget_usd } : null}
+      accent={hub?.accent || "var(--accent)"}
+    />
   );
   const syncing = membersLoading || hubDetailLoading || usage.loading || connectionSyncing;
 
@@ -329,7 +317,7 @@ export default function WorkgroupDetail({
         kind="workgroup"
         id={workgroup.name || workgroup.id}
         accent={hub?.accent || "var(--accent)"}
-        mark={pipelineRunMark({ workgroup, pipelineRun: run })}
+        mark={heroMark}
         bio={workgroup.briefing}
         meta={heroMeta}
         paused={!!workgroup.paused}

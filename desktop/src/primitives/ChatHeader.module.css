@@ -53,7 +53,7 @@
 .label {
   font-family: var(--font-sans);
   font-size: var(--text-title);
-  font-weight: var(--fw-medium);
+  font-weight: var(--fw-regular);
   line-height: var(--lh-tight);
   color: var(--ink-3);
   white-space: nowrap;

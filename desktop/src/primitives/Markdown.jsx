@@ -52,14 +52,12 @@ export default function Markdown({ source, as = "div", className = "", style, ac
         onClick,
         dangerouslySetInnerHTML: { __html: html },
       })}
-      {zoom && (
-        <ImageLightbox
-          src={zoom.src}
-          caption={zoom.caption}
-          path={zoom.path}
-          onClose={() => setZoom(null)}
-        />
-      )}
+      <ImageLightbox
+        src={zoom?.src}
+        caption={zoom?.caption}
+        path={zoom?.path}
+        onClose={() => setZoom(null)}
+      />
     </>
   );
 }

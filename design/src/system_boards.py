@@ -396,7 +396,7 @@ DESKTOP_MOTION = [
     ("New turn", "--dur-2 · 200 ms", "rises 8 px and fades in; only turns appended after the thread is on screen"),
     ("Streaming text", "150 ms", "only the newest chunk fades; nothing already shown re-animates"),
     ("Steps and reasoning open", "--dur-2 · 200 ms", "grid-rows reveal; reasoning folds itself when the answer lands"),
-    ("Dialog in", "--dur-enter · 180 ms", "the veil fades; the panel rises 8 px and settles from 0.98 on the enter curve"),
+    ("Dialog and window in", "--dur-enter · 180 ms", "dialogs, the palette, Activity, notifications, shortcuts, the sessions manager and the image preview: the veil fades; the panel rises 8 px and settles from 0.98 on the enter curve"),
     ("Menu, popover, dropdown in", "--dur-fast · 120 ms", "drifts 4 px out of its anchor and settles from 0.98, from the anchor corner"),
     ("Toast in", "--dur-enter · 180 ms", "rises 8 px from its screen edge, no scale"),
     ("Every exit", "--dur-exit · 130 ms", "half the entrance travel on the exit curve: a dialog and a toast sink 4 px, a menu only settles to 0.98; inert while it leaves, and a timer closes it if the animation never ends"),

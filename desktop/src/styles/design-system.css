@@ -662,6 +662,8 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
 
 @keyframes ds-pop-in   { from { opacity: 0; } to { opacity: 1; } }
 @keyframes ds-dialog-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes ds-fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes ds-dialog-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(4px) scale(0.98); } }
 @keyframes ds-menu-in { from { opacity: 0; transform: translateY(var(--menu-dy, -4px)) scale(0.98); } to { opacity: 1; transform: none; } }
 @keyframes ds-menu-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: scale(0.98); } }
 @keyframes ds-fade-in  { from { opacity: 0; } to { opacity: 1; } }
@@ -680,6 +682,8 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
 .anim-up   { animation: ds-slide-up var(--dur-4) var(--ease) both; }
 .anim-overlay { animation: ds-fade-in var(--dur-enter) var(--ease-enter) both; }
 .anim-dialog  { animation: ds-dialog-in var(--dur-enter) var(--ease-enter) both; }
+.anim-overlay-out { animation: ds-fade-out var(--dur-exit) var(--ease-exit) both; pointer-events: none; }
+.anim-dialog-out { animation: ds-dialog-out var(--dur-exit) var(--ease-exit) both; }
 .anim-menu { animation: ds-menu-in var(--dur-fast) var(--ease-enter) both; }
 .anim-menu-out { animation: ds-menu-out var(--dur-exit) var(--ease-exit) both; pointer-events: none; }
 .pulse-dot { animation: ds-pulse-dot var(--dur-loop) ease-in-out infinite; }

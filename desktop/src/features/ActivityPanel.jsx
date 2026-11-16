@@ -9,6 +9,7 @@ import { useNow } from "../hooks/useNow.js";
 import { isMissingVerb, toEpochSeconds } from "../hooks/useActivity.js";
 import { profileLabel } from "../lib/profile-display.js";
 import { clockOf, formatDay, formatNextFire, relativeTime } from "../lib/time.js";
+import useExit from "../hooks/useExit.js";
 import styles from "./ActivityPanel.module.css";
 import { ICON_ROLES } from "../../../common/iconRoles.mjs";
 import { EMPTY } from "../../../common/emptyCopy.mjs";
@@ -147,17 +148,19 @@ export default function ActivityPanel({
     setShowAllUpcoming(false);
   }, [connectionId]);
 
+  const { mounted, closing } = useExit(open);
+
   useEffect(() => {
-    if (!open) {
+    if (!mounted) {
       setFilter("all");
       setToggled({});
       setConfirmAll(false);
       setShowAllUpcoming(false);
     }
-  }, [open]);
+  }, [mounted]);
 
   const groups = useMemo(() => groupActivity(activity, { nowMs: now }), [activity, now]);
-  if (!open) return null;
+  if (!mounted) return null;
 
   const shown = applyFilter(groups, filter);
   const retryable = Boolean(canRetry && onRetry && !retryGone);
@@ -231,7 +234,7 @@ export default function ActivityPanel({
   const capped = showAllUpcoming ? { days: upcomingDays.map((day) => ({ ...day, total: day.rows.length })), hidden: 0 } : capDays(upcomingDays);
 
   return (
-    <Scrim onClose={onClose} top={80}>
+    <Scrim onClose={onClose} top={80} closing={closing}>
       <PanelShell width={500} maxHeight="70vh" label="Activity">
         <div className={styles.head}>
           <Icon name={ICON_ROLES.activity} />

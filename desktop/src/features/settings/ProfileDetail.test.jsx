@@ -81,7 +81,7 @@ import { _resetProfileEdits } from "../../lib/optimisticProfiles.js";
 beforeEach(() => _resetProfileEdits());
 
 describe("ProfileDetail", () => {
-  it("matches the chat header model and budget treatment", () => {
+  it("opens the same details popover as the chat header: labelled Model, full id and Cost today", () => {
     const { container } = render(
       <ProfileDetail
         profile={{
@@ -96,18 +96,14 @@ describe("ProfileDetail", () => {
       />,
     );
 
-    const model = screen.getByText("deepseek-v4-flash-latest");
-    expect(model.closest(".ds-tip-escape")).toBeInTheDocument();
-    fireEvent.mouseEnter(model.closest(".ds-tip-escape"));
-    expect(screen.getByText("openrouter/deepseek/deepseek-v4-flash-latest"))
-      .toHaveClass("ds-tip-wide");
+    const details = container.querySelector("[role=dialog][aria-label$=\" details\"]");
+    expect(details).toHaveTextContent("Model");
+    expect(details).toHaveTextContent("deepseek-v4-flash-latest");
+    expect(details.querySelector("[data-model-id]")).toHaveTextContent("openrouter/deepseek/deepseek-v4-flash-latest");
+    expect(details).toHaveTextContent("Cost today");
     expect(container.querySelector(".ds-meter")).toHaveTextContent("$0.26/$10.00");
-    const budgetTip = container.querySelector(".ds-meter").closest(".ds-tip-escape");
-    expect(budgetTip).toBeInTheDocument();
-    fireEvent.mouseEnter(budgetTip);
-    expect(screen.getByText("Daily budget")).toBeInTheDocument();
-    expect(container.querySelector(".ds-meter [role='progressbar']"))
-      .toHaveAttribute("aria-valuenow", "3");
+    expect(details).not.toHaveTextContent("Context");
+    expect(container.querySelector(".ds-meter [role='progressbar']")).toHaveAttribute("aria-valuenow", "3");
   });
 
   it("shows the settings sync progress bar under the header", () => {

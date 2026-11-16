@@ -1,4 +1,5 @@
 import { OverlayScope, useOverlay } from "../hooks/useOverlay.js";
+import useExit from "../hooks/useExit.js";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { CheckIcon, CopyIcon, IconBtn, RefreshBar, SearchIcon, Tip, XIcon } from "./index.js";
@@ -20,6 +21,7 @@ export function BrowseShell({ open, onClose, label, guardRef: sharedGuard = null
     onClose?.();
   }, [onClose]);
   const isTop = useOverlay({ open, onClose: close, ref: wrapRef, modal: true });
+  const { mounted, closing } = useExit(open);
   const shell = useMemo(() => ({ close, guardRef, badges }), [close, guardRef, badges]);
 
   useEffect(() => {
@@ -53,12 +55,12 @@ export function BrowseShell({ open, onClose, label, guardRef: sharedGuard = null
     };
   }, [open, close]);
 
-  if (!open) return null;
+  if (!mounted) return null;
 
   return createPortal(
     <OverlayScope overlay={isTop}>
-      <div className={`anim-overlay ${styles.backdrop}`}>
-        <div ref={wrapRef} tabIndex={-1} className={`anim-dialog ${styles.modal}`} role="dialog" aria-modal="true" aria-label={label}>
+      <div className={`${closing ? "anim-overlay-out" : "anim-overlay"} ${styles.backdrop}`} inert={closing || undefined}>
+        <div ref={wrapRef} tabIndex={-1} className={`${closing ? "anim-dialog-out" : "anim-dialog"} ${styles.modal}`} role="dialog" aria-modal="true" aria-label={label}>
           <ShellContext.Provider value={shell}>{children}</ShellContext.Provider>
         </div>
       </div>

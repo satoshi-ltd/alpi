@@ -795,30 +795,6 @@
   padding-left: var(--sp-4);
 }
 
-.heroMetaGroup {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-4);
-}
-
-.heroMetaLabel {
-  color: var(--ink-3);
-}
-
-.heroMetaValue {
-  color: var(--ink-2);
-}
-
-.heroMetaMuted {
-  color: var(--ink-3);
-}
-
-.heroMetaSep {
-  width: 1px;
-  height: 10px;
-  background: none;
-}
-
 .identityBlock {
   flex: 1;
 }

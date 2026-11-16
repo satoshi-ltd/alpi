@@ -18,14 +18,11 @@ import {
   AppearancePicker,
   CopyIcon,
   Fold,
-  MeterChip,
-  Mono,
   SettingsHero,
-  Tip,
 } from "../../primitives/index.js";
 import { TWIN } from "../../lib/brandMark.js";
 import { profileLabel } from "../../lib/profile-display.js";
-import { modelLabel } from "../../lib/modelLabel.js";
+import { ProfileDetails, profileBudget } from "../../primitives/HeaderDetails.jsx";
 import RefreshBar from "../../primitives/RefreshBar.jsx";
 import { FIELD_KEYS, providerPills } from "./util.js";
 import { mergeProfileDraft } from "../../lib/profile-draft.js";
@@ -273,41 +270,11 @@ export default function ProfileDetail({
   }
 
   const capUsd = profile.budget_daily_usd;
-  const usedUsd = profile.budget_used_usd ?? 0;
   const accent = profile.accent || "var(--accent)";
   const providers = providerPills(profile, ollamaErrors);
   const hasModels =
     (profile.models?.length ?? 0) > 0 || (profile.provider_ollama?.length ?? 0) > 0;
-  const heroMeta = (
-    <>
-      {profile.model && (
-        <Tip text={profile.model} side="down" escape wide>
-          <Mono className={styles.heroMetaValue}>{modelLabel(profile.model)}</Mono>
-        </Tip>
-      )}
-      {profile.model && capUsd != null && capUsd > 0 && (
-        <span aria-hidden className={styles.heroMetaSep} />
-      )}
-      {capUsd != null && capUsd > 0 && (
-        <Tip
-          text="Daily budget"
-          side="down"
-          escape
-        >
-          <MeterChip
-            value={
-              <>
-                ${usedUsd.toFixed(2)}
-                <span className={styles.heroMetaMuted}>/${capUsd.toFixed(2)}</span>
-              </>
-            }
-            pct={Math.min(1, usedUsd / capUsd)}
-            color={accent}
-          />
-        </Tip>
-      )}
-    </>
-  );
+  const heroMeta = <ProfileDetails model={profile.model} budget={profileBudget(profile)} accent={accent} />;
   // Lazy sections (storage, peers, network) keep their loading local — the header bar covers only above-the-fold data.
   const syncing = (
     detailLoading || emailLoading

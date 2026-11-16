@@ -6,11 +6,8 @@
   color: var(--ink-3);
 }
 
-.divider {
-  width: 1px;
-  height: var(--ctrl-2xs);
-  background: none;
-  margin: 0 var(--sp-4);
+.hubRow {
+  gap: var(--sp-4);
 }
 
 .detailId {

@@ -22,6 +22,7 @@ import CreateWorkgroupModal from "./features/CreateWorkgroupModal.jsx";
 import NotificationsModal from "./features/NotificationsModal.jsx";
 import ProfilePanels from "./features/ProfilePanels.jsx";
 import { useCommands } from "./hooks/useCommands.js";
+import useExit from "./hooks/useExit.js";
 import { orderedJumpTargets } from "./lib/profile-order.js";
 import LoadFailed from "./primitives/LoadFailed.jsx";
 import { LANDING_VIEW, firstRosterProfile, newSessionProfile, profileLandingView, swapPreviousView, viewLeavingSettings } from "./lib/landing.js";
@@ -255,6 +256,7 @@ export default function App() {
   // Pre-probe (``null``) defaults to allow — local Unix socket users have no token but are admin-equiv, and the role probe lands within a couple seconds for remote.
   const canAdminEarly = activeRole === "admin" || activeRole == null;
   const canManageProfileSurfaces = profileManagementAllowed(activeRole);
+  const notificationsPresence = useExit(notificationsOpen && canManageProfileSurfaces);
   const [createProfileOpen, setCreateProfileOpen] = useState(false);
   const onNewProfile = useCallback(() => {
     setCreateProfileOpen(true);
@@ -1701,8 +1703,8 @@ export default function App() {
       />
       <ApprovalModal requests={approvalSplit.modal} onResolved={approval.resolve} profiles={profiles} />
       <ClarificationModal requests={clarificationSplit.modal} onResolved={clarification.resolve} />
-      {notificationsOpen && canManageProfileSurfaces && <NotificationsModal
-        open={notificationsOpen}
+      {notificationsPresence.mounted && <NotificationsModal
+        open={!notificationsPresence.closing}
         onClose={onCloseNotifications}
         connections={hostConnections.connections}
         activeConnectionId={hostConnections.active_id}

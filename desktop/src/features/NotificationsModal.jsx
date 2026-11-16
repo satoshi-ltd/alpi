@@ -190,19 +190,7 @@ export default function NotificationsModal({
     ?? null;
 
   useEffect(() => {
-    if (!open) {
-      setPendingId(null);
-      setPendingProfile(null);
-      setPendingConnectionId(null);
-      setQuery("");
-      setReadIds(new Set());
-      setUnreadIds(new Set());
-      setHeldUnread(null);
-      setFilter("all");
-      setFrozen(null);
-      setAllKeys(false);
-      return;
-    }
+    if (!open) return;
     // hiddenIds reseeds from in-flight pending deletes so a row in its undo window stays hidden across modal reopens.
     setHiddenIds(() => new Set(pendingDeleteKeys()));
   }, [open]);

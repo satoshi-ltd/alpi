@@ -372,8 +372,7 @@ PROFILE_SECTIONS = ("Overview", "Usage", "Service", "ALP", "Sandbox", "Voice", "
 
 
 def desktop_profile_settings():
-    meta = f'{mono12("deepseek-v4.1-flash")}{SEP}{meterchip("$0.00", "/$1.00", 0, DOC_ACCENT)}'
-    hero = d_hero(h1("doc", identity_glyph("doc", DOC_ACCENT, 28), DOC_ACCENT) + '<span style="font-size: 20px; font-weight: 500; color: #6b6b6b; margin-left: 2px">Settings</span>', meta, button("Connections", "ghost", "sm", "globe") + iconbtn("arrow-left", "Back to chat"), DOC_ACCENT)
+    hero = d_hero(h1("doc", identity_glyph("doc", DOC_ACCENT, 28), DOC_ACCENT) + '<span style="font-size: 20px; font-weight: 400; color: #6b6b6b; margin-left: 2px">Settings</span>', "", button("Connections", "ghost", "sm", "globe") + iconbtn("arrow-left", "Back to chat"), DOC_ACCENT)
     clean = lambda: button("Clean", "ghost", "sm")
     delete = lambda text: button(text, "danger-ghost", "sm")
     group = lambda name, size, files, *actions: row(name, chip(size, "plain", "sm") + chip(files, "plain", "sm") + "".join(actions))
@@ -437,9 +436,7 @@ def member_row(name, color, bio, hub=False, removable=True):
 def desktop_wg_settings():
     from wg_settings_studies import LAUNCH, PIPELINES, RUN, invited_block, member_block, pipeline_block
     stack = wg_mark(ALPI_ACCENT, 28, "running", phase=(2, 4))
-    meta = (f'<span>hub</span>{identity_glyph("mira", "#6572e4", 14)}{mono12("@mira")}{SEP}<span>members</span>{mono12("7")}{SEP}'
-            f'<span style="display: inline-flex; align-items: center; gap: 6px"><span style="width: 8px; height: 8px; border-radius: 999px; background: #3fb37a"></span>active</span>{SEP}{mono12("wg_4f2a…9c1e", INK3)}')
-    hero = d_hero(h1("alpha", stack, "ink") + '<span style="font-size: 20px; font-weight: 500; color: #6b6b6b; margin-left: 2px">Settings</span>', meta, iconbtn("pause", "Pause") + iconbtn("arrow-left", "Back to chat"), ALPI_ACCENT)
+    hero = d_hero(h1("alpha", stack, "ink") + '<span style="font-size: 20px; font-weight: 400; color: #6b6b6b; margin-left: 2px">Settings</span>', "", iconbtn("pause", "Pause") + iconbtn("arrow-left", "Back to chat"), ALPI_ACCENT)
     inner = (
         section("Overview", "", ''.join([
             row("hub", f'<span style="display: inline-flex; align-items: center; gap: 8px">{identity_glyph("mira", "#6572e4", 14)}{mono12("@mira")}</span>'),
@@ -468,8 +465,7 @@ def desktop_wg_settings():
 
 
 def desktop_connections():
-    meta = f'<span>2 paired · 2 connected</span>{SEP}<span>14-day spend {mono12("$1.49")}</span>{SEP}<span>14 sessions</span>'
-    hero = d_hero(h1("alpi", identity_glyph("alpi", AMBER, 28), "ink") + '<span style="font-size: 20px; font-weight: 500; color: #6b6b6b; margin-left: 2px">Connections</span>', meta, button("Audit log", "ghost", "sm", "history") + button("New connection", "ghost", "sm", "plus") + iconbtn("arrow-left", "Back to chat"), AMBER)
+    hero = d_hero(h1("alpi", identity_glyph("alpi", AMBER, 28), "ink") + '<span style="font-size: 20px; font-weight: 400; color: #6b6b6b; margin-left: 2px">Connections</span>', "", button("Audit log", "ghost", "sm", "history") + button("New connection", "ghost", "sm", "plus") + iconbtn("arrow-left", "Back to chat"), AMBER)
     head = (f'<div style="display: grid; grid-template-columns: minmax(240px, 1fr) 126px 88px 112px; {BLEED}; min-height: 32px; align-items: center; padding: 0 12px; font-size: 14px; color: {INK3}">'
             f'<span>Connection</span><span style="text-align: right">Last activity</span><span style="text-align: right">Sessions</span><span style="text-align: right">14-day spend</span></div>')
 
@@ -543,8 +539,7 @@ def desktop_workgroups(stale=False):
              + wrow("alpha", DOC_ACCENT, "#3fb37a", "Working · media · @lingo", 3, "$0.40", "2m", "setup done", dict(state="running", phase=(2, 4)))
              + wrow("launch-crew", AMBER, "#e08a3c", "Queued · #2", 4, "$1.12", "9m", "setup done · media next", dict(state="queued"))
              + wrow("digest", "#9b5ad9", INK4, "Idle", 2, "$0.08", "1d"))
-    meta = f'<span>3 workgroups</span>{SEP}<span>1 working · 1 queued · 1 idle</span>'
-    hero = d_hero(wg_mark(AMBER, 28) + f'<span style="font-size: 20px; font-weight: 600; color: {INK}">Workgroups</span>', meta, button("New workgroup", "ghost", "sm", "plus"), AMBER)
+    hero = d_hero(wg_mark(AMBER, 28) + f'<span style="font-size: 20px; font-weight: 600; color: {INK}">Workgroups</span>', "", button("New workgroup", "ghost", "sm", "plus"), AMBER)
     warning = banner_bar("warning", "Workgroups may be out of date. Retrying automatically.", "Retry") if stale else ""
     body = f"""<div style="display: flex; height: 100%">
 {d_sidebar(740, selected="", settings_mode=False)}

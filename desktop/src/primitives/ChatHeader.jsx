@@ -68,7 +68,7 @@ export default function ChatHeader({
           ) : null}
         </div>
         {meta && (
-          <div id={menuId} role="dialog" aria-label={`${id} details`} className={`anim-pop ${styles.menu}`} hidden={!open} data-no-drag>
+          <div id={menuId} role="dialog" aria-label={`${id} details`} className={`anim-menu ${styles.menu}`} hidden={!open} data-no-drag>
             {meta}
           </div>
         )}

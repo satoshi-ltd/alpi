@@ -39,4 +39,17 @@ describe("ProducedImages", () => {
     const { container } = render(<ProducedImages images={[]} />);
     expect(container).toBeEmptyDOMElement();
   });
+
+  it("keeps the preview on screen, inert, while it closes", async () => {
+    window.matchMedia = vi.fn(() => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
+    invoke.mockResolvedValueOnce("data:image/jpeg;base64,ZZZ");
+    render(<ProducedImages images={[IMG]} />);
+    await waitFor(() => expect(screen.getByRole("img")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button"));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(dialog);
+    expect(screen.getByRole("dialog", { hidden: true })).toHaveAttribute("inert");
+    await waitFor(() => expect(screen.queryByRole("dialog", { hidden: true })).toBeNull());
+    delete window.matchMedia;
+  });
 });

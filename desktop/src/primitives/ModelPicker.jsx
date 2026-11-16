@@ -7,6 +7,7 @@ import { I } from "./icons.jsx";
 import Tip from "./Tip.jsx";
 import { fmtTok } from "../lib/format.js";
 import { modelLabel } from "../lib/modelLabel.js";
+import useExit from "../hooks/useExit.js";
 import styles from "./ModelPicker.module.css";
 
 const EFFORT_OPTIONS = [
@@ -31,6 +32,7 @@ export default function ModelPicker({
   placeholder = null,
 }) {
   const [open, setOpen] = useState(false);
+  const { mounted, closing } = useExit(open);
   const [picked, setPicked] = useState(currentModel);
   const ref = useRef(null);
   const popRef = useRef(null);
@@ -78,11 +80,13 @@ export default function ModelPicker({
           <I.ChevDown size="sm" />
         </Button>
       </Tip>
-      {open && (
+      {mounted && (
         <div
           ref={popRef}
+          inert={closing || undefined}
+          style={{ "--menu-dy": mode === "default" ? "-4px" : "4px", transformOrigin: mode === "default" ? "top left" : "bottom left" }}
           onKeyDown={(event) => navigateMenu(event, popRef.current)}
-          className={`anim-pop ${styles.modelPickerPop} ${
+          className={`${closing ? "anim-menu-out" : "anim-menu"} ${styles.modelPickerPop} ${
             mode === "default" ? styles.modelPickerPopDown : styles.modelPickerPopUp
           }`}
         >

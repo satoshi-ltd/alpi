@@ -10,6 +10,7 @@ import { useNotify } from "../../../primitives/Notification.jsx";
 import { useDismissOnOutside } from "../../../hooks/useDismissOnOutside.js";
 import { useSkeleton } from "../../../hooks/useSkeleton.js";
 import { Row } from "../primitives.jsx";
+import useExit from "../../../hooks/useExit.js";
 import styles from "../Settings.module.css";
 
 // Coalesce only concurrent probes — no time-cache, each settings open still fetches fresh.
@@ -112,6 +113,7 @@ export function PrivateRouteField({ onLoadingChange = null }) {
 export function PublicRouteField({ onLoadingChange = null }) {
   const notify = useNotify();
   const [open, setOpen] = useState(false);
+  const { mounted, closing } = useExit(open);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const wrapRef = useRef(null);
   const [status, setStatus] = useState(null);
@@ -203,8 +205,8 @@ export function PublicRouteField({ onLoadingChange = null }) {
             </span>
           )}
         </span>
-        {open && (
-          <div className={`${styles.popover} ${styles.networkPopover}`}>
+        {mounted && (
+          <div className={`${closing ? "anim-menu-out" : "anim-menu"} ${styles.popover} ${styles.networkPopover}`} inert={closing || undefined}>
             <div className={styles.field}>
               <Eyebrow as="label">public WSS route</Eyebrow>
               <Field

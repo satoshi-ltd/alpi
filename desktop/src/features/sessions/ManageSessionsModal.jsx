@@ -15,6 +15,7 @@ import {
 import EditableSessionTitle from "../../primitives/EditableSessionTitle.jsx";
 import { removeSessionTitles } from "../../lib/session-titles.js";
 import { useNotify } from "../../primitives/Notification.jsx";
+import useExit from "../../hooks/useExit.js";
 import styles from "./ManageSessionsModal.module.css";
 
 const DAY_MS = 86_400_000;
@@ -191,6 +192,7 @@ export default function ManageSessionsModal({
 
   const dialogRef = useRef(null);
   const isTop = useOverlay({ open, onClose, ref: dialogRef, modal: true });
+  const { mounted, closing } = useExit(open);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -250,7 +252,7 @@ export default function ManageSessionsModal({
     }
   }, [selectedIds, profile, connectionId, notify, onDeleted, clearSelection, refresh]);
 
-  if (!open) return null;
+  if (!mounted) return null;
 
   const headerActions = selectedCount === 0 ? null : (
     <>
@@ -269,12 +271,13 @@ export default function ManageSessionsModal({
 
   const body = (
     <div
-      className={`anim-overlay ${styles.backdrop}`}
+      className={`${closing ? "anim-overlay-out" : "anim-overlay"} ${styles.backdrop}`}
+      inert={closing || undefined}
       onMouseDown={(e) => {
         if (isTop() && e.target === e.currentTarget) onClose?.();
       }}
     >
-      <div ref={dialogRef} className={`anim-dialog ${styles.modal}`} role="dialog" aria-modal="true" aria-label="Manage sessions">
+      <div ref={dialogRef} className={`${closing ? "anim-dialog-out" : "anim-dialog"} ${styles.modal}`} role="dialog" aria-modal="true" aria-label="Manage sessions">
         <header className={styles.header}>
           <div className={styles.headerLead}>
             <div className={styles.titleRow}>

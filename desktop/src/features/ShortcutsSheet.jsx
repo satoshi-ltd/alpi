@@ -1,3 +1,4 @@
+import useExit from "../hooks/useExit.js";
 import { Scrim, PanelShell } from "../primitives/Panels.jsx";
 import { Icon, IconBtn, KeyHint } from "../primitives/index.js";
 import { SHORTCUTS } from "../lib/shortcuts.js";
@@ -13,9 +14,10 @@ export function groupShortcuts(list = SHORTCUTS) {
 }
 
 export default function ShortcutsSheet({ open, onClose }) {
-  if (!open) return null;
+  const { mounted, closing } = useExit(open);
+  if (!mounted) return null;
   return (
-    <Scrim onClose={onClose} top={80}>
+    <Scrim onClose={onClose} top={80} closing={closing}>
       <PanelShell width={620} maxHeight="76vh" label="Keyboard shortcuts">
         <div className={styles.head}>
           <h2 className={styles.title}>Keyboard shortcuts</h2>

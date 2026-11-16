@@ -25,6 +25,7 @@ import { copyText } from "../../../lib/clipboard.js";
 import { pairingDisplayStatus, pairingExpiryText } from "../../../lib/pairing-expiry.js";
 import { EMPTY, emptyLine } from "../../../../../common/emptyCopy.mjs";
 import { isComposing } from "../../../lib/composition.js";
+import useExit from "../../../hooks/useExit.js";
 
 function cacheKey(connectionId) {
   return connectionId || "local";
@@ -46,6 +47,7 @@ export function DevicesField({
   const [devices, setDevices] = useState(() => _devicesCache.get(key) ?? null);
   const showSkeleton = useSkeleton(devices === null);
   const [adding, setAdding] = useState(false);
+  const pairing = useExit(adding);
   const [selectedTokenId, setSelectedTokenId] = useState(null);
   const [revokeTarget, setRevokeTarget] = useState(null);
   const detailAnchorRef = useRef(null);
@@ -199,8 +201,9 @@ export function DevicesField({
           <span className={styles.muted}>member device — admin-only</span>
         )}
       </span>
-      {adding && (
+      {pairing.mounted && (
         <PairDeviceModal
+          open={!pairing.closing}
           connectionId={connectionId}
           onClose={() => setAdding(false)}
           onPaired={() => { setAdding(false); reload(); }}
@@ -255,7 +258,7 @@ function DeviceDetailPopover({
   return (
     <div
       ref={popoverRef}
-      className={`${pos.ready ? "anim-pop " : ""}${styles.popover}`}
+      className={`${pos.ready ? "anim-menu " : ""}${styles.popover}`}
       style={{
         minWidth: 320,
         maxWidth: pos.maxWidth ?? undefined,
@@ -332,7 +335,7 @@ function DeviceDetailPopover({
   );
 }
 
-export function PairDeviceModal({ connectionId, onClose, onPaired }) {
+export function PairDeviceModal({ open, connectionId, onClose, onPaired }) {
   const notify = useNotify();
   const connectionArg = useMemo(
     () => (connectionId ? { connectionId } : {}),
@@ -578,7 +581,7 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
 
   if (warn) {
     return (
-      <Modal title="Pair a new device" onClose={onClose} width="var(--modal-md)">
+      <Modal open={open} title="Pair a new device" onClose={onClose} width="var(--modal-md)">
         <div className={styles.warn}>{warn}</div>
         <DialogFooter onCancel={onClose} cancelLabel="Close" />
       </Modal>
@@ -586,7 +589,7 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
   }
 
   return (
-    <Modal title="Pair a new device" onClose={cancel} closeOnBackdrop={!busy && !payload && !label.trim()} width="var(--modal-md)">
+    <Modal open={open} title="Pair a new device" onClose={cancel} closeOnBackdrop={!busy && !payload && !label.trim()} width="var(--modal-md)">
       <div className={styles.field}>
         <Eyebrow as="label">Label</Eyebrow>
         <Field

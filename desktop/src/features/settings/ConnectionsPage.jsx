@@ -32,6 +32,7 @@ import { toUsageDays } from "../../hooks/useUsage.js";
 import { copyText } from "../../lib/clipboard.js";
 import { pairingDisplayStatus, pairingExpiryText } from "../../lib/pairing-expiry.js";
 import { profileLabel } from "../../lib/profile-display.js";
+import useExit from "../../hooks/useExit.js";
 import styles from "./ConnectionsPage.module.css";
 import { EMPTY } from "../../../../common/emptyCopy.mjs";
 
@@ -82,6 +83,7 @@ export default function ConnectionsPage({
   const [data, setData] = useState(null);
   const [openId, setOpenId] = useState(null);
   const [creating, setCreating] = useState(false);
+  const creation = useExit(creating);
   const [pairing, setPairing] = useState(null);
   const [editTarget, setEditTarget] = useState(null);
   const [disableTarget, setDisableTarget] = useState(null);
@@ -334,8 +336,9 @@ export default function ConnectionsPage({
         )}
       </div>
 
-      {creating && (
+      {creation.mounted && (
         <PairDeviceModal
+          open={!creation.closing}
           connectionId={activeConnection?.id || null}
           onClose={() => setCreating(false)}
           onPaired={() => {

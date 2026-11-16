@@ -12,10 +12,12 @@ import ProviderPickerForm, {
   isProviderValueValid,
 } from "../ProviderPickerForm.jsx";
 import { PAID_PROVIDERS } from "../util.js";
+import useExit from "../../../hooks/useExit.js";
 import styles from "../Settings.module.css";
 
 export function AddProviderField({ profile, onSaved }) {
   const [open, setOpen] = useState(false);
+  const { mounted, closing } = useExit(open);
   const wrapRef = useRef(null);
   const anchorRef = useRef(null);
   const popoverRef = useRef(null);
@@ -36,10 +38,11 @@ export function AddProviderField({ profile, onSaved }) {
           Providers
         </Button>
       </span>
-      {open && (
+      {mounted && (
         <div
           ref={popoverRef}
-          className={`${pos.ready ? "anim-pop " : ""}${styles.popover}`}
+          inert={closing || undefined}
+          className={`${closing ? "anim-menu-out " : pos.ready ? "anim-menu " : ""}${styles.popover}`}
           style={{
             minWidth: 360,
             maxWidth: pos.maxWidth ?? undefined,

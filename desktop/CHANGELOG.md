@@ -11,6 +11,13 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.10.2 — 2026-11-16 — windows that move
+
+- Every window that opens over the app (search, Activity, notifications, shortcuts, sessions, image preview) rises in and sinks out, like dialogs and menus.
+- The profile and workgroup pages open the same details popover as the chat header, with labelled Model, Context and Cost today rows; today's cost reads $0.00 until something is spent.
+- The "Settings" and "Connections" label beside the name is regular weight at the name's size, so it no longer clashes with the page headings.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.10.1 — 2026-11-16 — surfaces that move
 
 - Dialogs, menus, popovers, dropdowns and toasts rise a few pixels as they open and settle as they close; menus used to vanish in one frame.

@@ -10,6 +10,7 @@ import {
   subscribeUpdater,
 } from "../lib/updater.js";
 import { TWIN } from "../lib/brandMark.js";
+import useExit from "../hooks/useExit.js";
 import styles from "./VersionButton.module.css";
 
 // eslint-disable-next-line no-undef
@@ -27,6 +28,7 @@ export default function VersionButton() {
     progress: null,
   });
   const [open, setOpen] = useState(false);
+  const { mounted, closing } = useExit(open);
   const ref = useRef(null);
 
   // The tray's "Restart & install" runs the same install; the popover opens so the progress and any failure are visible.
@@ -61,8 +63,8 @@ export default function VersionButton() {
           {APP_VERSION}
         </button>
       </Tip>
-      {open && (
-        <div className={`anim-pop ${styles.popover}`}>
+      {mounted && (
+        <div className={`${closing ? "anim-menu-out" : "anim-menu"} ${styles.popover}`} style={{ "--menu-dy": "4px", transformOrigin: "bottom left" }} inert={closing || undefined}>
           <div className={styles.brand}>
             <Fold shape={TWIN} size={26} />
             <span className={`ds-name ${styles.brandMark}`}>alpi</span>

@@ -104,7 +104,7 @@ describe("ChatHeader bar type", () => {
   it("sets the name at the 20 px title size inside the bar, over the 28 px display rule", () => {
     const css = readFileSync(join(import.meta.dirname, "ChatHeader.module.css"), "utf8");
     expect(css).toMatch(/:global\(\.ds-chat-header\)\.bar h1 \{\s*font-size: var\(--text-title\);/);
-    expect(css).toMatch(/\.label \{[^}]*font-size: var\(--text-title\);[^}]*color: var\(--ink-3\);/);
+    expect(css).toMatch(/\.label \{[^}]*font-size: var\(--text-title\);[^}]*font-weight: var\(--fw-regular\);[^}]*color: var\(--ink-3\);/);
   });
 
   it("keeps the name outside the menu button and names the button by it", () => {

@@ -5,7 +5,12 @@ import { useState } from "react";
 import ContextMenu, { ContextMenuMount } from "./ContextMenu.jsx";
 import Dropdown from "./Dropdown.jsx";
 import Popover from "./Popover.jsx";
+import { BrowseShell } from "./BrowseModal.jsx";
 import ConfirmDelete from "./ConfirmDelete.jsx";
+import { PairDeviceModal } from "../features/settings/fields/devices.jsx";
+import ImageLightbox from "./ImageLightbox.jsx";
+import { Palette } from "./Panels.jsx";
+import ShortcutsSheet from "../features/ShortcutsSheet.jsx";
 import useExit from "../hooks/useExit.js";
 
 function motion(reduced) {
@@ -156,5 +161,66 @@ describe("menus leave with an exit", () => {
     expect(screen.getByText("Remove?")).toBe(before);
     act(() => vi.advanceTimersByTime(200));
     expect(screen.queryByText("Remove?")).toBeNull();
+  });
+});
+
+describe("windows leave with an exit and arrive with a rise", () => {
+  const dialog = (name) => screen.getByRole("dialog", { name, hidden: true });
+
+  it("a launcher panel (shortcuts, palette, activity, connections share it) rises in and sinks out inert", () => {
+    motion(false);
+    const { rerender } = render(<ShortcutsSheet open onClose={() => {}} />);
+    expect(dialog("Keyboard shortcuts")).toHaveClass("anim-dialog");
+    const scrim = dialog("Keyboard shortcuts").parentElement;
+    expect(scrim).toHaveClass("anim-fade");
+    rerender(<ShortcutsSheet open={false} onClose={() => {}} />);
+    expect(dialog("Keyboard shortcuts")).toHaveClass("anim-dialog-out");
+    expect(scrim).toHaveClass("anim-overlay-out");
+    expect(scrim).toHaveAttribute("inert");
+    act(() => vi.advanceTimersByTime(200));
+    expect(screen.queryByRole("dialog", { hidden: true })).toBeNull();
+  });
+
+  it("the command palette leaves the same way", () => {
+    motion(false);
+    const { rerender } = render(<Palette open onClose={() => {}} groups={[]} />);
+    expect(dialog("Command palette")).toHaveClass("anim-dialog");
+    rerender(<Palette open={false} onClose={() => {}} groups={[]} />);
+    expect(dialog("Command palette")).toHaveClass("anim-dialog-out");
+    act(() => vi.advanceTimersByTime(200));
+    expect(screen.queryByRole("dialog", { hidden: true })).toBeNull();
+  });
+
+  it("a browse window (notifications, skills, memory, tools, schedule) rises in and sinks out", () => {
+    motion(false);
+    const { rerender } = render(<BrowseShell open onClose={() => {}} label="Skills"><p>body</p></BrowseShell>);
+    expect(dialog("Skills")).toHaveClass("anim-dialog");
+    expect(dialog("Skills").parentElement).toHaveClass("anim-overlay");
+    rerender(<BrowseShell open={false} onClose={() => {}} label="Skills"><p>body</p></BrowseShell>);
+    expect(dialog("Skills")).toHaveClass("anim-dialog-out");
+    expect(dialog("Skills").parentElement).toHaveClass("anim-overlay-out");
+    expect(dialog("Skills").parentElement).toHaveAttribute("inert");
+    act(() => vi.advanceTimersByTime(200));
+    expect(screen.queryByRole("dialog", { hidden: true })).toBeNull();
+  });
+
+  it("the image preview keeps its picture while it leaves", () => {
+    motion(false);
+    const { rerender } = render(<ImageLightbox src="a.png" caption="Cat" onClose={() => {}} />);
+    expect(screen.getByRole("img")).toHaveAttribute("src", "a.png");
+    rerender(<ImageLightbox src={null} onClose={() => {}} />);
+    expect(screen.getByRole("img", { hidden: true })).toHaveAttribute("src", "a.png");
+    expect(screen.getByRole("figure", { hidden: true })).toHaveClass("anim-dialog-out");
+    act(() => vi.advanceTimersByTime(200));
+    expect(screen.queryByRole("img", { hidden: true })).toBeNull();
+  });
+
+  it("the pair-a-device modal sinks out when its owner closes it", () => {
+    motion(false);
+    const { rerender } = render(<PairDeviceModal open onClose={() => {}} onPaired={() => {}} />);
+    expect(screen.getByRole("dialog")).toHaveClass("anim-dialog");
+    rerender(<PairDeviceModal open={false} onClose={() => {}} onPaired={() => {}} />);
+    expect(document.querySelector("[data-closing]")).not.toBeNull();
+    expect(screen.getByRole("dialog", { hidden: true }).className).toMatch(/modalClosing/);
   });
 });

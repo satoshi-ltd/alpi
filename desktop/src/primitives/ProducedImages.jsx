@@ -48,14 +48,12 @@ export default function ProducedImages({ images }) {
       {images.map((im) => (
         <Tile key={im.path} image={im} onZoom={setZoom} />
       ))}
-      {zoom && (
-        <ImageLightbox
-          src={zoom.src}
-          path={zoom.path}
-          caption={zoom.caption}
-          onClose={() => setZoom(null)}
-        />
-      )}
+      <ImageLightbox
+        src={zoom?.src}
+        path={zoom?.path}
+        caption={zoom?.caption}
+        onClose={() => setZoom(null)}
+      />
     </div>
   );
 }

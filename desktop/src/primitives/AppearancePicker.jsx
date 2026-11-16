@@ -7,6 +7,7 @@ import Fold from "./Fold.jsx";
 import IconBtn from "./IconBtn.jsx";
 import Selectish from "./Selectish.jsx";
 import { useDismissOnOutside } from "../hooks/useDismissOnOutside.js";
+import useExit from "../hooks/useExit.js";
 import styles from "./AppearancePicker.module.css";
 
 const FALLBACK_ACCENT = "#f0b447";
@@ -14,6 +15,7 @@ const HEX_RE = /^#[0-9a-f]{6}$/i;
 
 export default function AppearancePicker({ shape, accent, onChange }) {
   const [open, setOpen] = useState(false);
+  const { mounted, closing } = useExit(open);
   const [hex, setHex] = useState(accent || FALLBACK_ACCENT);
   const ref = useRef(null);
 
@@ -43,8 +45,8 @@ export default function AppearancePicker({ shape, accent, onChange }) {
       >
         {name}
       </Selectish>
-      {open && (
-        <div className={`anim-pop ${styles.popover}`}>
+      {mounted && (
+        <div className={`${closing ? "anim-menu-out" : "anim-menu"} ${styles.popover}`} inert={closing || undefined}>
           <Eyebrow>Shape</Eyebrow>
           <div className={styles.objects}>
             {SHAPE_IDS.map((candidate) => {

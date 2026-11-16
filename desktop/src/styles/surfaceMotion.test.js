@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -40,5 +40,15 @@ describe("surface motion", () => {
 
   it("stops under reduced motion through the global rule", () => {
     expect(ds).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*\{\s*\*, \*::before, \*::after\s*\{\s*animation-duration: 0\.01ms !important/);
+  });
+
+  it("leaves the plain fade to the usage tooltip: no window or popover still uses anim-pop", () => {
+    const walk = (dir) => readdirSync(dir).flatMap((name) => {
+      const path = join(dir, name);
+      if (statSync(path).isDirectory()) return walk(path);
+      return /\.jsx$/.test(name) && !/\.test\./.test(name) ? [path] : [];
+    });
+    const users = walk(join(import.meta.dirname, "..")).filter((f) => /anim-pop\b/.test(readFileSync(f, "utf8")));
+    expect(users.map((f) => f.split("/src/")[1])).toEqual(["features/settings/Usage.jsx"]);
   });
 });
