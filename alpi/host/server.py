@@ -289,6 +289,7 @@ class WebSocketMetrics:
     stale_connections_evicted: int = 0
     pairing_exchange_attempts: int = 0
     preauth_rejected: int = 0
+    unlisted_proxy_refusals: int = 0
 
 
 _DEVICE_THROTTLED = object()
@@ -328,6 +329,8 @@ class Server:
         self._ws_preauth: dict[str, int] = defaultdict(int)
         self._rejections_logged: dict[tuple[str, str], float] = {}
         self._rejection_window: list[float] = [0.0, 0, 0.0]
+        self._unlisted_proxies_logged: dict[str, float] = {}
+        self._unlisted_proxy_logged_at = -_UNLISTED_PROXY_LOG_GAP_S
         self._ws_max_preauth = int(_env_number(
             "ALPI_HOST_WS_MAX_PREAUTH", WS_MAX_PREAUTH, minimum=1, maximum=10_000,
         ))
@@ -550,6 +553,7 @@ class Server:
             "revoked_connections": metrics.revoked_connections,
             "stale_connections_evicted": metrics.stale_connections_evicted,
             "pairing_exchange_attempts": metrics.pairing_exchange_attempts,
+            "unlisted_proxy_refusals": metrics.unlisted_proxy_refusals,
         }
 
     async def serve_forever(self) -> None:
@@ -611,6 +615,7 @@ class Server:
         if self._ws_auth_failures.exceeded(source):
             self._ws_metrics.auth_rate_limited += 1
             self._log_rejection("source rate-limited after authentication failures", source, origin)
+            self._note_unlisted_proxy(ws, source)
             await ws.close(code=1013, reason=WS_CLOSE_REASON_RATE_LIMITED)
             return
         source_full = self._ws_preauth[source] >= self._ws_max_preauth_per_source
@@ -621,6 +626,8 @@ class Server:
                 else "daemon-wide unauthenticated socket limit reached",
                 source, origin,
             )
+            if source_full:
+                self._note_unlisted_proxy(ws, source)
             if not self._ws_preauth[source]:
                 self._ws_preauth.pop(source, None)
             await ws.close(code=1013, reason="WebSocket capacity reached")
@@ -735,6 +742,26 @@ class Server:
         self._rejections_logged[key] = now
         suffix = f" [{_loggable(detail)}]" if detail else ""
         log.warning("host websocket refused: %s%s (from=%s)", kind, suffix, origin)
+
+    def _note_unlisted_proxy(self, ws: ServerConnection, source: str) -> None:
+        if not _unlisted_proxy(ws, self._ws_trusted_proxies):
+            return
+        self._ws_metrics.unlisted_proxy_refusals += 1
+        now = time.monotonic()
+        if now - self._unlisted_proxy_logged_at < _UNLISTED_PROXY_LOG_GAP_S:
+            return
+        if now - self._unlisted_proxies_logged.get(source, -_UNLISTED_PROXY_LOG_EVERY_S) < _UNLISTED_PROXY_LOG_EVERY_S:
+            return
+        if len(self._unlisted_proxies_logged) >= _UNLISTED_PROXY_LOG_KEYS:
+            self._unlisted_proxies_logged.clear()
+        self._unlisted_proxies_logged[source] = now
+        self._unlisted_proxy_logged_at = now
+        log.warning(
+            "host websocket: %s sends X-Forwarded-For but ALPI_HOST_WS_TRUSTED_PROXIES does not list it; "
+            "if it is your reverse proxy, its clients share one limit and one client's failures refuse the "
+            "others, so list its address there (any client can send that header: list only your own proxy)",
+            source,
+        )
 
     def _release_preauth(self, source: str, held: bool) -> bool:
         if held:
@@ -1375,6 +1402,26 @@ def _ws_source_key(peer_host: str | None, forwarded_for: str | None, trusted: _N
     return _source_bucket(peer)
 
 
+def _unlisted_proxy(ws: ServerConnection, trusted: _Networks = ()) -> bool:
+    remote = getattr(ws, "remote_address", None)
+    try:
+        ip = ipaddress.ip_address(remote[0] if isinstance(remote, tuple) and remote else "")
+    except ValueError:
+        return False
+    ip = getattr(ip, "ipv4_mapped", None) or ip
+    # A public peer that sends the header is a client relabelling itself, not a proxy in front of the daemon.
+    if ip.is_global or _in_networks(str(ip), trusted):
+        return False
+    headers = getattr(getattr(ws, "request", None), "headers", None)
+    try:
+        return bool(headers is not None and str(headers.get("X-Forwarded-For") or "").strip())
+    except Exception:  # noqa: BLE001
+        return False
+
+
+_UNLISTED_PROXY_LOG_EVERY_S = 3600.0
+_UNLISTED_PROXY_LOG_GAP_S = 60.0
+_UNLISTED_PROXY_LOG_KEYS = 64
 _REJECTION_LOG_EVERY_S = 60.0
 _REJECTION_LOG_PER_MINUTE = 120
 _REJECTION_LOG_KEYS = 4096

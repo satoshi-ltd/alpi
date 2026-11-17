@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.19.6 — 2026-11-17 — a proxy nobody declared
+
+- Behind an HTTP load balancer or reverse proxy that `ALPI_HOST_WS_TRUSTED_PROXIES` does not list, every app shares one failed-login limit, so a stranger probing the port could lock paired devices out for as long as the probing lasted, with nothing saying why. The daemon now says so in `service.log` when it happens, naming the address and the variable to set.
+- `host.network.status` counts those refusals as `unlisted_proxy_refusals`.
+
 ## v0.19.5 — 2026-11-17 — a blank chat that introduces the profile
 
 - The agent knows that the desktop and phone show a profile's public bio and a Continue button into its latest chat when a new thread is empty, so it can explain what users see there and why the bio matters.

@@ -248,6 +248,9 @@ Behind Caddy the socket peer is the proxy, so the client is read from
 `X-Forwarded-For`, but only when the peer is listed in
 `ALPI_HOST_WS_TRUSTED_PROXIES` (the WSS overlay pins Caddy's address and lists
 it); otherwise the header is ignored and a direct client cannot relabel itself.
+An unlisted proxy therefore shares one limit among all its clients: when that
+refuses someone, `service.log` names the address and the variable; list it only
+if it is the operator's own proxy, since any client can send the header.
 Rejected pairing codes count; successful authentications, timeouts, protocol
 errors and internal errors never do. Per-source state is bounded and expires.
 

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import ipaddress
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -227,3 +229,114 @@ async def test_two_devices_of_one_connection_are_counted_apart(short_tmp, monkey
         assert reply["error"]["data"] == {"reason": "device-revoked"}
     finally:
         await server.stop()
+
+
+def _proxy_warnings(caplog) -> list[str]:
+    return [r.getMessage() for r in caplog.records if "ALPI_HOST_WS_TRUSTED_PROXIES" in r.getMessage()]
+
+
+async def _attempt_via(url: str, token: str, client: str) -> tuple[dict | None, int | None, str | None]:
+    async with websockets.connect(url, additional_headers={"X-Forwarded-For": client}) as ws:
+        try:
+            await ws.send(_ws_request(token))
+            reply = json.loads(await ws.recv())
+        except websockets.ConnectionClosed:
+            return None, ws.close_code, ws.close_reason
+        return reply, ws.close_code, ws.close_reason
+
+
+@pytest.mark.asyncio
+async def test_a_client_refused_for_another_clients_failures_behind_an_unlisted_proxy_is_explained(short_tmp, monkeypatch, caplog) -> None:
+    connections.invalidate_cache()
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    _limits(server, device_limit=50, address_limit=2)
+    _row, healthy = connections.create_connection("Web")
+    try:
+        with caplog.at_level(logging.WARNING, logger="alpi.host.server"):
+            await _attempt_via(url, "unknown-token-1", "203.0.113.1")
+            await _attempt_via(url, "unknown-token-2", "203.0.113.1")
+            first = await _attempt_via(url, healthy["token"], "203.0.113.2")
+            second = await _attempt_via(url, healthy["token"], "203.0.113.3")
+
+        assert first == (None, 1013, "auth-rate-limited") and second == first
+        assert server.websocket_status()["unlisted_proxy_refusals"] == 2
+        warnings = _proxy_warnings(caplog)
+        assert len(warnings) == 1 and warnings[0].startswith("host websocket: 127.0.0.1 sends X-Forwarded-For")
+        assert "if it is your reverse proxy" in warnings[0] and "list only your own proxy" in warnings[0]
+        assert "203.0.113" not in warnings[0]
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_a_rate_limited_direct_client_is_not_called_a_proxy(short_tmp, monkeypatch, caplog) -> None:
+    connections.invalidate_cache()
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    _limits(server, device_limit=50, address_limit=2)
+    _row, healthy = connections.create_connection("Web")
+    try:
+        with caplog.at_level(logging.WARNING, logger="alpi.host.server"):
+            await _attempt(url, "unknown-token-1")
+            await _attempt(url, "unknown-token-2")
+            assert (await _attempt(url, healthy["token"]))[1] == 1013
+
+        assert server.websocket_status()["unlisted_proxy_refusals"] == 0
+        assert _proxy_warnings(caplog) == []
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_a_listed_proxy_limits_each_client_apart_and_is_not_reported(short_tmp, monkeypatch, caplog) -> None:
+    connections.invalidate_cache()
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    _limits(server, device_limit=50, address_limit=2)
+    server._ws_trusted_proxies = (ipaddress.ip_network("127.0.0.1/32"),)
+    _row, healthy = connections.create_connection("Web")
+    try:
+        with caplog.at_level(logging.WARNING, logger="alpi.host.server"):
+            await _attempt_via(url, "unknown-token-1", "203.0.113.1")
+            await _attempt_via(url, "unknown-token-2", "203.0.113.1")
+            noisy = await _attempt_via(url, healthy["token"], "203.0.113.1")
+            other = await _attempt_via(url, healthy["token"], "203.0.113.2")
+
+        assert noisy[1] == 1013 and "result" in other[0]
+        assert server.websocket_status()["unlisted_proxy_refusals"] == 0
+        assert _proxy_warnings(caplog) == []
+    finally:
+        await server.stop()
+
+
+def test_only_a_private_peer_that_forwards_clients_counts_as_an_unlisted_proxy() -> None:
+    from websockets.datastructures import Headers
+
+    from alpi.host.server import _unlisted_proxy
+
+    def ws(peer: str, forwarded: str | None):
+        headers = Headers({"X-Forwarded-For": forwarded} if forwarded is not None else {})
+        return type("Ws", (), {"remote_address": (peer, 1), "request": type("R", (), {"headers": headers})()})()
+
+    listed = (ipaddress.ip_network("10.5.0.0/24"),)
+    assert _unlisted_proxy(ws("10.5.0.19", "192.0.2.7"))
+    assert _unlisted_proxy(ws("::ffff:10.5.0.19", "192.0.2.7"))
+    assert not _unlisted_proxy(ws("10.5.0.19", "192.0.2.7"), listed)
+    assert not _unlisted_proxy(ws("10.5.0.19", None))
+    assert not _unlisted_proxy(ws("10.5.0.19", "  "))
+    assert not _unlisted_proxy(ws("8.8.8.8", "192.0.2.7"))
+    assert not _unlisted_proxy(ws("not-an-address", "192.0.2.7"))
+
+
+def test_the_unlisted_proxy_line_cannot_be_multiplied_by_rotating_sources(short_tmp, caplog) -> None:
+    from websockets.datastructures import Headers
+
+    from alpi.host.server import Server
+
+    server = Server(home=short_tmp)
+    with caplog.at_level(logging.WARNING, logger="alpi.host.server"):
+        for n in range(200):
+            peer = f"10.0.{n // 250}.{n % 250 + 1}"
+            ws = type("Ws", (), {"remote_address": (peer, 1), "request": type("R", (), {"headers": Headers({"X-Forwarded-For": "192.0.2.7"})})()})()
+            server._note_unlisted_proxy(ws, peer)
+
+    assert len(_proxy_warnings(caplog)) == 1
+    assert server.websocket_status()["unlisted_proxy_refusals"] == 200

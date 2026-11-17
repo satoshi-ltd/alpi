@@ -112,7 +112,16 @@ id), shown for reading only.
 Each reason is logged at most once a minute per source and at most 120 refusals a
 minute in all, with one line counting what was left out (written with the next
 refusal after that minute), so a flood cannot rotate
-the log. Admin actions by paired devices, allowed or refused, are in
+the log. When a source limit refuses a socket whose peer is not a public address (private,
+loopback, link-local or CGNAT), sends `X-Forwarded-For` and is not in `ALPI_HOST_WS_TRUSTED_PROXIES`,
+the daemon also logs, at most once an hour per address and once a minute in all: `host websocket:
+<address> sends X-Forwarded-For but ALPI_HOST_WS_TRUSTED_PROXIES does not list it …`. If that address
+is your HTTP reverse proxy or load balancer, the clients behind it share its limits and one client's
+failed attempts refuse the others for as long as they continue: list the proxy's address or subnet in
+that variable and restart the daemon. If it is not, leave it out: any client can send that header, and
+a listed address chooses the source it is limited by. A balancer that forwards TCP without the header
+never triggers the line and cannot be listed. `unlisted_proxy_refusals` in the `websocket` block of
+`host.network.status` counts those refusals. Admin actions by paired devices, allowed or refused, are in
 `logs/admin-audit.jsonl`.
 
 ## Daemon — one process per machine, every profile inside
