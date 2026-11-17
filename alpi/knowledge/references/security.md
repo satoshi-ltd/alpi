@@ -58,6 +58,18 @@ every profile, `.env`, skill secret and knowledge file in a container is
 reachable from any shell command in it. Give each mutually untrusted scope its
 own container and volume.
 
+A workgroup phase that declares write paths loses `terminal` in Docker, because
+nothing there can hold a shell to those paths. `tools.terminal.docker_scoped:
+true` (per profile, off by default) returns it to the profile that owns the
+phase, unsandboxed. The gate's audit still fails a phase whose shell edited a
+source file outside its paths, but that is attribution, not confinement: it
+skips undeclared dependency and generated trees, lock files and everything
+outside the project root, and the shell can read and change the alpi home,
+every profile's `.env` and the audit baseline, and an installer's downloaded
+scripts run with the same reach. A process that detaches into its own session
+(`setsid`) outlives its command and can write after the audit. `alpi
+doctor` and `alpi audit` warn while it is on.
+
 Pipe-to-interpreter is classified `dangerous` and blocked regardless of
 sandbox state via a `shlex.shlex(punctuation_chars=True)` detector that
 splits the command into shell-aware tokens — distinguishing `|` and `|&`

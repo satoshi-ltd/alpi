@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 
 from alpi import config as cfg_mod
-from alpi.doctor import _GLYPH, Check, exit_code
+from alpi.doctor import _GLYPH, Check, docker_scoped_check, exit_code
 
 __all__ = ["run_all", "render", "exit_code"]
 
@@ -129,6 +129,9 @@ def _audit_hardening(cfg: cfg_mod.Config) -> list[Check]:
     else:
         out.append(Check("Hardening", "terminal sandbox", "warn",
                          "off — shell commands run unconfined on this host"))
+
+    if cfg.tools.terminal.docker_scoped:
+        out.append(docker_scoped_check("Hardening", sandbox=cfg.tools.terminal.sandbox))
 
     if (
         cfg.runtime.first_byte_timeout_s == 0

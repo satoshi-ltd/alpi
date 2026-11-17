@@ -36,6 +36,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "terminal": {
             "sandbox": False,
             "allow_network": False,
+            "docker_scoped": False,
             "approval": {"allowlist": []},
             "env": {},
         },
@@ -115,6 +116,7 @@ class ExecutionToolConfig:
 class TerminalToolConfig:
     sandbox: bool = False
     allow_network: bool = False
+    docker_scoped: bool = False
     approval: ApprovalConfig = field(default_factory=ApprovalConfig)
     env: dict[str, str] = field(default_factory=dict)
 
@@ -462,6 +464,7 @@ def load(home: Path) -> Config:
         terminal=TerminalToolConfig(
             sandbox=bool(terminal_raw.get("sandbox", False)),
             allow_network=bool(terminal_raw.get("allow_network", False)),
+            docker_scoped=terminal_raw.get("docker_scoped") is True,
             env=_terminal_env(terminal_raw.get("env"), str(home / "config.yaml")),
             approval=ApprovalConfig(
                 allowlist=[
@@ -719,6 +722,8 @@ def _tools_delta(cfg: Config) -> dict:
         term_out["sandbox"] = cfg.tools.terminal.sandbox
     if cfg.tools.terminal.allow_network != term_d["allow_network"]:
         term_out["allow_network"] = cfg.tools.terminal.allow_network
+    if cfg.tools.terminal.docker_scoped != term_d["docker_scoped"]:
+        term_out["docker_scoped"] = cfg.tools.terminal.docker_scoped
     if cfg.tools.terminal.approval.allowlist:
         term_out["approval"] = {"allowlist": list(cfg.tools.terminal.approval.allowlist)}
     raw_env = ((cfg.raw.get("tools") or {}).get("terminal") or {}).get("env") if isinstance(cfg.raw, dict) else None

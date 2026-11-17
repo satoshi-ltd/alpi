@@ -184,6 +184,248 @@ def test_scoped_terminal_is_unavailable_in_docker(
     assert "Daemon gates still run" in result.error
 
 
+def _docker_scoped_home(
+    home: Path, monkeypatch: pytest.MonkeyPatch, *, opted_in: bool, paths: list,
+    workspace: Path | None = None, sandbox: bool = False,
+) -> Path:
+    import json
+
+    workspace = workspace or home
+    project = workspace / "project"
+    (project / "assets").mkdir(parents=True, exist_ok=True)
+    keys = (["docker_scoped: true"] if opted_in else []) + (["sandbox: true"] if sandbox else [])
+    (home / "config.yaml").write_text(
+        f"workspace: {workspace}\n" + ("tools:\n  terminal:\n" + "".join(f"    {k}\n" for k in keys) if keys else "")
+    )
+    monkeypatch.setenv("ALPI_HOME", str(home))
+    monkeypatch.setenv("ALPI_PLATFORM", "docker")
+    monkeypatch.setenv("ALPI_WORKGROUP_WRITE_SCOPE", json.dumps({
+        "root": "project", "paths": paths, "phase": "setup", "owner": "pixel",
+    }))
+    return project
+
+
+def test_opted_in_phase_owner_runs_terminal_in_docker(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from alpi import runtime
+    from alpi.tools._paths import dispatch_tool_denies
+
+    project = _docker_scoped_home(tmp_home_no_env, monkeypatch, opted_in=True, paths=["assets/**", "src/**/*.md"])
+
+    assert "terminal" not in dispatch_tool_denies()
+    result = Terminal().run(command="echo built > assets/out.txt && echo done", cwd=str(project))
+
+    assert result.ok, result.error
+    assert "done" in result.output
+    assert (project / "assets" / "out.txt").read_text().strip() == "built"
+    assert runtime.is_docker()
+
+
+@pytest.mark.parametrize("opt", ["docker_scoped: false", "docker_scoped: \"true\"", "docker_scoped: 1", "sandbox: false"])
+def test_only_a_literal_true_opts_a_profile_in(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch, opt: str,
+) -> None:
+    from alpi.tools._paths import dispatch_tool_denies
+
+    _docker_scoped_home(tmp_home_no_env, monkeypatch, opted_in=False, paths=["assets/**"])
+    (tmp_home_no_env / "config.yaml").write_text(f"workspace: {tmp_home_no_env}\ntools:\n  terminal:\n    {opt}\n")
+
+    assert "terminal" in dispatch_tool_denies()
+    result = Terminal().run(command="true")
+    assert not result.ok
+    assert "unavailable during scoped workgroup phases in Docker" in result.error
+
+
+@pytest.mark.parametrize("paths", [[], None, "assets/**", [""], [1], ["assets/**", ""]])
+def test_opt_in_never_reaches_a_profile_that_does_not_own_the_phase(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch, paths,
+) -> None:
+    from alpi.tools._paths import dispatch_tool_denies, dispatch_tool_deny_reasons
+
+    _docker_scoped_home(tmp_home_no_env, monkeypatch, opted_in=True, paths=paths)
+
+    assert "terminal" in dispatch_tool_denies()
+    reason = dispatch_tool_deny_reasons(frozenset())["terminal"]
+    if paths == []:
+        assert "only for the profile that owns the phase" in reason and "@pixel" in reason
+    else:
+        assert "terminal is unavailable during scoped workgroup phase #setup in Docker" in reason
+    result = Terminal().run(command="true")
+    assert not result.ok
+    assert "unavailable during scoped workgroup phases in Docker" in result.error
+
+
+def test_opt_in_with_an_unreadable_scope_keeps_terminal_out(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from alpi.tools._paths import dispatch_tool_denies
+
+    _docker_scoped_home(tmp_home_no_env, monkeypatch, opted_in=True, paths=["assets/**"])
+    monkeypatch.setenv("ALPI_WORKGROUP_WRITE_SCOPE", "{not json")
+
+    from alpi.tools._paths import dispatch_tool_deny_reasons
+
+    assert {"terminal", "write_file"} <= dispatch_tool_denies()
+    assert "owns the phase" not in dispatch_tool_deny_reasons(frozenset())["terminal"]
+    assert not Terminal().run(command="true").ok
+
+
+def test_opt_in_refuses_background_jobs_in_a_scoped_docker_phase(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _docker_scoped_home(tmp_home_no_env, monkeypatch, opted_in=True, paths=["assets/**"])
+
+    result = Terminal().run(action="background", command="sleep 30")
+
+    assert not result.ok
+    assert "background commands are unavailable during scoped workgroup phases in Docker" in result.error
+
+
+def test_opt_in_leaves_a_member_device_turn_refused(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    from alpi.tools import terminal as terminal_mod
+    from alpi.tools._sandbox import SandboxUnavailable
+
+    workspace = tmp_path_factory.mktemp("ws")
+    project = _docker_scoped_home(tmp_home_no_env, monkeypatch, opted_in=True, paths=["assets/**"], workspace=workspace)
+    monkeypatch.setattr(terminal_mod, "_is_member", lambda: True)
+    seen: dict = {}
+
+    def no_sandbox(command, **kwargs):
+        seen.update(kwargs)
+        raise SandboxUnavailable("no bwrap")
+
+    monkeypatch.setattr(terminal_mod, "wrap_command", no_sandbox)
+    result = Terminal().run(command="true", cwd=str(project))
+
+    assert not result.ok
+    assert "only Linux bubblewrap" in result.error
+    assert seen["member_root"] is not None and seen["write_rules"]
+
+
+def test_opt_in_with_the_profile_sandbox_on_keeps_terminal_out(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from alpi.tools._paths import dispatch_tool_denies
+
+    _docker_scoped_home(tmp_home_no_env, monkeypatch, opted_in=True, paths=["assets/**"], sandbox=True)
+
+    assert "terminal" in dispatch_tool_denies()
+    result = Terminal().run(command="true")
+    assert not result.ok
+    assert "unavailable during scoped workgroup phases in Docker" in result.error
+
+
+@pytest.mark.parametrize("deny", ["terminal", "term*", "terminal:run", "terminal:*"])
+def test_opt_in_does_not_override_the_profile_denying_terminal(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch, deny: str,
+) -> None:
+    from alpi.tools._paths import docker_scoped_terminal
+
+    _docker_scoped_home(tmp_home_no_env, monkeypatch, opted_in=True, paths=["assets/**"])
+    with (tmp_home_no_env / "config.yaml").open("a") as fh:
+        fh.write(f"  deny: ['{deny}']\n")
+
+    assert docker_scoped_terminal() is True
+    assert docker_scoped_terminal(runs=True) is False
+
+
+def test_opt_in_refuses_a_member_turn_whose_scope_cannot_be_sandboxed(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    from alpi.tools import terminal as terminal_mod
+
+    workspace = tmp_path_factory.mktemp("ws")
+    project = _docker_scoped_home(
+        tmp_home_no_env, monkeypatch, opted_in=True, paths=["assets/**/*.md"], workspace=workspace,
+    )
+    monkeypatch.setattr(terminal_mod, "_is_member", lambda: True)
+    monkeypatch.setattr(terminal_mod, "wrap_command", lambda command, **kwargs: command)
+
+    result = Terminal().run(command="true", cwd=str(project))
+
+    assert not result.ok
+    assert "cannot be sandboxed exactly" in result.error
+
+
+@pytest.mark.parametrize("docker", [True, False])
+def test_a_malformed_path_entry_keeps_the_owner_its_file_tools(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch, docker: bool,
+) -> None:
+    from alpi.tools._paths import dispatch_tool_denies
+
+    _docker_scoped_home(tmp_home_no_env, monkeypatch, opted_in=True, paths=["assets/**", 404])
+    if not docker:
+        monkeypatch.delenv("ALPI_PLATFORM")
+
+    denied = dispatch_tool_denies()
+    assert not denied & {"write_file", "edit_file", "delete_file"}
+    assert ("terminal" in denied) is docker
+
+
+def test_a_job_left_running_in_an_opted_in_phase_dies_with_its_command(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import time
+
+    project = _docker_scoped_home(tmp_home_no_env, monkeypatch, opted_in=True, paths=["assets/**"])
+
+    result = Terminal().run(command="(sleep 1; echo late > late.txt) >/dev/null 2>&1 & echo started", cwd=str(project))
+
+    assert result.ok and "started" in result.output
+    time.sleep(1.8)
+    assert not (project / "late.txt").exists()
+
+
+def test_opt_in_outside_docker_still_sandboxes_the_phase(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from alpi.tools import terminal as terminal_mod
+
+    _docker_scoped_home(tmp_home_no_env, monkeypatch, opted_in=True, paths=["assets/**"])
+    monkeypatch.delenv("ALPI_PLATFORM")
+    seen: dict = {}
+
+    def fake_wrap(command, **kwargs):
+        seen.update(kwargs)
+        return ["true"]
+
+    monkeypatch.setattr(terminal_mod, "wrap_command", fake_wrap)
+    terminal_mod._resolve_popen_args("true")
+
+    assert seen["write_rules"]
+
+
+def test_an_opted_in_shell_write_outside_the_phase_paths_reds_the_gate_audit(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    import types
+
+    from alpi.alp import pipeline_gates as gates
+
+    project = _docker_scoped_home(tmp_home_no_env, monkeypatch, opted_in=True, paths=["assets/**"])
+    (project / "README.md").write_text("demo\n")
+    meta = types.SimpleNamespace(
+        id="wg_scoped", name="site", hub_pubkey="HUB", paused=False,
+        pipelines={"setup": ("setup",)}, launch_pipeline=None,
+        pipeline_steps={"setup": {
+            "owner": "pixel", "task": "bootstrap",
+            "gate": {"argv": ["true"], "cwd": "project"}, "paths": ["assets/**"],
+        }},
+    )
+    step = gates.step_for(meta, "setup")
+    wg_dir = tmp_path / "wgdir"
+    gates.snapshot_baseline(wg_dir, step, tmp_home_no_env)
+
+    assert Terminal().run(command="echo ok > assets/site.txt", cwd=str(project)).ok
+    assert gates.paths_violations(wg_dir, step, tmp_home_no_env) == ""
+
+    assert Terminal().run(command="echo changed > README.md", cwd=str(project)).ok
+    assert "README.md" in gates.paths_violations(wg_dir, step, tmp_home_no_env)
+
+
 @pytest.mark.parametrize(
     ("sandbox_enabled", "expected_network"),
     [(False, True), (True, False)],

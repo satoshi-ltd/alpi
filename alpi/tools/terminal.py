@@ -167,6 +167,11 @@ def _sandbox_config() -> tuple[bool, bool]:
         return True, False
 
 
+def _docker_scoped_phase() -> bool:
+    from alpi.runtime import is_docker
+    return os.environ.get("ALPI_WORKGROUP_WRITE_SCOPE") is not None and is_docker()
+
+
 def _resolve_popen_args(
     command: str,
     cwd: str | None = None,
@@ -185,13 +190,21 @@ def _resolve_popen_args(
         wp = None
     if wp is None:
         wp = Path(_default_cwd())
-    from alpi.runtime import is_docker
-    if os.environ.get("ALPI_WORKGROUP_WRITE_SCOPE") is not None and is_docker():
-        raise SandboxUnavailable(
-            "terminal is unavailable during scoped workgroup phases in Docker; "
-            "use native file and search tools. Daemon gates still run"
-        )
-    write_rules = phase_write_rules(wp)
+    docker_scoped = _docker_scoped_phase()
+    if docker_scoped:
+        from alpi.tools._paths import dispatch_tool_denies
+        if "terminal" in dispatch_tool_denies():
+            raise SandboxUnavailable(
+                "terminal is unavailable during scoped workgroup phases in Docker; "
+                "use native file and search tools. Daemon gates still run"
+            )
+    unbounded: SandboxUnavailable | None = None
+    try:
+        write_rules = phase_write_rules(wp)
+    except SandboxUnavailable as exc:
+        if not docker_scoped:
+            raise
+        write_rules, unbounded = None, exc
     member_root = alpi_root().resolve() if _is_member() else None
     if member_root is not None:
         home_dir = Path(os.path.expanduser("~"))
@@ -201,6 +214,8 @@ def _resolve_popen_args(
                 if any(_overlaps(form, root) for root in hidden):
                     raise SandboxUnavailable(_MEMBER_INSIDE_HOME.format(what=what, path=path))
     if world is not None and world.backend != "local":
+        if unbounded is not None:
+            raise unbounded
         profile_env, extra_path = ({}, "") if member_root is not None else _profile_env()
         if extra_path:
             # The image has its own PATH; the forwarded host PATH may point at nothing inside it.
@@ -212,6 +227,8 @@ def _resolve_popen_args(
             member=member_root is not None,
         )
     sandbox_enabled, allow_network = _sandbox_config()
+    if unbounded is not None and (member_root is not None or sandbox_enabled):
+        raise unbounded
     if member_root is not None:
         try:
             return wrap_command(
@@ -224,7 +241,8 @@ def _resolve_popen_args(
             )
         except SandboxUnavailable as exc:
             raise SandboxUnavailable(_MEMBER_NO_SANDBOX) from exc
-    if not sandbox_enabled and write_rules is None:
+    # The supported Docker runtime has no OS sandbox: an opted-in phase owner's shell is unbounded there and only the gate audit attributes its writes.
+    if not sandbox_enabled and (write_rules is None or docker_scoped):
         return command
     if not sandbox_enabled:
         allow_network = True
@@ -289,6 +307,14 @@ def _stamped(env: dict[str, str]) -> dict[str, str]:
     from alpi.runs import stamp_env
 
     return stamp_env(env)
+
+
+def _kill_group_survivors(pgid: int) -> None:
+    # Only for a child started with start_new_session=True, whose group id is its pid; a job left behind with `&` would write after the phase's gate audit.
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except OSError:
+        pass
 
 
 def _kill_process_group(proc: subprocess.Popen | None) -> None:
@@ -463,6 +489,8 @@ class Terminal(Tool):
             )
             _record_detached_child(child.pid)
             stdout, stderr = child.communicate(timeout=timeout)
+            if _docker_scoped_phase():
+                _kill_group_survivors(child.pid)
             proc = subprocess.CompletedProcess(
                 popen_args, child.returncode, stdout=stdout, stderr=stderr,
             )
@@ -513,6 +541,14 @@ class Terminal(Tool):
             return ToolResult(
                 ok=False, output="",
                 error="background commands are unavailable in the ephemeral Docker execution world",
+            )
+        if _docker_scoped_phase():
+            return ToolResult(
+                ok=False, output="",
+                error=(
+                    "background commands are unavailable during scoped workgroup phases in Docker: "
+                    "a job that outlives the phase would write after its gate audit"
+                ),
             )
         effective_cwd = cwd or _default_cwd()
         fenced_args = None

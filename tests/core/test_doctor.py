@@ -181,6 +181,34 @@ def test_sandbox_enabled_without_backend_fails(tmp_path: Path, monkeypatch) -> N
     assert sb.status == "fail"
 
 
+def test_security_reports_the_scoped_phase_terminal_opt_in(tmp_path, monkeypatch):
+    from alpi import config as config_mod
+
+    cfg = config_mod.load(tmp_path)
+    assert "scoped phase terminal" not in {c.name for c in doctor._check_security(cfg)}
+
+    (tmp_path / "config.yaml").write_text("tools:\n  terminal:\n    docker_scoped: true\n")
+    monkeypatch.setenv("ALPI_PLATFORM", "docker")
+    cfg = config_mod.load(tmp_path)
+    finding = {c.name: c for c in doctor._check_security(cfg)}["scoped phase terminal"]
+    assert finding.status == "warn" and "without an OS sandbox" in finding.detail
+
+
+def test_scoped_phase_terminal_opt_in_survives_a_config_save(tmp_path):
+    from alpi import config as config_mod
+
+    (tmp_path / "config.yaml").write_text("tools:\n  terminal:\n    docker_scoped: true\n")
+    cfg = config_mod.load(tmp_path)
+    assert cfg.tools.terminal.docker_scoped is True
+    config_mod.save(cfg)
+    assert config_mod.load(tmp_path).tools.terminal.docker_scoped is True
+    assert "docker_scoped" in (tmp_path / "config.yaml").read_text()
+
+    cfg.tools.terminal.docker_scoped = False
+    config_mod.save(cfg)
+    assert "docker_scoped" not in (tmp_path / "config.yaml").read_text()
+
+
 def _cfg_with_network(home: Path, host: str, *, allow_public: bool = False):
     from alpi import config as cfg_mod
     cfg = cfg_mod.Config(home=home, model="")

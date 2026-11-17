@@ -284,7 +284,15 @@ those denies stays readable. Network is denied by default.
 phase that declares write scopes forces `terminal` through the sandbox on bare
 metal even when the profile has it off, so a phase owner cannot write outside
 its lane. In the official Docker runtime a scoped phase omits `terminal`
-altogether rather than sandboxing it (see [WORKGROUPS.md](WORKGROUPS.md)). Everywhere else it defaults to off,
+altogether rather than sandboxing it (see [WORKGROUPS.md](WORKGROUPS.md)).
+`tools.terminal.docker_scoped: true` gives it back to the profile that owns the
+phase, unsandboxed, and trades enforcement for attribution: the gate's audit
+still fails a phase whose shell edited a source file outside its paths, but it
+covers only the project's source files: not dependency or generated trees the phase does not declare (`.git`, `node_modules`, `dist`, `.astro`, `public`, `.venv`, caches), lock files, file modes, symlinks or empty directories, and nothing outside the project root. That shell can read and change the alpi home, every
+profile's `.env`, the audit baseline itself and the `node_modules/.bin` and
+`.git/hooks` a later gate command executes, and whatever an installer downloads
+runs with the same reach. A process that detaches into its own session (`setsid`) outlives its command and can write after the audit. Turn it on only in a container that holds a single trust scope; `alpi
+doctor` and `alpi audit` report it while it is on. Everywhere else it defaults to off,
 because real-world dev workflows vary too much to pick a profile that never
 breaks: `git
 push` over SSH relies on `~/.ssh`, Apple Silicon Homebrew lives in

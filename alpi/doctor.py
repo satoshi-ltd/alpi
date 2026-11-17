@@ -837,6 +837,9 @@ def _check_security(cfg: cfg_mod.Config) -> list[Check]:
     else:
         out.append(Check("Security", "Sandbox", "info", "off"))
 
+    if term.docker_scoped:
+        out.append(docker_scoped_check("Security", sandbox=term.sandbox))
+
     allow = (cfg.raw.get("tools") or {}).get("terminal", {}).get("approval", {}).get("allowlist") or []
     if allow:
         out.append(Check("Security", "Approval allowlist", "info",
@@ -1150,6 +1153,24 @@ def _live_pid(home: Path, name: str = "service") -> int | None:
     legacy callers but ignored — there's only one process per profile."""
     from alpi import service as svc
     return svc.running_pid(home)
+
+
+def docker_scoped_check(group: str, *, sandbox: bool = False) -> Check:
+    from alpi import runtime
+
+    if not runtime.is_docker():
+        return Check(group, "scoped phase terminal", "info", "tools.terminal.docker_scoped is on but only applies in Docker")
+    if sandbox:
+        return Check(
+            group, "scoped phase terminal", "info",
+            "tools.terminal.docker_scoped is on, but tools.terminal.sandbox is on too and Docker has no OS sandbox, so terminal stays refused",
+        )
+    return Check(
+        group, "scoped phase terminal", "warn",
+        "tools.terminal.docker_scoped is on — a phase owner's shell runs without an OS sandbox: "
+        "it can read and change the alpi home, every profile's .env and the phase audit baseline, "
+        "and the gate only audits the project's source files. Keep it to a container that holds one trust scope",
+    )
 
 
 def _sandbox_backend() -> str | None:

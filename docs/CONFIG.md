@@ -104,6 +104,7 @@ removes the key.
 | `tools.read_image.model` | `""` (use main) | string — a model id, or the literal `fast` / `deep` to reference a tier | next turn |
 | `tools.terminal.sandbox` | `false` | bool | next turn |
 | `tools.terminal.allow_network` | `false` | bool | next turn |
+| `tools.terminal.docker_scoped` | `false` | bool — a YAML boolean true; strings and numbers do not count. In the Docker runtime, lets this profile run `terminal` unsandboxed in the workgroup phases it owns (see [WORKGROUPS.md](WORKGROUPS.md)); no effect elsewhere, nor while `tools.terminal.sandbox` is on or `terminal` is in `tools.deny` | next turn |
 | `tools.terminal.approval.allowlist` | `[]` | list of pattern descriptions and/or command globs (see below) | next turn |
 | `tools.terminal.env` | `{}` | map of variable name to plain string (see below) | next command |
 | `tools.browser.vision` | `false` | bool | next turn |

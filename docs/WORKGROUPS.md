@@ -831,7 +831,21 @@ it: only exact literal paths and trailing `/**` subtrees are writable,
 unsupported globs fail closed, and `ALPI_HOME` stays read-only. A scope-only
 sandbox preserves the profile's existing network access. In the official
 Docker runtime, `terminal` is unavailable during scoped phases; native file and
-search tools remain available and daemon gates still run. Phase denials are
+search tools remain available and daemon gates still run. A pipeline whose
+phases must run a build or an installer there opts its phase owners in with
+`tools.terminal.docker_scoped: true` in each owner's `config.yaml`: the profile
+that owns the active phase then gets `terminal` without an OS sandbox, from its
+next turn, while every other member keeps losing it. Background commands stay
+refused; a command that leaves a process running with `&` waits for it unless
+its output is redirected, and the process is killed when the command returns
+— a best-effort stop, not containment: a process that detaches into its own
+session (`setsid`) survives it and can write after the gate's audit.
+The write globs still bound the native file tools, and the gate still runs its
+audit before its command, so a shell edit to a source file outside the declared
+paths reds the phase. That audit covers the project's source files: not dependency or generated trees the phase does not declare (`.git`, `node_modules`, `dist`, `.astro`, `public`, `.venv`, caches), lock files, file modes, symlinks or empty directories, and nothing outside the project root; it attributes writes, it
+does not confine the shell (see [SECURITY.md](SECURITY.md)). The key does
+nothing while `tools.terminal.sandbox` is on or `terminal` is in `tools.deny`.
+Phase denials are
 reported separately from profile `tools.deny`; the gate remains the final
 workspace-diff audit. Once that pre-command audit is clean, filesystem effects
 created by the trusted gate command become the retry baseline, so a red gate

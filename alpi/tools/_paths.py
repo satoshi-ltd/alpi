@@ -176,6 +176,22 @@ PIPELINE_HISTORY_TOOLS = frozenset({
 })
 
 
+def docker_scoped_terminal(home: Path | None = None, *, runs: bool = False) -> bool:
+    try:
+        from alpi import config as cfg_mod
+        from alpi.home import get_home
+        cfg = cfg_mod.load(home or get_home())
+    except Exception:  # noqa: BLE001
+        return False
+    if cfg.tools.terminal.docker_scoped is not True:
+        return False
+    if not runs:
+        return True
+    from alpi.tools._policy import denied_actions, is_denied
+    deny = cfg.tools.deny or []
+    return not (cfg.tools.terminal.sandbox or is_denied("terminal", deny) or denied_actions("terminal", deny) & {"run", "*"})
+
+
 def dispatch_tool_denies() -> frozenset[str]:
     raw = os.environ.get("ALPI_WORKGROUP_WRITE_SCOPE")
     denied: set[str] = (
@@ -187,17 +203,18 @@ def dispatch_tool_denies() -> frozenset[str]:
     if raw is None:
         return frozenset(denied)
     from alpi.runtime import is_docker
-    if is_docker():
-        denied.add("terminal")
+    docker = is_docker()
     try:
         scope = json.loads(raw)
         paths = scope.get("paths")
     except (AttributeError, TypeError, json.JSONDecodeError):
-        return frozenset(denied | set(DISPATCH_FILE_MUTATION_TOOLS))
-    if paths == []:
+        return frozenset(denied | set(DISPATCH_FILE_MUTATION_TOOLS) | ({"terminal"} if docker else set()))
+    if not isinstance(paths, list) or not paths:
         denied.update(DISPATCH_FILE_MUTATION_TOOLS)
-    elif not isinstance(paths, list):
-        denied.update(DISPATCH_FILE_MUTATION_TOOLS)
+    elif docker and all(isinstance(p, str) and p for p in paths) and docker_scoped_terminal(runs=True):
+        docker = False
+    if docker:
+        denied.add("terminal")
     return frozenset(denied)
 
 
@@ -212,9 +229,11 @@ def dispatch_tool_deny_reasons(
         scope = json.loads(raw or "")
         phase = str(scope.get("phase") or "the active phase")
         owner = str(scope.get("owner") or "")
+        readable = scope.get("paths") == []
     except (AttributeError, TypeError, json.JSONDecodeError):
-        phase, owner = "the active phase", ""
+        phase, owner, readable = "the active phase", "", False
     profile_denies = frozenset(profile_denies or ())
+    terminal_opted_in = readable and "terminal" in denied and docker_scoped_terminal()
     reasons: dict[str, str] = {}
     if not os.environ.get("ALPI_WORKGROUP_PIPELINE"):
         for name in denied & SESSION_HISTORY_TOOLS:
@@ -234,6 +253,12 @@ def dispatch_tool_deny_reasons(
             phase_reason = (
                 "direct peer messaging is unavailable during pipeline turns; "
                 "deliver through workgroup_post on the active workgroup"
+            )
+        elif name == "terminal" and terminal_opted_in:
+            ownership = f"; its declared owner is @{owner}" if owner else ""
+            phase_reason = (
+                f"terminal in scoped workgroup phase #{phase} in Docker runs only for the "
+                f"profile that owns the phase{ownership}; use native file and search tools"
             )
         elif name == "terminal":
             phase_reason = (

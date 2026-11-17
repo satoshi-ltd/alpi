@@ -1068,6 +1068,40 @@ async def test_dispatch_explains_scoped_terminal_policy_in_docker(
     assert "Terminal is unavailable during scoped phases in Docker" in prompt
     assert "Daemon gates still run" in prompt
 
+    (home / "config.yaml").write_text("tools:\n  terminal:\n    docker_scoped: true\n")
+    await service._dispatch_workgroup_turn(
+        home, profile="quill", wg_id="wg_x", wg_name="hotel",
+        reason="new task", pipeline=True,
+        write_scope={
+            "root": "projects/hotel", "paths": ["src/content/**"],
+            "phase": "content", "owner": "quill",
+        },
+    )
+    prompt = captured["argv"][-1]
+    assert "Terminal runs without an OS sandbox in this container" in prompt
+    assert "any change outside them" in prompt and "stopped when the command returns" in prompt
+    assert "Terminal is unavailable" not in prompt
+
+    for extra in ("    sandbox: true\n", "  deny: [terminal]\n", "  deny: ['term*']\n"):
+        (home / "config.yaml").write_text("tools:\n  terminal:\n    docker_scoped: true\n" + extra)
+        await service._dispatch_workgroup_turn(
+            home, profile="quill", wg_id="wg_x", wg_name="hotel",
+            reason="new task", pipeline=True,
+            write_scope={
+                "root": "projects/hotel", "paths": ["src/content/**"],
+                "phase": "content", "owner": "quill",
+            },
+        )
+        assert "Terminal is unavailable during scoped phases in Docker" in captured["argv"][-1]
+    (home / "config.yaml").write_text("tools:\n  terminal:\n    docker_scoped: true\n")
+
+    await service._dispatch_workgroup_turn(
+        home, profile="quill", wg_id="wg_x", wg_name="hotel",
+        reason="new task", pipeline=True,
+        write_scope={"root": "projects/hotel", "paths": [], "phase": "content", "owner": "lens"},
+    )
+    assert "Native file mutation and terminal are unavailable" in captured["argv"][-1]
+
 
 @pytest.mark.asyncio
 async def test_dispatch_timeout_kills_and_records(

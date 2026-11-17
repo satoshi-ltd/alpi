@@ -87,6 +87,7 @@ providers:
 | `model` | Next turn/session depending on caller. |
 | `workspace` | Next tool call after reload. |
 | `budget` | Next turn. |
+| `tools.terminal.docker_scoped` | Next turn. Default `false`; a YAML boolean true (strings and numbers do not count). In the Docker runtime it lets this profile run `terminal`, unsandboxed, in the scoped workgroup phases it owns (non-owners and background commands stay refused, a process left running with `&` is killed when its command returns, but one that detaches into its own session with `setsid` survives and can write after the gate; member-device turns keep their own rule). No effect outside Docker, nor while `tools.terminal.sandbox` is on or `terminal` is in `tools.deny`. The gate audits only the project's source files, and that shell can reach the alpi home and every profile's `.env`, so it belongs only in a container with one trust scope; `alpi doctor` and `alpi audit` warn while it is on. |
 | `tools.terminal.sandbox` | Next terminal call (member turns and peers without `tools.allow` run only in Linux bubblewrap or the Docker execution backend, and are refused in the Docker runtime and on macOS). |
 | `tools.deny` | Next turn (re-read from disk per turn, same as `budget`). |
 | `tools.call_timeout_s` | Next turn (re-read from disk per turn). |

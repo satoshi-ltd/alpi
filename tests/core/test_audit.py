@@ -49,6 +49,26 @@ def test_hardening_flags_sandbox_off_and_uncapped_budget(tmp_path):
     assert by["budget"].status == "info"
 
 
+def test_hardening_reports_the_scoped_phase_terminal_opt_in(tmp_path, monkeypatch):
+    cfg = cfg_mod.load(tmp_path)
+    assert "scoped phase terminal" not in {c.name for c in audit._audit_hardening(cfg)}
+
+    cfg.tools.terminal.docker_scoped = True
+    monkeypatch.setenv("ALPI_PLATFORM", "docker")
+    finding = {c.name: c for c in audit._audit_hardening(cfg)}["scoped phase terminal"]
+    assert finding.status == "warn"
+    assert "alpi home" in finding.detail and ".env" in finding.detail and "audit baseline" in finding.detail
+
+    cfg.tools.terminal.sandbox = True
+    finding = {c.name: c for c in audit._audit_hardening(cfg)}["scoped phase terminal"]
+    assert finding.status == "info" and "stays refused" in finding.detail
+    cfg.tools.terminal.sandbox = False
+
+    monkeypatch.delenv("ALPI_PLATFORM")
+    finding = {c.name: c for c in audit._audit_hardening(cfg)}["scoped phase terminal"]
+    assert finding.status == "info" and "only applies in Docker" in finding.detail
+
+
 def test_hardening_clean_config(tmp_path):
     cfg = cfg_mod.load(tmp_path)
     cfg.tools.terminal.sandbox = True

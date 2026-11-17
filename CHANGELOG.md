@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.19.3 — 2026-11-17 — a shell for Docker phases
+
+- A workgroup pipeline whose phases run a build or an installer can now work in the Docker runtime: `tools.terminal.docker_scoped: true` in a profile's `config.yaml` gives it `terminal` in the phases it owns. Off by default, and nothing changes outside Docker.
+- Only the phase owner gets the shell; other members, member devices and background commands stay refused, and the write paths still bound the file tools.
+- The gate still fails a phase whose shell edited a source file outside its declared paths, and a process a command leaves running with `&` is stopped when the command returns; one that detaches into its own session (`setsid`) is not, and can write after the audit.
+- That shell has no OS sandbox and the gate's audit skips dependency and generated folders: it can reach the alpi home and every profile's `.env`, so use it only in a container that holds one trust scope. `alpi doctor` and `alpi audit` warn while it is on.
+
 ## v0.19.2 — 2026-11-16 — eyes on the pointer
 
 - The site's alpi mark in the landing hero turns to the mouse again: while it follows the pointer it faces front and drops its own turn, and keeps it on phones and under reduced motion, where it does not follow.

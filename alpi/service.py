@@ -3803,7 +3803,18 @@ async def _dispatch_workgroup_turn(
         from alpi.runtime import is_docker
         docker_runtime = is_docker()
         if paths:
-            if docker_runtime:
+            from alpi.tools._paths import docker_scoped_terminal
+            if docker_runtime and docker_scoped_terminal(home, runs=True):
+                policy = (
+                    f"PHASE WRITE POLICY: this turn owns `#{phase}`. Native file "
+                    f"tools may write only: {', '.join(paths)}. Terminal runs without an OS "
+                    "sandbox in this container, so keep everything its commands write inside "
+                    "those paths too: the daemon gate audits the project's source files and fails "
+                    "the phase on any change outside them. Background commands are unavailable: "
+                    "a command that leaves a process running with `&` waits for it unless its "
+                    "output is redirected, and the process is stopped when the command returns."
+                )
+            elif docker_runtime:
                 policy = (
                     f"PHASE WRITE POLICY: this turn owns `#{phase}`. Native file "
                     f"tools may write only: {', '.join(paths)}. Terminal is unavailable "
