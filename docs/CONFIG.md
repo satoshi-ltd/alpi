@@ -78,7 +78,7 @@ Three options:
 | `providers.ollama` | `[]` | list of `{name, url}` — one per Ollama server | next session |
 | `providers.openrouter.models` | `[]` | list of OpenRouter model ids the user has picked | next session |
 | `providers.openrouter.ignore` | `[]` | OpenRouter provider slugs (lowercase, e.g. `together`) excluded from routing for every `openrouter/…` model of this profile, tiers and fallbacks included. An exclusion, not a pin: OpenRouter still picks freely among the rest, so `:nitro` sorting keeps working. Sent as `extra_body.provider.ignore` | next turn |
-| `public_bio` | `""` | string — one-line public tag-line broadcast to every workgroup this profile joins (source of truth for `Member.bio` on the hub). Empty = don't publish; peers see name only. `AGENT.md` stays private. | next `workgroup.join` |
+| `public_bio` | `""` | string — one-line public tag-line broadcast to every workgroup this profile joins (source of truth for `Member.bio` on the hub), and the introduction both apps show under "Start a new thread" (3 lines at most on desktop, 5 on the phone). `alpi setup` keeps it to 200 characters; the apps save it as typed. Empty = don't publish; peers see name only. `AGENT.md` stays private. | next `workgroup.join`; the apps on their next summary read |
 | `paused` | `false` | bool — profile-level pause flag. Surfaced in the desktop / mobile profile summary so paired apps can show + respect the state; the daemon itself does not gate turns on this flag. Persisted only when `true`. | next host-plane read |
 
 Over the host API, `host.profile.detail` returns `fallback_models` as a list

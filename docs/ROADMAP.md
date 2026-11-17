@@ -120,16 +120,6 @@ _None._
   accept: a written answer to each; a different answer becomes an edit to the task it touches
   before that task ships.
 
-- **BRAND.EMPTY** — A blank chat that introduces the profile
-  `decision · desktop, mobile · creator · normal`
-  note: today an empty chat is the profile's origami at 72 px, "Start a new thread" and the model. Ideas to
-  weigh with the copy pass: the profile's own one-line bio under the origami, the pair name ("blue shield")
-  beside the model as the Brand board shows, up to three starter chips drawn from the profile's skills or
-  its recent sessions (one tap fills the composer), and a short fold-in of the origami on first paint that
-  stops under reduced motion. Needs a board before any code, and the copy of every empty state decided together.
-  accept: the creator picks which of these ideas ship and the copy of the empty states; the answer becomes a
-  `ui` task with its board.
-
 - **MOB.ROSTER-STALE** — How does a populated phone roster say that its data is old?
   `decision · mobile · creator · normal`
   note: [Roster.jsx](../mobile/src/features/inbox/Roster.jsx) sends request errors only to its empty
@@ -166,44 +156,6 @@ _None._
   count of each `agent.engine_note` per profile, the escalation rate against 0.18.0, the journal bytes per run
   against 0.18.0, whether the longest-turn profiles compacted mid-turn without a provider rejection, and
   whether a provider pause opened and closed with one notification each way. Anything off becomes a `bug`.
-
-- **WG.SYNC-VERIFY** — Busy workgroups stay current on the creator's desktop and phone
-  `verify · alpi, desktop, mobile · creator · normal`
-  depends: MOB.ROSTER-STALE
-  note: blocked until the mobile UI task resulting from `MOB.ROSTER-STALE` is implemented and
-  installed by the creator; replace the decision dependency with that task's ID when it is created.
-  accept: on a deployed daemon with multiple active pipelines, compare the roster, canonical phase
-  and spend against read-only host responses over local Unix and remote WebSocket connections;
-  create/remove a workgroup from the console, interrupt/reconnect the client transport, and resume
-  the phone after backgrounding. Record installed versions and recovery time; a populated stale
-  list shows its warning and recovers, and pipeline state can appear while transcript loading is
-  pending. Use a creator-approved run; no agent launches, installs or daemon restarts are implied.
-
-- **EXPORT.PAGES-VERIFY** — The printed PDF on macOS shows header and footer on pages 2+, no block cut across pages
-  `verify · desktop · creator · normal`
-  note: desktop 0.9.13 paginates the export itself; jsdom has no layout, so only a real print proves the measured
-  heights, the page size and that WKWebView does not scale the sheet.
-  accept: on macOS, export a long report (a chart, a table split across pages, a code block and a blockquote each
-  longer than a page, latin-ext text such as "Ładowanie, Šťastný, Ğüç") to PDF on A4 and on Letter, at 100 % and at
-  another page zoom, and once with Landscape picked in the print sheet: every page carries the header (mark,
-  profile, server, title) and the footer (profile, date, n / m), the total matches the page count, no paragraph line, chart, table row or code line is cut or clipped,
-  split table pieces keep their column widths, and no blank page appears. Repeat once on Windows (WebView2) and
-  Linux (WebKitGTK).
-
-- **MOB.LINK-VERIFY** — A link inside a selectable paragraph opens on iOS and Android
-  `verify · mobile · creator · normal`
-  note: mobile 0.9.9 renders a notification link as a pressable `Text` nested in a `selectable` one; Android has a
-  history of the parent swallowing the child's tap, and jsdom cannot prove it.
-  accept: on an installed build on iOS and on Android, open a notification whose body has a bare URL and a markdown
-  link inside a paragraph: a tap opens the browser, a long-press still selects text, the link stays readable at the
-  largest text size and with reduce motion on.
-
-- **MOB.KEYBOARD-VERIFY** — The keyboard and back behave on a foldable
-  `verify · mobile · creator · normal`
-  note: mobile 0.9.5 shipped the keyboard height, keyboard dismissal and system back fixes.
-  accept: on an installed build on a foldable Android phone: fold and unfold with the keyboard open in a chat,
-  open a sheet from the focused composer, background and resume; the composer sits on the keyboard each time
-  and no gap remains when it closes; after folding, system back returns to the list.
 
 ## Proposed
 

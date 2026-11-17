@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.19.5 — 2026-11-17 — a blank chat that introduces the profile
+
+- The agent knows that the desktop and phone show a profile's public bio and a Continue button into its latest chat when a new thread is empty, so it can explain what users see there and why the bio matters.
+
 ## v0.19.4 — 2026-11-17 — the image builds again
 
 - The Docker image builds again: 0.19.3 reached PyPI but never got an image, so `tools.terminal.docker_scoped` first ships in a container here.

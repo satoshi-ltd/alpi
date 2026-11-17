@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { setSessionTitle } from "../lib/session-titles.js";
 
 import ChatPane from "./ChatPane.jsx";
 
@@ -26,6 +27,61 @@ function renderEmpty(profile, extra = {}) {
 }
 
 describe("ChatPane — an empty thread", () => {
+  const base = { name: "curator", model: "prov/base", shape: "arch", accent: "#f05940" };
+  const latest = { id: "s-1", kind: "chat", first_user: "Can we modify a booking\n after an early check-out?", updated_at: Math.floor(Date.now() / 1000) - 8 * 86400 };
+
+  it("introduces the profile with its bio, clamped by the stylesheet, and the full text on hover", () => {
+    const bio = "Migration assistant for MINT: inventories legacy bots, jobs and data, classifies reuse/repair/replace/retire, runs parallel comparisons and prepares staff-device authorization handoffs.";
+    const { container } = renderEmpty({ ...base, bio: `  ${bio}\n` });
+    const line = container.querySelector("p[class*='emptyBio']");
+    expect(line.textContent).toBe(bio);
+    expect(line.getAttribute("title")).toBe(bio);
+    expect(line.className).toMatch(/emptyBio/);
+  });
+
+  it("shows no bio line when the profile has none", () => {
+    const { container } = renderEmpty({ ...base, bio: "   " });
+    expect(container.querySelector("[class*='emptyBio']")).toBeNull();
+  });
+
+  it("offers to continue the latest chat session and opens it", () => {
+    const onChangeSession = vi.fn();
+    renderEmpty({ ...base, latest_session: latest }, { onChangeSession });
+    const button = screen.getByRole("button", { name: /Continue “Can we modify a booking after an early check-out\?”/ });
+    expect(button.textContent).toContain("1w");
+    fireEvent.click(button);
+    expect(onChangeSession).toHaveBeenCalledWith("s-1");
+  });
+
+  it("titles Continue with the name the user gave the session", () => {
+    setSessionTitle(null, "curator", "s-1", "Early check-outs");
+    try {
+      renderEmpty({ ...base, latest_session: latest }, { onChangeSession: vi.fn() });
+      expect(screen.getByRole("button", { name: /Continue “Early check-outs”/ })).toBeInTheDocument();
+    } finally {
+      setSessionTitle(null, "curator", "s-1", "");
+    }
+  });
+
+  it("renames Continue as soon as the session is renamed, and names its age apart from the title", () => {
+    try {
+      renderEmpty({ ...base, latest_session: latest }, { onChangeSession: vi.fn() });
+      expect(screen.getByRole("button", { name: "Continue “Can we modify a booking after an early check-out?”, 1w" })).toBeInTheDocument();
+      act(() => { setSessionTitle(null, "curator", "s-1", "Early check-outs"); });
+      expect(screen.getByRole("button", { name: "Continue “Early check-outs”, 1w" })).toBeInTheDocument();
+    } finally {
+      setSessionTitle(null, "curator", "s-1", "");
+    }
+  });
+
+  it("offers no Continue without a chat session to go back to", () => {
+    for (const latest_session of [null, { id: "w-1", kind: "workgroup", first_user: "hub post" }, { id: "s-2", kind: "chat", first_user: "  " }]) {
+      const { unmount } = renderEmpty({ ...base, latest_session }, { onChangeSession: vi.fn() });
+      expect(screen.queryByRole("button", { name: /^Continue/ })).toBeNull();
+      unmount();
+    }
+  });
+
   it("shows the profile's own shape at hero size, never Twin", () => {
     const { container } = renderEmpty({ name: "lens", model: "prov/base", shape: "bell", accent: "#3899e2" });
     expect(hero(container, "bell").dataset.mark).toBe("bell");

@@ -4,7 +4,7 @@ import { lineHeights, space, tracking } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeContext';
 import { Button } from './Button';
 
-export function EmptyState({ title, detail, action, mark, hero = false, monoDetail = false, maxWidth, alert = false }) {
+export function EmptyState({ title, lead = null, detail, action, footer = null, mark, hero = false, monoDetail = false, maxWidth, alert = false }) {
   const { colors, fonts, fontSizes } = useTheme();
   const titleSize = hero ? fontSizes.xxl : fontSizes.xl;
   return (
@@ -27,6 +27,7 @@ export function EmptyState({ title, detail, action, mark, hero = false, monoDeta
         >
           {title}
         </Text>
+        {lead}
         {detail ? (
           <Text
             style={{
@@ -46,6 +47,7 @@ export function EmptyState({ title, detail, action, mark, hero = false, monoDeta
             <Button title={action.label} variant="secondary" size="md" onPress={action.onPress} />
           </View>
         ) : null}
+        {footer}
       </View>
     </View>
   );

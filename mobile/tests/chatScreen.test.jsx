@@ -659,6 +659,16 @@ describe('Reply from a notification', () => {
     expect(h.sessionIds.at(-1)).toBe('s-latest');
   });
 
+  it('offers to continue the latest chat from a fresh thread and opens it there', () => {
+    h.profile = { ...READY, bio: 'Keeps the knowledge base current.', latest_session: { kind: 'chat', id: 's-latest', first_user: 'Early check-outs', updated_at: 1 } };
+    h.params = { id: 'doc', fresh: '1' };
+    render(<ProfileChat />);
+    expect(screen.getByText('Keeps the knowledge base current.')).toBeTruthy();
+    expect(h.sessionIds.at(-1)).toBeNull();
+    fireEvent.click(document.querySelector('[testid="thread-continue"]'));
+    expect(h.sessionIds.at(-1)).toBe('s-latest');
+  });
+
   it('resumes the latest session with an empty composer otherwise', () => {
     h.profile = LATEST;
     const { container } = render(<ProfileChat />);

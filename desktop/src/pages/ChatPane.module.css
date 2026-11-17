@@ -70,6 +70,39 @@
   color: var(--ink-2);
 }
 
+.emptyBio {
+  margin: 0;
+  max-width: 520px;
+  font-family: var(--font-sans);
+  font-size: var(--text-ui);
+  line-height: 1.45;
+  color: var(--ink-2);
+  text-align: center;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.emptyContinue {
+  max-width: min(440px, 100%);
+}
+
+.emptyContinueTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emptyContinueTime {
+  flex: none;
+  font-size: var(--text-meta);
+  color: var(--ink-3);
+}
+
 .emptyModel {
   font-family: var(--font-mono);
   font-size: var(--text-mono);

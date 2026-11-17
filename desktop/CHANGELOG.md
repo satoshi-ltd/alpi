@@ -11,6 +11,13 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.10.8 — 2026-11-17 — a blank chat that introduces the profile
+
+- A new chat shows the profile's bio under "Start a new thread", up to three lines, with the whole text on hover.
+- A Continue button reopens the profile's latest chat, titled by its first message (or the name you gave it) and how long ago it was.
+- Each appears only when the profile has one.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.10.7 — 2026-11-16 — eyes on the pointer
 
 - The profile on a new chat turns to the mouse again: while it follows the pointer it faces front and drops its own turn, so only the pointer turns it.

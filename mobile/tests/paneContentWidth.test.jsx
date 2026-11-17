@@ -29,6 +29,7 @@ vi.mock('react-native', () => {
     View,
     Text,
     Pressable,
+    ScrollView: ({ children, contentContainerStyle, keyboardShouldPersistTaps, showsVerticalScrollIndicator, ...p }) => React.createElement('div', p, children),
     FlatList,
     KeyboardAvoidingView: ({ children }) => React.createElement('div', { 'data-kav': 'true' }, children),
     Platform: { OS: 'ios', select: (sel) => sel?.ios ?? sel?.default },

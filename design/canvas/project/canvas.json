@@ -68,7 +68,7 @@
    "x": 0,
    "y": 10660,
    "w": 1280,
-   "h": 3040,
+   "h": 3200,
    "title": "Desktop \u00b7 conversation",
    "page": "system"
   },
@@ -76,13 +76,13 @@
    "x": 1360,
    "y": 10660,
    "w": 1280,
-   "h": 2580,
+   "h": 2700,
    "title": "Mobile \u00b7 conversation",
    "page": "system"
   },
   "System-DesktopWorkgroup.dc.html": {
    "x": 0,
-   "y": 13940,
+   "y": 14100,
    "w": 1280,
    "h": 2260,
    "title": "Desktop \u00b7 workgroups",
@@ -90,7 +90,7 @@
   },
   "System-MobileWorkgroup.dc.html": {
    "x": 1360,
-   "y": 13940,
+   "y": 14100,
    "w": 1280,
    "h": 1560,
    "title": "Mobile \u00b7 workgroups",
@@ -671,14 +671,6 @@
    "h": 590,
    "title": "Brand \u00b7 gate",
    "page": "brand"
-  },
-  "Proposals-SHAPE.VOLUME.dc.html": {
-   "x": 0,
-   "y": 240,
-   "w": 1280,
-   "h": 3100,
-   "title": "Proposals \u00b7 shape.volume \u00b7 a soft, moving highlight makes the twelve shapes read as 3d solids",
-   "page": "proposals"
   }
  },
  "order": [
@@ -761,8 +753,7 @@
   "Brand-Motion.dc.html",
   "Brand-Names.dc.html",
   "Brand-Workgroups.dc.html",
-  "Brand-Gate.dc.html",
-  "Proposals-SHAPE.VOLUME.dc.html"
+  "Brand-Gate.dc.html"
  ],
  "notes": {
   "s-Foundations": {
@@ -791,7 +782,7 @@
   },
   "s-Workgroups": {
    "x": 0,
-   "y": 13717,
+   "y": 13877,
    "text": "Workgroups",
    "kind": "title1",
    "maxW": 2600,
@@ -1124,14 +1115,6 @@
    "kind": "title1",
    "maxW": 2600,
    "page": "brand"
-  },
-  "p-SHAPE.VOLUME \u00b7 A soft, moving highlight makes the twelve shapes read as 3D solids": {
-   "x": 0,
-   "y": 17,
-   "text": "SHAPE.VOLUME \u00b7 A soft, moving highlight makes the twelve shapes read as 3D solids",
-   "kind": "title1",
-   "maxW": 2600,
-   "page": "proposals"
   }
  },
  "designSystems": []

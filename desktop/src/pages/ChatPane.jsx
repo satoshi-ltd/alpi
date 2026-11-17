@@ -28,6 +28,11 @@ import Markdown from "../primitives/Markdown.jsx";
 import { ACCENT_HEXES } from "../../../common/accents.mjs";
 import ExportMenu from "../features/ExportMenu.jsx";
 import { MARK_SIZES } from "../../../common/agentMarks.mjs";
+import { CONTINUE_LABEL, introBio, introSession } from "../../../common/threadIntro.mjs";
+import { displaySessionTitle, subscribeSessionTitles } from "../lib/session-titles.js";
+import { relativeTime } from "../lib/time.js";
+import { useNow } from "../hooks/useNow.js";
+import Icon from "../primitives/Icon.jsx";
 import ProducedImages from "../primitives/ProducedImages.jsx";
 import { setImageRoots } from "../lib/imageRoots.js";
 import { Banner, JumpToLatest, LoadFailed, MessageBubble, ProfileChatHeader } from "../primitives/index.js";
@@ -222,6 +227,17 @@ export default function ChatPane({
     onTogglePauseProfile && activeProfile ? () => onTogglePauseProfile(activeProfile) : null;
   const sessionModelOverride = canManageProfileSurfaces ? modelOverride : null;
   const effectiveModel = pickEffectiveModel(sessionModelOverride, activeProfile?.model);
+  const [titlesSeen, setTitlesSeen] = useState(0);
+  useEffect(() => subscribeSessionTitles(() => setTitlesSeen((n) => n + 1)), []);
+  const latest = activeProfile?.latest_session;
+  const latestKey = latest ? [latest.id, latest.kind, latest.first_user, latest.updated_at, latest.mtime, latest.started_at].join("\u0000") : "";
+  const profileBio = introBio(activeProfile);
+  const continueSession = useMemo(() => {
+    const session = introSession(activeProfile);
+    if (!session) return null;
+    const title = displaySessionTitle({ id: session.id, first_user: session.title }, { connectionId, profile: activeProfile?.name });
+    return { ...session, title };
+  }, [latestKey, connectionId, activeProfile?.name, titlesSeen]);
   const contextWindow = useContextWindow(activeProfile?.name, effectiveModel, connectionId);
   const liveCtxTokens = pendingTurn?.ctxTokens ?? null;
 
@@ -352,6 +368,9 @@ export default function ChatPane({
           heroState={heroState}
           profileName={activeProfile?.name ?? null}
           profileModel={activeProfile?.model ?? null}
+          profileBio={profileBio}
+          latestSession={continueSession}
+          onContinueSession={onChangeSession}
           voiceId={activeProfile?.voice_id ?? activeDetail?.voice_id ?? null}
           onRewriteMessage={paused ? null : onRewriteMessage}
           onRetryMessage={paused ? null : onRetryMessage}
@@ -403,6 +422,9 @@ function SessionView({
   heroState,
   profileName,
   profileModel,
+  profileBio,
+  latestSession,
+  onContinueSession,
   voiceId,
   onRewriteMessage,
   onRetryMessage,
@@ -429,6 +451,9 @@ function SessionView({
         heroState={heroState}
         profileName={profileName}
         profileModel={profileModel}
+        profileBio={profileBio}
+        latestSession={latestSession}
+        onContinueSession={onContinueSession}
         voiceId={voiceId}
         onRewriteMessage={onRewriteMessage}
         onRetryMessage={onRetryMessage}
@@ -445,6 +470,23 @@ function SessionView({
   );
 }
 
+function ContinueButton({ session, onOpen }) {
+  const age = relativeTime(session.ts, useNow());
+  return (
+    <Button
+      variant="secondary"
+      size="sm"
+      icon={<Icon name="history" />}
+      className={styles.emptyContinue}
+      onClick={() => onOpen(session.id)}
+      aria-label={[`${CONTINUE_LABEL} “${session.title}”`, age].filter(Boolean).join(", ")}
+    >
+      <span className={styles.emptyContinueTitle}>{CONTINUE_LABEL} “<bdi>{session.title}</bdi>”</span>
+      {age ? <span className={styles.emptyContinueTime}>{age}</span> : null}
+    </Button>
+  );
+}
+
 const Transcript = memo(function Transcript({
   data,
   connectionId,
@@ -457,6 +499,9 @@ const Transcript = memo(function Transcript({
   heroState,
   profileName,
   profileModel,
+  profileBio,
+  latestSession,
+  onContinueSession,
   voiceId,
   onRewriteMessage,
   onRetryMessage,
@@ -531,9 +576,11 @@ const Transcript = memo(function Transcript({
       <div className={styles.empty}>
         <Fold shape={shape} color={accent || "var(--accent)"} size={MARK_SIZES.hero} state={heroState} watch />
         <div className={styles.emptyHeading}>Start a new thread</div>
+        {profileBio && <p className={styles.emptyBio} title={profileBio}>{profileBio}</p>}
         {profileModel && (
           <div className={styles.emptyModel}>{profileModel}</div>
         )}
+        {latestSession && onContinueSession && <ContinueButton session={latestSession} onOpen={onContinueSession} />}
         {inlineBlock}
       </div>
     );

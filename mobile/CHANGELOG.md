@@ -14,6 +14,13 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.10.4 — 2026-11-17 — a blank chat that introduces the profile
+
+- A new thread shows the profile's bio under "Start a new thread", up to five lines.
+- A Continue button reopens the profile's latest chat, titled by its first message and how long ago it was.
+- Each appears only when the profile has one.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.10.3 — 2026-11-16 — nothing lost on the way back
 
 - Adding a provider key, an MCP server, an email account or a peer, and accepting a peer, ask before back drops what you typed.

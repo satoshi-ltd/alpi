@@ -1592,7 +1592,10 @@ hand, `design/drift.py` fails when they drift). Both clients, the site and the i
   merge it with the roster: paused first, then a missing provider, then needs you, then the session state when it is not idle, then
   failed, working and unread; on the phone the shared session store counts every mounted chat of a profile, so closing the top
   one of a stack hands the row to the one below. The big profile mark of an empty thread
-  ("Start a new thread", "needs a model") wears the same state, so a paused profile draws it paused; an empty workgroup's
+  ("Start a new thread", "needs a model") wears the same state, so a paused profile draws it paused. Under "Start a new thread" both
+  clients show the profile's `bio` from `host.profile.summaries` (cut at three lines on desktop, with the full text on hover,
+  and five on the phone) and a Continue row into its `latest_session` titled by its first message (the user's own title on
+  desktop) and its age; each is hidden when there is none, and `common/threadIntro.mjs` picks both. An empty workgroup's
   honeycomb wears the workgroup's state. A workgroup has no disabled look: its states are those of
   `common/workgroupMarkState.mjs`.
 - **Motion policy**: only the hero-size profile mark of an empty thread follows the pointer on desktop (`watch` on `Fold`, which

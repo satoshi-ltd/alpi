@@ -36,6 +36,7 @@ vi.mock('react-native', () => {
     View,
     Text,
     Pressable,
+    ScrollView: ({ children, contentContainerStyle, keyboardShouldPersistTaps, showsVerticalScrollIndicator, ...p }) => React.createElement('div', p, children),
     TextInput,
     Modal: ({ children, visible }) => (visible ? React.createElement('div', { 'data-modal': '' }, children) : null),
     useWindowDimensions: () => ({ height: 852, width: 393 }),

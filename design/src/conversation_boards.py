@@ -1,5 +1,5 @@
 from gen import ic as _ic, R_SHEET, DANGER, DOC_ACCENT, WELL, FLOAT_EDGE, R_XS, R_CHIP, R_CONTROL, R_SURFACE, NEST, di as ic, identity_glyph, m_button, mi, mix, page, profile_mark, ladder_px, mono_px
-from desktop_boards import ELEV, HOVER, INK, INK2, INK3, INK4, LINE, LINE2, MONO, PANE, SELECTED, SM_FLOAT, CARD
+from desktop_boards import ELEV, FILL, HOVER, INK, INK2, INK3, INK4, LINE, LINE2, MONO, PANE, SELECTED, SM_FLOAT, CARD
 
 AMBER = "#14110c"
 BRAND = "#14110c"
@@ -311,14 +311,14 @@ def desktop_conversation():
 {spec("Alpi message · markdown body, actions flush with the left edge then the faint time, on hover or focus within and at rest on the last message, usage in a tooltip on the time", d_assistant("<strong>Deploy summary</strong>: 14 jobs ran; 2 failed.<ul style='margin: 8px 0; padding-left: 22px'><li>" + code_inline("api-migrate") + " timed out after 300s</li><li>" + code_inline("web-build") + " hit a lint error</li></ul>" + d_code_block("bash", "alpi logs api-migrate --tail 50") + d_table() + "Want me to open a fix?"), 1184)}
 {row(spec("Work line · after the answer: the profile’s mark at the 24 px row size, how long the turn worked, its steps and any failures, one chevron after the label", process(work_line("done", secs="34s", steps=6, failed=1)), 380), spec("Work line · while it works: the mark working, the newest step in plain words, a clock at the right (still under reduced motion)", process(work_line("running", action="Fetching status.example.com", secs="8s")), 380), spec("Work line · opened: every step in the order it happened, indented under the mark, each still closed", process(work_line("done", secs="34s", steps=4, open_=True), work_steps(d_thought(secs="3s"), d_step("read_file", "deploy.log · first 200 lines", "0.2s"), d_thought(secs="2s"), d_step("grep", "3 matches for exit=1", "0.1s"))), 380))}
 {row(spec("Work line · a step opens to its arguments and output", process(work_line("done", secs="34s", steps=6, failed=1, open_=True), work_steps(d_step("shell", "npm run lint", "4.1s", "failed", step_body(["$ npm run lint", '<span style="color: #c14545">src/app.ts:14  no-unused-vars</span>', "1 error, 0 warnings"])), d_step("grep", "3 matches for exit=1", "0.1s"))), 580), spec("Inline approval · the open chat asks in the flow on a card with an ink-4 ring; one primary action and three ghost alternatives; a question uses the same card", inline_request() + inline_ask(), 580))}
-{spec("Load skeleton · after 450 ms", d_skeleton(), 580)}
+{row(spec("Load skeleton · after 450 ms", d_skeleton(), 580), spec("Empty thread · the profile’s bio, three lines at most with the full text on hover, and Continue into its latest chat session; each only when there is one", d_empty(), 580))}
 {row(spec("Attachments · composer and message variants", d_attachment("deploy-report.pdf", "1.2 MB") + d_attachment("chart.png", "png · 240 KB", "message"), 380), spec("Produced images · 2-column grid, 4:3", d_images(), 380), spec("Ask user · answered and unanswered", d_ask_answered() + d_ask_missing(), 380))}
 {row(spec("Composer · idle", d_composer(), 580), spec("Composer · ready to send", d_composer("Open a fix for the lint error", "ready"), 580))}
 {row(spec("Composer · busy (Stop)", d_composer("Open a fix for the lint error", "busy"), 580), spec("Mention popover · peer alias caption, 1 px edge ring · jump to latest", row(d_mention(), d_jump()), 580))}
 {row(spec("Composer · model label capped at 160 px with an ellipsis, the effort stays after it", d_composer(model_name="claude-sonnet-4-5-20251001-extended", effort="medium"), 580), spec("Composer · paused: grey only here, with no edge; the input dims and the banner above is the one place that says it and offers Resume", d_composer(name="doc", dim=True, placeholder="Paused — resume to chat"), 580))}
 {row(spec("Composer · offline: the placeholder stays normal, the reason line is the only offline text", d_composer(name="doc", dim=True, reason="Daemon offline — sending paused"), 580), spec("Mention popover · empty rows: no peers, no match", d_mention(empty="No peers yet. Add one in Connections.") + d_mention(empty="No peer matches @zz"), 580))}
 </div>"""
-    return page("System · desktop conversation", 1280, 3040, body)
+    return page("System · desktop conversation", 1280, 3200, body)
 
 
 
@@ -504,9 +504,42 @@ def m_jump():
     return f'<span style="display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border-radius: {R_CONTROL}px; background: var(--bg-elev, #ffffff); {FLOAT_EDGE}; font-size: 14px; font-weight: 500; color: {INK2}">{mi("chev-d", 14, INK2)}Latest</span>'
 
 
+EMPTY_BIO = "Keeps the team’s knowledge base current and answers from it, with sources."
+EMPTY_LAST = ("Can we modify a booking after an early check-out?", "1w")
+
+
+def thread_bio(lines, w):
+    return (f'<span style="max-width: {w}px; font-size: 15px; line-height: 1.45; color: {INK2}; text-align: center; display: -webkit-box; -webkit-box-orient: vertical; '
+            f'-webkit-line-clamp: {lines}; overflow: hidden">{EMPTY_BIO}</span>')
+
+
+def thread_continue(phone):
+    title, when = EMPTY_LAST
+    glyph = mi("history", 16, INK2) if phone else ic("history", 16, INK2)
+    edge = f"background: {FILL}"
+    return (f'<span role="button" style="display: inline-flex; align-items: center; gap: 8px; height: {44 if phone else 32}px; max-width: {300 if phone else 440}px; padding: 0 {16 if phone else 12}px; '
+            f'box-sizing: border-box; border-radius: 999px; {edge}; font-size: 14px; font-weight: 500; color: {INK}">{glyph}'
+            f'<span style="min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Continue “{title}”</span><span style="font-size: 12px; font-weight: 400; color: {INK3}">{when}</span></span>')
+
+
+def d_empty():
+    import marks
+    hero = marks.shape_mark("arch", "#f05940", 72, seed="empty-d")
+    return (f'<div style="display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 32px 0">{hero}'
+            f'<span style="font-size: 20px; font-weight: 600; letter-spacing: -0.018em; line-height: 1.3; color: {INK}">Start a new thread</span>'
+            f'{thread_bio(3, 520)}{mono("deepseek-v4.1-flash", 12)}{thread_continue(False)}</div>')
+
+
 def m_empty():
     from gen import m_empty_state
-    return m_empty_state("Start a new thread", "sonnet-4", mark=identity_glyph("alpi", AMBER, 72), mono_detail=True, hero=True)
+    import marks
+    drawn = m_empty_state("Start a new thread", "deepseek-v4.1-flash", mark=marks.shape_mark("arch", "#f05940", 72, seed="empty-m"), mono_detail=True, hero=True)
+    head = '<span style="font-weight: 600; font-size: 20px;'
+    at = drawn.index("</span>", drawn.index(head)) + len("</span>")
+    drawn = drawn[:at] + thread_bio(5, 280) + drawn[at:]
+    tail = "</div></div>"
+    assert drawn.endswith(tail)
+    return drawn[: -len(tail)] + f'<div style="margin-top: 8px">{thread_continue(True)}</div>' + tail
 
 
 def m_mention_popover(items=(), token="zz"):
@@ -538,7 +571,7 @@ def m_chat_states():
 def mobile_conversation():
     body = f"""<div style="padding: 40px 48px; display: flex; flex-direction: column; gap: 24px; box-sizing: border-box">
 {h1("Conversation · phone and Fold", "The phone draws the same conversation with touch rules: bubbles at radius 4, chat text at 16, actions behind a long press (with Select text), steps that open into a sheet, and a composer where Return adds a line and the model chip sits beside attach.")}
-{row(spec("Chat header · profile", m_header("profile"), 420, 0), spec("Chat header · workgroup", m_header("workgroup"), 420, 0), spec("Empty thread", m_empty(), 300))}
+{row(spec("Chat header · profile", m_header("profile"), 420, 0), spec("Chat header · workgroup", m_header("workgroup"), 420, 0), spec("Empty thread · bio up to five lines and Continue into the latest chat session, each only when there is one", m_empty(), 300))}
 {row(spec("User message · neutral selected tone, radius 4, long press for actions", phone(m_user("Can you summarize yesterday’s deploy logs?")), 420, 16), spec("Alpi message · rich text: heading, quote, list, code, routed model", phone(m_assistant()), 420, 16))}
 {row(spec("Work line · one 36 pt line with the 24 pt mark; a tap opens the steps in place and a step still opens its sheet", phone(work_line("done", secs="34s", steps=5, failed=1, open_=True, phone=True) + work_steps(m_reasoning(secs="3s"), m_tool("read_file", "deploy.log · 200 lines"), m_tool("shell", "npm run lint", "failed"), m_reasoning(True, "2s"), phone=True) + work_line("running", action="Reading deploy.log", secs="6s", phone=True)), 420, 16), spec("Attachments · composer and message", m_attachment("deploy-report.pdf", "1.2 MB") + m_attachment("chart.png", "png · 240 KB", "message"), 420))}
 {row(spec("Composer · idle", phone(m_composer()), 420, 0), spec("Composer · ready", phone(m_composer("Open a fix", "ready")), 420, 0))}
@@ -547,7 +580,7 @@ def mobile_conversation():
 {row(spec("Mention · 44 pt rows on the composer’s 16 pt edge, scrolls past four", phone(m_mention_popover((("mira", AMBER, True, "deepseek-v4.1"), ("morpheus", BUILDER, False, "sonnet-4"), ("maya", DOC_ACCENT, False, "gpt-5")), "m") + m_composer(workgroup=True, text="@m", mention=True)), 420, 0), spec("Mention · no match says so", phone(m_mention_popover() + m_composer(workgroup=True, text="@zz", mention=True)), 420, 0))}
 {row(spec("Banners and failures · paused is the warning banner with Resume; each failure is one row: icon, sentence, Retry", m_chat_states(), 420, 0), spec("Last agent message · the visible ‘…’ opens the same actions as a long press", phone(m_agent_text("Triglycerides moved most: <strong>142 → 88 mg/dL</strong> since March.", more=True)), 420, 16))}
 </div>"""
-    return page("System · mobile conversation", 1280, 2580, body)
+    return page("System · mobile conversation", 1280, 2700, body)
 
 
 def m_post(name, color, text, seq, side="left"):

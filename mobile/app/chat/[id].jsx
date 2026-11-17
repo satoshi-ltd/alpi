@@ -37,6 +37,7 @@ import { profileLabel } from '../../src/lib/profileName';
 import { mergeStreamingTurn, isInterruptedTurn, isLastTurnInFlight, consumeAutoRead, routedModelFor, baselineModelFor, turnFrontier, turnLandedSince, reasoningStreams } from '../../src/features/chat/chatTurns';
 import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
 import { EmptyThread } from '../../src/features/chat/EmptyThread';
+import { introBio, introSession } from '../../../common/threadIntro.mjs';
 import { KeyboardDismissArea } from '../../src/components/KeyboardDismissArea';
 import { useDismissKeyboard } from '../../src/hooks/useDismissKeyboard';
 import { JumpToLatest, JUMP_THRESHOLD } from '../../src/features/chat/JumpToLatest';
@@ -224,7 +225,7 @@ function AskUserAnswer({ result, question, accent, shape, colors, fonts, fontSiz
   );
 }
 
-function ChatList({ turns, pendingTurn, hydrating, profileName, model, accent, shape, markState, onActionTarget, colors, fonts, fontSizes, turnsBase = 0, hasMoreRemote = false, onLoadOlder, sessionInFlight = false, loadError = null, onRetryLoad }) {
+function ChatList({ turns, pendingTurn, hydrating, profileName, model, accent, shape, markState, intro = null, onContinue = null, onActionTarget, colors, fonts, fontSizes, turnsBase = 0, hasMoreRemote = false, onLoadOlder, sessionInFlight = false, loadError = null, onRetryLoad }) {
   const [pageSize, setPageSize] = useState(INITIAL_PAGE);
   const [farFromLatest, setFarFromLatest] = useState(false);
   const listRef = useRef(null);
@@ -286,6 +287,9 @@ function ChatList({ turns, pendingTurn, hydrating, profileName, model, accent, s
           accent={accent}
           shape={shape}
           state={markState}
+          bio={intro?.bio}
+          session={intro?.session}
+          onContinue={onContinue}
         />
       </KeyboardDismissArea>
     );
@@ -405,6 +409,7 @@ function ProfileChatInner() {
   const opening = summaries.loading && !profile;
   const holding = useBusyVisible(opening);
 
+  const intro = useMemo(() => ({ bio: introBio(profile), session: introSession(profile) }), [profile]);
   const latestChatId =
     profile?.latest_session?.kind === 'chat' ? profile.latest_session.id : null;
   const seedSessionId = useMemo(() => {
@@ -804,6 +809,11 @@ function ProfileChatInner() {
             accent={accent}
             shape={profile.shape}
             markState={headerMark}
+            intro={intro}
+            onContinue={(sid) => {
+              setSessionPicked(true);
+              setSessionId(sid);
+            }}
             onActionTarget={setActionTarget}
             colors={colors}
             fonts={fonts}
