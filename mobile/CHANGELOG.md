@@ -14,6 +14,11 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.10.5 — 2026-11-17 — current with its SDK
+
+- Expo SDK 55 and React Native are on the latest patch releases the SDK supports (React Native 0.83.10), picking up their upstream fixes.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.10.4 — 2026-11-17 — a blank chat that introduces the profile
 
 - A new thread shows the profile's bio under "Start a new thread", up to five lines.

@@ -408,6 +408,23 @@ _None._
 
 ### Found while shipping mobile 0.9.14
 
+### Found while shipping mobile 0.10.5
+
+- **MOB.SDK-58** — The phone moves from Expo SDK 55 to SDK 58
+  `chore · mobile · agent · normal`
+  note: mobile 0.10.5 sits on the last SDK 55 patches (React Native 0.83.10, reanimated 4.2); SDK 58 ships React Native
+  0.88, React 19.3, reanimated 4.7 with worklets 0.13 and svg 15.16. Step one SDK at a time (56, 57, 58) with
+  `npx expo install expo@^<n> --fix`, each step's upgrade guide, `expo-doctor` clean and the suite green; the native
+  modules and config plugins must survive `expo prebuild`. The device check is MOB.SDK-58-VERIFY.
+  accept: `mobile/package.json` on `expo ~58`, `npx -y expo-doctor@latest` passes every check, `npm ci --dry-run` passes,
+  the mobile suite is green and `npx expo prebuild --clean --no-install` succeeds for iOS and Android.
+
+- **MOB.SDK-58-VERIFY** — The SDK 58 build behaves on iOS and Android
+  `verify · mobile · creator · normal`
+  depends: MOB.SDK-58
+  accept: an EAS build of each platform installs over the SDK 55 build, keeps the pairing, and the chat, its marks'
+  motion, notifications, the camera pairing and the fold layout behave as before.
+
 ### Found while shipping mobile 0.9.16
 
 - **MOB.RADIO-CHECKED** — TalkBack announces which segment is chosen
