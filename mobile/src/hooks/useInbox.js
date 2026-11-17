@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { FALLBACK_ACCENT } from '../../../common/shapes.mjs';
+import { accentLookup } from '../../../common/workgroupMarkState.mjs';
 import { useEndpoint } from '../lib/EndpointContext';
 import { profileEmptyState } from '../lib/profileReady';
 import { profileLabel } from '../lib/profileName';
@@ -114,6 +115,7 @@ export function useInbox() {
       };
     });
     const profileByName = new Map((profilesQ.data?.profiles ?? []).map((p) => [p.name, p]));
+    const accentOf = accentLookup(profilesQ.data?.profiles);
     const wgItems = (wgsQ.data?.workgroups ?? []).map((w) => {
       const wgTs = w.mtime ?? 0;
       const unread = !w.paused && wgTs > 0 && checkWorkgroup(w.profile, w.id, wgTs);
@@ -126,6 +128,7 @@ export function useInbox() {
         name: w.name ?? w.id,
         label: w.name ?? w.id,
         accent: hub?.accent ?? FALLBACK_ACCENT,
+        accentOf,
         paused: w.paused,
         preview: workgroupPreview(w),
         unread,

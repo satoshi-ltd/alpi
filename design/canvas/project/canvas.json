@@ -148,13 +148,13 @@
    "x": 0,
    "y": 14000,
    "w": 1280,
-   "h": 850,
+   "h": 900,
    "title": "Desktop \u00b7 connections",
    "page": "desktop"
   },
   "Desktop-AppSettings.dc.html": {
    "x": 0,
-   "y": 15090,
+   "y": 15140,
    "w": 1280,
    "h": 1250,
    "title": "Desktop \u00b7 app settings",
@@ -162,7 +162,7 @@
   },
   "Desktop-FirstRun.dc.html": {
    "x": 0,
-   "y": 16580,
+   "y": 16630,
    "w": 1280,
    "h": 5660,
    "title": "Desktop \u00b7 first run",
@@ -170,7 +170,7 @@
   },
   "Desktop-Overlays.dc.html": {
    "x": 0,
-   "y": 22480,
+   "y": 22530,
    "w": 1280,
    "h": 3380,
    "title": "Desktop \u00b7 overlays",
@@ -178,7 +178,7 @@
   },
   "Desktop-Tray.dc.html": {
    "x": 0,
-   "y": 26100,
+   "y": 26150,
    "w": 1280,
    "h": 4400,
    "title": "Desktop \u00b7 tray",
@@ -186,7 +186,7 @@
   },
   "Desktop-TrayIcon.dc.html": {
    "x": 0,
-   "y": 30740,
+   "y": 30790,
    "w": 1280,
    "h": 1590,
    "title": "Desktop \u00b7 tray icon",
@@ -846,7 +846,7 @@
   },
   "d-App settings": {
    "x": 0,
-   "y": 14867,
+   "y": 14917,
    "text": "App settings",
    "kind": "title1",
    "maxW": 2600,
@@ -854,7 +854,7 @@
   },
   "d-First run": {
    "x": 0,
-   "y": 16357,
+   "y": 16407,
    "text": "First run",
    "kind": "title1",
    "maxW": 2600,
@@ -862,7 +862,7 @@
   },
   "d-Overlays": {
    "x": 0,
-   "y": 22257,
+   "y": 22307,
    "text": "Overlays",
    "kind": "title1",
    "maxW": 2600,
@@ -870,7 +870,7 @@
   },
   "d-Tray": {
    "x": 0,
-   "y": 25877,
+   "y": 25927,
    "text": "Tray",
    "kind": "title1",
    "maxW": 2600,
@@ -878,7 +878,7 @@
   },
   "d-Tray icon": {
    "x": 0,
-   "y": 30517,
+   "y": 30567,
    "text": "Tray icon",
    "kind": "title1",
    "maxW": 2600,

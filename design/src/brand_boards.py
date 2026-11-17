@@ -183,11 +183,11 @@ def honeycomb_strip():
 
 
 def pipeline_turns():
-    blue = am.COLOUR["blue"]
     out = []
-    for done, (phase, owner) in enumerate((("fetch", "yuri"), ("translate", "lingo"), ("file", "etxea"))):
-        out.append(row(cell(wg.honeycomb(blue, 56, "running", phase=(done, 3), seed="pt" + owner), f"{done}/3 · {wg.current_cell((done, 3))}"),
-                       cell(wg.honeycomb(blue, ROW, "running", phase=(done, 3)), f"{ROW} still"), tag(f"Working · {phase} · @{owner}", INK2, 11), gap=10, align="center"))
+    for done, (phase, owner, colour) in enumerate((("fetch", "yuri", "rose"), ("translate", "lingo", "violet"), ("file", "etxea", "green"))):
+        lit = am.COLOUR[colour]
+        out.append(row(cell(wg.honeycomb(lit, 56, "running", phase=(done, 3), seed="pt" + owner), f"{done}/3 · {wg.current_cell((done, 3))}"),
+                       cell(wg.honeycomb(lit, ROW, "running", phase=(done, 3)), f"{ROW} still"), tag(f"Working · {phase} · @{owner}", INK2, 11), gap=10, align="center"))
     return f'<div style="display: flex; flex-direction: column; gap: 14px">{"".join(out)}</div>'
 
 
@@ -365,13 +365,13 @@ def names_board():
 
 
 def workgroups_board():
-    return board("workgroups", "Brand · workgroups", "Workgroups are places: a neutral soft honeycomb that lights up in its hub’s accent only when something happens.",
-                 "Three soft cells in neutral ink, without eyes, turning in 3D like the marks. Idle, done and queued stay neutral (queued as an outline); running fills the current phase cell in the hub’s accent, "
-                 "the finished cells faint and the pending ones outlined; needs you squares up and lifts the waiting cell in the hub’s accent; failed fills that cell in the danger tone and turns away; "
-                 "paused is a dashed outline and offline is faint. No member’s colour ever reaches the mark: who works is said in words.",
+    return board("workgroups", "Brand · workgroups", "Workgroups are places: a neutral soft honeycomb that lights up, only when something happens, in the accent of the profile at work.",
+                 "Three soft cells in neutral ink, without eyes, turning in 3D like the marks. Idle, done and queued stay neutral (queued as an outline); running fills the current phase cell in the accent of the profile that owns the phase (the hub’s when the owner is not a profile on this device), "
+                 "the finished cells faint and the pending ones outlined; needs you squares up and lifts the waiting cell in that accent; failed fills that cell in the danger tone and turns away; "
+                 "paused is a dashed outline and offline is faint. The colour says who works, and the meta names them in words.",
                  block(f"States · {wg.PREVIEW} turning, {ROW} and {wg.INLINE} still", honeycomb_strip()),
                  block("The turn follows the pipeline", pipeline_turns(),
-                       caption("The current cell is the phase in progress, so the turn says where the run is, even still at 20 px; the owner of the phase is named in the meta.")),
+                       caption("The current cell is the phase in progress, lit in the colour of the profile that owns it, so the mark says where the run is and who works, even still at 20 px; the meta names the owner.")),
                  block("Titles · neutral ink, cream in dark, never the hub’s tone; rows keep the plain row type", workgroup_names()),
                  block("Sizes · one scale with the marks", honeycomb_sizes()))
 

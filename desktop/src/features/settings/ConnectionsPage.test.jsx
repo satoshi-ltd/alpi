@@ -124,10 +124,20 @@ describe("ConnectionsPage", () => {
     }));
   });
 
-  it("names the profiles a member connection can reach next to its devices and role", async () => {
-    render(<ConnectionsPage profiles={[{ name: "atlas" }]} activeConnection={{ id: "local" }} />);
+  it("leads a member connection with the profiles it reaches, then its role and devices", async () => {
+    render(<ConnectionsPage profiles={[{ name: "atlas", accent: "#3899e2", shape: "bell" }]} activeConnection={{ id: "local" }} />);
     await screen.findByText("Javi");
-    expect(screen.getByText("1 device · member · @atlas")).toBeInTheDocument();
+    const access = screen.getByLabelText("atlas");
+    expect(access.querySelector("[data-shape='bell']")).not.toBeNull();
+    expect(access.nextElementSibling.textContent).toBe("member · 1 device");
+  });
+
+  it("names the scope plainly while the roster is still empty, never as removed", async () => {
+    render(<ConnectionsPage profiles={[]} activeConnection={{ id: "local" }} />);
+    await screen.findByText("Javi");
+    const access = screen.getByRole("group", { name: "atlas" });
+    expect(access.textContent).toBe("atlas");
+    expect(access.querySelector("[title]")).toBeNull();
   });
 
   it("switches a connection to private per-device sessions from the edit modal", async () => {

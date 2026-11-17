@@ -140,7 +140,7 @@ vi.mock('../src/features/aln/deeplink', () => ({ isForeignConnection: () => h.fo
 
 vi.mock('../src/hooks/useActiveRole', () => ({ useCanAdminEarly: () => h.canAdmin }));
 vi.mock('../src/hooks/useDaemonData', () => ({
-  useProfileSummaries: () => ({ data: { profiles: [] }, loading: false, refresh: vi.fn() }),
+  useProfileSummaries: () => ({ data: { profiles: h.profiles ?? [] }, loading: false, refresh: vi.fn() }),
   useWorkgroups: () => ({
     data: { workgroups: h.wg ? [h.wg] : [] },
     loading: false,
@@ -332,6 +332,16 @@ describe('Workgroup header status', () => {
     h.wg = { ...WG, pipeline_status: 'running', pipeline_phase: 'translate', phase_map: { translate: { owner: '@lingua' } } };
     render(<WorkgroupChat />);
     expect(screen.getByText('· Working · translate · @lingua')).toBeTruthy();
+  });
+
+  it('lights the header honeycomb in the colour of the profile that owns the running phase', () => {
+    h.profiles = [{ name: 'Lingua', accent: '#9b5ad9' }];
+    h.wg = { ...WG, pipeline_status: 'running', pipeline_phase: 'translate', phase_map: { translate: { owner: '@lingua' } } };
+    render(<WorkgroupChat />);
+    const marks = [...document.querySelectorAll('[data-shape="honeycomb"]')];
+    h.profiles = null;
+    expect(marks.length).toBeGreaterThan(0);
+    expect(marks[0].getAttribute('data-color')).toBe('#9b5ad9');
   });
 
   it('names who a blocked phase waits on', () => {

@@ -1613,16 +1613,19 @@ hand, `design/drift.py` fails when they drift). Both clients, the site and the i
 - **Sizes**: `MARK_SIZES` inline 16 (in text), row 24 (sidebar rows, menus, the palette), header 28 (beside a title), list 40
   (phone rows, the inbox, pickers), tile 48 (pinned profiles in the sidebar and the roster), hero 72 (empty and first-run pages).
 - **Workgroups** wear the soft honeycomb (`WG_CELLS`, three cells in `WG_ORDER` left, top, right) that turns like the profile
-  marks. A workgroup is neutral and lights up only in its hub's accent, only when something happens: idle, done and queued are
-  neutral ink-3 (queued as an outline, `WG_RING`); running fills the current phase cell (`currentCell`) in the hub's accent, the
+  marks. A workgroup is neutral and lights up only when something happens, in the accent of the profile that owns the live phase
+  (else its hub's): idle, done and queued are
+  neutral ink-3 (queued as an outline, `WG_RING`); running fills the current phase cell (`currentCell`) in that accent, the
   finished cells a faint neutral fill (`WG_ALPHA.faint`) and the pending ones a neutral outline (a run without phase counts chases
-  the hub's accent around the cells); needs draws the other cells in solid neutral ink-3 and the waiting cell in the hub's
+  the hub's accent around the cells); needs draws the other cells in solid neutral ink-3 and the waiting cell in that
   accent, popped out of the honeycomb above row size (`MARK_SIZES.row`: the header and larger pop, rows and inline marks fill it
   flat); failed fills the failed cell in the danger colour; paused is the dashed neutral outline and offline a faint neutral
-  fill. The lit colour (running cell, chase, waiting cell) is `nameTone(hub, ground)`, the hub's hue toned for the theme ground
-  so a pale accent still reads (desktop `--wg-lit-light` / `--wg-lit-dark` on the mark, mobile against the theme `bg`). Without a
-  known hub accent (a hub that is not a profile on this device) the mark lights in the brand ink. No member or owner colour ever
-  reaches the mark: a member's Activity row lights in the accent of its `hub_id`, never of the local member profile.
+  fill. The lit colour (running cell, chase, waiting cell) is `nameTone(accent, ground)`, toned for the theme ground so a pale
+  accent still reads (desktop `--wg-lit-light` / `--wg-lit-dark` on the mark, mobile against the theme `bg`). The accent is
+  `workgroupMarkAccent(mark, hub, accentOf)`: the owner of the running or waiting phase when that owner is a profile on this
+  device, else the hub's accent, else the brand ink (a hub that is not a profile on this device). The desktop sidebar, workgroups
+  page, chat header and settings hero and the phone roster, chat header and settings hero all use it; the Activity rows carry no
+  phase owner and light in the accent of their `hub_id`, never of the local member profile.
   `common/workgroupMarkState.mjs` maps a workgroup, its run and its task to that state (paused, offline, needs, queued, running,
   failed, idle), the phase counts, the phase slug (`step`) and the owner's name (`phaseOwnerName`), both from the same phase,
   which the meta says in words: `workgroupStatusLine` gives "Working · translate · @lingo" and "Needs you · approval · @yuri"
@@ -1635,8 +1638,8 @@ hand, `design/drift.py` fails when they drift). Both clients, the site and the i
   with `lib/nameVars.js`, mobile `theme/name.js`). A workgroup's name in a title (the chat header and the settings hero on
   desktop, the chat and settings headers on the phone) is the same solid Bricolage in neutral ink, cream in dark, never the hub's
   tone, and ink-3 when paused; in rows (sidebar, workgroups page, phone roster, activity) it keeps the plain row type of any
-  other row. The desktop sidebar's phase count of a running workgroup ("2/4") is meta text in the hub's `nameTone` on the
-  sidebar ground (`nameVars(hub, "bgSide")`), never the raw accent.
+  other row. The desktop sidebar's phase count of a running workgroup ("2/4") is meta text in the lit accent's `nameTone` (the
+  phase owner's, else the hub's) on the sidebar ground (`nameVars(accent, "bgSide")`), never the raw accent.
 - `common/markEyes.mjs` places the eyes of a still mark; the exported PDF footer (`common/messageExport.mjs`) signs with Twin.
 - **Site**: `site/scripts/brand.mjs` builds the site's lockup, favicon, social card, profile marks and names from the same modules;
   the hero's flowing "agents" word wears the same `markTone` per theme, and `heroTone` is `toneAgainst` at 3:1 on a given ground.
@@ -2243,7 +2246,14 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   budget reaches 80 %, and for a workgroup while its pipeline needs the user or failed; the phone header carries the same
   dot beside the chip, and its popover speaks the full model id. The settings pages (profile, workgroup, connections) wear the same
   56 px bar: the mark, the name, a 20 px sentence-case "Settings" or "Connections" in `ink3`, the chevron opening their
-  details, and the page's actions ending in Back to chat. The stream is
+  details, and the page's actions ending in Back to chat. The workgroups list wears that bar too: the honeycomb, the name
+  "Workgroups" and its counts behind the chevron. Connections and its audit log put the bar, the search and the table in
+  one centred column the width of the table (`--stream-max` + 200 px; the settings forms keep the left edge beside their
+  rail); each paired connection reads its access first (`common/connectionAccess.mjs`): "All profiles" for an admin or an
+  empty scope, otherwise up to three profiles in scope as their 16 px mark and their name in its `nameTone`, then +N with
+  the rest in the tooltip and every name in the accessible label, and a name the roster no longer has struck in ink 3
+  with no mark; the role and the devices follow in ink 3. The phone's connection list and the Profiles row of its
+  connection detail draw the same access line, and on the fold the list's and the detail's column is centred. The stream is
   a 760 px column (`--stream-max`) with 24 px between turns; your message sits in a `fill` bubble at `surface`, an answer is
   plain 16 px prose; a turn's time sits on its outer edge (the bubble's right edge for yours, the text's left edge for an
   answer) with its actions inside it, so actions hidden at rest never move it. The composer is one pill on the `fill` at `sheet`, at least 56 px: a leading + (attach; its tooltip

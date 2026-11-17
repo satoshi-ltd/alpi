@@ -45,12 +45,12 @@ describe("Sidebar workgroup rows", () => {
     expect(cells(el).every((c) => c.getAttribute("fill-opacity") === null)).toBe(true);
   });
 
-  it("light only the current phase's cell in the hub's colour while running, never the owner's, and name the owner in the tip", () => {
+  it("light only the current phase's cell in its owner's colour while running and name the owner in the tip", () => {
     render(
       <Sidebar
         {...BASE}
         profiles={[...BASE.profiles, { name: "lingo", model: "a/b", accent: "#f36a8a", shape: "heart" }]}
-        workgroups={[{ profile: "alpi", id: "crew", name: "launch-crew", phase_map: { translate: { owner: "lingo" } } }]}
+        workgroups={[{ profile: "alpi", id: "crew", name: "launch-crew", phase_map: { translate: { owner: "@Lingo" } } }]}
         rosterState={{ profiles: {}, workgroups: { "alpi/crew": { state: "working", phase: "translate", phasesDone: 2, phasesTotal: 3 } } }}
       />,
     );
@@ -59,11 +59,12 @@ describe("Sidebar workgroup rows", () => {
     expect(el.dataset.cell).toBe("right");
     const lead = el.querySelector("[data-lead]");
     expect(lead.getAttribute("fill")).toBe("var(--wg-lit)");
-    expect(el.style.getPropertyValue("--wg-lit-light")).toBe(nameTone("#3899e2", palettes.light.bgPane));
+    expect(el.style.getPropertyValue("--wg-lit-light")).toBe(nameTone("#f36a8a", palettes.light.bgPane));
     expect(lead.getAttribute("class")).toBeNull();
-    expect(el.innerHTML).not.toContain("#f36a8a");
     expect(cells(el).slice(0, 2).map((c) => c.getAttribute("fill"))).toEqual(["var(--ink-3)", "var(--ink-3)"]);
-    expect(document.body.innerHTML).toContain("Working · translate · @lingo");
+    expect(document.body.innerHTML).toContain("Working · translate · @Lingo");
+    const count = screen.getByLabelText("phase 2 of 3");
+    expect(count.style.getPropertyValue("--name-light")).toBe(nameTone("#f36a8a", palettes.light.bgSide));
   });
 
   it("count the phases in the hub's name tone on the sidebar ground, never the raw accent", async () => {

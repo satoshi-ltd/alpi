@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.10.9 — 2026-11-17 — who reaches what
+
+- Connections lead each row with the profiles it can reach, as their marks and names in their own colours (the first three, then +N), or All profiles.
+- Connections and its audit log sit in one centred column with their header.
+- A working workgroup lights its honeycomb in the colour of the profile doing the current phase.
+- The workgroups list uses the same compact header as every other page; its counts sit behind the title.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.10.8 — 2026-11-17 — a blank chat that introduces the profile
 
 - A new chat shows the profile's bio under "Start a new thread", up to three lines, with the whole text on hover.

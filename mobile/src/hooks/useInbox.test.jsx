@@ -146,13 +146,15 @@ describe('useInbox accent', () => {
     expect(accentOf('beta')).toBe(FALLBACK_ACCENT);
   });
 
-  it('hands a workgroup no member colours, only its hub accent', () => {
+  it('keeps the hub accent on a workgroup and hands it a lookup for the phase owner, whatever its case', () => {
     h.profiles = [{ ...withSession('doc', 60), accent: '#3ac9f3' }, { ...withSession('lingo', 50), accent: '#e2558a' }];
     h.workgroups = [{ ...wg('alpha', 30), hub_id: 'doc', phase_map: { translate: { owner: '@Lingo' } } }];
     render(<Probe />);
     const item = seen.items.find((i) => i.id === 'alpha');
     expect(item.memberAccents).toBeUndefined();
     expect(item.accent).toBe('#3ac9f3');
+    expect(item.accentOf('@Lingo')).toBe('#e2558a');
+    expect(item.accentOf('peer')).toBeNull();
   });
 });
 

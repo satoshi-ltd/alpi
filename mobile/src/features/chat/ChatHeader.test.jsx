@@ -141,6 +141,14 @@ describe('ChatHeader profile fold', () => {
     expect(fold.getAttribute('data-color')).toBe('#6572e4');
   });
 
+  it('lights the workgroup mark in the working profile colour when one is given, never a profile mark', () => {
+    const wg = render(<ChatHeader kind="workgroup" accent="#6572e4" markColor="#3ec173" title="alpha" mark={{ state: 'running', phase: [1, 3], owner: 'lingo' }} />);
+    expect(wg.container.querySelector('[data-shape]').getAttribute('data-color')).toBe('#3ec173');
+    wg.unmount();
+    const profile = render(<ChatHeader kind="profile" shape="heart" accent="#6572e4" markColor="#3ec173" title="doc" />);
+    expect(profile.container.querySelector('[data-shape]').getAttribute('data-color')).toBe('#6572e4');
+  });
+
   it('draws a paused mark as paused whatever state it is handed, and greys its name', () => {
     for (const kind of ['workgroup', 'profile']) {
       const { container } = render(<ChatHeader kind={kind} named accent="#6572e4" title="alpha" paused mark={{ state: 'working' }} />);

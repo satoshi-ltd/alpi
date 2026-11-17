@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { WORKGROUP_SHAPE } from "../../../common/shapes.mjs";
-import { workgroupMark, workgroupStatusLine } from "../../../common/workgroupMarkState.mjs";
-import { MUTED_NAME } from "../lib/nameVars.js";
+import { accentLookup, workgroupMark, workgroupMarkAccent, workgroupStatusLine } from "../../../common/workgroupMarkState.mjs";
+import ChatHeader from "../primitives/ChatHeader.jsx";
 import {
   Banner,
   Button,
@@ -76,6 +76,7 @@ export default function WorkgroupsView({
     () => Object.fromEntries(profiles.map((profile) => [profile.name, profile.accent])),
     [profiles],
   );
+  const accentOf = useMemo(() => accentLookup(profiles), [profiles]);
   const rows = useMemo(() => {
     const now = Date.now();
     const needle = query.trim().toLowerCase();
@@ -128,22 +129,19 @@ export default function WorkgroupsView({
 
   return (
     <section className={styles.page}>
-      <header className={`ds-chat-header ${styles.header}`} data-drag>
-        <div className={styles.titleBlock}>
-          <div className="title-row">
-            <Fold shape={WORKGROUP_SHAPE} size="md" color="var(--accent)" seed="workgroups" />
-            <h1 className="ds-name" style={MUTED_NAME}>Workgroups</h1>
-          </div>
-          <div className="meta-row">
+      <ChatHeader
+        kind="workgroup"
+        id="Workgroups"
+        accent="var(--accent)"
+        mark={{ seed: "workgroups" }}
+        meta={(
+          <span className={styles.summary}>
             <span>{workgroupLabel}</span>
-            <span className="sep" aria-hidden />
             <span>{activityParts.join(" · ")}</span>
-          </div>
-        </div>
-        {onNewWorkgroup && (
-          <Button icon={<PlusIcon />} onClick={onNewWorkgroup}>New workgroup</Button>
+          </span>
         )}
-      </header>
+        right={onNewWorkgroup ? <Button icon={<PlusIcon />} onClick={onNewWorkgroup}>New workgroup</Button> : null}
+      />
 
       {stale && (
         <Banner kind="warning" action={onRefresh ? "Retry" : null} onAction={onRefresh}>
@@ -201,7 +199,7 @@ export default function WorkgroupsView({
                   onClick={() => onOpenWorkgroup?.(workgroup)}
                 >
                   <span className={styles.identity}>
-                    <Fold shape={WORKGROUP_SHAPE} color={accent} state={mark.state} phase={mark.phase} seed={key} />
+                    <Fold shape={WORKGROUP_SHAPE} color={workgroupMarkAccent(mark, accent, accentOf)} state={mark.state} phase={mark.phase} seed={key} />
                     <span className="sb-name">{workgroup.name ?? workgroup.id}</span>
                   </span>
                   <span className={styles.statusCell}>

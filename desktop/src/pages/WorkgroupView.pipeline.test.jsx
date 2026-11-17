@@ -214,7 +214,7 @@ describe("WorkgroupView pipeline strip", () => {
     expect(phaseEl("qa").dataset.state).toBe("pending");
   });
 
-  it("leans the header honeycomb toward the running phase in the hub's colour and names the owner in the meta", async () => {
+  it("leans the header honeycomb toward the running phase in its owner's colour and names the owner in the meta", async () => {
     invokeMock.mockImplementation((cmd) => {
       if (cmd === "workgroup_tasks") {
         return Promise.resolve({
@@ -246,9 +246,8 @@ describe("WorkgroupView pipeline strip", () => {
     await waitFor(() => expect(header().dataset.cell).toBe("top"));
     expect(header().dataset.state).toBe("running");
     expect(header().querySelector("[data-lead]").getAttribute("fill")).toBe("var(--wg-lit)");
-    expect(header().style.getPropertyValue("--wg-lit-light")).toBe(nameTone("#5588ff", palettes.light.bgPane));
+    expect(header().style.getPropertyValue("--wg-lit-light")).toBe(nameTone("#f36a8a", palettes.light.bgPane));
     expect(header().querySelector("[data-cell='left']").getAttribute("fill")).toBe("var(--ink-3)");
-    expect(header().innerHTML).not.toContain("#f36a8a");
     expect(document.querySelector(".ds-chat-header [data-status]").textContent).toBe("Working · enrich · @pixel");
   });
 

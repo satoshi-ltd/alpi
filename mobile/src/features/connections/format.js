@@ -26,12 +26,6 @@ export function deviceMeta(device) {
     .join(' · ');
 }
 
-export function scopeLabel(row) {
-  if (row?.role === 'admin') return 'all profiles';
-  const scope = row?.profile_scope ?? [];
-  return scope.length ? scope.join(', ') : 'all profiles';
-}
-
 function count(n, noun) {
   return `${n} ${noun}${n === 1 ? '' : 's'}`;
 }
@@ -39,9 +33,7 @@ function count(n, noun) {
 export function connectionMeta(row) {
   return [
     row?.role,
-    scopeLabel(row),
     count((row?.devices ?? []).length, 'device'),
-    count(row?.sessions ?? 0, 'session'),
     `seen ${relativeSeen(row?.last_seen)}`,
   ].join(' · ');
 }

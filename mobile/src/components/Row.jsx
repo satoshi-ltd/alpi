@@ -62,7 +62,7 @@ function pressable(body, { onPress, onLongPress, disabled, colors, spoken }) {
   );
 }
 
-export function Row({ label, helper, value, leading, trailing, onPress, onLongPress, danger, disabled = false, chevron = true, labelLines = 1, helperLines, helperDanger = false, spokenValue, below }) {
+export function Row({ label, helper, value, leading, trailing, onPress, onLongPress, danger, disabled = false, chevron = true, labelLines = 1, helperLines, helperDanger = false, spokenValue, below, subline = null, spokenSubline }) {
   const { colors, fonts, fontSizes } = useTheme();
   const [width, setWidth] = useState(0);
   const stacked = stacksRow(width);
@@ -152,6 +152,7 @@ export function Row({ label, helper, value, leading, trailing, onPress, onLongPr
             {trailing}
             {chevronNode}
           </View>
+          {subline}
           {helperNode}
           {valueNode ? <View style={{ marginTop: space.s1 }}>{valueNode}</View> : null}
         </View>
@@ -159,6 +160,7 @@ export function Row({ label, helper, value, leading, trailing, onPress, onLongPr
         <>
           <View style={{ flex: 1, minWidth: 0, gap: space.s1 }}>
             {labelNode}
+            {subline}
             {helperNode}
           </View>
           {valueNode}
@@ -169,7 +171,7 @@ export function Row({ label, helper, value, leading, trailing, onPress, onLongPr
     </View>
   );
 
-  return pressable(body, { onPress, onLongPress, disabled, colors, spoken: rowLabel(label, spokenValue ?? value, helper) });
+  return pressable(body, { onPress, onLongPress, disabled, colors, spoken: rowLabel(label, spokenValue ?? value, [spokenSubline, helper].filter(Boolean).join(', ')) });
 }
 
 export function RowSeparator() {

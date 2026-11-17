@@ -46,6 +46,17 @@ export function workgroupMark({ workgroup, run = null, task = null, busy = false
   return { state, phase: workgroupPhase(run), step: lit ? phaseSlug(workgroup, run) : null, owner: owner ? owner.replace(/^@/, "") : null };
 }
 
+export function accentLookup(profiles) {
+  const byName = new Map();
+  for (const p of profiles ?? []) if (p?.name && !byName.has(p.name.toLowerCase())) byName.set(p.name.toLowerCase(), p.accent ?? null);
+  return (name) => (name ? byName.get(String(name).replace(/^@/, "").toLowerCase()) ?? null : null);
+}
+
+export function workgroupMarkAccent(mark, hubAccent, accentOf) {
+  const owner = mark?.owner ? accentOf?.(mark.owner) : null;
+  return owner || hubAccent || null;
+}
+
 export function workgroupStatusLine(mark) {
   const word = mark?.state === "running" ? "Working" : mark?.state === "needs" ? "Needs you" : null;
   if (!word) return null;

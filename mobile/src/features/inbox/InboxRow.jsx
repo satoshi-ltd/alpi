@@ -164,6 +164,7 @@ export const InboxRow = memo(function InboxRow({ item, onPress, onLongPress, sel
             phase={rowState?.phases ?? null}
             phaseSlug={rowState?.phase ?? null}
             workgroup={item.raw ?? null}
+            accentOf={item.accentOf ?? null}
             size={MARK_SIZES.tile}
           />
           {pip ? <View testID="tile-pip" style={[STATIC.tilePip, { backgroundColor: pip, borderColor: twoPane ? colors.bgSide : colors.bg }]} /> : null}
@@ -202,6 +203,7 @@ export const InboxRow = memo(function InboxRow({ item, onPress, onLongPress, sel
           phase={rowState?.phases ?? null}
           phaseSlug={rowState?.phase ?? null}
           workgroup={item.raw ?? null}
+          accentOf={item.accentOf ?? null}
           size={twoPane ? MARK_SIZES.row : MARK_SIZES.list}
         />
       </View>

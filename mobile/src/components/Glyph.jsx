@@ -1,5 +1,5 @@
 import { WORKGROUP_SHAPE } from '../../../common/shapes.mjs';
-import { workgroupMark } from '../../../common/workgroupMarkState.mjs';
+import { workgroupMark, workgroupMarkAccent } from '../../../common/workgroupMarkState.mjs';
 import { parsePhase } from '../lib/workgroupMark';
 import { useTheme } from '../theme/ThemeContext';
 import { Fold } from './Fold';
@@ -27,12 +27,13 @@ export function workgroupGlyph({ workgroup = null, paused = false, offline = fal
   });
 }
 
-export function Glyph({ kind, color, shape, name, active = false, state = null, workgroup = null, needsProvider = false, working = false, paused = false, offline = false, rowState = null, pending = false, unread = false, phase = null, phaseSlug = null, size }) {
+export function Glyph({ kind, color, shape, name, active = false, state = null, workgroup = null, needsProvider = false, working = false, paused = false, offline = false, rowState = null, pending = false, unread = false, phase = null, phaseSlug = null, accentOf = null, size }) {
   const { colors } = useTheme();
   const tint = typeof color === 'string' && color.startsWith('#') ? color : colors.ink3;
   if (kind === 'workgroup') {
     const mark = workgroupGlyph({ workgroup, paused, offline, working, rowState, phase, phaseSlug });
-    return <Fold shape={WORKGROUP_SHAPE} color={tint} size={size} state={mark.state} phase={mark.phase} seed={name} still={!active} />;
+    const lit = workgroupMarkAccent(mark, null, accentOf);
+    return <Fold shape={WORKGROUP_SHAPE} color={typeof lit === 'string' && lit.startsWith('#') ? lit : tint} size={size} state={mark.state} phase={mark.phase} seed={name} still={!active} />;
   }
   return <Fold shape={shape} color={tint} size={size} state={markState({ needsProvider, paused, offline, rowState, working, pending, unread, live: state })} seed={name} still={!active} />;
 }

@@ -1,10 +1,11 @@
 import re
-from gen import BANNER_DOT, BANNER_TEXT, HOVER_FILL, SELECTED_FILL, R_XS, R_CONTROL, R_SURFACE, R_SHEET, banner_surface, app_version, button_heights, ALPI_ACCENT, DANGER, DOC_ACCENT, FRONT, PROFILES, di as ic, identity_glyph, profile_mark, page, usage_chart
+from gen import BANNER_DOT, BANNER_TEXT, HOVER_FILL, SELECTED_FILL, R_XS, R_CONTROL, R_SURFACE, R_SHEET, banner_surface, app_version, button_heights, ALPI_ACCENT, DANGER, DOC_ACCENT, FRONT, PROFILES, di as ic, identity_glyph, profile_mark, page, usage_chart, access_line
 
 INK, INK2, INK3, INK4 = "#141414", "#454545", "#6b6b6b", "#b4b4b4"
 LINE, LINE2, HOVER, SELECTED = "rgba(20,20,20,0.07)", "rgba(20,20,20,0.14)", HOVER_FILL, SELECTED_FILL
 SIDE, PANE, BG = "#f6f6f6", "#ffffff", "#f0f0f0"
 AMBER = "#14110c"
+LINGO_ACCENT = "#9b5ad9"
 EDGE = "#8c8c8c"
 RING = f"0 0 0 1px {EDGE}"
 ELEV = "var(--bg-elev, #ffffff)"
@@ -248,7 +249,7 @@ def d_sidebar(h, selected="doc", settings_mode=False, wg_selected=False, states=
 
     tiles = "".join(tile(n, AMBER if n == FRONT else c, mark_state(n, states.get(n)), selected=n == selected, roster_state=states.get(n)) for n, c, t, _ in sorted(PROFILES, key=lambda p: p[0] != FRONT) if n == FRONT or n in PINNED)
     rows = "".join(prow(n, c, t) for n, c, t, _ in PROFILES if n not in PINNED and n != FRONT)
-    wgs = (sb_row(wg_mark(DOC_ACCENT, 24, state="running", phase=(2, 4), still=True), "alpha", active=wg_selected, href="Desktop-WorkgroupSettings.dc.html", trailing=phase_count(2, 4, DOC_ACCENT), accent=DOC_ACCENT)
+    wgs = (sb_row(wg_mark(LINGO_ACCENT, 24, state="running", phase=(2, 4), still=True), "alpha", active=wg_selected, href="Desktop-WorkgroupSettings.dc.html", trailing=phase_count(2, 4, LINGO_ACCENT), accent=DOC_ACCENT)
            + sb_row(wg_mark(AMBER, 24), "launch-crew", "2h", href="Desktop-WorkgroupSettings.dc.html"))
     return f"""<div style="width: {SIDEBAR_W}px; height: {h}px; flex-shrink: 0; box-sizing: border-box; background: {SIDE}; display: flex; flex-direction: column">
 <div style="height: 38px; flex-shrink: 0"></div>
@@ -325,8 +326,8 @@ def row(label, control, align_top=False, desc="", lines=None):
             f'{body}</div>')
 
 
-def d_body(inner, pad_bottom=80):
-    return f'<div style="padding: 16px 32px {pad_bottom}px; display: flex; flex-direction: column"><div style="max-width: 920px; width: 100%; align-self: center; display: flex; flex-direction: column">{inner}</div></div>'
+def d_body(inner, pad_bottom=80, column=920):
+    return f'<div style="padding: 16px 32px {pad_bottom}px; display: flex; flex-direction: column"><div style="max-width: {column}px; width: 100%; align-self: center; display: flex; flex-direction: column">{inner}</div></div>'
 
 
 def settings_rail(sections, active=0, query=""):
@@ -457,7 +458,7 @@ def member_row(name, color, bio, hub=False, removable=True):
 
 def desktop_wg_settings():
     from wg_settings_studies import LAUNCH, PIPELINES, RUN, invited_block, member_block, pipeline_block
-    stack = wg_mark(ALPI_ACCENT, 28, "running", phase=(2, 4))
+    stack = wg_mark(LINGO_ACCENT, 28, "running", phase=(2, 4))
     hero = d_hero(h1("alpha", stack, "ink") + '<span style="font-size: 20px; font-weight: 400; color: #6b6b6b; margin-left: 2px">Settings</span>', "", iconbtn("pause", "Pause") + iconbtn("arrow-left", "Back to chat"), ALPI_ACCENT)
     inner = (
         section("Overview", "", ''.join([
@@ -492,12 +493,14 @@ def desktop_connections():
             f'<span>Connection</span><span style="text-align: right">Last activity</span><span style="text-align: right">Sessions</span><span style="text-align: right">14-day spend</span></div>')
 
     def metric(v, cap):
-        return f'<span style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px"><span style="font-family: {MONO}; font-size: 12px; font-weight: 500; color: {INK}">{v}</span><span style="font-family: {MONO}; font-size: 12px; color: {INK3}">{cap}</span></span>'
+        return f'<span style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px"><span style="font-size: 14px; font-weight: 500; color: {INK}">{v}</span><span style="font-size: 14px; color: {INK3}">{cap}</span></span>'
 
-    def crow(label, sub, seen, sessions, spend, expanded=False, host=False):
+    def crow(label, sub, seen, sessions, spend, expanded=False, host=False, scope=None):
+        meta = (f'<span style="font-family: {MONO}; font-size: 12px; color: {INK3}">{sub}</span>' if host
+                else f'<span style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px">{access_line(scope or [], "card" if expanded else "bgPane")}<span style="font-size: 14px; color: {INK3}">{sub}</span></span>')
         return (f'<div style="display: grid; grid-template-columns: minmax(240px, 1fr) 126px 88px 112px; min-height: 74px; align-items: center; padding: 0 12px; {"" if expanded else BLEED}">'
-                f'<span style="display: flex; flex-direction: column; gap: 3px"><strong style="font-size: 15px; font-weight: 600; line-height: 1.3; color: {INK}">{label}</strong><span style="font-family: {MONO}; font-size: 12px; color: {INK3}">{sub}</span></span>'
-                f'{metric(seen, "last seen")}{metric(sessions, "sessions")}{metric(spend, "14-day")}</div>')
+                f'<span style="display: flex; flex-direction: column; gap: 6px"><strong style="font-size: 15px; font-weight: 600; line-height: 1.3; color: {INK}">{label}</strong>{meta}</span>'
+                f'{metric(seen, "LAST SEEN")}{metric(sessions, "SESSIONS")}{metric(spend, "14-DAY")}</div>')
 
     detail = f"""<div style="padding: 16px 12px 12px; display: flex; flex-direction: column; gap: 16px">
 <div style="display: flex; align-items: baseline; gap: 8px"><span style="font-size: 16px; font-weight: 600; color: {INK}">Usage</span><span style="font-size: 12px; color: {INK3}">last 14 days</span></div>
@@ -508,22 +511,22 @@ def desktop_connections():
 <div style="display: flex; align-items: center; min-height: 56px"><span style="flex: 1; display: flex; flex-direction: column; gap: 3px"><span style="font-size: 15px; font-weight: 500">sdk_gphone64_arm64</span><span style="font-size: 12px; color: {INK3}">mobile · 0.5.0</span></span>{mono12("now", INK3)}<span style="width: 16px"></span>{alink("Revoke", danger=True)}</div>
 </div>
 </div>"""
-    toolbar = search_toolbar("Search connections…", f'<span style="font-family: {MONO}; font-size: 12px; color: {INK3}">3 of 3</span>')
+    toolbar = search_toolbar("Search connections…", f'<span style="font-size: 14px; color: {INK3}">4 of 4</span>')
     table = f"""<div style="display: flex; flex-direction: column">
 {toolbar}
 {head}
 {crow("Local host", "host.sock", "now", "10", "$1.09", host=True)}
-<div style="{BLEED}; border-radius: {R_SURFACE}px; background: {CARD}"><div>{crow("emulator-android", "2 devices · admin · all profiles", "now", "4", "$0.00", expanded=True)}</div>{detail}</div>
-<div style="opacity: 0.55">{crow("remote", "2 devices · admin · all profiles", "now", "4", "$0.40")}</div>
+<div style="{BLEED}; border-radius: {R_SURFACE}px; background: {CARD}"><div>{crow("emulator-android", "admin · 2 devices", "now", "4", "$0.00", expanded=True)}</div>{detail}</div>
+<div style="opacity: 0.55">{crow("front-desk", "member · 1 device", "now", "1", "$0.12", scope=["lingo"])}{crow("ops-team", "member · 3 devices", "9m ago", "514", "$0.40", scope=["doc", "abby", "yuri", "galt"])}</div>
 </div>"""
     body = f"""<div style="display: flex; height: 100%">
-{d_sidebar(850, selected="", settings_mode=True)}
+{d_sidebar(900, selected="", settings_mode=True)}
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: {PANE}">
-{hero}{d_body(table)}
+<div style="width: 100%; max-width: 1024px; align-self: center">{hero}</div>{d_body(table, column=960)}
 </div>
 </div>
 """
-    return page("Desktop · connections", 1280, 850, body, bg=PANE)
+    return page("Desktop · connections", 1280, 900, body, bg=PANE)
 
 
 WG_GRID = "grid-template-columns: minmax(240px, 1fr) 10.5rem 76px 112px 92px; gap: 12px; padding: 0 12px"
@@ -558,10 +561,10 @@ def desktop_workgroups(stale=False):
 
     toolbar = search_toolbar("Search workgroups…", seg(("All", "Active", "Queued", "Paused"), "All") + f'<span style="font-family: {MONO}; font-size: 12px; color: {INK3}">3 of 3</span>')
     table = (toolbar + head
-             + wrow("alpha", DOC_ACCENT, "#3fb37a", "Working · media · @lingo", 3, "$0.40", "2m", "setup done", dict(state="running", phase=(2, 4)))
+             + wrow("alpha", LINGO_ACCENT, "#3fb37a", "Working · media · @lingo", 3, "$0.40", "2m", "setup done", dict(state="running", phase=(2, 4)))
              + wrow("launch-crew", AMBER, "#e08a3c", "Queued · #2", 4, "$1.12", "9m", "setup done · media next", dict(state="queued"))
              + wrow("digest", "#9b5ad9", INK4, "Idle", 2, "$0.08", "1d"))
-    hero = d_hero(wg_mark(AMBER, 28) + f'<span style="font-size: 20px; font-weight: 600; color: {INK}">Workgroups</span>', "", button("New workgroup", "ghost", "sm", "plus"), AMBER)
+    hero = d_hero(h1("Workgroups", wg_mark(AMBER, 28), "ink"), "", button("New workgroup", "ghost", "sm", "plus"), AMBER)
     warning = banner_bar("warning", "Workgroups may be out of date. Retrying automatically.", "Retry") if stale else ""
     body = f"""<div style="display: flex; height: 100%">
 {d_sidebar(740, selected="", settings_mode=False)}

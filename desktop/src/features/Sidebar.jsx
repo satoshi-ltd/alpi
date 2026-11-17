@@ -3,7 +3,7 @@ import ConnectionSwitcher from "./ConnectionSwitcher.jsx";
 import VersionButton from "./VersionButton.jsx";
 import { ActionLink, SidebarRow, SectionLabel, ContextMenu } from "../primitives/index.js";
 import { WORKGROUP_SHAPE } from "../../../common/shapes.mjs";
-import { workgroupMark, workgroupStatusLine } from "../../../common/workgroupMarkState.mjs";
+import { accentLookup, workgroupMark, workgroupMarkAccent, workgroupStatusLine } from "../../../common/workgroupMarkState.mjs";
 import { shortcutKeys } from "../lib/shortcuts.js";
 import { cycleTheme, nextTheme, useTheme } from "../lib/theme.js";
 import {
@@ -231,6 +231,7 @@ function Sidebar({
     for (const p of profiles) map[p.name] = p.accent ?? null;
     return map;
   }, [profiles]);
+  const profileAccentOf = useMemo(() => accentLookup(profiles), [profiles]);
 
   const pinnedItems = useMemo(
     () => orderPinnedItems(pinnedProfiles, pinnedWorkgroups),
@@ -491,6 +492,7 @@ function Sidebar({
         key={`tile:${key}`}
         workgroup={w}
         hubAccent={hubAccentByProfile[w.hub_id ?? w.profile] ?? null}
+        accentOf={profileAccentOf}
         task={taskByWorkgroup[key] ?? null}
         busy={!!activityByWorkgroup[key]}
         run={rosterState?.workgroups?.[key] ?? null}
@@ -512,6 +514,7 @@ function Sidebar({
         key={keyPrefix + key}
         workgroup={w}
         hubAccent={hubAccentByProfile[w.hub_id ?? w.profile] ?? null}
+        accentOf={profileAccentOf}
         task={taskByWorkgroup[key] ?? null}
         busy={!!activityByWorkgroup[key]}
         run={rosterState?.workgroups?.[key] ?? null}
@@ -1009,6 +1012,7 @@ const ProfileTile = memo(function ProfileTile({
 const WorkgroupTile = memo(function WorkgroupTile({
   workgroup,
   hubAccent,
+  accentOf,
   task,
   busy,
   run = null,
@@ -1024,6 +1028,7 @@ const WorkgroupTile = memo(function WorkgroupTile({
   const mtime = workgroup.mtime ?? 0;
   const paused = !!workgroup.paused;
   const mark = workgroupMark({ workgroup, run, task, busy });
+  const markColor = workgroupMarkAccent(mark, hubAccent, accentOf);
   useEffect(() => {
     if (active && mtime > 0) markWorkgroupRead(connId, workgroup.profile, workgroup.id, mtime);
   }, [active, connId, workgroup.profile, workgroup.id, mtime]);
@@ -1037,7 +1042,7 @@ const WorkgroupTile = memo(function WorkgroupTile({
       pip={TILE_PIP[mark.state] ?? null}
       ariaLabel={paused ? `${label}, paused` : unread ? `${label}, unread` : label}
       tip={paused ? null : workgroupStatusLine(mark)}
-      mark={<Fold shape={WORKGROUP_SHAPE} color={hubAccent || undefined} state={mark.state} phase={mark.phase} seed={`${workgroup.profile}/${workgroup.id}`} size={MARK_SIZES.tile} still={!active} />}
+      mark={<Fold shape={WORKGROUP_SHAPE} color={markColor || undefined} state={mark.state} phase={mark.phase} seed={`${workgroup.profile}/${workgroup.id}`} size={MARK_SIZES.tile} still={!active} />}
       onClick={handleClick}
       onContextMenu={handleContextMenu}
     />
@@ -1047,6 +1052,7 @@ const WorkgroupTile = memo(function WorkgroupTile({
 const WorkgroupRow = memo(function WorkgroupRow({
   workgroup,
   hubAccent,
+  accentOf,
   task,
   busy,
   run = null,
@@ -1073,6 +1079,7 @@ const WorkgroupRow = memo(function WorkgroupRow({
   const paused = !!workgroup.paused;
 
   const mark = workgroupMark({ workgroup, run, task, busy });
+  const markColor = workgroupMarkAccent(mark, hubAccent, accentOf);
   const tip = paused ? null : workgroupStatusLine(mark);
 
   useEffect(() => {
@@ -1080,11 +1087,11 @@ const WorkgroupRow = memo(function WorkgroupRow({
   }, [active, connId, workgroup.profile, workgroup.id, mtime]);
   const unread =
     !paused && !active && checkUnread?.(workgroup.profile, workgroup.id, mtime);
-  const glyph = <Fold shape={WORKGROUP_SHAPE} color={hubAccent || undefined} state={mark.state} phase={mark.phase} seed={`${workgroup.profile}/${workgroup.id}`} still={!active} />;
+  const glyph = <Fold shape={WORKGROUP_SHAPE} color={markColor || undefined} state={mark.state} phase={mark.phase} seed={`${workgroup.profile}/${workgroup.id}`} still={!active} />;
   const hasPhases = run?.phasesTotal > 0 && run?.phasesDone != null;
   const trailing = hasPhases
     ? (
-      <span className={`tnum ${styles.phaseCount}`} style={nameVars(hubAccent, "bgSide") ?? undefined} aria-label={`phase ${run.phasesDone} of ${run.phasesTotal}`}>
+      <span className={`tnum ${styles.phaseCount}`} style={nameVars(markColor, "bgSide") ?? undefined} aria-label={`phase ${run.phasesDone} of ${run.phasesTotal}`}>
         {run.phasesDone}/{run.phasesTotal}
       </span>
     )

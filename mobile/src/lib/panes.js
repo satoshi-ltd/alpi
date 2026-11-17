@@ -45,9 +45,9 @@ export function sidebarOpenByDefault(width, height = 0) {
   return height > 0 && width >= MIN_W && width > height;
 }
 
-export function settingsContentStyle(twoPane) {
+export function settingsContentStyle(twoPane, alignSelf = 'flex-start') {
   if (!twoPane) return { paddingBottom: space.s10 };
-  return { paddingTop: space.s9, paddingBottom: space.s11, maxWidth: SETTINGS_COLUMN_MAX_W, width: '100%', alignSelf: 'flex-start' };
+  return { paddingTop: space.s9, paddingBottom: space.s11, maxWidth: SETTINGS_COLUMN_MAX_W, width: '100%', alignSelf };
 }
 
 export function stacksRow(width) {

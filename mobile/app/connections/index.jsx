@@ -12,10 +12,11 @@ import { ScreenHeader } from '../../src/components/ScreenHeader';
 import { SyncBar } from '../../src/components/SyncBar';
 import { NewConnectionSheet } from '../../src/features/connections/NewConnectionSheet';
 import { PairingSheet } from '../../src/features/connections/PairingSheet';
+import { AccessLine, accessLabel } from '../../src/features/connections/AccessLine';
 import { connectionMeta, relativeSeen } from '../../src/features/connections/format';
 import { useBack } from '../../src/hooks/useBack';
 import { usePullRefresh } from '../../src/hooks/usePullRefresh';
-import { useConnectionsSummary } from '../../src/hooks/useDaemonData';
+import { useConnectionsSummary, useProfileSummaries } from '../../src/hooks/useDaemonData';
 import { settingsContentStyle } from '../../src/lib/panes';
 import { usePane } from '../../src/nav/PaneContext';
 import { useTheme } from '../../src/theme/ThemeContext';
@@ -38,6 +39,7 @@ function ConnectionsScreen() {
   const { colors } = useTheme();
   const { twoPane } = usePane();
   const summary = useConnectionsSummary();
+  const profiles = useProfileSummaries().data?.profiles ?? null;
   const [creating, setCreating] = useState(false);
   const [pairing, setPairing] = useState(null);
 
@@ -50,7 +52,7 @@ function ConnectionsScreen() {
   const host = rows.find((r) => r.id === 'host');
   const paired = rows.filter((r) => r.id !== 'host');
 
-  const contentStyle = settingsContentStyle(twoPane);
+  const contentStyle = settingsContentStyle(twoPane, 'center');
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -99,6 +101,8 @@ function ConnectionsScreen() {
                   <Row
                     label={row.label || row.id}
                     item
+                    subline={<AccessLine row={row} profiles={profiles} />}
+                    spokenSubline={accessLabel(row, profiles)}
                     helper={connectionMeta(row)}
                     value={
                       row.status === 'disabled'

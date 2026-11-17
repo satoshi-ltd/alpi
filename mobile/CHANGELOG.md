@@ -14,6 +14,13 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.10.6 — 2026-11-17 — who reaches what
+
+- Connections show the profiles each one can reach as their marks and names in their own colours, in the list and in the Profiles row of a connection.
+- On a foldable, the connections list and a connection's page sit centred; the sessions count moves to the connection's page.
+- A working workgroup lights its honeycomb in the colour of the profile doing the current phase.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.10.5 — 2026-11-17 — current with its SDK
 
 - Expo SDK 55 and React Native are on the latest patch releases the SDK supports (React Native 0.83.10), picking up their upstream fixes.

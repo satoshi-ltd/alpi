@@ -78,6 +78,13 @@ describe("ChatHeader", () => {
     expect(glyph.querySelector("[data-lead]").getAttribute("fill")).toBe("var(--wg-lit)");
     expect(glyph.style.getPropertyValue("--wg-lit-light")).toBe(nameTone("#3899e2", palettes.light.bgPane));
   });
+
+  it("lights the cell in the working profile's colour when one is given", () => {
+    const { container } = render(<ChatHeader kind="workgroup" id="ops" accent="#3899e2" markColor="#3ec173" mark={{ state: "running", phase: [1, 3], owner: "lingo" }} />);
+    const glyph = titleGlyph(container);
+    expect(glyph.style.getPropertyValue("--wg-lit-light")).toBe(nameTone("#3ec173", palettes.light.bgPane));
+    expect(container.querySelector("header").style.getPropertyValue("--c")).toBe("#3899e2");
+  });
 });
 
 describe("ChatHeader paused", () => {

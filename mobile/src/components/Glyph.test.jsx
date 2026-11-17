@@ -120,6 +120,15 @@ describe('Glyph', () => {
     expect(fills.filter((f) => f === '#3899e2')).toHaveLength(1);
   });
 
+  it('lights the current cell in the colour of the profile that owns the phase', () => {
+    const workgroup = { phase_map: { translate: { owner: '@scout' } } };
+    const accentOf = (name) => ({ scout: '#3ec173' })[name] ?? null;
+    const fills = (props) => [...mark(<Glyph kind="workgroup" color="#3899e2" working phase="1/3" phaseSlug="translate" workgroup={workgroup} accentOf={accentOf} {...props} />).querySelectorAll('path')].map((p) => p.getAttribute('fill'));
+    expect(fills()[1]).toBe('#3ec173');
+    expect(fills()).not.toContain('#3899e2');
+    expect(fills({ phaseSlug: 'review' })[1]).toBe('#3899e2');
+  });
+
   it('shows a blocked workgroup as needing you on the phone too', () => {
     expect(mark(<Glyph kind="workgroup" color="#3899e2" workgroup={{ pipeline_status: 'blocked' }} />).getAttribute('data-state')).toBe('needs');
   });

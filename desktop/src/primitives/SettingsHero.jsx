@@ -23,6 +23,7 @@ export default function SettingsHero({
   onOpenConnections,
   actions = null,
   mark = null,
+  markColor = null,
 }) {
   const isWg = kind === "workgroup";
   const isConnections = kind === "connections";
@@ -62,6 +63,7 @@ export default function SettingsHero({
       right={right}
       paused={paused}
       mark={mark}
+      markColor={markColor}
       state="idle"
       label={isConnections ? "Connections" : "Settings"}
       className={styles.header}

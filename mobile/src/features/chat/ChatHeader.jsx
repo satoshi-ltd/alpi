@@ -201,7 +201,7 @@ function ProfileChip({ title, open, onPress, children }) {
   );
 }
 
-export function ChatHeader({ kind, accent, shape, named = false, paused = false, mark = null, title, meta, details = null, flag = null, onBack, onMore, onPickSession, right, failedJobs = 0 }) {
+export function ChatHeader({ kind, accent, shape, named = false, paused = false, mark = null, markColor = null, title, meta, details = null, flag = null, onBack, onMore, onPickSession, right, failedJobs = 0 }) {
   const { colors, fontSizes } = useTheme();
   const { twoPane, sidebarOpen, toggleSidebar } = usePane();
   const showBack = useShowBack(onBack);
@@ -211,7 +211,7 @@ export function ChatHeader({ kind, accent, shape, named = false, paused = false,
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsAnchor, setDetailsAnchor] = useState(null);
 
-  const markNode = <Fold shape={kind === 'profile' ? shape : WORKGROUP_SHAPE} color={accent} size={MARK_SIZES.header} seed={title} {...mark} state={paused ? 'paused' : mark?.state} />;
+  const markNode = <Fold shape={kind === 'profile' ? shape : WORKGROUP_SHAPE} color={(kind !== 'profile' && markColor) || accent} size={MARK_SIZES.header} seed={title} {...mark} state={paused ? 'paused' : mark?.state} />;
   const backNode = showBack ? (
     <Pressable
       onPress={onBack}

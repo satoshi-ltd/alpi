@@ -40,7 +40,7 @@ import {
 import { fetchWorkgroupTranscript } from "../lib/workgroup-fetch.js";
 import { WORKGROUP_SHAPE } from "../../../common/shapes.mjs";
 import { MARK_SIZES } from "../../../common/agentMarks.mjs";
-import { pipelineRunMark } from "../../../common/workgroupMarkState.mjs";
+import { accentLookup, pipelineRunMark, workgroupMarkAccent } from "../../../common/workgroupMarkState.mjs";
 import { chainChips, liveChip, orderedPipelines, phaseCostLine, runChips, runProgress, sameName } from "../../../common/pipelinePhases.mjs";
 import PipelineStages, { PipelinePlaceholder } from "../primitives/PipelineStages.jsx";
 import { WorkgroupChatHeader, TasksButton, Eyebrow, LoadFailed } from "../primitives/index.js";
@@ -275,6 +275,7 @@ export default function WorkgroupView({
     task: activeTask,
     offline: daemonOffline,
   });
+  const markColor = workgroupMarkAccent(mark, ownerProfile?.accent, accentLookup(profiles));
 
   useEffect(() => {
     setMySeqs(loadMySeqs(connectionId, workgroup.profile, workgroup.id));
@@ -511,6 +512,7 @@ export default function WorkgroupView({
         workgroup={workgroup}
         hubAccent={ownerProfile?.accent}
         mark={mark}
+        markColor={markColor}
         hubShape={ownerProfile?.shape}
         hubName={hubName}
         hubBio={ownerProfile?.bio || ownerProfile?.public_bio}
@@ -605,7 +607,7 @@ export default function WorkgroupView({
           <>
             {messages.length === 0 && (
               <div className={styles.empty}>
-                <Fold shape={WORKGROUP_SHAPE} color={ownerProfile?.accent || "var(--accent)"} size={MARK_SIZES.hero} {...mark} seed={workgroup.id} />
+                <Fold shape={WORKGROUP_SHAPE} color={markColor || "var(--accent)"} size={MARK_SIZES.hero} {...mark} seed={workgroup.id} />
                 <div className={styles.emptyHeading}>{EMPTY.posts.title}</div>
                 <div className={styles.emptyModel}>{postsHint(profileLabel(hubName))}</div>
               </div>

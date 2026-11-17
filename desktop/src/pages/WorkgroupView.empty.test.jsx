@@ -18,6 +18,8 @@ vi.mock("../hooks/useProfileDetail.js", () => ({
 }));
 
 import WorkgroupView from "./WorkgroupView.jsx";
+import { nameTone } from "../../../common/name.mjs";
+import { palettes } from "../../../common/tokens.mjs";
 
 globalThis.ResizeObserver ??= class {
   observe() {}
@@ -43,6 +45,20 @@ describe("WorkgroupView empty state", () => {
     await waitFor(() => expect(screen.getByText("No posts yet")).toBeInTheDocument());
     expect(screen.getByText("Direct @hub to open a #task.")).toBeInTheDocument();
     expect(container.querySelector("[data-shape='honeycomb']")).toBeTruthy();
+  });
+
+  it("lights the empty-state honeycomb in the colour of the profile at work, like the header", async () => {
+    invokeMock.mockImplementation((cmd) => Promise.resolve(cmd === "workgroup_tasks" ? {
+      active: { slug: "enrich", title: "go", opened_seq: 1 }, closed: [], blocked: null,
+      pipeline_run: { pipeline: "setup", status: "running", current_phase: "enrich", phases: [{ slug: "setup", state: "completed", seq: 1 }, { slug: "enrich", state: "current", seq: 2 }, { slug: "qa", state: "pending", seq: null }] },
+    } : ""));
+    const running = { ...workgroup, pipeline_status: "running", pipelines: { setup: ["setup", "enrich", "qa"] }, phase_map: { enrich: { owner: "@Pixel" } } };
+    const { container } = render(<WorkgroupView workgroup={running} profiles={[...profiles, { name: "pixel", accent: "#f36a8a" }]} connectionId="local" />);
+    await waitFor(() => expect(screen.getByText("No posts yet")).toBeInTheDocument());
+    await waitFor(() => expect(container.querySelectorAll("[data-shape='honeycomb'][data-state='running']")).toHaveLength(2));
+    for (const mark of container.querySelectorAll("[data-shape='honeycomb']")) {
+      expect(mark.style.getPropertyValue("--wg-lit-light")).toBe(nameTone("#f36a8a", palettes.light.bgPane));
+    }
   });
 
   it("drops a deleted workgroup when its transcript returns not-found", async () => {

@@ -13,6 +13,7 @@ import {
   Checkbox,
   Chip,
   CopyIcon,
+  Fold,
   DialogFooter,
   EditIcon,
   Icon,
@@ -32,6 +33,8 @@ import { toUsageDays } from "../../hooks/useUsage.js";
 import { copyText } from "../../lib/clipboard.js";
 import { pairingDisplayStatus, pairingExpiryText } from "../../lib/pairing-expiry.js";
 import { profileLabel } from "../../lib/profile-display.js";
+import { nameVars } from "../../lib/nameVars.js";
+import { ALL_PROFILES, accessSpoken, connectionAccess } from "../../../../common/connectionAccess.mjs";
 import useExit from "../../hooks/useExit.js";
 import styles from "./ConnectionsPage.module.css";
 import { EMPTY } from "../../../../common/emptyCopy.mjs";
@@ -42,10 +45,26 @@ export function deviceCount(row) {
   return `${n} device${n === 1 ? "" : "s"}`;
 }
 
-export function scopeLabel(row) {
-  if (row?.role === "admin") return "all profiles";
-  const scope = row?.profile_scope ?? [];
-  return scope.length ? scope.map((name) => `@${profileLabel(name)}`).join(", ") : "all profiles";
+export function ConnectionAccess({ row, profiles, ground = "bgPane" }) {
+  const access = connectionAccess(row, profiles);
+  if (access.all) return <span className={styles.accessAll}>{ALL_PROFILES}</span>;
+  return (
+    <span className={styles.access} role="group" aria-label={accessSpoken(access, profileLabel)}>
+      {access.shown.map((entry) => (entry.known ? (
+        <span key={entry.name} className={styles.accessProfile} style={nameVars(entry.accent, ground) ?? undefined}>
+          <Fold shape={entry.shape} color={entry.accent} size="inline" still />
+          <span className={styles.accessName}>{profileLabel(entry.name)}</span>
+        </span>
+      ) : entry.known === null ? (
+        <span key={entry.name} className={styles.metaRest}>{profileLabel(entry.name)}</span>
+      ) : (
+        <span key={entry.name} className={styles.accessGone} title="No longer on this daemon">{profileLabel(entry.name)}</span>
+      )))}
+      {access.more.length > 0 && (
+        <span className={styles.accessMore} title={access.more.map(profileLabel).join(", ")}>+{access.more.length}</span>
+      )}
+    </span>
+  );
 }
 
 function since(value) {
@@ -266,7 +285,8 @@ export default function ConnectionsPage({
                         <Mono>host.sock</Mono>
                       ) : (
                         <span className={styles.identityMeta}>
-                          <span>{deviceCount(row)} · {row.role} · {scopeLabel(row)}</span>
+                          <ConnectionAccess row={row} profiles={profiles.length ? profiles : null} ground={expanded ? "card" : "bgPane"} />
+                          <span className={styles.metaRest}>{row.role} · {deviceCount(row)}</span>
                           {row.status === "disabled" && <Chip size="sm" state="off">disabled</Chip>}
                         </span>
                       )}

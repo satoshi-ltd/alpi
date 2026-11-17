@@ -469,4 +469,14 @@ describe("settingsContentStyle", () => {
   it("leaves the phone column uncapped", () => {
     expect(settingsContentStyle(false)).toEqual({ paddingBottom: space.s10 });
   });
+
+  it("centres the column for the rail-less connections list on the fold", async () => {
+    expect(settingsContentStyle(true, "center")).toMatchObject({ maxWidth: 560, alignSelf: "center" });
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    for (const file of ["index.jsx", "[id].jsx"]) {
+      const src = readFileSync(join(import.meta.dirname, "..", "..", "app", "connections", file), "utf8");
+      expect(src).toContain("settingsContentStyle(twoPane, 'center')");
+    }
+  });
 });

@@ -24,6 +24,7 @@ export default function ChatHeader({
   right,
   paused = false,
   mark = null,
+  markColor = null,
   state = null,
   label = null,
   flag = null,
@@ -39,7 +40,7 @@ export default function ChatHeader({
   const close = useCallback(() => setOpen(false), []);
   useDismissOnOutside({ open, onClose: close, wrapRef });
   const glyph = isWg
-    ? <Fold shape={WORKGROUP_SHAPE} color={accent} size="md" {...mark} state={paused ? "paused" : mark?.state} />
+    ? <Fold shape={WORKGROUP_SHAPE} color={markColor || accent} size="md" {...mark} state={paused ? "paused" : mark?.state} />
     : <Fold shape={shape} color={accent} size="md" state={paused ? "paused" : state || "idle"} />;
   const titleGlyph = trimmedBio
     ? <Tip text={trimmedBio} side="l">{glyph}</Tip>

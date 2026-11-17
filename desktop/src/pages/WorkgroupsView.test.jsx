@@ -14,12 +14,15 @@ const WORKGROUPS = [
 ];
 
 describe("WorkgroupsView", () => {
-  it("sets its heading in the name face like every other page header", () => {
+  it("uses the compact page header every other page wears, the counts behind its details", () => {
     const { container } = render(<WorkgroupsView workgroups={WORKGROUPS} profiles={[]} onOpenWorkgroup={vi.fn()} />);
-    const h1 = container.querySelector("h1");
+    const header = container.querySelector("header.ds-chat-header");
+    const h1 = header.querySelector("h1");
     expect(h1.textContent).toBe("Workgroups");
     expect(h1.className).toBe("ds-name");
-    expect(h1.style.getPropertyValue("--name-light")).toBe("var(--ink-3)");
+    expect(header.querySelector(".title-row [data-mark='soft-honeycomb']")).not.toBeNull();
+    expect(header.querySelector("[role='dialog']").textContent).toContain("4 workgroups");
+    expect(container.querySelector(".meta-row")).toBeNull();
   });
 
   it("lists every workgroup and opens the selected row", () => {
@@ -192,7 +195,7 @@ describe("WorkgroupsView", () => {
     expect(cells("Paused hotel").every((c) => c.querySelector("path").getAttribute("fill") === "none")).toBe(true);
   });
 
-  it("lights a running row's phase cell in the hub's colour, never the owner's, and names the owner in the status", () => {
+  it("lights a running row's phase cell in the colour of the profile that owns the phase and names it in the status", () => {
     const running = {
       id: "wg-run", name: "Running hotel", profile: "mira", pipeline_status: "running", pipeline_phase: "media",
       phase_map: { media: { owner: "lingo" } }, mtime: 30,
@@ -207,8 +210,7 @@ describe("WorkgroupsView", () => {
     const glyph = screen.getByText("Running hotel").closest("button").querySelector("[data-shape]");
     expect(glyph.dataset.cell).toBe("top");
     expect(glyph.querySelector("[data-lead]").getAttribute("fill")).toBe("var(--wg-lit)");
-    expect(glyph.style.getPropertyValue("--wg-lit-light")).toBe(nameTone("#3388ff", palettes.light.bgPane));
-    expect(glyph.innerHTML).not.toContain("#f36a8a");
+    expect(glyph.style.getPropertyValue("--wg-lit-light")).toBe(nameTone("#f36a8a", palettes.light.bgPane));
     expect(screen.getByText("Working · media · @lingo")).toBeInTheDocument();
   });
 

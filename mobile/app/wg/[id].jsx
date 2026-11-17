@@ -39,7 +39,7 @@ import { buildTasks, classifyMessage } from '../../src/features/chat/parseMarker
 import { PipelineStrip } from '../../src/features/chat/PipelineStrip';
 import { PhaseMark } from '../../src/features/workgroups/PhaseChip';
 import { liveChip, runChips, runProgress, sameName } from '../../../common/pipelinePhases.mjs';
-import { pipelineRunMark, workgroupStatusLine } from '../../../common/workgroupMarkState.mjs';
+import { accentLookup, pipelineRunMark, workgroupMarkAccent, workgroupStatusLine } from '../../../common/workgroupMarkState.mjs';
 import { TasksSheet } from '../../src/features/sheets/TasksSheet';
 import {
   useProfileSummaries,
@@ -639,6 +639,7 @@ function WorkgroupChatInner() {
         named
         paused={!!paused}
         mark={headerMark}
+        markColor={workgroupMarkAccent(headerMark, accent, accentLookup(summaries.data?.profiles))}
         flag={workgroupHeaderFlag({ mark: headerMark, status: statusLine, paused })}
         title={wg.name || wg.id}
         meta={meta}

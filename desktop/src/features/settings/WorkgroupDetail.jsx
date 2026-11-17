@@ -29,7 +29,7 @@ import { workgroupWaitLabel } from "../../../../common/runLimits.mjs";
 import { useSettingsDirty } from "../../lib/settingsDirty.js";
 import { copyText } from "../../lib/clipboard.js";
 import { chainChips, hasPhaseOwners, orderedPipelines, ownedPhases, pipelineTrigger, runSummary, runSummaryLine, sameName } from "../../../../common/pipelinePhases.mjs";
-import { pipelineRunMark, workgroupStatusLine } from "../../../../common/workgroupMarkState.mjs";
+import { accentLookup, pipelineRunMark, workgroupMarkAccent, workgroupStatusLine } from "../../../../common/workgroupMarkState.mjs";
 import { WorkgroupDetails } from "../../primitives/HeaderDetails.jsx";
 import { settingsMatch, useSectionTitleHit, useSettingsQuery } from "./SettingsNav.jsx";
 
@@ -318,6 +318,7 @@ export default function WorkgroupDetail({
         id={workgroup.name || workgroup.id}
         accent={hub?.accent || "var(--accent)"}
         mark={heroMark}
+        markColor={workgroupMarkAccent(heroMark, hub?.accent, accentLookup(profiles))}
         bio={workgroup.briefing}
         meta={heroMeta}
         paused={!!workgroup.paused}

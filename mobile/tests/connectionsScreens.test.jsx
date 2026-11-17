@@ -135,10 +135,13 @@ beforeEach(() => {
 });
 
 describe('connections list', () => {
-  it('lists paired connections with role, scope and device count, and the host apart', () => {
-    render(<ConnectionsRoute />);
+  it('lists paired connections led by the profiles they reach, then role and devices, and the host apart', () => {
+    const { container } = render(<ConnectionsRoute />);
     expect(screen.getByText('Support')).toBeTruthy();
-    expect(screen.getByText('member · doc · 2 devices · 3 sessions · seen never')).toBeTruthy();
+    const access = container.querySelector('[testID="connection-access"]');
+    expect(access.textContent).toBe('doc');
+    expect(access.querySelector('[data-shape]')).toBeTruthy();
+    expect(screen.getByText('member · 2 devices · seen never')).toBeTruthy();
     expect(screen.getByText('disabled')).toBeTruthy();
     expect(screen.getByText('Local host')).toBeTruthy();
     expect(screen.getByText('12 sessions · seen never')).toBeTruthy();
@@ -210,6 +213,14 @@ describe('connection detail', () => {
     expect(screen.getByText('web · 1.0 · never · provisioner')).toBeTruthy();
     expect(screen.getByText('per connection')).toBeTruthy();
     expect(document.querySelector('[data-chart]')).toBeTruthy();
+  });
+
+  it('draws the Profiles row as the marks of the profiles in scope and speaks their names', () => {
+    const { container } = render(<ConnectionRoute />);
+    const access = container.querySelector('[testID="connection-access"]');
+    expect(access.textContent).toBe('doc');
+    expect(access.querySelector('[data-shape]')).toBeTruthy();
+    expect(screen.getByLabelText('Profiles, doc, blank = all')).toBeTruthy();
   });
 
   it('draws the revoke control as a 44 pt button with no extra hit slop', () => {

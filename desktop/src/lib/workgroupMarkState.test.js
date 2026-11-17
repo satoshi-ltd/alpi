@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { currentCell, pipelineRunMark, withOwner, workgroupGap, workgroupStatusLine, workgroupMark, workgroupMarkState, workgroupPhase } from "../../../common/workgroupMarkState.mjs";
+import { currentCell, pipelineRunMark, withOwner, workgroupGap, workgroupStatusLine, workgroupMark, workgroupMarkAccent, workgroupMarkState, workgroupPhase, accentLookup } from "../../../common/workgroupMarkState.mjs";
 
 describe("workgroup mark state", () => {
   it("reads the pipeline's state, paused and offline first", () => {
@@ -58,5 +58,38 @@ describe("workgroup mark state", () => {
     expect(pipelineRunMark({ workgroup, pipelineRun })).toEqual({ state: "running", phase: [1, 3], step: "b", owner: "lingo" });
     expect(pipelineRunMark({ workgroup, pipelineRun: { ...pipelineRun, status: "blocked" } }).state).toBe("needs");
     expect(pipelineRunMark({ workgroup, pipelineRun: { ...pipelineRun, status: "completed" } })).toEqual({ state: "idle", phase: null, step: null, owner: null });
+  });
+});
+
+describe("workgroup mark accent", () => {
+  const accents = { lingo: "#9b5ad9", doc: "#3899e2" };
+  const accentOf = (name) => accents[name];
+
+  it("lights the honeycomb in the accent of the profile that owns the live phase", () => {
+    const workgroup = { pipeline_status: "running", phase_map: { build: { owner: "@lingo" } } };
+    const mark = workgroupMark({ workgroup, run: { phasesDone: 1, phasesTotal: 3, phase: "build" } });
+    expect(workgroupMarkAccent(mark, "#3899e2", accentOf)).toBe("#9b5ad9");
+  });
+
+  it("falls back to the hub when nobody owns the phase, the owner is remote or the group rests", () => {
+    const hub = "#3899e2";
+    const running = { pipeline_status: "running", phase_map: { build: { owner: "@peer" } } };
+    expect(workgroupMarkAccent(workgroupMark({ workgroup: running, run: { phasesDone: 1, phasesTotal: 3, phase: "build" } }), hub, accentOf)).toBe(hub);
+    expect(workgroupMarkAccent(workgroupMark({ workgroup: { pipeline_status: "running" } }), hub, accentOf)).toBe(hub);
+    expect(workgroupMarkAccent(workgroupMark({ workgroup: { pipeline_status: "completed", pipeline_phase: "build", phase_map: { build: { owner: "lingo" } } } }), hub, accentOf)).toBe(hub);
+    expect(workgroupMarkAccent({ owner: "lingo" }, hub, null)).toBe(hub);
+    expect(workgroupMarkAccent(null, null, accentOf)).toBeNull();
+  });
+});
+
+describe("accentLookup", () => {
+  it("finds an owner whatever its case or leading @, like the daemon does", () => {
+    const accentOf = accentLookup([{ name: "lingo", accent: "#9b5ad9" }, { name: "Doc", accent: "#3899e2" }]);
+    expect(accentOf("@Lingo")).toBe("#9b5ad9");
+    expect(accentOf("doc")).toBe("#3899e2");
+    expect(accentOf("peer")).toBeNull();
+    expect(accentLookup(null)("lingo")).toBeNull();
+    const workgroup = { pipeline_status: "running", phase_map: { build: { owner: "@LINGO" } } };
+    expect(workgroupMarkAccent(workgroupMark({ workgroup, run: { phasesDone: 1, phasesTotal: 3, phase: "build" } }), "#000000", accentOf)).toBe("#9b5ad9");
   });
 });

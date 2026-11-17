@@ -315,8 +315,8 @@ def carded(html):
     return re.sub(r"(?:<!--r-->.*?<!--/r-->\s*)+", wrap_run, html, flags=re.S)
 
 
-def fold_column(inner, top=20):
-    return f'<div style="max-width: 560px; padding: {top}px 0 40px; box-sizing: border-box; display: flex; flex-direction: column">{carded(inner)}</div>'
+def fold_column(inner, top=20, centred=False):
+    return f'<div style="max-width: 560px; {"width: 100%; align-self: center; " if centred else ""}padding: {top}px 0 40px; box-sizing: border-box; display: flex; flex-direction: column">{carded(inner)}</div>'
 
 
 def switch(on=False, accent=DOC_ACCENT, label="", disabled=False):
@@ -588,7 +588,7 @@ def m_roster(selected="doc", compact=True, wg_selected=False, offline=False, til
         return m_roster_row(name, col, ts=ts, state=state, phases=phases, selected=compact and name == selected, unread=name == "yuri", compact=compact, dim=name == "etxea", paused=name == "galt", offline=offline)
 
     rows = "".join(prow(n, c, t) for n, c, t, _ in PROFILES if n not in M_PINNED and n != FRONT)
-    wgs = "".join((m_roster_row("alpha", DOC_ACCENT, "workgroup", state=None if offline else "working", phases=None if offline else "2/4", selected=wg_selected, compact=compact, offline=offline),
+    wgs = "".join((m_roster_row("alpha", "#9b5ad9", "workgroup", state=None if offline else "working", phases=None if offline else "2/4", selected=wg_selected, compact=compact, offline=offline),
                    m_roster_row("launch-crew", "#f0b447", "workgroup", ts="2h", compact=compact, offline=offline)))
     return f'{m_tiles(compact) if tiles else ""}{m_roster_label("Profiles", True, gutter)}{rows}{m_roster_label("Workgroups", True, gutter)}{wgs}'
 
@@ -1043,8 +1043,32 @@ def fold_wg_settings():
 
 
 
-def conn_row(label, meta, cost):
-    return m_row(label, meta, cost)
+ACCESS_CAST = {"doc": ("squircle", "#3899e2"), "lingo": ("clover", "#9b5ad9"), "abby": ("drop", "#df4b9d"), "yuri": ("heart", "#f36a8a"), "galt": ("arch", "#6572e4")}
+
+
+def access_line(scope, ground="bgPane", size=14, align="flex-start", limit=3):
+    import marks
+    import volume_marks as vm
+    if not scope:
+        return f'<span style="font-size: {size}px; color: #454545">All profiles</span>'
+
+    def one(name):
+        if name not in ACCESS_CAST:
+            return f'<span title="No longer on this daemon" style="font-size: {size}px; color: #6b6b6b; text-decoration: line-through">{name}</span>'
+        shape, accent = ACCESS_CAST[name]
+        tone = f"light-dark({marks.name_tone(accent, PALETTES['light'][ground])}, {marks.name_tone(accent, PALETTES['dark'][ground])})"
+        return (f'<span style="display: inline-flex; align-items: center; gap: 4px; white-space: nowrap">{vm.mark(shape, accent, 16, "idle", seed="access" + name, still=True)}'
+                f'<span style="font-size: {size}px; font-weight: 500; color: {tone}">{name}</span></span>')
+
+    more = f'<span title="{", ".join(scope[limit:])}" style="font-size: {size}px; color: #6b6b6b">+{len(scope) - limit}</span>' if len(scope) > limit else ""
+    return f'<span aria-label="{", ".join(scope)}" style="display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: {align}; gap: 4px 12px; min-width: 0">{"".join(one(n) for n in scope[:limit])}{more}</span>'
+
+
+def conn_row(label, scope, meta, cost):
+    return f"""<div data-tile="" style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 12px 16px; box-sizing: border-box">
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 15px; font-weight: 500; line-height: 21px; color: #141414">{label}</span>{access_line(scope, "card")}<span style="font-size: 14px; line-height: 20px; color: #6b6b6b">{meta}</span></div>
+<span style="font-size: 15px; color: #6b6b6b">{cost}</span><span style="display: inline-flex; flex-shrink: 0">{mi("chev-r", 20, "#b4b4b4")}</span>
+</div>"""
 
 
 def phone_connections():
@@ -1054,10 +1078,11 @@ def phone_connections():
 {m_group(
     m_row("Local host", "14 sessions · seen now", "$6.28", sep=False),
 )}
-{m_section("Connections", "2 paired")}
+{m_section("Connections", "3 paired")}
 {m_group(
-    m_row("emulator-android", "admin · all profiles · 2 devices · 4 sessions · seen now", "$0.00"),
-    m_row("remote", "admin · all profiles · 2 devices · 4 sessions · seen now", "$0.44", sep=False),
+    conn_row("emulator-android", [], "admin · 2 devices · seen now", "$0.00"),
+    conn_row("front-desk", ["lingo"], "member · 1 device · seen now", "$0.12"),
+    conn_row("ops-team", ["doc", "abby", "yuri", "galt"], "member · 3 devices · seen 9m ago", "$0.44"),
 )}
 </div>
 """
@@ -1076,7 +1101,7 @@ def phone_connection_detail():
 {m_group(
     m_row("Label", "", "emulator-android"),
     m_row("Role", "manages profiles and connections", control=pill("admin", tone="warning"), chevron=False),
-    m_row("Profiles", "", "all"),
+    m_row("Profiles", "blank = all", access_line([], "card", 15, "flex-end")),
     m_row("Session scope", "one thread per connection, or one per device", "connection"),
     m_row("Enabled", "this phone goes offline with it · an admin elsewhere must re-enable it", control=switch(True, ALPI_ACCENT, "Enabled"), chevron=False),
     m_row("Sessions", "", "4", chevron=False),
@@ -1105,7 +1130,7 @@ def fold_connection_detail():
     inner = fold_column(f"""{m_wide_section("Overview", first=True)}
 {m_wide_row("Label", "", "emulator-android")}
 {m_wide_row("Role", "manages profiles and connections", control=pill("admin", tone="warning"), chevron=False)}
-{m_wide_row("Profiles", "", "all")}
+{m_wide_row("Profiles", "blank = all", access_line([], "card", 15, "flex-end"))}
 {m_wide_row("Session scope", "one thread per connection, or one per device", "connection")}
 {m_wide_row("Enabled", "this phone goes offline with it · an admin elsewhere must re-enable it", control=switch(True, ALPI_ACCENT, "Enabled"), chevron=False)}
 {m_wide_row("Sessions", "", "4", chevron=False)}
@@ -1118,7 +1143,7 @@ def fold_connection_detail():
 {m_wide_row("+ Add device", "one-time pairing link", chevron=False)}
 {m_wide_section("Danger zone")}
 {m_wide_row("Delete connection", "revokes every device and its sessions. Cannot be undone.", danger=True)}
-""")
+""", centred=True)
     body = f"""<div style="display: flex; height: 100%">
 {m_sidebar(1300, selected="", conn_selected=True)}
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: #ffffff">
@@ -1231,7 +1256,7 @@ def build(desktop_boards):
         ("Desktop-ProfilePanels.dc.html", desktop_panels_board(), PANELS_DESKTOP_H, "Profile panels"),
         ("Desktop-Workgroups.dc.html", desktop_boards["workgroups"], 630, "Workgroups"),
         ("Desktop-WorkgroupsStale.dc.html", desktop_boards["workgroups-stale"], 630, "Workgroups · stale"),
-        ("Desktop-Connections.dc.html", desktop_boards["connections"], 850, "Connections"),
+        ("Desktop-Connections.dc.html", desktop_boards["connections"], 900, "Connections"),
         ("Desktop-AppSettings.dc.html", desktop_boards["app"], 740, "App settings"),
         ("Desktop-FirstRun.dc.html", desktop_onboarding(), DESKTOP_ONBOARDING_H, "First run"),
         ("Desktop-Overlays.dc.html", desktop_overlays(), OVERLAYS_H, "Overlays"),

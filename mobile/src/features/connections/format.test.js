@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { connectionMeta, deviceMeta, deviceTitle, pairingLink, relativeSeen, scopeLabel, sessionScopeLabel } from './format';
+import { connectionMeta, deviceMeta, deviceTitle, pairingLink, relativeSeen, sessionScopeLabel } from './format';
 
 describe('relativeSeen', () => {
   beforeEach(() => {
@@ -33,12 +33,6 @@ describe('device rows', () => {
 });
 
 describe('scopes', () => {
-  it('reads an admin or an empty scope as every profile', () => {
-    expect(scopeLabel({ role: 'admin', profile_scope: ['doc'] })).toBe('all profiles');
-    expect(scopeLabel({ role: 'member', profile_scope: [] })).toBe('all profiles');
-    expect(scopeLabel({ role: 'member', profile_scope: ['doc', 'abby'] })).toBe('doc, abby');
-  });
-
   it('labels the session scope', () => {
     expect(sessionScopeLabel({ session_scope: 'device' })).toBe('per device');
     expect(sessionScopeLabel({})).toBe('per connection');
@@ -74,10 +68,8 @@ describe('pairingLink', () => {
 });
 
 describe('connectionMeta', () => {
-  it('reads role · scope · devices · sessions · seen, singular where it counts one', () => {
-    expect(connectionMeta({ role: 'member', profile_scope: ['doc'], devices: [{}], sessions: 1, last_seen: 0 })).toBe(
-      'member · doc · 1 device · 1 session · seen never',
-    );
-    expect(connectionMeta({ role: 'admin', devices: [{}, {}], sessions: 0 })).toBe('admin · all profiles · 2 devices · 0 sessions · seen never');
+  it('reads role · devices · seen, leaving the profiles to the access line', () => {
+    expect(connectionMeta({ role: 'member', profile_scope: ['doc'], devices: [{}], sessions: 1, last_seen: 0 })).toBe('member · 1 device · seen never');
+    expect(connectionMeta({ role: 'admin', devices: [{}, {}], sessions: 0 })).toBe('admin · 2 devices · seen never');
   });
 });

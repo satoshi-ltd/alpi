@@ -20,6 +20,7 @@ export default function WorkgroupChatHeader({
   onRefresh,
   tasksButton,
   mark = null,
+  markColor = null,
 }) {
   const accent = hubAccent || "var(--accent)";
 
@@ -58,6 +59,7 @@ export default function WorkgroupChatHeader({
       right={right}
       paused={paused}
       mark={mark}
+      markColor={markColor}
       flag={flag}
     />
   );

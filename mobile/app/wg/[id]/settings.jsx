@@ -26,7 +26,7 @@ import { usePullRefresh } from '../../../src/hooks/usePullRefresh';
 import { useProfileSummaries, useWorkgroupMembers, useWorkgroupTasks, useWorkgroupUsage } from '../../../src/hooks/useDaemonData';
 import { MemberCard } from '../../../src/features/workgroups/MemberCard';
 import { hasPhaseOwners, orderedPipelines, ownedPhases, sameName } from '../../../../common/pipelinePhases.mjs';
-import { pipelineRunMark } from '../../../../common/workgroupMarkState.mjs';
+import { accentLookup, pipelineRunMark, workgroupMarkAccent } from '../../../../common/workgroupMarkState.mjs';
 import { useProfile, useWorkgroup } from '../../../src/hooks/useSubject';
 import { copyText } from '../../../src/lib/clipboard';
 import { useEndpoint } from '../../../src/lib/EndpointContext';
@@ -232,7 +232,7 @@ function WorkgroupSettings() {
         accent={accent}
         neutral
         muted={!!paused}
-        leadingGlyph={<Fold shape={WORKGROUP_SHAPE} color={accent} size="md" state={headerMark.state} phase={headerMark.phase} seed={wg.id} />}
+        leadingGlyph={<Fold shape={WORKGROUP_SHAPE} color={workgroupMarkAccent(headerMark, accent, accentLookup(summaries.data?.profiles))} size="md" state={headerMark.state} phase={headerMark.phase} seed={wg.id} />}
         meta={
           <>
             <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink2 }}>{`hub @${wg.hub_id}`}</Text>

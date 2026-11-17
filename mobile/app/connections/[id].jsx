@@ -21,10 +21,11 @@ import { Bold, Code, ConfirmDialog } from '../../src/components/ConfirmDialog';
 import { UsageChart } from '../../src/components/UsageChart';
 import { PairingSheet } from '../../src/features/connections/PairingSheet';
 import { ProfilesScopeSheet } from '../../src/features/connections/ProfilesScopeSheet';
-import { deviceMeta, deviceTitle, relativeSeen, scopeLabel, sessionScopeLabel } from '../../src/features/connections/format';
+import { AccessLine, accessLabel } from '../../src/features/connections/AccessLine';
+import { deviceMeta, deviceTitle, relativeSeen, sessionScopeLabel } from '../../src/features/connections/format';
 import { useBack } from '../../src/hooks/useBack';
 import { usePullRefresh } from '../../src/hooks/usePullRefresh';
-import { useConnectionsSummary } from '../../src/hooks/useDaemonData';
+import { useConnectionsSummary, useProfileSummaries } from '../../src/hooks/useDaemonData';
 import { useEndpoint } from '../../src/lib/EndpointContext';
 import { settingsContentStyle } from '../../src/lib/panes';
 import { usePane } from '../../src/nav/PaneContext';
@@ -74,6 +75,7 @@ function ConnectionDetail() {
   const { colors } = useTheme();
   const { twoPane } = usePane();
   const summary = useConnectionsSummary();
+  const profiles = useProfileSummaries().data?.profiles ?? null;
   const pull = usePullRefresh(summary.refresh);
   const [prompt, setPrompt] = useState(null);
   const [confirm, setConfirm] = useState(null);
@@ -110,7 +112,7 @@ function ConnectionDetail() {
     }
   };
 
-  const contentStyle = settingsContentStyle(twoPane);
+  const contentStyle = settingsContentStyle(twoPane, 'center');
 
   if (!row || opening) {
     return (
@@ -158,7 +160,7 @@ function ConnectionDetail() {
               {row.role !== 'admin' ? (
                 <>
                   <RowSeparator />
-                  <Row label="Profiles" helper="blank = all" value={scopeLabel(row)} onPress={() => setScopeOpen(true)} />
+                  <Row label="Profiles" helper="blank = all" value={<AccessLine row={row} profiles={profiles} align="flex-end" />} spokenValue={accessLabel(row, profiles)} onPress={() => setScopeOpen(true)} />
                   <RowSeparator />
                   <Row
                     label="Session scope"
