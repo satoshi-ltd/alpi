@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.19.4 — 2026-11-17 — the image builds again
+
+- The Docker image builds again: 0.19.3 reached PyPI but never got an image, so `tools.terminal.docker_scoped` first ships in a container here.
+- playwright stays below 1.65, the release the image could not be built with.
+
 ## v0.19.3 — 2026-11-17 — a shell for Docker phases
 
 - A workgroup pipeline whose phases run a build or an installer can now work in the Docker runtime: `tools.terminal.docker_scoped: true` in a profile's `config.yaml` gives it `terminal` in the phases it owns. Off by default, and nothing changes outside Docker.

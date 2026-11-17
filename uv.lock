@@ -8,7 +8,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-10-16T13:17:48.219504Z"
+exclude-newer = "2026-11-10T02:58:06.909455Z"
 exclude-newer-span = "P7D"
 
 [[package]]
@@ -113,7 +113,7 @@ wheels = [
 
 [[package]]
 name = "alpi-agent"
-version = "0.19.3"
+version = "0.19.4"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
@@ -171,7 +171,7 @@ requires-dist = [
     { name = "litellm", specifier = ">=1.104.1,<1.105" },
     { name = "pillow", specifier = ">=10.0" },
     { name = "pip-audit", marker = "extra == 'dev'", specifier = ">=2.7" },
-    { name = "playwright", specifier = ">=1.44" },
+    { name = "playwright", specifier = ">=1.44,<1.65" },
     { name = "playwright-stealth", specifier = ">=1.0.6" },
     { name = "prompt-toolkit", specifier = ">=3.0.43" },
     { name = "pypdf", specifier = ">=4.0" },

@@ -5,6 +5,7 @@ import tomllib
 
 import pytest
 import yaml
+from packaging.specifiers import SpecifierSet
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -88,3 +89,10 @@ def test_every_workflow_pip_install_uses_the_cooldown():
                 for command in _commands(step.get("run", "")):
                     if "install" in command and any(word.startswith("pip") for word in command[:4]):
                         _check_pip(command)
+
+
+def test_playwright_stays_below_the_release_whose_driver_broke_the_image():
+    deps = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["dependencies"]
+    spec = next(d for d in deps if re.match(r"playwright(?![\w-])", d))
+    assert not SpecifierSet(spec[len("playwright"):]).contains("1.65.0"), spec
+

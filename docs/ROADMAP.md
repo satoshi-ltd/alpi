@@ -1,6 +1,6 @@
 # alpi roadmap
 
-Updated 2026-11-11. Current versions live in the changelogs. The Queue runs top to bottom; the creator
+Updated 2026-11-17. Current versions live in the changelogs. The Queue runs top to bottom; the creator
 approves the next tasks from Proposed.
 
 This is the task pool. [ARCHITECTURE.md](ARCHITECTURE.md) owns current state and
@@ -438,6 +438,21 @@ _None._
   disappears from the picker; only `alpi workgroup recipes` and "Import recipe…" name the reason.
   accept: the picker lists each refused recipe as disabled with the daemon's reason; an older daemon without
   `invalid_recipes` shows nothing extra; a component test renders one valid and one refused recipe.
+
+### Found while shipping alpi 0.19.3
+
+- **DOCKER.LOCKED-INSTALL** — The Docker image installs the versions in `uv.lock`
+  `bug · alpi · agent · normal`
+  note: `docker/Dockerfile` runs `pip install --uploaded-prior-to P7D .`, so every build resolves each
+  dependency again and `uv.lock` never reaches the image: a build fails with no dependency change when a
+  release ages past the seven days, as playwright 1.65.0 did (its bundled `node` needs `libatomic.so.1`).
+  `pyproject.toml` caps `playwright<1.65`; lifting it needs `libatomic1` in the image, which the guard in
+  `tests/tools/test_browser.py` against hand-written libraries must allow. The lock
+  holds an older playwright than the image ships, so this changes the browser version. `CHROMIUM_DEPS_COMMAND`
+  (`uvx --from playwright …`) is uncapped too, so the repair `alpi doctor` prints may resolve 1.65 on a host.
+  accept: the image installs the exact versions `uv.lock` records; `tests/core/test_dependency_cooldown.py`
+  fails when the Dockerfile resolves a dependency outside the lock; the playwright cap is lifted or kept with
+  its reason, and the repair command resolves the playwright alpi runs; the image smoke test launches the browser.
 
 ### Found while shipping mobile 0.9.14
 
