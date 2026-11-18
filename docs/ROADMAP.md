@@ -196,21 +196,6 @@ Each entry is written to be worked without that report:
 
 #### Security — daemon
 
-- **SEC.SCRIPT-JOB-ARGV** — A script job runs a script file, never inline code (S3)
-  `bug · alpi · agent · high`
-  note: the `no_agent` argv check in [scheduler/run.py](../alpi/scheduler/run.py) (`:296-312`) refuses only tokens
-  that start with `-c`, `-m`, `--command` or `--module` and skips every other token that starts with `-`, so
-  `python3 '-Bcopen("/x","w").write("ran")' <home>/skills/a/b/scripts/none.py` is accepted and runs the inline code;
-  `-Ic'…'` and `-uc'…'` pass too. The named script need not exist. `schedule` infers `no_agent` by itself
-  ([tools/schedule.py](../alpi/tools/schedule.py) `:226-232`) and `_run_script_only` (`run.py:318-350`) runs the argv
-  with the profile's whole environment, no classifier and no sandbox, on a cron. It also defeats a profile that
-  denies `terminal` or `write_file`. Fix shape: accept only the exact flags `-u`, `-B`, `-I`, `-E`, `-s`, `-O` before
-  the script; refuse every other token that starts with `-`; require the script to exist as a regular file whose
-  resolved path is still under the directory `_under_skills` accepts today (do not narrow that directory).
-  accept: the three inputs are refused with a reason the `schedule` tool returns; a missing script, a symlink and a
-  path that resolves outside the skills directory are refused; `python3 -u <existing script>` and a bare
-  `<existing script>` still pass; tests on the validator and through `schedule(action="create")`.
-
 - **SEC.LOCAL-ONLY-CHILDREN** — A remote admin cannot reach a local-only setting through a child key (S5)
   `bug · alpi · agent · high`
   note: `_touches_local_only_config` in [server.py](../alpi/host/server.py) (`:98-106`) refuses a key equal to a

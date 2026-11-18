@@ -60,7 +60,15 @@ def test_cron_tool_add_cron_job_silent_by_default(tmp_home_no_env: Path) -> None
     assert data[0]["notify"] is False
 
 
+def _skill_script(home: Path, rel: str) -> Path:
+    path = home / "skills" / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("print('ok')\n")
+    return path
+
+
 def test_cron_tool_add_stores_title(tmp_home_no_env: Path) -> None:
+    _skill_script(tmp_home_no_env, "personal/sports/scripts/run.py")
     out = Schedule().run(action="add", kind="cron", expression="0 9 * * 1",
                      prompt="python3 ${ALPI_HOME}/skills/personal/sports/scripts/run.py",
                      no_agent=True, title="Sports this weekend")
@@ -809,6 +817,7 @@ def test_no_agent_expands_alpi_home_and_loads_dotenv(
     profile's .env is merged into the subprocess env so skills find
     their declared requires_env variables."""
     (tmp_home_no_env / ".env").write_text("FOLDER=/tmp/vault\nOTHER=abc\n")
+    _skill_script(tmp_home_no_env, "personal/foo/scripts/run.py")
 
     captured = {}
     def fake_run(argv, *, env, **kw):
@@ -864,6 +873,8 @@ def test_no_agent_rejects_command_outside_skills(tmp_home_no_env: Path) -> None:
     assert f("python3 ${ALPI_HOME}/skills/loose.py", h) is not None
 
     # Happy paths
+    _skill_script(h, "personal/whoop/scripts/run.py")
+    _skill_script(h, "personal/coros/scripts/run.py")
     assert f("python3 ${ALPI_HOME}/skills/personal/whoop/scripts/run.py sync", h) is None
     assert f("python3 -u ${ALPI_HOME}/skills/personal/coros/scripts/run.py", h) is None
     # Script invoked directly (shebang form)

@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.19.10 — 2026-11-18 — script jobs run scripts, not code
+
+- A scheduled script job (`no_agent`) now accepts only `python[3]` with the flags `-u -B -I -E -s -O` and a script that exists as a regular file under a skill's `scripts/` folder. Before, a flag such as `-Bc` carried inline code, and the named script did not even have to exist.
+- The interpreter must be `python`, `python3` or `python3.N`, as a bare name or an absolute path outside the profile and temp folders, so a job cannot name a binary of its own.
+- The same check runs at every fire, so a job saved with a refused shape stops running and says which flag it refused and which are allowed.
+- Why: inline code in a job skipped the skill scanner, and it kept running on every cron tick with the profile's credentials.
+
 ## v0.19.9 — 2026-11-18 — a shell command that cannot be read needs approval
 
 - A terminal command the safety check cannot read, for instance one with an unbalanced quote or a heredoc it cannot follow, now asks for approval, each time. Before, it went through as safe, so a stray apostrophe in a comment was enough to run a download-and-execute or read a credential file without a prompt. On a surface with nobody to ask, it is refused.

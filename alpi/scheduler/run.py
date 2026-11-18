@@ -263,11 +263,37 @@ def _last_user_activity(home: Path) -> datetime | None:
 
 
 
+_PYTHON_FLAGS_RE = re.compile(r"-[uBIEsO]+")
+_INTERPRETER_NAME_RE = re.compile(r"python3?(?:\.\d+)?")
+_PYTHON_FLAGS_ALLOWED = "-u -B -I -E -s -O -OO"
+
+
+def _interpreter_problem(exe: str, home: Path) -> str | None:
+    if "/" not in exe:
+        return None
+    path = Path(exe)
+    if not path.is_absolute():
+        return f"no_agent python must be a bare name or an absolute path outside the profile and temp folders — got: {exe!r}"
+    import tempfile
+    from alpi import config as cfg_mod
+    roots = [home, Path(tempfile.gettempdir()), Path("/tmp"), Path("/private/tmp")]
+    try:
+        workspace = cfg_mod.load(home).workspace_path
+    except Exception:  # noqa: BLE001
+        workspace = None
+    if workspace:
+        roots.append(Path(workspace))
+    resolved = path.resolve()
+    for root in roots:
+        try:
+            resolved.relative_to(root.resolve())
+        except ValueError:
+            continue
+        return f"no_agent python must not live under {root} — got: {exe!r}"
+    return None
+
+
 def validate_no_agent_command(prompt: str, home: Path) -> str | None:
-    # Form-based allowlist: only `python[3] [flags] <skill_script>` or a
-    # `<skill_script>` invoked directly. Blocks `-c`/`-m` (inline code/module
-    # bypass the script-on-disk check) and non-python executables (rm, bash,
-    # curl…) even when a skills/ path appears as an argument.
     expanded = prompt.replace("${ALPI_HOME}", str(home)).replace(
         "$ALPI_HOME", str(home),
     )
@@ -288,26 +314,37 @@ def validate_no_agent_command(prompt: str, home: Path) -> str | None:
         parts = rel.parts
         return len(parts) >= 4 and parts[2] == "scripts"
 
+    def _script_problem(tok: str) -> str | None:
+        path = Path(tok)
+        if not path.is_file() or path.is_symlink():
+            return f"the script must exist as a regular file under {home}/skills/<category>/<name>/scripts/ — got: {tok!r}"
+        return None
+
     exe = argv[0]
     rest = argv[1:]
 
     if _under_skills(exe):
-        return None
+        return _script_problem(exe)
 
-    exe_name = Path(exe).name
-    if not (exe_name in {"python", "python3"} or exe_name.startswith("python3.")):
+    if not _INTERPRETER_NAME_RE.fullmatch(Path(exe).name):
         return (
             f"no_agent executable must be python or a script under "
             f"{home}/skills/ — got: {exe!r}"
         )
+    problem = _interpreter_problem(exe, home)
+    if problem:
+        return problem
 
     for tok in rest:
-        if tok.startswith(("-c", "-m", "--command", "--module")):
-            return f"forbidden python flag in no_agent: {tok!r}"
         if tok.startswith("-"):
-            continue
+            if _PYTHON_FLAGS_RE.fullmatch(tok):
+                continue
+            return (
+                f"python flag not allowed in no_agent: {tok!r}; "
+                f"only {_PYTHON_FLAGS_ALLOWED}, so a job cannot carry inline code"
+            )
         if _under_skills(tok):
-            return None
+            return _script_problem(tok)
         return (
             f"first non-flag python arg must be a script under "
             f"{home}/skills/ — got: {tok!r}"
