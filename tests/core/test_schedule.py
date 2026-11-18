@@ -771,7 +771,8 @@ def test_no_agent_silent_when_no_stdout(monkeypatch, tmp_home_no_env: Path) -> N
 
     assert ok
     assert "silent" in msg
-    assert spawn_calls == [["python3", script]]
+    assert len(spawn_calls) == 1 and spawn_calls[0][1:] == [script]
+    assert Path(spawn_calls[0][0]).is_absolute()
 
 
 def test_no_agent_notifies_stdout_when_notify_true(
@@ -833,7 +834,8 @@ def test_no_agent_expands_alpi_home_and_loads_dotenv(
 
     assert ok
     expected_script = str(tmp_home_no_env / "skills/personal/foo/scripts/run.py")
-    assert captured["argv"] == ["python3", expected_script]
+    assert captured["argv"][1:] == [expected_script]
+    assert Path(captured["argv"][0]).is_absolute() and Path(captured["argv"][0]).name.startswith("python")
     assert captured["env"]["FOLDER"] == "/tmp/vault"
     assert captured["env"]["OTHER"] == "abc"
     assert captured["env"]["ALPI_HOME"] == str(tmp_home_no_env)

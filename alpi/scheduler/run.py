@@ -8,6 +8,7 @@ import math
 import os
 import re
 import shlex
+import shutil
 import signal
 import subprocess
 import sys
@@ -283,13 +284,15 @@ def _interpreter_problem(exe: str, home: Path) -> str | None:
         workspace = None
     if workspace:
         roots.append(Path(workspace))
+    typed = Path(os.path.abspath(exe))
     resolved = path.resolve()
     for root in roots:
-        try:
-            resolved.relative_to(root.resolve())
-        except ValueError:
-            continue
-        return f"no_agent python must not live under {root} — got: {exe!r}"
+        for form in (typed, resolved):
+            try:
+                form.relative_to(root.resolve())
+            except ValueError:
+                continue
+            return f"no_agent python must not live under {root} — got: {exe!r}"
     return None
 
 
@@ -380,6 +383,15 @@ def _run_script_only(job: dict, home: Path, secs: int) -> JobOutcome:
         **deploy_env(),
         **workspace_env(home),
     })
+
+    if _INTERPRETER_NAME_RE.fullmatch(Path(argv[0]).name):
+        resolved = argv[0] if "/" in argv[0] else shutil.which(argv[0], path=env.get("PATH"))
+        if not resolved or not os.path.isabs(resolved):
+            return JobOutcome(False, f"no_agent rejected: interpreter not found as an absolute path on the job's PATH: {argv[0]!r}")
+        problem = _interpreter_problem(resolved, home)
+        if problem:
+            return JobOutcome(False, f"no_agent rejected: {problem}")
+        argv[0] = resolved
 
     try:
         proc = subprocess.run(

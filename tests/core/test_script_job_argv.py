@@ -124,3 +124,84 @@ def test_an_interpreter_inside_a_writable_root_is_refused(home: Path, tmp_path: 
 @pytest.mark.parametrize("exe", ["python", "python3", "python3.12", "/usr/bin/python3", "/usr/local/bin/python3.11"])
 def test_a_real_interpreter_name_or_a_system_path_passes(home: Path, exe: str) -> None:
     assert validate_no_agent_command(f"{exe} -u {SCRIPT}", home) is None, exe
+
+
+def _run(home: Path, monkeypatch, command: str, env_text: str = ""):
+    spawned: list = []
+    monkeypatch.setattr(scheduler.subprocess, "run", lambda argv, **kw: spawned.append(argv) or _Done())
+    if env_text:
+        (home / ".env").write_text(env_text)
+    job = {"id": "j", "kind": "cron", "no_agent": True, "prompt": command}
+    ok, message, _ = scheduler.run_job(job, home)
+    return ok, message, spawned
+
+
+class _Done:
+    returncode = 0
+    stdout = ""
+    stderr = ""
+
+
+def _stub_python(directory: Path) -> Path:
+    directory.mkdir(parents=True, exist_ok=True)
+    stub = directory / "python3"
+    stub.write_text("#!/bin/sh\necho hijacked\n")
+    stub.chmod(0o755)
+    npm = directory / "npm"
+    npm.write_text("#!/bin/sh\n")
+    npm.chmod(0o755)
+    return stub
+
+
+def test_a_bare_python_is_resolved_on_the_job_path_and_refused_inside_a_writable_root(home: Path, tmp_path: Path, monkeypatch) -> None:
+    _stub_python(tmp_path / "evil-bin")
+    ok, message, spawned = _run(home, monkeypatch, f"python3 {SCRIPT}", f"PATH={tmp_path / 'evil-bin'}:/usr/bin:/bin\n")
+    assert ok is False and "no_agent rejected" in message
+    assert spawned == []
+
+
+def test_a_bare_python_the_path_cannot_find_spawns_nothing(home: Path, monkeypatch) -> None:
+    monkeypatch.setattr(scheduler.shutil, "which", lambda *a, **k: None)
+    ok, message, spawned = _run(home, monkeypatch, f"python3 {SCRIPT}")
+    assert ok is False and "not found" in message
+    assert spawned == []
+
+
+def test_a_bare_python_on_a_normal_path_runs_with_its_absolute_path(home: Path, monkeypatch) -> None:
+    import shutil
+    expected = shutil.which("python3")
+    assert expected
+    ok, _message, spawned = _run(home, monkeypatch, f"python3 -u {SCRIPT}")
+    assert ok is True
+    assert spawned and spawned[0][0] == expected
+    assert spawned[0][1:] == ["-u", str(home / "skills/a/b/scripts/run.py")]
+
+
+def test_a_symlink_in_a_writable_root_to_a_system_python_is_refused(home: Path, tmp_path: Path) -> None:
+    import sys
+    link = home / "py"
+    link.symlink_to(sys.executable)
+    assert validate_no_agent_command(f"{link} {SCRIPT}", home) is not None
+    outside_link = tmp_path / "py3"
+    outside_link.symlink_to(sys.executable)
+    assert validate_no_agent_command(f"{outside_link} {SCRIPT}", home) is not None
+
+
+@pytest.mark.parametrize("path_value", [":/usr/bin", "/x::/usr/bin", "/usr/bin:", ".:/usr/bin"])
+def test_an_empty_or_relative_path_entry_cannot_bring_in_a_program_from_the_current_directory(
+    home: Path, tmp_path: Path, monkeypatch, path_value: str,
+) -> None:
+    here = tmp_path / "cwd"
+    here.mkdir()
+    stub = here / "python3"
+    stub.write_text("#!/bin/sh\necho hijacked\n")
+    stub.chmod(0o755)
+    (here / "npm").write_text("#!/bin/sh\n")
+    (here / "npm").chmod(0o755)
+    monkeypatch.chdir(here)
+    ok, message, spawned = _run(home, monkeypatch, f"python3 {SCRIPT}", f"PATH={path_value}\n")
+    assert spawned == [] or Path(spawned[0][0]).is_absolute()
+    if spawned:
+        assert not Path(spawned[0][0]).resolve().is_relative_to(here.resolve())
+    else:
+        assert ok is False and "no_agent rejected" in message

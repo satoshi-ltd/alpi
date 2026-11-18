@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.19.13 — 2026-11-18 — a script job runs the interpreter it checked
+
+- A scheduled script job named `python3` without a path was checked by name and then started through the profile's `PATH`, so a writable folder ahead of the system ones in a profile's `.env` `PATH` could run a program of its own in its place. The scheduler now looks the interpreter up on the job's own `PATH`, applies the same checks to the real path (not inside the profile, the workspace or a temp folder), and runs that exact path.
+- An interpreter it cannot find, finds in one of those folders, reaches through a link that lives in one of them, or finds only through an empty `PATH` entry (the current directory), stops the job with a reason, and nothing is started.
+
 ## v0.19.12 — 2026-11-18 — what a remote device may write into `.env`
 
 - A paired device with the admin role could write any variable name into a profile's `.env`, including `ALPI_NETWORK_HOST`, `ALPI_HOST_TCP_PORT` and `ALPI_HOST_WS_TRUSTED_PROXIES`, which change where the daemon listens and whom it trusts on its next start. Over the network it can now set only the built-in providers' API keys, the Gmail client id and secret, and `EMAIL__…` passwords, as the apps do.

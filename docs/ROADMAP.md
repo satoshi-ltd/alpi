@@ -80,7 +80,23 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-_Empty: the creator approves the next tasks from Proposed._
+- **DESK.PAIR-DRAFT** — Pairing another daemon does not drop an unsaved Settings draft
+  `bug · desktop · agent · normal`
+  note: reported in the same review, not yet reproduced here. Commit `83448425` guards a plain connection switch against
+  pending changes, but the pairing button calls `onAddHostConnection` directly
+  ([App.jsx](../desktop/src/App.jsx) near `:1513`); when pairing completes, Rust activates the new connection
+  ([host_client.rs](../desktop/src-tauri/src/host_client.rs) near `:1125`) and React remounts the form, so unsaved fields
+  are lost without a prompt. Reproduce first.
+  accept: starting a pairing runs the same pending-changes check as a connection switch and offers to keep editing; a
+  component test edits a Settings field, starts pairing and finds the prompt, and one without a draft finds none.
+
+- **MOB.PEER-PERMS-DRAFT** — Changing only a new peer's permissions arms the leave warning
+  `bug · mobile · agent · low`
+  note: reported in the same review, not yet reproduced here. The new-peer form
+  ([peers/new.jsx](../mobile/app/profile/[id]/peers/new.jsx) near `:33`) compares name, key and address to decide whether
+  anything is pending and leaves out the selected permissions; the accept-peer screen does include them.
+  accept: the permissions join the comparison with the initial state; a test changes only one permission, goes back and
+  finds the warning, and an untouched form goes back without one.
 
 ## In progress
 
