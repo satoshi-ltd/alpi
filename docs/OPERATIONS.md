@@ -124,6 +124,12 @@ never triggers the line and cannot be listed. `unlisted_proxy_refusals` in the `
 `host.network.status` counts those refusals. Admin actions by paired devices, allowed or refused, are in
 `logs/admin-audit.jsonl`.
 
+An authenticated call refused for lack of permission (a member on an admin verb, a local-only verb or config
+key over the network, a profile outside a scoped connection) leaves `host forbidden: <what was refused>
+(connection=<id> device=<id>)` in `service.log`. The ids are the ones `alpi audit-log` and Connections show;
+the caller is the last parenthesised group on the line, since a refused config key or profile is quoted before
+it. Devices paired before connections existed all read `legacy` and cannot be told apart there.
+
 ## Daemon — one process per machine, every profile inside
 
 alpi runs a single daemon process — the launchd job `com.alpi.daemon` on

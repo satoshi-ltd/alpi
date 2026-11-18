@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.19.7 — 2026-11-18 — who was refused
+
+- A call the daemon refuses for lack of permission now says who made it: every `host forbidden` line in `service.log` ends with `(connection=<id> device=<id>)`, the ids shown by `alpi audit-log` and Connections. Refused read verbs never reach the audit trail, so until now nothing told which device kept asking.
+- The start of each line is unchanged, so anything matching on it keeps working. The addition carries only ids: no labels, device names, addresses or tokens.
+- A scoped member can no longer forge one of these lines by sending a method name that contains a line break: an unusable method name is written as `?`.
+
 ## v0.19.6 — 2026-11-17 — a proxy nobody declared
 
 - Behind an HTTP load balancer or reverse proxy that `ALPI_HOST_WS_TRUSTED_PROXIES` does not list, every app shares one failed-login limit, so a stranger probing the port could lock paired devices out for as long as the probing lasted, with nothing saying why. The daemon now says so in `service.log` when it happens, naming the address and the variable to set.

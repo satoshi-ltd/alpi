@@ -1101,7 +1101,7 @@ class Server:
             })
             return
         if require_token and method in _LOCAL_ONLY_METHODS:
-            log.warning("host forbidden: %s blocked over remote transport", method)
+            log.warning("host forbidden: %s blocked over remote transport (%s)", method, _actor(request_context))
             from alpi.host import admin_audit
             await asyncio.to_thread(
                 admin_audit.record_denied,
@@ -1122,7 +1122,7 @@ class Server:
         if require_token and method in ("host.config.set_field", "host.config.unset_field"):
             params = body.get("params") if isinstance(body.get("params"), dict) else {}
             if _touches_local_only_config(str(params.get("key") or "")):
-                log.warning("host forbidden: config key %r is local-only", params.get("key"))
+                log.warning("host forbidden: config key %r is local-only (%s)", params.get("key"), _actor(request_context))
                 from alpi.host import admin_audit
                 await asyncio.to_thread(
                     admin_audit.record_denied,
@@ -1144,7 +1144,7 @@ class Server:
             require_token and method in _ADMIN_METHODS and role != "admin"
             and not _self_service_allowed(method, remote_meta, audit_params)
         ):
-            log.warning("host forbidden: %s blocked for role=%s", method, role)
+            log.warning("host forbidden: %s blocked for role=%s (%s)", method, role, _actor(request_context))
             from alpi.host import admin_audit
             await asyncio.to_thread(
                 admin_audit.record_denied,
@@ -1176,8 +1176,8 @@ class Server:
                 target = clarification.pending_profile(params.get("request_id"))
             if not isinstance(target, str) or not target:
                 log.warning(
-                    "host forbidden: %s requires explicit profile for scoped token",
-                    method,
+                    "host forbidden: %s requires explicit profile for scoped token (%s)",
+                    _loggable(method), _actor(request_context),
                 )
                 await send({
                     "id": body.get("id"),
@@ -1190,8 +1190,8 @@ class Server:
                 return
             if target not in profile_scope:
                 log.warning(
-                    "host forbidden: %s blocked for token, profile=%r not in scope=%s",
-                    method, target, profile_scope,
+                    "host forbidden: %s blocked for token, profile=%r not in scope=%s (%s)",
+                    _loggable(method), target, profile_scope, _actor(request_context),
                 )
                 await send({
                     "id": body.get("id"),
@@ -1740,6 +1740,18 @@ def _loggable(value: Any) -> str:
     # Anything a client sends is reduced to an identifier before it reaches a log line, so it cannot forge one.
     text = str(value)
     return text if _LOGGABLE.fullmatch(text) else "?"
+
+
+def _actor_id(value: Any) -> str:
+    text = str(value or "")
+    if not text:
+        return "-"
+    # A legacy id embeds the last characters of its token, which must not reach a log.
+    return "legacy" if text.startswith("legacy_") else _loggable(text)
+
+
+def _actor(ctx: Any) -> str:
+    return f"connection={_actor_id(ctx.connection_id)} device={_actor_id(ctx.device_id)}"
 
 
 def _check_token_meta(body: dict[str, Any], quiet: bool = False) -> AuthMeta:
