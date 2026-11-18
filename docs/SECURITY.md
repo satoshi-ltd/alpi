@@ -245,7 +245,11 @@ not reach.
   dotted write never turns a value into a section (`network.host.x` is
   refused, never stored as a nested block). A remote admin can
   restart and update the daemon (`host.daemon.restart`, `host.daemon.update`),
-  which the apps offer in Settings. What `member` does **not** restrict is the
+  which the apps offer in Settings. A remote client sets environment names
+  only for the built-in providers' API keys, `GMAIL_CLIENT_ID`,
+  `GMAIL_CLIENT_SECRET` and `EMAIL__<ID>__<FIELD>`; `ALPI_*`, `PYTHON*`, `LD_*`
+  and `DYLD_*` are refused to every caller, and no `.env` value may hold a
+  line break or NUL. What `member` does **not** restrict is the
   agent: a member device can still send chat turns, and a turn can do
   anything the profile's tools can do. Bound agent capability with the OS
   sandbox and a dedicated profile, not with the device role. Profiles in one

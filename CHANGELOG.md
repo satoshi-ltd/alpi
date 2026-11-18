@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.19.12 — 2026-11-18 — what a remote device may write into `.env`
+
+- A paired device with the admin role could write any variable name into a profile's `.env`, including `ALPI_NETWORK_HOST`, `ALPI_HOST_TCP_PORT` and `ALPI_HOST_WS_TRUSTED_PROXIES`, which change where the daemon listens and whom it trusts on its next start. Over the network it can now set only the built-in providers' API keys, the Gmail client id and secret, and `EMAIL__…` passwords, as the apps do.
+- Names starting with `ALPI_`, `PYTHON`, `LD_` or `DYLD_` are refused for every caller of the provider-key calls, the local socket included.
+- A value with a line break or a NUL, such as a Gmail client id with a second line in it, is refused instead of adding lines to the file, and the file writer itself now refuses them.
+- The apps are unchanged: they already send only those names.
+
 ## v0.19.11 — 2026-11-18 — the network settings stay on the local socket
 
 - A paired device with the admin role could no longer change `host.tcp_port`, `network.host` or `host.allow_public_bind` directly, but it could write a sub-key such as `network.host.x`, which replaced the value with a block and made the daemon listen on every network address after a restart. Sub-keys of those settings are now refused over the network too.

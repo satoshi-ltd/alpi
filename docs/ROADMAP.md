@@ -196,20 +196,6 @@ Each entry is written to be worked without that report:
 
 #### Security — daemon
 
-- **SEC.ENV-KEYS** — A remote admin sets only the environment names a client needs (S6)
-  `bug · alpi · agent · high`
-  note: `_check_env_key` in [host/config.py](../alpi/host/config.py) (`:12-35`) refuses nine names.
-  `host.providers.set_key` (`:122-146`) writes any other name to the root `.env`, which the daemon loads into
-  `os.environ` at start, so a remote admin sets `ALPI_NETWORK_HOST`, `ALPI_HOST_TCP_PORT`, `ALPI_ALP_TCP_PORT` and
-  `ALPI_HOST_WS_TRUSTED_PROXIES=0.0.0.0/0` (the last lets any client choose its rate-limit bucket): the same
-  network settings SEC.LOCAL-ONLY-CHILDREN protects. `host.email.gmail.begin` (`:676-680`) writes a `client_id` that
-  contains a newline as extra lines. Fix shape: first list every name the shipped desktop and mobile send through
-  the callers of `_check_env_key`. For a remote caller accept only the `api_key_env` of a provider in the built-in
-  catalogue or the profile's config, and the names the email and Gmail handlers write themselves. For every caller
-  refuse `ALPI_*`, `PYTHON*`, `LD_*` and `DYLD_*`, and refuse CR, LF and NUL in a value in `_append_env`.
-  accept: each of the four `ALPI_*` names and a value with `\n` is refused with an admin token; the local socket
-  can still set a provider key; a test per shipped client flow (add a provider key, add an email account) passes.
-
 - **SEC.RECIPE-YAML** — A recipe with YAML aliases is refused before it expands (S7)
   `bug · alpi · agent · high`
   note: `host.workgroup.recipes.describe` ([host/recipes.py](../alpi/host/recipes.py) `:266-276`) is reachable by any

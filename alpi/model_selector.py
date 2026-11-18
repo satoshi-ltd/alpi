@@ -467,6 +467,8 @@ def _atomic_write_env(env_path: Path, content: str) -> None:
 
 
 def _append_env(env_path: Path, key: str, value: str) -> None:
+    if any(ch in text for text in (key, value) for ch in ("\n", "\r", "\x00")) or "=" in key:
+        raise ValueError("an env key or value cannot contain a line break, NUL or (in the key) '='")
     lines = env_path.read_text().splitlines() if env_path.exists() else []
     out, replaced = [], False
     for line in lines:

@@ -17,7 +17,29 @@ _PROTECTED_ENV_KEYS = frozenset({
     "PYTHONPATH", "TMPDIR", "LANG", "LC_ALL",
 })
 
+_DENIED_ENV_PREFIXES = ("ALPI_", "PYTHON", "LD_", "DYLD_")
+_REMOTE_ENV_EMAIL_RE = re.compile(r"^EMAIL__[A-Z0-9_]+__[A-Z0-9_]+$")
+_REMOTE_ENV_NAMES = frozenset({"GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET"})
+
 __all__ = ["RESERVED_PROFILE_NAMES"]
+
+
+def _remote_env_names() -> frozenset[str]:
+    from alpi import providers as prov_mod
+    return _REMOTE_ENV_NAMES | {p.api_key_env for p in prov_mod.builtin() if p.api_key_env}
+
+
+def _forbidden_env(key: str, why: str) -> host_server.HandlerError:
+    return host_server.HandlerError(-32001, "forbidden", data={"detail": f"{key!r} {why}"})
+
+
+def _check_env_value(value: str) -> str:
+    if any(ch in value for ch in ("\n", "\r", "\x00")):
+        raise host_server.HandlerError(
+            -32602, "invalid-params",
+            data={"detail": "value must not contain line breaks or NUL"},
+        )
+    return value
 
 
 def _check_env_key(key: str) -> str:
@@ -27,11 +49,11 @@ def _check_env_key(key: str) -> str:
             -32602, "invalid-params",
             data={"detail": "key must match [A-Z_][A-Z0-9_]* (max 64 chars)"},
         )
-    if key in _PROTECTED_ENV_KEYS:
-        raise host_server.HandlerError(
-            -32001, "forbidden",
-            data={"detail": f"{key!r} is reserved and cannot be touched"},
-        )
+    if key in _PROTECTED_ENV_KEYS or key.startswith(_DENIED_ENV_PREFIXES):
+        raise _forbidden_env(key, "is reserved and cannot be touched")
+    from alpi.host.connection_context import current
+    if current().source not in ("host", "local") and key not in _remote_env_names() and not _REMOTE_ENV_EMAIL_RE.match(key):
+        raise _forbidden_env(key, "is not a variable a remote client may set")
     return key
 
 
@@ -130,12 +152,7 @@ async def _providers_set_key(
             -32602, "invalid-params", data={"detail": "value required"},
         )
     key = _check_env_key(str(key or ""))
-    value_str = str(value)
-    if "\n" in value_str or "\r" in value_str:
-        raise host_server.HandlerError(
-            -32602, "invalid-params",
-            data={"detail": "value must not contain newlines"},
-        )
+    value_str = _check_env_value(str(value))
     home = _resolve_home(str(profile or ""))
     cfg = cfg_mod.load(home)
     _append_env(cfg.env_path, key, value_str)
@@ -658,6 +675,8 @@ async def _gmail_begin(
         str(params.get("client_secret") or "").strip()
         or existing.get("GMAIL_CLIENT_SECRET", "")
     )
+    _check_env_value(client_id)
+    _check_env_value(client_secret)
     address = str(params.get("address") or "").strip()
     redirect_uri = str(params.get("redirect_uri") or "").strip()
     if not redirect_uri:
@@ -794,6 +813,7 @@ async def _email_add(
             -32602, "invalid-params",
             data={"detail": "address, imap_host, smtp_host are required"},
         )
+    _check_env_value(password)
     home = _resolve_home(str(params.get("profile") or ""))
     # Empty password is fine on an edit (preserve the stored one); a new account must set one.
     if not password and accounts_mod.get_account(home, accounts_mod.slug(address)) is None:

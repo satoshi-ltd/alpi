@@ -10,7 +10,7 @@
   out-of-scope profiles from scoped members (detail below). Network admin
   is local-only over the Unix socket: the bind, ports, public-bind switch,
   endpoints and `network.host` (and their parent blocks and sub-keys) cannot be set over
-  WebSocket, a dotted key with an empty or padded part is refused, and a dotted write never turns a value into a section. A
+  WebSocket, a remote client can set only provider API-key, Gmail and `EMAIL__*` environment names (`ALPI_*`, `PYTHON*`, `LD_*`, `DYLD_*` are refused to everyone, and an env value never holds a line break), a dotted key with an empty or padded part is refused, and a dotted write never turns a value into a section. A
   remote admin can still restart and update the daemon. Remote callers never
   get internal error text or daemon file paths.
 - Trust: direct user input is trusted; web/email/PDF/tool content is
