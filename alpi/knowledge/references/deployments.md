@@ -26,7 +26,7 @@ alpi daemon restart
 
 ## Docker shape
 
-- Image `satoshiltd/alpi`; PID 1 is a minimal init that forwards signals and reaps orphans, the daemon is its only child. UI via `docker exec -it <name> alpi` (no web terminal).
+- Image `satoshiltd/alpi`; PID 1 is a minimal init that forwards signals and reaps orphans, the daemon is its only child, forked before the CLI and its dependencies load. On a version before 0.19.14 a container daemon that logs `host server listening` and then answers nothing was forked while a background thread was still loading a module: update; setting `ALPI_SKIP_UPDATE_CHECK=1` and recreating the container is only a partial mitigation (a dependency can still start a thread before the fork). UI via `docker exec -it <name> alpi` (no web terminal).
 - Volume mounts at `/data`; `HOME=/data` makes `/data/.alpi` the profile root, surviving restarts.
 - Container binds `0.0.0.0`; set `ALPI_NETWORK_HOST` to the address clients dial (LAN/Tailscale IP for direct WS, or a hostname with an explicit certificate-validated `wss://` entry in `host.endpoints`). It can't see the host's interfaces, so this knob carries the advertised address.
 - Ports: `49200` = host plane for paired desktop/mobile (`host.*`, TCP/WS); `7423` = ALP peer traffic (`link.*`, `workgroup.*`, Noise_XK), only for cross-machine peers.

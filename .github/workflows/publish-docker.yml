@@ -169,14 +169,29 @@ jobs:
           "
           '
 
-      # PID 1 semantics exist only inside a container: prove the init reaps the orphans `docker exec` leaves, forwards SIGTERM and mirrors the daemon's exit code.
-      - name: smoke — PID 1 reaps orphans and forwards SIGTERM
+      # PID 1 semantics exist only inside a container: prove the daemon answers after the init forks it, the init reaps the orphans `docker exec` leaves, forwards SIGTERM and mirrors the daemon's exit code.
+      - name: smoke — PID 1 starts an answering daemon, reaps orphans and forwards SIGTERM
         run: |
           docker run -d --name alpi-pid1 "alpi-smoke:$VERSION"
           for _ in $(seq 60); do
             docker exec alpi-pid1 test -f /data/.alpi/service.pid && break
             sleep 1
           done
+          answered=""
+          for _ in $(seq 30); do
+            if docker exec alpi-pid1 python -c '
+          import asyncio
+          from alpi.tui import host_client
+          print("host.version:", asyncio.run(host_client.acall("host.version", {}, timeout=5)))
+          '; then answered=1; break; fi
+            sleep 1
+          done
+          test -n "$answered" || { docker logs alpi-pid1 | tail -n 40; echo "daemon started but never answered host.version"; exit 1; }
+          if docker logs alpi-pid1 2>&1 | grep -q "forking with live threads"; then
+            docker logs alpi-pid1 | tail -n 40
+            echo "init forked the daemon with live threads"
+            exit 1
+          fi
           docker exec alpi-pid1 sh -c 'sleep 0.2 & exit 0'
           sleep 3
           docker exec alpi-pid1 python -c '

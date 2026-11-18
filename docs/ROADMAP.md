@@ -82,19 +82,24 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 - **DESK.PAIR-DRAFT** — Pairing another daemon does not drop an unsaved Settings draft
   `bug · desktop · agent · normal`
-  note: reported in the same review, not yet reproduced here. Commit `83448425` guards a plain connection switch against
-  pending changes, but the pairing button calls `onAddHostConnection` directly
-  ([App.jsx](../desktop/src/App.jsx) near `:1513`); when pairing completes, Rust activates the new connection
-  ([host_client.rs](../desktop/src-tauri/src/host_client.rs) near `:1125`) and React remounts the form, so unsaved fields
-  are lost without a prompt. Reproduce first.
-  accept: starting a pairing runs the same pending-changes check as a connection switch and offers to keep editing; a
-  component test edits a Settings field, starts pairing and finds the prompt, and one without a draft finds none.
+  note: confirmed by trace on 2026-11-18. Commit `83448425` guards a plain connection switch against pending changes
+  (`settingsLocked()`, [App.jsx](../desktop/src/App.jsx) near `:452`), but the sidebar's connection switcher passes the
+  unguarded `onAddHostConnection` ([Sidebar.jsx](../desktop/src/features/Sidebar.jsx) near `:542`). Rust
+  `add_remote_connection` sets `state.active_id` ([host_client.rs](../desktop/src-tauri/src/host_client.rs) near
+  `:1125`), `reloadConnections({ acceptActiveChange: true })` installs it
+  ([useHostConnections.js](../desktop/src/hooks/useHostConnections.js) near `:524`), Settings is keyed by connection and
+  remounts, and the `useSettingsDirty` cleanup clears the flag, so unsaved fields are lost without a prompt. Forgetting
+  the active connection from the same switcher (`onForgetHostConnection`, near `:531`) is the same hole.
+  accept: starting a pairing and forgetting the active connection both run the same pending-changes check as a
+  connection switch and offer to keep editing; a component test edits a Settings field, starts pairing and finds the
+  prompt, one does the same with forget, and one without a draft finds none.
 
 - **MOB.PEER-PERMS-DRAFT** — Changing only a new peer's permissions arms the leave warning
   `bug · mobile · agent · low`
-  note: reported in the same review, not yet reproduced here. The new-peer form
-  ([peers/new.jsx](../mobile/app/profile/[id]/peers/new.jsx) near `:33`) compares name, key and address to decide whether
-  anything is pending and leaves out the selected permissions; the accept-peer screen does include them.
+  note: confirmed by trace on 2026-11-18. The new-peer form
+  ([peers/new.jsx](../mobile/app/profile/[id]/peers/new.jsx) `:34`) computes dirty from handle, key and address and
+  leaves out `scopes` (state at `:31`), so `useDirtyBack` returns before `preventDefault()`; the accept-peer screen
+  (`peers/accept.jsx` `:35`) does include them.
   accept: the permissions join the comparison with the initial state; a test changes only one permission, goes back and
   finds the warning, and an untouched form goes back without one.
 
@@ -118,6 +123,15 @@ _None._
   within their connection or across connections. Create a separate agent task for consistent
   enforcement, documentation and matrix tests; preserve the local socket owner semantics.
   Member-only isolation fixes in Queue do not wait on this decision.
+
+- **SEC.D-UNREADABLE-HEADLESS** — May an operator let an unattended profile run commands the checker cannot read?
+  `decision · alpi · creator · normal`
+  note: since 0.19.9 such a command needs a person each time and no allowlist entry covers it, so a profile with no
+  approver can never run one (SEC.TERMINAL-UNREADABLE-HEADLESS makes the refusal say how to rephrase it). The
+  alternative is a per-profile setting, off by default and local-socket only, that restores the pre-0.19.9 behaviour
+  for that profile: unreadable commands run after every pattern that could be checked passed.
+  accept: decide between no setting and that setting. If it is wanted, create the agent task with its name, its
+  default, who may set it and the log line each use writes.
 
 - **SEC.D-REMOTE-ADMIN** — What may a remote admin device do to the daemon's own host? (S4)
   `decision · alpi · creator · high`
@@ -191,6 +205,138 @@ _None._
   whether a provider pause opened and closed with one notification each way. Anything off becomes a `bug`.
 
 ## Proposed
+
+### Regression review 2026-11-18
+
+Found by reviewing everything shipped from alpi 0.19.0, desktop 0.10.0 and mobile 0.10.0 to commit `8ac3c373` for
+behaviour that broke. Each entry was confirmed by a probe, a throwaway test or an exact code trace.
+
+- **MOB.SKILL-FILE-CRASH** — Opening a skill file shows the file
+  `bug · mobile · agent · high`
+  note: since mobile 0.10.0, [skill-file.jsx](../mobile/app/profile/[id]/brain/skill-file.jsx) `:11` imports `fileSize`
+  from `src/lib/skillDetail.js`, which no longer exports it (`SkillDetail.jsx` moved to `sizeLabel` from
+  `common/panelRow.mjs`). The loaded branch calls `undefined(...)` at `:52` and the root error boundary replaces the
+  app; reload re-enters the same route. No test renders this screen.
+  accept: the screen uses `sizeLabel`; a render test of the loaded branch shows the file name, its size and its body,
+  and fails on the current code.
+
+- **MOB.STOP-DISABLED** — Stop cancels a running turn while the composer is disabled
+  `bug · mobile · agent · high`
+  note: since mobile 0.10.0, `RoundButton` in [Composer.jsx](../mobile/src/features/chat/Composer.jsx) `:29` drops
+  `onPress` when `disabled`, and Send/Stop passes `disabled={disabled || (!stoppable && !canSend)}` (`:288-292`). The
+  chat disables the composer when the profile is paused or the daemon is unreachable
+  (`mobile/app/chat/[id].jsx` near `:832`), so a streaming turn cannot be stopped from the phone in either state.
+  accept: Stop is pressable whenever a turn is stoppable, whatever `disabled` says, and keeps its dimmed look; a test
+  renders `<Composer busy onStop disabled />`, presses Stop and finds the call, and Send stays inert when disabled.
+
+- **SEC.TERMINAL-UNREADABLE-HEADLESS** — An unattended profile is told how to rerun a command the checker cannot read
+  `bug · alpi · agent · high`
+  note: since 0.19.9 a command the classifier cannot parse asks once and is never allowlisted
+  ([_approval.py](../alpi/tools/_approval.py) `_check_inner`, `once_only`). On a surface with no approver (scheduled
+  jobs, gateways, workgroup turns, ALP) that is a refusal with no way forward, and the message says only "Rerun from
+  TUI to approve". The common case is a heredoc whose text has an odd apostrophe:
+  `git commit -m "$(cat <<'EOF' … don't … EOF)"`, `gh pr create --body "$(cat <<'EOF' …)"`, `cat > notes.md <<'EOF'`.
+  Before 0.19.9 these ran. A replay of 427 documented and typical commands changed 12 verdicts, all of this shape.
+  Whether an operator may opt a profile back in is SEC.D-UNREADABLE-HEADLESS; this task does not wait on it.
+  accept: with no approver, the refusal for an unreadable command tells the agent to write the text to a file with
+  `write_file` and pass the file (`git commit -F <file>`, `gh pr create --body-file <file>`); the terminal tool
+  description and `alpi/knowledge/references/security.md` say the same; a test asserts the message on a heredoc with
+  an apostrophe and that the file-based form of the same command classifies as safe.
+
+- **DESK.OVERLAY-FOCUS** — Closing an overlay returns keyboard focus
+  `bug · desktop · agent · normal`
+  note: since desktop 0.10.1 and 0.10.2 a closed overlay stays mounted `inert` for the 140 ms exit
+  ([useExit.js](../desktop/src/hooks/useExit.js) `:10-25`). `useOverlay` restores focus only when the active element
+  is `body` or disconnected ([useOverlay.js](../desktop/src/hooks/useOverlay.js) `:79-83`) and the composer autofocuses
+  only from `body` (`primitives/Composer.jsx` `:49-54`); the focused node inside the closing layer is still connected
+  when both run, so neither fires and focus later falls to `body`. Command palette then Esc leaves the composer
+  unfocused; picking a session from the palette swallows typing until a click; Esc on a dropdown, context menu or
+  popover drops the trigger's focus. `Modal` and `ModelPicker` restore explicitly and reduced motion is unaffected.
+  jsdom has no `matchMedia`, so the suite always takes the instant path.
+  accept: focus returns to the opener, or to the composer when the opener is gone, after the palette, a popover, a
+  dropdown and a context menu close with motion on; a test with `matchMedia` stubbed to `matches: false` proves each
+  and fails on the current code.
+
+- **APPS.SHAPE-OLD-DAEMON** — A profile keeps its mark against a daemon older than 0.19.0
+  `bug · desktop, mobile, common · agent · normal`
+  note: since the 0.10.0 clients, `common/shapes.mjs` reads only `profile.shape`; daemons up to 0.18.x send `fold`.
+  Every non-default profile draws as `round`, the shape picker writes `tui.shape`, which such a daemon stores and
+  never returns, and the optimistic edit is never released (`common/optimisticProfiles.mjs` near `:106`), so the chosen
+  shape shows until restart. Every client changelog entry from 0.10.0 still says "Needs alpi ≥ 0.17.0". The reverse
+  case, a client older than 0.10.0 on a daemon from 0.19.0, loses the mark the same way and cannot change it
+  (`tui.fold` answers `invalid-params`); those clients update themselves, so it is not covered here.
+  accept: when a summary has no `shape`, the clients map its legacy `fold` to the shape the daemon's own translation
+  gives (`alpi/config.py` `translate_shape`) and hide the shape picker; tests cover a legacy row in both clients; the
+  next client changelog entries state the real minimum daemon.
+
+- **DESK.SETTINGS-MENU-TOGGLE** — The Settings menu item opens Settings when the window was hidden on it
+  `bug · desktop · agent · low`
+  note: since desktop 0.10.5 the menu item shows the window and emits `settings-toggle`
+  ([lib.rs](../desktop/src-tauri/src/lib.rs) near `:4037`), and `onOpenSettings` toggles on the current view
+  (`App.jsx` near `:390`). With the window hidden while on Settings, choosing Settings… or ⌘, brings it back on chat.
+  accept: the menu item and its shortcut close Settings only when the window was already visible and focused on it;
+  a test covers hidden-on-settings, visible-on-settings and visible-on-chat.
+
+- **SCHED.INTERPRETER-MESSAGE** — A refused script-job interpreter says what to write instead
+  `bug · alpi · agent · low`
+  note: since 0.19.13 a script job is refused when its Python resolves under the profile home, a temp folder or the
+  workspace ([scheduler/run.py](../alpi/scheduler/run.py) `_interpreter_problem`). A profile whose workspace is the
+  user's home directory, with Python from pyenv, conda or uv under it, loses every script job, and the message names
+  the folder but not the fix. Flags `-S -q -P -v -bb -d` were accepted before 0.19.10 and are refused now; no known
+  job uses them.
+  accept: the refusal names the resolved interpreter and says to give an absolute interpreter outside those folders
+  (for example `/usr/bin/python3`); `docs/` and the scheduling reference state the rule; a test asserts the message.
+
+- **SEC.SCRIPT-JOB-PATH** — A script job's PATH carries no folder the agent can write
+  `bug · alpi · agent · low`
+  note: 0.19.13 resolves and checks the interpreter of `python3 <script>`, but a job that names the script alone runs
+  it through its shebang, and `#!/usr/bin/env python3` still resolves on the profile's `PATH`; so does everything the
+  script spawns. A remote device cannot set `PATH` since 0.19.12; a value planted earlier or by hand still applies.
+  accept: the environment of a script job drops every `PATH` entry that is empty, relative or under the profile home,
+  a temp folder or the workspace; a test plants a `python3` stub in such a folder, runs a shebang script job and
+  finds the stub not run.
+
+- **HOST.SET-FIELD-SCALAR-TIER** — Setting a tier's model repairs a hand-edited scalar tier
+  `bug · alpi · agent · low`
+  note: since 0.19.11 `_set_dotted` ([device_state.py](../alpi/host/device_state.py)) answers `invalid-params` when a
+  path descends through a non-object. The one scalar parent the loader tolerates is a hand-edited
+  `tiers.fast: "<model>"`; setting Fast or Deep from an app used to rewrite it as a section and now fails with
+  "Save failed".
+  accept: `set_field tiers.<fast|deep>.<model|effort>` on a config whose tier is a scalar rewrites the tier as a
+  section that keeps the scalar as its model; every other non-object parent still answers `invalid-params`; tests
+  cover both.
+
+- **DAEMON.STACK-DUMP** — A frozen daemon can be asked for its stacks
+  `feature · alpi · agent · normal`
+  note: the freeze fixed in 0.19.14 could not be diagnosed from the host: the image has no debugger and the daemon
+  registers no dump signal, so the only route was attaching a tracer from outside.
+  accept: the daemon registers `faulthandler` on `SIGUSR1` for all threads, writing to a file under `logs/` with the
+  log's permissions; `alpi/pid1.py` forwards the signal; `alpi doctor` or the operations reference names the command;
+  a test sends the signal to a child interpreter that loads the same hook and finds every thread's stack in the file.
+
+- **CLI.DAEMON-UNRESPONSIVE** — A CLI command says the daemon is not answering instead of waiting
+  `bug · alpi · agent · normal`
+  note: `alpi workgroup launch` calls the host socket with a 3600 s timeout and `remove` with 60 s
+  ([cli.py](../alpi/cli.py) near `:4665` and `:4852`); `host_client.acall` restarts that timeout on every line read.
+  Against a daemon that accepts the connection and never answers, launch waits an hour with no output.
+  accept: before a long host call the CLI makes a cheap one with a 5 s timeout and, when it gets no answer, exits
+  non-zero naming the daemon as unresponsive and how to check it; `acall` bounds the whole call, not each line; a test
+  serves a socket that accepts and never replies and finds the error within the short timeout.
+
+- **TEST.TOCTOU-LOAD** — The device revoke race test passes on a loaded machine
+  `chore · alpi · agent · low`
+  note: `tests/host/test_connections.py::test_legacy_revoke_add_device_toctou` failed once in a full run while other
+  suites ran beside it (`p_rev.exitcode` was `None`: the child had not finished within the join timeout) and passed
+  five times alone.
+  accept: the test waits on the children's completion rather than a fixed join budget and passes twenty consecutive
+  runs under `pytest -n` load.
+
+- **DESK.TCP-PORT-REMOTE** — The ALP port field is hidden on a remote connection
+  `bug · desktop · agent · low`
+  note: older than this review. `TcpPortField` writes `alp.tcp_port`, which a remote connection has been refused since
+  alpi 0.10.12, and its availability check probes the desktop's own machine; the field shows on every connection
+  ([ProfileDetail.jsx](../desktop/src/features/settings/ProfileDetail.jsx) near `:463`).
+  accept: the field renders only on the local connection, like `host.tcp_port`; a test covers both connection kinds.
 
 ### Project analysis 2026-11-18
 

@@ -587,7 +587,8 @@ def main(ctx: click.Context, profile: str | None, continue_last: bool) -> None:
     # ALPI_PROFILE env var is the source of truth for downstream get_home() calls; without it tools silently write to the default profile.
     if profile:
         os.environ["ALPI_PROFILE"] = profile
-    if ctx.invoked_subcommand != "update":
+    # PID 1 forks the daemon from `daemon start`: a thread alive at that fork leaves its half-finished imports locked in the child forever.
+    if ctx.invoked_subcommand != "update" and not (ctx.invoked_subcommand == "daemon" and _is_init()):
         from alpi import updater
         updater.trigger_background_check_if_enabled()
     _bootstrap(h)
@@ -1059,9 +1060,22 @@ def daemon_start() -> None:
 
     root = _root()
     if pid1.is_pid1():
-        pid1.run(lambda: _serve_daemon(root))
+        pid1.run(lambda: _serve_forked_daemon(root))
     else:
         _serve_daemon(root)
+
+
+def _is_init() -> bool:
+    from alpi import pid1
+
+    return pid1.is_pid1()
+
+
+def _serve_forked_daemon(root: Path) -> None:
+    from alpi import updater
+
+    updater.trigger_background_check_if_enabled()
+    _serve_daemon(root)
 
 
 def _serve_daemon(root: Path) -> None:

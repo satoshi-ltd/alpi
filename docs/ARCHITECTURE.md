@@ -695,7 +695,15 @@ ExecStart. It:
    removed on exit.
 
 **PID 1 (`alpi/pid1.py`).** Inside the image `alpi daemon start` is PID 1
-(`ENTRYPOINT ["alpi-docker"]`, no init). Before anything else it forks: PID 1
+(`ENTRYPOINT ["alpi-docker"]`, no init). The console entry (`alpi/__main__.py`)
+forks there, before `alpi.cli` or any dependency is imported: a thread alive in
+PID 1 at the fork is absent from the child while every lock it held stays
+taken, so a module it was importing never finishes loading in the daemon and
+the daemon's first use of it never returns. The child imports and runs the CLI.
+The entry recognises `daemon start` behind the global options (`-p`,
+`--profile`, `-c`, `--continue`, combined short flags) and `--` separators; a PID 1 that reaches the command any other
+way forks later, from the command itself, with the update check deferred to
+the child, and `pid1.run` names on stderr any thread it forks with. PID 1
 stays a minimal init — `waitpid(-1)` in a loop, SIGTERM / SIGINT / SIGHUP /
 SIGQUIT / SIGUSR1 / SIGUSR2 forwarded to its only child, exit code mirrored
 (128 + signal on a signal death) — and `serve_all` runs in the child, which
@@ -708,8 +716,9 @@ asyncio's child watcher, which then report 0 or 255 for a child they never
 saw exit. Outside a container `os.getpid() != 1` and the fork is skipped.
 `pytest` covers the fork, the forwarding and the exit-code mirror; the PID 1
 case itself runs in `publish-docker.yml`, which starts the built image,
-leaves an orphan through `docker exec`, asserts no zombie remains and that
-`docker stop` returns the daemon's exit code.
+asserts the daemon answers `host.version` on its socket and that init forked
+with no live thread, leaves an orphan through `docker exec`, asserts no zombie
+remains and that `docker stop` returns the daemon's exit code.
 
 **Operational invariants of `serve_all`** (each one is the root cause of a real production incident; do not regress):
 

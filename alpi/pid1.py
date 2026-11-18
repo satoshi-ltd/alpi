@@ -4,6 +4,7 @@ import logging
 import os
 import signal
 import sys
+import threading
 from collections.abc import Callable
 
 log = logging.getLogger("alpi.pid1")
@@ -22,6 +23,12 @@ def is_pid1() -> bool:
 
 
 def run(child: Callable[[], None]) -> None:
+    others = sorted(t.name for t in threading.enumerate() if t is not threading.main_thread())
+    if others:
+        print(
+            f"init: forking with live threads ({', '.join(others)}); a module one of them is importing stays locked in the daemon",
+            file=sys.stderr,
+        )
     sys.stdout.flush()
     sys.stderr.flush()
     pid = os.fork()

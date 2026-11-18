@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.19.14 — 2026-11-19 — a container daemon that answers after it starts
+
+- In a container, a daemon could start, log that it was listening and then answer nothing: the apps stayed disconnected, workgroup turns stopped, and `alpi workgroup launch` and `alpi workgroup remove` waited without a word. Restarting it did not always clear it. The container now splits off the daemon before anything else is loaded, which removes the cause.
+- If the container's init ever has to split with background work still running, it says so on stderr and names it.
+- On an earlier version, setting `ALPI_SKIP_UPDATE_CHECK=1` and recreating the container is a partial mitigation: it removes alpi's own background check, not every one a dependency may start.
+
 ## v0.19.13 — 2026-11-18 — a script job runs the interpreter it checked
 
 - A scheduled script job named `python3` without a path was checked by name and then started through the profile's `PATH`, so a writable folder ahead of the system ones in a profile's `.env` `PATH` could run a program of its own in its place. The scheduler now looks the interpreter up on the job's own `PATH`, applies the same checks to the real path (not inside the profile, the workspace or a temp folder), and runs that exact path.
