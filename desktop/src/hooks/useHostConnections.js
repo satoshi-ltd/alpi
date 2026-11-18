@@ -14,6 +14,7 @@ import {
 } from "../lib/workgroup-fetch.js";
 import { invalidateSessionCache } from "../lib/session-cache.js";
 import { invalidateProfileDetailCache } from "./useProfileDetail.js";
+import { announceActiveConnection } from "./useActiveRole.js";
 import { purgeConnectionReadState } from "./useReadState.js";
 import { LANDING_VIEW } from "../lib/landing.js";
 import {
@@ -114,6 +115,7 @@ export function useHostConnections({
       }
       hostConnectionsRef.current = value;
       setHostConnections(value);
+      announceActiveConnection(value);
       return value;
     } catch {
       return null;
@@ -449,6 +451,7 @@ export function useHostConnections({
       };
       hostConnectionsRef.current = next;
       setHostConnections(next);
+      announceActiveConnection(next);
       setRewriteDraft(null);
       setSessionData(null);
       setActiveTask(null);
@@ -479,6 +482,7 @@ export function useHostConnections({
           if (connectionSwitchRef.current === switchId) {
             hostConnectionsRef.current = previousState;
             setHostConnections(previousState);
+            announceActiveConnection(previousState);
             loadFromCache(previousState.active_id);
             setView((v) => (v.kind === "settings" ? v : LANDING_VIEW));
             setConnectionSyncing(false);

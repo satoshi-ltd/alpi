@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => []) }));
@@ -8,8 +8,9 @@ vi.mock("../primitives/AttachmentChips.jsx", () => ({
   default: ({ items }) => <ul aria-label="attachments">{items.map((a) => <li key={a.path}>{a.name}</li>)}</ul>,
 }));
 vi.mock("../primitives/Composer.jsx", () => ({
-  default: ({ value, onChange, onSubmit, canSend, topBar }) => (
+  default: ({ value, onChange, onSubmit, canSend, topBar, mentions }) => (
     <div>
+      <ul aria-label="mentions">{(mentions ?? []).map((m) => <li key={m.id}>{`${m.id}:${m.status}`}</li>)}</ul>
       <textarea aria-label="message" value={value} onChange={(e) => onChange(e.target.value)} />
       <button type="button" disabled={!canSend} onClick={onSubmit}>send</button>
       {topBar}
@@ -17,6 +18,7 @@ vi.mock("../primitives/Composer.jsx", () => ({
   ),
 }));
 
+import { invoke } from "@tauri-apps/api/core";
 import ChatComposer from "./ChatComposer.jsx";
 import { clearDraft, getDraft, setDraft } from "../lib/drafts.js";
 
@@ -93,5 +95,49 @@ describe("composer send", () => {
     await act(async () => { refuse(false); });
     expect(getDraft("chat|pk-scout")).toBe("first\n\ntyped later");
     expect(screen.getByLabelText("message").value).toBe("");
+  });
+});
+
+describe("peer liveness", () => {
+  const probed = () => invoke.mock.calls.filter(([cmd]) => cmd === "probe_peers");
+  const mountAs = (admin) =>
+    render(<ChatComposer profiles={[PROFILE]} activeProfile={PROFILE} onSend={vi.fn()} canManageProfileSurfaces={admin} />);
+
+  beforeEach(() => {
+    invoke.mockReset();
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "read_file") return "- id: rook\n  alias: Rook\n";
+      if (cmd === "probe_peers") return [{ id: "rook", status: "on" }];
+      return [];
+    });
+  });
+
+  afterEach(() => {
+    invoke.mockReset();
+    invoke.mockImplementation(async () => []);
+  });
+
+  it("probes the profile's peers for an admin", async () => {
+    mountAs(true);
+    expect(await screen.findByText("rook:on")).toBeTruthy();
+    expect(probed()).toHaveLength(1);
+    expect(probed()[0][1]).toEqual({ profile: "scout", ids: ["rook"] });
+  });
+
+  it("does not ask a member's daemon for the admin-only probe", async () => {
+    mountAs(false);
+    expect(await screen.findByText("rook:?")).toBeTruthy();
+    expect(probed()).toHaveLength(0);
+  });
+
+  it("stops probing on demotion and probes again on promotion", async () => {
+    const view = mountAs(true);
+    await screen.findByText("rook:on");
+    view.rerender(<ChatComposer profiles={[PROFILE]} activeProfile={PROFILE} onSend={vi.fn()} canManageProfileSurfaces={false} />);
+    expect(await screen.findByText("rook:?")).toBeTruthy();
+    expect(probed()).toHaveLength(1);
+    view.rerender(<ChatComposer profiles={[PROFILE]} activeProfile={PROFILE} onSend={vi.fn()} canManageProfileSurfaces />);
+    expect(await screen.findByText("rook:on")).toBeTruthy();
+    expect(probed()).toHaveLength(2);
   });
 });

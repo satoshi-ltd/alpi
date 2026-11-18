@@ -11,6 +11,13 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.10.10 — 2026-11-18 — the role follows the connection
+
+- Switching between connections where you hold different roles updates what you may do at once. The app kept the previous connection's role for a while, so it showed admin controls on a member connection (or hid them on an admin one) and asked the daemon for things it refused.
+- On a member connection, the peers a profile knows can be picked with @ in the composer. They were all shown as pending and could not be chosen.
+- The app no longer asks a member's daemon whether each peer is reachable when a chat opens. Only an admin may ask that, so the daemon refused it and logged a warning each time.
+- Needs alpi ≥ 0.17.0.
+
 ## v0.10.9 — 2026-11-17 — who reaches what
 
 - Connections lead each row with the profiles it can reach, as their marks and names in their own colours (the first three, then +N), or All profiles.

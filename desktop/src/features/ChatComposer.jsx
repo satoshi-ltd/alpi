@@ -154,13 +154,15 @@ export default function ChatComposer({
           return;
         }
         let probes = [];
-        try {
-          probes = await invoke("probe_peers", {
-            profile: activeProfile.name,
-            ids: parsed.map((m) => m.id),
-          });
-        } catch {
-          probes = [];
+        if (canManageProfileSurfaces) {
+          try {
+            probes = await invoke("probe_peers", {
+              profile: activeProfile.name,
+              ids: parsed.map((m) => m.id),
+            });
+          } catch {
+            probes = [];
+          }
         }
         if (cancelled) return;
         const statusById = {};
@@ -174,7 +176,7 @@ export default function ChatComposer({
     return () => {
       cancelled = true;
     };
-  }, [activeProfile?.name, connectionId]);
+  }, [activeProfile?.name, connectionId, canManageProfileSurfaces]);
 
   const mentions = useMemo(
     () =>
