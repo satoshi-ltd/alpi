@@ -69,8 +69,11 @@ def test_member_workspace_access_allowed(home):
         assert resolve_path(str(work), for_write=False) == work.resolve()
 
 
-@pytest.mark.parametrize("rel", PRIVATE_AREA)
-def test_admin_unrestricted(home, rel):
+ADMIN_OPEN = ("gateway/telegram.token", "mentions/alexandra.json", "mentions/alexandra@c0ffee.json")
+
+
+@pytest.mark.parametrize("rel", ADMIN_OPEN)
+def test_admin_unrestricted_outside_the_always_private_areas(home, rel):
     assert resolve_path(str(home / rel), for_write=True) == (home / rel).resolve()
     assert resolve_path(str(home / rel), for_write=False) == (home / rel).resolve()
 

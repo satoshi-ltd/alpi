@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.19.8 — 2026-11-18 — credentials stay out of file tools
+
+- The file tools (`read_file`, `search`, `write_file`, `edit_file`, `delete_file`) no longer read or write a profile's `secrets/`, `alp/secrets/` or `host/`, in any turn: an app, the console or a scheduled job. Before, only turns driven by members and peers were fenced from them.
+- They also no longer write `schedule/`, `memories/`, `logs/`, `runs/`, `sessions/`, `recipes/` or `alp/peers.yaml`. A profile still changes its memory, identity and schedule through the `memory` and `schedule` tools, and the refusal names the tool to use. Files you attach in the apps stay readable.
+- Why: a web page or an email the agent read could have steered it into reading a Gmail token or rewriting the list of paired devices.
+
 ## v0.19.7 — 2026-11-18 — who was refused
 
 - A call the daemon refuses for lack of permission now says who made it: every `host forbidden` line in `service.log` ends with `(connection=<id> device=<id>)`, the ids shown by `alpi audit-log` and Connections. Refused read verbs never reach the audit trail, so until now nothing told which device kept asking.

@@ -96,8 +96,16 @@ not reach.
   or model choice; those two files are edited by hand or via `alpi setup`.
   File tools are the stricter of the two: they refuse **every** `.env` at any
   depth, including one in your own project, exempting only the obvious
-  templates (`.env.example`, `.sample`, `.template`, `.dist`). Everything else
-  — `$HOME`, `/tmp`, directories outside the workspace — is allowed.
+  templates (`.env.example`, `.sample`, `.template`, `.dist`). In every turn,
+  whoever drives it, they also refuse reading or writing a profile's
+  `secrets/`, `alp/secrets/` and `host/` (the pairing store included; only
+  `host/attachments/` stays readable, because staged chat uploads are read
+  from there), and writing `schedule/`, `memories/`, `logs/`, `runs/`,
+  `sessions/`, `recipes/` and `alp/peers.yaml`. A profile changes its own
+  memory, identity and schedule through the `memory` and `schedule` tools, and
+  the refusal names the tool to use. Symlinks are resolved first, so a link in
+  the workspace gets no way in. Everything else — `$HOME`, `/tmp`,
+  directories outside the workspace — is allowed.
   For a turn started from a member device, file tools also refuse every
   profile's `host/`, `secrets/`, `gateway/`, `cache/`, `logs/`, `outputs/`,
   `out/`, `sessions/`, `memories/`, `schedule/`, `skills/`, `runs/`, `run/`,

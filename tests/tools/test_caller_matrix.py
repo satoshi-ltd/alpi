@@ -134,7 +134,7 @@ def test_each_caller_class_is_offered_exactly_the_tool_actions_it_may_call(stubb
 
 
 @pytest.mark.parametrize("key", CALLERS)
-def test_only_a_caller_the_fence_does_not_cover_touches_a_private_area_of_the_home(home: Path, monkeypatch, key: str) -> None:
+def test_only_a_caller_the_fence_does_not_cover_reads_a_private_area_and_no_caller_writes_it(home: Path, monkeypatch, key: str) -> None:
     sessions = home / "sessions"
 
     def probe():
@@ -153,8 +153,8 @@ def test_only_a_caller_the_fence_does_not_cover_touches_a_private_area_of_the_ho
     assert touched == {
         "read_file": key in "AL",
         "search": key in "AL",
-        "write_file": key in "AL",
-        "edit_file": key in "A",
+        "write_file": False,
+        "edit_file": False,
     }, CALLERS[key]
 
 

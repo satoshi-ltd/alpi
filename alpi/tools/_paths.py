@@ -101,6 +101,56 @@ def _member_home_area(*paths: Path | str) -> str | None:
     return None
 
 
+_HOME_TAIL_REGEX = re.compile(r"(?:^|/)\.alpi(?:/profiles/[^/]+)?/(.+)$", re.IGNORECASE)
+_NO_ACCESS_AREAS = frozenset({"secrets", "host"})
+_NO_WRITE_AREAS = frozenset({"schedule", "memories", "logs", "runs", "sessions", "recipes"})
+_AREA_OWNER = {"memories": "memory", "schedule": "schedule"}
+
+
+def _home_parts(path: Path | str) -> list[list[str]]:
+    text = str(path)
+    found: list[list[str]] = []
+    m = _HOME_TAIL_REGEX.search(text)
+    if m:
+        found.append([part for part in m.group(1).lower().split("/") if part])
+    lowered = text.lower()
+    for home in _profile_homes():
+        if lowered.startswith(home + "/"):
+            parts = [part for part in lowered[len(home) + 1:].split("/") if part]
+            if parts[:1] == ["profiles"] and len(parts) >= 3:
+                parts = parts[2:]
+            found.append(parts)
+    return found
+
+
+def _always_private_area(typed: Path | str, resolved: Path | str, *, for_write: bool) -> str | None:
+    for form in (typed, resolved):
+        for parts in _home_parts(form):
+            if not parts:
+                continue
+            head = parts[0]
+            if head == "host":
+                if not for_write and parts[1:2] == ["attachments"]:
+                    continue
+                return head
+            if head in _NO_ACCESS_AREAS or parts[:2] == ["alp", "secrets"]:
+                return head if head != "alp" else "alp/secrets"
+            if for_write and (head in _NO_WRITE_AREAS or parts[:2] == ["alp", "peers.yaml"]):
+                return head if head != "alp" else "alp/peers.yaml"
+    return None
+
+
+def _always_private_error(area: str, path: str, *, for_write: bool) -> str:
+    owner = _AREA_OWNER.get(area)
+    if owner:
+        return (
+            f"cannot write {path}: {area}/ is owned by the `{owner}` tool; "
+            f"use `{owner}` instead of the file tools"
+        )
+    verb = "write to" if for_write else "read"
+    return f"cannot {verb} {path}: {area} is a daemon-owned area that file tools never touch"
+
+
 def private_areas_fenced() -> bool:
     from alpi.host.connection_context import current
     from alpi.tools import _policy
@@ -313,6 +363,8 @@ def is_read_denied(path: Path | str) -> bool:
         resolved = typed
     if _is_sensitive(typed, resolved) is not None:
         return True
+    if _always_private_area(typed, resolved, for_write=False) is not None:
+        return True
     return private_areas_fenced() and _member_denied_area(typed, resolved, for_write=False) is not None
 
 
@@ -345,6 +397,9 @@ def resolve_path(path: str, *, for_write: bool = False) -> Path:
                 f"member devices and peers without a tool policy cannot {verb} the profile "
                 f"{area}/ area; this requires an admin device: {path}"
             )
+    area = _always_private_area(p, resolved, for_write=for_write)
+    if area is not None:
+        raise ValueError(_always_private_error(area, path, for_write=for_write))
     if for_write:
         _enforce_dispatch_write_scope(resolved, path)
     from alpi.core.execution_world import current as current_world
