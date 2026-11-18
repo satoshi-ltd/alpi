@@ -155,6 +155,14 @@ def _admin():
         "host",
         "network",
         "alp",
+        "network.host.x",
+        "host.allow_public_bind.x",
+        "host.tcp_port.x",
+        "alp.tcp_port.x",
+        "host.endpoints.x",
+        "host.endpoints.a.b",
+        "network.host.",
+        " network.host.x",
     ],
 )
 async def test_config_field_local_only_key_blocked_over_remote(

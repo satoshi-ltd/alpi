@@ -240,8 +240,10 @@ not reach.
   uses the skills the profile has. The local socket is
   sovereign and always `admin`; network settings (`host.tcp_port`,
   `alp.tcp_port`, `host.allow_public_bind`, `host.endpoints`, `network.host`
-  and their parent blocks) are set only there, and a config key with an
-  empty or padded segment is refused on every transport. A remote admin can
+  and their parent blocks and sub-keys) are set only there, a config key
+  with an empty or padded segment is refused on every transport, and a
+  dotted write never turns a value into a section (`network.host.x` is
+  refused, never stored as a nested block). A remote admin can
   restart and update the daemon (`host.daemon.restart`, `host.daemon.update`),
   which the apps offer in Settings. What `member` does **not** restrict is the
   agent: a member device can still send chat turns, and a turn can do

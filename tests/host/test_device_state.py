@@ -2083,3 +2083,61 @@ async def test_read_file_not_found_never_names_the_daemon_path(
     })
     assert resp["error"]["message"] == "not-found"
     assert str(tmp_path) not in json.dumps(resp)
+
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("key", ["network.host.x", "host.allow_public_bind.x", "host.tcp_port.x", "alp.tcp_port.x", "model.x"])
+async def test_set_field_never_turns_a_scalar_into_a_mapping(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, key: str,
+) -> None:
+    home = _bootstrap(tmp_path / "h")
+    (home / "config.yaml").write_text(
+        "model: openrouter/deepseek/deepseek-v4.1-flash\nnetwork:\n  host: 100.64.0.5\n"
+        "host:\n  tcp_port: 49200\n  allow_public_bind: false\nalp:\n  tcp_port: 7423\n"
+    )
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+    before = (home / "config.yaml").read_text()
+    resp = await srv._dispatch({
+        "id": "k", "method": "host.config.set_field",
+        "params": {"profile": "default", "key": key, "value": "y"},
+    })
+    assert resp["error"]["code"] == -32602
+    assert resp["error"]["message"] == "invalid-params"
+    assert (home / "config.yaml").read_text() == before
+
+
+def test_a_dotted_write_creates_missing_and_empty_parents_but_not_through_a_scalar() -> None:
+    data: dict = {"tools": None, "reasoning": {}, "model": "m"}
+    host_device_state._set_dotted(data, "tools.terminal.sandbox", True)
+    host_device_state._set_dotted(data, "reasoning.effort", "low")
+    host_device_state._set_dotted(data, "fresh.child.leaf", 1)
+    assert data["tools"] == {"terminal": {"sandbox": True}}
+    assert data["reasoning"] == {"effort": "low"}
+    assert data["fresh"] == {"child": {"leaf": 1}}
+    for key in ("model.x", "tools.terminal.sandbox.deeper"):
+        with pytest.raises(host_server.HandlerError) as caught:
+            host_device_state._set_dotted(data, key, "y")
+        assert caught.value.message == "invalid-params"
+    assert data["model"] == "m" and data["tools"]["terminal"]["sandbox"] is True
+
+
+@pytest.mark.asyncio
+async def test_the_local_socket_still_sets_the_real_network_keys(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path / "h")
+    (home / "config.yaml").write_text("model: m\nhost:\n  tcp_port: 49200\nalp:\n  tcp_port: 7423\n")
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+    for key, value in (("host.tcp_port", "49300"), ("alp.tcp_port", "7500")):
+        resp = await srv._dispatch({
+            "id": "k", "method": "host.config.set_field",
+            "params": {"profile": "default", "key": key, "value": value},
+        })
+        assert "error" not in resp, (key, resp)
+    text = (home / "config.yaml").read_text()
+    assert "49300" in text and "7500" in text

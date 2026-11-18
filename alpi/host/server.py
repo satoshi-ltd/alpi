@@ -96,12 +96,14 @@ def _without_internal_detail(send: SendCoro) -> SendCoro:
 
 
 def _touches_local_only_config(key: str) -> bool:
-    # The handler refuses empty segments, but the gate must not depend on that: compare the normalised key and its parents.
+    # The handler refuses empty segments, but the gate must not depend on that: compare the normalised key, its parents and its children.
     normalised = ".".join(part.strip() for part in key.split(".") if part.strip())
     if not normalised:
         return False
     return any(
-        protected == normalised or protected.startswith(normalised + ".")
+        protected == normalised
+        or protected.startswith(normalised + ".")
+        or normalised.startswith(protected + ".")
         for protected in _LOCAL_ONLY_CONFIG_KEYS
     )
 

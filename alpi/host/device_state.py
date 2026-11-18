@@ -1116,9 +1116,14 @@ def _set_dotted(data: dict[str, Any], key: str, value: Any) -> None:
     cur = data
     for part in parts[:-1]:
         child = cur.get(part)
-        if not isinstance(child, dict):
+        if child is None:
             child = {}
             cur[part] = child
+        elif not isinstance(child, dict):
+            raise host_server.HandlerError(
+                -32602, "invalid-params",
+                data={"detail": f"{part!r} in {key!r} is a value, not a section"},
+            )
         cur = child
     cur[parts[-1]] = value
 

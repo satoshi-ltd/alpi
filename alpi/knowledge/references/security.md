@@ -9,8 +9,8 @@
   `profile_scope`; dispatcher blocks sensitive verbs from members and
   out-of-scope profiles from scoped members (detail below). Network admin
   is local-only over the Unix socket: the bind, ports, public-bind switch,
-  endpoints and `network.host` (and their parent blocks) cannot be set over
-  WebSocket, and a dotted key with an empty or padded part is refused. A
+  endpoints and `network.host` (and their parent blocks and sub-keys) cannot be set over
+  WebSocket, a dotted key with an empty or padded part is refused, and a dotted write never turns a value into a section. A
   remote admin can still restart and update the daemon. Remote callers never
   get internal error text or daemon file paths.
 - Trust: direct user input is trusted; web/email/PDF/tool content is

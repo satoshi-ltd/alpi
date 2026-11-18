@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.19.11 — 2026-11-18 — the network settings stay on the local socket
+
+- A paired device with the admin role could no longer change `host.tcp_port`, `network.host` or `host.allow_public_bind` directly, but it could write a sub-key such as `network.host.x`, which replaced the value with a block and made the daemon listen on every network address after a restart. Sub-keys of those settings are now refused over the network too.
+- Setting a key through a value that is not a section (`model.x` when `model` is text) is refused with `invalid-params` instead of replacing the value, on every transport. An empty section, as in `tools:` with nothing under it, still takes new keys.
+- The apps are unchanged: they set the two port numbers by their exact keys from the local socket.
+
 ## v0.19.10 — 2026-11-18 — script jobs run scripts, not code
 
 - A scheduled script job (`no_agent`) now accepts only `python[3]` with the flags `-u -B -I -E -s -O` and a script that exists as a regular file under a skill's `scripts/` folder. Before, a flag such as `-Bc` carried inline code, and the named script did not even have to exist.

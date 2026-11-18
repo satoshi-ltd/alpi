@@ -196,19 +196,6 @@ Each entry is written to be worked without that report:
 
 #### Security — daemon
 
-- **SEC.LOCAL-ONLY-CHILDREN** — A remote admin cannot reach a local-only setting through a child key (S5)
-  `bug · alpi · agent · high`
-  note: `_touches_local_only_config` in [server.py](../alpi/host/server.py) (`:98-106`) refuses a key equal to a
-  protected one or a parent of it, not a child. `host.config.set_field` with `key: "network.host.x"` or
-  `"host.allow_public_bind.x"` passes; `_set_dotted` ([device_state.py](../alpi/host/device_state.py) `:1111-1123`)
-  replaces the scalar with a dict and the readers coerce it with `str()` and `bool()`
-  ([network.py](../alpi/host/network.py) `:122-125,277-286`), so `resolve_bind_host` returns `0.0.0.0`.
-  `host.tcp_port.x` makes `resolve_host_tcp_port` raise and the WebSocket listener stays down until a local edit.
-  accept: under `require_token=True` with an admin token, `set_field` on `network.host.x`,
-  `host.allow_public_bind.x`, `host.tcp_port.x`, `alp.tcp_port.x` and `host.endpoints.x` answers `forbidden`;
-  `_set_dotted` refuses, on every transport, to descend through a value that is not a mapping (`invalid-params`);
-  the local socket still sets the five real keys.
-
 - **SEC.ENV-KEYS** — A remote admin sets only the environment names a client needs (S6)
   `bug · alpi · agent · high`
   note: `_check_env_key` in [host/config.py](../alpi/host/config.py) (`:12-35`) refuses nine names.
