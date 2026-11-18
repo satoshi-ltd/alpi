@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.19.9 — 2026-11-18 — a shell command that cannot be read needs approval
+
+- A terminal command the safety check cannot read, for instance one with an unbalanced quote or a heredoc it cannot follow, now asks for approval, each time. Before, it went through as safe, so a stray apostrophe in a comment was enough to run a download-and-execute or read a credential file without a prompt. On a surface with nobody to ask, it is refused.
+- The check now looks through `#` comments, `$'…'` quoting, `${VAR…}` forms, `~+`, unset variables, `time` and `$SHELL`, versioned interpreters such as `python3.12`, and into the string given to `sh -c`, `bash -c` and `eval` and every `$( … )` substitution.
+- Ordinary commands keep running without a prompt, comments, `${…}` and quoted substitutions included. A heredoc whose text has an unbalanced apostrophe, a `git commit -m "$(cat <<'EOF' … EOF)"` message with one included, now asks.
+
 ## v0.19.8 — 2026-11-18 — credentials stay out of file tools
 
 - The file tools (`read_file`, `search`, `write_file`, `edit_file`, `delete_file`) no longer read or write a profile's `secrets/`, `alp/secrets/` or `host/`, in any turn: an app, the console or a scheduled job. Before, only turns driven by members and peers were fenced from them.

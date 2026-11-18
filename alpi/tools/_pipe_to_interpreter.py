@@ -10,6 +10,7 @@ _INTERPRETERS = frozenset({
     "sh", "bash", "zsh", "ash", "dash", "ksh", "fish",
     "python", "python2", "python3", "perl", "ruby", "node",
     "pwsh", "powershell",
+    "$shell", "${shell}",
 })
 
 _PIPE_TOKENS = frozenset({"|", "|&"})
@@ -65,7 +66,15 @@ _WRAPPER_SPECS: dict[str, dict] = {
         "positional_after_flags": 0,
         "query_flags": frozenset(),
     },
+    "time": {
+        "value_flags": frozenset({"-f", "-o", "--format", "--output"}),
+        "positional_after_flags": 0,
+        "query_flags": frozenset(),
+    },
 }
+
+
+_VERSIONED_EXE_RE = re.compile(r"(python|ruby|perl|node|bash|zsh|dash|ksh)[\d.]+")
 
 
 def _normalize_exe(token: str) -> str:
@@ -76,60 +85,160 @@ def _normalize_exe(token: str) -> str:
     name = name.casefold()
     if name.endswith(".exe"):
         name = name[:-4]
-    return name
+    versioned = _VERSIONED_EXE_RE.fullmatch(name)
+    return versioned.group(1) if versioned else name
+
+
+_ANSI_ESCAPES = {
+    "n": "\n", "t": "\t", "r": "\r", "a": "\a", "b": "\b", "e": "\x1b", "E": "\x1b",
+    "f": "\f", "v": "\v", "\\": "\\", "'": "'", '"': '"',
+}
+_ANSI_ESCAPE_RE = re.compile(r"\\(?:x([0-9A-Fa-f]{1,2})|u([0-9A-Fa-f]{1,4})|U([0-9A-Fa-f]{1,8})|([0-7]{1,3})|(.))", re.S)
+
+
+def _decode_ansi_c(body: str) -> str:
+    def one(m: re.Match[str]) -> str:
+        hex2, hex4, hex8, octal, other = m.groups()
+        try:
+            if hex2 or hex4 or hex8:
+                return chr(int(hex2 or hex4 or hex8, 16))
+            if octal:
+                return chr(int(octal, 8) & 0xFF)
+        except (ValueError, OverflowError):
+            return ""
+        return _ANSI_ESCAPES.get(other, other)
+
+    return _ANSI_ESCAPE_RE.sub(one, body)
+
+
+def _ansi_c_end(cmd: str, start: int) -> int:
+    j = start
+    while j < len(cmd):
+        if cmd[j] == "\\":
+            j += 2
+            continue
+        if cmd[j] == "'":
+            return j
+        j += 1
+    return -1
+
+
+class _Unreadable(Exception):
+    pass
 
 
 def _normalize_command(cmd: str) -> str:
-    cmd = cmd.replace("\\\n", " ")
     out: list[str] = []
     i = 0
+    n = len(cmd)
     quote: str | None = None
-    while i < len(cmd):
+    boundary = True
+    braces = 0
+    backtick = False
+    while i < n:
         c = cmd[i]
         if quote is None:
+            if c == "\\":
+                if i + 1 >= n:
+                    out.append("\\\\")
+                    boundary = False
+                    i += 1
+                    continue
+                if cmd[i + 1] == "\n":
+                    i += 2
+                    continue
+                out.append(c)
+                out.append(cmd[i + 1])
+                boundary = False
+                i += 2
+                continue
+            if c == "#" and boundary and braces == 0 and not backtick:
+                if "[[" in cmd:
+                    raise _Unreadable
+                end = cmd.find("\n", i)
+                i = n if end < 0 else end
+                continue
+            if c == "$" and cmd.startswith("$'", i):
+                end = _ansi_c_end(cmd, i + 2)
+                if end >= 0:
+                    if "\\'" in cmd[i + 2:end]:
+                        raise _Unreadable
+                    decoded = _decode_ansi_c(cmd[i + 2:end])
+                    out.append("'" + decoded.replace("'", "'\\''") + "'")
+                    boundary = False
+                    i = end + 1
+                    continue
+            if c == "$" and cmd.startswith('$"', i):
+                i += 1
+                continue
             if c in ('"', "'"):
                 quote = c
                 out.append(c)
+                boundary = False
                 i += 1
                 continue
-            if c == "\\" and i + 1 < len(cmd):
-                out.append(c)
-                out.append(cmd[i + 1])
+            if c == "$" and cmd.startswith("${", i):
+                braces += 1
+                out.append("${")
+                boundary = False
                 i += 2
                 continue
+            if c == "}" and braces:
+                braces -= 1
+            if c == "`":
+                backtick = not backtick
             if c == "\n":
                 j = i + 1
-                while j < len(cmd) and cmd[j] in " \t":
+                while j < n and cmd[j] in " \t":
                     j += 1
-                next_is_op = j < len(cmd) and cmd[j] in "|&;"
+                next_is_op = j < n and cmd[j] in "|&;"
                 k = len(out) - 1
                 while k >= 0 and out[k] in " \t":
                     k -= 1
                 prev_is_op = k >= 0 and out[k] in "|&;"
-                if next_is_op or prev_is_op:
-                    out.append(" ")
-                else:
-                    out.append(" ; ")
+                out.append(" " if next_is_op or prev_is_op else " ; ")
+                boundary = True
+                i += 1
+                continue
+            if braces and c in " \t":
+                out.append("\\" + c)
+                boundary = False
                 i += 1
                 continue
             out.append(c)
+            boundary = c in " \t;&|("
             i += 1
             continue
         out.append(c)
         if c == quote:
             quote = None
+            boundary = False
             i += 1
             continue
-        if c == "\\" and i + 1 < len(cmd) and quote == '"':
-            out.append(cmd[i + 1])
+        if c == "\\" and i + 1 < n and quote == '"':
+            if cmd[i + 1] == "\n":
+                out.pop()
+            else:
+                out.append(cmd[i + 1])
             i += 2
             continue
         i += 1
+    if braces:
+        raise _Unreadable
     return "".join(out)
 
 
-def _tokenize(command: str) -> list[str] | None:
-    normalized = _normalize_command(command)
+def _try_normalize(text: str) -> str | None:
+    try:
+        return _normalize_command(text)
+    except _Unreadable:
+        return None
+
+
+def _lex(text: str) -> list[str] | None:
+    normalized = _try_normalize(text)
+    if normalized is None:
+        return None
     lex = shlex.shlex(normalized, posix=True, punctuation_chars=True)
     lex.whitespace_split = True
     lex.commenters = ""
@@ -137,6 +246,153 @@ def _tokenize(command: str) -> list[str] | None:
         return list(lex)
     except ValueError:
         return None
+
+
+def _match_paren(text: str, start: int, _level: int = 0) -> int:
+    if _level > 20:
+        return -2
+    depth = 1
+    i = start
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if c == "\\":
+            i += 2
+            continue
+        if c == "'":
+            j = text.find("'", i + 1)
+            if j < 0:
+                return -1
+            i = j + 1
+            continue
+        if c == '"':
+            i += 1
+            while i < n and text[i] != '"':
+                if text[i] == "\\":
+                    i += 2
+                    continue
+                if text.startswith("$(", i):
+                    inner = _match_paren(text, i + 2, _level + 1)
+                    if inner < 0:
+                        return inner
+                    i = inner + 1
+                    continue
+                i += 1
+            if i >= n:
+                return -1
+            i += 1
+            continue
+        if c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return -1
+
+
+_HEREDOC_OP_RE = re.compile(r"(?<!<)<<(?!<)")
+_UNQUOTED_HEREDOC_RE = re.compile(r"(?<!<)<<-?[ \t]*[A-Za-z_]\w*")
+_SUBSTITUTION_RE = re.compile(r"\$\((?!\()|`")
+_CASE_WORD_RE = re.compile(r"(?<![\w-])case(?![\w-])")
+
+
+def _mask_substitutions(text: str) -> tuple[str, list[str]] | None:
+    out: list[str] = []
+    bodies: list[str] = []
+    quote: str | None = None
+    i = 0
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if quote == "'":
+            out.append(c)
+            if c == "'":
+                quote = None
+            i += 1
+            continue
+        if c == "\\":
+            out.append(text[i:i + 2])
+            i += 2
+            continue
+        if c == "'" and quote is None:
+            quote = "'"
+            out.append(c)
+            i += 1
+            continue
+        if c == '"':
+            quote = None if quote == '"' else '"'
+            out.append(c)
+            i += 1
+            continue
+        if text.startswith("$(", i) and not text.startswith("$((", i):
+            end = _match_paren(text, i + 2)
+            if end == -2 or (end >= 0 and _CASE_WORD_RE.search(text[i + 2:end])):
+                raise _Unreadable
+            if end < 0:
+                return None
+            bodies.append(text[i + 2:end])
+            out.append("$_SUB_")
+            i = end + 1
+            continue
+        if c == "`":
+            j = i + 1
+            while j < n and text[j] != "`":
+                j += 2 if text[j] == "\\" else 1
+            if j >= n:
+                return None
+            bodies.append(re.sub(r"\\([`\\$])", r"\1", text[i + 1:j]))
+            out.append("$_SUB_")
+            i = j + 1
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out), bodies
+
+
+def _tokenize_text(command: str) -> tuple[list[str] | None, list[str], bool]:
+    normalized = _try_normalize(command)
+    if normalized is None:
+        return None, [], False
+    try:
+        masked = _mask_substitutions(normalized)
+    except _Unreadable:
+        return None, [], False
+    tokens = _lex(command)
+    if tokens is not None:
+        return tokens, masked[1] if masked is not None else [], masked is not None
+    if masked is not None:
+        tokens = _lex(masked[0])
+        if tokens is not None:
+            return tokens, masked[1], True
+    return None, [], False
+
+
+def _tokenize_with_bodies(command: str) -> tuple[list[str] | None, list[str]]:
+    tokens, bodies, clean = _tokenize_text(command)
+    if tokens is not None and (clean or not _HEREDOC_OP_RE.search(command)):
+        return tokens, bodies
+    return None, []
+
+
+def _tokenize(command: str) -> list[str] | None:
+    return _tokenize_with_bodies(command)[0]
+
+
+def substitution_bodies(command: str) -> list[str]:
+    return _tokenize_with_bodies(command)[1]
+
+
+def heredoc_may_expand(command: str) -> bool:
+    for match in _UNQUOTED_HEREDOC_RE.finditer(command):
+        if _SUBSTITUTION_RE.search(command, match.end()):
+            return True
+    return False
+
+
+def is_unparseable(command: str) -> bool:
+    return bool(command and command.strip()) and _tokenize(command) is None
 
 
 def _split_by_separators(tokens: list[str]) -> list[list[str]]:
@@ -559,7 +815,9 @@ def _downloaded_file_executed(segments: list[list[str]]) -> bool:
 def runs_remote_code(command: str) -> bool:
     if not command or not command.strip():
         return False
-    text = _normalize_command(command)
+    text = _try_normalize(command)
+    if text is None:
+        return False
     parts: list[str] = []
     last = 0
     for start, end, body in _substitution_spans(text):

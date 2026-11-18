@@ -71,6 +71,8 @@ scripts run with the same reach. A process that detaches into its own session
 (`setsid`) outlives its command and can write after the audit. `alpi
 doctor` and `alpi audit` warn while it is on.
 
+A terminal command the classifier cannot read (an unbalanced quote, a heredoc it cannot follow, `${!name}`, an `eval` with arguments, nesting that is too deep, for example) always asks first, once (a heredoc whose text has an unbalanced quote asks too): no allowlist and no "always" applies to it, and a surface without an approver refuses it. Before classifying, `#` comments are removed, `$'…'` is decoded, and the string given to `sh -c`, `bash -c`, `eval` and every command substitution is classified again (three levels deep; deeper asks); unset variables count as empty and `${VAR:-default}`, `${VAR:+x}` and `~+` are expanded (trim and replace modifiers use the variable's value as is). `time` is a wrapper and `$SHELL` and versioned names such as `python3.12` are interpreters.
+
 Pipe-to-interpreter is classified `dangerous` and blocked regardless of
 sandbox state via a `shlex.shlex(punctuation_chars=True)` detector that
 splits the command into shell-aware tokens — distinguishing `|` and `|&`

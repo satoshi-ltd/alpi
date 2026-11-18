@@ -42,7 +42,20 @@ not reach.
   redirections against the profile's `.env` or `config.yaml`, and bare
   `env` / `printenv`, are classified dangerous. `env VAR=x cmd` stays
   allowed: it sets one variable for one child instead of dumping the
-  environment. The classifier also resolves what a command names before
+  environment. A command the classifier cannot read always asks first, once
+  per command: an unbalanced quote or a heredoc it cannot follow, a `$'…'`
+  with an escaped quote, a `case` inside `$( … )`, `${!name}`, an `eval` with
+  more than one argument, an unquoted heredoc whose text holds a substitution,
+  more than eight nested commands or nesting beyond three levels. No session
+  or config allowlist, and no "always", can approve it, and a surface with
+  nobody to ask refuses it, so a heredoc whose text has an unbalanced quote
+  asks, `git commit -m "$(cat <<'EOF' … EOF)"` with an apostrophe included.
+  `#` comments, `$'…'` quoting, `${VAR…}` forms
+  and the string given to `sh -c`, `bash -c`, `eval` and every `$( … )` or
+  backtick substitution are resolved and classified again, three levels deep,
+  before that. This is a text classifier and stays best-effort: the OS sandbox
+  is the line that holds. The
+  classifier also resolves what a command names before
   judging it: `~`, `$HOME`, `$ALPI_HOME`, `$PWD`, `$OLDPWD` and variables
   assigned earlier in the same command are expanded, `.`, `..` and `//`
   normalised, letter case ignored, braces and globs (`**` included) expanded,

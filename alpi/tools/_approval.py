@@ -9,8 +9,15 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, Optional
 
-from alpi.tools._command_paths import touches_credential_path
-from alpi.tools._pipe_to_interpreter import is_pipe_to_interpreter, runs_remote_code
+from alpi.tools._command_paths import INDIRECT_RE, _nested_commands, touches_credential_path
+from alpi.tools._pipe_to_interpreter import (
+    command_segments,
+    heredoc_may_expand,
+    is_pipe_to_interpreter,
+    is_unparseable,
+    runs_remote_code,
+    substitution_bodies,
+)
 
 
 class Severity(str, Enum):
@@ -190,7 +197,26 @@ def _persist_always(pattern_desc: str) -> None:
     atomic_write_yaml(p, data)
 
 
-def classify(cmd: str, cwd: str | None = None) -> tuple[Severity, str]:
+_MAX_NESTED_DEPTH = 3
+_NESTED_WORK_BUDGET = 60
+_MAX_NESTED_BODIES = 8
+
+
+def _eval_with_arguments(segment: list[str]) -> bool:
+    for i, tok in enumerate(segment):
+        if tok == "eval":
+            args = [t for t in segment[i + 1:] if t not in ("|", "|&", ";", "&&", "||", "&")]
+            if args[:2] == ["$", "("] or args[:1] and args[0].startswith(("$(", "`")):
+                return False
+            return len(args) > 1
+    return False
+
+UNPARSEABLE_DESC = "command could not be checked"
+
+
+def classify(
+    cmd: str, cwd: str | None = None, _depth: int = 0, _budget: list[int] | None = None,
+) -> tuple[Severity, str]:
     """Return ``(worst_severity, desc_of_that_match)``.
 
     Scans every pattern: if any matches with ``DANGEROUS``, that one wins
@@ -202,6 +228,11 @@ def classify(cmd: str, cwd: str | None = None) -> tuple[Severity, str]:
     """
     if not cmd:
         return Severity.SAFE, ""
+    budget = _budget if _budget is not None else [_NESTED_WORK_BUDGET]
+    budget[0] -= 1
+    if budget[0] < 0:
+        return Severity.CAUTION, UNPARSEABLE_DESC
+    unparseable = is_unparseable(cmd) or bool(INDIRECT_RE.search(cmd)) or heredoc_may_expand(cmd)
     if is_pipe_to_interpreter(cmd):
         return Severity.DANGEROUS, "pipe-to-interpreter"
     caution_match: tuple[Severity, str] | None = None
@@ -216,6 +247,27 @@ def classify(cmd: str, cwd: str | None = None) -> tuple[Severity, str]:
         return Severity.DANGEROUS, "remote code execution"
     if touches_credential_path(cmd, cwd):
         return Severity.DANGEROUS, "credential path"
+    segments = command_segments(cmd) or []
+    if any(_eval_with_arguments(segment) for segment in segments):
+        unparseable = True
+    nested = [n for segment in segments for n in _nested_commands(segment)]
+    nested += substitution_bodies(cmd)
+    nested = list(dict.fromkeys(nested))
+    if len(nested) > _MAX_NESTED_BODIES:
+        unparseable = True
+        nested = []
+    for body in nested if _depth < _MAX_NESTED_DEPTH else []:
+        severity, desc = classify(body, cwd, _depth + 1, budget)
+        if severity == Severity.DANGEROUS:
+            return severity, desc
+        if desc == UNPARSEABLE_DESC:
+            unparseable = True
+        elif severity == Severity.CAUTION and caution_match is None:
+            caution_match = (severity, desc)
+    if unparseable:
+        return Severity.CAUTION, UNPARSEABLE_DESC
+    if nested and _depth >= _MAX_NESTED_DEPTH:
+        return Severity.CAUTION, UNPARSEABLE_DESC
     return caution_match if caution_match else (Severity.SAFE, "")
 
 
@@ -304,13 +356,14 @@ def _check_inner(cmd: str, cwd: str | None = None) -> Decision:
             reason=f"dangerous pattern: {desc}",
         )
 
+    once_only = desc == UNPARSEABLE_DESC
     with _lock:
-        if desc in _session_allowlist:
+        if desc in _session_allowlist and not once_only:
             return Decision(
                 allowed=True, severity=severity, pattern=desc,
                 reason="session allowlist",
             )
-    match = _allowlist_match(cmd, _persistent_allowlist(), desc)
+    match = None if once_only else _allowlist_match(cmd, _persistent_allowlist(), desc)
     if match is not None:
         entry, kind = match
         reason = (
@@ -328,6 +381,9 @@ def _check_inner(cmd: str, cwd: str | None = None) -> Decision:
         return Decision(
             allowed=False, severity=severity, pattern=desc,
             reason=(
+                f"caution pattern: {desc} — no interactive approver in "
+                f"this surface. Rerun from TUI to approve."
+                if once_only else
                 f"caution pattern: {desc} — no interactive approver in "
                 f"this surface. Rerun from TUI to approve, or add {desc!r} "
                 f"to tools.terminal.approval.allowlist in config.yaml."
@@ -351,7 +407,9 @@ def _check_inner(cmd: str, cwd: str | None = None) -> Decision:
                 "it was denied."
             ),
         )
-    if choice == "session":
+    if once_only:
+        pass
+    elif choice == "session":
         with _lock:
             _session_allowlist.add(desc)
     elif choice == "always":

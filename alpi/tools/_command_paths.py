@@ -8,6 +8,7 @@ import re
 import time
 
 from alpi.tools._pipe_to_interpreter import (
+    _normalize_exe,
     command_segments,
     segment_executable,
 )
@@ -47,6 +48,11 @@ _INPUT_SUB_RE = re.compile(r"\$\(\s*<\s*([^()\s]+)\s*\)|`\s*<\s*([^`\s]+)\s*`")
 
 _ASSIGNMENT_RE = re.compile(r"([A-Za-z_]\w*)=(.*)", re.S)
 _VAR_RE = re.compile(r"\$(?:\{(\w+)\}|(\w+))")
+_BRACED_RE = re.compile(r"\$\{(\w+)([^{}]*)\}")
+_DEFAULT_MOD_RE = re.compile(r"(:?)([-=])(.*)", re.S)
+_LENGTH_RE = re.compile(r"\$\{#\w*\}")
+_LEFTOVER_BRACED_RE = re.compile(r"\$\{[^{}]*\}")
+INDIRECT_RE = re.compile(r"\$\{![A-Za-z_]\w*\}")
 _GLOB_RE = re.compile(r"[*?\[]")
 _OPERATOR_RE = re.compile(r"[|&;<>()]+")
 _BRACE_RE = re.compile(r"\{([^{}]*,[^{}]*)\}")
@@ -62,7 +68,7 @@ _RECURSIVE_FLAG_LETTERS = {
 _FIND_EXEC = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
 _IDENTITY_USERS = frozenset({"ssh", "sftp"})
 _KEYGEN_SAFE_FLAGS = frozenset({"-l", "-y", "-t"})
-_SHELLS = frozenset({"sh", "bash", "zsh", "dash", "ash", "ksh"})
+_SHELLS = frozenset({"sh", "bash", "zsh", "dash", "ash", "ksh", "$shell", "${shell}"})
 _CHDIR_FLAGS = frozenset({"-C", "--directory", "--chdir"})
 _CHDIR_EXES = frozenset({"tar", "bsdtar", "git", "make", "env"})
 _GROUP_TOKENS = frozenset({"(", ")", "{", "}"})
@@ -97,6 +103,7 @@ def _base_env() -> dict[str, str]:
     from alpi.home import get_home
 
     env = dict(os.environ)
+    env["IFS"] = " "
     env["HOME"] = os.path.expanduser("~")
     try:
         env["ALPI_HOME"] = str(get_home())
@@ -105,19 +112,42 @@ def _base_env() -> dict[str, str]:
     return env
 
 
-def _expand(raw: str, env: dict[str, str]) -> str | None:
-    missing = False
+def _expand(raw: str, env: dict[str, str], _depth: int = 0) -> str | None:
+    if raw.startswith("~+"):
+        raw = "$PWD" + raw[2:]
+    elif raw.startswith("~-"):
+        raw = "$OLDPWD" + raw[2:]
+    raw = _LENGTH_RE.sub("0", raw)
 
-    def sub(match: re.Match[str]) -> str:
-        nonlocal missing
-        value = env.get(match.group(1) or match.group(2))
-        if value is None:
-            missing = True
+    def braced(match: re.Match[str]) -> str:
+        value = env.get(match.group(1))
+        modifier = match.group(2)
+        if not modifier:
+            return value or ""
+        default = _DEFAULT_MOD_RE.fullmatch(modifier)
+        if default is not None:
+            if value is None or (default.group(1) and value == ""):
+                return _expand(default.group(3), env, _depth + 1) or ""
+            return value
+        if modifier.startswith(":+") or modifier.startswith("+"):
+            alternative = modifier[2:] if modifier.startswith(":") else modifier[1:]
+            return _expand(alternative, env, _depth + 1) or "" if value else ""
+        if modifier[0] in "%#/^,:@":
+            return value if value and ":" not in value and not re.search(r"\s", value) else ""
+        if modifier[0] == "[":
             return ""
-        return value
+        return "*"
 
-    out = _VAR_RE.sub(sub, raw)
-    return None if missing else out
+    out = raw
+    for _ in range(6):
+        grown = _BRACED_RE.sub(braced, out)
+        if grown == out:
+            break
+        out = grown
+    out = out.replace("${@}", "").replace("${*}", "")
+    out = _LEFTOVER_BRACED_RE.sub("", out)
+    out = re.sub(r"\$[@*]", "", out)
+    return _VAR_RE.sub(lambda m: env.get(m.group(1) or m.group(2)) or "", out)
 
 
 def _braces(token: str) -> list[str]:
@@ -266,19 +296,21 @@ def _hits(
         expanded = _expand(variant, env)
         if expanded is None:
             continue
-        path = os.path.expanduser(expanded)
-        if not os.path.isabs(path):
-            path = os.path.join(work, path)
-        path = os.path.normpath(path)
-        has_glob = bool(_GLOB_RE.search(path))
-        if has_glob and _pattern_may_match(path, roots):
-            return True
-        for cand in _glob_candidates(path, budget) if has_glob else [path]:
-            for form in _forms(cand):
-                if _is_credential(form, roots):
-                    return True
-                if recursive and _is_credential_ancestor(form, roots):
-                    return True
+        words = expanded.split() or [expanded] if "IFS" in variant else [expanded]
+        for word in words:
+            path = os.path.expanduser(word)
+            if not os.path.isabs(path):
+                path = os.path.join(work, path)
+            path = os.path.normpath(path)
+            has_glob = bool(_GLOB_RE.search(path))
+            if has_glob and _pattern_may_match(path, roots):
+                return True
+            for cand in _glob_candidates(path, budget) if has_glob else [path]:
+                for form in _forms(cand):
+                    if _is_credential(form, roots):
+                        return True
+                    if recursive and _is_credential_ancestor(form, roots):
+                        return True
     return False
 
 
@@ -414,6 +446,8 @@ def _touches(command: str, cwd: str | None, depth: int, outer_env: dict[str, str
             ):
                 return True
         if exe in ("cd", "pushd"):
+            at = next((n for n, t in enumerate(tokens) if os.path.basename(t) == exe), 0)
+            tokens = tokens[at:]
             args = _positional(tokens)
             if tokens[1:2] == ["-"]:
                 target = env.get("OLDPWD")
@@ -446,8 +480,8 @@ def _assigned_commands(tokens: list[str]) -> list[str]:
 def _nested_commands(tokens: list[str]) -> list[str]:
     found: list[str] = []
     for i, tok in enumerate(tokens):
-        name = os.path.basename(tok).casefold()
-        if name == "eval":
+        name = _normalize_exe(tok)
+        if name == "eval" and tok == "eval":
             found.append(" ".join(tokens[i + 1:]))
         elif name in _SHELLS:
             for j in range(i + 1, len(tokens) - 1):
