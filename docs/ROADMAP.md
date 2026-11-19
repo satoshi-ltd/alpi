@@ -80,25 +80,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **DAEMON.EXECUTORS** — A full thread pool cannot stop heartbeats, authentication or cancel (D2)
-  `bug · alpi · agent · high`
-  note: nothing calls `set_default_executor`, so the default pool (`min(32, cpu + 4)`: six threads on two vCPUs)
-  carries whole engine turns ([chat.py](../alpi/host/chat.py) `:403`,
-  [alp/handlers.py](../alpi/alp/handlers.py) `:84,197`), run-now jobs for their full length
-  ([host/schedule.py](../alpi/host/schedule.py) `:149`), gate commands (`service.py:1580`), email probes whose
-  worker stays stuck after the 20 s timeout ([probes.py](../alpi/host/probes.py) `:41`), the sidecar append of
-  every chat frame (`chat.py:353`), the token check of every WebSocket message
-  ([server.py](../alpi/host/server.py) `:819`), the revocation watcher (`:995`) and most RPC reads. When it is full
-  no chat frame is written or sent, the 5 s heartbeat included, so clients reach their 75 s timeout; every WebSocket
-  RPC waits at authentication, `host.chat.cancel` included. Measured with every worker blocked: one sidecar append
-  waited until a worker freed. Fix shape: (1) a named executor for engine turns, `link.ask`, run-now and gate
-  commands, at least as large as the default pool is today so concurrency does not drop; (2) `_check_token_meta`
-  called inline (it costs 10 µs), with only the once-a-minute `_touch` left off the loop; (3) sidecar frames
-  written inline or by one writer thread that keeps their order; (4) email probes on a small pool of their own.
-  accept: a test blocks every worker of the turn executor with fake turns and still gets `host.version` over a
-  WebSocket and a chat heartbeat; a hung email probe leaves the default pool at its size; frame order in the
-  sidecar is unchanged.
-
 - **HARN.PRUNE-WATERMARK** — Old tool output is trimmed long before the context window fills (H2)
   `feature · alpi · agent · high`
   note: the cheap prune pass, which calls no model, runs only past `DEFAULT_TRIGGER_RATIO = 0.75` of the window

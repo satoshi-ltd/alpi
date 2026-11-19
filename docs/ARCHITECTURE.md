@@ -1102,10 +1102,17 @@ Verb namespaces in current shape:
   `host.events.history`) are filtered to the device's scope before
   delivery; the event-subscribe stream drops out-of-scope frames
   the same way.
+- **Long work has its own threads.** `host.workers` keeps named executors so the default executor only carries short
+  reads: `turn` (at least 16 workers) runs engine turns from `host.chat.send`, `link.ask`, `host.schedule.fire`,
+  pipeline prepare and gate commands, and the RPCs that wait on a model or a process (bio draft, voice script, MCP
+  probe, `host.daemon.update`); on shutdown the daemon waits for them before it releases its pidfile and lock; `auth` (4) checks tokens, writes auth-failure audit lines and re-checks live WebSocket
+  authorizations; `probe` (2) runs email probes, whose threads outlive their 20-second answer; `sidecar` (4) writes
+  chat frames to the replay sidecar; a turn awaits each frame before the next, so its order is kept. Every turn thread busy still leaves heartbeats,
+  authentication and `host.chat.cancel` answering.
 - **Roster reads stay responsive during agent turns.** `host.profile.summaries`
   and `host.workgroups.list` run their filesystem aggregation on a dedicated four-worker
   executor in `host.read_pool`, preserving the caller's context variables and scope. Agent turns and pipeline gates
-  use the default executor and cannot occupy the roster's workers. The desktop gives both reads
+  run on their own executor and cannot occupy the roster's workers. The desktop gives both reads
   a 60-second deadline. It applies each successful half independently and persists only that half;
   a failed or unapplied response retains memory and marks the workgroups page as potentially out
   of date, with Retry. Only applied responses count as synchronized.
@@ -1412,8 +1419,8 @@ It does not write `sessions/<id>.json`: cron output belongs to
 schedule delivery/logging, not to local TUI / desktop chat history.
 
 **Loop isolation.** `serve()` runs `tick()` in a dedicated
-`ThreadPoolExecutor(max_workers=2)`, and `host.schedule.fire` wraps
-`fire_by_id` in `run_in_executor` before awaiting. Both paths
+`ThreadPoolExecutor(max_workers=2)`, and `host.schedule.fire` runs
+`fire_by_id` on the daemon's turn executor before awaiting. Both paths
 ultimately call `subprocess.run(timeout=job_run_timeout(job))` (default 900s, per-job up to 86400s); running them inline
 would block every other coroutine on the daemon's asyncio loop —
 ALP responders and `host.chat.send` streams in

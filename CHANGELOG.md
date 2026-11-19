@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.19.21 — 2026-11-19 — busy turns no longer silence the daemon
+
+- Chat, peer and run-now turns, pipeline prepare and gate commands, and the settings calls that wait on a model or a process (bio draft, voice script, MCP check, update) run on threads of their own (at least 16), so a daemon with every turn busy still sends chat heartbeats, signs devices in and answers cancel. Before, a handful of long turns on a small server could leave the apps waiting until they timed out.
+- A hung email probe no longer takes a thread from the daemon's other work, and one slow chat replay write no longer holds up other chats.
+- Stopping the daemon still waits for running turns before it gives up its lock, so a restart never runs beside the old process.
+- A stack dump names each thread by its work (`alpi-turn`, `alpi-auth`, `alpi-probe`, `alpi-sidecar`).
+
 ## v0.19.20 — 2026-11-19 — what an admin device can do, said plainly
 
 - Changing an email account's mail servers now asks for its password again, and email accounts can no longer be rewritten through the generic settings call, so a stored password is not sent to a different server by an edit that leaves it blank.

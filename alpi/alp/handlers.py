@@ -80,9 +80,9 @@ def register_link_ask(server: alp_server.Server, home: Path) -> None:
 
         async def _solo() -> dict[str, Any]:
             async with lock:
-                loop = asyncio.get_running_loop()
-                return await loop.run_in_executor(
-                    None, _run_turn, home, prompt, peer.id, active, peer.pubkey,
+                from alpi.host import workers
+                return await workers.submit(
+                    "turn", _run_turn, home, prompt, peer.id, active, peer.pubkey,
                     conversation, tool_allow,
                 )
 
@@ -194,7 +194,8 @@ async def _run_turn_stream(
             finally:
                 loop.call_soon_threadsafe(queue.put_nowait, SENTINEL)
 
-        worker_task = loop.run_in_executor(None, worker)
+        from alpi.host import workers
+        worker_task = workers.submit("turn", worker)
         try:
             yield {
                 "kind": "chunk",

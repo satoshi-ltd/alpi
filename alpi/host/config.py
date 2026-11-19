@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import re
 import time
 from pathlib import Path
@@ -9,6 +8,7 @@ from typing import Any
 from alpi import config as cfg_mod
 from alpi.home import RESERVED_PROFILE_NAMES
 from alpi.host import server as host_server
+from alpi.host import workers
 
 
 _ENV_KEY_RE = re.compile(r"^[A-Z_][A-Z0-9_]{0,63}$")
@@ -437,8 +437,6 @@ async def _profile_create(
 async def _identity_draft(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
-    import asyncio
-
     from alpi import config as config_mod
     from alpi import home as home_mod
     from alpi import identity
@@ -455,7 +453,7 @@ async def _identity_draft(
         )
     cfg = config_mod.load(h)
     try:
-        bio = await asyncio.to_thread(identity.draft_bio_from_agent, h, cfg)
+        bio = await workers.run("turn", identity.draft_bio_from_agent, h, cfg)
     except ValueError as e:
         raise host_server.HandlerError(
             -32010, "draft-failed", data={"detail": str(e)},
@@ -588,7 +586,7 @@ async def _mcp_tools(
             client.stop()
 
     try:
-        tools = await asyncio.to_thread(_probe)
+        tools = await workers.run("turn", _probe)
     except MCPError as e:
         raise host_server.HandlerError(
             -32603, "internal-error", data={"detail": str(e)},
@@ -1026,5 +1024,5 @@ async def _voice_script(
     home = _resolve_home(profile)
     from alpi.host import voice as host_voice
 
-    script, source = await asyncio.to_thread(host_voice.script_for, home, text)
+    script, source = await workers.run("turn", host_voice.script_for, home, text)
     return {"script": script, "source": source}

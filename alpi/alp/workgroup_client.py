@@ -1827,8 +1827,9 @@ async def trigger_pipeline(
         prepare = gates.prepare_for(wg.meta, key)
         if prepare is not None:
             workspace = cfg_mod.load(home).workspace_path or home
-            passed, output = await asyncio.to_thread(
-                gates.run_prepare, prepare, workspace,
+            from alpi.host import workers
+            passed, output = await workers.run(
+                "turn", gates.run_prepare, prepare, workspace,
             )
             try:
                 await asyncio.to_thread(

@@ -144,9 +144,9 @@ async def _schedule_fire(
         )
 
     async def _run() -> None:
-        loop = asyncio.get_running_loop()
+        from alpi.host import workers
         try:
-            await loop.run_in_executor(None, fire_by_id, home, job_id)
+            await workers.submit("turn", fire_by_id, home, job_id)
         except Exception as exc:  # noqa: BLE001
             logging.getLogger("alpi.host.schedule").exception(
                 "background fire crashed for %s/%s: %s", home, job_id, exc,

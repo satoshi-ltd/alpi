@@ -47,13 +47,9 @@ async def test_update_upgrades_and_restarts_on_new_version(tmp_path: Path) -> No
     data_daemon.register(srv)
     scheduled: list[float] = []
 
-    class FakeLoop:
-        def call_later(self, delay, _fn):
-            scheduled.append(delay)
-
     result = {"ok": True, "updated": True, "current": "0.9.4", "latest": "0.9.5", "installer": "uv"}
     with patch("alpi.updater.update_now", return_value=result), \
-         patch("asyncio.get_running_loop", return_value=FakeLoop()):
+         patch.object(data_daemon, "schedule_self_terminate", lambda delay=0.2: scheduled.append(delay)):
         resp = await srv._dispatch({
             "id": "u", "method": "host.daemon.update", "params": {},
         })
@@ -70,13 +66,9 @@ async def test_update_does_not_restart_when_already_current(tmp_path: Path) -> N
     data_daemon.register(srv)
     scheduled: list[float] = []
 
-    class FakeLoop:
-        def call_later(self, delay, _fn):
-            scheduled.append(delay)
-
     result = {"ok": True, "updated": False, "current": "0.9.5", "latest": "0.9.5", "reason": "up-to-date"}
     with patch("alpi.updater.update_now", return_value=result), \
-         patch("asyncio.get_running_loop", return_value=FakeLoop()):
+         patch.object(data_daemon, "schedule_self_terminate", lambda delay=0.2: scheduled.append(delay)):
         resp = await srv._dispatch({
             "id": "u", "method": "host.daemon.update", "params": {},
         })

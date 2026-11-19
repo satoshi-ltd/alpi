@@ -18,6 +18,7 @@ from websockets.asyncio.server import ServerConnection, serve as ws_serve
 
 from alpi._redact import scrub_surrogates
 from alpi.alp.rate_limit import RateLimiter
+from alpi.host import workers
 from alpi.host.tailscale import is_tailscale_ip
 
 
@@ -793,7 +794,7 @@ class Server:
                     await send({"id": None, "error": {"code": -32000, "message": "auth-failed"}})
                     return None
                 raw_token = token
-                meta = await asyncio.to_thread(_check_token_meta, {"params": {"auth_token": token}}, True)
+                meta = await workers.run("auth", _check_token_meta, {"params": {"auth_token": token}}, True)
                 if not meta.valid:
                     body = {"id": None}
             if body is None:
@@ -819,7 +820,7 @@ class Server:
             })
             return None
         if meta is None or meta.valid:
-            meta = await asyncio.to_thread(_check_token_meta, body, True)
+            meta = await workers.run("auth", _check_token_meta, body, True)
         if not meta.valid:
             params = body.get("params") if isinstance(body.get("params"), dict) else {}
             kind = (
@@ -839,8 +840,8 @@ class Server:
             if device_key is not None:
                 from alpi.host import admin_audit
                 from alpi.host.connection_context import ConnectionContext
-                await asyncio.to_thread(
-                    admin_audit.record_auth_failed,
+                await workers.run(
+                    "auth", admin_audit.record_auth_failed,
                     self.home,
                     str(body.get("method") or ""),
                     ConnectionContext(
@@ -995,7 +996,7 @@ class Server:
                 continue
             checked = set(self._ws_identities)
             try:
-                active = await asyncio.to_thread(_authorization_policies)
+                active = await workers.run("auth", _authorization_policies)
             except Exception:  # noqa: BLE001
                 log.exception("cannot verify active WebSocket authorizations")
                 active = {}
@@ -1044,7 +1045,7 @@ class Server:
         audit_params = body.get("params") if isinstance(body.get("params"), dict) else {}
         remote_meta: AuthMeta | None = None
         if require_token:
-            meta = authenticated or await asyncio.to_thread(_check_token_meta, body)
+            meta = authenticated or await workers.run("auth", _check_token_meta, body)
             valid, role, profile_scope = meta
             if not valid:
                 from alpi.host import admin_audit
@@ -1054,8 +1055,8 @@ class Server:
                     source="remote",
                     role=meta.role or "",
                 )
-                await asyncio.to_thread(
-                    admin_audit.record_auth_failed,
+                await workers.run(
+                    "auth", admin_audit.record_auth_failed,
                     self.home,
                     method,
                     denied_context,

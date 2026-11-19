@@ -35,10 +35,10 @@ async def _email_probe(
             data={"detail": f"unknown email account {account_id!r}"},
         )
 
-    loop = asyncio.get_running_loop()
+    from alpi.host import workers
     try:
         return await asyncio.wait_for(
-            loop.run_in_executor(None, _email_probe_blocking, home, account_id, account),
+            workers.submit("probe", _email_probe_blocking, home, account_id, account),
             timeout=_EMAIL_PROBE_TIMEOUT_SECS,
         )
     except asyncio.TimeoutError:

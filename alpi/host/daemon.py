@@ -6,6 +6,7 @@ import signal
 from typing import Any
 
 from alpi.host import server as host_server
+from alpi.host import workers
 
 
 def register(server: host_server.Server) -> None:
@@ -24,7 +25,7 @@ async def _daemon_update(
     _params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
     from alpi import updater
-    result = await asyncio.to_thread(updater.update_now)
+    result = await workers.run("turn", updater.update_now)
     # Restart only on a real upgrade; a Docker daemon never gets here (reason "manual").
     if result.get("updated"):
         schedule_self_terminate(delay=0.5)

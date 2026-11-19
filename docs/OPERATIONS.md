@@ -196,6 +196,11 @@ kill -USR1 "$(cat ~/.alpi/service.pid)"      # host install
 docker kill -s USR1 <container>              # container: PID 1 forwards it
 ```
 
+Threads are named for their work: `alpi-turn_*` run chat, peer, run-now, pipeline
+prepare and gate work and the model-backed settings calls, `alpi-auth_*` check tokens, `alpi-probe_*` run email probes and
+`alpi-sidecar_*` write the chat replay file. Every `alpi-turn` thread busy delays
+new turns, but heartbeats, sign-in and cancel keep answering.
+
 A CLI command that needs the daemon (`alpi workgroup launch`, `remove`) checks
 first that it answers within 5 s and exits naming it as unresponsive instead of
 waiting.

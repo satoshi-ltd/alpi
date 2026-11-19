@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from alpi.host import _chat_events
+from alpi.host import _chat_events, workers
 from alpi.host import server as host_server
 
 
@@ -335,7 +335,8 @@ async def _data_chat_send(
         lock_acquired = True
 
         from alpi.host.connection_context import current
-        await asyncio.to_thread(
+        await workers.run(
+            "sidecar",
             _chat_events.reset_for_turn,
             home,
             persisted_sid,
@@ -350,8 +351,8 @@ async def _data_chat_send(
             nonlocal stream_alive
             # Persist FIRST: replay depends on the sidecar staying complete even after the wire is gone.
             try:
-                await asyncio.to_thread(
-                    _chat_events.append, home, persisted_sid, request_id,
+                await workers.run(
+                    "sidecar", _chat_events.append, home, persisted_sid, request_id,
                     _persistable_frame(frame),
                 )
             except Exception:  # noqa: BLE001
@@ -400,7 +401,7 @@ async def _data_chat_send(
             finally:
                 loop.call_soon_threadsafe(queue.put_nowait, SENTINEL)
 
-        task = loop.run_in_executor(None, run_engine)
+        task = workers.submit("turn", run_engine)
         heartbeat_task = loop.create_task(_heartbeat_loop())
         _timing.mark(request_id, "stream_open")
 

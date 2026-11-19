@@ -10,6 +10,7 @@ import os
 import platform
 import re
 import shutil
+import contextlib
 import signal
 import subprocess
 import sys
@@ -153,6 +154,22 @@ def register_stack_dump(root: Path) -> Path | None:
     return path
 
 
+# The loop's own handlers are gone once asyncio.run returns; a signal here must not release the pidfile and lock while turns still run.
+@contextlib.contextmanager
+def _signals_held():
+    saved: dict[int, Any] = {}
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            saved[sig] = signal.signal(sig, signal.SIG_IGN)
+        except ValueError:
+            pass
+    try:
+        yield
+    finally:
+        for sig, handler in saved.items():
+            signal.signal(sig, handler)
+
+
 def serve_all(root: Path) -> None:
     """Foreground entry point for the central daemon."""
     from alpi import provider_pause
@@ -177,6 +194,9 @@ def serve_all(root: Path) -> None:
     except KeyboardInterrupt:
         pass
     finally:
+        from alpi.host import workers
+        with _signals_held():
+            workers.shutdown()
         _clear_daemon_pid(root)
         lock.close()
         log.info("central service stopped")
@@ -698,7 +718,7 @@ _sub_io_pool: Any = None
 _sub_io_pool_lock = threading.Lock()
 
 
-# Never asyncio.to_thread these reads: that pool also runs whole engine turns (host/chat.py, alp/handlers.py), so a few hung turns would park every poller forever.
+# Never asyncio.to_thread these reads: the default pool carries every short RPC read, so a slow poller there would stall them.
 async def _sub_io(fn: Callable[..., Any], *args: Any) -> Any:
     global _sub_io_pool
     if _sub_io_pool is None:
@@ -1608,7 +1628,8 @@ async def _maybe_gate_advance(
         # Boundary red before the command: gate pressure is what causes cross-phase edits.
         passed, output = False, violations
     else:
-        passed, output = await asyncio.to_thread(gates.run_gate, step, workspace)
+        from alpi.host import workers
+        passed, output = await workers.run("turn", gates.run_gate, step, workspace)
         try:
             await asyncio.to_thread(
                 gates.refresh_baseline,
