@@ -85,16 +85,16 @@ async def test_concurrent_prompts_queue_behind_the_first(tui_home) -> None:
 
 
 @pytest.mark.asyncio
-async def test_countdown_is_shown_and_expiry_auto_denies(tui_home, monkeypatch) -> None:
+async def test_countdown_is_shown_and_expiry_reports_no_answer(tui_home, monkeypatch) -> None:
     monkeypatch.setattr(AlpiApp, "APPROVAL_TIMEOUT_S", 2.0)
     app = AlpiApp(home_dir=tui_home)
     results: list = []
     async with app.run_test(size=(110, 40)) as pilot:
         t = _ask_approval(app, "sleep", results)
         await _wait_for(pilot, lambda: app.query(ApprovalPanel))
-        assert re.fullmatch(r"esc deny · auto-deny in [12]s", app.query_one(ApprovalPanel).hint_text())
+        assert re.fullmatch(r"esc deny · unanswered, not run in [12]s", app.query_one(ApprovalPanel).hint_text())
         await asyncio.to_thread(t.join, 10)
-        assert results == [("sleep", "deny")]
+        assert results == [("sleep", "unanswered")]
         await _wait_for(pilot, lambda: not app.query(ApprovalPanel))
 
 
@@ -189,7 +189,7 @@ async def test_a_prompt_that_expires_while_queued_says_so(tui_home) -> None:
         app._enqueue_prompt(head)
         app._enqueue_prompt(queued)
         await pilot.pause()
-        assert queued.hint_text() == "esc deny · auto-deny in 30s"
+        assert queued.hint_text() == "esc deny · unanswered, not run in 30s"
         queued.expire()
         await pilot.pause()
         assert app.pending_prompts == [head]
@@ -198,7 +198,7 @@ async def test_a_prompt_that_expires_while_queued_says_so(tui_home) -> None:
         head.expire()
         await pilot.pause()
         notes = [str(w.render()) for w in app.query(DimLine)]
-        assert any("approval for `first` timed out — auto-deny" in n for n in notes)
+        assert any("approval for `first` timed out — unanswered, not run" in n for n in notes)
 
 
 def test_zero_remaining_is_a_deadline_not_none() -> None:

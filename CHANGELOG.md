@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.19.16 — 2026-11-19 — a denial is final
+
+- When a person presses Deny on a command, the agent is told only that it was rejected. Since 0.19.15 it was also told how to run the same thing another way.
+- An approval request nobody answers in time is now reported as unanswered rather than as a person's refusal, in the agent's message and in the terminal's prompt; only then does the agent get the advice to pass its text through a file.
+- In a workgroup phase that may write only some folders, that advice points inside one of them instead of the repository's `.git/` folder, which the phase cannot write; in a phase that may write no whole folder, it tells the agent to put the text in its reply instead.
+
 ## v0.19.15 — 2026-11-19 — an unattended profile learns how to pass long text
 
 - Since 0.19.9 a shell command the safety check cannot read, such as a commit message in a heredoc with an apostrophe in it, needs a person to approve it. On a surface with nobody to ask (scheduled jobs, workgroup turns, peers) the refusal only said to rerun from the TUI or that a person had rejected it; it now tells the agent to write the text to a file inside the repository's `.git/` folder, where it is never committed, and pass that file (`git commit -F`, `gh pr create --body-file`), which runs without approval.

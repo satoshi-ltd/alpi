@@ -149,12 +149,63 @@ PromptChoice = str  # "once" | "session" | "always" | "deny"
 # ``cwd`` is the *effective* working directory the command will run in (already resolved through ``terminal._default_cwd()``). Callbacks that want to display it to the user can collapse ``$HOME`` to ``~`` themselves.
 PromptFn = Callable[[str, str, Severity, Optional[str]], PromptChoice]
 
-UNREADABLE_TEXT_ADVICE = (
-    "Pass multi-line or quoted text through a file: `write_file` it to an absolute path inside the "
-    "repository's git directory (the one `git rev-parse --absolute-git-dir` prints, usually "
-    "`<repo>/.git`; for example `<repo>/.git/ALPI_MSG_<task>`, never tracked), then "
-    "`git commit -F <that path>` or `gh pr create --body-file <that path>`."
-)
+UNANSWERED = "unanswered"
+
+
+def unreadable_text_advice() -> str:
+    scoped, examples = _phase_scratch_files()
+    if not scoped:
+        return (
+            "Pass multi-line or quoted text through a file: `write_file` it to an absolute path inside the "
+            "repository's git directory (the one `git rev-parse --absolute-git-dir` prints, usually "
+            "`<repo>/.git`; for example `<repo>/.git/ALPI_MSG_<task>`, never tracked), then "
+            "`git commit -F <that path>` or `gh pr create --body-file <that path>`."
+        )
+    if not examples:
+        return (
+            "This turn may not write a scratch file, so do not run it another way: put the text in "
+            "your reply instead."
+        )
+    listed = ", ".join(f"`{example}`" for example in examples)
+    return (
+        "Pass multi-line or quoted text through a file this turn may write: `write_file` it to "
+        f"{listed}, pass that absolute path to the command, do not stage it, and delete it when done."
+    )
+
+
+def _phase_scratch_files() -> tuple[bool, list[str]]:
+    import os
+    raw = os.environ.get("ALPI_WORKGROUP_WRITE_SCOPE")
+    if raw is None:
+        return False, []
+    import json
+
+    from alpi.tools._paths import _enforce_dispatch_write_scope, _workspace_root
+    try:
+        scope = json.loads(raw)
+        root = (_workspace_root().resolve() / str(scope.get("root") or "")).resolve()
+        paths = [p for p in scope.get("paths") or () if isinstance(p, str)]
+    except (AttributeError, TypeError, ValueError):
+        return True, []
+    examples: list[str] = []
+    for pattern in paths:
+        if pattern == "**":
+            folder = root
+        elif pattern.endswith("/**") and not any(ch in pattern[:-3] for ch in "*?["):
+            folder = (root / pattern[:-3]).resolve()
+        else:
+            continue
+        candidate = folder / "ALPI_MSG_<task>"
+        try:
+            _enforce_dispatch_write_scope(candidate, str(candidate))
+        except ValueError:
+            continue
+        examples.append(str(candidate))
+        if len(examples) == 3:
+            break
+    return True, examples
+
+
 _prompt_callback: Optional[PromptFn] = None
 
 
@@ -388,7 +439,7 @@ def _check_inner(cmd: str, cwd: str | None = None) -> Decision:
             allowed=False, severity=severity, pattern=desc,
             reason=(
                 f"caution pattern: {desc} — nobody here can approve a command the "
-                f"checker cannot read, so do not retry it as written. {UNREADABLE_TEXT_ADVICE}"
+                f"checker cannot read, so do not retry it as written. {unreadable_text_advice()}"
                 if once_only else
                 f"caution pattern: {desc} — no interactive approver in "
                 f"this surface. Rerun from TUI to approve, or add {desc!r} "
@@ -397,21 +448,29 @@ def _check_inner(cmd: str, cwd: str | None = None) -> Decision:
         )
 
     try:
-        choice = (fn(cmd, desc, severity, cwd) or "deny").lower()
+        choice = (fn(cmd, desc, severity, cwd) or UNANSWERED).lower()
     except Exception as e:  # noqa: BLE001
         return Decision(
             allowed=False, severity=severity, pattern=desc,
             reason=f"approval prompt crashed: {e}",
         )
 
-    if choice == "deny":
+    if choice == UNANSWERED:
+        return Decision(
+            allowed=False, severity=severity, pattern=desc,
+            reason=(
+                f"nobody answered the approval request for this command, so it did not run. "
+                + (f"Do not retry it as written. {unreadable_text_advice()}" if once_only else
+                   "Do not retry it; tell the user it needs their approval.")
+            ),
+        )
+    if choice not in ("once", "session", "always"):
         return Decision(
             allowed=False, severity=severity, pattern=desc,
             reason=(
                 "user rejected this command. Do not retry, do not "
                 "prompt them to reconfirm — just move on or tell them "
                 "it was denied."
-                + (f" If it only carried text, {UNREADABLE_TEXT_ADVICE[0].lower()}{UNREADABLE_TEXT_ADVICE[1:]}" if once_only else "")
             ),
         )
     if once_only:

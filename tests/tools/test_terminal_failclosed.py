@@ -242,14 +242,45 @@ def test_the_terminal_tool_tells_the_model_to_pass_long_text_through_a_file() ->
     assert "write_file" in Terminal.description and "--body-file" in Terminal.description
 
 
-def test_an_approver_that_never_answers_still_hears_the_file_based_form(_isolate: Path) -> None:
-    _approval.set_prompt_callback(lambda command, desc, severity, cwd: "deny")
-    decision = _approval.check("git commit -m \"$(cat <<'EOF'\nit's done\nEOF\n)\"", cwd=str(_isolate.parent))
+UNREADABLE_COMMIT = "git commit -m \"$(cat <<'EOF'\nit's done\nEOF\n)\""
+
+
+def test_an_approver_that_never_answers_hears_the_file_based_form(_isolate: Path) -> None:
+    _approval.set_prompt_callback(lambda command, desc, severity, cwd: _approval.UNANSWERED)
+    decision = _approval.check(UNREADABLE_COMMIT, cwd=str(_isolate.parent))
     assert decision.allowed is False
-    assert "user rejected" in decision.reason and ".git/ALPI_MSG" in decision.reason
+    assert "nobody answered" in decision.reason and ".git/ALPI_MSG" in decision.reason
+    assert "rejected" not in decision.reason
 
 
-def test_a_refused_readable_command_gets_no_text_advice(_isolate: Path) -> None:
+def test_a_person_who_denies_ends_the_operation_with_no_way_around(_isolate: Path) -> None:
+    _approval.set_prompt_callback(lambda command, desc, severity, cwd: "deny")
+    decision = _approval.check(UNREADABLE_COMMIT, cwd=str(_isolate.parent))
+    assert decision.allowed is False
+    assert "user rejected" in decision.reason
+    assert "write_file" not in decision.reason and "ALPI_MSG" not in decision.reason
+
+
+@pytest.mark.parametrize("answer", [None, "", "later"])
+def test_an_empty_or_unknown_answer_never_runs_the_command(answer, _isolate: Path) -> None:
+    _approval.set_prompt_callback(lambda command, desc, severity, cwd: answer)
+    assert _approval.check(UNREADABLE_COMMIT, cwd=str(_isolate.parent)).allowed is False
+
+
+def test_an_unanswered_readable_command_asks_for_the_user_without_text_advice(_isolate: Path) -> None:
+    _approval.set_prompt_callback(lambda command, desc, severity, cwd: _approval.UNANSWERED)
+    decision = _approval.check("git push --force origin main", cwd=str(_isolate.parent))
+    assert decision.allowed is False
+    assert "nobody answered" in decision.reason and "ALPI_MSG" not in decision.reason
+
+
+def test_in_a_scoped_phase_the_advice_never_points_at_the_git_directory(monkeypatch, _isolate: Path) -> None:
+    monkeypatch.setenv("ALPI_WORKGROUP_WRITE_SCOPE", '{"paths": ["docs/**"]}')
+    decision = _approval.check(UNREADABLE_COMMIT, cwd=str(_isolate.parent))
+    assert ".git" not in decision.reason and "nobody here can approve" in decision.reason
+
+
+def test_a_denied_readable_command_gets_no_text_advice(_isolate: Path) -> None:
     _approval.set_prompt_callback(lambda command, desc, severity, cwd: "deny")
     decision = _approval.check("git push --force origin main", cwd=str(_isolate.parent))
     assert decision.allowed is False

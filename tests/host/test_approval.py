@@ -253,6 +253,7 @@ async def test_timeout_auto_denies_without_a_responder(short_tmp: Path, monkeypa
         d = out["decision"]
         assert d.allowed is False
         assert d.severity == _approval.Severity.CAUTION
+        assert "nobody answered" in d.reason and "rejected" not in d.reason
     finally:
         await srv.stop()
 

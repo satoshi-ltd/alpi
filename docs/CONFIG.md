@@ -311,8 +311,9 @@ severities:
   the pattern until restart), `Always` (persist the pattern
   description to `tools.terminal.approval.allowlist` in config), or
   `Deny` (abort the tool call). On non-interactive surfaces
-  (schedule) these auto-deny with a clear error telling the
-  user to rerun from the TUI or edit the config allowlist.
+  (schedule) these are refused with a clear error telling the
+  user to rerun from the TUI or edit the config allowlist; a prompt
+  nobody answers in time is refused as unanswered, not as a denial.
 - **dangerous** — matches a pattern that's almost never legitimate.
   Examples: `mkfs`, `dd of=/dev/…`, fork bomb, pipe-to-interpreter
   from an unknown URL (`curl … | bash`, `bash <(curl …)`, `eval "$(curl …)"`,

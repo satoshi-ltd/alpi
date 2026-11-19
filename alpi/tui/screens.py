@@ -797,7 +797,11 @@ class PromptPanel(FloatingPanel):
         verb = self.cancel_verb
         if remaining is None:
             return f"esc {verb}"
-        return f"esc {verb} · auto-{verb} in {fmt_remaining(remaining)}"
+        return f"esc {verb} · {self.timeout_label} in {fmt_remaining(remaining)}"
+
+    @property
+    def timeout_label(self) -> str:
+        return f"auto-{self.cancel_verb}"
 
     def on_mount(self) -> None:
         self.call_after_refresh(self._focus_first)
@@ -843,11 +847,12 @@ class PromptPanel(FloatingPanel):
 
     def expiry_note(self, shown: bool) -> str:
         when = "timed out" if shown else "timed out while queued behind another prompt"
-        return f"{self.subject} {when} — auto-{self.cancel_verb}"
+        return f"{self.subject} {when} — {self.timeout_label}"
 
 
 class ApprovalPanel(PromptPanel):
     panel_title = "⚠ approval required"
+    timeout_label = "unanswered, not run"
     cancel_verb = "deny"
 
     _OPTIONS: list[tuple[str, str, str]] = [
@@ -861,7 +866,7 @@ class ApprovalPanel(PromptPanel):
                  cwd: str | None = None, profile: str = "", timeout_s: float | None = None,
                  blocking: bool = True) -> None:
         super().__init__(on_choice, timeout_s=timeout_s, blocking=blocking,
-                         cancel_choice="deny", timeout_choice="deny")
+                         cancel_choice="deny", timeout_choice="unanswered")
         self._command = command
         self._pattern = pattern
         self._severity = severity

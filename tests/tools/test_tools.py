@@ -108,6 +108,54 @@ def test_file_writes_follow_active_workgroup_phase_paths(
     assert not denied.exists()
 
 
+def test_the_text_advice_in_a_scoped_phase_names_a_place_write_file_accepts(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import json
+
+    from alpi.tools._approval import unreadable_text_advice
+
+    (tmp_home_no_env / "config.yaml").write_text(f"workspace: {tmp_home_no_env}\n")
+    repo = tmp_home_no_env / "projects" / "hotel"
+    monkeypatch.setenv("ALPI_WORKGROUP_WRITE_SCOPE", json.dumps({"root": "projects/hotel", "paths": ["docs/**"]}))
+
+    advice = unreadable_text_advice()
+    assert f"`{(repo / 'docs' / 'ALPI_MSG_<task>').resolve()}`" in advice and ".git" not in advice
+    assert "do not stage it" in advice
+    assert WriteFile().run(path=str(repo / "docs" / "ALPI_MSG"), content="it's done\n").ok
+    assert not WriteFile().run(path=str(repo / ".git" / "ALPI_MSG"), content="it's done\n").ok
+
+
+@pytest.mark.parametrize("scope", [
+    '{"root": "", "paths": []}', "not json", '{"paths": ["index.html", "src/*.css"]}',
+    '{"root": "../out", "paths": ["**"]}', '{"root": "projects/hotel", "paths": ["./docs/**"]}',
+])
+def test_the_text_advice_in_a_phase_with_no_writable_folder_offers_no_file(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch, scope: str,
+) -> None:
+    from alpi.tools._approval import unreadable_text_advice
+
+    (tmp_home_no_env / "config.yaml").write_text(f"workspace: {tmp_home_no_env}\n")
+    monkeypatch.setenv("ALPI_WORKGROUP_WRITE_SCOPE", scope)
+    advice = unreadable_text_advice()
+    assert "write_file" not in advice and ".git" not in advice and "index.html" not in advice
+    assert "in your reply" in advice
+
+
+def test_the_text_advice_outside_a_phase_names_a_place_write_file_accepts(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from alpi.tools._approval import unreadable_text_advice
+
+    monkeypatch.delenv("ALPI_WORKGROUP_WRITE_SCOPE", raising=False)
+    (tmp_home_no_env / "config.yaml").write_text(f"workspace: {tmp_home_no_env}\n")
+    git_dir = tmp_home_no_env / "projects" / "hotel" / ".git"
+    git_dir.mkdir(parents=True)
+
+    assert "<repo>/.git/ALPI_MSG" in unreadable_text_advice()
+    assert WriteFile().run(path=str(git_dir / "ALPI_MSG_t1"), content="it's done\n").ok
+
+
 def test_phase_scope_root_cannot_escape_workspace(
     tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:

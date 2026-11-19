@@ -80,6 +80,22 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
+- **LLM.CATALOGUE-OFFLINE** — alpi starts the same way when litellm cannot download its price map
+  `bug · alpi · agent · high`
+  note: reported on 2026-11-19 by an external review of 0.19.15: with the download unreachable, `alpi --version`
+  failed 3 of 4 times with an error raised during `import litellm`, and 4 of 4 succeeded with
+  `LITELLM_LOCAL_MODEL_COST_MAP=True`; two `tests/test_pid1.py` entry probes failed the same way. Not reproduced
+  here against refused, permission-denied, reset, 403, HTML, garbage or hanging endpoints (0 of 18), so get the
+  traceback first. Forcing the bundled map is not enough on its own: litellm 1.104.1 ships a map without
+  `claude-sonnet-5-5`, `claude-haiku-5-5` and `gpt-6.1-sol`, so those curated models would lose their window, price
+  and vision flag (`tests/core/test_providers.py::test_every_curated_native_model_has_a_real_window_and_price`
+  fails). [ctx_window.py](../alpi/ctx_window.py) uses alpi's own table only for `openrouter/` ids; native models rely
+  on litellm's map.
+  accept: the failing import is reproduced with its traceback and a test; alpi registers window, prices and vision
+  for every curated native model from its own catalogue (`litellm.register_model`) so they hold whichever map loads;
+  then the bundled map can be the default and a test imports alpi with sockets blocked, records no connection
+  attempt and still finds every curated model with a window ≥ 200k, a price and its vision flag.
+
 ## In progress
 
 _None._

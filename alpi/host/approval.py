@@ -17,8 +17,8 @@ Lifecycle of one approval:
    waking the tool thread.
 5. If no client responds within ``PROMPT_TIMEOUT_S`` the Future times
    out, the request is pruned from ``_pending``, and the callback
-   returns ``"deny"`` so ``_approval.check`` produces an auto-deny
-   ``Decision``. Late responses are no-ops (idempotent).
+   returns ``_approval.UNANSWERED`` (clients still see ``"deny"`` in
+   ``approval.resolved``). Late responses are no-ops (idempotent).
 
 The TUI path is unaffected: ``alpi/tui/app.py`` still installs its own
 blocking prompt callback on mount, which overrides this one. On unmount
@@ -92,13 +92,13 @@ def host_approval_callback(
 
     Runs on the tool execution thread; bridges to the asyncio loop, awaits
     a client response, and returns one of ``"once" | "session" | "always" |
-    "deny"``. Any failure (no loop, timeout, bus down) falls back to
-    ``"deny"`` so caution commands never auto-allow on missing clients.
+    "deny"``. Any failure (no loop, timeout, bus down) returns
+    ``_approval.UNANSWERED``, which never allows the command.
     """
     loop = _loop_ref
     if loop is None or loop.is_closed():
         log.warning("host approval requested but daemon loop is not bound; auto-deny")
-        return "deny"
+        return _approval.UNANSWERED
 
     request_id = uuid.uuid4().hex
     # ALPI_PROFILE env is the legacy path and is unreliable in the multi-profile daemon (Engine.run_turn binds get_home() via ContextVar). Derive from the active home so each per-profile turn carries the right tag into the modal.
@@ -143,7 +143,7 @@ def host_approval_callback(
         arm_future.result(timeout=5.0)
     except Exception as e:  # noqa: BLE001
         log.warning("host approval arm failed: %s; auto-deny", e)
-        return "deny"
+        return _approval.UNANSWERED
 
     host_events.emit("approval.request", payload)
 
@@ -154,7 +154,7 @@ def host_approval_callback(
         choice = wait_future.result(timeout=PROMPT_TIMEOUT_S + 5.0)
     except Exception as e:  # noqa: BLE001
         log.warning("host approval wait failed for %s: %s; auto-deny", request_id, e)
-        choice = "deny"
+        choice = _approval.UNANSWERED
     finally:
         with _pending_lock:
             _pending.pop(request_id, None)
@@ -164,7 +164,7 @@ def host_approval_callback(
         "request_id": request_id,
         "connection_id": payload["connection_id"],
         "device_id": payload["device_id"],
-        "choice": choice,
+        "choice": "deny" if choice == _approval.UNANSWERED else choice,
         "pattern": pattern,
         "severity": payload["severity"],
         "responder": _client_id_hint(),
@@ -192,7 +192,7 @@ async def _await_choice(fut: asyncio.Future, timeout_s: float) -> str:
     try:
         return await asyncio.wait_for(fut, timeout=timeout_s)
     except asyncio.TimeoutError:
-        return "deny"
+        return _approval.UNANSWERED
 
 
 async def _respond_handler(

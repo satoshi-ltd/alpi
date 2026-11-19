@@ -345,7 +345,7 @@ class AlpiApp(App):
         return box[0]
 
     def _approval_prompt_blocking(self, command: str, pattern: str, severity, cwd: str | None = None) -> str:
-        box: list[str] = ["deny"]
+        box: list[str] = ["unanswered"]
         done = threading.Event()
         sev_str = severity.value if hasattr(severity, "value") else str(severity)
 
@@ -354,7 +354,7 @@ class AlpiApp(App):
             done.set()
 
         panel = ApprovalPanel(command, pattern, sev_str, _on_choice, cwd=cwd, timeout_s=self.APPROVAL_TIMEOUT_S)
-        return self._await_prompt(panel, self.APPROVAL_TIMEOUT_S, "deny", box, done)
+        return self._await_prompt(panel, self.APPROVAL_TIMEOUT_S, "unanswered", box, done)
 
     def _clarification_prompt_blocking(
         self,
