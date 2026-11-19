@@ -368,3 +368,34 @@ def test_run_audit_is_read_only(home: Path) -> None:
     memory_audit.run_audit(home)
     after = {p: p.read_bytes() for p in (home / "memories").rglob("*") if p.is_file()}
     assert snapshot == after
+
+
+def test_prune_passes_are_counted_apart_from_compactions(home: Path) -> None:
+    now = 1_716_000_000.0
+    log_dir = home / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    rows = [
+        {"ts": now - 3600, "trigger": "manual", "tokens_before": 4000, "tokens_after": 2000, "fired": True},
+        {"ts": now - 3600, "trigger": "prune", "tokens_before": 200000, "tokens_after": 150000, "fired": False},
+    ]
+    (log_dir / "compaction.jsonl").write_text("\n".join(json.dumps(r) for r in rows))
+
+    c = memory_audit.run_audit(home, now=now).compaction
+    assert (c.events_30d, c.prunes_30d) == (1, 1)
+    assert c.fired_pct == pytest.approx(1.0)
+    assert c.avg_ratio == pytest.approx(0.5)
+
+
+def test_the_audit_prints_prunes_when_nothing_compacted(home: Path) -> None:
+    from rich.console import Console
+
+    from alpi import cli
+
+    now = 1_716_000_000.0
+    log_dir = home / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    (log_dir / "compaction.jsonl").write_text(json.dumps({"ts": now - 60, "trigger": "prune", "tokens_before": 2, "tokens_after": 1, "fired": False}))
+    console = Console(record=True, width=200)
+    cli._render_audit(memory_audit.run_audit(home, now=now), console)
+    out = console.export_text()
+    assert "no compactions in last 30d" in out and "1 tool-output prune(s) in 30d" in out

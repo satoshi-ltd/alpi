@@ -42,10 +42,13 @@ TOOL_TRUNCATE_MIN_CHARS = 32_000
 TOOL_TRUNCATE_KEEP_HEAD_CHARS = 8_000
 TOOL_TRUNCATE_KEEP_TAIL_CHARS = 4_000
 
-# Mid-turn prune of tool outputs already behind the kept tail: cheaper than a summary and runs only past the trigger.
+# Mid-turn prune of tool outputs already behind the kept tail: cheaper than a summary.
 TOOL_PRUNE_MIN_CHARS = 4_000
 TOOL_PRUNE_KEEP_HEAD_CHARS = 1_500
 TOOL_PRUNE_KEEP_TAIL_CHARS = 500
+
+# Each prune breaks the provider cache from the first pruned message, so a watermark pass waits until it frees this much.
+PRUNE_MIN_SAVED_TOKENS = 20_000
 
 # Floor for the summary's output budget: even on tiny windows we never
 # squeeze the summarizer below this.
@@ -229,18 +232,17 @@ def _only_a_stale_summary(middle: list[dict]) -> bool:
     )
 
 
-def _prune_stale_tool_outputs(messages: list[dict], keep_tail: int) -> int:
-    """Shrink tool outputs behind the kept tail to head + … + tail. Returns the count pruned."""
+def _prune_plan(messages: list[dict], keep_tail: int) -> list[tuple[int, str]]:
     n = len(messages)
     system_end = 0
     while system_end < n and messages[system_end].get("role") == "system":
         system_end += 1
     body = messages[system_end:]
     if len(body) <= max(0, keep_tail):
-        return 0
+        return []
     cutoff = system_end + _tail_start(body, max(0, keep_tail))
-    count = 0
-    for msg in messages[:cutoff]:
+    plan: list[tuple[int, str]] = []
+    for index, msg in enumerate(messages[:cutoff]):
         if msg.get("role") != "tool":
             continue
         content = msg.get("content")
@@ -249,11 +251,42 @@ def _prune_stale_tool_outputs(messages: list[dict], keep_tail: int) -> int:
         head = content[:TOOL_PRUNE_KEEP_HEAD_CHARS]
         tail = content[-TOOL_PRUNE_KEEP_TAIL_CHARS:]
         dropped = len(content) - len(head) - len(tail)
-        msg["content"] = (
-            f"{head}\n\n[... {dropped} chars elided by auto-compact ...]\n\n{tail}"
-        )
-        count += 1
-    return count
+        plan.append((index, f"{head}\n\n[... {dropped} chars elided by auto-compact ...]\n\n{tail}"))
+    return plan
+
+
+def _prune_stale_tool_outputs(messages: list[dict], keep_tail: int) -> int:
+    """Shrink tool outputs behind the kept tail to head + … + tail. Returns the count pruned."""
+    plan = _prune_plan(messages, keep_tail)
+    for index, content in plan:
+        messages[index]["content"] = content
+    return len(plan)
+
+
+def prune_past_watermark(
+    messages: list[dict],
+    prune_after_tokens: int,
+    policy: CompactionPolicy | None = None,
+) -> tuple[list[dict], CompactionResult] | None:
+    if prune_after_tokens <= 0:
+        return None
+    policy = policy or CompactionPolicy()
+    tokens_before = estimate_messages_tokens(messages)
+    if tokens_before <= prune_after_tokens:
+        return None
+    plan = _prune_plan(messages, policy.keep_tail)
+    saved = sum(estimate_tokens(messages[i].get("content")) - estimate_tokens(c) for i, c in plan)
+    if saved < PRUNE_MIN_SAVED_TOKENS:
+        return None
+    new_messages = [dict(m) for m in messages]
+    for index, content in plan:
+        new_messages[index]["content"] = content
+    return new_messages, CompactionResult(
+        fired=False,
+        tool_truncated=len(plan),
+        tokens_before=tokens_before,
+        tokens_after=estimate_messages_tokens(new_messages),
+    )
 
 
 def _partition(
@@ -616,7 +649,7 @@ def record_event(
     path = event_log_path(home)
     record = {
         "ts": time.time(),
-        "trigger": trigger,                       # "auto" | "manual"
+        "trigger": trigger,                       # "auto" | "manual" | "prune"
         "session_id": session_id,
         "model": model,
         "ctx_window": ctx_window,
@@ -652,6 +685,7 @@ __all__ = [
     "estimate_tokens",
     "event_log_path",
     "parse_candidates",
+    "prune_past_watermark",
     "record_event",
     "should_compact",
 ]

@@ -469,9 +469,16 @@ On a named Ollama endpoint (`<endpoint>/<model>`) the hint is sent, and the apps
 | `memory.review_interval` | `0` (off) | Post-turn reviewer cadence. `N > 0` fires a daemon-thread reviewer every `N` user turns that snapshots the conversation and writes durable facts via `memory(action="add")`. Append-only — the reviewer cannot `replace`/`remove`. Opt-in by design. |
 
 Memory file caps, duplicate thresholds, low-confidence pruning age and the
-auto-compaction ratios are product constants, not user knobs. They only
-become configurable if real `logs/compaction.jsonl` or memory-review traces
-show repeated failures a fixed default cannot solve.
+auto-compaction ratios are product constants, not user knobs. A constant
+becomes a setting only when real `logs/compaction.jsonl` or memory-review
+traces show a cost or failure a fixed default cannot solve; the prune
+watermark below is the first.
+
+### Compaction
+
+| Field | Default | Notes |
+|---|---|---|
+| `compaction.prune_after_tokens` | `120000` | Once the prompt passes this many estimated tokens, tool outputs behind at least the last eight messages are trimmed to their first 1,500 and last 500 characters, without a model call, and only when the pass frees at least 20,000 tokens (each trim breaks the provider cache once). Long tool loops on large windows stop re-sending every old result. `0` turns it off; the summary still runs at 75 % of the window. Each pass writes a `prune` line to `logs/compaction.jsonl`. The check runs before every model call, so a follow-up turn in a chat already past the threshold trims older turns' outputs first. Whole non-negative integers only; anything else reads as the default. Edit `config.yaml`, or set it through the settings call described at the top of this page. `alpi memory audit` and the ops digest count prune passes apart from compactions. |
 
 ### Retention
 

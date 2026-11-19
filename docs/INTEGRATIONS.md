@@ -142,7 +142,7 @@ Frames (each is `{ "id": 1, "event": "...", ... }`):
 | `reasoning_delta` | `text` | extended-reasoning fragment |
 | `assistant_delta` | `text` | a chunk of the answer — concatenate |
 | `tool_start` / `tool_state` / `tool_end` | `tool_id`, `name`, … | the agent ran a tool |
-| `auto_compact` | `text`, `tokens_before`, `tokens_after` | context was compacted |
+| `auto_compact` | `text`, `tokens_before`, `tokens_after` | context was compacted, or old tool output trimmed |
 | `heartbeat` | — | keep-alive; every 2s while the session loads, 5s once the turn runs. Ignore it, but do use it to tell a slow turn from a dead socket |
 | `reply` | `text`, `session_id`, `attachments?` | the final answer text |
 | `done` | `session_id` | **terminal** — stream ends here |

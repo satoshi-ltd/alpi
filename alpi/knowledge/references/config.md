@@ -122,7 +122,7 @@ Email is multi-account: a profile holds N accounts (any mix of IMAP and Gmail), 
 
 `memory.review_interval` defaults to `0` (off). `N > 0` enables the daemon-thread reviewer every N user turns (append-only via `memory(action="add")`).
 
-These are constants, not config knobs: memory char limits, low-confidence expiry, dedup threshold, and compaction ratios.
+These are constants, not config knobs: memory char limits, low-confidence expiry, dedup threshold, and compaction ratios. The one compaction setting is `compaction.prune_after_tokens` (default 120000, `0` off): past that many estimated prompt tokens, tool outputs behind at least the last eight messages are trimmed to head and tail without a model call, only when the pass frees ≥ 20,000 tokens; checked before every model call, so older turns of a long chat are trimmed too. Whole non-negative integer; `config.yaml` or `host.config.set_field`. Prune passes are counted apart from compactions in the memory audit and ops digest.
 
 ## Terminal environment
 

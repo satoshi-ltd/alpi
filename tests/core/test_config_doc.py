@@ -14,6 +14,7 @@ _DOC_TOP_LEVEL_PREFIXES = {
     "model", "model_reasoning", "fallback_models", "workspace", "providers",
     "tools", "tui", "mcp", "email", "runtime", "memory", "alp", "host",
     "network", "budget", "relay", "public_bio", "paused", "tiers", "retention",
+    "compaction",
 }
 
 
@@ -50,6 +51,7 @@ CODE_LEAVES_INTENTIONALLY_UNDOCUMENTED: set[str] = {"email.accounts"}
 _CONFIG_CONTAINER_FIELDS = {
     "providers", "tools", "memory", "model_reasoning", "runtime",
     "tui", "email", "alp", "host", "network", "budget", "relay", "tiers", "retention",
+    "compaction",
 }
 
 _CONFIG_INTERNAL_FIELDS = {"home", "raw"}

@@ -5244,7 +5244,7 @@ def _render_audit(report, console) -> None:
     c = report.compaction
     console.print("[dim]Compaction[/dim]")
     if c.events_30d == 0:
-        console.print("  [dim]no events in last 30d[/dim]")
+        console.print("  [dim]no compactions in last 30d[/dim]")
     else:
         ratio = "—" if c.avg_ratio is None else f"{c.avg_ratio * 100:.0f}%"
         fired = "—" if c.fired_pct is None else f"{c.fired_pct * 100:.0f}%"
@@ -5252,6 +5252,8 @@ def _render_audit(report, console) -> None:
             f"  {c.events_7d} in 7d / {c.events_30d} in 30d · "
             f"avg ratio after/before={ratio} · fired={fired}"
         )
+    if c.prunes_30d:
+        console.print(f"  {c.prunes_30d} tool-output prune(s) in 30d")
     console.print("")
 
     # Warnings footer
@@ -5364,7 +5366,7 @@ def _render_digest(report, console) -> None:
     c = report.compaction
     console.print("[dim]Compaction[/dim]")
     if c.events_in_window == 0:
-        console.print(f"  [dim]no events in last {report.window_days:.1f}d[/dim]")
+        console.print(f"  [dim]no compactions in last {report.window_days:.1f}d[/dim]")
     else:
         ratio = "—" if c.avg_ratio is None else f"{c.avg_ratio * 100:.0f}%"
         fired = "—" if c.fired_pct is None else f"{c.fired_pct * 100:.0f}%"
@@ -5372,6 +5374,8 @@ def _render_digest(report, console) -> None:
             f"  {c.events_in_window} event(s) · "
             f"avg ratio after/before={ratio} · fired={fired}"
         )
+    if c.prunes_in_window:
+        console.print(f"  {c.prunes_in_window} tool-output prune(s)")
 
     # Runs
     r = report.runs

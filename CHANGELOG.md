@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.19.22 — 2026-11-19 — long tool loops stop re-sending old output
+
+- Once a conversation's prompt passes 120,000 tokens, tool outputs behind the last few messages are trimmed to their start and end without a model call, in batches of at least 20,000 tokens, including older turns of a long chat. The trim used to wait until 75 % of the context window, so on large windows a long tool loop re-sent every earlier result on every step; a 60-step loop of 5,000-token results now sends less than half the input tokens.
+- `compaction.prune_after_tokens` sets the threshold, and `0` turns it off. Each trim is a `prune` line in `logs/compaction.jsonl`, says "old tool output trimmed" in the chat, and is counted apart from compactions in `alpi memory audit` and the ops digest.
+
 ## v0.19.21 — 2026-11-19 — busy turns no longer silence the daemon
 
 - Chat, peer and run-now turns, pipeline prepare and gate commands, and the settings calls that wait on a model or a process (bio draft, voice script, MCP check, update) run on threads of their own (at least 16), so a daemon with every turn busy still sends chat heartbeats, signs devices in and answers cancel. Before, a handful of long turns on a small server could leave the apps waiting until they timed out.

@@ -391,3 +391,35 @@ def test_cache_section_is_empty_without_provider_data(tmp_path: Path) -> None:
     assert report.cache.tokens_measured == 0
     assert report.cache.hit_pct is None
     json.loads(json.dumps(__import__("dataclasses").asdict(report), default=str))
+
+
+def test_prune_passes_are_counted_apart_from_compactions(home: Path) -> None:
+    now = 1_700_000_000.0
+    log = home / "logs" / "compaction.jsonl"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    rows = [
+        {"ts": now - 3600, "trigger": "auto", "tokens_before": 4000, "tokens_after": 1000, "fired": True},
+        {"ts": now - 3600, "trigger": "prune", "tokens_before": 200000, "tokens_after": 150000, "fired": False},
+        {"ts": now - 3600, "trigger": "prune", "tokens_before": 180000, "tokens_after": 140000, "fired": False},
+    ]
+    log.write_text("\n".join(json.dumps(r) for r in rows))
+
+    c = ops_digest.run_digest(home, window_days=7.0, now=now).compaction
+    assert (c.events_in_window, c.prunes_in_window) == (1, 2)
+    assert c.fired_pct == pytest.approx(1.0)
+    assert c.avg_ratio == pytest.approx(0.25)
+
+
+def test_the_digest_prints_prunes_when_nothing_compacted(home: Path) -> None:
+    from rich.console import Console
+
+    from alpi import cli
+
+    now = 1_700_000_000.0
+    log = home / "logs" / "compaction.jsonl"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text(json.dumps({"ts": now - 60, "trigger": "prune", "tokens_before": 2, "tokens_after": 1, "fired": False}))
+    console = Console(record=True, width=200)
+    cli._render_digest(ops_digest.run_digest(home, window_days=7.0, now=now), console)
+    out = console.export_text()
+    assert "no compactions in last 7.0d" in out and "1 tool-output prune(s)" in out

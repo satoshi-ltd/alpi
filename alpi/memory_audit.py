@@ -106,6 +106,7 @@ class CompactionStats:
     avg_ratio: float | None
     median_ratio: float | None
     fired_pct: float | None
+    prunes_30d: int = 0
 
 
 @dataclass
@@ -379,6 +380,7 @@ def _compaction(home: Path, now_ts: float) -> CompactionStats:
 
     events_7d = 0
     events_30d = 0
+    prunes_30d = 0
     ratios: list[float] = []
     fired_count = 0
     fired_total = 0
@@ -402,6 +404,9 @@ def _compaction(home: Path, now_ts: float) -> CompactionStats:
         age_days = (now_ts - ts) / 86400.0
         if age_days > 30:
             continue  # rolling window — older events don't inform current behaviour
+        if obj.get("trigger") == "prune":
+            prunes_30d += 1
+            continue
         events_30d += 1
         if age_days <= 7:
             events_7d += 1
@@ -425,6 +430,7 @@ def _compaction(home: Path, now_ts: float) -> CompactionStats:
         avg_ratio=avg,
         median_ratio=med,
         fired_pct=fired_pct,
+        prunes_30d=prunes_30d,
     )
 
 

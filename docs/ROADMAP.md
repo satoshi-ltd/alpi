@@ -80,23 +80,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **HARN.PRUNE-WATERMARK** — Old tool output is trimmed long before the context window fills (H2)
-  `feature · alpi · agent · high`
-  note: the cheap prune pass, which calls no model, runs only past `DEFAULT_TRIGGER_RATIO = 0.75` of the window
-  ([compaction.py](../alpi/compaction.py) `:24`, `:46-48`, `:169-178`; [engine.py](../alpi/engine.py) `:901`,
-  `:2036-2055`). On a 1M-token window that is 750,000 tokens, so it never runs and every step re-sends every earlier
-  tool output: a long turn sends millions of input tokens. A simulation calibrated to the fleet's long turns
-  (40 steps of about 5,000 tokens) drops from 4.4M to 2.9M input tokens with a 120,000-token threshold; a 12-step
-  turn is unchanged. Each prune breaks the provider cache from the first pruned message for one step, so it runs in
-  batches. Sibling of HARN.COMPACT-BATCH, which is about overflow; this is about cost.
-  accept: the prune pass (not the summary) also runs when the estimated prompt passes
-  `compaction.prune_after_tokens` (new key, default 120,000, 0 turns it off; CONFIG.md says the compaction ratios
-  become settings when traces ask for it, and this is the first, so that paragraph is rewritten), and only
-  when at least 20,000 tokens are prunable; the kept tail is intact and each pass writes a `prune` line to
-  `compaction.jsonl`; a fake-model test of 60 calls with 20,000-character results on a 1M window prunes mid-turn
-  without a summary call and with no more passes than its batches allow; a 12-step turn of 5,000-token results
-  never prunes.
-
 - **SEC.SCRIPT-JOB-PATH** — A script job's PATH carries no folder the agent can write
   `bug · alpi · agent · low`
   note: 0.19.13 resolves and checks the interpreter of `python3 <script>`, but a job that names the script alone runs
@@ -705,7 +688,7 @@ Each entry is written to be worked without that report:
 
 - **HARN.019-VERIFY** — The prune threshold and the smaller prefix lower the cost on the deployed daemons
   `verify · alpi · creator · normal`
-  depends: HARN.PRUNE-WATERMARK, HARN.PREFIX-BY-ACTION
+  depends: HARN.PREFIX-BY-ACTION
   accept: after a week on the release, from the ledgers: input tokens at the 90th percentile and the cache-hit rate
   of the profiles with the longest turns, against the week before; the count of `prune` lines; no rise in
   repeated-read tool calls, which would mean the model lost output it needed.

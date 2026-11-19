@@ -2052,6 +2052,11 @@ class Engine:
         if not force and not compaction.should_compact(
             self.session.messages, "", ctx_window, policy,
         ):
+            pruned = compaction.prune_past_watermark(
+                self.session.messages, self.cfg.compaction.prune_after_tokens, policy,
+            )
+            if pruned is not None:
+                self._apply_compaction(emit, *pruned, trigger="prune", ctx_window=ctx_window)
             return
 
         from alpi import ledger as _ledger
@@ -2136,27 +2141,8 @@ class Engine:
         if not result.fired and result.tool_truncated == 0:
             return
 
-        self.session.messages = new_messages
-        self._expected_rewrite = "compaction"
-        self.session.last_ctx_tokens = result.tokens_after
-        emit(AgentEvent(
-            kind="auto_compact",
-            text=(
-                f"context compacted: {result.tokens_before} → "
-                f"{result.tokens_after} tokens "
-                f"({result.summarized_messages} messages summarized, "
-                f"{result.tool_truncated} tool outputs truncated)"
-            ),
-            tokens_in=result.tokens_before,
-            tokens_out=result.tokens_after,
-        ))
-        compaction.record_event(
-            self.home,
-            result=result,
-            trigger="manual" if force else "auto",
-            session_id=self.session.id,
-            model=self.session.model or self.cfg.model,
-            ctx_window=ctx_window,
+        self._apply_compaction(
+            emit, new_messages, result, trigger="manual" if force else "auto", ctx_window=ctx_window,
         )
 
         if result.fired:
@@ -2187,6 +2173,36 @@ class Engine:
                 session_id=self.session.id,
                 model=self.session.model or self.cfg.model,
             )
+
+    def _apply_compaction(self, emit: EventSink, new_messages, result, *, trigger: str, ctx_window: int) -> None:  # noqa: ANN001
+        from alpi import compaction
+
+        self.session.messages = new_messages
+        self._expected_rewrite = "compaction"
+        self.session.last_ctx_tokens = result.tokens_after
+        text = (
+            f"old tool output trimmed: {result.tokens_before} → {result.tokens_after} tokens "
+            f"({result.tool_truncated} tool outputs)"
+            if trigger == "prune" else
+            f"context compacted: {result.tokens_before} → "
+            f"{result.tokens_after} tokens "
+            f"({result.summarized_messages} messages summarized, "
+            f"{result.tool_truncated} tool outputs truncated)"
+        )
+        emit(AgentEvent(
+            kind="auto_compact",
+            text=text,
+            tokens_in=result.tokens_before,
+            tokens_out=result.tokens_after,
+        ))
+        compaction.record_event(
+            self.home,
+            result=result,
+            trigger=trigger,
+            session_id=self.session.id,
+            model=self.session.model or self.cfg.model,
+            ctx_window=ctx_window,
+        )
 
     def save_session(self) -> Path:
         path = self.session.save()

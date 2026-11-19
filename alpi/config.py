@@ -80,6 +80,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "runs_days": 0,
         "sessions_days": 0,
     },
+    "compaction": {
+        "prune_after_tokens": 120_000,
+    },
 }
 
 
@@ -260,6 +263,11 @@ class RetentionConfig:
     sessions_days: int = 0
 
 
+@dataclass
+class CompactionConfig:
+    prune_after_tokens: int = 120_000
+
+
 def _retention_days(value: Any) -> int:
     # A malformed deletion policy must never coerce true or 1.5 into a one-day window.
     return value if type(value) is int and value >= 0 else 0
@@ -277,6 +285,7 @@ class Config:
     model_reasoning: ModelReasoningConfig = field(default_factory=ModelReasoningConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
     retention: RetentionConfig = field(default_factory=RetentionConfig)
+    compaction: CompactionConfig = field(default_factory=CompactionConfig)
     tui: dict[str, Any] = field(default_factory=dict)
     email: dict[str, Any] = field(default_factory=dict)
     alp: dict[str, Any] = field(default_factory=dict)
@@ -538,6 +547,14 @@ def load(home: Path) -> Config:
         sessions_days=_retention_days(ret_raw.get("sessions_days")),
     )
 
+    comp_raw = data.get("compaction")
+    if not isinstance(comp_raw, dict):
+        comp_raw = {}
+    prune_after = comp_raw.get("prune_after_tokens")
+    compaction_cfg = CompactionConfig(
+        prune_after_tokens=prune_after if type(prune_after) is int and prune_after >= 0 else CompactionConfig.prune_after_tokens,
+    )
+
     return Config(
         home=home,
         model=data.get("model", DEFAULT_CONFIG["model"]),
@@ -549,6 +566,7 @@ def load(home: Path) -> Config:
         model_reasoning=reasoning_cfg,
         runtime=runtime_cfg,
         retention=retention_cfg,
+        compaction=compaction_cfg,
         tui=data.get("tui", DEFAULT_CONFIG["tui"]),
         email=data.get("email", DEFAULT_CONFIG["email"]),
         alp=dict(data.get("alp") or {}),
@@ -636,6 +654,9 @@ def save(cfg: Config) -> None:
     }
     if retention_delta:
         data["retention"] = retention_delta
+
+    if cfg.compaction.prune_after_tokens != CompactionConfig().prune_after_tokens:
+        data["compaction"] = {"prune_after_tokens": cfg.compaction.prune_after_tokens}
 
     atomic_write_yaml(cfg.config_path, data)
 

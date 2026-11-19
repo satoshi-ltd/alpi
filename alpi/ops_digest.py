@@ -92,6 +92,7 @@ class CompactionSection:
     fired_pct: float | None = None
     avg_ratio: float | None = None
     median_ratio: float | None = None
+    prunes_in_window: int = 0
 
 
 @dataclass
@@ -310,6 +311,7 @@ def _compaction_section(
 
     cutoff = now_ts - window_days * 86400.0
     events = 0
+    prunes = 0
     fired_total = 0
     fired_count = 0
     ratios: list[float] = []
@@ -329,6 +331,9 @@ def _compaction_section(
                 ts = _safe_float(obj.get("ts"))
                 if ts < cutoff:
                     continue
+                if obj.get("trigger") == "prune":
+                    prunes += 1
+                    continue
                 events += 1
                 before = _safe_float(obj.get("tokens_before"))
                 after = _safe_float(obj.get("tokens_after"))
@@ -347,6 +352,7 @@ def _compaction_section(
         fired_pct=(fired_count / fired_total) if fired_total > 0 else None,
         avg_ratio=(sum(ratios) / len(ratios)) if ratios else None,
         median_ratio=statistics.median(ratios) if ratios else None,
+        prunes_in_window=prunes,
     )
 
 

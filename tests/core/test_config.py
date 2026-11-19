@@ -334,3 +334,19 @@ def test_retention_rejects_negatives_and_garbage_back_to_the_default(tmp_home_no
     cfg = config.load(tmp_home_no_env)
     # A value the loader cannot honour must not turn into a sweep: it falls back to forever.
     assert (cfg.retention.runs_days, cfg.retention.sessions_days) == (0, 0)
+
+
+def test_compaction_prune_watermark_defaults_round_trips_and_rejects_garbage(tmp_home_no_env: Path) -> None:
+    config.seed_defaults(tmp_home_no_env)
+    cfg = config.load(tmp_home_no_env)
+    assert cfg.compaction.prune_after_tokens == 120_000
+    config.save(cfg)
+    assert "compaction" not in cfg.config_path.read_text()
+
+    cfg.compaction.prune_after_tokens = 0
+    config.save(cfg)
+    assert config.load(tmp_home_no_env).compaction.prune_after_tokens == 0
+
+    for bad in ("-5", "soon", "true", "1.5"):
+        (tmp_home_no_env / "config.yaml").write_text(f"model: m\ncompaction:\n  prune_after_tokens: {bad}\n")
+        assert config.load(tmp_home_no_env).compaction.prune_after_tokens == 120_000

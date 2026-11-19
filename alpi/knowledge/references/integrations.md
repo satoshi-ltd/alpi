@@ -70,7 +70,7 @@ Frames are `{ "id", "event", ... }`:
 | `reasoning_done` | `seconds` | closes one reasoning span |
 | `tool_calls_pending` | — | the model started a tool call: the text streamed since the last tool is a step, not the answer |
 | `tool_start`/`tool_state`/`tool_end` | `tool_id`, `name`, `started_at` / `duration_s`, … | agent ran a tool |
-| `auto_compact` | `text`, `tokens_before`, `tokens_after` | context compacted |
+| `auto_compact` | `text`, `tokens_before`, `tokens_after` | context compacted, or old tool output trimmed |
 | `heartbeat` | — | every 5s; ignore |
 | `reply` | `text`, `session_id`, `attachments?` | final answer |
 | `done` | `session_id` | **terminal** |
