@@ -285,14 +285,15 @@ export function useChatStream({
 
   // Rebuild a turn's state from the persisted sidecar — used when its live stream goes silent.
   const applyReplayedEvents = useCallback((requestId, events) => {
-    const { tools, assistant, reasoning, error, sawDone, finalSessionId, ctxTokens, reasonedSeconds, reasoningDone, spanReasonedSeconds, sawToolStart } = reconstructFromEvents(events);
+    const { tools, assistant, note, reasoning, error, sawDone, finalSessionId, ctxTokens, reasonedSeconds, reasoningDone, spanReasonedSeconds, sawToolStart } = reconstructFromEvents(events);
     updateTurn(requestId, (prev) => ({
       ...prev,
       tools,
       reasoned_s: reasonedSeconds ?? prev.reasoned_s,
       spanReasoned_s: spanReasonedSeconds,
       reasoningDone,
-      assistantPreview: sawToolStart ? assistant : assistant || prev.assistantPreview,
+      assistantPreview: sawToolStart || note ? assistant : assistant || prev.assistantPreview,
+      interimNote: note,
       reasoningPreview: sawToolStart ? reasoning : reasoning || prev.reasoningPreview,
       error,
       ctxTokens: ctxTokens ?? prev.ctxTokens,
@@ -388,7 +389,7 @@ export function useChatStream({
         updateTurn(rid, (prev) => {
           const existing = prev.tools.findIndex((t) => t.tool_id === p.tool_id);
           const prior = existing >= 0 ? prev.tools[existing] : null;
-          const segment = [prev.reasoningPreview, pendingReasoning, `${prev.assistantPreview ?? ""}${pendingProse}`]
+          const segment = [prev.reasoningPreview, pendingReasoning, prev.interimNote, `${prev.assistantPreview ?? ""}${pendingProse}`]
             .map((s) => (s ?? "").trim())
             .filter(Boolean)
             .join("\n\n");
@@ -410,7 +411,7 @@ export function useChatStream({
           const tools = existing >= 0
             ? prev.tools.map((t, i) => (i === existing ? entry : t))
             : [...prev.tools, entry];
-          return { ...prev, tools, reasoningPreview: "", assistantPreview: "", reasoningDone: false, spanReasoned_s: 0 };
+          return { ...prev, tools, reasoningPreview: "", assistantPreview: "", interimNote: "", reasoningDone: false, spanReasoned_s: 0 };
         });
       } else if (p.kind === "tool_state") {
         updateTurn(rid, (prev) => {
@@ -474,6 +475,16 @@ export function useChatStream({
           }, MIN_TOOL_RUNNING_MS - elapsed);
           toolEndTimersRef.current.add(entry);
           return prev;
+        });
+      } else if (p.kind === "tool_calls_pending") {
+        const buf = deltaBufferRef.current[rid] ?? { assistant: "", reasoning: "" };
+        const pendingProse = buf.assistant;
+        buf.assistant = "";
+        updateTurn(rid, (prev) => {
+          const said = `${prev.assistantPreview ?? ""}${pendingProse}`.trim();
+          if (!said) return prev;
+          const interimNote = [prev.interimNote, said].filter(Boolean).join("\n\n");
+          return { ...prev, assistantPreview: "", interimNote };
         });
       } else if (p.kind === "assistant_delta") {
         const buf = (deltaBufferRef.current[rid] ??= { assistant: "", reasoning: "" });

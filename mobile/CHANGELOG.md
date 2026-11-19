@@ -14,6 +14,12 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.10.9 — 2026-11-19 — clearer details and a quieter working line
+
+- A sentence alpi writes before using a tool, such as "Sweeping Bitbucket now", shows as the current step of the work line instead of looking like the answer; once the tool starts it stays among the steps, and only the last message is the reply.
+- The profile details sheet is wider, every label stays on one line, and a Provider row replaces the raw model id.
+- Needs alpi ≥ 0.19.18 for the working-line change; with an older daemon the sentence still shows as before.
+
 ## v0.10.8 — 2026-11-19 — newer recommended models
 
 - The model picker offers GPT-6.2 Astra and GPT-6.2 Sol for OpenAI and Claude Fable 5.2 for Anthropic, and a new profile on an OpenAI key starts on GPT-6.2 Sol.

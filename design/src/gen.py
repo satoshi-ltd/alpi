@@ -635,11 +635,10 @@ def m_sidebar(h, selected="doc", badge="1", conn_selected=False, wg_selected=Fal
 
 def m_chat_details():
     row = lambda label, body: (f'<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px">'
-                               f'<span style="font-size: 15px; font-weight: 500; color: #454545">{label}</span>{body}</div>')
-    model = row("Model", f'<span style="font-family: {MONO}; font-size: 12px; color: #454545">deepseek-v4.1-flash</span>')
-    full = f'<span style="font-family: {MONO}; font-size: 12px; line-height: 1.4; color: #6b6b6b; word-break: break-all">openrouter/deepseek/deepseek-v4.1-flash</span>'
-    return (f'<div role="dialog" aria-label="doc details" style="position: absolute; z-index: 3; left: 30px; top: 62px; width: 330px; box-sizing: border-box; padding: 12px 20px 16px; border-radius: {R_SURFACE}px; background: #ffffff; {FLOAT_EDGE}; display: flex; flex-direction: column; gap: 4px">'
-            f'{model}{full}{row("Context", meter("36K", "/1.0M", 0.04))}{row("Cost today", meter("$0.07", "/$1.00", 0.07))}</div>')
+                               f'<span style="flex-shrink: 0; font-size: 15px; font-weight: 500; color: #454545; white-space: nowrap">{label}</span>{body}</div>')
+    value = lambda text: f'<span style="min-width: 0; font-family: {MONO}; font-size: 12px; color: #454545; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{text}</span>'
+    return (f'<div role="dialog" aria-label="doc details" style="position: absolute; z-index: 3; left: 30px; top: 62px; width: 360px; box-sizing: border-box; padding: 12px 20px 16px; border-radius: {R_SURFACE}px; background: #ffffff; {FLOAT_EDGE}; display: flex; flex-direction: column; gap: 4px">'
+            f'{row("Model", value("deepseek-v4.1-flash"))}{row("Provider", value("OpenRouter"))}{row("Context", meter("36K", "/1.0M", 0.04))}{row("Cost today", meter("$0.07", "/$1.00", 0.07))}</div>')
 
 
 def m_chat_header(title, accent, meta_html, two_pane=False, back=True, meta_items=None, details_open=False):

@@ -10,11 +10,8 @@
   gap: var(--sp-4);
 }
 
-.detailId {
-  padding: 0 var(--sp-12) var(--sp-4);
-  font-family: var(--font-mono);
-  font-size: var(--text-meta);
-  color: var(--ink-3);
-  overflow-wrap: anywhere;
-  user-select: text;
+.clip {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

@@ -212,7 +212,7 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
           writeTurn((cur) => {
             const tools = [...(cur.tools ?? [])];
             const existing = tools.findIndex((t) => t.tool_id === frame.tool_id);
-            const segment = [cur.reasoning, pendingReasoning, `${cur.assistant ?? ''}${pendingProse}`]
+            const segment = [cur.reasoning, pendingReasoning, cur.note, `${cur.assistant ?? ''}${pendingProse}`]
               .map((s) => (s ?? '').trim())
               .filter(Boolean)
               .join('\n\n');
@@ -226,7 +226,15 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
             if (segment) next.reasoning = clip(segment, MAX_STREAMED_CHARS);
             if (existing >= 0) tools[existing] = { ...tools[existing], ...next };
             else if (tools.length < MAX_TURN_TOOLS) tools.push(next);
-            return { ...cur, tools, reasoning: '', assistant: '', reasoningOpen: false };
+            return { ...cur, tools, reasoning: '', assistant: '', note: '', reasoningOpen: false };
+          });
+        } else if (event === 'tool_calls_pending') {
+          const pendingProse = deltaBufRef.current;
+          deltaBufRef.current = '';
+          writeTurn((cur) => {
+            const said = `${cur.assistant ?? ''}${pendingProse}`.trim();
+            if (!said) return cur;
+            return { ...cur, assistant: '', note: clip([cur.note, said].filter(Boolean).join('\n\n'), MAX_STREAMED_CHARS) };
           });
         } else if (event === 'tool_state') {
           writeTurn((cur) => {
@@ -292,7 +300,7 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
             cancelAnimationFrame(rafRef.current);
             rafRef.current = null;
           }
-          writeTurn((cur) => ({ ...cur, assistant: '', reasoning: '', reasoned_s: 0, reasoning_spans: [], reasoningOpen: false, tools: [], error: null }));
+          writeTurn((cur) => ({ ...cur, assistant: '', note: '', reasoning: '', reasoned_s: 0, reasoning_spans: [], reasoningOpen: false, tools: [], error: null }));
           let sawDone = false;
           for (const rec of records) {
             const f = rec?.frame ?? rec;
@@ -347,7 +355,7 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
 
       const handle = callStream(params.method ?? 'host.chat.send', params, {
         cancelMethod: 'host.chat.cancel',
-        // Daemon emit() in alpi/host/chat.py: tool_start | tool_state | tool_end | assistant_delta | reply | done | heartbeat | error | interrupted | reasoning_delta | reasoning_done | auto_compact.
+        // Daemon emit() in alpi/host/chat.py: tool_start | tool_state | tool_end | assistant_delta | reply | done | heartbeat | error | interrupted | reasoning_delta | reasoning_done | auto_compact | tool_calls_pending.
         onFrame: (frame) => {
           if (requestIdRef.current !== requestId) return;
           applyFrame(frame);

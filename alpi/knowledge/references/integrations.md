@@ -68,6 +68,7 @@ Frames are `{ "id", "event", ... }`:
 | `assistant_delta` | `text` | concatenate for the answer |
 | `reasoning_delta` | `text` | reasoning fragment |
 | `reasoning_done` | `seconds` | closes one reasoning span |
+| `tool_calls_pending` | — | the model started a tool call: the text streamed since the last tool is a step, not the answer |
 | `tool_start`/`tool_state`/`tool_end` | `tool_id`, `name`, `started_at` / `duration_s`, … | agent ran a tool |
 | `auto_compact` | `text`, `tokens_before`, `tokens_after` | context compacted |
 | `heartbeat` | — | every 5s; ignore |

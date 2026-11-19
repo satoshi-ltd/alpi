@@ -554,7 +554,8 @@ describe('Profile chat model label', () => {
     render(<ProfileChat />);
     expect(shown('llama3').length).toBe(1);
     fireEvent.click(screen.getByLabelText('doc, profile details'));
-    expect(shown('llama3').length).toBe(3);
+    expect(shown('llama3').length).toBe(2);
+    expect(screen.queryByText('Provider')).toBeNull();
   });
 });
 

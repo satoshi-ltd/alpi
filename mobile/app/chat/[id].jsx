@@ -32,7 +32,7 @@ import { useReduceMotion } from '../../src/lib/reduceMotion';
 import { agentTurnTarget, retryTextFor, showsMoreButton } from '../../src/features/chat/messageActions';
 import { visibleWindow } from '../../src/lib/chatWindow';
 import { compactProducedTool } from '../../../common/producedAttachments.mjs';
-import { modelLabel } from '../../src/lib/modelLabel';
+import { modelLabel, modelProvider } from '../../src/lib/modelLabel';
 import { profileLabel } from '../../src/lib/profileName';
 import { mergeStreamingTurn, isInterruptedTurn, isLastTurnInFlight, consumeAutoRead, routedModelFor, baselineModelFor, turnFrontier, turnLandedSince, reasoningStreams } from '../../src/features/chat/chatTurns';
 import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
@@ -705,7 +705,7 @@ function ProfileChatInner() {
   const hasDetails = !!shownModel || (ctxWindow && ctxWindow > 0) || budgetCap > 0;
   const headerDetails = !hasDetails ? null : {
     model: shownModel,
-    modelId: profile.model || null,
+    provider: modelProvider(profile.model) || null,
     context: ctxWindow && ctxWindow > 0 ? { value: fmtTokens(ctxUsed), tail: `/${fmtTokens(ctxWindow)}`, pct: ctxUsed / ctxWindow } : null,
     cost: budgetCap > 0 ? { value: `$${budgetUsed.toFixed(2)}`, tail: `/$${budgetCap.toFixed(2)}`, pct: budgetUsed / budgetCap } : null,
   };

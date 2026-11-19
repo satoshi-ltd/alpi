@@ -97,6 +97,30 @@ describe("useChatSend.send", () => {
     expect(result.current.pendingTurn.tools[0]).toMatchObject({ tool_id: "t1", ok: true, output: "ok" });
   });
 
+  it("text followed by a tool call becomes the work's current step, then that tool's segment, never the answer", async () => {
+    const { result } = renderHook(() => useChatSend({ profile: "doc" }));
+    act(() => result.current.send("hi"));
+    act(() => lastStreamHandlers.onFrame({ event: "session_start", session_id: "sess-1" }));
+    act(() => lastStreamHandlers.onFrame({ event: "assistant_delta", text: "Sweeping Bitbucket now" }));
+    act(() => lastStreamHandlers.onFrame({ event: "tool_calls_pending" }));
+    await waitFor(() => expect(result.current.pendingTurn.note).toBe("Sweeping Bitbucket now"));
+    expect(result.current.pendingTurn.assistant).toBe("");
+    act(() => lastStreamHandlers.onFrame({ event: "tool_start", tool_id: "t1", name: "search", args: {} }));
+    expect(result.current.pendingTurn.note).toBe("");
+    expect(result.current.pendingTurn.tools[0].reasoning).toContain("Sweeping Bitbucket now");
+    act(() => lastStreamHandlers.onFrame({ event: "tool_end", tool_id: "t1", ok: true, output: "ok" }));
+    act(() => lastStreamHandlers.onFrame({ event: "assistant_delta", text: "78 force reviews" }));
+    await waitFor(() => expect(result.current.pendingTurn.assistant).toBe("78 force reviews"));
+  });
+
+  it("a turn with no tool call keeps its text as the answer", async () => {
+    const { result } = renderHook(() => useChatSend({ profile: "doc" }));
+    act(() => result.current.send("hi"));
+    act(() => lastStreamHandlers.onFrame({ event: "assistant_delta", text: "Hello" }));
+    await waitFor(() => expect(result.current.pendingTurn.assistant).toBe("Hello"));
+    expect(result.current.pendingTurn.note ?? "").toBe("");
+  });
+
   it("onDone calls onCompleted({ok:true}) and clears pendingTurn", async () => {
     const onCompleted = vi.fn();
     const { result } = renderHook(() => useChatSend({ profile: "doc", onCompleted }));

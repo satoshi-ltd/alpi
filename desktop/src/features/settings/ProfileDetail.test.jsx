@@ -99,7 +99,9 @@ describe("ProfileDetail", () => {
     const details = container.querySelector("[role=dialog][aria-label$=\" details\"]");
     expect(details).toHaveTextContent("Model");
     expect(details).toHaveTextContent("deepseek-v4-flash-latest");
-    expect(details.querySelector("[data-model-id]")).toHaveTextContent("openrouter/deepseek/deepseek-v4-flash-latest");
+    expect(details.querySelector("[data-model-id]")).toBeNull();
+    expect(details).toHaveTextContent("ProviderOpenRouter");
+    expect(details).not.toHaveTextContent("openrouter/deepseek");
     expect(details).toHaveTextContent("Cost today");
     expect(container.querySelector(".ds-meter")).toHaveTextContent("$0.26/$10.00");
     expect(details).not.toHaveTextContent("Context");

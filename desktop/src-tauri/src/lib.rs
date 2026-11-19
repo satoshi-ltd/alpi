@@ -73,6 +73,9 @@ enum ChatEvent {
         request_id: String,
         seconds: f64,
     },
+    ToolCallsPending {
+        request_id: String,
+    },
     AssistantDelta {
         request_id: String,
         text: String,
@@ -3408,6 +3411,14 @@ fn stream_chat(
                     },
                 );
             }
+            "tool_calls_pending" => {
+                let _ = app_for_frames.emit(
+                    "chat-event",
+                    ChatEvent::ToolCallsPending {
+                        request_id: rid_for_frames.clone(),
+                    },
+                );
+            }
             "reasoning_delta" => {
                 let _ = app_for_frames.emit(
                     "chat-event",
@@ -4395,6 +4406,16 @@ mod chat_event_tests {
         .unwrap();
         assert_eq!(done["kind"], "reasoning_done");
         assert_eq!(done["seconds"], 7.2);
+    }
+
+    #[test]
+    fn a_pending_tool_call_reaches_the_webview_as_its_own_kind() {
+        let pending = serde_json::to_value(ChatEvent::ToolCallsPending {
+            request_id: "r".to_string(),
+        })
+        .unwrap();
+        assert_eq!(pending["kind"], "tool_calls_pending");
+        assert_eq!(pending["request_id"], "r");
     }
 }
 

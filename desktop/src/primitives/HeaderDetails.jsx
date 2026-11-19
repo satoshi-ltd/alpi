@@ -1,6 +1,6 @@
 import { Fold, MeterChip, Mono, Tip } from "./index.js";
 import { HeaderDetail } from "./ChatHeader.jsx";
-import { modelLabel } from "../lib/modelLabel.js";
+import { modelLabel, modelProvider } from "../lib/modelLabel.js";
 import { profileLabel } from "../lib/profile-display.js";
 import styles from "./HeaderDetails.module.css";
 
@@ -29,11 +29,13 @@ export function ProfileDetails({ model, contextWindow = 0, ctxTokens = 0, budget
     <>
       {model && (
         <HeaderDetail label="Model">
-          <Mono className={styles.ink2}>{modelLabel(model)}</Mono>
+          <span className={styles.clip} title={modelLabel(model)}><Mono className={styles.ink2}>{modelLabel(model)}</Mono></span>
         </HeaderDetail>
       )}
-      {model && modelLabel(model) !== model && (
-        <span className={styles.detailId} data-model-id="">{model}</span>
+      {modelProvider(model) && (
+        <HeaderDetail label="Provider">
+          <span className={styles.clip} title={modelProvider(model)}><Mono className={styles.ink2}>{modelProvider(model)}</Mono></span>
+        </HeaderDetail>
       )}
       {contextWindow > 0 && (
         <HeaderDetail label="Context">

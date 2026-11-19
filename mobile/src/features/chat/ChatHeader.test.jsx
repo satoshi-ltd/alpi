@@ -259,7 +259,7 @@ describe('ChatHeader title scale', () => {
 describe('ChatHeader phone anatomy', () => {
   const DETAILS = {
     model: 'deepseek-v4.1-flash',
-    modelId: 'openrouter/deepseek/deepseek-v4.1-flash',
+    provider: 'OpenRouter',
     context: { value: '36K', tail: '/1.0M', pct: 0.04 },
     cost: { value: '$0.07', tail: '/$1.00', pct: 0.07 },
   };
@@ -304,7 +304,8 @@ describe('ChatHeader phone anatomy', () => {
     expect(chip.getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByText('Model')).toBeTruthy();
     expect(screen.getByText('deepseek-v4.1-flash')).toBeTruthy();
-    expect(document.querySelector('[testid="details-model-id"]').textContent).toBe('openrouter/deepseek/deepseek-v4.1-flash');
+    expect(screen.getByText('Provider')).toBeTruthy();
+    expect(document.querySelector('[testid="details-provider"]').textContent).toBe('OpenRouter');
     expect(screen.getByText('Context')).toBeTruthy();
     expect(screen.getByText('Cost today')).toBeTruthy();
     expect(screen.getByLabelText('Context window')).toBeTruthy();
@@ -316,11 +317,11 @@ describe('ChatHeader phone anatomy', () => {
   });
 
   it('omits the rows the profile has no data for', () => {
-    render(<ChatHeader kind="profile" named accent="#3899e2" title="doc" details={{ model: 'm', modelId: null, context: null, cost: null }} />);
+    render(<ChatHeader kind="profile" named accent="#3899e2" title="doc" details={{ model: 'm', provider: null, context: null, cost: null }} />);
     fireEvent.click(screen.getByLabelText('doc, profile details'));
     expect(screen.queryByText('Context')).toBeNull();
     expect(screen.queryByText('Cost today')).toBeNull();
-    expect(document.querySelector('[testid="details-model-id"]')).toBeNull();
+    expect(screen.queryByText('Provider')).toBeNull();
   });
 
   it('keeps the meters off the phone header', () => {
@@ -701,5 +702,17 @@ describe('ChatHeader flag', () => {
     }
     render(<ChatHeader kind="profile" accent="#3899e2" named title="doc" />);
     expect(document.querySelector('[testid="header-flag"]')).toBeNull();
+  });
+});
+
+describe('profile details sheet width', () => {
+  it('is 360 pt where the screen allows it, and keeps its edges on the narrowest phones', async () => {
+    const { DETAILS_W, detailsPosition } = await import('./ProfileDetails');
+    expect(DETAILS_W).toBe(360);
+    expect(detailsPosition({ x: 0, y: 40, width: 120, height: 32 }, 430).width).toBe(360);
+    const narrow = detailsPosition({ x: 0, y: 40, width: 120, height: 32 }, 320);
+    expect(narrow.width).toBeLessThan(320);
+    expect(narrow.left).toBeGreaterThan(0);
+    expect(narrow.left + narrow.width).toBeLessThan(320);
   });
 });

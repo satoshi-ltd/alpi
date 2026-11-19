@@ -3,6 +3,7 @@ export function reconstructFromEvents(events) {
   let finalSessionId = null;
   const nextTools = [];
   let assistant = "";
+  let note = "";
   let reasoning = "";
   let errorText = null;
   let ctxTokens = null;
@@ -15,8 +16,9 @@ export function reconstructFromEvents(events) {
     if (kind === "session_start") {
       if (f.session_id) finalSessionId = f.session_id;
     } else if (kind === "tool_start") {
-      const segment = [reasoning, assistant.trim()].map((s) => (s ?? "").trim()).filter(Boolean).join("\n\n");
+      const segment = [reasoning, note, assistant.trim()].map((s) => (s ?? "").trim()).filter(Boolean).join("\n\n");
       reasoning = "";
+      note = "";
       assistant = "";
       reasoningDone = false;
       const existing = nextTools.findIndex((t) => t.tool_id === f.tool_id);
@@ -59,6 +61,9 @@ export function reconstructFromEvents(events) {
           break;
         }
       }
+    } else if (kind === "tool_calls_pending") {
+      note = [note, assistant.trim()].filter(Boolean).join("\n\n");
+      assistant = "";
     } else if (kind === "assistant_delta") {
       assistant += f.text ?? "";
     } else if (kind === "reasoning_delta") {
@@ -82,5 +87,5 @@ export function reconstructFromEvents(events) {
       if (f.session_id) finalSessionId = f.session_id;
     }
   }
-  return { tools: nextTools, assistant, reasoning, error: errorText, sawDone, finalSessionId, ctxTokens, reasonedSeconds, reasoningDone, spanReasonedSeconds: spanSeconds, sawToolStart: nextTools.length > 0 };
+  return { tools: nextTools, assistant, note, reasoning, error: errorText, sawDone, finalSessionId, ctxTokens, reasonedSeconds, reasoningDone, spanReasonedSeconds: spanSeconds, sawToolStart: nextTools.length > 0 };
 }

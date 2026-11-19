@@ -387,6 +387,65 @@ async def test_data_chat_send_streams_events_in_order(
     assert reply["session_id"] == "fake-session-id"
 
 
+class _InterimTextEngine(_FakeEngine):
+    def run_turn(self, text, emit, **kwargs) -> None:  # noqa: ANN001
+        from alpi.engine import AgentEvent
+
+        emit(AgentEvent(kind="assistant_delta", text="Sweeping Bitbucket now"))
+        for _ in range(3):
+            emit(AgentEvent(kind="model_state"))
+        emit(AgentEvent(kind="assistant_done", text="Sweeping Bitbucket now"))
+        emit(AgentEvent(kind="tool_start", name="search", args={"q": "x"}))
+        emit(AgentEvent(kind="tool_end", name="search", ok=True))
+        emit(AgentEvent(kind="model_state"))
+        emit(AgentEvent(kind="tool_start", name="search", args={"q": "y"}))
+        emit(AgentEvent(kind="tool_end", name="search", ok=True))
+        emit(AgentEvent(kind="assistant_delta", text="one more"))
+        emit(AgentEvent(kind="model_state"))
+        emit(AgentEvent(kind="assistant_delta", text="and another"))
+        emit(AgentEvent(kind="model_state"))
+        emit(AgentEvent(kind="assistant_done", text="done", final=True))
+
+
+@pytest.mark.asyncio
+async def test_a_tool_call_after_text_is_announced_once_per_span(monkeypatch, short_tmp: Path) -> None:
+    home = short_tmp / "h"
+    home.mkdir()
+    load_or_generate(home)
+    _patch_engine(monkeypatch)
+    import alpi.engine
+    from alpi.host import chat as dc
+    monkeypatch.setattr(alpi.engine, "Engine", _InterimTextEngine)
+    monkeypatch.setattr(dc, "_resolve_home", lambda profile: home)
+
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+    dc.register(srv)
+    await srv.start()
+    try:
+        reader, writer = await asyncio.open_unix_connection(str(srv.socket_path()))
+        request = {"id": "req-1", "method": "host.chat.send", "params": {"profile": "default", "text": "hello", "request_id": "req-1"}}
+        writer.write((json.dumps(request) + "\n").encode("utf-8"))
+        await writer.drain()
+        events: list[dict] = []
+        while True:
+            line = await reader.readline()
+            if not line:
+                break
+            events.append(json.loads(line))
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await srv.stop()
+
+    kinds = [e.get("event") for e in events if e.get("event") not in ("preparing", "heartbeat")]
+    assert kinds == [
+        "session_start", "assistant_delta", "tool_calls_pending", "tool_start", "tool_end",
+        "tool_calls_pending", "tool_start", "tool_end",
+        "assistant_delta", "tool_calls_pending", "assistant_delta", "tool_calls_pending", "reply", "done",
+    ]
+
+
 @pytest.mark.asyncio
 async def test_local_delegate_owns_sidecar_and_marks_session_active(
     monkeypatch, short_tmp: Path,

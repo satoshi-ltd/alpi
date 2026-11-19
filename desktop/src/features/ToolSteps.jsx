@@ -174,7 +174,7 @@ function rememberOpen(key, value) {
   if (OPEN_LINES.size > OPEN_LINES_MAX) OPEN_LINES.delete(OPEN_LINES.keys().next().value);
 }
 
-export const ProcessBlock = memo(function ProcessBlock({ entries, accent, shape, thinking = false, answered = false, running = false, writing = false, memoryKey = null }) {
+export const ProcessBlock = memo(function ProcessBlock({ entries, accent, shape, thinking = false, answered = false, running = false, writing = false, note = "", memoryKey = null }) {
   const keys = memoryKey == null ? [] : Array.isArray(memoryKey) ? memoryKey : [memoryKey];
   const [open, setOpenState] = useState(() => keys.map((k) => OPEN_LINES.get(k)).find((v) => v != null) ?? false);
   const setOpen = (value) => {
@@ -199,7 +199,7 @@ export const ProcessBlock = memo(function ProcessBlock({ entries, accent, shape,
     : base;
   const summary = workSummary(list.map((e) => (e.kind === "tool"
     ? { kind: "tool", name: e.tool.name, target: toolSummary(e.tool), ok: e.tool.ok, seconds: e.tool.duration_s, start: toolStart(e.tool) ?? undefined }
-    : { kind: "thought", text: e.text, seconds: e.seconds, live: thinking && !!e.tail })), { thinking, running, writing });
+    : { kind: "thought", text: e.text, seconds: e.seconds, live: thinking && !!e.tail && !note })), { thinking, running, writing, note });
   const starts = list.filter((e) => e.kind === "tool").map((e) => startMs(e.tool)).filter((v) => v != null);
   const begun = useWorkStart(summary.running, starts.length ? Math.min(...starts) : null);
   if (!list.length) return null;

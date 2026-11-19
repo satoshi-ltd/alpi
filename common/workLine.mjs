@@ -27,7 +27,31 @@ function span(tools) {
   return Math.max(0, last - first);
 }
 
-export function workSummary(items, { thinking = false, running: turnRunning = false, writing = false } = {}) {
+function proseLines(note) {
+  const out = [];
+  let fenced = false;
+  for (const raw of String(note ?? "").split("\n")) {
+    const line = raw.trim();
+    if (/^(```|~~~)/.test(line)) {
+      fenced = !fenced;
+      out.push("");
+      continue;
+    }
+    out.push(fenced || /^([-*_]\s*){3,}$/.test(line) || /^\|.*\|$/.test(line) ? "" : line);
+  }
+  return out;
+}
+
+export function notePhrase(note) {
+  const paragraphs = proseLines(note).join("\n").split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean);
+  const line = (paragraphs[paragraphs.length - 1] ?? "").split("\n")[0];
+  return line
+    .replace(/^#{1,6}\s+|^[-*+]\s+(\[[ xX]\]\s+)?|^\d+\.\s+|^>\s*/, "")
+    .replace(/(\*\*|\*|~~|`)(?=\S)(.+?)(?<=\S)\1/g, "$2")
+    .trim();
+}
+
+export function workSummary(items, { thinking = false, running: turnRunning = false, writing = false, note = "" } = {}) {
   const list = Array.isArray(items) ? items : [];
   const tools = list.filter((i) => i.kind === "tool");
   const thoughts = list.filter((i) => i.kind === "thought" && (i.live || String(i.text || "").trim() || i.seconds >= 1));
@@ -35,7 +59,8 @@ export function workSummary(items, { thinking = false, running: turnRunning = fa
   const running = turnRunning || thinking || !!runningTool || thoughts.some((t) => t.live);
   const last = list[list.length - 1];
   const liveThought = last?.kind === "thought" && last.live;
-  const phrase = !running ? "" : runningTool && !liveThought ? stepPhrase(runningTool.name, runningTool.target) : writing && !liveThought ? "Writing" : "Thinking";
+  const said = notePhrase(note);
+  const phrase = !running ? "" : runningTool && !liveThought ? stepPhrase(runningTool.name, runningTool.target) : said ? said : writing && !liveThought ? "Writing" : "Thinking";
   const toolSpan = span(tools);
   const toolAt = list.flatMap((i, n) => (i.kind === "tool" ? [n] : []));
   const outside = thoughts.filter((t) => { const n = list.indexOf(t); return n < toolAt[0] || n > toolAt[toolAt.length - 1]; })

@@ -11,6 +11,12 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.10.12 — 2026-11-19 — clearer details and a quieter working line
+
+- A sentence alpi writes before using a tool, such as "Sweeping Bitbucket now", shows as the current step of the work line instead of looking like the answer; once the tool starts it stays among the steps, and only the last message is the reply.
+- The profile details under the name are wider, every label stays on one line, and a Provider row (OpenRouter, Anthropic, OpenAI…) replaces the raw model id.
+- Needs alpi ≥ 0.19.18 for the working-line change; with an older daemon the sentence still shows as before.
+
 ## v0.10.11 — 2026-11-19 — unsaved settings and the keyboard
 
 - Pairing another computer, or forgetting the connection in use, from the connection switcher while Settings has unsaved changes now asks you to save or discard them first, as a plain connection switch already did. The changes used to be lost without a word. The pairing link you typed stays in the field.

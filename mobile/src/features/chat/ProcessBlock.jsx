@@ -62,7 +62,7 @@ function WorkBlock({ turn, tools, reasoning, seconds, reasoningLive, answered, s
   const [open, setOpen] = useState(false);
   const steps = processSteps(turn, { tools, reasoning, seconds, streaming: reasoningLive, hasReasoning: showReasoning });
   const items = workItems(steps);
-  const summary = workSummary(items, { thinking: !!reasoningLive, running, writing: !!answered });
+  const summary = workSummary(items, { thinking: !!reasoningLive, running, writing: !!answered, note: running ? turn?.note ?? '' : '' });
   const starts = items.filter((i) => i.start != null).map((i) => i.start * 1000);
   if (running && Number.isFinite(turn?.at)) starts.push(turn.at * 1000);
   const elapsed = useElapsed(summary.running, starts.length ? Math.min(...starts) : null);

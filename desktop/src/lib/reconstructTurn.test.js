@@ -45,6 +45,25 @@ describe("reconstructFromEvents", () => {
     expect(r.assistant).toBe("");
   });
 
+  it("keeps text announced as a pending tool call as the note, then folds it into that tool", () => {
+    const pending = reconstructFromEvents([
+      ev("assistant_delta", { text: "Sweeping Bitbucket now" }, 1),
+      ev("tool_calls_pending", {}, 2),
+    ]);
+    expect(pending.note).toBe("Sweeping Bitbucket now");
+    expect(pending.assistant).toBe("");
+    const started = reconstructFromEvents([
+      ev("assistant_delta", { text: "Sweeping Bitbucket now" }, 1),
+      ev("tool_calls_pending", {}, 2),
+      ev("tool_start", { tool_id: "t1", name: "grep" }, 3),
+      ev("tool_end", { tool_id: "t1", ok: true }, 4),
+      ev("assistant_delta", { text: "78 force reviews" }, 5),
+    ]);
+    expect(started.tools[0].reasoning).toBe("Sweeping Bitbucket now");
+    expect(started.note).toBe("");
+    expect(started.assistant).toBe("78 force reviews");
+  });
+
   it("prefers the daemon's timing fields and sums reasoning_done seconds", () => {
     const r = reconstructFromEvents([
       ev("reasoning_delta", { text: "hmm" }, 1),

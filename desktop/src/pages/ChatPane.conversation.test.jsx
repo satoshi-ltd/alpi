@@ -83,6 +83,23 @@ describe("ChatPane — reasoning while streaming", () => {
     expect(row.textContent).toContain("reading the deploy log");
   });
 
+  it("draws the sentence written before a pending tool call as the running step, not as an answer", () => {
+    const { container } = render(pane({ sessionData: history, pendingTurn: { requestId: "r", user: "q", tools: [], assistantPreview: "", interimNote: "Sweeping Bitbucket now", reasoningDone: true } }));
+    expect(screen.getByRole("button", { name: "Working · Sweeping Bitbucket now" })).toBeInTheDocument();
+    const answers = [...container.querySelectorAll("[data-role='assistant'], .alpi-md")].map((n) => n.textContent);
+    expect(answers.some((text) => text.includes("Sweeping Bitbucket now"))).toBe(false);
+  });
+
+  it("stops saying Working once the turn is interrupted, even with a note", () => {
+    render(pane({ sessionData: history, pendingTurn: { requestId: "r", user: "q", tools: [], assistantPreview: "", interimNote: "Sweeping Bitbucket now", interrupted: true } }));
+    expect(screen.queryByRole("button", { name: /^Working ·/ })).toBeNull();
+  });
+
+  it("keeps a turn's text as the answer when no tool call is pending", () => {
+    render(pane({ sessionData: history, pendingTurn: { requestId: "r", user: "q", tools: [], assistantPreview: "Hello there" } }));
+    expect(screen.getByText("Hello there")).toBeInTheDocument();
+  });
+
   it("keeps the line Working after reasoning_done while the turn still runs, and the thought collapses to its row", () => {
     render(pane({ sessionData: history, pendingTurn: { requestId: "r", user: "q", tools: [], assistantPreview: "", reasoningPreview: "plan", reasoned_s: 7, reasoningDone: true } }));
     const line = screen.getByRole("button", { name: "Working · Thinking" });

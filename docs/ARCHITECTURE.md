@@ -2134,7 +2134,10 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   see their own connection's chat turns and prompts; member devices also apply
   `session_scope`. Local callers see all connections; scheduled and workgroup runs
   keep their separate visibility rules. Chat frames:
-  `tool_start.started_at`, `tool_end.duration_s`, and one `reasoning_done
+  `tool_calls_pending` once per span when the model starts writing a tool call
+  (any text streamed since the last tool is a step of the work, not the answer; the
+  apps draw it as the work line's current step and fold it into that tool's
+  segment on `tool_start`), `tool_start.started_at`, `tool_end.duration_s`, and one `reasoning_done
   {seconds}` per reasoning span (consecutive deltas closed by the next tool
   call, text delta or step end); `seconds` is time spent reasoning — the first
   span of a step counts from the model call (equal to the stored `reasoned_s`

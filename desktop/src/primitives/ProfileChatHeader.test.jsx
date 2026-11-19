@@ -27,7 +27,8 @@ describe("ProfileChatHeader context meter", () => {
       },
     });
     expect(container.querySelectorAll(".ds-tip-wide")).toHaveLength(0);
-    expect(container.querySelector("[role='dialog'] [data-model-id]")).toHaveTextContent("openrouter/z-ai/glm-5.3-flash");
+    expect(container.querySelector("[role='dialog']")).toHaveTextContent("ProviderOpenRouter");
+    expect(container.querySelector("[role='dialog']")).not.toHaveTextContent("openrouter/z-ai");
     expect(container.textContent).toContain("Context window");
     expect(container.textContent).toContain("Daily budget");
   });

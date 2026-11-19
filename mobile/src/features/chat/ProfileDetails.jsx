@@ -6,7 +6,7 @@ import { code } from '../../theme/code';
 import { useTheme } from '../../theme/ThemeContext';
 import { radii, space } from '../../theme/tokens';
 
-export const DETAILS_W = 330;
+export const DETAILS_W = 360;
 
 export function detailsPosition(anchor, windowWidth) {
   const width = Math.min(DETAILS_W, windowWidth - 2 * POPOVER_EDGE);
@@ -19,7 +19,7 @@ function Row({ label, children }) {
   const { colors, fonts, fontSizes } = useTheme();
   return (
     <View style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.s5 }}>
-      <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.ink2 }}>{label}</Text>
+      <Text numberOfLines={1} style={{ flexShrink: 0, fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.ink2 }}>{label}</Text>
       {children}
     </View>
   );
@@ -57,8 +57,10 @@ function DetailsPopover({ anchor, onClose, name, accent, details }) {
             <Row label="Model">
               <Text numberOfLines={1} style={{ ...mono, flexShrink: 1 }}>{details.model}</Text>
             </Row>
-            {details.modelId ? (
-              <Text testID="details-model-id" selectable style={{ ...code(fonts, fontSizes.xs), color: colors.ink3 }}>{details.modelId}</Text>
+            {details.provider ? (
+              <Row label="Provider">
+                <Text testID="details-provider" numberOfLines={1} style={{ ...mono, flexShrink: 1 }}>{details.provider}</Text>
+              </Row>
             ) : null}
           </>
         ) : null}

@@ -530,13 +530,14 @@ const Transcript = memo(function Transcript({
     onDone: onRefreshSession,
   });
   const stub = lastTurnInFlight && !pendingTurn ? turns[turns.length - 1] : null;
-  const tailTurn = liveTail && stub && ((liveTail.tools?.length ?? 0) > 0 || liveTail.assistant || liveTail.reasoning)
+  const tailTurn = liveTail && stub && ((liveTail.tools?.length ?? 0) > 0 || liveTail.assistant || liveTail.reasoning || liveTail.note)
     ? {
         user: stub.user,
         at: stub.at,
         attachments: stub.attachments,
         tools: liveTail.tools,
         assistantPreview: liveTail.assistant,
+        interimNote: liveTail.note,
         reasoningPreview: liveTail.reasoning,
         reasoned_s: liveTail.reasonedSeconds ?? undefined,
         reasoningDone: liveTail.reasoningDone,
@@ -1038,9 +1039,10 @@ function PendingTurn({ turn, accent, shape, profiles, fresh = false, inline = nu
     reasoned_s: turn.reasoned_s,
   });
   const answered = !!turn.assistantPreview;
+  const note = turn.interimNote ?? "";
   const runningTool = allTools.some((t) => t.ok == null);
-  const closed = !!turn.error || !!turn.ended || !!turn.settling;
-  const thinking = !answered && !runningTool && !turn.reasoningDone && !closed;
+  const closed = !!turn.error || !!turn.ended || !!turn.settling || !!turn.interrupted;
+  const thinking = !answered && !runningTool && !closed && (!turn.reasoningDone || !!note);
   const process = processTimeline(
     allTools.map((t) => compactProducedTool(t, turn.output_attachments)),
     turn.reasoningPreview,
@@ -1060,7 +1062,7 @@ function PendingTurn({ turn, accent, shape, profiles, fresh = false, inline = nu
       {(process.length > 0 || parts.askUsers.length > 0 || thinking) && (
         <div className={styles.steps}>
           {(process.length > 0 || thinking) && (
-            <ProcessBlock entries={process} accent={accent} shape={shape} thinking={thinking} answered={answered} running={!closed && !turn.interrupted} writing={answered} memoryKey={workLineKeys(memoryScope.connectionId, memoryScope.profileName, memoryScope.sessionId, memoryScope.turnIndex, turn.user)} />
+            <ProcessBlock entries={process} accent={accent} shape={shape} thinking={thinking} answered={answered} running={!closed && !turn.interrupted} writing={answered} note={runningTool ? "" : note} memoryKey={workLineKeys(memoryScope.connectionId, memoryScope.profileName, memoryScope.sessionId, memoryScope.turnIndex, turn.user)} />
           )}
           {parts.askUsers.map((a, i) => (
             <AskUserAnswer key={`a-${a.tool_id ?? i}`} result={a.result} question={a.question} accent={accent} shape={shape} />

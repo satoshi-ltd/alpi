@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.19.18 — 2026-11-19 — the apps know when a sentence is part of the work
+
+- The chat stream now tells the apps when the model starts a tool call after writing some text, so the apps can show that text as the step it is rather than as the answer. Older apps ignore it.
+
 ## v0.19.17 — 2026-11-19 — newer models, and no download to start
 
 - The recommended models are now GPT-6.2 Astra and GPT-6.2 Sol for OpenAI and Claude Fable 5.2 for Anthropic; profiles that use the previous ones keep them.

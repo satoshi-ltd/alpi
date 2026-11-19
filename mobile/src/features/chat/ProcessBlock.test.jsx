@@ -127,6 +127,14 @@ describe('ProcessBlock', () => {
     expect(document.querySelector('[data-step="tools"]').getAttribute('data-names')).toBe('early,late');
   });
 
+  it('names the sentence alpi wrote before its next tool call as the running step', () => {
+    renderTurn({ req: 'm-1', pending: true, note: 'Sweeping Bitbucket now\nthen grouping', tools: [] }, { running: true, showReasoning: true, reasoningLive: true });
+    expect(document.querySelector('[data-testid="work-line"]').getAttribute('aria-label')).toBe('Working · Sweeping Bitbucket now');
+    cleanup();
+    renderTurn({ req: 'm-1', pending: true, note: 'Sweeping Bitbucket now', tools: [{ name: 'web_fetch', args: { url: 'bitbucket.org' }, at: 1 }] }, { running: true });
+    expect(document.querySelector('[data-testid="work-line"]').getAttribute('aria-label')).toBe('Working · Fetching bitbucket.org');
+  });
+
   it('keeps a pending turn with nothing yet as a lone Thinking row', () => {
     renderTurn({ req: 'm-1', pending: true, tools: [] }, { showReasoning: true, reasoningLive: true });
     expect(steps()).toEqual(['reasoning']);

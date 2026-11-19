@@ -60,3 +60,29 @@ describe("workSummary", () => {
   });
 });
 
+describe("workSummary with a note", () => {
+  it("names the first line of the note as the running step when no tool runs", () => {
+    expect(workSummary([], { running: true, note: "Sweeping Bitbucket now\nthen grouping" }).phrase).toBe("Sweeping Bitbucket now");
+  });
+
+  it("lets a running tool win over the note, and says nothing once done", () => {
+    expect(workSummary([{ kind: "tool", name: "web_fetch", target: "x.org", ok: null }], { running: true, note: "Sweeping" }).phrase).toBe("Fetching x.org");
+    expect(workSummary([], { running: false, note: "Sweeping" }).phrase).toBe("");
+  });
+});
+
+describe("notePhrase", () => {
+  it("reads the newest sentence as plain text, skipping markdown marks, fences and rules", async () => {
+    const { notePhrase } = await import("../../../common/workLine.mjs");
+    expect(notePhrase("First plan\n\n**Deploy summary**: 14 jobs ran")).toBe("Deploy summary: 14 jobs ran");
+    expect(notePhrase("## Sweeping Bitbucket now")).toBe("Sweeping Bitbucket now");
+    expect(notePhrase("```bash\nls -la\n```")).toBe("");
+    expect(notePhrase("First para\n\n```py\nx=1\n```")).toBe("First para");
+    expect(notePhrase("Reading `deploy_log` in src/__init__.py and ~/notes")).toBe("Reading deploy_log in src/__init__.py and ~/notes");
+    expect(notePhrase("https://x.com/a_b_c")).toBe("https://x.com/a_b_c");
+    expect(notePhrase("- [ ] check the queue")).toBe("check the queue");
+    expect(notePhrase("---\n- checking the logs")).toBe("checking the logs");
+    expect(notePhrase("")).toBe("");
+  });
+});
+

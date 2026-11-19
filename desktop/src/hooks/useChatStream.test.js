@@ -279,6 +279,31 @@ describe("useChatStream concurrent turns", () => {
     expect(turnOf(result, "req-2").assistantPreview).toBe("for two");
   });
 
+  it("text followed by a pending tool call becomes the turn's note, then that tool's segment", async () => {
+    const { result } = mount();
+    await waitForListen();
+    seedTurn(result, { requestId: "req-1", sessionId: "s1" });
+    emit({ kind: "assistant_delta", text: "Sweeping Bitbucket now", request_id: "req-1" });
+    await act(async () => { await vi.advanceTimersByTimeAsync(60); });
+    emit({ kind: "tool_calls_pending", request_id: "req-1" });
+    expect(turnOf(result, "req-1").assistantPreview).toBe("");
+    expect(turnOf(result, "req-1").interimNote).toBe("Sweeping Bitbucket now");
+    emit({ kind: "tool_start", tool_id: "t1", name: "grep", request_id: "req-1" });
+    expect(turnOf(result, "req-1").interimNote).toBe("");
+    expect(turnOf(result, "req-1").tools[0].reasoning).toBe("Sweeping Bitbucket now");
+  });
+
+  it("a pending tool call announced before the text was flushed still takes that text", async () => {
+    const { result } = mount();
+    await waitForListen();
+    seedTurn(result, { requestId: "req-1", sessionId: "s1" });
+    emit({ kind: "assistant_delta", text: "Sweeping", request_id: "req-1" });
+    emit({ kind: "tool_calls_pending", request_id: "req-1" });
+    await act(async () => { await vi.advanceTimersByTimeAsync(60); });
+    expect(turnOf(result, "req-1").interimNote).toBe("Sweeping");
+    expect(turnOf(result, "req-1").assistantPreview ?? "").toBe("");
+  });
+
   it("re-sending into the same chat evicts its prior turn but spares other chats", async () => {
     const { result } = mount();
     await waitForListen();

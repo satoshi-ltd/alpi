@@ -406,6 +406,7 @@ async def _data_chat_send(
 
         first_signal = False
         tool_started: dict[str, float] = {}
+        tool_call_announced = False
         while True:
             item = await queue.get()
             if item is SENTINEL:
@@ -414,6 +415,8 @@ async def _data_chat_send(
             if not first_signal and ev.kind in ("reasoning_delta", "assistant_delta", "tool_start"):
                 _timing.mark(request_id, "first_delta")
                 first_signal = True
+            if ev.kind in ("tool_start", "assistant_delta"):
+                tool_call_announced = False
             if ev.kind == "tool_start":
                 started_at = time.time()
                 tool_started[ev.tool_id] = started_at
@@ -453,6 +456,9 @@ async def _data_chat_send(
                 await emit({"event": "reasoning_done", "seconds": ev.seconds})
             elif ev.kind == "assistant_delta":
                 await emit({"event": "assistant_delta", "text": ev.text})
+            elif ev.kind == "model_state" and not tool_call_announced:
+                tool_call_announced = True
+                await emit({"event": "tool_calls_pending"})
             elif ev.kind == "error":
                 await emit({"event": "error", "text": ev.text, **({"code": ev.code} if ev.code else {})})
             elif ev.kind == "interrupted":
