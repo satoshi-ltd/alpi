@@ -152,13 +152,33 @@ def test_migration_coordinates_with_legacy_writer(monkeypatch, tmp_path: Path) -
     assert "added-during-migration" in labels, labels
 
 
+_CHILD_DEADLINE_S = 600
+
+
+def _results_or_exit(procs_and_queues) -> list:
+    import queue as queue_mod
+    import time
+    results: list = [None] * len(procs_and_queues)
+    deadline = time.monotonic() + _CHILD_DEADLINE_S
+    while any(r is None for r in results):
+        for i, (proc, q) in enumerate(procs_and_queues):
+            if results[i] is not None:
+                continue
+            try:
+                results[i] = q.get(timeout=0.2)
+            except queue_mod.Empty:
+                assert proc.exitcode in (None, 0), f"child {i} exited with {proc.exitcode} before reporting"
+        assert time.monotonic() < deadline, "children did not finish"
+    return results
+
+
 def _add_and_report_worker(root_str: str, conn_id: str, queue, barrier) -> None:
     from alpi import home as home_mod
     from alpi.host import connections as conn
 
     home_mod._ROOT = Path(root_str)
     conn.invalidate_cache()
-    barrier.wait()
+    barrier.wait(_CHILD_DEADLINE_S)
     try:
         conn.add_device(conn_id)
         queue.put("added")
@@ -166,7 +186,7 @@ def _add_and_report_worker(root_str: str, conn_id: str, queue, barrier) -> None:
         queue.put("not-found")
 
 
-def _revoke_worker(root_str: str, token_id: str, barrier) -> None:
+def _revoke_worker(root_str: str, token_id: str, barrier, done) -> None:
     import asyncio
 
     from alpi import home as home_mod
@@ -174,8 +194,9 @@ def _revoke_worker(root_str: str, token_id: str, barrier) -> None:
 
     home_mod._ROOT = Path(root_str)
     conn.invalidate_cache()
-    barrier.wait()
+    barrier.wait(_CHILD_DEADLINE_S)
     asyncio.run(conn._legacy_revoke({"token_id": token_id}, None))
+    done.put("revoked")
 
 
 def test_legacy_revoke_add_device_toctou(monkeypatch, tmp_path: Path) -> None:
@@ -186,15 +207,23 @@ def test_legacy_revoke_add_device_toctou(monkeypatch, tmp_path: Path) -> None:
     ctx = mp.get_context()
     barrier = ctx.Barrier(2)
     queue = ctx.Queue()
-    p_rev = ctx.Process(target=_revoke_worker, args=(str(root), token_id, barrier))
+    revoked = ctx.Queue()
+    p_rev = ctx.Process(target=_revoke_worker, args=(str(root), token_id, barrier, revoked))
     p_add = ctx.Process(target=_add_and_report_worker, args=(str(root), conn["id"], queue, barrier))
     p_rev.start()
     p_add.start()
-    p_rev.join(30)
-    p_add.join(30)
+    try:
+        add_result, revoke_result = _results_or_exit([(p_add, queue), (p_rev, revoked)])
+    except BaseException:
+        for proc in (p_add, p_rev):
+            if proc.is_alive():
+                proc.terminate()
+        raise
+    assert revoke_result == "revoked"
+    p_rev.join()
+    p_add.join()
     assert p_rev.exitcode == 0
     assert p_add.exitcode == 0
-    add_result = queue.get(timeout=5)
     connections.invalidate_cache()
     row = next((c for c in connections.list_connections(include_deleted=True) if c["id"] == conn["id"]), None)
     assert row is not None

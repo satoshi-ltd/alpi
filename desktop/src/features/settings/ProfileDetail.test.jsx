@@ -46,7 +46,7 @@ vi.mock("./fields/alp.jsx", async () => {
   return {
     PeersField: () => null,
     PipelineLimitField: () => <span>pipeline limit</span>,
-    TcpPortField: () => null,
+    TcpPortField: () => <span data-testid="alp-port-field" />,
     WorkgroupsField: ({ onCountChange }) => {
       const count = workgroupsProbe.count;
       useEffect(() => { onCountChange?.(count); }, [count, onCountChange]);
@@ -469,5 +469,14 @@ describe("ProfileDetail appearance", () => {
     expect(screen.getByTestId("effort-value")).toHaveTextContent("high");
     delete stableDetail.model_reasoning_effort;
     delete stableDetail.model_reasoning_supported;
+  });
+});
+
+describe("ProfileDetail — ALP port", () => {
+  it("offers the ALP port only on the local connection", () => {
+    const view = render(<ProfileDetail profile={{ name: "pulse" }} profiles={[]} activeConnection={{ id: "local", kind: "local" }} />);
+    expect(screen.getByTestId("alp-port-field")).toBeInTheDocument();
+    view.rerender(<ProfileDetail profile={{ name: "pulse" }} profiles={[]} activeConnection={{ id: "remote", kind: "remote", role: "admin" }} />);
+    expect(screen.queryByTestId("alp-port-field")).toBeNull();
   });
 });

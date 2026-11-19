@@ -541,7 +541,7 @@ export default function ProfileDetail({
               >
                 unix
               </Chip>
-              <TcpPortField profile={profile} onSaved={onSaved} />
+              {activeConnection?.kind === "local" && <TcpPortField profile={profile} onSaved={onSaved} />}
             </span>
           </Row>
           <Row label="Peers">

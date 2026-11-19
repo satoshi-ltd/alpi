@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.19.23 — 2026-11-19 — script jobs run only programs the agent cannot plant
+
+- A script job's `PATH` leaves out every folder that is empty, relative, or inside the profile, the workspace or a temp folder, so a script started through its shebang (`#!/usr/bin/env python3`), and anything it runs, cannot pick up a program the agent wrote in those folders. A bare `python3` now resolves only outside them.
+- A refused script-job interpreter now names where it resolves and what to write instead: an absolute interpreter outside the profile, the workspace and the temp folders, such as `/usr/bin/python3`. A job that needs a pyenv, conda or uv environment kept inside your workspace must name that interpreter by an absolute path outside those folders.
+- Setting a tier's model or effort from an app works again on a config where that tier was written by hand as a single model name; the tier becomes a section that keeps that model.
+
 ## v0.19.22 — 2026-11-19 — long tool loops stop re-sending old output
 
 - Once a conversation's prompt passes 120,000 tokens, tool outputs behind the last few messages are trimmed to their start and end without a model call, in batches of at least 20,000 tokens, including older turns of a long chat. The trim used to wait until 75 % of the context window, so on large windows a long tool loop re-sent every earlier result on every step; a 60-step loop of 5,000-token results now sends less than half the input tokens.

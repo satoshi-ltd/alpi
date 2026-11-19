@@ -2141,3 +2141,95 @@ async def test_the_local_socket_still_sets_the_real_network_keys(
         assert "error" not in resp, (key, resp)
     text = (home / "config.yaml").read_text()
     assert "49300" in text and "7500" in text
+
+
+def test_a_hand_edited_scalar_tier_becomes_a_section_that_keeps_its_model() -> None:
+    data: dict = {"tiers": {"fast": "openai/o3-mini", "deep": " ", "other": "x"}, "model": "m"}
+    host_device_state._repair_scalar_tier(data, "fast")
+    host_device_state._repair_scalar_tier(data, "deep")
+    host_device_state._set_dotted(data, "tiers.fast.effort", "low")
+    host_device_state._set_dotted(data, "tiers.deep.model", "openai/gpt-5")
+    assert data["tiers"]["fast"] == {"model": "openai/o3-mini", "effort": "low"}
+    assert data["tiers"]["deep"] == {"model": "openai/gpt-5"}
+    for key in ("tiers.other.model", "model.x"):
+        with pytest.raises(host_server.HandlerError) as caught:
+            host_device_state._set_dotted(data, key, "y")
+        assert caught.value.message == "invalid-params"
+    assert data["tiers"]["other"] == "x"
+
+
+@pytest.mark.asyncio
+async def test_setting_a_tier_from_an_app_repairs_a_scalar_tier(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path / "h")
+    with open(home / "config.yaml", "a", encoding="utf-8") as fh:
+        fh.write("tiers:\n  fast: openai/o3-mini\n")
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+    resp = await srv._dispatch({
+        "id": "s", "method": "host.config.set_field",
+        "params": {"profile": "default", "key": "tiers.fast.effort", "value": "low"},
+    })
+    assert resp.get("result", {}).get("ok") is True, resp
+    tier = cfg_mod.load(home).tiers.fast
+    assert (tier.model, tier.effort) == ("openai/o3-mini", "low")
+
+
+@pytest.mark.asyncio
+async def test_setting_a_tier_model_from_an_app_replaces_a_scalar_tier(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path / "h")
+    with open(home / "config.yaml", "a", encoding="utf-8") as fh:
+        fh.write("tiers:\n  deep: openai/o3-mini\n")
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+    resp = await srv._dispatch({
+        "id": "s", "method": "host.config.set_field",
+        "params": {"profile": "default", "key": "tiers.deep.model", "value": "openai/gpt-5"},
+    })
+    assert resp.get("result", {}).get("ok") is True, resp
+    assert cfg_mod.load(home).tiers.deep.model == "openai/gpt-5"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tiers_yaml", ["tiers:\n  fast: 5\n", "tiers:\n  fast: true\n", "tiers: hello\n"])
+@pytest.mark.parametrize("key", ["tiers.fast.effort", "tiers.fast.model"])
+async def test_a_tier_that_is_neither_a_section_nor_a_model_name_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tiers_yaml: str, key: str,
+) -> None:
+    home = _bootstrap(tmp_path / "h")
+    with open(home / "config.yaml", "a", encoding="utf-8") as fh:
+        fh.write(tiers_yaml)
+    before = (home / "config.yaml").read_text()
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+    resp = await srv._dispatch({
+        "id": "s", "method": "host.config.set_field",
+        "params": {"profile": "default", "key": key, "value": "low" if key.endswith("effort") else "openai/gpt-5"},
+    })
+    assert resp["error"]["message"] == "invalid-params", resp
+    assert (home / "config.yaml").read_text() == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad", ["5", "true"])
+async def test_clearing_a_broken_tier_model_removes_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, bad: str,
+) -> None:
+    home = _bootstrap(tmp_path / "h")
+    with open(home / "config.yaml", "a", encoding="utf-8") as fh:
+        fh.write(f"tiers:\n  fast: {bad}\n")
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+    resp = await srv._dispatch({
+        "id": "s", "method": "host.config.set_field",
+        "params": {"profile": "default", "key": "tiers.fast.model", "value": ""},
+    })
+    assert resp.get("result", {}).get("ok") is True, resp
+    assert "tiers" not in (home / "config.yaml").read_text()

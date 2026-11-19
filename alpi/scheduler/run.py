@@ -269,31 +269,60 @@ _INTERPRETER_NAME_RE = re.compile(r"python3?(?:\.\d+)?")
 _PYTHON_FLAGS_ALLOWED = "-u -B -I -E -s -O -OO"
 
 
-def _interpreter_problem(exe: str, home: Path) -> str | None:
-    if "/" not in exe:
-        return None
-    path = Path(exe)
-    if not path.is_absolute():
-        return f"no_agent python must be a bare name or an absolute path outside the profile and temp folders — got: {exe!r}"
+_INTERPRETER_FIX = (
+    "name an absolute interpreter outside the profile, the workspace and the temp folders, "
+    "for example /usr/bin/python3"
+)
+
+
+def _agent_writable_roots(home: Path) -> list[Path]:
     import tempfile
     from alpi import config as cfg_mod
     roots = [home, Path(tempfile.gettempdir()), Path("/tmp"), Path("/private/tmp")]
+    if sys.platform == "darwin":
+        roots.append(Path("/private/var/folders"))
     try:
         workspace = cfg_mod.load(home).workspace_path
     except Exception:  # noqa: BLE001
         workspace = None
     if workspace:
         roots.append(Path(workspace))
-    typed = Path(os.path.abspath(exe))
-    resolved = path.resolve()
-    for root in roots:
-        for form in (typed, resolved):
+    return roots
+
+
+def _under_any(path: str, roots: list[Path]) -> Path | None:
+    for form in (Path(os.path.abspath(path)), Path(path).resolve()):
+        for root in roots:
             try:
                 form.relative_to(root.resolve())
-            except ValueError:
+            except (OSError, ValueError):
                 continue
-            return f"no_agent python must not live under {root} — got: {exe!r}"
+            return root
     return None
+
+
+def _interpreter_problem(exe: str, home: Path) -> str | None:
+    if "/" not in exe:
+        return None
+    if not Path(exe).is_absolute():
+        return f"no_agent python must be a bare name or an absolute path; {_INTERPRETER_FIX} — got: {exe!r}"
+    root = _under_any(exe, _agent_writable_roots(home))
+    if root is None:
+        return None
+    resolved = str(Path(exe).resolve())
+    named = exe if resolved == exe else f"{exe} (resolves to {resolved})"
+    return f"no_agent python {named} is under {root}, a folder the agent can write; {_INTERPRETER_FIX}"
+
+
+def _script_job_path(path: str, home: Path) -> str:
+    roots = _agent_writable_roots(home)
+    kept = [
+        entry for entry in path.split(os.pathsep)
+        if entry and os.path.isabs(entry) and _under_any(entry, roots) is None
+    ]
+    if kept:
+        return os.pathsep.join(kept)
+    return os.pathsep.join(d for d in ("/usr/bin", "/bin") if _under_any(d, roots) is None)
 
 
 def validate_no_agent_command(prompt: str, home: Path) -> str | None:
@@ -383,6 +412,7 @@ def _run_script_only(job: dict, home: Path, secs: int) -> JobOutcome:
         **deploy_env(),
         **workspace_env(home),
     })
+    env["PATH"] = _script_job_path(env.get("PATH") or os.defpath, home)
 
     if _INTERPRETER_NAME_RE.fullmatch(Path(argv[0]).name):
         resolved = argv[0] if "/" in argv[0] else shutil.which(argv[0], path=env.get("PATH"))

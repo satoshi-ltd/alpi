@@ -387,17 +387,21 @@ export default function App() {
       profiles: profilesRef.current,
       workgroups: workgroupsRef.current,
     });
-  const onOpenSettings = useCallback(() => {
+  const openSettingsFromView = useCallback(() => {
     const v = viewRef.current;
-    if (v?.kind === "settings") {
-      setView(leavingSettingsView());
-      return;
-    }
+    if (v?.kind === "settings") return;
     const next = settingsTargetForChatView(v, newSessionProfileRef.current());
     settingsTargetRef.current = next;
     setSettingsTarget(next);
     setView({ kind: "settings" });
   }, []);
+  const onOpenSettings = useCallback(() => {
+    if (viewRef.current?.kind === "settings") {
+      setView(leavingSettingsView());
+      return;
+    }
+    openSettingsFromView();
+  }, [openSettingsFromView]);
   const adminOnOpenSettings = canAdminEarly ? onOpenSettings : null;
   const openSettingsFor = useCallback((target) => {
     setSettingsTarget(target);
@@ -406,7 +410,9 @@ export default function App() {
   const adminOpenSettingsFor = canAdminEarly ? openSettingsFor : null;
   const toggleSettingsRef = useRef(null);
   toggleSettingsRef.current = onOpenSettings;
-  useNavListener(setView, toggleSettingsRef);
+  const openSettingsRef = useRef(null);
+  openSettingsRef.current = openSettingsFromView;
+  useNavListener(setView, toggleSettingsRef, openSettingsRef);
 
   const connectionOnlineRef = useRef(true);
   const { pendingTurns, pendingTurnsRef, startTurn, removeTurn, clearTurnsForConnection, detachNewChatTurns } = useChatStream({

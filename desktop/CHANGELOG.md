@@ -11,6 +11,12 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.10.16 — 2026-11-19 — Settings from the menu, and the ALP port where it applies
+
+- Choosing Settings… or ⌘, while the window is hidden or minimized brings it back on Settings, even if it was left there; it closes Settings only when the window is already in front.
+- The ALP port field shows only for this computer's daemon: a remote daemon refuses it, and its availability check could only test this machine.
+- Needs alpi ≥ 0.19.23 to set a tier on a profile whose tier was written by hand as a single model name.
+
 ## v0.10.15 — 2026-11-19 — a steadier first-run hint test
 
 - No visible change: the check that a first message reached the daemon no longer outlives the window that sent it.

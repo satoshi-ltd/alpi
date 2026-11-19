@@ -153,11 +153,39 @@ def _stub_python(directory: Path) -> Path:
     return stub
 
 
-def test_a_bare_python_is_resolved_on_the_job_path_and_refused_inside_a_writable_root(home: Path, tmp_path: Path, monkeypatch) -> None:
+def test_a_bare_python_never_resolves_inside_a_writable_root(home: Path, tmp_path: Path, monkeypatch) -> None:
+    stub = _stub_python(tmp_path / "evil-bin")
+    captured: dict = {}
+    monkeypatch.setattr(scheduler.subprocess, "run", lambda argv, **kw: captured.update(argv=argv, env=kw["env"]) or _Done())
+    (home / ".env").write_text(f"PATH={tmp_path / 'evil-bin'}:relative/bin::/usr/bin:/bin\n")
+    ok, _message, _ = scheduler.run_job({"id": "j", "kind": "cron", "no_agent": True, "prompt": f"python3 {SCRIPT}"}, home)
+    assert ok is True
+    assert captured["argv"][0] != str(stub)
+    assert captured["env"]["PATH"].split(":") == ["/usr/bin", "/bin"]
+
+
+def test_a_refused_interpreter_names_where_it_resolves_and_what_to_write(home: Path) -> None:
+    import sys
+    link = home / "bin" / "python3"
+    link.parent.mkdir()
+    link.symlink_to(sys.executable)
+    reason = validate_no_agent_command(f"{link} {SCRIPT}", home)
+    assert str(link) in reason and str(Path(sys.executable).resolve()) in reason
+    assert "/usr/bin/python3" in reason and "outside the profile, the workspace and the temp folders" in reason
+
+
+def test_a_shebang_script_job_does_not_run_a_python_planted_on_its_path(home: Path, tmp_path: Path) -> None:
+    import shutil
+    if not shutil.which("python3", path="/usr/bin:/bin"):
+        pytest.skip("no system python3 at /usr/bin or /bin")
     _stub_python(tmp_path / "evil-bin")
-    ok, message, spawned = _run(home, monkeypatch, f"python3 {SCRIPT}", f"PATH={tmp_path / 'evil-bin'}:/usr/bin:/bin\n")
-    assert ok is False and "no_agent rejected" in message
-    assert spawned == []
+    script = home / "skills" / "a" / "b" / "scripts" / "run.py"
+    script.write_text("#!/usr/bin/env python3\nprint('ran by python')\n")
+    script.chmod(0o755)
+    (home / ".env").write_text(f"PATH={tmp_path / 'evil-bin'}:/usr/bin:/bin\n")
+    ok, message, _ = scheduler.run_job({"id": "j", "kind": "cron", "no_agent": True, "prompt": SCRIPT}, home)
+    assert ok is True, message
+    assert "ran by python" in message and "hijacked" not in message
 
 
 def test_a_bare_python_the_path_cannot_find_spawns_nothing(home: Path, monkeypatch) -> None:
@@ -205,3 +233,14 @@ def test_an_empty_or_relative_path_entry_cannot_bring_in_a_program_from_the_curr
         assert not Path(spawned[0][0]).resolve().is_relative_to(here.resolve())
     else:
         assert ok is False and "no_agent rejected" in message
+
+
+@pytest.mark.skipif(__import__("sys").platform != "darwin", reason="macOS per-user temp tree")
+def test_the_whole_macos_per_user_temp_tree_is_left_out_of_a_script_jobs_path(home: Path) -> None:
+    path = scheduler._script_job_path("/private/var/folders/zz/abc/C/bin:/var/folders/zz/abc/C/bin:/usr/bin", home)
+    assert path == "/usr/bin"
+
+
+def test_a_job_path_with_nothing_left_falls_back_only_to_system_folders_outside_the_roots(home: Path, monkeypatch) -> None:
+    monkeypatch.setattr(scheduler, "_agent_writable_roots", lambda h: [Path("/usr")])
+    assert scheduler._script_job_path("/usr/local/bin", home) == "/bin"

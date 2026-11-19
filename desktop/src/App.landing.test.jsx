@@ -389,6 +389,21 @@ describe("App landing", () => {
     await waitFor(() => expect(selected("alpi")).toBe(false));
   });
 
+  it("opens Settings on the open chat's profile when the menu brings the window back, and never closes it", async () => {
+    daemon();
+    render(<App />);
+    await waitFor(() => expect(selected("alpi")).toBe(true));
+    await waitFor(() => expect(listeners.nav).toBeTruthy());
+    fireEvent.click(row("doc"));
+    await waitFor(() => expect(selected("doc")).toBe(true));
+    act(() => listeners.nav({ payload: "settings-open" }));
+    await waitFor(() => expect(inSettingsView()).toBe(true));
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toMatch(/doc/);
+    act(() => listeners.nav({ payload: "settings-open" }));
+    await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+    expect(inSettingsView()).toBe(true);
+  });
+
   it("closes Settings from the menu's Settings… when nothing is unsaved, while the tray's Settings only opens", async () => {
     daemon();
     render(<App />);

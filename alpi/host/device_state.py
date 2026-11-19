@@ -654,6 +654,7 @@ async def _config_set_field(
         if not model_val:
             _unset_dotted(data, f"tiers.{tier}")
         else:
+            _repair_scalar_tier(data, tier)
             _set_dotted(data, key, model_val)
             if not supports_reasoning(model_val, providers):
                 _unset_dotted(data, f"tiers.{tier}.effort")
@@ -661,6 +662,7 @@ async def _config_set_field(
     elif key in ("tiers.fast.effort", "tiers.deep.effort"):
         from alpi.providers.reasoning import normalise_effort, supports_reasoning
         tier = key.split(".")[1]
+        _repair_scalar_tier(data, tier)
         normalised = normalise_effort(coerced)
         tier_model = str(((data.get("tiers") or {}).get(tier) or {}).get("model") or "")
         if normalised and tier_model and supports_reasoning(tier_model, providers):
@@ -1094,6 +1096,20 @@ def _write_user_yaml(home: Path, data: dict[str, Any]) -> None:
     # Atomic tmp+fsync+rename — same writer as ``config.save`` so a daemon crash mid-write never leaves a truncated config.yaml.
     from alpi.config import atomic_write_yaml
     atomic_write_yaml(home / "config.yaml", data)
+
+
+def _repair_scalar_tier(data: dict[str, Any], tier: str) -> None:
+    tiers = data.get("tiers")
+    if tiers is None:
+        return
+    if isinstance(tiers, dict) and isinstance(tiers.get(tier), str):
+        model = tiers[tier].strip()
+        tiers[tier] = {"model": model} if model else {}
+    if not isinstance(tiers, dict) or not isinstance(tiers.get(tier, {}), (dict, type(None))):
+        raise host_server.HandlerError(
+            -32602, "invalid-params",
+            data={"detail": f"tiers.{tier} in config.yaml is a value, not a section"},
+        )
 
 
 def _prune_empty_tiers(data: dict[str, Any]) -> None:

@@ -4045,14 +4045,28 @@ fn install_app_menu(app: &AppHandle) -> tauri::Result<()> {
         if event.id.as_ref() == "menu:settings" {
             notifications::clear_activation();
             if let Some(window) = app.get_webview_window("main") {
+                // Read before show(): a window brought back from hidden or minimized only opens Settings, never closes it.
+                let nav = settings_menu_nav(
+                    window.is_visible().unwrap_or(false),
+                    window.is_focused().unwrap_or(false),
+                    window.is_minimized().unwrap_or(false),
+                );
                 let _ = window.show();
                 let _ = window.unminimize();
                 let _ = window.set_focus();
-                let _ = window.emit("nav", "settings-toggle");
+                let _ = window.emit("nav", nav);
             }
         }
     });
     Ok(())
+}
+
+fn settings_menu_nav(visible: bool, focused: bool, minimized: bool) -> &'static str {
+    if visible && focused && !minimized {
+        "settings-toggle"
+    } else {
+        "settings-open"
+    }
 }
 
 pub fn run() {
@@ -4416,6 +4430,19 @@ mod chat_event_tests {
         .unwrap();
         assert_eq!(pending["kind"], "tool_calls_pending");
         assert_eq!(pending["request_id"], "r");
+    }
+}
+
+#[cfg(test)]
+mod settings_menu_tests {
+    use super::settings_menu_nav;
+
+    #[test]
+    fn toggles_only_a_window_already_in_front() {
+        assert_eq!(settings_menu_nav(true, true, false), "settings-toggle");
+        assert_eq!(settings_menu_nav(false, false, false), "settings-open");
+        assert_eq!(settings_menu_nav(true, false, false), "settings-open");
+        assert_eq!(settings_menu_nav(true, true, true), "settings-open");
     }
 }
 

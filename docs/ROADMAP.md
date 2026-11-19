@@ -80,58 +80,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **SEC.SCRIPT-JOB-PATH** — A script job's PATH carries no folder the agent can write
-  `bug · alpi · agent · low`
-  note: 0.19.13 resolves and checks the interpreter of `python3 <script>`, but a job that names the script alone runs
-  it through its shebang, and `#!/usr/bin/env python3` still resolves on the profile's `PATH`; so does everything the
-  script spawns. A remote device cannot set `PATH` since 0.19.12; a value planted earlier or by hand still applies.
-  accept: the environment of a script job drops every `PATH` entry that is empty, relative or under the profile home,
-  a temp folder or the workspace; a test plants a `python3` stub in such a folder, runs a shebang script job and
-  finds the stub not run.
-
-- **HOST.SET-FIELD-SCALAR-TIER** — Setting a tier's model repairs a hand-edited scalar tier
-  `bug · alpi · agent · low`
-  note: since 0.19.11 `_set_dotted` ([device_state.py](../alpi/host/device_state.py)) answers `invalid-params` when a
-  path descends through a non-object. The one scalar parent the loader tolerates is a hand-edited
-  `tiers.fast: "<model>"`; setting Fast or Deep from an app used to rewrite it as a section and now fails with
-  "Save failed".
-  accept: `set_field tiers.<fast|deep>.<model|effort>` on a config whose tier is a scalar rewrites the tier as a
-  section that keeps the scalar as its model; every other non-object parent still answers `invalid-params`; tests
-  cover both.
-
-- **SCHED.INTERPRETER-MESSAGE** — A refused script-job interpreter says what to write instead
-  `bug · alpi · agent · low`
-  note: since 0.19.13 a script job is refused when its Python resolves under the profile home, a temp folder or the
-  workspace ([scheduler/run.py](../alpi/scheduler/run.py) `_interpreter_problem`). A profile whose workspace is the
-  user's home directory, with Python from pyenv, conda or uv under it, loses every script job, and the message names
-  the folder but not the fix. Flags `-S -q -P -v -bb -d` were accepted before 0.19.10 and are refused now; no known
-  job uses them.
-  accept: the refusal names the resolved interpreter and says to give an absolute interpreter outside those folders
-  (for example `/usr/bin/python3`); `docs/` and the scheduling reference state the rule; a test asserts the message.
-
-- **DESK.TCP-PORT-REMOTE** — The ALP port field is hidden on a remote connection
-  `bug · desktop · agent · low`
-  note: older than this review. `TcpPortField` writes `alp.tcp_port`, which a remote connection has been refused since
-  alpi 0.10.12, and its availability check probes the desktop's own machine; the field shows on every connection
-  ([ProfileDetail.jsx](../desktop/src/features/settings/ProfileDetail.jsx) near `:463`).
-  accept: the field renders only on the local connection, like `host.tcp_port`; a test covers both connection kinds.
-
-- **DESK.SETTINGS-MENU-TOGGLE** — The Settings menu item opens Settings when the window was hidden on it
-  `bug · desktop · agent · low`
-  note: since desktop 0.10.5 the menu item shows the window and emits `settings-toggle`
-  ([lib.rs](../desktop/src-tauri/src/lib.rs) near `:4037`), and `onOpenSettings` toggles on the current view
-  (`App.jsx` near `:390`). With the window hidden while on Settings, choosing Settings… or ⌘, brings it back on chat.
-  accept: the menu item and its shortcut close Settings only when the window was already visible and focused on it;
-  a test covers hidden-on-settings, visible-on-settings and visible-on-chat.
-
-- **TEST.TOCTOU-LOAD** — The device revoke race test passes on a loaded machine
-  `chore · alpi · agent · low`
-  note: `tests/host/test_connections.py::test_legacy_revoke_add_device_toctou` failed once in a full run while other
-  suites ran beside it (`p_rev.exitcode` was `None`: the child had not finished within the join timeout) and passed
-  five times alone.
-  accept: the test waits on the children's completion rather than a fixed join budget and passes twenty consecutive
-  runs under `pytest -n` load.
-
 ## In progress
 
 _None._
