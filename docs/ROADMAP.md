@@ -80,6 +80,17 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
+- **DESK.HINT-FLAKE** — The first-run hint test does not depend on an earlier test's timer
+  `bug · desktop · agent · normal`
+  note: `clients` failed on `d7e86990` (passed on the next commit) in
+  `desktop/src/App.landing.test.jsx` "keeps the hint line and writes nothing when the daemon refuses the first
+  message": `localStorage` held `seen`. Likely cause: `watchAcceptance` ([chat-acceptance.js](../desktop/src/lib/chat-acceptance.js))
+  settles `{accepted: true}` after an 8 s timer when no frame arrives, and `onSend` in
+  [App.jsx](../desktop/src/App.jsx) (near `:1197`) then calls `dismissFirstRunHint()` even if that App was already
+  unmounted, so an earlier test's send can write the flag during a later test.
+  accept: a send whose App unmounts before the verdict marks nothing (a test with fake timers proves it), and the
+  landing suite passes twenty consecutive runs under load.
+
 ## In progress
 
 _None._
