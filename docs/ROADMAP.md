@@ -1155,6 +1155,17 @@ Each entry is written to be worked without that report:
   reaches a peer with a valid signature, and a `--once` turn whose tool output holds one prints its events; tests
   drive the ALP client and server, the CLI line and a provider-bound message.
 
+### Found while shipping alpi 0.19.24
+
+- **CLI.STREAM-DEADLINE** — The console's untimed daemon calls stop when the daemon stops reading
+  `bug · alpi · agent · low`
+  note: the chat stream ([cli.py](../alpi/cli.py) near `:494`), `alpi runs cancel` (`:684`) and `alpi activity`
+  (`:717`) open the host socket with no deadline and close with `close()` plus `wait_closed()`; a daemon that
+  accepts and stops reading holds them at `drain()` forever. `host_client.acall` got one deadline and an abort on
+  failure in 0.19.24.
+  accept: each of the three sends with a deadline and aborts its transport on failure; a test with a socket that
+  never reads finishes each within its deadline.
+
 ### Found while shipping alpi 0.18.4
 
 - **DESK.RECIPES-INVALID** — The desktop's saved-recipe list says which recipes it left out and why

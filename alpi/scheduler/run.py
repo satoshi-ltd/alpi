@@ -413,6 +413,12 @@ def _run_script_only(job: dict, home: Path, secs: int) -> JobOutcome:
         **workspace_env(home),
     })
     env["PATH"] = _script_job_path(env.get("PATH") or os.defpath, home)
+    if not env["PATH"]:
+        return JobOutcome(
+            False,
+            "no_agent rejected: no folder is left on the job's PATH outside the profile, "
+            "the workspace and the temp folders; move the workspace off a system folder",
+        )
 
     if _INTERPRETER_NAME_RE.fullmatch(Path(argv[0]).name):
         resolved = argv[0] if "/" in argv[0] else shutil.which(argv[0], path=env.get("PATH"))

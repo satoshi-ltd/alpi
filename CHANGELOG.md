@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.19.24 — 2026-11-19 — no empty PATH, no stuck console call
+
+- A script job whose `PATH` would be left with no folder outside the profile, the workspace and the temp folders is refused before it starts and says why; an empty `PATH` would have searched the current folder.
+- A console call to the daemon now has one deadline for connecting, sending and the answer, and gives up on time even when the daemon stops reading a large request.
+
 ## v0.19.23 — 2026-11-19 — script jobs run only programs the agent cannot plant
 
 - A script job's `PATH` leaves out every folder that is empty, relative, or inside the profile, the workspace or a temp folder, so a script started through its shebang (`#!/usr/bin/env python3`), and anything it runs, cannot pick up a program the agent wrote in those folders. A bare `python3` now resolves only outside them.

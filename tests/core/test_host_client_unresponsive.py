@@ -164,3 +164,28 @@ async def test_host_ping_answers_without_work():
 
     assert await device_state._host_ping({}, None) == {"ok": True}
     assert "host.ping" in host_server._SCOPE_FREE_METHODS
+
+
+@pytest.mark.asyncio
+async def test_a_daemon_that_stops_reading_a_large_request_does_not_hold_the_call_past_its_timeout(stuck_socket):
+    writers = []
+    release = asyncio.Event()
+
+    async def never_reads(reader, writer):
+        writers.append(writer)
+        await release.wait()
+
+    server = await asyncio.start_unix_server(never_reads, path=str(stuck_socket))
+    try:
+        started = time.monotonic()
+        with pytest.raises(host_client.HostTimedOut):
+            await asyncio.wait_for(
+                host_client.acall("host.ping", {"blob": "x" * (16 * 1024 * 1024)}, timeout=0.5), 10,
+            )
+        assert time.monotonic() - started < 3
+    finally:
+        release.set()
+        for writer in writers:
+            writer.close()
+        server.close()
+        await server.wait_closed()

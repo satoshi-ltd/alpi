@@ -60,13 +60,20 @@ async def acall(method: str, params: dict[str, Any] | None = None, *, timeout: f
     path = socket_path()
     if not path.exists():
         raise HostNotConnected("daemon not running")
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
     try:
         reader, writer = await asyncio.wait_for(_open(path), timeout)
     except (OSError, asyncio.TimeoutError) as e:
         raise HostNotConnected(str(e) or "daemon not running") from None
     request_id = f"tui-{next(_ids)}"
+    answered = False
     try:
-        return await asyncio.wait_for(_exchange(reader, writer, request_id, method, params), timeout)
+        result = await asyncio.wait_for(
+            _exchange(reader, writer, request_id, method, params), max(0.0, deadline - loop.time()),
+        )
+        answered = True
+        return result
     except asyncio.TimeoutError:
         raise HostTimedOut("daemon did not answer") from None
     except OSError as e:
@@ -74,9 +81,20 @@ async def acall(method: str, params: dict[str, Any] | None = None, *, timeout: f
     except ValueError:
         raise HostError(None, INVALID_RESPONSE) from None
     finally:
+        await _release(writer, flush=answered, budget=max(0.0, deadline - loop.time()))
+
+
+# A daemon that stopped reading would hold close() on unsent bytes forever, so only a clean answer waits, briefly, to close.
+async def _release(writer, *, flush: bool, budget: float) -> None:  # noqa: ANN001
+    try:
+        if not flush:
+            writer.transport.abort()
+            return
+        writer.close()
+        await asyncio.wait_for(writer.wait_closed(), max(budget, 0.25))
+    except Exception:  # noqa: BLE001
         try:
-            writer.close()
-            await writer.wait_closed()
+            writer.transport.abort()
         except Exception:  # noqa: BLE001
             pass
 

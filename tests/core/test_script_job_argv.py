@@ -242,5 +242,19 @@ def test_the_whole_macos_per_user_temp_tree_is_left_out_of_a_script_jobs_path(ho
 
 
 def test_a_job_path_with_nothing_left_falls_back_only_to_system_folders_outside_the_roots(home: Path, monkeypatch) -> None:
-    monkeypatch.setattr(scheduler, "_agent_writable_roots", lambda h: [Path("/usr")])
-    assert scheduler._script_job_path("/usr/local/bin", home) == "/bin"
+    roots = [Path("/usr")]
+    monkeypatch.setattr(scheduler, "_agent_writable_roots", lambda h: roots)
+    path = scheduler._script_job_path("/usr/local/bin", home)
+    assert all(entry and scheduler._under_any(entry, roots) is None for entry in path.split(":") if path)
+
+
+def test_a_job_path_with_only_agent_folders_falls_back_to_the_system_folders(home: Path, tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(scheduler, "_agent_writable_roots", lambda h: [tmp_path])
+    assert scheduler._script_job_path(f"{tmp_path / 'a'}:{tmp_path / 'b'}", home) == "/usr/bin:/bin"
+
+
+def test_a_script_job_with_no_folder_left_on_its_path_is_refused_before_it_runs(home: Path, monkeypatch) -> None:
+    monkeypatch.setattr(scheduler, "_agent_writable_roots", lambda h: [Path("/")])
+    ok, message, spawned = _run(home, monkeypatch, SCRIPT, "PATH=/usr/local/bin\n")
+    assert ok is False and "no folder is left on the job's PATH" in message
+    assert spawned == []
