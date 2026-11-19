@@ -30,7 +30,8 @@ export default function AddPeer() {
   const [address, setAddress] = useState('');
   const [scopes, setScopes] = useState(new Set(['link.ping', 'link.ask']));
   const [busy, setBusy] = useState(false);
-  const askBack = useDirtyBack(!!(handle.trim() || pubkey.trim() || address.trim()), goBack);
+  const scopesChanged = scopes.size !== 2 || !scopes.has('link.ping') || !scopes.has('link.ask');
+  const askBack = useDirtyBack(!!(handle.trim() || pubkey.trim() || address.trim()) || scopesChanged, goBack);
 
   const ready = handle.trim() && pubkey.trim() && scopes.size > 0 && !busy;
 

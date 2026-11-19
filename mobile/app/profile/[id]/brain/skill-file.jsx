@@ -8,7 +8,7 @@ import { RichText } from '../../../../src/components/RichText';
 import { PanelHeader } from '../../../../src/features/profile/PanelHeader';
 import { useBack } from '../../../../src/hooks/useBack';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
-import { fileSize } from '../../../../src/lib/skillDetail';
+import { sizeLabel } from '../../../../../common/panelRow.mjs';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 import { ReaderSkeleton } from '../../../../src/components/ReaderSkeleton';
 import { code } from '../../../../src/theme/code';
@@ -49,7 +49,7 @@ export default function SkillFile() {
         <ScrollView contentContainerStyle={{ padding: space.s8, gap: space.s5, paddingBottom: space.s10 }}>
           <View style={{ gap: space.s1 }}>
             <Text style={{ ...code(fonts, fontSizes.md, 'semibold'), color: colors.ink }}>{String(file)}</Text>
-            <Text style={meta}>{[fileSize(f.size), f.truncated ? 'truncated' : null].filter(Boolean).join(' · ')}</Text>
+            <Text style={meta}>{[sizeLabel(f.size), f.truncated ? 'truncated' : null].filter(Boolean).join(' · ')}</Text>
           </View>
           {f.binary ? (
             <Text style={meta}>Binary file · not shown</Text>

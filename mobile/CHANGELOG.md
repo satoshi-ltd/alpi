@@ -14,6 +14,13 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.10.7 — 2026-11-19 — fixes after the new identity
+
+- Opening a file from a skill's page shows the file again; since 0.10.0 it replaced the whole app with an error screen.
+- Stop cancels a running reply even while the profile is paused or the daemon is unreachable; it stays dimmed but answers.
+- Changing only a new peer's permissions now asks before going back, like any other unsaved change.
+- Needs alpi ≥ 0.19.0: earlier daemons do not send the profile marks, so every profile draws the same.
+
 ## v0.10.6 — 2026-11-17 — who reaches what
 
 - Connections show the profiles each one can reach as their marks and names in their own colours, in the list and in the Profiles row of a connection.

@@ -80,6 +80,20 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
+- **SEC.TERMINAL-UNREADABLE-HEADLESS** — An unattended profile is told how to rerun a command the checker cannot read
+  `bug · alpi · agent · high`
+  note: since 0.19.9 a command the classifier cannot parse asks once and is never allowlisted
+  ([_approval.py](../alpi/tools/_approval.py) `_check_inner`, `once_only`). On a surface with no approver (scheduled
+  jobs, gateways, workgroup turns, ALP) that is a refusal with no way forward, and the message says only "Rerun from
+  TUI to approve". The common case is a heredoc whose text has an odd apostrophe:
+  `git commit -m "$(cat <<'EOF' … don't … EOF)"`, `gh pr create --body "$(cat <<'EOF' …)"`, `cat > notes.md <<'EOF'`.
+  Before 0.19.9 these ran. A replay of 427 documented and typical commands changed 12 verdicts, all of this shape.
+  Whether an operator may opt a profile back in is SEC.D-UNREADABLE-HEADLESS; this task does not wait on it.
+  accept: with no approver, the refusal for an unreadable command tells the agent to write the text to a file with
+  `write_file` and pass the file (`git commit -F <file>`, `gh pr create --body-file <file>`); the terminal tool
+  description and `alpi/knowledge/references/security.md` say the same; a test asserts the message on a heredoc with
+  an apostrophe and that the file-based form of the same command classifies as safe.
+
 - **DESK.PAIR-DRAFT** — Pairing another daemon does not drop an unsaved Settings draft
   `bug · desktop · agent · normal`
   note: confirmed by trace on 2026-11-18. Commit `83448425` guards a plain connection switch against pending changes
@@ -94,14 +108,19 @@ defect, so a helper is extracted only when it removes evidenced duplication.
   connection switch and offer to keep editing; a component test edits a Settings field, starts pairing and finds the
   prompt, one does the same with forget, and one without a draft finds none.
 
-- **MOB.PEER-PERMS-DRAFT** — Changing only a new peer's permissions arms the leave warning
-  `bug · mobile · agent · low`
-  note: confirmed by trace on 2026-11-18. The new-peer form
-  ([peers/new.jsx](../mobile/app/profile/[id]/peers/new.jsx) `:34`) computes dirty from handle, key and address and
-  leaves out `scopes` (state at `:31`), so `useDirtyBack` returns before `preventDefault()`; the accept-peer screen
-  (`peers/accept.jsx` `:35`) does include them.
-  accept: the permissions join the comparison with the initial state; a test changes only one permission, goes back and
-  finds the warning, and an untouched form goes back without one.
+- **DESK.OVERLAY-FOCUS** — Closing an overlay returns keyboard focus
+  `bug · desktop · agent · normal`
+  note: since desktop 0.10.1 and 0.10.2 a closed overlay stays mounted `inert` for the 140 ms exit
+  ([useExit.js](../desktop/src/hooks/useExit.js) `:10-25`). `useOverlay` restores focus only when the active element
+  is `body` or disconnected ([useOverlay.js](../desktop/src/hooks/useOverlay.js) `:79-83`) and the composer autofocuses
+  only from `body` (`primitives/Composer.jsx` `:49-54`); the focused node inside the closing layer is still connected
+  when both run, so neither fires and focus later falls to `body`. Command palette then Esc leaves the composer
+  unfocused; picking a session from the palette swallows typing until a click; Esc on a dropdown, context menu or
+  popover drops the trigger's focus. `Modal` and `ModelPicker` restore explicitly and reduced motion is unaffected.
+  jsdom has no `matchMedia`, so the suite always takes the instant path.
+  accept: focus returns to the opener, or to the composer when the opener is gone, after the palette, a popover, a
+  dropdown and a context menu close with motion on; a test with `matchMedia` stubbed to `matches: false` proves each
+  and fails on the current code.
 
 ## In progress
 
@@ -210,52 +229,6 @@ _None._
 
 Found by reviewing everything shipped from alpi 0.19.0, desktop 0.10.0 and mobile 0.10.0 to commit `8ac3c373` for
 behaviour that broke. Each entry was confirmed by a probe, a throwaway test or an exact code trace.
-
-- **MOB.SKILL-FILE-CRASH** — Opening a skill file shows the file
-  `bug · mobile · agent · high`
-  note: since mobile 0.10.0, [skill-file.jsx](../mobile/app/profile/[id]/brain/skill-file.jsx) `:11` imports `fileSize`
-  from `src/lib/skillDetail.js`, which no longer exports it (`SkillDetail.jsx` moved to `sizeLabel` from
-  `common/panelRow.mjs`). The loaded branch calls `undefined(...)` at `:52` and the root error boundary replaces the
-  app; reload re-enters the same route. No test renders this screen.
-  accept: the screen uses `sizeLabel`; a render test of the loaded branch shows the file name, its size and its body,
-  and fails on the current code.
-
-- **MOB.STOP-DISABLED** — Stop cancels a running turn while the composer is disabled
-  `bug · mobile · agent · high`
-  note: since mobile 0.10.0, `RoundButton` in [Composer.jsx](../mobile/src/features/chat/Composer.jsx) `:29` drops
-  `onPress` when `disabled`, and Send/Stop passes `disabled={disabled || (!stoppable && !canSend)}` (`:288-292`). The
-  chat disables the composer when the profile is paused or the daemon is unreachable
-  (`mobile/app/chat/[id].jsx` near `:832`), so a streaming turn cannot be stopped from the phone in either state.
-  accept: Stop is pressable whenever a turn is stoppable, whatever `disabled` says, and keeps its dimmed look; a test
-  renders `<Composer busy onStop disabled />`, presses Stop and finds the call, and Send stays inert when disabled.
-
-- **SEC.TERMINAL-UNREADABLE-HEADLESS** — An unattended profile is told how to rerun a command the checker cannot read
-  `bug · alpi · agent · high`
-  note: since 0.19.9 a command the classifier cannot parse asks once and is never allowlisted
-  ([_approval.py](../alpi/tools/_approval.py) `_check_inner`, `once_only`). On a surface with no approver (scheduled
-  jobs, gateways, workgroup turns, ALP) that is a refusal with no way forward, and the message says only "Rerun from
-  TUI to approve". The common case is a heredoc whose text has an odd apostrophe:
-  `git commit -m "$(cat <<'EOF' … don't … EOF)"`, `gh pr create --body "$(cat <<'EOF' …)"`, `cat > notes.md <<'EOF'`.
-  Before 0.19.9 these ran. A replay of 427 documented and typical commands changed 12 verdicts, all of this shape.
-  Whether an operator may opt a profile back in is SEC.D-UNREADABLE-HEADLESS; this task does not wait on it.
-  accept: with no approver, the refusal for an unreadable command tells the agent to write the text to a file with
-  `write_file` and pass the file (`git commit -F <file>`, `gh pr create --body-file <file>`); the terminal tool
-  description and `alpi/knowledge/references/security.md` say the same; a test asserts the message on a heredoc with
-  an apostrophe and that the file-based form of the same command classifies as safe.
-
-- **DESK.OVERLAY-FOCUS** — Closing an overlay returns keyboard focus
-  `bug · desktop · agent · normal`
-  note: since desktop 0.10.1 and 0.10.2 a closed overlay stays mounted `inert` for the 140 ms exit
-  ([useExit.js](../desktop/src/hooks/useExit.js) `:10-25`). `useOverlay` restores focus only when the active element
-  is `body` or disconnected ([useOverlay.js](../desktop/src/hooks/useOverlay.js) `:79-83`) and the composer autofocuses
-  only from `body` (`primitives/Composer.jsx` `:49-54`); the focused node inside the closing layer is still connected
-  when both run, so neither fires and focus later falls to `body`. Command palette then Esc leaves the composer
-  unfocused; picking a session from the palette swallows typing until a click; Esc on a dropdown, context menu or
-  popover drops the trigger's focus. `Modal` and `ModelPicker` restore explicitly and reduced motion is unaffected.
-  jsdom has no `matchMedia`, so the suite always takes the instant path.
-  accept: focus returns to the opener, or to the composer when the opener is gone, after the palette, a popover, a
-  dropdown and a context menu close with motion on; a test with `matchMedia` stubbed to `matches: false` proves each
-  and fails on the current code.
 
 - **APPS.SHAPE-OLD-DAEMON** — A profile keeps its mark against a daemon older than 0.19.0
   `bug · desktop, mobile, common · agent · normal`

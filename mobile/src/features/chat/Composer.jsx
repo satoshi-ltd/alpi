@@ -22,7 +22,7 @@ export const COMPOSER_BTN = 40;
 export const STREAM_FADE = 28;
 const DIMMED = alpha.disabled;
 
-function RoundButton({ label, onPress, disabled, fill, children }) {
+function RoundButton({ label, onPress, disabled, dimmed = disabled, fill, children }) {
   const { colors } = useTheme();
   const [focused, focusHandlers] = useFocusRing();
   return (
@@ -41,7 +41,7 @@ function RoundButton({ label, onPress, disabled, fill, children }) {
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: fill ?? (pressed ? colors.pressed : 'transparent'),
-        opacity: disabled ? DIMMED : 1,
+        opacity: dimmed ? DIMMED : 1,
         ...focusRingStyle(colors, focused),
       })}
     >
@@ -291,7 +291,8 @@ export function Composer({
           <RoundButton
             label={stoppable ? 'Stop' : 'Send'}
             onPress={stoppable ? stop : canSend ? submit : undefined}
-            disabled={disabled || (!stoppable && !canSend)}
+            disabled={!stoppable && !canSend}
+            dimmed={!!disabled || (!stoppable && !canSend)}
             fill={!stoppable && !canSend ? colors.pressed : actionBg}
           >
             <Icon

@@ -115,6 +115,26 @@ describe('send and stop', () => {
   });
 });
 
+describe('stop while the composer is disabled', () => {
+  it('still stops a running turn when the profile is paused or the daemon is unreachable, and stays dimmed', () => {
+    const onStop = vi.fn();
+    render(<Composer onSend={() => {}} busy onStop={onStop} disabled offline />);
+    const stop = screen.getByLabelText('Stop');
+    fireEvent.click(stop);
+    expect(onStop).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(stop.getAttribute('data-style')).opacity).toBeLessThan(1);
+  });
+
+  it('keeps Send inert when disabled', () => {
+    const onSend = vi.fn();
+    const { rerender } = render(<Composer onSend={onSend} />);
+    type('hi');
+    rerender(<Composer onSend={onSend} disabled />);
+    fireEvent.click(screen.getByLabelText('Send'));
+    expect(onSend).not.toHaveBeenCalled();
+  });
+});
+
 describe('model chip', () => {
   it('moves model · effort into the + menu on the phone and opens its picker from there', () => {
     const onPress = vi.fn();
