@@ -80,22 +80,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **LLM.CATALOGUE-OFFLINE** — alpi starts the same way when litellm cannot download its price map
-  `bug · alpi · agent · high`
-  note: reported on 2026-11-19 by an external review of 0.19.15: with the download unreachable, `alpi --version`
-  failed 3 of 4 times with an error raised during `import litellm`, and 4 of 4 succeeded with
-  `LITELLM_LOCAL_MODEL_COST_MAP=True`; two `tests/test_pid1.py` entry probes failed the same way. Not reproduced
-  here against refused, permission-denied, reset, 403, HTML, garbage or hanging endpoints (0 of 18), so get the
-  traceback first. Forcing the bundled map is not enough on its own: litellm 1.104.1 ships a map without
-  `claude-sonnet-5-5`, `claude-haiku-5-5` and `gpt-6.1-sol`, so those curated models would lose their window, price
-  and vision flag (`tests/core/test_providers.py::test_every_curated_native_model_has_a_real_window_and_price`
-  fails). [ctx_window.py](../alpi/ctx_window.py) uses alpi's own table only for `openrouter/` ids; native models rely
-  on litellm's map.
-  accept: the failing import is reproduced with its traceback and a test; alpi registers window, prices and vision
-  for every curated native model from its own catalogue (`litellm.register_model`) so they hold whichever map loads;
-  then the bundled map can be the default and a test imports alpi with sockets blocked, records no connection
-  attempt and still finds every curated model with a window ≥ 200k, a price and its vision flag.
-
 ## In progress
 
 _None._
@@ -745,11 +729,10 @@ Each entry is written to be worked without that report:
 
 - **HARN.COLD-START** — Starting alpi makes no network call and a console command does not load the model library (H5)
   `chore · alpi · agent · normal`
-  note: `import litellm` downloads its price map from GitHub at every process start unless
-  `LITELLM_LOCAL_MODEL_COST_MAP=true` is set (254 ms of its 1.1 s; the rest is the import itself), which sits oddly
-  beside `litellm.telemetry = False` in `_silence_litellm` ([llm.py](../alpi/llm.py) `:118-158`). alpi takes cost
-  from the provider and context windows from its own catalogue first. [cli.py](../alpi/cli.py) (`:18`) imports the
-  engine at module top, so `alpi --version` and `alpi runs list` take a second.
+  note: since 0.19.17 `import litellm` makes no network call (`alpi/__init__.py` defaults
+  `LITELLM_LOCAL_MODEL_COST_MAP`, and alpi registers `alpi/providers/native_models.yaml`), so the first clause of the
+  accept below and the SECURITY.md line are done. [cli.py](../alpi/cli.py) (`:18`) still imports the engine at
+  module top, so `alpi --version` and `alpi runs list` take a second.
   accept: `_silence_litellm` sets the variable with `os.environ.setdefault` before the import; a test in
   `tests/test_llm_privacy.py` imports the library with sockets blocked and records no connection attempt; a
   subprocess test runs `alpi --version` and finds neither `litellm` nor `alpi.engine` in `sys.modules`; the chat and

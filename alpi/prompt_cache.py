@@ -192,14 +192,16 @@ PREFIX_CACHING_PROVIDERS = frozenset({"openai"})
 
 def _provider_of(model: str) -> str | None:
     try:
-        import litellm
+        from alpi.llm import litellm_ready
+        litellm = litellm_ready()
         return litellm.utils.get_llm_provider(model)[1]
     except Exception:  # noqa: BLE001
         return None
 
 
 def _is_openai_endpoint(api_base: str | None) -> bool:
-    import litellm
+    from alpi.llm import litellm_ready
+    litellm = litellm_ready()
 
     base = (api_base or getattr(litellm, "api_base", None) or os.environ.get("OPENAI_BASE_URL") or os.environ.get("OPENAI_API_BASE") or "").strip()
     if not base:
@@ -213,7 +215,8 @@ def cache_kwargs_for_model(model: str, api_base: str | None = None) -> dict:
     if not model:
         return {}
     try:
-        import litellm
+        from alpi.llm import litellm_ready
+        litellm = litellm_ready()
         if not litellm.utils.supports_prompt_caching(model=model):
             return {}
     except Exception:  # noqa: BLE001

@@ -69,11 +69,11 @@ When a wrong tool call is expensive: refactors, code review, long debugging, sch
 
 | Model | OpenRouter ID | Notes |
 |---|---|---|
-| Claude Fable 5.1 | `anthropic/claude-fable-5.1` | Ceiling: Anthropic's most capable widely released model ($10 / $50 per MTok, 1M). |
+| Claude Fable 5.2 | `anthropic/claude-fable-5.2` | Ceiling: Anthropic's most capable widely released model ($8 / $40 per MTok, cached $0.20, 1M). |
 | Claude Opus 5.5 | `anthropic/claude-opus-5.5` | Flagship for agentic coding ($4 / $20 per MTok, 1M); thinking cannot be turned off, default effort `medium`. |
 | Claude Sonnet 5.5 | `anthropic/claude-sonnet-5.5` | Best daily premium balance for coding-heavy profiles. |
-| GPT-6 Astra | `openai/gpt-6-astra` | OpenAI flagship ($10 / $50 per MTok, cached $1, 1.05M). |
-| GPT-6.1 Sol | `openai/gpt-6.1-sol` | OpenAI's recommended balance ($2 / $10 per MTok, cached $0.10, 1.05M), strong at coding. OpenAI's 1.05M is input plus output; on the native route alpi budgets against LiteLLM's ~922K input share, through OpenRouter against ~1.017M. |
+| GPT-6.2 Astra | `openai/gpt-6.2-astra` | OpenAI flagship ($8 / $40 per MTok, cached $0.40, 1.05M). |
+| GPT-6.2 Sol | `openai/gpt-6.2-sol` | OpenAI's recommended balance ($2 / $10 per MTok, cached $0.10, 1.05M), strong at coding. OpenAI's 1.05M is input plus output; on the native route alpi budgets against LiteLLM's ~922K input share, through OpenRouter against ~1.017M. |
 | Nemotron 3 Super | `nvidia/nemotron-3-super-120b-a12b` | Open-weight engineering option; 256K context. |
 
 ## Local/private profiles
@@ -88,15 +88,15 @@ When the user has ANTHROPIC_API_KEY or OPENAI_API_KEY, native routes work and us
 
 | Provider | OpenRouter route | Native route |
 |---|---|---|
-| Anthropic | `anthropic/claude-fable-5.1` | `claude-fable-5-1` (hyphens, not dots) |
+| Anthropic | `anthropic/claude-fable-5.2` | `claude-fable-5-2` (hyphens, not dots) |
 | Anthropic | `anthropic/claude-opus-5.5` | `claude-opus-5-5` |
 | Anthropic | `anthropic/claude-sonnet-5.5` | `claude-sonnet-5-5` |
 | Anthropic | `anthropic/claude-haiku-5.5` | `claude-haiku-5-5` |
-| OpenAI | `openai/gpt-6-astra` | `gpt-6-astra` |
-| OpenAI | `openai/gpt-6.1-sol` | `gpt-6.1-sol` |
+| OpenAI | `openai/gpt-6.2-astra` | `gpt-6.2-astra` |
+| OpenAI | `openai/gpt-6.2-sol` | `gpt-6.2-sol` |
 | OpenAI | `openai/gpt-6-luna` | `gpt-6-luna` |
 
-Checked against the providers' pages on 2026-10-07. Superseded but still served (a profile that pins one keeps working; never change a profile's model yourself): Claude Fable 5, Opus 5, Opus 4.8, Sonnet 5; GPT-6 Sol (replaced by GPT-6.1 Sol) and GPT-5.6 Sol/Terra/Luna. Claude refuses a forced tool call whenever it thinks (always on Fable, Opus 5.5 and Sonnet 5.5; on any Claude with an effort set), and alpi never forces one then.
+Checked against LiteLLM's price map and OpenRouter on 2026-11-19. Superseded but still served (a profile that pins one keeps working; never change a profile's model yourself): Claude Fable 5 and 5.1, Opus 5, Opus 4.8, Sonnet 5; GPT-6 Astra (replaced by GPT-6.2 Astra), GPT-6 Sol and GPT-6.1 Sol (replaced by GPT-6.2 Sol) and GPT-5.6 Sol/Terra/Luna. Claude refuses a forced tool call whenever it thinks (always on Fable, Opus 5.5 and Sonnet 5.5; on any Claude with an effort set), and alpi never forces one then.
 
 ## Prompt caching
 
@@ -127,7 +127,8 @@ Per-profile: `alpi -p work` can run Sonnet 4.6 while `alpi -p personal` runs MiM
 
 ## Keeping the catalog current
 
-- `python3 scripts/refresh_models.py` regenerates `alpi/providers/openrouter_models.yaml` (OpenRouter id -> safe input limit) from `https://openrouter.ai/api/v1/models`.
+- `python3 scripts/refresh_models.py` regenerates `alpi/providers/openrouter_models.yaml` (OpenRouter id -> safe input limit) from `https://openrouter.ai/api/v1/models` and `alpi/providers/native_models.yaml` (LiteLLM's full entry for each curated OpenAI/Anthropic model and each newer native chat model the bundled map lacks) from LiteLLM's public price map, and lists native chat models the curated list does not offer.
+- alpi registers `native_models.yaml` into LiteLLM for any model LiteLLM's own map lacks, and LiteLLM uses the map it ships (`LITELLM_LOCAL_MODEL_COST_MAP=True` by default; `False` downloads the latest at start). A model the curated list names therefore always has its window, cost and vision, online or not.
 - `alpi/providers/curated_models.yaml` (picker list) is edited by hand and mirrored in `mobile/src/lib/curatedModels.js`.
 - Usage ranking of tool-capable models: `https://openrouter.ai/api/v1/models?sort=top-weekly&supported_parameters=tools`; `https://openrouter.ai/rankings` is the web page. `category=` has no agents or tools value and barely changes the top, so omit it. Usage shows what to evaluate, not tool-calling quality.
 - Anthropic and OpenAI pickers carry only the newest models.

@@ -43,7 +43,8 @@ def _from_openrouter(model: str) -> int | None:
 
 def _from_litellm(model: str) -> int | None:
     try:
-        import litellm
+        from alpi.llm import litellm_ready
+        litellm = litellm_ready()
     except Exception:  # noqa: BLE001
         return None
     head, _, rest = model.partition("/")

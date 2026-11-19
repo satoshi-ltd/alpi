@@ -1,15 +1,15 @@
 openai:
-  - id: gpt-6-astra
+  - id: gpt-6.2-astra
     note: flagship · 1M
     reasoning: true
-  - id: gpt-6.1-sol
+  - id: gpt-6.2-sol
     note: balanced · coding · 1M
     reasoning: true
   - id: gpt-6-luna
     note: cheap · fast · 1M
     reasoning: true
 anthropic:
-  - id: claude-fable-5-1
+  - id: claude-fable-5-2
     note: flagship · 1M
     reasoning: true
   - id: claude-opus-5-5

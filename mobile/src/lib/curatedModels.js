@@ -2,12 +2,12 @@
 
 export const CURATED_BY_PROVIDER = {
   openai: [
-    { id: 'gpt-6-astra', note: 'flagship · 1M' },
-    { id: 'gpt-6.1-sol', note: 'balanced · coding · 1M' },
+    { id: 'gpt-6.2-astra', note: 'flagship · 1M' },
+    { id: 'gpt-6.2-sol', note: 'balanced · coding · 1M' },
     { id: 'gpt-6-luna', note: 'cheap · fast · 1M' },
   ],
   anthropic: [
-    { id: 'claude-fable-5-1', note: 'flagship · 1M' },
+    { id: 'claude-fable-5-2', note: 'flagship · 1M' },
     { id: 'claude-opus-5-5', note: 'agentic coding · 1M' },
     { id: 'claude-sonnet-5-5', note: 'balanced · 1M' },
     { id: 'claude-haiku-5-5', note: 'cheap · fast · 1M' },
@@ -16,7 +16,7 @@ export const CURATED_BY_PROVIDER = {
 
 export const DEFAULT_MODEL_BY_PROVIDER = {
   anthropic: 'anthropic/claude-sonnet-5-5',
-  openai: 'openai/gpt-6.1-sol',
+  openai: 'openai/gpt-6.2-sol',
 };
 
 // Flat tuples — Hermes/Metro dev mode has tripped on Object.entries+destructure for-of.

@@ -23,15 +23,16 @@ describe('the mirror of the daemon catalog', () => {
 describe('anthropic catalog', () => {
   const ids = CURATED_BY_PROVIDER.anthropic.map((m) => m.id);
 
-  it('leads with Fable 5.1 as flagship and offers Opus 5.5 and Sonnet 5.5', () => {
-    expect(ids[0]).toBe('claude-fable-5-1');
-    expect(noteFor('anthropic/claude-fable-5-1')).toBe('flagship · 1M');
+  it('leads with Fable 5.2 as flagship and offers Opus 5.5 and Sonnet 5.5', () => {
+    expect(ids[0]).toBe('claude-fable-5-2');
+    expect(noteFor('anthropic/claude-fable-5-2')).toBe('flagship · 1M');
     expect(ids).toContain('claude-opus-5-5');
     expect(ids).toContain('claude-sonnet-5-5');
   });
 
-  it('no longer offers the superseded Fable 5, Opus 4.8 or Sonnet 5', () => {
+  it('no longer offers the superseded Fable 5 and 5.1, Opus 4.8 or Sonnet 5', () => {
     expect(ids).not.toContain('claude-fable-5');
+    expect(ids).not.toContain('claude-fable-5-1');
     expect(ids).not.toContain('claude-opus-4-8');
     expect(ids).not.toContain('claude-sonnet-5');
   });
@@ -40,15 +41,15 @@ describe('anthropic catalog', () => {
 describe('openai catalog', () => {
   const ids = CURATED_BY_PROVIDER.openai.map((m) => m.id);
 
-  it('is the GPT-6 family, not the superseded GPT-5.6 lineup', () => {
-    expect(ids).toEqual(['gpt-6-astra', 'gpt-6.1-sol', 'gpt-6-luna']);
+  it('is the newest GPT-6 family, not the superseded GPT-6 and GPT-6.1 tiers', () => {
+    expect(ids).toEqual(['gpt-6.2-astra', 'gpt-6.2-sol', 'gpt-6-luna']);
   });
 });
 
 describe('default models', () => {
   it('pin the balanced tier of each provider', () => {
     expect(DEFAULT_MODEL_BY_PROVIDER.anthropic).toBe('anthropic/claude-sonnet-5-5');
-    expect(DEFAULT_MODEL_BY_PROVIDER.openai).toBe('openai/gpt-6.1-sol');
+    expect(DEFAULT_MODEL_BY_PROVIDER.openai).toBe('openai/gpt-6.2-sol');
   });
 
   it('only reference ids present in the catalog (drift guard)', () => {

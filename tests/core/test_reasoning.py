@@ -34,15 +34,17 @@ def test_normalise_effort_canonicalises_or_drops(raw, expected) -> None:
 @pytest.mark.parametrize("model", [
     "openai/o3-mini",
     "openai/o4-mini",
-    "openai/gpt-6-astra",         # curated catalog
-    "openai/gpt-6.1-sol",         # curated catalog
+    "openai/gpt-6.2-astra",       # curated catalog
+    "openai/gpt-6.2-sol",         # curated catalog
+    "openai/gpt-6.1-sol",         # custom-typed (regex fallback)
     "openai/gpt-6-luna",          # curated catalog
     "openai/gpt-6-sol",           # custom-typed (regex fallback)
     "openai/gpt-5.6-sol",         # custom-typed (regex fallback)
     "openai/gpt-5",               # custom-typed (catalog miss → regex fallback)
     "openai/gpt-5-mini",          # custom-typed (regex fallback)
     "openai/gpt-10",              # custom-typed (regex fallback, two-digit major)
-    "anthropic/claude-fable-5-1", # curated catalog
+    "anthropic/claude-fable-5-2", # curated catalog
+    "anthropic/claude-fable-5-1", # custom-typed (regex fallback)
     "anthropic/claude-opus-5-5",  # curated catalog
     "anthropic/claude-sonnet-5-5", # curated catalog
     "anthropic/claude-sonnet-5",  # custom-typed (regex fallback)

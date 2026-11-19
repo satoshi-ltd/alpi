@@ -135,11 +135,11 @@ long debugging sessions, schema changes, release work.
 
 | Model | OpenRouter ID | Why |
 |---|---|---|
-| **Claude Fable 5.1** | `anthropic/claude-fable-5.1` | Ceiling: Anthropic's most capable widely released model, for long-running agents. $10 / $50 per MTok, 1M context. |
+| **Claude Fable 5.2** | `anthropic/claude-fable-5.2` | Ceiling: Anthropic's most capable widely released model, for long-running agents. $8 / $40 per MTok, cached input $0.20, 1M context. |
 | **Claude Opus 5.5** | `anthropic/claude-opus-5.5` | Flagship for complex agentic coding; supersedes Opus 5 at a lower price ($4 / $20 per MTok), 1M context. Thinking cannot be turned off; its default effort is `medium`. |
 | **Claude Sonnet 5.5** | `anthropic/claude-sonnet-5.5` | Best daily premium balance for coding-heavy profiles. |
-| **GPT-6 Astra** | `openai/gpt-6-astra` | OpenAI flagship ($10 / $50 per MTok, cached input $1, 1.05M context). |
-| **GPT-6.1 Sol** | `openai/gpt-6.1-sol` | OpenAI's recommended balance of intelligence and cost ($2 / $10 per MTok, cached input $0.10, 1.05M context), strong at coding. |
+| **GPT-6.2 Astra** | `openai/gpt-6.2-astra` | OpenAI flagship ($8 / $40 per MTok, cached input $0.40, 1.05M context). |
+| **GPT-6.2 Sol** | `openai/gpt-6.2-sol` | OpenAI's recommended balance of intelligence and cost ($2 / $10 per MTok, cached input $0.10, 1.05M context), strong at coding. |
 | **Nemotron 3 Super** | `nvidia/nemotron-3-super-120b-a12b` | Open-weight engineering option; 256K context. |
 
 OpenAI's 1.05M is the whole window, input plus output. On the native
@@ -170,12 +170,12 @@ latency and one less layer to break.
 
 | Provider | OpenRouter route | Native route |
 |---|---|---|
-| Anthropic | `anthropic/claude-fable-5.1` | `claude-fable-5-1` (hyphens, not dots) |
+| Anthropic | `anthropic/claude-fable-5.2` | `claude-fable-5-2` (hyphens, not dots) |
 | Anthropic | `anthropic/claude-opus-5.5` | `claude-opus-5-5` |
 | Anthropic | `anthropic/claude-sonnet-5.5` | `claude-sonnet-5-5` |
 | Anthropic | `anthropic/claude-haiku-5.5` | `claude-haiku-5-5` |
-| OpenAI | `openai/gpt-6-astra` | `gpt-6-astra` |
-| OpenAI | `openai/gpt-6.1-sol` | `gpt-6.1-sol` |
+| OpenAI | `openai/gpt-6.2-astra` | `gpt-6.2-astra` |
+| OpenAI | `openai/gpt-6.2-sol` | `gpt-6.2-sol` |
 | OpenAI | `openai/gpt-6-luna` | `gpt-6-luna` |
 
 Claude refuses a forced tool call whenever it is thinking: always on Fable,
@@ -187,10 +187,11 @@ model does not call it).
 #### Superseded, still served
 
 These still answer, so a profile that pins one keeps working, but the
-curated pickers no longer offer them: Claude Fable 5, Opus 5, Opus 4.8 and
-Sonnet 5 (replaced by Fable 5.1, Opus 5.5 and Sonnet 5.5); GPT-6 Sol
-(replaced by GPT-6.1 Sol at the same price, half the cached-input price) and
-the GPT-5.6 Sol, Terra and Luna lineup (replaced by the GPT-6 family).
+curated pickers no longer offer them: Claude Fable 5 and 5.1, Opus 5, Opus
+4.8 and Sonnet 5 (replaced by Fable 5.2, Opus 5.5 and Sonnet 5.5); GPT-6
+Astra (replaced by GPT-6.2 Astra, cheaper), GPT-6 Sol and GPT-6.1 Sol
+(replaced by GPT-6.2 Sol at the same price) and the GPT-5.6 Sol, Terra and
+Luna lineup (replaced by the GPT-6 family).
 alpi never changes a profile's configured model; switch it yourself with
 `alpi setup` or the apps.
 
@@ -258,8 +259,8 @@ changes behavior until you opt in. Profiles still split roles best:
 - **High-volume service profile**: DeepSeek V4 Flash 0731,
   DeepSeek V4.1 Flash, MiMo V2.6 Flash, Haiku 5.5, or GPT-6 Luna, with
   fewer skills and tighter prompts.
-- **Engineering profile**: Sonnet 5.5, Opus 5.5, Fable 5.1,
-  GPT-6.1 Sol or GPT-6 Astra.
+- **Engineering profile**: Sonnet 5.5, Opus 5.5, Fable 5.2,
+  GPT-6.2 Sol or GPT-6.2 Astra.
 - **Local/private profile**: a current Qwen-coder, Gemma, or codestral
   family model, sized to your VRAM.
 
@@ -277,15 +278,29 @@ The choice is per-profile. `alpi -p work` can run Sonnet 5.5 while
 
 ## Keeping the catalog current
 
-Two files, two jobs:
+Three files, three jobs:
 
 - `alpi/providers/openrouter_models.yaml` maps every OpenRouter id to a safe
-  input limit. Regenerate it with `python3 scripts/refresh_models.py` (it
-  reads `https://openrouter.ai/api/v1/models` and keeps the old file if the
-  fetch fails).
+  input limit.
+- `alpi/providers/native_models.yaml` holds LiteLLM's public price-map entry
+  (window, prices, vision, tool and reasoning flags) for every curated OpenAI
+  and Anthropic model and every newer native chat model the installed
+  LiteLLM's bundled map lacks. alpi registers each entry LiteLLM does not know
+  when it loads it, and LiteLLM runs on the map it ships
+  (`LITELLM_LOCAL_MODEL_COST_MAP` defaults to true; set it to `False` to
+  download the latest at each start), so a curated model newer than the
+  installed LiteLLM keeps its window, cost and images, and a blocked download
+  never touches startup.
 - `alpi/providers/curated_models.yaml` is the hand-picked picker list
-  (OpenRouter, OpenAI, Anthropic). Nothing updates it; edit it by hand and
-  mirror it in `mobile/src/lib/curatedModels.js`.
+  (OpenRouter, OpenAI, Anthropic), edited by hand and mirrored in
+  `mobile/src/lib/curatedModels.js`.
+
+`python3 scripts/refresh_models.py` regenerates the first two (from
+`https://openrouter.ai/api/v1/models` and LiteLLM's price map; each keeps its
+old file if its fetch fails, and the native one refuses to write if a curated
+model has no window or price yet) and lists the OpenAI and Anthropic chat
+models the curated list does not offer, grouped by provider and without dated
+snapshots, to review by hand.
 
 To see what people actually use before editing the curated list, ask the same
 endpoint for its usage order, restricted to models that accept tools:

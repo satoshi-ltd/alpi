@@ -273,7 +273,8 @@ def validate(
 
 def vision_status(model: str) -> str:
     try:
-        import litellm
+        from alpi.llm import litellm_ready
+        litellm = litellm_ready()
         return "yes" if litellm.supports_vision(model=model) else "no"
     except Exception:  # noqa: BLE001
         return "unknown"
@@ -286,7 +287,8 @@ def supports_vision(model: str) -> bool:
 
 def model_context_tokens(model: str) -> int | None:
     try:
-        import litellm
+        from alpi.llm import litellm_ready
+        litellm = litellm_ready()
         n = litellm.get_model_info(model=model).get("max_input_tokens")
         return int(n) if n else None
     except Exception:  # noqa: BLE001 — unmapped model / litellm error → caller falls back

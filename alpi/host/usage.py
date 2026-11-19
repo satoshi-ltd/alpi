@@ -129,8 +129,9 @@ def price_out(model: str) -> float:
             price = llm._openrouter_pricing().get(m.split("/", 1)[1])
             if price and price[1] > 0:
                 return float(price[1])
-        import litellm
-        info = litellm.model_cost.get(m) or {}
+        from alpi.llm import litellm_ready
+        litellm = litellm_ready()
+        info = litellm.model_cost.get(m) or litellm.model_cost.get(m.split("/", 1)[-1]) or {}
         out = info.get("output_cost_per_token")
         if out:
             return float(out)

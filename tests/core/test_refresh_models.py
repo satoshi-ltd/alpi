@@ -90,3 +90,32 @@ def test_write_atomic_replaces_without_leftovers(tmp_path: Path) -> None:
     refresh.write_atomic(target, "NEW")
     assert target.read_text(encoding="utf-8") == "NEW"
     assert not list(tmp_path.glob(".tmp-*"))
+
+
+def test_build_native_keeps_curated_ids_and_every_native_model_the_bundled_map_lacks() -> None:
+    prices = {
+        "gpt-6.2-sol": {"litellm_provider": "openai", "mode": "chat", "max_input_tokens": 922000, "input_cost_per_token": 2e-06, "supports_tool_choice": True},
+        "gpt-6.1-sol": {"litellm_provider": "openai", "mode": "chat", "max_input_tokens": 922000, "input_cost_per_token": 2e-06},
+        "gpt-6-luna": {"litellm_provider": "openai", "mode": "chat", "max_input_tokens": 922000, "input_cost_per_token": 1e-07},
+        "gpt-embed": {"litellm_provider": "openai", "mode": "embedding", "max_input_tokens": 8000, "input_cost_per_token": 1e-08},
+    }
+    native, missing = refresh.build_native(prices, ["gpt-6.2-sol", "gpt-unpriced"], bundled={"gpt-6-luna"})
+    assert set(native) == {"gpt-6.2-sol", "gpt-6.1-sol"}
+    assert native["gpt-6.2-sol"]["supports_tool_choice"] is True
+    assert missing == ["gpt-unpriced"]
+
+
+def test_the_uncurated_list_groups_by_provider_and_skips_dated_snapshots() -> None:
+    prices = {
+        "gpt-6.3-sol": {"litellm_provider": "openai", "mode": "chat"},
+        "gpt-6.3-sol-2026-11-01": {"litellm_provider": "openai", "mode": "chat"},
+        "claude-fable-6": {"litellm_provider": "anthropic", "mode": "chat"},
+        "claude-fable-6-20261101": {"litellm_provider": "anthropic", "mode": "chat"},
+        "gpt-6.2-sol": {"litellm_provider": "openai", "mode": "chat"},
+    }
+    assert refresh.uncurated_chat_models(prices, ["gpt-6.2-sol"]) == {"anthropic": ["claude-fable-6"], "openai": ["gpt-6.3-sol"]}
+
+
+def test_curated_native_ids_come_from_the_openai_and_anthropic_lists() -> None:
+    curated = {"openai": [{"id": "a"}], "anthropic": [{"id": "b"}], "openrouter": [{"id": "c/d"}]}
+    assert refresh.curated_native_ids(curated) == ["a", "b"]

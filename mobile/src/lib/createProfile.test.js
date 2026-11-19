@@ -26,9 +26,9 @@ describe('createProfileWithProvider', () => {
     const model = await createProfileWithProvider(call, {
       name: 'doc', providerId: 'openai', env: 'OPENAI_API_KEY', apiKey: 'sk-x',
     });
-    expect(model).toBe('openai/gpt-6.1-sol');
+    expect(model).toBe('openai/gpt-6.2-sol');
     expect(call).toHaveBeenCalledWith('host.config.set_field', {
-      profile: 'doc', key: 'model', value: 'openai/gpt-6.1-sol',
+      profile: 'doc', key: 'model', value: 'openai/gpt-6.2-sol',
     });
   });
 

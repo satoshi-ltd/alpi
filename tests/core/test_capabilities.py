@@ -9,6 +9,8 @@ from alpi.providers.capabilities import forced_tool_choice
     "anthropic/claude-opus-5-5",
     "anthropic/claude-sonnet-5-5",
     "anthropic/claude-fable-5-1",
+    "anthropic/claude-fable-5-2",
+    "openrouter/anthropic/claude-fable-5.2",
     "anthropic/claude-mythos-5-1",
     "openrouter/anthropic/claude-opus-5.5",
     "openrouter/anthropic/claude-fable-5.1",

@@ -14,6 +14,11 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.10.8 — 2026-11-19 — newer recommended models
+
+- The model picker offers GPT-6.2 Astra and GPT-6.2 Sol for OpenAI and Claude Fable 5.2 for Anthropic, and a new profile on an OpenAI key starts on GPT-6.2 Sol.
+- Needs alpi ≥ 0.19.17: an earlier daemon that cannot download its price list does not know these models' window, price or tool support.
+
 ## v0.10.7 — 2026-11-19 — fixes after the new identity
 
 - Opening a file from a skill's page shows the file again; since 0.10.0 it replaced the whole app with an error screen.

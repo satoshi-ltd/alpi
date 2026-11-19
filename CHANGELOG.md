@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.19.17 — 2026-11-19 — newer models, and no download to start
+
+- The recommended models are now GPT-6.2 Astra and GPT-6.2 Sol for OpenAI and Claude Fable 5.2 for Anthropic; profiles that use the previous ones keep them.
+- alpi carries its own window, price, image and tool support for every recommended OpenAI and Anthropic model, and for every newer one its model library does not know yet (GPT-6.1 Sol among them), so they work even when that library is older than the model.
+- Starting alpi no longer downloads the model library's price list, so a firewalled or offline machine starts the same way every time. Set `LITELLM_LOCAL_MODEL_COST_MAP=False` to fetch the latest list at each start.
+
 ## v0.19.16 — 2026-11-19 — a denial is final
 
 - When a person presses Deny on a command, the agent is told only that it was rejected. Since 0.19.15 it was also told how to run the same thing another way.

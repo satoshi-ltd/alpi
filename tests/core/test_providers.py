@@ -217,8 +217,8 @@ def test_ollama_supports_thinking_retries_a_failed_lookup_after_the_miss_ttl(mon
 def test_the_curated_anthropic_and_openai_lists_are_the_current_models() -> None:
     from alpi.providers.curated import load_curated
 
-    assert [m["id"] for m in load_curated("anthropic")] == ["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"]
-    assert [m["id"] for m in load_curated("openai")] == ["gpt-6-astra", "gpt-6.1-sol", "gpt-6-luna"]
+    assert [m["id"] for m in load_curated("anthropic")] == ["claude-fable-5-2", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"]
+    assert [m["id"] for m in load_curated("openai")] == ["gpt-6.2-astra", "gpt-6.2-sol", "gpt-6-luna"]
     for provider in ("anthropic", "openai"):
         assert all(m.get("reasoning") is True for m in load_curated(provider)), provider
 
@@ -246,3 +246,32 @@ def test_every_curated_openrouter_model_is_in_the_openrouter_window_table() -> N
     table = yaml.safe_load((Path(__file__).resolve().parents[2] / "alpi" / "providers" / "openrouter_models.yaml").read_text())
     for entry in load_curated("openrouter"):
         assert entry["id"] in table, entry["id"]
+
+
+def test_every_curated_native_model_is_in_alpi_native_catalogue() -> None:
+    from alpi.providers.curated import load_curated
+    from alpi.providers.native import catalogue
+
+    native = catalogue()
+    for provider in ("openai", "anthropic"):
+        for entry in load_curated(provider):
+            info = native.get(entry["id"])
+            assert info, entry["id"]
+            assert info["max_input_tokens"] >= 200_000 and info["input_cost_per_token"] > 0, entry["id"]
+            assert "supports_vision" in info, entry["id"]
+
+
+def test_the_native_catalogue_fills_only_what_litellm_lacks() -> None:
+    from alpi.providers import native
+
+    class Fake:
+        model_cost = {"claude-opus-5-5": {"max_input_tokens": 1}}
+        registered: dict = {}
+
+        def register_model(self, models):
+            self.registered.update(models)
+
+    fake = Fake()
+    added = native.register(fake)
+    assert "claude-opus-5-5" not in added and "claude-opus-5-5" not in fake.registered
+    assert "claude-sonnet-5-5" in added and fake.registered["claude-sonnet-5-5"]["max_input_tokens"] >= 200_000

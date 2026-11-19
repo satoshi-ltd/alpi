@@ -137,6 +137,11 @@ def _silence_litellm() -> None:
         # it off at import time so no request to our own providers ever
         # carries a side-effect call.
         litellm.telemetry = False
+        try:
+            from alpi.providers import native
+            native.register(litellm)
+        except Exception:  # noqa: BLE001
+            pass
         # Warm the provider cache once so future calls don't emit banners.
         try:
             litellm.get_llm_provider("openrouter/dummy")
@@ -156,6 +161,11 @@ def _silence_litellm() -> None:
 
 
 _silence_litellm()
+
+
+def litellm_ready():
+    import litellm
+    return litellm
 
 
 DEBUG = bool(__import__("os").environ.get("ALPI_DEBUG"))

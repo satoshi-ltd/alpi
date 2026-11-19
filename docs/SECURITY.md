@@ -485,7 +485,7 @@ Risk profile of the runtime set:
 
 | Dep | Risk | Notes |
 |---|---|---|
-| `litellm` | **Medium** | Large surface (100+ providers). Ships with `telemetry=True` by default — alpi flips it off in `llm.py::_silence_litellm()` so no request phones home. Regression test: `tests/test_llm_privacy.py`. |
+| `litellm` | **Medium** | Large surface (100+ providers). Ships with `telemetry=True` by default — alpi flips it off in `llm.py::_silence_litellm()` so no request phones home. It also downloads its price map at import unless `LITELLM_LOCAL_MODEL_COST_MAP` is true; `alpi/__init__.py` defaults it to true and `llm.py` registers alpi's own catalogue of native models, so no network call happens at start (set it to `False` to fetch the latest map); the regression tests below also import alpi with sockets blocked and check every recommended model still has its window, price, vision and tool support. Regression test: `tests/core/test_llm_privacy.py`. |
 | `playwright` | Medium-high | Runs a full Chromium (~230 MB) that loads arbitrary web content. Chromium's own sandbox is the line of defence at that layer; alpi adds nothing on top. Used only by the `browser` tool. |
 | `playwright-stealth` | Low | Small patch set on `navigator.webdriver` and friends. Reverse-engineered detection bypass; breaks occasionally when detection vendors tighten. |
 | `pillow` | Medium | Image parsers have a long history of CVEs. Keep on the latest minor; `pip-audit` catches known issues. |
