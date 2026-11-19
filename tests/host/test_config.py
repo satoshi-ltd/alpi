@@ -788,12 +788,17 @@ async def test_email_add_edit_preserves_password(tmp_path: Path, monkeypatch) ->
     aid = add["id"]
     res = await data_config._email_add({
         "profile": "default", "address": "me@x.com", "password": "",
-        "imap_host": "imap2.x.com", "smtp_host": "smtp.x.com",
+        "imap_host": "imap.x.com", "smtp_host": "smtp.x.com",
     }, None)
     assert res["ok"] is True and res["id"] == aid
     env = accounts_mod._read_env(home)
     assert env[accounts_mod.password_env_key(aid)] == "orig"
-    assert accounts_mod.get_account(home, aid)["imap_host"] == "imap2.x.com"
+    with pytest.raises(host_server.HandlerError):
+        await data_config._email_add({
+            "profile": "default", "address": "me@x.com", "password": "",
+            "imap_host": "imap2.x.com", "smtp_host": "smtp.x.com",
+        }, None)
+    assert accounts_mod.get_account(home, aid)["imap_host"] == "imap.x.com"
 
 
 @pytest.mark.asyncio

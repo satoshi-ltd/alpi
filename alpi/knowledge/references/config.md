@@ -6,7 +6,7 @@
 - Say whether daemon/service restart is needed.
 - Secrets go in profile `.env`, not `config.yaml` or skill files.
 - Each profile has its own config and `.env`.
-- `host.config.set_field` (apps, `alpi setup`) stores each typed key with its type: `"14"` becomes the integer 14, `"90.5"` a number (never negative), `true`/`false` booleans, JSON text a list; a value that does not parse is refused with `invalid-params` and nothing is written. Keys with no fixed type (the `email` and `mcp` blocks) still store text, so a quoted number there or in a hand-edited YAML is possible.
+- `host.config.set_field` (apps, `alpi setup`) stores each typed key with its type: `"14"` becomes the integer 14, `"90.5"` a number (never negative), `true`/`false` booleans, JSON text a list; a value that does not parse is refused with `invalid-params` and nothing is written. Keys with no fixed type (the `mcp` block) still store text, so a quoted number there or in a hand-edited YAML is possible. `email` keys are refused by set_field/unset_field; accounts change only through `host.email.add`/`remove`.
 
 ## Locations
 
@@ -116,7 +116,7 @@ Profile `.env` holds provider keys and static secrets. Skills declare needs with
 
 The daemon supervises many profiles in one process and does not mutate global `os.environ`. Profile-scoped lookups go through `effective_profile_env(home)`: process env overlaid with the profile's `.env`. The `email` tool reads creds via this lookup at call time, so credential edits take effect on the next call with no restart.
 
-Email is multi-account: a profile holds N accounts (any mix of IMAP and Gmail), declared under `email.accounts` in `config.yaml` (non-secret shape only; id = slug of the address). Per-account secrets in `.env`: IMAP `EMAIL__<ID>__PASSWORD`; Gmail OAuth client `GMAIL_CLIENT_ID` / `GMAIL_CLIENT_SECRET` shared across all Gmail accounts, per-account token at `secrets/gmail_tokens/<id>.json`. Manage via `alpi setup → Email` or the apps' Email section; `alpi email probe <id>` / `alpi email remove <id>` operate by id. The `email` tool's `account` param selects by address or id.
+Email is multi-account: a profile holds N accounts (any mix of IMAP and Gmail), declared under `email.accounts` in `config.yaml` (non-secret shape only; id = slug of the address; changing an IMAP account's servers or ports needs its password again). Per-account secrets in `.env`: IMAP `EMAIL__<ID>__PASSWORD`; Gmail OAuth client `GMAIL_CLIENT_ID` / `GMAIL_CLIENT_SECRET` shared across all Gmail accounts, per-account token at `secrets/gmail_tokens/<id>.json`. Manage via `alpi setup → Email` or the apps' Email section; `alpi email probe <id>` / `alpi email remove <id>` operate by id. The `email` tool's `account` param selects by address or id.
 
 ## Memory knobs
 

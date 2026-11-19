@@ -1935,3 +1935,16 @@ async def test_a_provisioner_cannot_grant_provisioning_nor_revoke_itself(
     assert revoked == {"ok": True, "existed": True}
     assert connections.authenticate(sibling["token"]).valid is False
     assert connections.authenticate(device["token"]).valid is True
+
+
+def test_console_promotion_to_admin_says_it_grants_full_control(monkeypatch, tmp_path: Path) -> None:
+    root = _root(monkeypatch, tmp_path)
+    member, _device = connections.create_connection("Member")
+    choices = iter(["role", None])
+    prompts = []
+    monkeypatch.setattr(ui, "menu", lambda *_args, **_kwargs: next(choices))
+    monkeypatch.setattr(ui, "confirm", lambda prompt, **_kwargs: prompts.append(prompt) or False)
+    cli._device_detail(root, member["id"])
+    assert prompts and "full control of this machine" in prompts[0]
+    stored = next(row for row in connections.list_connections() if row["id"] == member["id"])
+    assert stored["role"] == "member"

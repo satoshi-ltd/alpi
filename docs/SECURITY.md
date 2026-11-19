@@ -251,7 +251,18 @@ not reach.
   dotted write never turns a value into a section (`network.host.x` is
   refused, never stored as a nested block). A remote admin can
   restart and update the daemon (`host.daemon.restart`, `host.daemon.update`),
-  which the apps offer in Settings. A remote client sets environment names
+  which the apps offer in Settings. **A remote admin has full control of the
+  daemon's user:** it adds MCP servers, which are programs the daemon starts
+  with the command and arguments it is given, and it approves the agent's
+  terminal commands, so an admin pairing is a shell on that machine. Pair only
+  your own devices as admin and give everyone else `member`; the apps say so
+  when Admin is chosen. The local-only network settings keep a remote client
+  from cutting its own access or exposing the daemon; they are not a barrier
+  against a compromised admin device, and neither is anything else on the host
+  plane. Changing an email account's servers requires its password again, and
+  `email.*` keys are refused by `host.config.set_field`/`unset_field`, so an
+  edit that leaves the password blank never sends it to a new server; this
+  guards against mistakes, not against an admin, who can read `.env` anyway. A remote client sets environment names
   only for the built-in providers' API keys, `GMAIL_CLIENT_ID`,
   `GMAIL_CLIENT_SECRET` and `EMAIL__<ID>__<FIELD>`; `ALPI_*`, `PYTHON*`, `LD_*`
   and `DYLD_*` are refused to every caller, and no `.env` value may hold a

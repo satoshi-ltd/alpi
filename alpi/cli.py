@@ -2723,7 +2723,7 @@ def _device_add(h: Path, endpoints: list[dict[str, str]]) -> None:
         return ui.cancelled()
 
     grant_admin = ui.confirm(
-        "Grant admin access? — can manage profiles and connections",
+        "Grant admin access? — full control of this machine: can add MCP servers and approve commands",
         default=False,
     )
     role = "admin" if grant_admin else "member"
@@ -3071,7 +3071,8 @@ def _device_detail(h: Path, connection_id: str) -> None:
                 )
         elif choice == "role":
             role = "member" if public["role"] == "admin" else "admin"
-            if ui.confirm(f"Change {public['label']} to {role}?", default=False):
+            warning = " — full control of this machine: can add MCP servers and approve commands" if role == "admin" else ""
+            if ui.confirm(f"Change {public['label']} to {role}?{warning}", default=False):
                 connections_mod.update_connection(connection_id, role=role)
         elif choice == "status":
             status = "active" if public["status"] == "disabled" else "disabled"

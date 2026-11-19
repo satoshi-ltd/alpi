@@ -106,6 +106,13 @@ def client_for(home: Path, account_id: str):
     return ImapClient.from_account(account, password)
 
 
+def _port(value, default: int) -> int:  # noqa: ANN001
+    try:
+        return int(value) if value not in (None, "") else default
+    except (TypeError, ValueError):
+        return default
+
+
 def add_imap(
     home: Path,
     *,
@@ -124,6 +131,11 @@ def add_imap(
     cfg = cfg_mod.load(home)
     accounts = dict((cfg.email or {}).get("accounts") or {})
     _reject_collision(accounts, account_id, address, "imap")
+    previous = accounts.get(account_id) or {}
+    servers = (imap_host, int(imap_port), smtp_host, int(smtp_port))
+    stored = (previous.get("imap_host"), _port(previous.get("imap_port"), 993), previous.get("smtp_host"), _port(previous.get("smtp_port"), 587))
+    if previous and not password and servers != stored:
+        raise ValueError("enter the password again to change this account's mail servers")
     accounts[account_id] = {
         "type": "imap",
         "address": address,

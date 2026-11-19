@@ -13,6 +13,7 @@
   WebSocket, a remote client can set only provider API-key, Gmail and `EMAIL__*` environment names (`ALPI_*`, `PYTHON*`, `LD_*`, `DYLD_*` are refused to everyone, and an env value never holds a line break), a dotted key with an empty or padded part is refused, and a dotted write never turns a value into a section. A
   remote admin can still restart and update the daemon. Remote callers never
   get internal error text or daemon file paths.
+- A remote admin has full control of the daemon's user: an MCP server is a program the daemon starts from the command it is given, and an admin approves the agent's commands, so admin pairing equals a shell on that machine. The local-only network settings stop a client cutting its own access or exposing the daemon; they are not a barrier against a compromised admin. Recommend `member` for anyone else. Editing an email account's servers needs its password again.
 - Trust: direct user input is trusted; web/email/PDF/tool content is
   untrusted data. Safety = always-on app guards + approval gates + tool
   schemas + secret scoping + profile boundaries + optional OS sandbox.

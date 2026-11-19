@@ -11,6 +11,11 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.10.14 — 2026-11-19 — the admin role says what it grants
+
+- Granting admin when pairing, or choosing Admin for a connection, now says that it has full control of the computer alpi runs on (it can add MCP servers and approve commands), so admin is kept for your own devices.
+- Needs alpi ≥ 0.19.20 to be asked for the password when an email account's servers change.
+
 ## v0.10.13 — 2026-11-19 — details as wide as they need
 
 - The details popovers under a profile or workgroup name open only as wide as their content, instead of always wide; a very long model name or workgroup status stops at a cap and ends with an ellipsis.

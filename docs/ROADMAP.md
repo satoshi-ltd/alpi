@@ -121,20 +121,6 @@ _None._
   accept: decide between no setting and that setting. If it is wanted, create the agent task with its name, its
   default, who may set it and the log line each use writes.
 
-- **SEC.D-REMOTE-ADMIN** — What may a remote admin device do to the daemon's own host? (S4)
-  `decision · alpi · creator · high`
-  note: `host.mcp.add` stores a `command` and `args` ([host/config.py](../alpi/host/config.py) `:492-516`) and
-  `host.mcp.tools` spawns them (`:537-578`), so a paired remote admin runs any command as the daemon's user in two
-  requests; it can also ask the agent to run one and approve it itself. The local-only tier (network bind,
-  `host.chat.delegate`) therefore protects settings that a remote admin can change by other means, and
-  [SECURITY.md](SECURITY.md) presents it as a boundary.
-  accept: one of two written answers. (a) A remote admin is not a shell: `host.mcp.add` and `host.mcp.tools`
-  become local-only, or a remote caller may add only commands from a list set on the local socket; this becomes an
-  agent task with a test that a remote admin token is refused and the Unix socket still works. (b) A remote admin
-  equals a shell as the daemon's user: SECURITY.md says so and stops describing the local-only settings as
-  protection against a compromised admin device. SEC.LOCAL-ONLY-CHILDREN and SEC.ENV-KEYS are worth doing under
-  either answer, because they make the code match what SECURITY.md states today.
-
 - **OPS-CONN-POLICY** — Connection policy for the fleet
   `decision · alpi · creator · normal`
   accept: a written connection policy (one connection per person with an exact

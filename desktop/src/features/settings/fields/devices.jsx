@@ -641,7 +641,7 @@ export function PairDeviceModal({ open, connectionId, onClose, onPaired }) {
             </Tip>
           </span>
           <span className={styles.adminBannerCaption}>
-            Can manage profiles, devices. Sees all profiles.
+            Full control of the computer alpi runs on: can add MCP servers and approve commands. Only your own devices.
           </span>
         </span>
       </label>

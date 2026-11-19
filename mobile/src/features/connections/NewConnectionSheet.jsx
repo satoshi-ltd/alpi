@@ -16,7 +16,7 @@ import { EMPTY } from '../../../../common/emptyCopy.mjs';
 
 const ROLES = [
   ['member', 'Member', 'chat + settings of scoped profiles'],
-  ['admin', 'Admin', 'manages profiles and connections'],
+  ['admin', 'Admin', 'full control: can run commands where alpi runs'],
 ];
 
 export function ProfilePicker({ profiles, selected, onToggle }) {

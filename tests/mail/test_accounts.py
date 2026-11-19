@@ -168,15 +168,19 @@ def test_add_imap_empty_password_preserves_existing(tmp_path: Path) -> None:
         tmp_path, address="me@x.com", password="orig-pw",
         imap_host="imap.x.com", smtp_host="smtp.x.com",
     )
-    # Edit the same account with empty password + changed host — password preserved.
     accounts_mod.add_imap(
         tmp_path, address="me@x.com", password="",
-        imap_host="imap2.x.com", smtp_host="smtp.x.com",
+        imap_host="imap.x.com", smtp_host="smtp.x.com",
     )
     env = accounts_mod._read_env(tmp_path)
     assert env[accounts_mod.password_env_key("me_x_com")] == "orig-pw"
+    with pytest.raises(ValueError, match="password again"):
+        accounts_mod.add_imap(
+            tmp_path, address="me@x.com", password="",
+            imap_host="imap2.x.com", smtp_host="smtp.x.com",
+        )
     acct = accounts_mod.get_account(tmp_path, "me_x_com")
-    assert acct["imap_host"] == "imap2.x.com"
+    assert acct["imap_host"] == "imap.x.com"
     assert accounts_mod.list_accounts(tmp_path)[0]["configured"] is True
 
 
@@ -195,3 +199,20 @@ def test_two_accounts_isolated(tmp_path: Path) -> None:
     home = accounts_mod.client_for(tmp_path, "home_y_com")
     assert work.password == "w"
     assert home.password == "h"
+
+
+def test_a_hand_written_account_without_or_with_text_ports_edits_without_its_password(tmp_path: Path) -> None:
+    import yaml
+
+    from alpi import config as cfg_mod
+
+    accounts_mod.add_imap(tmp_path, address="me@x.com", password="pw", imap_host="imap.x.com", smtp_host="smtp.x.com")
+    path = tmp_path / "config.yaml"
+    data = yaml.safe_load(path.read_text())
+    data["email"]["accounts"]["me_x_com"].pop("imap_port")
+    data["email"]["accounts"]["me_x_com"]["smtp_port"] = "587"
+    path.write_text(yaml.safe_dump(data))
+    accounts_mod.add_imap(tmp_path, address="me@x.com", password="", imap_host="imap.x.com", smtp_host="smtp.x.com")
+    assert accounts_mod._read_env(tmp_path)[accounts_mod.password_env_key("me_x_com")] == "pw"
+    with pytest.raises(ValueError, match="password again"):
+        accounts_mod.add_imap(tmp_path, address="me@x.com", password="", imap_host="imap.x.com", smtp_host="smtp.x.com", smtp_port=465)

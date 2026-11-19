@@ -64,6 +64,7 @@
 .deviceRow small { color: var(--ink-3); }
 .manageField { display: flex; flex-direction: column; gap: var(--sp-8); }
 .fieldLabel { color: var(--ink-2); font-family: var(--font-sans); font-size: var(--text-ui); }
+.roleNote { color: var(--ink-3); font-family: var(--font-sans); font-size: var(--text-meta); }
 .profiles { max-height: 130px; overflow: auto; background: var(--card); border-radius: var(--r-surface); padding: var(--sp-8); }
 .profiles label { display: flex; align-items: center; gap: var(--sp-8); min-height: var(--ctl-32); }
 .profiles input { position: absolute; opacity: 0; pointer-events: none; }

@@ -1099,7 +1099,7 @@ def phone_connection_detail():
 {m_section("Overview", first=True)}
 {m_group(
     m_row("Label", "", "emulator-android"),
-    m_row("Role", "manages profiles and connections", control=pill("admin", tone="warning"), chevron=False),
+    m_row("Role", "full control: can run commands where alpi runs", control=pill("admin", tone="warning"), chevron=False),
     m_row("Profiles", "blank = all", access_line([], "card", 15, "flex-end")),
     m_row("Session scope", "one thread per connection, or one per device", "connection"),
     m_row("Enabled", "this phone goes offline with it · an admin elsewhere must re-enable it", control=switch(True, ALPI_ACCENT, "Enabled"), chevron=False),
@@ -1128,7 +1128,7 @@ def phone_connection_detail():
 def fold_connection_detail():
     inner = fold_column(f"""{m_wide_section("Overview", first=True)}
 {m_wide_row("Label", "", "emulator-android")}
-{m_wide_row("Role", "manages profiles and connections", control=pill("admin", tone="warning"), chevron=False)}
+{m_wide_row("Role", "full control: can run commands where alpi runs", control=pill("admin", tone="warning"), chevron=False)}
 {m_wide_row("Profiles", "blank = all", access_line([], "card", 15, "flex-end"))}
 {m_wide_row("Session scope", "one thread per connection, or one per device", "connection")}
 {m_wide_row("Enabled", "this phone goes offline with it · an admin elsewhere must re-enable it", control=switch(True, ALPI_ACCENT, "Enabled"), chevron=False)}

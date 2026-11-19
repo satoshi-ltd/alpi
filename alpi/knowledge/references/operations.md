@@ -46,6 +46,8 @@ the console never repeats it locally.
 alpi daemon start|status|restart|stop
 ```
 
+A lost or disclosed admin device: after revoking it, treat the daemon's host user as exposed — review each profile's MCP servers, schedules and skills, and rotate the keys, email passwords and Gmail tokens in `.env`.
+
 A daemon that is running but answers nothing: send it `SIGUSR1` (`kill -USR1 "$(cat ~/.alpi/service.pid)"`, or `docker kill -s USR1 <container>`, which PID 1 forwards) and read every thread's stack in `~/.alpi/logs/stacks.log` before restarting it. `alpi workgroup launch|remove` check first that the daemon answers within 5 s and exit naming it unresponsive.
 
 One daemon supervises every profile on the machine. `restart` after `uv tool install --reinstall` (or when `doctor` flags a stale binary) to drop old in-memory code.

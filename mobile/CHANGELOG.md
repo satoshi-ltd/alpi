@@ -14,6 +14,11 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.10.10 — 2026-11-19 — the admin role says what it grants
+
+- The Admin role now reads "full control: can run commands where alpi runs" when you create or open a connection, and promoting one says the same, so admin is kept for your own devices.
+- Needs alpi ≥ 0.19.20 to be asked for the password when an email account's servers change.
+
 ## v0.10.9 — 2026-11-19 — clearer details and a quieter working line
 
 - A sentence alpi writes before using a tool, such as "Sweeping Bitbucket now", shows as the current step of the work line instead of looking like the answer; once the tool starts it stays among the steps, and only the last message is the reply.

@@ -93,8 +93,8 @@ vi.mock('../src/components/Sheet', () => ({
 vi.mock('../src/components/ConfirmDialog', () => ({
   Bold: ({ children }) => React.createElement('b', {}, children),
   Code: ({ children }) => React.createElement('code', {}, children),
-  ConfirmDialog: ({ open, title, onConfirm }) =>
-    open ? React.createElement('button', { type: 'button', 'data-confirm': title, onClick: onConfirm }, 'confirm') : null,
+  ConfirmDialog: ({ open, title, body, onConfirm }) =>
+    open ? React.createElement('div', {}, React.createElement('p', { 'data-confirm-body': '' }, body), React.createElement('button', { type: 'button', 'data-confirm': title, onClick: onConfirm }, 'confirm')) : null,
 }));
 vi.mock('../src/hooks/useBack', () => ({ useBack: () => vi.fn() }));
 vi.mock('../src/hooks/useDaemonData', () => ({
@@ -203,6 +203,12 @@ describe('connections list', () => {
     expect(dotIn('Admin')).toBe(true);
     expect(dotIn('Member')).toBe(false);
   });
+
+  it('says the admin role is full control of the machine', () => {
+    render(<ConnectionsRoute />);
+    fireEvent.click(screen.getByText('New'));
+    expect(screen.getByText('full control: can run commands where alpi runs')).toBeTruthy();
+  });
 });
 
 describe('connection detail', () => {
@@ -228,6 +234,12 @@ describe('connection detail', () => {
     const button = screen.getByLabelText('Revoke Pixel');
     expect(button.getAttribute('data-w')).toBe('44');
     expect(button.getAttribute('data-hit')).toBe('0');
+  });
+
+  it('warns that promoting gives the connection full control of the machine', () => {
+    render(<ConnectionRoute />);
+    fireEvent.click(screen.getByText('Role'));
+    expect(document.querySelector('[data-confirm-body]').textContent).toMatch(/full control of the computer alpi runs on/);
   });
 
   it('revokes a device after the typed confirmation', async () => {

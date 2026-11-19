@@ -314,6 +314,11 @@ Use the smallest response that matches the incident:
 - **Suspected device-token disclosure:** revoke only the affected device. The
   daemon closes its active WebSockets; other devices on the connection remain
   valid.
+- **Lost, stolen or disclosed admin device:** an admin device has full control
+  of the daemon's user, so after revoking it treat that host user as exposed:
+  review every profile's MCP servers, scheduled jobs and skills for anything
+  you did not add, and rotate the provider keys, email passwords and Gmail
+  tokens in its `.env` files.
 - **Exposed `connections.yaml`, Alpi home, server snapshot, or backup:** remove
   public reachability to the affected runtime, rebuild on a trusted host,
   revoke every restored device credential before reopening WSS, and re-pair

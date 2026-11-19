@@ -13,8 +13,9 @@ any case, a list key takes a list or its JSON text (a list of names takes only
 text items; `providers.openrouter.ignore` also takes one bare slug), and a text
 key keeps the text as given (`"true"` stays the string). A value that does not
 parse as that type is refused with `-32602 invalid-params` naming the key, and
-nothing is written. A key that has no fixed type (for example the `email` and
-`mcp` blocks) keeps the text, with `true`/`false` stored as booleans.
+nothing is written. A key that has no fixed type (for example the `mcp`
+block) keeps the text, with `true`/`false` stored as booleans. `email` keys
+are refused there: accounts change only through `host.email.add` / `remove`.
 
 ## What ships in the YAML
 
@@ -601,7 +602,8 @@ just another entry. The `email` tool's `account` parameter selects
 which one by address or id.
 
 Accounts are declared in `config.yaml` under `email.accounts`, which
-carries no secrets — only the non-sensitive shape of each account:
+carries no secrets — only the non-sensitive shape of each account. Editing an
+IMAP account's servers or ports asks for its password again:
 
 ```yaml
 email:

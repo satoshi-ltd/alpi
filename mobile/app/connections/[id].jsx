@@ -152,7 +152,7 @@ function ConnectionDetail() {
               <RowSeparator />
               <Row
                 label="Role"
-                helper={row.role === 'admin' ? 'manages profiles and connections' : 'chat + settings of scoped profiles'}
+                helper={row.role === 'admin' ? 'full control: can run commands where alpi runs' : 'chat + settings of scoped profiles'}
                 value={<Pill tone={row.role === 'admin' ? 'warn' : undefined}>{row.role}</Pill>}
                 onPress={() => setConfirm('role')}
                 chevron={false}
@@ -307,7 +307,7 @@ function ConnectionDetail() {
               {isSelf ? <Bold>This phone is one of them and loses this screen.</Bold> : null}
             </>
           ) : (
-            <>Its devices can manage every profile, connection and the daemon.</>
+            <>Its devices get full control of the computer alpi runs on: they can run commands through MCP servers and approve the agent's commands. Promote only your own devices.</>
           )
         }
         tone="neutral"

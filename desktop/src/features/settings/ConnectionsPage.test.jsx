@@ -124,6 +124,16 @@ describe("ConnectionsPage", () => {
     }));
   });
 
+  it("says what the admin role grants when it is chosen, and nothing for a member", async () => {
+    render(<ConnectionsPage profiles={[{ name: "atlas" }]} activeConnection={{ id: "local" }} />);
+    await screen.findByText("Javi");
+    fireEvent.click(screen.getByRole("button", { name: "Edit connection" }));
+    expect(document.querySelector("[data-role-note]")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Role" }));
+    fireEvent.click(await screen.findByText("Admin"));
+    expect(document.querySelector("[data-role-note]").textContent).toMatch(/full control of the computer alpi runs on/);
+  });
+
   it("leads a member connection with the profiles it reaches, then its role and devices", async () => {
     render(<ConnectionsPage profiles={[{ name: "atlas", accent: "#3899e2", shape: "bell" }]} activeConnection={{ id: "local" }} />);
     await screen.findByText("Javi");
@@ -291,6 +301,7 @@ describe("ConnectionsPage", () => {
 
     expect(screen.getByText("Pair a new device")).toBeInTheDocument();
     expect(screen.getByText("Grant admin access")).toBeInTheDocument();
+    expect(screen.getByText(/Full control of the computer alpi runs on/)).toBeInTheDocument();
     expect(screen.getByText("Generate pairing code")).toBeInTheDocument();
     expect(screen.queryByText("Create connection")).toBeNull();
   });

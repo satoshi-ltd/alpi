@@ -748,6 +748,11 @@ function EditConnectionModal({ row, profiles, connectionArg, onClose, onSaved })
             portal
             options={[{ value: "member", label: "Member" }, { value: "admin", label: "Admin" }]}
           />
+          {role === "admin" && (
+            <span className={styles.roleNote} data-role-note="" role="status">
+              Admin has full control of the computer alpi runs on: it can add MCP servers and approve commands. Pair only your own devices as admin.
+            </span>
+          )}
         </div>
         <div className={styles.manageField}>
           <span className={styles.fieldLabel}>Sessions</span>

@@ -731,6 +731,11 @@ def _config_key(params: dict[str, Any]) -> str:
 
 
 def _reject_removed_config_key(key: str) -> None:
+    if key.split(".", 1)[0].strip() == "email":
+        raise host_server.HandlerError(
+            -32602, "invalid-params",
+            data={"detail": "email accounts are changed through host.email.add and host.email.remove"},
+        )
     if key == "tui.fold":
         raise host_server.HandlerError(
             -32602, "invalid-params", data={"detail": "tui.fold is not a config key; set tui.shape"},

@@ -147,3 +147,43 @@ def test_the_env_writer_itself_refuses_line_breaks_and_nul(tmp_path: Path, key: 
     with pytest.raises(ValueError):
         _append_env(path, key, value)
     assert not path.exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", [{"imap_host": "imap.evil.example"}, {"smtp_host": "smtp.evil.example"}, {"imap_port": 1993}, {"smtp_port": 2525}])
+async def test_changing_an_email_accounts_servers_needs_its_password_again(srv, change) -> None:
+    base = {"address": "a@b.co", "imap_host": "imap.b.co", "smtp_host": "smtp.b.co"}
+    resp = await _call(srv, "host.email.add", password="secret", **base)
+    assert resp["result"]["ok"] is True
+    with use(REMOTE_ADMIN):
+        resp = await _call(srv, "host.email.add", password="", **{**base, **change})
+    assert resp["error"]["message"] == "invalid-params"
+    assert "password again" in resp["error"]["data"]["detail"]
+    assert "imap.b.co" in (srv.home_path / "config.yaml").read_text()
+
+
+@pytest.mark.asyncio
+async def test_an_email_edit_that_keeps_the_servers_keeps_the_stored_password(srv) -> None:
+    base = {"address": "a@b.co", "imap_host": "imap.b.co", "smtp_host": "smtp.b.co"}
+    await _call(srv, "host.email.add", password="secret", **base)
+    resp = await _call(srv, "host.email.add", password="", **base)
+    assert resp["result"]["ok"] is True
+    assert "secret" in _env(srv)
+    resp = await _call(srv, "host.email.add", password="new-secret", **{**base, "imap_host": "imap2.b.co"})
+    assert resp["result"]["ok"] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("key", ["email.accounts.a_b_co.imap_host", "email", "email.accounts"])
+@pytest.mark.parametrize("method", ["host.config.set_field", "host.config.unset_field"])
+async def test_email_accounts_are_not_written_through_the_generic_config_verbs(srv, key, method) -> None:
+    base = {"address": "a@b.co", "imap_host": "imap.b.co", "smtp_host": "smtp.b.co"}
+    await _call(srv, "host.email.add", password="secret", **base)
+    host_config_mod = __import__("alpi.host.device_state", fromlist=["register"])
+    host_config_mod.register(srv)
+    extra = {"value": "imap.evil.example"} if method.endswith("set_field") else {}
+    with use(REMOTE_ADMIN):
+        resp = await _call(srv, method, key=key, **extra)
+    assert resp["error"]["message"] == "invalid-params"
+    assert "host.email.add" in resp["error"]["data"]["detail"]
+    assert "imap.evil.example" not in (srv.home_path / "config.yaml").read_text()

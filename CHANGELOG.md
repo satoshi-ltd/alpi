@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.19.20 — 2026-11-19 — what an admin device can do, said plainly
+
+- Changing an email account's mail servers now asks for its password again, and email accounts can no longer be rewritten through the generic settings call, so a stored password is not sent to a different server by an edit that leaves it blank.
+- The security notes now say plainly that a device paired as admin has full control of the machine the daemon runs on: it can add MCP servers, which are programs the daemon starts, and approve the agent's commands. Pair only your own devices as admin and everyone else as member; the console says so when you grant or promote to admin.
+
 ## v0.19.19 — 2026-11-19 — a stuck daemon says so, and recipes stay small
 
 - A workgroup recipe is read as plain YAML: aliases, more than 64 KB, more than 32 levels of nesting and text fields that are not text are refused with the reason, before anything is built. A few hundred bytes of nested aliases could make the daemon build hundreds of megabytes, and any paired device could send one. Recipes, saved ones included, are read apart from the daemon's other work, so a large one no longer slows the apps.
