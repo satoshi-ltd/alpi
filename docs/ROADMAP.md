@@ -1,6 +1,6 @@
 # alpi roadmap
 
-Updated 2026-11-18. Current versions live in the changelogs. The Queue runs top to bottom; the creator
+Updated 2026-11-19. Current versions live in the changelogs. The Queue runs top to bottom; the creator
 approves the next tasks from Proposed.
 
 This is the task pool. [ARCHITECTURE.md](ARCHITECTURE.md) owns current state and
@@ -80,16 +80,93 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **DESK.HINT-FLAKE** — The first-run hint test does not depend on an earlier test's timer
-  `bug · desktop · agent · normal`
-  note: `clients` failed on `d7e86990` (passed on the next commit) in
-  `desktop/src/App.landing.test.jsx` "keeps the hint line and writes nothing when the daemon refuses the first
-  message": `localStorage` held `seen`. Likely cause: `watchAcceptance` ([chat-acceptance.js](../desktop/src/lib/chat-acceptance.js))
-  settles `{accepted: true}` after an 8 s timer when no frame arrives, and `onSend` in
-  [App.jsx](../desktop/src/App.jsx) (near `:1197`) then calls `dismissFirstRunHint()` even if that App was already
-  unmounted, so an earlier test's send can write the flag during a later test.
-  accept: a send whose App unmounts before the verdict marks nothing (a test with fake timers proves it), and the
-  landing suite passes twenty consecutive runs under load.
+- **DAEMON.EXECUTORS** — A full thread pool cannot stop heartbeats, authentication or cancel (D2)
+  `bug · alpi · agent · high`
+  note: nothing calls `set_default_executor`, so the default pool (`min(32, cpu + 4)`: six threads on two vCPUs)
+  carries whole engine turns ([chat.py](../alpi/host/chat.py) `:403`,
+  [alp/handlers.py](../alpi/alp/handlers.py) `:84,197`), run-now jobs for their full length
+  ([host/schedule.py](../alpi/host/schedule.py) `:149`), gate commands (`service.py:1580`), email probes whose
+  worker stays stuck after the 20 s timeout ([probes.py](../alpi/host/probes.py) `:41`), the sidecar append of
+  every chat frame (`chat.py:353`), the token check of every WebSocket message
+  ([server.py](../alpi/host/server.py) `:819`), the revocation watcher (`:995`) and most RPC reads. When it is full
+  no chat frame is written or sent, the 5 s heartbeat included, so clients reach their 75 s timeout; every WebSocket
+  RPC waits at authentication, `host.chat.cancel` included. Measured with every worker blocked: one sidecar append
+  waited until a worker freed. Fix shape: (1) a named executor for engine turns, `link.ask`, run-now and gate
+  commands, at least as large as the default pool is today so concurrency does not drop; (2) `_check_token_meta`
+  called inline (it costs 10 µs), with only the once-a-minute `_touch` left off the loop; (3) sidecar frames
+  written inline or by one writer thread that keeps their order; (4) email probes on a small pool of their own.
+  accept: a test blocks every worker of the turn executor with fake turns and still gets `host.version` over a
+  WebSocket and a chat heartbeat; a hung email probe leaves the default pool at its size; frame order in the
+  sidecar is unchanged.
+
+- **HARN.PRUNE-WATERMARK** — Old tool output is trimmed long before the context window fills (H2)
+  `feature · alpi · agent · high`
+  note: the cheap prune pass, which calls no model, runs only past `DEFAULT_TRIGGER_RATIO = 0.75` of the window
+  ([compaction.py](../alpi/compaction.py) `:24`, `:46-48`, `:169-178`; [engine.py](../alpi/engine.py) `:901`,
+  `:2036-2055`). On a 1M-token window that is 750,000 tokens, so it never runs and every step re-sends every earlier
+  tool output: a long turn sends millions of input tokens. A simulation calibrated to the fleet's long turns
+  (40 steps of about 5,000 tokens) drops from 4.4M to 2.9M input tokens with a 120,000-token threshold; a 12-step
+  turn is unchanged. Each prune breaks the provider cache from the first pruned message for one step, so it runs in
+  batches. Sibling of HARN.COMPACT-BATCH, which is about overflow; this is about cost.
+  accept: the prune pass (not the summary) also runs when the estimated prompt passes
+  `compaction.prune_after_tokens` (new key, default 120,000, 0 turns it off; CONFIG.md says the compaction ratios
+  become settings when traces ask for it, and this is the first, so that paragraph is rewritten), and only
+  when at least 20,000 tokens are prunable; the kept tail is intact and each pass writes a `prune` line to
+  `compaction.jsonl`; a fake-model test of 60 calls with 20,000-character results on a 1M window prunes mid-turn
+  without a summary call and with no more passes than its batches allow; a 12-step turn of 5,000-token results
+  never prunes.
+
+- **SEC.SCRIPT-JOB-PATH** — A script job's PATH carries no folder the agent can write
+  `bug · alpi · agent · low`
+  note: 0.19.13 resolves and checks the interpreter of `python3 <script>`, but a job that names the script alone runs
+  it through its shebang, and `#!/usr/bin/env python3` still resolves on the profile's `PATH`; so does everything the
+  script spawns. A remote device cannot set `PATH` since 0.19.12; a value planted earlier or by hand still applies.
+  accept: the environment of a script job drops every `PATH` entry that is empty, relative or under the profile home,
+  a temp folder or the workspace; a test plants a `python3` stub in such a folder, runs a shebang script job and
+  finds the stub not run.
+
+- **HOST.SET-FIELD-SCALAR-TIER** — Setting a tier's model repairs a hand-edited scalar tier
+  `bug · alpi · agent · low`
+  note: since 0.19.11 `_set_dotted` ([device_state.py](../alpi/host/device_state.py)) answers `invalid-params` when a
+  path descends through a non-object. The one scalar parent the loader tolerates is a hand-edited
+  `tiers.fast: "<model>"`; setting Fast or Deep from an app used to rewrite it as a section and now fails with
+  "Save failed".
+  accept: `set_field tiers.<fast|deep>.<model|effort>` on a config whose tier is a scalar rewrites the tier as a
+  section that keeps the scalar as its model; every other non-object parent still answers `invalid-params`; tests
+  cover both.
+
+- **SCHED.INTERPRETER-MESSAGE** — A refused script-job interpreter says what to write instead
+  `bug · alpi · agent · low`
+  note: since 0.19.13 a script job is refused when its Python resolves under the profile home, a temp folder or the
+  workspace ([scheduler/run.py](../alpi/scheduler/run.py) `_interpreter_problem`). A profile whose workspace is the
+  user's home directory, with Python from pyenv, conda or uv under it, loses every script job, and the message names
+  the folder but not the fix. Flags `-S -q -P -v -bb -d` were accepted before 0.19.10 and are refused now; no known
+  job uses them.
+  accept: the refusal names the resolved interpreter and says to give an absolute interpreter outside those folders
+  (for example `/usr/bin/python3`); `docs/` and the scheduling reference state the rule; a test asserts the message.
+
+- **DESK.TCP-PORT-REMOTE** — The ALP port field is hidden on a remote connection
+  `bug · desktop · agent · low`
+  note: older than this review. `TcpPortField` writes `alp.tcp_port`, which a remote connection has been refused since
+  alpi 0.10.12, and its availability check probes the desktop's own machine; the field shows on every connection
+  ([ProfileDetail.jsx](../desktop/src/features/settings/ProfileDetail.jsx) near `:463`).
+  accept: the field renders only on the local connection, like `host.tcp_port`; a test covers both connection kinds.
+
+- **DESK.SETTINGS-MENU-TOGGLE** — The Settings menu item opens Settings when the window was hidden on it
+  `bug · desktop · agent · low`
+  note: since desktop 0.10.5 the menu item shows the window and emits `settings-toggle`
+  ([lib.rs](../desktop/src-tauri/src/lib.rs) near `:4037`), and `onOpenSettings` toggles on the current view
+  (`App.jsx` near `:390`). With the window hidden while on Settings, choosing Settings… or ⌘, brings it back on chat.
+  accept: the menu item and its shortcut close Settings only when the window was already visible and focused on it;
+  a test covers hidden-on-settings, visible-on-settings and visible-on-chat.
+
+- **TEST.TOCTOU-LOAD** — The device revoke race test passes on a loaded machine
+  `chore · alpi · agent · low`
+  note: `tests/host/test_connections.py::test_legacy_revoke_add_device_toctou` failed once in a full run while other
+  suites ran beside it (`p_rev.exitcode` was `None`: the child had not finished within the join timeout) and passed
+  five times alone.
+  accept: the test waits on the children's completion rather than a fixed join budget and passes twenty consecutive
+  runs under `pytest -n` load.
 
 ## In progress
 
@@ -179,63 +256,6 @@ _None._
   whether a provider pause opened and closed with one notification each way. Anything off becomes a `bug`.
 
 ## Proposed
-
-### Regression review 2026-11-18
-
-Found by reviewing everything shipped from alpi 0.19.0, desktop 0.10.0 and mobile 0.10.0 to commit `8ac3c373` for
-behaviour that broke. Each entry was confirmed by a probe, a throwaway test or an exact code trace.
-
-- **DESK.SETTINGS-MENU-TOGGLE** — The Settings menu item opens Settings when the window was hidden on it
-  `bug · desktop · agent · low`
-  note: since desktop 0.10.5 the menu item shows the window and emits `settings-toggle`
-  ([lib.rs](../desktop/src-tauri/src/lib.rs) near `:4037`), and `onOpenSettings` toggles on the current view
-  (`App.jsx` near `:390`). With the window hidden while on Settings, choosing Settings… or ⌘, brings it back on chat.
-  accept: the menu item and its shortcut close Settings only when the window was already visible and focused on it;
-  a test covers hidden-on-settings, visible-on-settings and visible-on-chat.
-
-- **SCHED.INTERPRETER-MESSAGE** — A refused script-job interpreter says what to write instead
-  `bug · alpi · agent · low`
-  note: since 0.19.13 a script job is refused when its Python resolves under the profile home, a temp folder or the
-  workspace ([scheduler/run.py](../alpi/scheduler/run.py) `_interpreter_problem`). A profile whose workspace is the
-  user's home directory, with Python from pyenv, conda or uv under it, loses every script job, and the message names
-  the folder but not the fix. Flags `-S -q -P -v -bb -d` were accepted before 0.19.10 and are refused now; no known
-  job uses them.
-  accept: the refusal names the resolved interpreter and says to give an absolute interpreter outside those folders
-  (for example `/usr/bin/python3`); `docs/` and the scheduling reference state the rule; a test asserts the message.
-
-- **SEC.SCRIPT-JOB-PATH** — A script job's PATH carries no folder the agent can write
-  `bug · alpi · agent · low`
-  note: 0.19.13 resolves and checks the interpreter of `python3 <script>`, but a job that names the script alone runs
-  it through its shebang, and `#!/usr/bin/env python3` still resolves on the profile's `PATH`; so does everything the
-  script spawns. A remote device cannot set `PATH` since 0.19.12; a value planted earlier or by hand still applies.
-  accept: the environment of a script job drops every `PATH` entry that is empty, relative or under the profile home,
-  a temp folder or the workspace; a test plants a `python3` stub in such a folder, runs a shebang script job and
-  finds the stub not run.
-
-- **HOST.SET-FIELD-SCALAR-TIER** — Setting a tier's model repairs a hand-edited scalar tier
-  `bug · alpi · agent · low`
-  note: since 0.19.11 `_set_dotted` ([device_state.py](../alpi/host/device_state.py)) answers `invalid-params` when a
-  path descends through a non-object. The one scalar parent the loader tolerates is a hand-edited
-  `tiers.fast: "<model>"`; setting Fast or Deep from an app used to rewrite it as a section and now fails with
-  "Save failed".
-  accept: `set_field tiers.<fast|deep>.<model|effort>` on a config whose tier is a scalar rewrites the tier as a
-  section that keeps the scalar as its model; every other non-object parent still answers `invalid-params`; tests
-  cover both.
-
-- **TEST.TOCTOU-LOAD** — The device revoke race test passes on a loaded machine
-  `chore · alpi · agent · low`
-  note: `tests/host/test_connections.py::test_legacy_revoke_add_device_toctou` failed once in a full run while other
-  suites ran beside it (`p_rev.exitcode` was `None`: the child had not finished within the join timeout) and passed
-  five times alone.
-  accept: the test waits on the children's completion rather than a fixed join budget and passes twenty consecutive
-  runs under `pytest -n` load.
-
-- **DESK.TCP-PORT-REMOTE** — The ALP port field is hidden on a remote connection
-  `bug · desktop · agent · low`
-  note: older than this review. `TcpPortField` writes `alp.tcp_port`, which a remote connection has been refused since
-  alpi 0.10.12, and its availability check probes the desktop's own machine; the field shows on every connection
-  ([ProfileDetail.jsx](../desktop/src/features/settings/ProfileDetail.jsx) near `:463`).
-  accept: the field renders only on the local connection, like `host.tcp_port`; a test covers both connection kinds.
 
 ### Project analysis 2026-11-18
 
@@ -473,25 +493,6 @@ Each entry is written to be worked without that report:
   accept: a test records the thread that runs `mutate` for a pull that brings posts, for a cursor advance and for
   a dispatch stamp, and each is an `alpi-sub-io` thread; the workgroup poller tests stay green.
 
-- **DAEMON.EXECUTORS** — A full thread pool cannot stop heartbeats, authentication or cancel (D2)
-  `bug · alpi · agent · high`
-  note: nothing calls `set_default_executor`, so the default pool (`min(32, cpu + 4)`: six threads on two vCPUs)
-  carries whole engine turns ([chat.py](../alpi/host/chat.py) `:403`,
-  [alp/handlers.py](../alpi/alp/handlers.py) `:84,197`), run-now jobs for their full length
-  ([host/schedule.py](../alpi/host/schedule.py) `:149`), gate commands (`service.py:1580`), email probes whose
-  worker stays stuck after the 20 s timeout ([probes.py](../alpi/host/probes.py) `:41`), the sidecar append of
-  every chat frame (`chat.py:353`), the token check of every WebSocket message
-  ([server.py](../alpi/host/server.py) `:819`), the revocation watcher (`:995`) and most RPC reads. When it is full
-  no chat frame is written or sent, the 5 s heartbeat included, so clients reach their 75 s timeout; every WebSocket
-  RPC waits at authentication, `host.chat.cancel` included. Measured with every worker blocked: one sidecar append
-  waited until a worker freed. Fix shape: (1) a named executor for engine turns, `link.ask`, run-now and gate
-  commands, at least as large as the default pool is today so concurrency does not drop; (2) `_check_token_meta`
-  called inline (it costs 10 µs), with only the once-a-minute `_touch` left off the loop; (3) sidecar frames
-  written inline or by one writer thread that keeps their order; (4) email probes on a small pool of their own.
-  accept: a test blocks every worker of the turn executor with fake turns and still gets `host.version` over a
-  WebSocket and a chat heartbeat; a hung email probe leaves the default pool at its size; frame order in the
-  sidecar is unchanged.
-
 - **DAEMON.OUTPUTS-FAST** — Reading the inbox does not re-clean every notification (D5)
   `bug · alpi · agent · high`
   note: `_read_all` in [outputs.py](../alpi/outputs.py) (`:336-364`) runs `normalize_notification_body` on every
@@ -614,23 +615,6 @@ Each entry is written to be worked without that report:
   cache is sized per profile; tests count the files opened.
 
 #### Harness
-
-- **HARN.PRUNE-WATERMARK** — Old tool output is trimmed long before the context window fills (H2)
-  `feature · alpi · agent · high`
-  note: the cheap prune pass, which calls no model, runs only past `DEFAULT_TRIGGER_RATIO = 0.75` of the window
-  ([compaction.py](../alpi/compaction.py) `:24`, `:46-48`, `:169-178`; [engine.py](../alpi/engine.py) `:901`,
-  `:2036-2055`). On a 1M-token window that is 750,000 tokens, so it never runs and every step re-sends every earlier
-  tool output: a long turn sends millions of input tokens. A simulation calibrated to the fleet's long turns
-  (40 steps of about 5,000 tokens) drops from 4.4M to 2.9M input tokens with a 120,000-token threshold; a 12-step
-  turn is unchanged. Each prune breaks the provider cache from the first pruned message for one step, so it runs in
-  batches. Sibling of HARN.COMPACT-BATCH, which is about overflow; this is about cost.
-  accept: the prune pass (not the summary) also runs when the estimated prompt passes
-  `compaction.prune_after_tokens` (new key, default 120,000, 0 turns it off; CONFIG.md says the compaction ratios
-  become settings when traces ask for it, and this is the first, so that paragraph is rewritten), and only
-  when at least 20,000 tokens are prunable; the kept tail is intact and each pass writes a `prune` line to
-  `compaction.jsonl`; a fake-model test of 60 calls with 20,000-character results on a 1M window prunes mid-turn
-  without a summary call and with no more passes than its batches allow; a 12-step turn of 5,000-token results
-  never prunes.
 
 - **HARN.COMPLETE-TIMEOUT** — A model call that does not stream has a deadline and a retry (H3)
   `bug · alpi · agent · normal`

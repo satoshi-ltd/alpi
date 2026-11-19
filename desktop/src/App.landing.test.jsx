@@ -1021,6 +1021,49 @@ describe("App landing", () => {
     expect(localStorage.getItem("alpi.firstRunHint.v1")).toBeNull();
   });
 
+  it("marks nothing when the app closes before the daemon answers the first message", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const state = daemon();
+      window.notify = vi.fn();
+      const { unmount } = render(<App />);
+      await waitFor(() => expect(screen.getByText(HINT_LINE)).toBeInTheDocument());
+      const box = screen.getByPlaceholderText(/Message/);
+      fireEvent.change(box, { target: { value: "hello" } });
+      fireEvent.keyDown(box, { key: "Enter", metaKey: true });
+      await waitFor(() => expect(state.calls.filter(([c]) => c === "chat_send_stream")).toHaveLength(1));
+      unmount();
+      await act(async () => { await vi.advanceTimersByTimeAsync(20000); });
+      expect(localStorage.getItem("alpi.firstRunHint.v1")).toBeNull();
+      expect(localStorage.getItem("alpi.drafts.v1") ?? "").not.toContain("hello");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not send a message whose app closed while it was getting ready", async () => {
+    const state = daemon();
+    let pressed = false;
+    let ready;
+    listen.mockImplementation(async (name, cb) => {
+      listeners[name] = cb;
+      if (name === "chat-event" && pressed) await new Promise((resolve) => { ready = resolve; });
+      return () => {};
+    });
+    window.notify = vi.fn();
+    const { unmount } = render(<App />);
+    await waitFor(() => expect(screen.getByText(HINT_LINE)).toBeInTheDocument());
+    pressed = true;
+    const box = screen.getByPlaceholderText(/Message/);
+    fireEvent.change(box, { target: { value: "hello" } });
+    fireEvent.keyDown(box, { key: "Enter", metaKey: true });
+    await waitFor(() => expect(ready).toBeTypeOf("function"));
+    unmount();
+    await act(async () => { ready(); await new Promise((r) => setTimeout(r, 50)); });
+    expect(state.calls.some(([c]) => c === "chat_send_stream")).toBe(false);
+    expect(localStorage.getItem("alpi.firstRunHint.v1")).toBeNull();
+  });
+
   it("shows the hint line only in a profile chat", async () => {
     daemon();
     render(<App />);

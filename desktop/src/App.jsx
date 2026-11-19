@@ -879,6 +879,17 @@ export default function App() {
   }, [applyChange, hostConnectionsRef, approval.merge, approval.resolve, clarification.merge, clarification.resolve, scheduleReload]);
 
   const sendingRef = useRef(false);
+  const mountedRef = useRef(true);
+  const acceptancesRef = useRef(new Set());
+  useEffect(() => {
+    mountedRef.current = true;
+    const acceptances = acceptancesRef.current;
+    return () => {
+      mountedRef.current = false;
+      for (const acceptance of acceptances) acceptance.cancel();
+      acceptances.clear();
+    };
+  }, []);
   const activeSettingsWorkgroup = useMemo(() => {
     if (view.kind !== "settings" || settingsTarget?.kind !== "workgroup") {
       return null;
@@ -1175,7 +1186,13 @@ export default function App() {
         }
 
         const acceptance = watchAcceptance(requestId);
+        acceptancesRef.current.add(acceptance);
+        acceptance.promise.then(() => acceptancesRef.current.delete(acceptance));
         await acceptance.ready;
+        if (!mountedRef.current) {
+          acceptance.cancel();
+          return false;
+        }
         try {
           await invoke("chat_send_stream", {
             profile: profileName,
@@ -1195,6 +1212,7 @@ export default function App() {
         }
         release();
         const verdict = await acceptance.promise;
+        if (!mountedRef.current) return true;
         if (!verdict.accepted) {
           removeTurn(requestId);
           notify({ message: describeConnectionError(verdict.text) || "The daemon did not take the message.", variant: "error" });

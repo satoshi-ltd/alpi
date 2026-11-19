@@ -11,6 +11,11 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.10.15 — 2026-11-19 — a steadier first-run hint test
+
+- No visible change: the check that a first message reached the daemon no longer outlives the window that sent it.
+- Needs alpi ≥ 0.19.20.
+
 ## v0.10.14 — 2026-11-19 — the admin role says what it grants
 
 - Granting admin when pairing, or choosing Admin for a connection, now says that it has full control of the computer alpi runs on (it can add MCP servers and approve commands), so admin is kept for your own devices.
