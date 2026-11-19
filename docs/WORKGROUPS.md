@@ -78,6 +78,13 @@ One-off or externally versioned recipes remain supported: the desktop file
 picker and CLI can read any `.yaml` / `.yml` file and hand its contents to the
 daemon. Both routes use the same parser and launcher.
 
+The parser accepts plain YAML only: no anchors used through aliases (`*name`)
+or merge keys (`<<: *name`), at most 64 KB and 32 levels of nesting, and
+`hub`, `name`, `task` and `briefing` written as text. Numbers like `1:30` stay
+text (YAML 1.1 base-60 is not read). A saved recipe that breaks a rule shows
+under the invalid recipes in the apps and `alpi workgroup recipes`, with the
+reason, and the others still list.
+
 Recipes are a **host-plane** convenience, not part of the ALP wire
 protocol — ALP gains no recipe or project verbs. A launch just
 assembles the existing `workgroup.create` primitive (plus, when

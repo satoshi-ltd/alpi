@@ -18,6 +18,22 @@ class LaunchError(ValueError):
 
 
 _STAGING = ".recipe-staging"
+_parse_pool = None
+
+
+async def _off_loop(fn, *args):  # noqa: ANN001, ANN202
+    from concurrent.futures import ThreadPoolExecutor
+
+    global _parse_pool
+    if _parse_pool is None:
+        _parse_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="alpi-recipe-parse")
+    return await asyncio.get_running_loop().run_in_executor(_parse_pool, fn, *args)
+
+
+async def _parse_off_loop(text: str, recipe_id: str):  # noqa: ANN202
+    from alpi import recipes as recipes_mod
+
+    return await _off_loop(recipes_mod.parse_recipe, text, recipe_id)
 _CLONE_TIMEOUT = 300
 
 
@@ -162,7 +178,7 @@ async def launch(
     from alpi.alp import workgroup_client as wc
     from alpi.alp.keys import load_or_generate
 
-    recipe = recipes_mod.parse_recipe(recipe_yaml, recipe_id)
+    recipe = await _parse_off_loop(recipe_yaml, recipe_id)
     spec = recipes_mod.resolve(recipe, params)
 
     profile = home_mod.profile_name(home)
@@ -270,7 +286,7 @@ async def _describe(params: dict[str, Any], _server: host_server.Server) -> dict
     if not yaml_text.strip():
         raise host_server.HandlerError(-32602, "invalid-params", data={"detail": "empty recipe yaml"})
     try:
-        r = recipes_mod.parse_recipe(yaml_text, recipe_id)
+        r = await _parse_off_loop(yaml_text, recipe_id)
     except recipes_mod.RecipeError as e:
         raise host_server.HandlerError(-32602, "invalid-params", data={"detail": str(e)})
     return _recipe_meta(r)
@@ -294,7 +310,7 @@ async def _list(params: dict[str, Any], _server: host_server.Server) -> dict[str
     home = _resolve_home(str((params or {}).get("profile") or ""))
     profile = str((params or {}).get("profile") or "default")
     try:
-        recipes, invalid = recipes_mod.scan_saved_recipes(home)
+        recipes, invalid = await _off_loop(recipes_mod.scan_saved_recipes, home)
     except (OSError, UnicodeError, recipes_mod.RecipeError) as e:
         raise host_server.HandlerError(-32602, "invalid-recipe", data={"detail": str(e)})
     valid = []
@@ -320,7 +336,7 @@ async def _launch(params: dict[str, Any], _server: host_server.Server) -> dict[s
     recipe_id = str((params or {}).get("recipe_id") or "recipe")
     if not yaml_text.strip():
         try:
-            _, yaml_text = recipes_mod.load_saved_recipe(home, recipe_id)
+            _, yaml_text = await _off_loop(recipes_mod.load_saved_recipe, home, recipe_id)
         except (OSError, UnicodeError, recipes_mod.RecipeError) as e:
             raise host_server.HandlerError(-32602, "invalid-recipe", data={"detail": str(e)})
     supplied = (params or {}).get("params") or {}

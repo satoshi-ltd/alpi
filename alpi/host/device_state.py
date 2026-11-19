@@ -36,6 +36,7 @@ KNOWN_PROVIDER_KEYS = (
 
 def register(server: host_server.Server) -> None:
     server.register("host.version", _host_version)
+    server.register("host.ping", _host_ping)
     server.register("host.profiles.list", _profiles_list)
     server.register("host.profile.summaries", _profile_summaries)
     server.register("host.profile.detail", _profile_detail)
@@ -81,6 +82,10 @@ def _profiles() -> list[dict[str, Any]]:
                     "is_default": False,
                 })
     return out
+
+
+async def _host_ping(_params: dict[str, Any], _server: host_server.Server) -> dict[str, Any]:
+    return {"ok": True}
 
 
 async def _host_version(

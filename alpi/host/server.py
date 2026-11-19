@@ -236,6 +236,7 @@ def _is_member_blocked_event(kind: Any) -> bool:
 # Methods that don't operate on a single profile — exempt from the scope gate. New profile-handling RPCs MUST default to denied for scoped members; add here only when the verb is truly profile-agnostic (or aggregates across profiles and the response gets scope-filtered downstream).
 _SCOPE_FREE_METHODS = frozenset({
     "host.version",
+    "host.ping",
     "host.profiles.list",
     "host.profile.summaries",
     "host.workgroups.list",

@@ -188,18 +188,6 @@ _None._
 Found by reviewing everything shipped from alpi 0.19.0, desktop 0.10.0 and mobile 0.10.0 to commit `8ac3c373` for
 behaviour that broke. Each entry was confirmed by a probe, a throwaway test or an exact code trace.
 
-- **APPS.SHAPE-OLD-DAEMON** — A profile keeps its mark against a daemon older than 0.19.0
-  `bug · desktop, mobile, common · agent · normal`
-  note: since the 0.10.0 clients, `common/shapes.mjs` reads only `profile.shape`; daemons up to 0.18.x send `fold`.
-  Every non-default profile draws as `round`, the shape picker writes `tui.shape`, which such a daemon stores and
-  never returns, and the optimistic edit is never released (`common/optimisticProfiles.mjs` near `:106`), so the chosen
-  shape shows until restart. Every client changelog entry from 0.10.0 still says "Needs alpi ≥ 0.17.0". The reverse
-  case, a client older than 0.10.0 on a daemon from 0.19.0, loses the mark the same way and cannot change it
-  (`tui.fold` answers `invalid-params`); those clients update themselves, so it is not covered here.
-  accept: when a summary has no `shape`, the clients map its legacy `fold` to the shape the daemon's own translation
-  gives (`alpi/config.py` `translate_shape`) and hide the shape picker; tests cover a legacy row in both clients; the
-  next client changelog entries state the real minimum daemon.
-
 - **DESK.SETTINGS-MENU-TOGGLE** — The Settings menu item opens Settings when the window was hidden on it
   `bug · desktop · agent · low`
   note: since desktop 0.10.5 the menu item shows the window and emits `settings-toggle`
@@ -237,23 +225,6 @@ behaviour that broke. Each entry was confirmed by a probe, a throwaway test or a
   section that keeps the scalar as its model; every other non-object parent still answers `invalid-params`; tests
   cover both.
 
-- **DAEMON.STACK-DUMP** — A frozen daemon can be asked for its stacks
-  `feature · alpi · agent · normal`
-  note: the freeze fixed in 0.19.14 could not be diagnosed from the host: the image has no debugger and the daemon
-  registers no dump signal, so the only route was attaching a tracer from outside.
-  accept: the daemon registers `faulthandler` on `SIGUSR1` for all threads, writing to a file under `logs/` with the
-  log's permissions; `alpi/pid1.py` forwards the signal; `alpi doctor` or the operations reference names the command;
-  a test sends the signal to a child interpreter that loads the same hook and finds every thread's stack in the file.
-
-- **CLI.DAEMON-UNRESPONSIVE** — A CLI command says the daemon is not answering instead of waiting
-  `bug · alpi · agent · normal`
-  note: `alpi workgroup launch` calls the host socket with a 3600 s timeout and `remove` with 60 s
-  ([cli.py](../alpi/cli.py) near `:4665` and `:4852`); `host_client.acall` restarts that timeout on every line read.
-  Against a daemon that accepts the connection and never answers, launch waits an hour with no output.
-  accept: before a long host call the CLI makes a cheap one with a 5 s timeout and, when it gets no answer, exits
-  non-zero naming the daemon as unresponsive and how to check it; `acall` bounds the whole call, not each line; a test
-  serves a socket that accepts and never replies and finds the error within the short timeout.
-
 - **TEST.TOCTOU-LOAD** — The device revoke race test passes on a loaded machine
   `chore · alpi · agent · low`
   note: `tests/host/test_connections.py::test_legacy_revoke_add_device_toctou` failed once in a full run while other
@@ -288,18 +259,6 @@ Each entry is written to be worked without that report:
   test asserts call counts, thread names or outputs, never wall-clock time.
 
 #### Security — daemon
-
-- **SEC.RECIPE-YAML** — A recipe with YAML aliases is refused before it expands (S7)
-  `bug · alpi · agent · high`
-  note: `host.workgroup.recipes.describe` ([host/recipes.py](../alpi/host/recipes.py) `:266-276`) is reachable by any
-  paired member and calls `parse_recipe` on the event loop; [recipes.py](../alpi/recipes.py) (`:200,257`) uses
-  `yaml.safe_load` and then `str(data.get("briefing"))`. A 389-byte document of nested aliases
-  (`l0: &l0 ["x" × 10]`, `l1: &l1 [*l0 × 10]`, … `briefing: *l6`, plus `hub`, `name`, `task`) produced a 52 MB
-  reply and 213 MB of memory; each further level multiplies by ten. Fix shape: a loader class that raises on any
-  alias event, a cap on the text length (256 KB), `briefing`, `task` and `name` required to be scalars, and the
-  parse run through `read_pool`. Use the same loader for every recipe text a client sends (import included).
-  accept: the seven-level document answers `invalid-params` and allocates no expanded structure (assert the loader
-  raised before construction); a shipped recipe still parses; a recipe file alpi wrote itself round-trips.
 
 - **SEC.DEVICE-FIELDS** — A device's name and version are capped and printable (S8)
   `bug · alpi · agent · high`

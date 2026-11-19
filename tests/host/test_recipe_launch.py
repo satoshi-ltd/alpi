@@ -757,3 +757,162 @@ def test_destroy_purges_local_subscription(tmp_path, monkeypatch):
     assert "scout" in purged
     assert sub_mod.get(scout_home, wg.meta.id) is None
     assert not (home / "alp" / "workgroups" / wg.meta.id).exists()
+
+
+def _nested_alias_bomb(levels: int = 7) -> str:
+    lines = ['l0: &l0 [' + ", ".join(['"x"'] * 10) + "]"]
+    for i in range(1, levels):
+        lines.append(f"l{i}: &l{i} [" + ", ".join([f"*l{i - 1}"] * 10) + "]")
+    lines += ["hub: mira", "name: bomb", "task: hi", f"briefing: *l{levels - 1}"]
+    return "\n".join(lines) + "\n"
+
+
+@pytest.mark.asyncio
+async def test_a_recipe_with_aliases_is_refused_before_anything_is_built(monkeypatch):
+    from alpi import recipes as recipes_mod
+    from alpi.host import server as host_server
+
+    def built(*_a, **_k):
+        raise AssertionError("the document was constructed")
+
+    monkeypatch.setattr(recipes_mod._RecipeLoader, "construct_document", built)
+    with pytest.raises(host_server.HandlerError) as exc:
+        await host_recipes._describe({"yaml": _nested_alias_bomb()}, None)
+    assert exc.value.message == "invalid-params"
+    assert "aliases are not allowed" in str(exc.value.data)
+
+
+@pytest.mark.asyncio
+async def test_launching_a_recipe_with_aliases_is_refused_too(tmp_path):
+    from alpi import recipes as recipes_mod
+
+    with pytest.raises(recipes_mod.RecipeError):
+        await host_recipes.launch(tmp_path, _nested_alias_bomb(2), {})
+
+
+@pytest.mark.asyncio
+async def test_an_oversized_recipe_is_refused():
+    from alpi.host import server as host_server
+
+    big = _CHAT_RECIPE + "# " + "x" * (64 * 1024) + "\n"
+    with pytest.raises(host_server.HandlerError) as exc:
+        await host_recipes._describe({"yaml": big}, None)
+    assert "larger than 64 KB" in str(exc.value.data)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("doc", [
+    "x: " + "[" * 5000 + "]" * 5000 + "\nhub: mira\nname: n\n",
+    "\n".join("  " * i + f"k{i}:" for i in range(600)) + " v\nhub: mira\nname: n\n",
+    "hub: mira\nname: n\nq: " + "9" * 5000 + "\n",
+])
+async def test_a_deep_or_oversized_number_recipe_is_invalid_not_an_internal_error(doc):
+    from alpi.host import server as host_server
+
+    with pytest.raises(host_server.HandlerError) as exc:
+        await host_recipes._describe({"yaml": doc}, None)
+    assert exc.value.message == "invalid-params"
+
+
+@pytest.mark.asyncio
+async def test_a_base60_number_stays_text_and_parses_fast():
+    import time
+
+    doc = "hub: mira\nname: n\ntask: \"@scout hi\"\nq: " + ":".join(["1"] * 20000) + "\n"
+    start = time.monotonic()
+    res = await host_recipes._describe({"yaml": doc}, None)
+    assert time.monotonic() - start < 2.0
+    assert res["hub"] == "mira"
+
+
+@pytest.mark.asyncio
+async def test_a_boolean_text_field_counts_as_missing():
+    from alpi.host import server as host_server
+
+    with pytest.raises(host_server.HandlerError) as exc:
+        await host_recipes._describe({"yaml": "hub: false\nname: n\n"}, None)
+    assert "missing 'hub'" in str(exc.value.data)
+
+
+def test_one_unreadable_saved_recipe_does_not_hide_the_others(tmp_path):
+    from alpi import recipes as recipes_mod
+
+    root = tmp_path / "recipes"
+    root.mkdir()
+    (root / "good.yaml").write_text("hub: default\nname: good\ntask: \"@scout hi\"\n")
+    (root / "deep.yaml").write_text("x: " + "[" * 5000 + "]" * 5000 + "\nhub: default\nname: n\n")
+    valid, invalid = recipes_mod.scan_saved_recipes(tmp_path)
+    assert [r.recipe_id for r in valid] == ["good"]
+    assert [r["id"] if isinstance(r, dict) else getattr(r, "recipe_id", r) for r in invalid] == ["deep"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["briefing", "task", "name", "hub"])
+async def test_recipe_text_fields_must_be_text(field):
+    from alpi.host import server as host_server
+
+    doc = {"hub": "mira", "name": "n", "task": "@scout hi", "briefing": "b"}
+    doc[field] = ["a", "b"]
+    import yaml
+    with pytest.raises(host_server.HandlerError) as exc:
+        await host_recipes._describe({"yaml": yaml.safe_dump(doc)}, None)
+    assert f"{field} must be text" in str(exc.value.data)
+
+
+@pytest.mark.asyncio
+async def test_an_unused_anchor_and_plain_recipes_still_parse():
+    res = await host_recipes._describe({"yaml": "hub: mira\nname: &n debate\ntask: \"@scout hi\"\n"}, None)
+    assert res["name"] == "debate"
+    assert (await host_recipes._describe({"yaml": _CHAT_RECIPE}, None))["hub"] == "mira"
+
+
+@pytest.mark.asyncio
+async def test_an_unreadable_timeout_is_invalid_not_an_internal_error():
+    from alpi.host import server as host_server
+
+    with pytest.raises(host_server.HandlerError) as exc:
+        await host_recipes._describe({"yaml": "hub: mira\nname: n\nquorum_timeout_seconds: 1:30\n"}, None)
+    assert exc.value.message == "invalid-params"
+    assert "quorum_timeout_seconds" in str(exc.value.data)
+
+
+def test_numbers_read_as_in_plain_yaml():
+    import yaml
+
+    from alpi import recipes as recipes_mod
+
+    for value in ("1.0E3", "1e3", "2.5", "1.5e+3", ".5", "0x1f", "600", "-1"):
+        assert recipes_mod.load_recipe_yaml(f"x: {value}\n") == yaml.safe_load(f"x: {value}\n"), value
+
+
+@pytest.mark.asyncio
+async def test_recipes_are_read_on_their_own_thread(monkeypatch):
+    import threading
+
+    from alpi import recipes as recipes_mod
+
+    seen = []
+    real = recipes_mod.parse_recipe
+
+    def recording(text, recipe_id):
+        seen.append(threading.current_thread().name)
+        return real(text, recipe_id)
+
+    monkeypatch.setattr(recipes_mod, "parse_recipe", recording)
+    await host_recipes._describe({"yaml": _CHAT_RECIPE}, None)
+    assert seen and all(name.startswith("alpi-recipe-parse") for name in seen)
+
+
+def test_host_ping_is_registered():
+    from alpi.host import device_state
+
+    class Server:
+        def __init__(self):
+            self.handlers = {}
+
+        def register(self, name, fn):
+            self.handlers[name] = fn
+
+    server = Server()
+    device_state.register(server)
+    assert "host.ping" in server.handlers

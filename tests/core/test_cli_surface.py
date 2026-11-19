@@ -254,7 +254,11 @@ def test_workgroup_launch_does_not_repeat_mutation_after_rpc_timeout(tmp_path, m
     async def duplicate(*args, **kwargs):
         raise AssertionError("must not launch twice")
 
+    async def answering(timeout=5.0):
+        return None
+
     monkeypatch.setattr(host_client, "acall", timeout)
+    monkeypatch.setattr(host_client, "ensure_responsive", answering)
     monkeypatch.setattr(host_recipes, "launch", duplicate)
     result = CliRunner().invoke(cli.main, ["workgroup", "launch", "--recipe", "hotel"])
     assert result.exit_code != 0

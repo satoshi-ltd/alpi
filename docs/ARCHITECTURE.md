@@ -1920,6 +1920,9 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   pane then says only Their chats open here; with the list folded an admin
   keeps New profile in the pane. The fold's sidebar is 280 pt.
 
+- **`host.ping` answers `{ok: true}` and does no work.** The console calls it
+  with a 5 s timeout before a long host call, so a daemon that accepts the
+  connection and answers nothing is reported instead of waited on.
 - **`host.version` says whether a daemon can update itself.** It returns
   `installer` (`uv` | `pipx` | `docker` | `source`, cached after a successful probe by
   `updater.install_kind`; `docker` comes from the deploy runtime) and

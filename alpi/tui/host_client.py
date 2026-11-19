@@ -23,6 +23,10 @@ class HostNotConnected(HostUnavailable):
     pass
 
 
+class HostTimedOut(HostUnavailable):
+    pass
+
+
 class HostError(Exception):
     def __init__(self, code: int | None, message: str) -> None:
         super().__init__(message)
@@ -46,6 +50,12 @@ async def _open(path: Path):
     return await asyncio.open_unix_connection(str(path), limit=READ_LIMIT)
 
 
+UNRESPONSIVE = (
+    "the alpi daemon accepted the connection but did not answer within {secs:g}s; it may be stuck. "
+    "Check `alpi daemon status` and the daemon log (`logs/service.log` in the alpi home), or restart it."
+)
+
+
 async def acall(method: str, params: dict[str, Any] | None = None, *, timeout: float = 5.0) -> Any:
     path = socket_path()
     if not path.exists():
@@ -56,23 +66,10 @@ async def acall(method: str, params: dict[str, Any] | None = None, *, timeout: f
         raise HostNotConnected(str(e) or "daemon not running") from None
     request_id = f"tui-{next(_ids)}"
     try:
-        writer.write((json.dumps({"id": request_id, "method": method, "params": params or {}}) + "\n").encode())
-        await writer.drain()
-        while True:
-            raw = await asyncio.wait_for(reader.readline(), timeout)
-            if not raw:
-                raise HostUnavailable("daemon closed the connection")
-            try:
-                body = json.loads(raw.decode())
-            except (UnicodeDecodeError, json.JSONDecodeError):
-                continue
-            if not isinstance(body, dict) or body.get("id") != request_id:
-                continue
-            if body.get("error"):
-                err = body["error"] if isinstance(body["error"], dict) else {"message": str(body["error"])}
-                raise HostError(err.get("code"), str(err.get("message") or "error"))
-            return body.get("result")
-    except (OSError, asyncio.TimeoutError) as e:
+        return await asyncio.wait_for(_exchange(reader, writer, request_id, method, params), timeout)
+    except asyncio.TimeoutError:
+        raise HostTimedOut("daemon did not answer") from None
+    except OSError as e:
         raise HostUnavailable(str(e) or "daemon did not answer") from None
     except ValueError:
         raise HostError(None, INVALID_RESPONSE) from None
@@ -82,3 +79,31 @@ async def acall(method: str, params: dict[str, Any] | None = None, *, timeout: f
             await writer.wait_closed()
         except Exception:  # noqa: BLE001
             pass
+
+
+async def _exchange(reader, writer, request_id: str, method: str, params: dict[str, Any] | None) -> Any:  # noqa: ANN001
+    writer.write((json.dumps({"id": request_id, "method": method, "params": params or {}}) + "\n").encode())
+    await writer.drain()
+    while True:
+        raw = await reader.readline()
+        if not raw:
+            raise HostUnavailable("daemon closed the connection")
+        try:
+            body = json.loads(raw.decode())
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        if not isinstance(body, dict) or body.get("id") != request_id:
+            continue
+        if body.get("error"):
+            err = body["error"] if isinstance(body["error"], dict) else {"message": str(body["error"])}
+            raise HostError(err.get("code"), str(err.get("message") or "error"))
+        return body.get("result")
+
+
+async def ensure_responsive(timeout: float = 5.0) -> None:
+    try:
+        await acall("host.ping", {}, timeout=timeout)
+    except HostError:
+        return
+    except HostTimedOut:
+        raise HostUnavailable(UNRESPONSIVE.format(secs=timeout)) from None

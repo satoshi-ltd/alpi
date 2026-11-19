@@ -185,6 +185,21 @@ on macOS:
 alpi setup → Services → Daemon → Uninstall
 ```
 
+### When the daemon is running but answers nothing
+
+Ask it for the stack of every thread before restarting it: the frozen process
+is the evidence. It writes them to `logs/stacks.log` under the alpi home (mode
+`0600`) and keeps running.
+
+```bash
+kill -USR1 "$(cat ~/.alpi/service.pid)"      # host install
+docker kill -s USR1 <container>              # container: PID 1 forwards it
+```
+
+A CLI command that needs the daemon (`alpi workgroup launch`, `remove`) checks
+first that it answers within 5 s and exits naming it as unresponsive instead of
+waiting.
+
 ### When `restart` is really what you want
 
 After `uv tool install --reinstall`, the long-running daemon

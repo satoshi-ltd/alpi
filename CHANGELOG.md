@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.19.19 — 2026-11-19 — a stuck daemon says so, and recipes stay small
+
+- A workgroup recipe is read as plain YAML: aliases, more than 64 KB, more than 32 levels of nesting and text fields that are not text are refused with the reason, before anything is built. A few hundred bytes of nested aliases could make the daemon build hundreds of megabytes, and any paired device could send one. Recipes, saved ones included, are read apart from the daemon's other work, so a large one no longer slows the apps.
+- `alpi workgroup launch` and `alpi workgroup remove` first check that the daemon answers within 5 seconds and otherwise stop with a message saying it is not answering and how to check it, instead of waiting up to an hour. Every console call to the daemon now gives up after its whole timeout, not after a silence.
+- Sending the daemon `SIGUSR1` (`docker kill -s USR1 <container>` in a container) writes the stack of every thread to `logs/stacks.log` and the daemon keeps running, so a daemon that stops answering can be diagnosed before it is restarted.
+
 ## v0.19.18 — 2026-11-19 — the apps know when a sentence is part of the work
 
 - The chat stream now tells the apps when the model starts a tool call after writing some text, so the apps can show that text as the step it is rather than as the answer. Older apps ignore it.

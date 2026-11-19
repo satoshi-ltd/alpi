@@ -123,6 +123,36 @@ def stop_daemon(root: Path, *, timeout: float = 5.0) -> bool:
     return True
 
 
+_stack_dump_file = None
+
+
+def register_stack_dump(root: Path) -> Path | None:
+    import faulthandler
+    import signal
+
+    global _stack_dump_file
+    if not hasattr(signal, "SIGUSR1"):
+        return None
+    path = root / "logs" / "stacks.log"
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        try:
+            os.fchmod(fd, 0o600)
+            handle = os.fdopen(fd, "a", encoding="utf-8")
+        except OSError:
+            os.close(fd)
+            raise
+        faulthandler.register(signal.SIGUSR1, file=handle, all_threads=True, chain=False)
+    except (OSError, RuntimeError, ValueError) as e:
+        log.warning("stack dump on SIGUSR1 unavailable: %s", e)
+        return None
+    if _stack_dump_file is not None:
+        _stack_dump_file.close()
+    _stack_dump_file = handle
+    return path
+
+
 def serve_all(root: Path) -> None:
     """Foreground entry point for the central daemon."""
     from alpi import provider_pause
@@ -137,6 +167,7 @@ def serve_all(root: Path) -> None:
             root / "service.lock",
         )
         return
+    register_stack_dump(root)
     profiles = home_mod.list_profiles(root)
     log.info("central service starting · profiles=%s", ",".join(profiles))
     _set_proctitle_daemon(len(profiles))

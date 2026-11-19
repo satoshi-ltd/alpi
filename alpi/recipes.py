@@ -20,6 +20,61 @@ class RecipeError(ValueError):
     pass
 
 
+MAX_RECIPE_BYTES = 64 * 1024
+MAX_RECIPE_DEPTH = 32
+_INT = "tag:yaml.org,2002:int"
+_FLOAT = "tag:yaml.org,2002:float"
+
+
+class _RecipeLoader(yaml.SafeLoader):
+    _depth = 0
+
+    def compose_node(self, parent, index):  # noqa: ANN001, ANN201
+        if self.check_event(yaml.events.AliasEvent):
+            raise yaml.composer.ComposerError(
+                None, None, "aliases are not allowed in a recipe", self.peek_event().start_mark,
+            )
+        self._depth += 1
+        try:
+            if self._depth > MAX_RECIPE_DEPTH:
+                raise yaml.composer.ComposerError(
+                    None, None, f"a recipe nests deeper than {MAX_RECIPE_DEPTH} levels", self.peek_event().start_mark,
+                )
+            return super().compose_node(parent, index)
+        finally:
+            self._depth -= 1
+
+
+# YAML 1.1 base-60 numbers (1:2:3) parse in quadratic time; a recipe never needs them.
+_RecipeLoader.yaml_implicit_resolvers = {
+    first: [(tag, rx) for tag, rx in resolvers if tag not in (_INT, _FLOAT)]
+    for first, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+_RecipeLoader.add_implicit_resolver(
+    _INT, re.compile(r"^(?:[-+]?0b[0-1_]+|[-+]?0[0-7_]+|[-+]?(?:0|[1-9][0-9_]*)|[-+]?0x[0-9a-fA-F_]+)$"),
+    list("-+0123456789"),
+)
+_RecipeLoader.add_implicit_resolver(
+    _FLOAT, re.compile(r"^(?:[-+]?(?:[0-9][0-9_]*)\.[0-9_]*(?:[eE][-+][0-9]+)?|\.[0-9][0-9_]*(?:[eE][-+][0-9]+)?|[-+]?\.(?:inf|Inf|INF)|\.(?:nan|NaN|NAN))$"),
+    list("-+0123456789."),
+)
+
+
+def load_recipe_yaml(text: str) -> Any:
+    if len(text.encode("utf-8", errors="replace")) > MAX_RECIPE_BYTES:
+        raise RecipeError(f"recipe is larger than {MAX_RECIPE_BYTES // 1024} KB")
+    return yaml.load(text, Loader=_RecipeLoader)
+
+
+def _scalar(recipe_id: str, data: dict, key: str) -> str:
+    value = data.get(key)
+    if value is None or isinstance(value, bool):
+        return ""
+    if isinstance(value, (str, int, float)):
+        return str(value)
+    raise RecipeError(f"recipe {recipe_id!r} {key} must be text")
+
+
 @dataclass(frozen=True)
 class Recipe:
     recipe_id: str
@@ -197,16 +252,20 @@ def parse_recipe(text: str, recipe_id: str) -> Recipe:
     if not _RECIPE_ID_RE.fullmatch(recipe_id):
         raise RecipeError(f"recipe id {recipe_id!r} must match [a-z0-9][a-z0-9_-]*")
     try:
-        data = yaml.safe_load(text) or {}
+        data = load_recipe_yaml(text) or {}
     except yaml.YAMLError as e:
         raise RecipeError(f"recipe {recipe_id!r} is not valid YAML: {e}")
+    except RecipeError:
+        raise
+    except (RecursionError, ValueError, OverflowError) as e:
+        raise RecipeError(f"recipe {recipe_id!r} cannot be read: {type(e).__name__}")
     if not isinstance(data, dict):
         raise RecipeError(f"recipe {recipe_id!r} must be a YAML mapping")
 
-    hub = str(data.get("hub") or "").strip()
+    hub = _scalar(recipe_id, data, "hub").strip()
     if not hub:
         raise RecipeError(f"recipe {recipe_id!r} missing 'hub'")
-    name = str(data.get("name") or "").strip()
+    name = _scalar(recipe_id, data, "name").strip()
     if not name:
         raise RecipeError(f"recipe {recipe_id!r} missing 'name'")
 
@@ -226,7 +285,7 @@ def parse_recipe(text: str, recipe_id: str) -> Recipe:
         steps = wg_mod.validate_pipeline_steps(pipelines, data.get("pipeline_steps"))
     except ValueError as e:
         raise RecipeError(f"recipe {recipe_id!r} {e}")
-    task = str(data.get("task") or "")
+    task = _scalar(recipe_id, data, "task")
     _check_launch_semantics(recipe_id, pipelines, launch_pipeline, steps, task.strip(), hub)
 
     project = data.get("project")
@@ -247,6 +306,11 @@ def parse_recipe(text: str, recipe_id: str) -> Recipe:
                 raise RecipeError(f"recipe {recipe_id!r} project.seed.{key} must be a mapping of path → value")
         project["exclude"] = _coerce_exclude(recipe_id, project.get("exclude"))
 
+    try:
+        quorum_timeout_seconds = int(data.get("quorum_timeout_seconds") or 0)
+    except (TypeError, ValueError):
+        raise RecipeError(f"recipe {recipe_id!r} quorum_timeout_seconds must be a whole number of seconds")
+
     digest = "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
     return Recipe(
         recipe_id=recipe_id,
@@ -254,9 +318,9 @@ def parse_recipe(text: str, recipe_id: str) -> Recipe:
         hub=hub,
         members=_coerce_members(data.get("members")),
         name=name,
-        briefing=str(data.get("briefing") or ""),
+        briefing=_scalar(recipe_id, data, "briefing"),
         task=task,
-        quorum_timeout_seconds=int(data.get("quorum_timeout_seconds") or 0),
+        quorum_timeout_seconds=quorum_timeout_seconds,
         budget_usd=budget_usd,
         pipelines=pipelines,
         launch_pipeline=launch_pipeline,

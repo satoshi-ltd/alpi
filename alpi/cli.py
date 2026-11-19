@@ -4676,6 +4676,7 @@ def workgroup_launch(
             )
     try:
         if host_client.daemon_present():
+            asyncio.run(host_client.ensure_responsive())
             result = asyncio.run(host_client.acall("host.workgroup.launch_recipe", {
                 "profile": home.profile_name(h), "yaml": recipe_yaml,
                 "params": params, "briefing": briefing,
@@ -4863,6 +4864,7 @@ def workgroup_remove(ctx: click.Context, wg_id: str, yes: bool) -> None:
         raise click.ClickException("aborted")
     try:
         if host_client.daemon_present():
+            asyncio.run(host_client.ensure_responsive())
             result = asyncio.run(host_client.acall("host.workgroup.remove", {
                 "profile": home.profile_name(h), "wg_id": wg_id,
             }, timeout=60.0))
