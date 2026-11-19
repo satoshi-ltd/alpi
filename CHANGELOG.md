@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.19.15 — 2026-11-19 — an unattended profile learns how to pass long text
+
+- Since 0.19.9 a shell command the safety check cannot read, such as a commit message in a heredoc with an apostrophe in it, needs a person to approve it. On a surface with nobody to ask (scheduled jobs, workgroup turns, peers) the refusal only said to rerun from the TUI or that a person had rejected it; it now tells the agent to write the text to a file inside the repository's `.git/` folder, where it is never committed, and pass that file (`git commit -F`, `gh pr create --body-file`), which runs without approval.
+- The terminal tool asks for that form up front, so an agent avoids the refused command in the first place.
+
 ## v0.19.14 — 2026-11-19 — a container daemon that answers after it starts
 
 - In a container, a daemon could start, log that it was listening and then answer nothing: the apps stayed disconnected, workgroup turns stopped, and `alpi workgroup launch` and `alpi workgroup remove` waited without a word. Restarting it did not always clear it. The container now splits off the daemon before anything else is loaded, which removes the cause.

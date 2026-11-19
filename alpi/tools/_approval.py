@@ -149,6 +149,12 @@ PromptChoice = str  # "once" | "session" | "always" | "deny"
 # ``cwd`` is the *effective* working directory the command will run in (already resolved through ``terminal._default_cwd()``). Callbacks that want to display it to the user can collapse ``$HOME`` to ``~`` themselves.
 PromptFn = Callable[[str, str, Severity, Optional[str]], PromptChoice]
 
+UNREADABLE_TEXT_ADVICE = (
+    "Pass multi-line or quoted text through a file: `write_file` it to an absolute path inside the "
+    "repository's git directory (the one `git rev-parse --absolute-git-dir` prints, usually "
+    "`<repo>/.git`; for example `<repo>/.git/ALPI_MSG_<task>`, never tracked), then "
+    "`git commit -F <that path>` or `gh pr create --body-file <that path>`."
+)
 _prompt_callback: Optional[PromptFn] = None
 
 
@@ -381,8 +387,8 @@ def _check_inner(cmd: str, cwd: str | None = None) -> Decision:
         return Decision(
             allowed=False, severity=severity, pattern=desc,
             reason=(
-                f"caution pattern: {desc} — no interactive approver in "
-                f"this surface. Rerun from TUI to approve."
+                f"caution pattern: {desc} — nobody here can approve a command the "
+                f"checker cannot read, so do not retry it as written. {UNREADABLE_TEXT_ADVICE}"
                 if once_only else
                 f"caution pattern: {desc} — no interactive approver in "
                 f"this surface. Rerun from TUI to approve, or add {desc!r} "
@@ -405,6 +411,7 @@ def _check_inner(cmd: str, cwd: str | None = None) -> Decision:
                 "user rejected this command. Do not retry, do not "
                 "prompt them to reconfirm — just move on or tell them "
                 "it was denied."
+                + (f" If it only carried text, {UNREADABLE_TEXT_ADVICE[0].lower()}{UNREADABLE_TEXT_ADVICE[1:]}" if once_only else "")
             ),
         )
     if once_only:

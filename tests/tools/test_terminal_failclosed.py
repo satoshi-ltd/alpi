@@ -215,3 +215,42 @@ def test_an_unparseable_command_says_why() -> None:
 def test_a_dangerous_pattern_still_wins_over_an_unparseable_command() -> None:
     assert classify("rm -rf ~ 'x")[0] == Severity.DANGEROUS
     assert classify("rm -rf ~ # don't")[0] == Severity.DANGEROUS
+
+
+HEADLESS_REPHRASED = [
+    ("git commit -m \"$(cat <<'EOF'\nfix: don't crash on empty input\nEOF\n)\"", "git commit -F /work/repo/.git/ALPI_MSG"),
+    ("gh pr create --title Fix --body \"$(cat <<'EOF'\nit's fixed\nEOF\n)\"", "gh pr create --title Fix --body-file /work/repo/.git/ALPI_MSG"),
+    ("git -C repo commit -F - <<'EOF'\nWe can't ship this yet.\nEOF", "git -C repo commit -F /work/repo/.git/ALPI_MSG"),
+]
+
+
+@pytest.mark.parametrize("cmd,rephrased", HEADLESS_REPHRASED)
+def test_with_nobody_to_ask_an_unreadable_command_is_refused_with_the_file_based_form(
+    cmd: str, rephrased: str, _isolate: Path,
+) -> None:
+    decision = _approval.check(cmd, cwd=str(_isolate.parent))
+    assert decision.allowed is False
+    assert "write_file" in decision.reason and "git commit -F" in decision.reason and "--body-file" in decision.reason
+    assert ".git/ALPI_MSG" in decision.reason and "python3" not in decision.reason
+    assert "Rerun from TUI" not in decision.reason
+    assert classify(rephrased, cwd=str(_isolate.parent))[0] == Severity.SAFE
+
+
+def test_the_terminal_tool_tells_the_model_to_pass_long_text_through_a_file() -> None:
+    from alpi.tools.terminal import Terminal
+
+    assert "write_file" in Terminal.description and "--body-file" in Terminal.description
+
+
+def test_an_approver_that_never_answers_still_hears_the_file_based_form(_isolate: Path) -> None:
+    _approval.set_prompt_callback(lambda command, desc, severity, cwd: "deny")
+    decision = _approval.check("git commit -m \"$(cat <<'EOF'\nit's done\nEOF\n)\"", cwd=str(_isolate.parent))
+    assert decision.allowed is False
+    assert "user rejected" in decision.reason and ".git/ALPI_MSG" in decision.reason
+
+
+def test_a_refused_readable_command_gets_no_text_advice(_isolate: Path) -> None:
+    _approval.set_prompt_callback(lambda command, desc, severity, cwd: "deny")
+    decision = _approval.check("git push --force origin main", cwd=str(_isolate.parent))
+    assert decision.allowed is False
+    assert "ALPI_MSG" not in decision.reason

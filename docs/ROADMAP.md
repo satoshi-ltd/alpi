@@ -80,20 +80,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **SEC.TERMINAL-UNREADABLE-HEADLESS** — An unattended profile is told how to rerun a command the checker cannot read
-  `bug · alpi · agent · high`
-  note: since 0.19.9 a command the classifier cannot parse asks once and is never allowlisted
-  ([_approval.py](../alpi/tools/_approval.py) `_check_inner`, `once_only`). On a surface with no approver (scheduled
-  jobs, gateways, workgroup turns, ALP) that is a refusal with no way forward, and the message says only "Rerun from
-  TUI to approve". The common case is a heredoc whose text has an odd apostrophe:
-  `git commit -m "$(cat <<'EOF' … don't … EOF)"`, `gh pr create --body "$(cat <<'EOF' …)"`, `cat > notes.md <<'EOF'`.
-  Before 0.19.9 these ran. A replay of 427 documented and typical commands changed 12 verdicts, all of this shape.
-  Whether an operator may opt a profile back in is SEC.D-UNREADABLE-HEADLESS; this task does not wait on it.
-  accept: with no approver, the refusal for an unreadable command tells the agent to write the text to a file with
-  `write_file` and pass the file (`git commit -F <file>`, `gh pr create --body-file <file>`); the terminal tool
-  description and `alpi/knowledge/references/security.md` say the same; a test asserts the message on a heredoc with
-  an apostrophe and that the file-based form of the same command classifies as safe.
-
 - **DESK.PAIR-DRAFT** — Pairing another daemon does not drop an unsaved Settings draft
   `bug · desktop · agent · normal`
   note: confirmed by trace on 2026-11-18. Commit `83448425` guards a plain connection switch against pending changes
@@ -146,7 +132,7 @@ _None._
 - **SEC.D-UNREADABLE-HEADLESS** — May an operator let an unattended profile run commands the checker cannot read?
   `decision · alpi · creator · normal`
   note: since 0.19.9 such a command needs a person each time and no allowlist entry covers it, so a profile with no
-  approver can never run one (SEC.TERMINAL-UNREADABLE-HEADLESS makes the refusal say how to rephrase it). The
+  approver can never run one (since 0.19.15 the refusal says how to rephrase it through a file). The
   alternative is a per-profile setting, off by default and local-socket only, that restores the pre-0.19.9 behaviour
   for that profile: unreadable commands run after every pattern that could be checked passed.
   accept: decide between no setting and that setting. If it is wanted, create the agent task with its name, its

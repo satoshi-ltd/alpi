@@ -50,6 +50,10 @@ not reach.
   or config allowlist, and no "always", can approve it, and a surface with
   nobody to ask refuses it, so a heredoc whose text has an unbalanced quote
   asks, `git commit -m "$(cat <<'EOF' … EOF)"` with an apostrophe included.
+  That refusal, and a denial of one, tell the agent to write the text with
+  `write_file` to an absolute path inside the repository's `.git/` (never
+  tracked) and pass that file (`git commit -F`, `gh pr create --body-file`);
+  the terminal tool's description asks for that form up front.
   `#` comments, `$'…'` quoting, `${VAR…}` forms
   and the string given to `sh -c`, `bash -c`, `eval` and every `$( … )` or
   backtick substitution are resolved and classified again, three levels deep,
