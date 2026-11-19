@@ -11,6 +11,11 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.10.13 — 2026-11-19 — details as wide as they need
+
+- The details popovers under a profile or workgroup name open only as wide as their content, instead of always wide; a very long model name or workgroup status stops at a cap and ends with an ellipsis.
+- Needs alpi ≥ 0.19.18.
+
 ## v0.10.12 — 2026-11-19 — clearer details and a quieter working line
 
 - A sentence alpi writes before using a tool, such as "Sweeping Bitbucket now", shows as the current step of the work line instead of looking like the answer; once the tool starts it stays among the steps, and only the last message is the reply.

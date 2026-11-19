@@ -87,7 +87,7 @@ export function WorkgroupDetails({ hubName, hubShape, hubBio = "", memberCount =
       </HeaderDetail>
       {status && (
         <HeaderDetail label="Status">
-          <span className={styles.ink2} data-status="">{status}</span>
+          <span className={styles.clip} title={status}><span className={styles.ink2} data-status="">{status}</span></span>
         </HeaderDetail>
       )}
       {budget && budget.cap > 0 && (
