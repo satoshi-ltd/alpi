@@ -49,7 +49,7 @@ export default function Composer({
   useEffect(() => {
     if (focusOnOpen == null || disabled) return;
     const held = document.activeElement;
-    if (held && held !== document.body) return;
+    if (held && held !== document.body && !held.closest("[inert]")) return;
     textareaRef.current?.focus({ preventScroll: true });
   }, [focusOnOpen, disabled]);
 

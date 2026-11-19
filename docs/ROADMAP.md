@@ -80,34 +80,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **DESK.PAIR-DRAFT** — Pairing another daemon does not drop an unsaved Settings draft
-  `bug · desktop · agent · normal`
-  note: confirmed by trace on 2026-11-18. Commit `83448425` guards a plain connection switch against pending changes
-  (`settingsLocked()`, [App.jsx](../desktop/src/App.jsx) near `:452`), but the sidebar's connection switcher passes the
-  unguarded `onAddHostConnection` ([Sidebar.jsx](../desktop/src/features/Sidebar.jsx) near `:542`). Rust
-  `add_remote_connection` sets `state.active_id` ([host_client.rs](../desktop/src-tauri/src/host_client.rs) near
-  `:1125`), `reloadConnections({ acceptActiveChange: true })` installs it
-  ([useHostConnections.js](../desktop/src/hooks/useHostConnections.js) near `:524`), Settings is keyed by connection and
-  remounts, and the `useSettingsDirty` cleanup clears the flag, so unsaved fields are lost without a prompt. Forgetting
-  the active connection from the same switcher (`onForgetHostConnection`, near `:531`) is the same hole.
-  accept: starting a pairing and forgetting the active connection both run the same pending-changes check as a
-  connection switch and offer to keep editing; a component test edits a Settings field, starts pairing and finds the
-  prompt, one does the same with forget, and one without a draft finds none.
-
-- **DESK.OVERLAY-FOCUS** — Closing an overlay returns keyboard focus
-  `bug · desktop · agent · normal`
-  note: since desktop 0.10.1 and 0.10.2 a closed overlay stays mounted `inert` for the 140 ms exit
-  ([useExit.js](../desktop/src/hooks/useExit.js) `:10-25`). `useOverlay` restores focus only when the active element
-  is `body` or disconnected ([useOverlay.js](../desktop/src/hooks/useOverlay.js) `:79-83`) and the composer autofocuses
-  only from `body` (`primitives/Composer.jsx` `:49-54`); the focused node inside the closing layer is still connected
-  when both run, so neither fires and focus later falls to `body`. Command palette then Esc leaves the composer
-  unfocused; picking a session from the palette swallows typing until a click; Esc on a dropdown, context menu or
-  popover drops the trigger's focus. `Modal` and `ModelPicker` restore explicitly and reduced motion is unaffected.
-  jsdom has no `matchMedia`, so the suite always takes the instant path.
-  accept: focus returns to the opener, or to the composer when the opener is gone, after the palette, a popover, a
-  dropdown and a context menu close with motion on; a test with `matchMedia` stubbed to `matches: false` proves each
-  and fails on the current code.
-
 ## In progress
 
 _None._

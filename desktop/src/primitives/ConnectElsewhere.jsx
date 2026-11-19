@@ -42,6 +42,10 @@ export default function ConnectElsewhere({ onConnect, onBack = null, autoFocus =
       await onConnect(link.trim());
       setCurrent("done");
     } catch (error) {
+      if (error?.held) {
+        setCurrent(null);
+        return;
+      }
       const next = pairingFailure(pairingFailureKind(error), host);
       setFailure(next);
       if (!next.keepLink) setLink("");

@@ -456,6 +456,20 @@ export default function App() {
     }
     onSetHostConnection(id);
   }, [onSetHostConnection, warnSettingsDirty]);
+  const addConnection = useCallback(async (payload) => {
+    if (settingsLocked()) {
+      warnSettingsDirty();
+      throw Object.assign(new Error(SETTINGS_DIRTY), { held: true });
+    }
+    return onAddHostConnection(payload);
+  }, [onAddHostConnection, warnSettingsDirty]);
+  const forgetConnection = useCallback(async (id) => {
+    if (id === hostConnectionsRef.current?.active_id && settingsLocked()) {
+      warnSettingsDirty();
+      return;
+    }
+    return onForgetHostConnection(id);
+  }, [onForgetHostConnection, warnSettingsDirty, hostConnectionsRef]);
 
   useEffect(() => {
     activeConnectionIdRef.current = hostConnections.active_id;
@@ -1511,8 +1525,8 @@ export default function App() {
           onTogglePin={onTogglePin}
           onTogglePauseProfile={adminOnTogglePauseProfile}
           onSetHostConnection={switchConnection}
-          onAddHostConnection={onAddHostConnection}
-          onForgetHostConnection={onForgetHostConnection}
+          onAddHostConnection={addConnection}
+          onForgetHostConnection={forgetConnection}
           onRenameHostConnection={onRenameHostConnection}
           onRefreshHostConnectionStatus={onRefreshHostConnectionStatus}
           autoOpenConnectionSwitcher={autoOpenConnectionSwitcher}
@@ -1571,8 +1585,6 @@ export default function App() {
               onOpenConnections={openConnections}
               onCloseConnections={closeConnections}
               onSetHostConnection={switchConnection}
-              onAddHostConnection={onAddHostConnection}
-              onForgetHostConnection={onForgetHostConnection}
               onRefreshHostConnectionStatus={onRefreshHostConnectionStatus}
             />
           ) : (

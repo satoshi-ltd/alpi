@@ -306,6 +306,81 @@ describe("App landing", () => {
     }
   });
 
+  it("keeps an unsaved Settings draft when pairing another computer is started from the switcher, and keeps the typed link", async () => {
+    const notify = vi.fn();
+    window.notify = notify;
+    daemon({ remote: { profiles: [SCOUT] } });
+    render(<App />);
+    await waitFor(() => expect(selected("alpi")).toBe(true));
+    openSettings();
+    await waitFor(() => expect(inSettingsView()).toBe(true));
+    setSettingsDirty("profile:default:bio", true);
+    try {
+      fireEvent.click(screen.getByText("This computer"));
+      await screen.findByLabelText("alpi:// link");
+      const link = "alpi://device?url=ws%3A%2F%2Fnew%3A7423&name=new&pairing_token=abc";
+      fireEvent.change(screen.getByLabelText("alpi:// link"), { target: { value: link } });
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Connect" })); });
+      expect(invoke.mock.calls.some(([cmd]) => cmd === "host_connection_add_remote")).toBe(false);
+      expect(notify).toHaveBeenCalledWith("Save or discard your settings changes first", { variant: "info" });
+      expect(inSettingsView()).toBe(true);
+      expect(screen.getByLabelText("alpi:// link").value).toBe(link);
+      expect(screen.queryByText("Pairing failed")).toBeNull();
+    } finally {
+      setSettingsDirty("profile:default:bio", false);
+      delete window.notify;
+    }
+  });
+
+  it("pairs from the switcher when nothing in Settings is unsaved", async () => {
+    daemon({ remote: { profiles: [SCOUT] } });
+    const base = invoke.getMockImplementation();
+    invoke.mockImplementation(async (cmd, args) => (cmd === "host_connection_add_remote" ? null : base(cmd, args)));
+    render(<App />);
+    await waitFor(() => expect(selected("alpi")).toBe(true));
+    fireEvent.click(screen.getByText("This computer"));
+    fireEvent.change(await screen.findByLabelText("alpi:// link"), { target: { value: "alpi://device?url=ws%3A%2F%2Fnew%3A7423&name=new&pairing_token=abc" } });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Connect" })); });
+    await waitFor(() => expect(invoke.mock.calls.some(([cmd]) => cmd === "host_connection_add_remote")).toBe(true));
+  });
+
+  it("forgets the active connection from the switcher when nothing in Settings is unsaved", async () => {
+    const state = daemon({ remote: { profiles: [SCOUT] } });
+    state.active = "remote";
+    const base = invoke.getMockImplementation();
+    invoke.mockImplementation(async (cmd, args) => (cmd === "host_connection_forget" ? null : base(cmd, args)));
+    render(<App />);
+    await waitFor(() => expect(screen.getAllByText("mirai").length).toBeGreaterThan(0));
+    fireEvent.click(screen.getAllByText("mirai")[0]);
+    fireEvent.click((await screen.findAllByRole("button", { name: "Forget" }))[0]);
+    await act(async () => { fireEvent.click(await screen.findByRole("button", { name: "Forget connection" })); });
+    await waitFor(() => expect(invoke.mock.calls.some(([cmd]) => cmd === "host_connection_forget")).toBe(true));
+  });
+
+  it("keeps an unsaved Settings draft when the active connection is forgotten from the switcher", async () => {
+    const notify = vi.fn();
+    window.notify = notify;
+    const state = daemon({ remote: { profiles: [SCOUT] } });
+    state.active = "remote";
+    render(<App />);
+    await waitFor(() => expect(screen.getAllByText("mirai").length).toBeGreaterThan(0));
+    openSettings();
+    await waitFor(() => expect(inSettingsView()).toBe(true));
+    setSettingsDirty("profile:scout:bio", true);
+    try {
+      fireEvent.click(screen.getAllByText("mirai")[0]);
+      fireEvent.click((await screen.findAllByRole("button", { name: "Forget" }))[0]);
+      await act(async () => { fireEvent.click(await screen.findByRole("button", { name: "Forget connection" })); });
+      await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+      expect(invoke.mock.calls.some(([cmd]) => cmd === "host_connection_forget")).toBe(false);
+      expect(notify).toHaveBeenCalledWith("Save or discard your settings changes first", { variant: "info" });
+      expect(inSettingsView()).toBe(true);
+    } finally {
+      setSettingsDirty("profile:scout:bio", false);
+      delete window.notify;
+    }
+  });
+
   it("jumps to the second roster row on ⌘2", async () => {
     daemon();
     render(<App />);

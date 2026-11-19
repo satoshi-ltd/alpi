@@ -11,6 +11,12 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.10.11 — 2026-11-19 — unsaved settings and the keyboard
+
+- Pairing another computer, or forgetting the connection in use, from the connection switcher while Settings has unsaved changes now asks you to save or discard them first, as a plain connection switch already did. The changes used to be lost without a word. The pairing link you typed stays in the field.
+- Closing the command palette, a menu, a dropdown or a popover gives the keyboard back to where it was when you opened it from the keyboard, such as the message box after ⌘K. Since 0.10.1 focus was dropped while the closing animation ran, so typing went nowhere until a click.
+- Needs alpi ≥ 0.19.0: earlier daemons do not send the profile marks, so every profile draws the same.
+
 ## v0.10.10 — 2026-11-18 — the role follows the connection
 
 - Switching between connections where you hold different roles updates what you may do at once. The app kept the previous connection's role for a while, so it showed admin controls on a member connection (or hid them on an admin one) and asked the daemon for things it refused.

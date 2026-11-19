@@ -120,6 +120,18 @@ describe("Composer focusOnOpen", () => {
     other.remove();
   });
 
+  it("takes focus from a control inside a closing, inert overlay", () => {
+    const layer = document.createElement("div");
+    const item = document.createElement("button");
+    layer.appendChild(item);
+    document.body.appendChild(layer);
+    item.focus();
+    layer.setAttribute("inert", "");
+    mount({ focusOnOpen: "doc" });
+    expect(document.activeElement).toBe(screen.getByRole("textbox"));
+    layer.remove();
+  });
+
   it("does not focus without the prop or while disabled", () => {
     mount();
     expect(document.activeElement).toBe(document.body);

@@ -55,6 +55,8 @@ export function useOverlay({ open, onClose, ref, modal = false, blocksShortcuts 
   const opener = document.activeElement;
   const close = useRef(onClose);
   const entry = useRef(null);
+  const openNow = useRef(open);
+  openNow.current = open;
   const isTop = useCallback(() => layers.at(-1) === entry.current, []);
 
   useLayoutEffect(() => {
@@ -76,11 +78,16 @@ export function useOverlay({ open, onClose, ref, modal = false, blocksShortcuts 
       const index = layers.indexOf(layer);
       if (index >= 0) layers.splice(index, 1);
       if (!layers.length) window.removeEventListener("keydown", onKey);
-      const shouldRestore = document.activeElement === document.body || ref.current?.contains(document.activeElement);
+      // React re-focuses the closing layer's node after this commit and the layer stays mounted (inert) through its exit: restore on the next tick and count focus left inside it as lost.
+      const layerNode = ref.current;
+      const closing = !openNow.current;
+      const shouldRestore = document.activeElement === document.body || layerNode?.contains(document.activeElement);
       if (shouldRestore) setTimeout(() => {
-        if (previous?.isConnected && (document.activeElement === document.body || !document.activeElement?.isConnected)) {
-          previous.focus?.();
-        }
+        const active = document.activeElement;
+        const lost = active === document.body || !active?.isConnected || (closing && layerNode?.contains(active));
+        if (!lost) return;
+        if (previous?.isConnected && previous !== document.body) previous.focus?.();
+        else if (closing && layerNode?.contains(document.activeElement)) document.activeElement.blur?.();
       }, 0);
     };
   }, [open, ref, modal, blocksShortcuts, ancestors, isTop]);
