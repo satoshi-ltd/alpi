@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.19.26 — 2026-11-20 — four things that were quietly lost
+
+- Memory no longer loses a fact that resembles one it already has. "Ana's flight to Bangkok is on Friday" after "Ana's flight to Madrid is on Friday" was taken for a repeat and dropped without a word. The agent is now told which entry it matched and can store the new one as a different fact; what gets written without that step does not change, and an entry is skipped silently only when its text is already inside an existing one. A candidate you approve one by one in `alpi memory promote` is no longer dropped for resembling an entry.
+- Changing a setting from `alpi setup` or an app no longer deletes the settings next to it: `memory.review_interval`, `tools.research`, `tools.web_search`, `tools.budget`, `tools.<name>.max_result_chars`, the PGP keys of `email` and any section a skill requires stay in `config.yaml`.
+- Downloading an attachment from a Gmail account works; it failed on every call.
+- On Linux, restarting or updating the daemon from an app brings it back. It used to stop cleanly, which systemd does not restart, and stay down. `alpi daemon restart` and the restarts `alpi setup` does after a change now restart the unit as well, when the unit is what runs the daemon.
+
 ## v0.19.25 — 2026-11-20 — console commands start instantly
 
 - `alpi --version`, `alpi runs list`, `alpi schedule list`, `alpi daemon status` and other commands that only read files or ask the daemon no longer load the agent engine or the model library, so they answer in a fraction of a second instead of over one.

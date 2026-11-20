@@ -87,6 +87,7 @@ _META_TOKEN = re.compile(r"(\w+)=([^\s]+)")
 @dataclass
 class MemoryStore:
     home: Path
+    last_matched: str = ""
 
     @property
     def user_path(self) -> Path:
@@ -207,14 +208,10 @@ class MemoryStore:
         target: str,
         content: str,
         confidence: str = DEFAULT_CONFIDENCE,
+        *,
+        distinct: bool = False,
     ) -> str:
-        """Append a new entry and return its action: 'added' or 'reinforced'.
-
-        Near-duplicates reinforce the matching existing entry (bumping
-        its counter and upgrading low→normal) instead of raising.
-        Raises ValueError only for empty content, over-limit writes, or
-        unknown target.
-        """
+        """'added', 'reinforced' (already written) or 'similar' (not written: the caller must quote `last_matched` to the model)."""
         cleaned = _clean_entry(content)
         if not cleaned:
             raise ValueError("empty entry after cleanup")
@@ -227,13 +224,14 @@ class MemoryStore:
         path = self._editable_path(name)
         with _memory_lock(path.parent):
             current = _read(path)
-            dup_idx = _find_duplicate_index(current, cleaned)
-            if dup_idx is not None:
-                rewritten = _reinforce_at(current, dup_idx)
+            match = _match_entry(current, cleaned, repeats_only=distinct)
+            if match is not None:
+                self.last_matched = strip_meta(current.split(ENTRY_DELIMITER)[match[0]]).strip()
+                rewritten = _reinforce_at(current, match[0])
                 if rewritten != current:
                     backup_file(path)
                     _atomic_write(path, rewritten)
-                return "reinforced"
+                return "reinforced" if match[1] == "repeat" else "similar"
             meta = _build_meta(confidence=confidence, captured=_today(), reinforced=0)
             entry_block = cleaned + meta
             new_content = (
@@ -319,41 +317,73 @@ def _clean_entry(content: str) -> str:
 
 
 def is_duplicate_stanza(existing_text: str, new_stanza: str) -> bool:
-    """Same fold + Jaccard dedup as ``_is_duplicate`` but splitting the
-    existing text on blank lines instead of the ``§`` delimiter. Used for
-    AGENT.md, which is free-form markdown (paragraphs / sections) rather
-    than a delimited entry list."""
     stanzas = [s for s in existing_text.split("\n\n") if s.strip()]
     joined = ENTRY_DELIMITER.join(stanzas)
     return _is_duplicate(joined, new_stanza)
 
 
-def _is_duplicate(existing: str, new_entry: str) -> bool:
-    return _find_duplicate_index(existing, new_entry) is not None
+def _is_duplicate(existing: str, new_entry: str, *, repeats_only: bool = False) -> bool:
+    return _match_entry(existing, new_entry, repeats_only=repeats_only) is not None
 
 
-def _find_duplicate_index(existing: str, new_entry: str) -> int | None:
-    needle_norm = _normalize_for_dedup(strip_meta(new_entry))
+# "repeat": the new text is literally inside an existing entry, word for word, so not writing it loses nothing. "similar" is a guess: its caller must name the entry it matched and leave a way to write the new one.
+def _match_entry(existing: str, new_entry: str, *, repeats_only: bool = False) -> tuple[int, str] | None:
+    needle_body = strip_meta(new_entry)
+    needle_norm = _normalize_for_dedup(needle_body)
     if not needle_norm:
-        return 0
-    needle_tokens = _content_tokens(strip_meta(new_entry))
+        return (0, "repeat")
+    needle_words = _dedup_words(needle_body)
+    needle_tokens = _content_tokens(needle_body)
+    similar: int | None = None
     for i, entry in enumerate(existing.split(ENTRY_DELIMITER)):
         body = strip_meta(entry)
         existing_norm = _normalize_for_dedup(body)
         if not existing_norm:
             continue
-        if (needle_norm == existing_norm
-                or needle_norm in existing_norm
-                or existing_norm in needle_norm):
-            return i
-        if needle_tokens:
-            existing_tokens = _content_tokens(body)
-            if existing_tokens:
-                overlap = len(needle_tokens & existing_tokens)
-                smaller = min(len(needle_tokens), len(existing_tokens))
-                if smaller >= 2 and overlap / smaller >= 0.7:
-                    return i
-    return None
+        if needle_norm in existing_norm:
+            if _has_run(_dedup_words(body), needle_words) if needle_words else needle_norm == existing_norm:
+                return (i, "repeat")
+            similar = i if similar is None else similar
+            continue
+        if repeats_only or similar is not None:
+            continue
+        if existing_norm in needle_norm:
+            similar = i
+            continue
+        existing_tokens = _content_tokens(body)
+        if needle_tokens and existing_tokens:
+            overlap = len(needle_tokens & existing_tokens)
+            smaller = min(len(needle_tokens), len(existing_tokens))
+            if smaller >= 2 and overlap / smaller >= 0.7:
+                similar = i
+    return (similar, "similar") if similar is not None and not repeats_only else None
+
+
+def _has_run(haystack: list[str], needle: list[str]) -> bool:
+    size = len(needle)
+    return any(haystack[i:i + size] == needle for i in range(len(haystack) - size + 1))
+
+
+# Accents fold only on Latin letters: in Thai, Arabic or Devanagari the marks tell words apart.
+def _dedup_words(s: str) -> list[str]:
+    import unicodedata
+    words: list[str] = []
+    current: list[str] = []
+    base = ""
+    for char in unicodedata.normalize("NFD", s):
+        kind = unicodedata.category(char)[0]
+        if kind == "M":
+            if current and ord(base) >= 0x0250:
+                current.append(char)
+        elif kind in "LN":
+            base = char
+            current.append(char)
+        elif current:
+            words.append("".join(current))
+            current = []
+    if current:
+        words.append("".join(current))
+    return [w.casefold() for w in words]
 
 
 # Minimal stopword set — Spanish + English function words. Kept deliberately

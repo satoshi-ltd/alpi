@@ -350,3 +350,65 @@ def test_compaction_prune_watermark_defaults_round_trips_and_rejects_garbage(tmp
     for bad in ("-5", "soon", "true", "1.5"):
         (tmp_home_no_env / "config.yaml").write_text(f"model: m\ncompaction:\n  prune_after_tokens: {bad}\n")
         assert config.load(tmp_home_no_env).compaction.prune_after_tokens == 120_000
+
+
+def test_save_keeps_what_it_does_not_model(tmp_home_no_env: Path) -> None:
+    import yaml
+
+    written = {
+        "model": "openai/gpt-4o",
+        "memory": {"review_interval": 3},
+        "tools": {
+            "deny": ["terminal"],
+            "budget": {"per_result_chars": 5000},
+            "research": {"max_usd": 0},
+            "web_search": {"max_per_turn": 4},
+            "web_fetch": {"max_result_chars": 9},
+            "terminal": {"sandbox": True, "max_result_chars": -1},
+        },
+        "email": {"accounts": {}, "signing_key": "ABCD", "encrypt_when_pubkey_available": True},
+        "home_assistant": {"url": "http://ha.local"},
+    }
+    (tmp_home_no_env / "config.yaml").write_text(yaml.safe_dump(written))
+
+    config.save(config.load(tmp_home_no_env))
+
+    on_disk = yaml.safe_load((tmp_home_no_env / "config.yaml").read_text())
+    for key in ("memory", "tools", "email", "home_assistant"):
+        assert on_disk[key] == written[key], key
+    reloaded = config.load(tmp_home_no_env)
+    assert reloaded.memory.review_interval == 3
+    from alpi.tools import research
+    assert research.max_usd(reloaded) is None
+
+
+def test_save_does_not_bring_back_a_setting_that_was_turned_off(tmp_home_no_env: Path) -> None:
+    import yaml
+
+    (tmp_home_no_env / "config.yaml").write_text(yaml.safe_dump({
+        "model": "openai/gpt-4o",
+        "memory": {"review_interval": 3},
+        "fallback_models": ["a/b"],
+        "tools": {"deny": ["terminal"], "terminal": {"sandbox": True}, "research": {"max_usd": 2}},
+    }))
+    cfg = config.load(tmp_home_no_env)
+    cfg.memory.review_interval = 0
+    cfg.fallback_models = []
+    cfg.tools.deny = []
+    cfg.tools.terminal.sandbox = False
+
+    config.save(cfg)
+
+    on_disk = yaml.safe_load((tmp_home_no_env / "config.yaml").read_text())
+    assert "memory" not in on_disk and "fallback_models" not in on_disk
+    assert on_disk["tools"] == {"research": {"max_usd": 2}}
+
+
+def test_every_setting_save_writes_is_one_it_never_carries_from_the_old_file() -> None:
+    import dataclasses
+
+    modelled = {f.name for f in dataclasses.fields(config.Config)} - {"home", "raw"}
+    assert modelled | {"mcp"} | set(config.DEFAULT_CONFIG) == config._SAVED_KEYS
+    tools = {f.name for f in dataclasses.fields(config.ToolsConfig)}
+    assert tools == set(config.DEFAULT_CONFIG["tools"]) == config._SAVED_TOOL_KEYS
+

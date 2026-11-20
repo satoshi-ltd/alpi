@@ -106,6 +106,8 @@ alpi --version
 alpi doctor
 ```
 
+`alpi daemon restart` stops the daemon and, on Linux when its systemd unit is what runs it, restarts that unit (launchd respawns it by itself; a daemon started by hand is only stopped); it says so when systemd could not, and the same happens when `alpi setup` restarts the daemon after a change. A restart or update asked from an app ends the daemon with exit status 75 so systemd, launchd and Docker all bring it back; `systemctl --user status alpi-daemon` shows that exit as a failure followed by a restart, which is expected.
+
 - Use the same installer family as the original install (`uv`, `pipx`, …).
 - No silent migrations: if a CHANGELOG entry calls for file moves, apply them for **every profile**.
 

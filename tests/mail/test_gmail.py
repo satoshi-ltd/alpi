@@ -262,3 +262,32 @@ def test_download_attachment_saves_bytes(
     n = client.download_attachment("msg1", "report.pdf", dest)
     assert dest.read_bytes() == raw_bytes
     assert n == len(raw_bytes)
+
+
+def test_the_email_tool_downloads_a_gmail_attachment(client: GmailClient, monkeypatch, tmp_path: Path) -> None:
+    from alpi.tools import email as email_mod
+
+    raw_bytes = b"PDF-1.5 fake"
+    ctx = _mock_httpx()
+    ctx.get.side_effect = [
+        _mock_response({"id": "msg1", "payload": {"parts": [{"filename": "report.pdf", "body": {"attachmentId": "att-1"}}]}}),
+        _mock_response({"data": base64.urlsafe_b64encode(raw_bytes).decode()}),
+    ]
+    monkeypatch.setattr(gmail_mod.httpx, "Client", lambda **kw: ctx)
+    dest = tmp_path / "out" / "report.pdf"
+
+    result = email_mod._dispatch(client, "download_attachment", {
+        "uid": "msg1", "attachment_name": "report.pdf", "dest_path": str(dest),
+    })
+
+    assert result.ok, result.error
+    assert dest.read_bytes() == raw_bytes
+
+
+def test_both_mail_clients_take_the_destination_under_one_name() -> None:
+    import inspect
+    from alpi.mail.imap import ImapClient
+
+    names = [list(inspect.signature(c.download_attachment).parameters) for c in (GmailClient, ImapClient)]
+    assert names[0] == names[1]
+

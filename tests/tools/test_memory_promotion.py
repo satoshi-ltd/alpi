@@ -142,3 +142,29 @@ def test_list_shows_warnings_on_candidate(isolated_home: Path) -> None:
     assert r.ok
     assert "warnings:" in r.output
     assert "session state" in r.output
+
+
+@pytest.mark.parametrize("args, answers, written", [
+    (["memory", "promote"], "a\n", True),
+    (["memory", "promote", "--apply-all"], "", False),
+])
+def test_only_a_candidate_approved_one_by_one_is_written_past_a_similar_entry(
+    tmp_home_no_env: Path, args: list[str], answers: str, written: bool,
+) -> None:
+    from click.testing import CliRunner
+
+    from alpi import cli, promotion
+    from alpi.tools.memory import Memory
+
+    (tmp_home_no_env / "memories").mkdir(exist_ok=True)
+    assert Memory().run(action="add", target="USER.md", content="Javi's flight to Madrid is on Friday").ok
+    promotion.add(
+        tmp_home_no_env, source="compaction", session_id="s1", model="x/y",
+        target="USER.md", text="Javi's flight to Bangkok is on Friday",
+    )
+
+    result = CliRunner().invoke(cli.main, args, input=answers)
+
+    assert result.exit_code == 0, result.output
+    text = (tmp_home_no_env / "memories" / "USER.md").read_text()
+    assert "Madrid" in text and ("Bangkok" in text) is written

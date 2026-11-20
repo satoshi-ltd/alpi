@@ -205,7 +205,7 @@ class GmailClient:
         self._post(f"messages/{uid}/trash")
 
     def download_attachment(self, uid: str, attachment_name: str,
-                            dest_path: Path, folder: str = "INBOX") -> int:
+                            dest: Path, folder: str = "INBOX") -> int:
         msg = self._get(f"messages/{uid}", format="full")
         part = _find_attachment(msg.get("payload", {}), attachment_name)
         if part is None:
@@ -219,8 +219,8 @@ class GmailClient:
                 raise GmailError(f"attachment has no data: {attachment_name!r}")
             resp = self._get(f"messages/{uid}/attachments/{att_id}")
             raw = base64.urlsafe_b64decode(_pad(resp["data"]))
-        dest_path.parent.mkdir(parents=True, exist_ok=True)
-        dest_path.write_bytes(raw)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(raw)
         return len(raw)
 
     def mark_seen(self, uid: str) -> None:

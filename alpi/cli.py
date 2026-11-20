@@ -1103,9 +1103,12 @@ def daemon_restart() -> None:
     if svc.daemon_running_pid(root) is None:
         click.echo("daemon is not running")
         return
-    svc.stop_daemon(root)
+    respawning = svc.restart_daemon(root)
     if svc.daemon_installed():
-        click.echo("daemon stopped — supervisor will respawn it shortly")
+        if respawning:
+            click.echo("daemon stopped — supervisor will respawn it shortly")
+        else:
+            click.echo("daemon stopped — systemd did not start it again; run `systemctl --user start alpi-daemon.service`")
         return
     alpi_bin = shutil.which("alpi") or "alpi"
     subprocess.Popen(
@@ -2334,7 +2337,7 @@ def _daemon_lifecycle_wizard(h: Path) -> None:
                 else:
                     ui.fail_and_wait("did not come up within 10s — check log")
             elif choice == "restart":
-                svc.stop_daemon(root)
+                svc.restart_daemon(root)
                 if _wait_for_daemon(root, up=True):
                     ui.ok_and_wait("daemon restarted")
                 else:
@@ -2390,8 +2393,9 @@ def _restart_daemon_for_apply(root: Path) -> str:
 
     if svc.daemon_running_pid(root) is None:
         return ""
-    svc.stop_daemon(root, timeout=2.0)
-    return " · daemon restarting"
+    if svc.restart_daemon(root, timeout=2.0):
+        return " · daemon restarting"
+    return " · daemon stopped, systemd did not start it again: `systemctl --user start alpi-daemon.service`"
 
 
 def _ensure_daemon_installed(root: Path) -> None:
@@ -5059,7 +5063,7 @@ def memory_group() -> None:
 def cmd_memory_promote(ctx: click.Context, apply_all: bool, discard_all: bool) -> None:
     """Interactively review the memory promotion queue."""
     from alpi import promotion as _promotion
-    from alpi.tools.memory import Memory
+    from alpi.tools.memory import Memory, refused_as_similar
 
     h: Path = ctx.obj["home"]
     pending = _promotion.list_pending(h)
@@ -5109,11 +5113,13 @@ def cmd_memory_promote(ctx: click.Context, apply_all: bool, discard_all: bool) -
             continue
         if choice == "a":
             r = Memory().run(
-                action="add",
-                target=cand.target,
-                content=cand.text,
-                confidence=cand.confidence,
+                action="add", target=cand.target, content=cand.text, confidence=cand.confidence,
             )
+            if not apply_all and refused_as_similar(cand.target, cand.text):
+                r = Memory().run(
+                    action="add", target=cand.target, content=cand.text, confidence=cand.confidence,
+                    distinct=True,
+                )
             if r.ok:
                 _promotion.remove_and_return(h, cand.id)
                 applied += 1

@@ -6,6 +6,7 @@
 - Say whether daemon/service restart is needed.
 - Secrets go in profile `.env`, not `config.yaml` or skill files.
 - Each profile has its own config and `.env`.
+- A setting saved from `alpi setup` or an app rewrites `config.yaml`. It keeps top-level sections alpi does not model (a skill's `requires_config` section), unmodelled sections under `tools` (`research`, `web_search`, `budget`, `db`), `tools.<name>.max_result_chars` and the PGP keys under `email`. It does not keep an unknown key inside a modelled section (`runtime`, `tiers`, `tools.terminal`, an email account) or the retired `service` section.
 - `host.config.set_field` (apps, `alpi setup`) stores each typed key with its type: `"14"` becomes the integer 14, `"90.5"` a number (never negative), `true`/`false` booleans, JSON text a list; a value that does not parse is refused with `invalid-params` and nothing is written. Keys with no fixed type (the `mcp` block) still store text, so a quoted number there or in a hand-edited YAML is possible. `email` keys are refused by set_field/unset_field; accounts change only through `host.email.add`/`remove`.
 
 ## Locations

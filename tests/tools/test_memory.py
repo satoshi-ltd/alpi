@@ -41,6 +41,142 @@ def test_add_reinforces_trailing_punctuation_variant(store: memory.MemoryStore) 
     assert store.add("USER.md", "Javi vive en Hua Hin.") == "reinforced"
 
 
+DIFFERENT_FACTS = [
+    ("Javi's flight to Madrid is on Friday", "Javi's flight to Bangkok is on Friday"),
+    ("User prefers dark mode", "User prefers dark roast coffee"),
+    ("User has 2 dogs", "User has 3 dogs"),
+    ("Meeting with Ana is at 5", "Meeting with Ana is at 7"),
+    ("Plan A is the default tier", "Plan B is the default tier"),
+    ("Server runs on port 8080", "Server runs on port 80"),
+    ("User owns cats", "User owns cat"),
+    ("Ana reports to Luis", "Luis reports to Ana"),
+    ("Javi lives in Madrid; his sister Ana lives in Bangkok", "Javi lives in Bangkok"),
+    ("\u0e01\u0e34\u0e19 rice", "\u0e01\u0e31\u0e19 rice"),
+    ("User's blood type is O+", "User's blood type is O-"),
+    ("Uses C++ daily", "Uses C#"),
+    ("temp 5 degrees outside", "temp -5"),
+]
+
+
+def _entries(store: memory.MemoryStore) -> list[str]:
+    return [e.strip() for e in store.snapshot()["USER.md"].split(memory.ENTRY_DELIMITER) if e.strip()]
+
+
+@pytest.mark.parametrize("first, second", DIFFERENT_FACTS)
+def test_a_different_fact_is_never_taken_for_one_already_written(store: memory.MemoryStore, first: str, second: str) -> None:
+    assert store.add("USER.md", first) == "added"
+    outcome = store.add("USER.md", second)
+    assert outcome in ("added", "similar")
+    if outcome == "similar":
+        assert _entries(store) == [first]
+        assert store.add("USER.md", second, distinct=True) == "added"
+    assert _entries(store) == [first, second]
+
+
+@pytest.mark.parametrize("first, second", DIFFERENT_FACTS[:2])
+def test_the_tool_names_the_entry_it_matched_and_stores_the_fact_when_told_it_differs(
+    tmp_home_no_env: Path, first: str, second: str,
+) -> None:
+    from alpi.tools.memory import Memory
+    (tmp_home_no_env / "memories").mkdir(exist_ok=True)
+    user = tmp_home_no_env / "memories" / "USER.md"
+    assert Memory().run(action="add", target="USER.md", content=first).ok
+
+    refused = Memory().run(action="add", target="USER.md", content=second)
+
+    assert refused.ok
+    assert refused.output.startswith(f'NOT ADDED "{second}"')
+    assert f'"{first}"' in refused.output and "distinct" in refused.output
+    assert second not in user.read_text()
+
+    stored = Memory().run(action="add", target="USER.md", content=second, distinct="True")
+
+    assert stored.ok and stored.output.startswith("Added 1 entry")
+    assert first in user.read_text() and second in user.read_text()
+
+
+def test_distinct_on_a_first_attempt_changes_nothing(tmp_home_no_env: Path) -> None:
+    from alpi.tools.memory import Memory
+    (tmp_home_no_env / "memories").mkdir(exist_ok=True)
+    user = tmp_home_no_env / "memories" / "USER.md"
+    Memory().run(action="add", target="USER.md", content="User prefers concise answers")
+
+    first = Memory().run(action="add", target="USER.md", content="User likes concise answers", distinct=True)
+    batch = Memory().run(action="add", target="USER.md", entries=["User wants concise answers"], distinct=True)
+
+    assert first.output.startswith("NOT ADDED") and batch.output.startswith("NOT ADDED")
+    assert "likes concise" not in user.read_text() and "wants concise" not in user.read_text()
+
+
+def test_a_batch_reports_each_similar_entry_and_writes_the_rest(tmp_home_no_env: Path) -> None:
+    from alpi.tools.memory import Memory
+    (tmp_home_no_env / "memories").mkdir(exist_ok=True)
+    Memory().run(action="add", target="USER.md", content="Javi's flight to Madrid is on Friday")
+
+    r = Memory().run(action="add", target="USER.md", entries=[
+        "Javi's flight to Bangkok is on Friday", "User drinks tea",
+    ])
+
+    text = (tmp_home_no_env / "memories" / "USER.md").read_text()
+    assert r.ok and 'NOT ADDED "Javi\'s flight to Bangkok is on Friday"' in r.output and "Madrid" in r.output
+    assert "User drinks tea" in text and "Bangkok" not in text
+
+
+@pytest.mark.parametrize("repeat", ["likes tea with milk", "THE USER LIKES TEA WITH MILK.", "tea"])
+def test_words_already_written_in_that_order_only_reinforce(store: memory.MemoryStore, repeat: str) -> None:
+    assert store.add("USER.md", "The user likes tea with milk") == "added"
+    assert store.add("USER.md", repeat, distinct=True) == "reinforced"
+    assert store.snapshot()["USER.md"].count("tea") == 1
+
+
+@pytest.mark.parametrize("existing, contained", [
+    ("\u0e1c\u0e39\u0e49\u0e43\u0e0a\u0e49\u0e0a\u0e2d\u0e1a\u0e01\u0e32\u0e41\u0e1f\u0e14\u0e33", "\u0e0a\u0e2d\u0e1a\u0e01\u0e32\u0e41\u0e1f\u0e14\u0e33"),
+    ("\u7528\u6237\u559c\u6b22\u5496\u5561", "\u559c\u6b22\u5496\u5561"),
+    ("Server runs on port 8080", "port 80"),
+])
+def test_text_inside_an_entry_but_not_as_whole_words_is_reported_not_appended(
+    store: memory.MemoryStore, existing: str, contained: str,
+) -> None:
+    assert store.add("USER.md", existing) == "added"
+    assert store.add("USER.md", contained) == "similar"
+    assert store.last_matched == existing
+    assert _entries(store) == [existing]
+
+
+def test_the_reviewer_cannot_force_an_entry_it_was_never_told_was_similar(tmp_home_no_env: Path) -> None:
+    import json
+
+    from alpi import review
+    from alpi.tools.memory import Memory
+    (tmp_home_no_env / "memories").mkdir(exist_ok=True)
+    Memory().run(action="add", target="USER.md", content="User prefers concise answers")
+
+    review._apply_calls([{"name": "memory", "arguments": json.dumps({
+        "action": "add", "target": "USER.md", "content": "User likes concise answers", "distinct": True,
+    })}])
+
+    assert "likes concise" not in (tmp_home_no_env / "memories" / "USER.md").read_text()
+
+
+def test_a_similar_entry_still_keeps_a_low_confidence_one_alive(store: memory.MemoryStore) -> None:
+    store.add("USER.md", "User prefers concise answers", confidence="low")
+    assert store.add("USER.md", "User likes concise answers") == "similar"
+    assert "reinforced=1" in store.user_path.read_text()
+
+
+def test_a_different_fact_in_the_other_file_can_be_stored(tmp_home_no_env: Path) -> None:
+    from alpi.tools.memory import Memory
+    (tmp_home_no_env / "memories").mkdir(exist_ok=True)
+    assert Memory().run(action="add", target="USER.md", content="Javi's flight to Madrid is on Friday").ok
+
+    refused = Memory().run(action="add", target="MEMORY.md", content="Javi's flight to Bangkok is on Friday")
+    stored = Memory().run(action="add", target="MEMORY.md", content="Javi's flight to Bangkok is on Friday", distinct=True)
+
+    assert not refused.ok and "distinct" in refused.error
+    assert stored.ok, stored.error
+    assert "Bangkok" in (tmp_home_no_env / "memories" / "MEMORY.md").read_text()
+
+
 def test_add_strips_headers_and_template(store: memory.MemoryStore) -> None:
     store.add("USER.md", "# header\n(alpi will fill...)\nReal fact.")
     text = store.user_path.read_text()

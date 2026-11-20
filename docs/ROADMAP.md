@@ -1,6 +1,6 @@
 # alpi roadmap
 
-Updated 2026-11-19. Current versions live in the changelogs. The Queue runs top to bottom; the creator
+Updated 2026-11-20. Current versions live in the changelogs. The Queue runs top to bottom; the creator
 approves the next tasks from Proposed.
 
 This is the task pool. [ARCHITECTURE.md](ARCHITECTURE.md) owns current state and
@@ -68,10 +68,17 @@ defect, so a helper is extracted only when it removes evidenced duplication.
   `tools.deny`, the tool-call deadline and the journal sweep cache; 0.18.1 added what the first day of fleet
   ledgers asked for (engine notes in the journal, the same-error hint, one copy of each tool output, the
   ledger kept by age). `HARN.018-VERIFY` reads the ledgers again; another harness patch needs evidence from it.
-- **Candidate for alpi 0.19.0: bounded pipeline repetition.** `WG.REPEAT` is the proposed feature boundary,
-  and it waits for the separate workgroup analysis (retry storms, `stale-round` waste) that only the creator's Mac can show. The goal is to finish a sequence of work without
-  an external script triggering every run, with finite limits and restart-safe progress. Approval of this
-  roadmap cleanup does not approve implementing the feature.
+- **Next feature line: the unattended agent.** A reading of the whole harness on 2026-11-20 found that the loop
+  holds up against the managed always-on agents and that three things do not: a profile is woken only by the
+  clock, it cannot wait for its owner's decision, and it keeps no thread between runs. `The unattended line` in
+  Proposed orders that work: wake on an event, park a decision, measure, keep a thread, and only then more
+  connectors and secrets the model never sees. Nothing in it is approved by being listed; the creator moves each
+  task to Queue.
+- **Faults before features.** `Code reading 2026-11-20` holds what that reading found broken. An entry marked
+  `run` or `read` goes ahead of any feature of the line; one marked `suspected` is settled by its failing test first.
+- **Pipeline-side candidate: bounded repetition.** `WG.REPEAT` waits for the separate workgroup analysis (retry
+  storms, `stale-round` waste) that only the creator's Mac can show. The goal is to finish a sequence of work
+  without an external script triggering every run, with finite limits and restart-safe progress.
 - **The clients keep their own versions.** Desktop and mobile release only when their shipped code changes;
   they do not inherit the daemon's minor number. Any new pipeline state needs an optional host field,
   console parity and compatibility tests before clients consume it.
@@ -108,7 +115,8 @@ _None._
   alternative is a per-profile setting, off by default and local-socket only, that restores the pre-0.19.9 behaviour
   for that profile: unreadable commands run after every pattern that could be checked passed.
   accept: decide between no setting and that setting. If it is wanted, create the agent task with its name, its
-  default, who may set it and the log line each use writes.
+  default, who may set it and the log line each use writes. `DECIDE.2` in Proposed is a third answer: the command
+  becomes a question the owner answers later.
 
 - **OPS-CONN-POLICY** — Connection policy for the fleet
   `decision · alpi · creator · normal`
@@ -168,6 +176,250 @@ _None._
   whether a provider pause opened and closed with one notification each way. Anything off becomes a `bug`.
 
 ## Proposed
+
+### The unattended line
+
+A reading of all of `alpi/` at commit `b6a7cc14` (alpi 0.19.25), against the managed always-on agents, found that the
+loop is not what separates them. Three things are: a profile is woken only by the clock, it cannot wait for its
+owner's decision, and it keeps no thread between runs. The entries below are in the order they would be approved
+and each stands alone. What they start from:
+
+- Jobs are `cron`, `once` or `inactivity` (`scheduler/run.py`). A `no_agent` job runs a script without a model; its
+  output can become a notification, never a turn.
+- An approval or an `ask_user` question is an in-memory future that waits 60 s or 300 s (`host/approval.py`,
+  `host/clarification.py`). Only `terminal` commands are classified. Scheduled and workgroup turns are
+  `alpi chat --once` children with no approver: a question gets a fallback string and a caution-class command is
+  refused at once.
+- A scheduled turn runs on a fresh engine and saves no session. In the apps every message builds a new engine that
+  replays the user text and the final replies of earlier turns, not what their tools returned
+  (`cli.py::_hydrate_from_path`).
+
+- **WATCH.1** — A script job wakes an agent turn when it has something to say
+  `feature · alpi · agent · high`
+  note: every watch in a deployment is a script that polls and then starts `alpi chat` itself, because nothing lets
+  a script's result start a turn. A `no_agent` job gains an optional `then` prompt. The script runs on the job's
+  schedule with no model call; when it exits 0 and printed something, one agent turn runs with that prompt and the
+  output, capped and marked untrusted, as its input; when it printed nothing the run is silent; a non-zero exit is
+  the failure it is today. Script validation, the timeout and one job at a time per profile stay as they are.
+  accept: a script that prints nothing costs no model call and files nothing; one that prints runs exactly one turn
+  that receives the text as untrusted data; `last_run_message` tells a failed script from a failed turn;
+  `host.schedule.list` carries the new fields as optional and an older client ignores them; the console lists the
+  pair.
+
+- **DECIDE.1** — A pending approval or question survives a restart and takes a late answer
+  `feature · alpi · agent · high`
+  note: a daemon restart loses every pending request, and an answer after the wait gets "unknown or already
+  resolved". The phone polls every 15 minutes at best, so a request raised while the app is closed is never
+  answered. Requests are stored under the profile, redacted and capped in count and age, with what was asked, by
+  which run and their state. The wait an attended turn makes does not change.
+  accept: a request written before a restart is listed by `host.approval.pending` / `host.clarification.pending`
+  after it; an answer to an expired request is recorded and the client is told it came late; ownership rules of the
+  two verbs hold; console parity in `/activity`.
+
+- **DECIDE.2** — A scheduled job or a workgroup turn can ask and wait
+  `feature · alpi · agent · high`
+  depends: DECIDE.1
+  note: the turn ends in a new outcome, waiting, with its question in the owner's inbox. The answer starts a
+  follow-up turn of the same job that receives the question, the answer and what the first turn had done. A request
+  nobody answers expires to today's behaviour. This is also what decides `SEC.D-UNREADABLE-HEADLESS`: an unreadable
+  command becomes a parked question instead of a refusal.
+  accept: a scheduled turn that calls `ask_user` or hits a caution-class command files one request and exits
+  without running the command; the answer runs one follow-up turn and the command only if approved; an unanswered
+  request leaves the job as it is today; the scheduler, gateways and `--once` ignore the new outcome unless they
+  need it.
+
+- **DECIDE.3** — An action that leaves the machine passes the gate
+  `feature · alpi · agent · high`
+  depends: DECIDE.1
+  note: `email` send, reply, forward and delete run on one sentence of the tool description; `browser` click, type
+  and press on nothing; MCP calls on deny globs — in unattended turns too. A profile policy names allow, ask or
+  deny per tool action. On an attended turn "ask" is today's approval sheet. On an unattended one it parks the
+  action: the exact call (recipient and body, selector, MCP arguments) is stored, shown to the owner and executed
+  as stored once approved, without another model call. The defaults for outward actions are the creator's choice
+  and are settled before this enters Queue.
+  accept: the approved call runs byte-identical to what was shown; a denied one reaches the next turn as a denial;
+  the audit trail records who approved; a profile with no policy behaves as today; console parity.
+
+- **EVAL.1** — A task battery scores a harness change per model
+  `chore · alpi · agent · normal`
+  note: there are a dozen `--llm` tests and nothing that says whether a harness change made the agent better or worse.
+  `ALPI_HOME=<tmp> alpi chat --once --emit-events --no-save` already isolates a run, and the run ledger records
+  model, tokens, cost and tools. Missing: a task set with checkable outcomes (a file written, a value returned, a
+  tool not called), a model argument, repetition, and one table of success, steps and cost per model. It lives
+  beside `tests/manual/` and never runs in `publish.yml`.
+  accept: one command runs the tasks against temporary homes for the models it is given and prints the table; with a
+  stub model, a deliberately broken prompt section lowers the score in a test.
+
+- **CONT.1** — A scheduled job keeps its own thread
+  `feature · alpi · agent · normal`
+  note: a job knows of its last run only what that run wrote to memory or to files. A job may opt in to a thread:
+  its runs append to one session that the next run rehydrates, bounded by compaction and a turn cap, and shown in
+  the apps as that job's history. `DECIDE.2` uses it for its follow-up turn.
+  accept: the second run of a threaded job sees the first run's reply; a job without the option runs as today; the
+  thread is owned like any scheduled run and deleting the job deletes it.
+
+- **CONT.2** — The todo list outlives the turn
+  `feature · alpi · agent · normal`
+  note: `tools/todo.py` keeps the list in memory and `Session.save` omits it, so a plan dies with the process and a
+  new message starts without it.
+  accept: a session reloaded from disk has its open todos; a finished list is not carried forever.
+
+- **CONT.3** — A chat keeps what its tools returned between messages
+  `feature · alpi · agent · normal`
+  depends: EVAL.1
+  note: the model answers a follow-up without the files it read or the commands it ran one message earlier, and
+  reads them again. Replaying earlier tool results costs prompt size, so the battery measures it first: success and
+  cost with and without, per model, with the prune threshold doing its work.
+  accept: the measured table is in the commit that turns it on or leaves it off; the replay is byte-stable for the
+  provider cache; what is replayed is already redacted and capped.
+
+- **CONT.4** — An interrupted turn resumes after a restart
+  `feature · alpi · agent · low`
+  depends: CONT.1
+  note: the run journal is flushed per event but nothing replays it; a restart marks the run interrupted and the
+  work starts again from nothing.
+  accept: a turn killed after three tool calls continues from the fourth and repeats no call that had side effects.
+
+- **MCP.REMOTE** — A remote MCP server over HTTP, signed in with OAuth
+  `feature · alpi, desktop, mobile · agent · normal`
+  depends: DECIDE.3
+  note: the client speaks stdio only (`mcp/client.py`); a remote endpoint goes through `mcp-remote` and Node. The
+  streamable-HTTP transport is `httpx`, already a dependency. Sign-in generalises the three flows of
+  `mail/gmail_auth.py` (loopback, pasted URL, loopback run by the client through `host.*`), today written for
+  Gmail only. Tokens live in the profile's `secrets/` and never reach a tool result. A remote server has no code to
+  scan, so its tool descriptions are pinned when the owner adds it and a change is reported before the tools are
+  offered again. It waits for `DECIDE.3`: more accounts in reach only behind the gate.
+  accept: a server added by URL lists and calls its tools with no Node on the machine; the three sign-in flows work
+  for it; a changed description withholds that server's tools until the owner accepts it; an older daemon answers
+  `-32601` and the apps hide the option.
+
+- **SECRET.REF** — The browser types a secret by name, on the site it belongs to
+  `feature · alpi · agent · normal`
+  note: `browser(action="type")` takes the literal text, so a password passes through the model's context, the
+  provider and the session. `type` accepts `secret: <name>`; the harness fills the field from the profile's
+  secrets, only when the page's origin is the one stored with that secret, and masks it in snapshots and traces.
+  accept: the secret's value appears in no tool argument, result, snapshot, trace or session; typing it on another
+  origin is refused and says why.
+
+- **MEM.RECALL-MEASURE** — How often does a turn need an earlier conversation and not look for it?
+  `chore · alpi · agent · normal`
+  note: nothing is recalled unless the model calls `session_search` or `recall_sessions`; the semantic index exists
+  only if the model built it; the post-turn reviewer is off by default. Before any automatic recall is designed, a
+  script over a sessions directory counts the turns whose user message points at earlier work, and how many of them
+  searched. Automatic recall is proposed only if that number is not small.
+  accept: the script prints the two counts and the turns behind them; the result and the decision it leads to are
+  recorded in this entry's place.
+
+- **MEM.PROMOTE-APPS** — Memory candidates can be reviewed where the owner is
+  `feature · alpi, desktop, mobile · agent · low`
+  note: compaction queues candidate facts and only `alpi memory promote` applies them, so on a daemon nobody opens a
+  console for, the queue fills and expires. A host verb lists, applies and discards candidates, with the same
+  checks as the console command, and the TUI gains the same.
+  accept: an applied candidate goes through the dedup and safety scan of `memory add`; a member connection cannot
+  call the verb; an older daemon answers `-32601` and the apps hide the list.
+
+### Code reading 2026-11-20
+
+Reported by the same reading of commit `b6a7cc14`. Each note says how far the fault was checked: **run** (reproduced
+on a temporary home), **read** (followed in the code, not run) or **suspected**. A suspected entry starts with the
+failing test that settles it; if the test cannot be made to fail, the entry is deleted.
+
+- **MAIL.PGP-ACCOUNTS** — Turning on PGP signing keeps the email accounts
+  `bug · alpi · agent · high`
+  note: run. `mail/pgp_setup.py::_write_email_cfg` assigns `data["email"] = {signing_key, encrypt_when_pubkey_available}`
+  and writes the file, so `email.accounts` is gone; with no signing key it removes `email` whole. It is reached from
+  `mail/setup.py` and `mail/gmail_setup.py` through `maybe_offer`. Whether a later `config.save` of the same wizard
+  puts the accounts back was not followed.
+  accept: after the wizard turns PGP on, and after it turns it off, every account that was in `config.yaml` is still
+  there, through the wizard's real sequence of writes.
+
+- **BROWSER.STATE** — A profile's browser session is its own and survives a crash
+  `bug · alpi · agent · normal`
+  note: suspected. `tools/browser.py` keeps one module-global browser, context and page on a worker thread, and
+  `_storage_dir()` runs on that thread, outside the `get_home()` context variable, so two profiles in one daemon
+  process may load and save the same `browser/state.json`. Read: the login state is written only on `close` and at
+  exit, so a killed process loses it; the file has default permissions; and it is not in the read denylist of
+  `tools/_paths.py`, so an owner-role turn can read its cookies with `read_file`.
+  accept: two profiles that browse in one process keep separate cookies; state written after a login survives
+  `SIGKILL`; `read_file` on `browser/state.json` is refused for every caller.
+
+- **SCHED.ONCE-FAILED** — A one-shot job that failed says so and does not linger
+  `bug · alpi · agent · normal`
+  note: read. A failed `once` job is stamped and never fires again, yet stays in the list
+  (`scheduler/run.py:198-199`, `:1064-1066`). An ad-hoc `fire` has no guard against the tick running the same job
+  and skips the run ledger (`:724-761`).
+  accept: a failed one-shot is shown as failed with its message and is not counted as pending; a `fire` during the
+  job's own run is refused or queued, and it writes its ledger row.
+
+- **HOST.RUNS-ADMIN** — An admin follows and cancels a scheduled run from an app
+  `bug · alpi · agent · normal`
+  note: read. `host.runs.*` filter by `owns_session` with no admin case (`host/runs.py:22`), and a scheduled run is
+  owned by `host`, so a remote admin sees it in Activity but cannot read its journal or cancel it.
+  accept: a remote admin reads and cancels a host-owned run inside its profile scope; a member still cannot.
+
+- **HOST.MCP-ADD-CHECKS** — An MCP server added from an app is checked like one added in the console
+  `bug · alpi · agent · normal`
+  note: read. `alpi mcp add` runs the malware lookup for an `npx` package; `host.mcp.add` stores whatever it is sent
+  and starts nothing (`host/config.py:507-531`). Its `env` may hold a literal secret in `config.yaml`.
+  accept: both paths run one function; the app is told what the check found before the server is saved; a literal
+  value in `env` is refused in favour of an `env:NAME` reference.
+
+- **ALP.PEER-BUDGET** — A peer's budget is enforced or removed
+  `bug · alpi · agent · normal`
+  note: read. `Peer.budget` is stored and shown (`alp/peers.py:74`) and nothing reads it; only the callee's own
+  daily budget stops a peer's request.
+  accept: a peer over its budget is refused with a reason, or the field leaves the file, the wizard and the docs.
+
+- **DAEMON.TASK-HEALTH** — A supervised task that dies is restarted or reported
+  `bug · alpi · agent · normal`
+  note: read. A crashed per-profile task is logged and not started again (`service.py`, the supervisor around
+  `_run_profile`), so an ALP or host server that fails once stays dead in a live process, and `alpi daemon status`
+  has no per-task state.
+  accept: a task that raises is started again with a backoff, and after repeated failures the owner gets one alert;
+  `daemon status --json` lists each task and its state.
+
+- **SKILL.SECRETS-READ** — The agent cannot read back a skill's secrets
+  `bug · alpi · agent · normal`
+  note: read. `skill(action="view")` returns files under a skill's `secrets/`, which only the host verbs hide
+  (`tools/skill.py`). `SEC.SKILL-ENV` covers the environment a skill script inherits.
+  accept: `view` refuses or masks a file under `secrets/` for every caller; a script still reads its own.
+
+- **TTS.ONLINE** — `tts` says where the text goes
+  `bug · alpi · agent · normal`
+  note: read. The tool and its module call the voice "local, no API key"; it uses `edge_tts`, which sends the text
+  to Microsoft's online service.
+  accept: the tool description, [CONFIG.md](CONFIG.md), [SECURITY.md](SECURITY.md) and the knowledge reference say
+  the text leaves the machine and to whom; a profile with `allow_network: false` does not offer the tool.
+
+- **MEM.SCAN-FACTS** — A fact that names a system file is not refused as an attack
+  `bug · alpi · agent · low`
+  note: read. Memory writes pass the skill scanner (`scan.py`), so "the user's aliases live in `.zshrc`" or a note
+  about `crontab` is refused.
+  accept: a plain sentence naming those files is stored; the injection and credential patterns still refuse.
+
+- **EDIT.ATOMIC** — `edit_file` does what its description says
+  `bug · alpi · agent · low`
+  note: read. The description promises a `.bak`; none is written, and the write is not atomic
+  (`tools/edit_file.py:76`).
+  accept: the description matches the tool; an edit interrupted mid-write leaves the old file whole.
+
+- **WG.SELF-DECLARED** — A workgroup budget counts what was spent, not what the poster says
+  `bug · alpi · agent · low`
+  note: read. A post carries the cost its author declares and the lifetime budget is checked when the post arrives,
+  after the spend (`alp/workgroup.py:294-316`). `WG.ORIGIN-WIRE` is the same question for a post's origin.
+  accept: decided together with `WG.ORIGIN-WIRE`, when a workgroup spans daemons that do not share an owner.
+
+- **HARN.DEAD-CODE** — Code nothing calls is removed
+  `chore · alpi · agent · low`
+  note: read; confirm each with `grep` before deleting. `doctor._live_pid` (calls `service.running_pid`, which does
+  not exist); `scheduler/run.py` `_load_jobs`, `_save_jobs`, `running_pid`, `stop`, `ensure_running` (starts
+  `alpi schedule start`, which does not exist); `tools/_guards.check_command` and its table; `llm._compute_cost`;
+  `engine._platform_hint`; `GmailClient.mark_seen`; `prompts/create_skill_guide.md` and `skill_template.md` (loaded
+  by nothing, and the guide names a `create_skill` tool that does not exist); the RPC handlers in `host/devices.py`
+  that `service.py` never registers; `Meta.notify_on_close`; the `workgroup.pause` / `resume` RPCs only the hub may
+  call and never does; `_chat_events.heartbeat` and `connection_id`; `service._mark_sub_dispatched` and
+  `_canonical_pipeline_slug`; the desktop's `runs_list`, `run_read` and `run_cancel` commands with no caller.
+  accept: each is gone or has a caller; the suites pass.
 
 ### Project analysis 2026-11-18
 
@@ -917,11 +1169,151 @@ Each entry is written to be worked without that report:
   `alpi/knowledge/references/architecture.md` (`:197`) say one commit per product, while the creator's rule since
   2026-11-15 is one commit per task whatever it releases. AGENTS.md says tests use isolated temporary homes but not
   that `ALPI_HOME` alone does not isolate a script. [QUICKSTART.md](../QUICKSTART.md) is missing from the
-  documents table.
+  documents table. From the code reading of 2026-11-20: [ARCHITECTURE.md](ARCHITECTURE.md) calls `notify` a
+  "native push" (`:151`, `:2060`) though the phone polls; its `send_message` paragraph and AGENTS.md (`:113`) name
+  a tool and gateways (telegram, matrix, webhook) that were retired in v0.10; `alp/tasks.py` says the hub "stays
+  zero-knowledge" while it decrypts the whole transcript on every post; `prompts/system_prompt.md` says memory is
+  frozen at session start, and in the apps it is read again on every message.
   accept: every `AUDIT.2` citation names an existing entry or is removed; the Hermes paragraph and the three
   commit-per-product sentences match the creator's current rules (ask before rewording them); the "Live
   environment boundaries" section says a hand-run script sets `HOME` and `ALPI_HOME`; the table lists
-  `QUICKSTART.md`; `grep` finds none of the stale strings.
+  `QUICKSTART.md`; the 2026-11-20 sentences say what the code does; `grep` finds none of the stale strings.
+
+### Security audit 2026-10-28
+
+- **SEC.BROWSER-PIN** — The browser connects to the IP its guard verified
+  `bug · alpi · agent · normal`
+  note: report TOOLS-2. `_route_guard` resolves with `check_url` and Chromium resolves again.
+  accept: Chromium is pinned to the verified address (host-resolver rule or the pinned transport) for every
+  navigation and subresource; a stub resolver that answers public then loopback cannot reach loopback.
+
+- **SEC.ALP-CONFINE** — ALP files, blobs and envelopes are confined before any peer is paired
+  `bug · alpi · agent · normal`
+  note: report ALP-1 to ALP-6; nothing on the fleet has peers or workgroups yet.
+  accept: `get_file` validates the hub's `name` (no `/` or `\` on any platform) and writes inside the workspace;
+  blobs have a per-profile quota, a TTL sweep and an in-flight cap per sender; `envelope.verify` raises
+  `EnvelopeError` for malformed fields; `_append_marker` takes the transcript lock; continuation requests need an
+  existing part; a Noise identity that does not match the envelope sender is cut before dispatch. A stub hub
+  returning `../x` and `..\x` is a test.
+
+- **SEC.REPO-GOVERNANCE** — GitHub controls for the release chain
+  `chore · alpi · creator · high`
+  note: report SUPPLY-1, 2, 4, 5. The repository half (actions pinned to a full SHA, `dependabot.yml`) is the
+  agent task SEC.ACTIONS-PIN; what is left here are GitHub settings. Turn on `sha_pinning_required` and
+  `allowed_actions: selected`, add a ruleset on `main` and on the four tag patterns, immutable
+  releases, an `environment: release` with a reviewer for the signing and publishing jobs, secret scanning and
+  push protection, and a root `SECURITY.md`.
+  accept: `gh api` shows each control on; a release still publishes end to end.
+
+- **SEC.SKILL-ENV** — Skill scripts, scheduler runs and `chat --once` children get an allow-listed environment
+  `bug · alpi · agent · low`
+  note: report SEC-1. The root `.env` loads into `os.environ`, `effective_profile_env` starts from it, and
+  `run.py` receives all of it. Low value while `terminal` runs unsandboxed: a script the agent writes can open
+  the `.env` files directly. Enforcing it today breaks fleet skills whose `run.py` reads undeclared keys
+  (`repo-task`, `security-triage`, `lobby-knowledge-enrichment`, scribe, scout, `sports-weekend`) or hands the
+  whole environment to `mvn`, `git` or `node`, and profiles that take the provider key from the root `.env`.
+  Order: an opt-in `skills.env: declared` mode plus a `doctor`/`skill validate` warning for undeclared reads;
+  then the creator declares each skill's env and enables the mode; then it becomes the default.
+  accept: the `run.py`, scheduler and `chat --once` environments are built like `terminal` (safe keys, the
+  skill's declared env, `ALPI_*`); the root `.env` no longer enters `os.environ` beyond the daemon-wide keys
+  that are read explicitly. Test: profile A with a secret, profile B whose `run.py` dumps its environment sees
+  neither A's keys nor B's undeclared ones.
+
+- **SEC.HARDENING-BATCH** — Desktop, client and supply-chain minors
+  `chore · alpi · desktop · agent · low`
+  note: report DESK-1 to DESK-4, CLIENT-2, MOB-6, SUPPLY-3 and the nits, taken in batches. Left from SEC.REDACT:
+  the ALP workgroup transcript (`alp/workgroup.py::_append_transcript`) is written unredacted, and
+  `alp/turns.jsonl` does not rotate.
+  accept: each batch names the IDs it closes and their tests.
+
+### Reliability before another feature
+
+- **FRAME.2** — Other writers still encode agent text with `ensure_ascii=False` and raise on a lone surrogate
+  `bug · alpi · agent · normal`
+  note: found while reviewing FRAME.1, which scrubs the host's Unix and WebSocket frames and the inbox, run ledger,
+  audit, workgroup transcript and file records. Still strict: the ALP wire writers
+  ([alp/server.py](../alpi/alp/server.py) `json.dumps(...).encode("utf-8")` at two sites,
+  [alp/client.py](../alpi/alp/client.py) at four), reached when a `workgroup_post` or `send_message` echoes a
+  binary filename read from a tool; the `--once` event lines (`sys.stdout.write(json.dumps(...))` in
+  [cli.py](../alpi/cli.py)) and a few `click.echo` of event or daemon payloads; and
+  `session.truncate_result`, which sends tool output to the provider unscrubbed. Scrubbing before signing changes
+  the bytes an envelope signs, so the ALP writers need the scrub in `envelope.py` or before the signature.
+  accept: each site either scrubs or is shown not to receive agent or tool text; a post carrying a lone surrogate
+  reaches a peer with a valid signature, and a `--once` turn whose tool output holds one prints its events; tests
+  drive the ALP client and server, the CLI line and a provider-bound message.
+
+### Found while shipping alpi 0.19.24
+
+- **CLI.STREAM-DEADLINE** — The console's untimed daemon calls stop when the daemon stops reading
+  `bug · alpi · agent · low`
+  note: the chat stream ([cli.py](../alpi/cli.py) near `:494`), `alpi runs cancel` (`:684`) and `alpi activity`
+  (`:717`) open the host socket with no deadline and close with `close()` plus `wait_closed()`; a daemon that
+  accepts and stops reading holds them at `drain()` forever. `host_client.acall` got one deadline and an abort on
+  failure in 0.19.24.
+  accept: each of the three sends with a deadline and aborts its transport on failure; a test with a socket that
+  never reads finishes each within its deadline.
+
+### Found while shipping alpi 0.18.4
+
+- **DESK.RECIPES-INVALID** — The desktop's saved-recipe list says which recipes it left out and why
+  `bug · desktop · agent · low`
+  note: `CreateWorkgroupModal.jsx` keeps only `recipes` from `host.workgroup.recipes.list` and drops
+  `invalid_recipes`, so a saved recipe the daemon refuses (from alpi 0.18.4, an unsupported step option) just
+  disappears from the picker; only `alpi workgroup recipes` and "Import recipe…" name the reason.
+  accept: the picker lists each refused recipe as disabled with the daemon's reason; an older daemon without
+  `invalid_recipes` shows nothing extra; a component test renders one valid and one refused recipe.
+
+### Found while shipping alpi 0.19.3
+
+- **DOCKER.LOCKED-INSTALL** — The Docker image installs the versions in `uv.lock`
+  `bug · alpi · agent · normal`
+  note: `docker/Dockerfile` runs `pip install --uploaded-prior-to P7D .`, so every build resolves each
+  dependency again and `uv.lock` never reaches the image: a build fails with no dependency change when a
+  release ages past the seven days, as playwright 1.65.0 did (its bundled `node` needs `libatomic.so.1`).
+  `pyproject.toml` caps `playwright<1.65`; lifting it needs `libatomic1` in the image, which the guard in
+  `tests/tools/test_browser.py` against hand-written libraries must allow. The lock
+  holds an older playwright than the image ships, so this changes the browser version. `CHROMIUM_DEPS_COMMAND`
+  (`uvx --from playwright …`) is uncapped too, so the repair `alpi doctor` prints may resolve 1.65 on a host.
+  accept: the image installs the exact versions `uv.lock` records; `tests/core/test_dependency_cooldown.py`
+  fails when the Dockerfile resolves a dependency outside the lock; the playwright cap is lifted or kept with
+  its reason, and the repair command resolves the playwright alpi runs; the image smoke test launches the browser.
+
+### Found while shipping mobile 0.10.5
+
+- **MOB.SDK-58** — The phone moves from Expo SDK 55 to SDK 58
+  `chore · mobile · agent · normal`
+  note: mobile 0.10.5 sits on the last SDK 55 patches (React Native 0.83.10, reanimated 4.2); SDK 58 ships React Native
+  0.88, React 19.3, reanimated 4.7 with worklets 0.13 and svg 15.16. Step one SDK at a time (56, 57, 58) with
+  `npx expo install expo@^<n> --fix`, each step's upgrade guide, `expo-doctor` clean and the suite green; the native
+  modules and config plugins must survive `expo prebuild`. The device check is MOB.SDK-58-VERIFY.
+  accept: `mobile/package.json` on `expo ~58`, `npx -y expo-doctor@latest` passes every check, `npm ci --dry-run` passes,
+  the mobile suite is green and `npx expo prebuild --clean --no-install` succeeds for iOS and Android.
+
+- **MOB.SDK-58-VERIFY** — The SDK 58 build behaves on iOS and Android
+  `verify · mobile · creator · normal`
+  depends: MOB.SDK-58
+  accept: an EAS build of each platform installs over the SDK 55 build, keeps the pairing, and the chat, its marks'
+  motion, notifications, the camera pairing and the fold layout behave as before.
+
+### Found while shipping mobile 0.9.16
+
+- **MOB.RADIO-CHECKED** — TalkBack announces which segment is chosen
+  `bug · mobile · agent · low`
+  note: `Segmented.jsx` sends `accessibilityState={{ selected: on }}` with `accessibilityRole="radio"`; Android
+  TalkBack reads a radio's state from `checked`, so the chosen theme or text size is not announced.
+  accept: `Segmented.test.jsx` asserts the selected cell carries `accessibilityState.checked: true` and the others `false`.
+
+### Found while shipping the new identity
+
+- **CI.GENERATED-DRIFT** — A push to main fails when a generated file is stale
+  `chore · alpi · agent · normal`
+  note: `alpi/mark_shapes.py` (`scripts/sync_marks.py --check`), the app icons (`scripts/gen_icons.py --check`)
+  and the design kit (`design/drift.py`) are generated from `common/*.mjs`, but only a local `scripts/validate.py`
+  checks them. A push that changes only `common/*.mjs` runs `clients.yml` (the JS suites) and skips `publish.yml`,
+  whose path filter needs `alpi/**`, so a stale console mark, icon or board reaches main unseen. Build tooling
+  only: no product bump.
+  accept: a workflow that runs on pushes and PRs touching `common/**`, `design/**` or the generators runs the three
+  checks and fails on drift; a release-script test asserts the workflow's path filter and commands.
 
 ### Client review 2026-11-05
 
@@ -1080,142 +1472,6 @@ Each entry is written to be worked without that report:
   `bug · mobile · agent · low`
   note: `backFallback` (`lib/panes.js:118-128`) sends identity, memory, email and other indexes to `/chat/X`.
   accept: they fall back to `/profile/X/settings`; test.
-
-### Security audit 2026-10-28
-
-- **SEC.BROWSER-PIN** — The browser connects to the IP its guard verified
-  `bug · alpi · agent · normal`
-  note: report TOOLS-2. `_route_guard` resolves with `check_url` and Chromium resolves again.
-  accept: Chromium is pinned to the verified address (host-resolver rule or the pinned transport) for every
-  navigation and subresource; a stub resolver that answers public then loopback cannot reach loopback.
-
-- **SEC.ALP-CONFINE** — ALP files, blobs and envelopes are confined before any peer is paired
-  `bug · alpi · agent · normal`
-  note: report ALP-1 to ALP-6; nothing on the fleet has peers or workgroups yet.
-  accept: `get_file` validates the hub's `name` (no `/` or `\` on any platform) and writes inside the workspace;
-  blobs have a per-profile quota, a TTL sweep and an in-flight cap per sender; `envelope.verify` raises
-  `EnvelopeError` for malformed fields; `_append_marker` takes the transcript lock; continuation requests need an
-  existing part; a Noise identity that does not match the envelope sender is cut before dispatch. A stub hub
-  returning `../x` and `..\x` is a test.
-
-- **SEC.REPO-GOVERNANCE** — GitHub controls for the release chain
-  `chore · alpi · creator · high`
-  note: report SUPPLY-1, 2, 4, 5. The repository half (actions pinned to a full SHA, `dependabot.yml`) is the
-  agent task SEC.ACTIONS-PIN; what is left here are GitHub settings. Turn on `sha_pinning_required` and
-  `allowed_actions: selected`, add a ruleset on `main` and on the four tag patterns, immutable
-  releases, an `environment: release` with a reviewer for the signing and publishing jobs, secret scanning and
-  push protection, and a root `SECURITY.md`.
-  accept: `gh api` shows each control on; a release still publishes end to end.
-
-- **SEC.SKILL-ENV** — Skill scripts, scheduler runs and `chat --once` children get an allow-listed environment
-  `bug · alpi · agent · low`
-  note: report SEC-1. The root `.env` loads into `os.environ`, `effective_profile_env` starts from it, and
-  `run.py` receives all of it. Low value while `terminal` runs unsandboxed: a script the agent writes can open
-  the `.env` files directly. Enforcing it today breaks fleet skills whose `run.py` reads undeclared keys
-  (`repo-task`, `security-triage`, `lobby-knowledge-enrichment`, scribe, scout, `sports-weekend`) or hands the
-  whole environment to `mvn`, `git` or `node`, and profiles that take the provider key from the root `.env`.
-  Order: an opt-in `skills.env: declared` mode plus a `doctor`/`skill validate` warning for undeclared reads;
-  then the creator declares each skill's env and enables the mode; then it becomes the default.
-  accept: the `run.py`, scheduler and `chat --once` environments are built like `terminal` (safe keys, the
-  skill's declared env, `ALPI_*`); the root `.env` no longer enters `os.environ` beyond the daemon-wide keys
-  that are read explicitly. Test: profile A with a secret, profile B whose `run.py` dumps its environment sees
-  neither A's keys nor B's undeclared ones.
-
-- **SEC.HARDENING-BATCH** — Desktop, client and supply-chain minors
-  `chore · alpi · desktop · agent · low`
-  note: report DESK-1 to DESK-4, CLIENT-2, MOB-6, SUPPLY-3 and the nits, taken in batches. Left from SEC.REDACT:
-  the ALP workgroup transcript (`alp/workgroup.py::_append_transcript`) is written unredacted, and
-  `alp/turns.jsonl` does not rotate.
-  accept: each batch names the IDs it closes and their tests.
-
-### Reliability before another feature
-
-- **FRAME.2** — Other writers still encode agent text with `ensure_ascii=False` and raise on a lone surrogate
-  `bug · alpi · agent · normal`
-  note: found while reviewing FRAME.1, which scrubs the host's Unix and WebSocket frames and the inbox, run ledger,
-  audit, workgroup transcript and file records. Still strict: the ALP wire writers
-  ([alp/server.py](../alpi/alp/server.py) `json.dumps(...).encode("utf-8")` at two sites,
-  [alp/client.py](../alpi/alp/client.py) at four), reached when a `workgroup_post` or `send_message` echoes a
-  binary filename read from a tool; the `--once` event lines (`sys.stdout.write(json.dumps(...))` in
-  [cli.py](../alpi/cli.py)) and a few `click.echo` of event or daemon payloads; and
-  `session.truncate_result`, which sends tool output to the provider unscrubbed. Scrubbing before signing changes
-  the bytes an envelope signs, so the ALP writers need the scrub in `envelope.py` or before the signature.
-  accept: each site either scrubs or is shown not to receive agent or tool text; a post carrying a lone surrogate
-  reaches a peer with a valid signature, and a `--once` turn whose tool output holds one prints its events; tests
-  drive the ALP client and server, the CLI line and a provider-bound message.
-
-### Found while shipping alpi 0.19.24
-
-- **CLI.STREAM-DEADLINE** — The console's untimed daemon calls stop when the daemon stops reading
-  `bug · alpi · agent · low`
-  note: the chat stream ([cli.py](../alpi/cli.py) near `:494`), `alpi runs cancel` (`:684`) and `alpi activity`
-  (`:717`) open the host socket with no deadline and close with `close()` plus `wait_closed()`; a daemon that
-  accepts and stops reading holds them at `drain()` forever. `host_client.acall` got one deadline and an abort on
-  failure in 0.19.24.
-  accept: each of the three sends with a deadline and aborts its transport on failure; a test with a socket that
-  never reads finishes each within its deadline.
-
-### Found while shipping alpi 0.18.4
-
-- **DESK.RECIPES-INVALID** — The desktop's saved-recipe list says which recipes it left out and why
-  `bug · desktop · agent · low`
-  note: `CreateWorkgroupModal.jsx` keeps only `recipes` from `host.workgroup.recipes.list` and drops
-  `invalid_recipes`, so a saved recipe the daemon refuses (from alpi 0.18.4, an unsupported step option) just
-  disappears from the picker; only `alpi workgroup recipes` and "Import recipe…" name the reason.
-  accept: the picker lists each refused recipe as disabled with the daemon's reason; an older daemon without
-  `invalid_recipes` shows nothing extra; a component test renders one valid and one refused recipe.
-
-### Found while shipping alpi 0.19.3
-
-- **DOCKER.LOCKED-INSTALL** — The Docker image installs the versions in `uv.lock`
-  `bug · alpi · agent · normal`
-  note: `docker/Dockerfile` runs `pip install --uploaded-prior-to P7D .`, so every build resolves each
-  dependency again and `uv.lock` never reaches the image: a build fails with no dependency change when a
-  release ages past the seven days, as playwright 1.65.0 did (its bundled `node` needs `libatomic.so.1`).
-  `pyproject.toml` caps `playwright<1.65`; lifting it needs `libatomic1` in the image, which the guard in
-  `tests/tools/test_browser.py` against hand-written libraries must allow. The lock
-  holds an older playwright than the image ships, so this changes the browser version. `CHROMIUM_DEPS_COMMAND`
-  (`uvx --from playwright …`) is uncapped too, so the repair `alpi doctor` prints may resolve 1.65 on a host.
-  accept: the image installs the exact versions `uv.lock` records; `tests/core/test_dependency_cooldown.py`
-  fails when the Dockerfile resolves a dependency outside the lock; the playwright cap is lifted or kept with
-  its reason, and the repair command resolves the playwright alpi runs; the image smoke test launches the browser.
-
-### Found while shipping mobile 0.10.5
-
-- **MOB.SDK-58** — The phone moves from Expo SDK 55 to SDK 58
-  `chore · mobile · agent · normal`
-  note: mobile 0.10.5 sits on the last SDK 55 patches (React Native 0.83.10, reanimated 4.2); SDK 58 ships React Native
-  0.88, React 19.3, reanimated 4.7 with worklets 0.13 and svg 15.16. Step one SDK at a time (56, 57, 58) with
-  `npx expo install expo@^<n> --fix`, each step's upgrade guide, `expo-doctor` clean and the suite green; the native
-  modules and config plugins must survive `expo prebuild`. The device check is MOB.SDK-58-VERIFY.
-  accept: `mobile/package.json` on `expo ~58`, `npx -y expo-doctor@latest` passes every check, `npm ci --dry-run` passes,
-  the mobile suite is green and `npx expo prebuild --clean --no-install` succeeds for iOS and Android.
-
-- **MOB.SDK-58-VERIFY** — The SDK 58 build behaves on iOS and Android
-  `verify · mobile · creator · normal`
-  depends: MOB.SDK-58
-  accept: an EAS build of each platform installs over the SDK 55 build, keeps the pairing, and the chat, its marks'
-  motion, notifications, the camera pairing and the fold layout behave as before.
-
-### Found while shipping mobile 0.9.16
-
-- **MOB.RADIO-CHECKED** — TalkBack announces which segment is chosen
-  `bug · mobile · agent · low`
-  note: `Segmented.jsx` sends `accessibilityState={{ selected: on }}` with `accessibilityRole="radio"`; Android
-  TalkBack reads a radio's state from `checked`, so the chosen theme or text size is not announced.
-  accept: `Segmented.test.jsx` asserts the selected cell carries `accessibilityState.checked: true` and the others `false`.
-
-### Found while shipping the new identity
-
-- **CI.GENERATED-DRIFT** — A push to main fails when a generated file is stale
-  `chore · alpi · agent · normal`
-  note: `alpi/mark_shapes.py` (`scripts/sync_marks.py --check`), the app icons (`scripts/gen_icons.py --check`)
-  and the design kit (`design/drift.py`) are generated from `common/*.mjs`, but only a local `scripts/validate.py`
-  checks them. A push that changes only `common/*.mjs` runs `clients.yml` (the JS suites) and skips `publish.yml`,
-  whose path filter needs `alpi/**`, so a stale console mark, icon or board reaches main unseen. Build tooling
-  only: no product bump.
-  accept: a workflow that runs on pushes and PRs touching `common/**`, `design/**` or the generators runs the three
-  checks and fails on drift; a release-script test asserts the workflow's path filter and commands.
 
 ### Harness, demand-gated
 

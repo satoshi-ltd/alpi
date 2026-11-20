@@ -32,6 +32,15 @@ async def _daemon_update(
     return result
 
 
+# A systemd unit with Restart=on-failure respawns only a non-zero exit, so a restart the daemon asks for must not end as a clean stop.
+RESPAWN_EXIT_CODE = 75
+_respawn_requested = False
+
+
+def respawn_requested() -> bool:
+    return _respawn_requested
+
+
 def schedule_self_terminate(delay: float = 0.2) -> None:
     # Deferred so the RPC returns before we SIGTERM ourselves; synchronous self-kill blocks the loop. Respawn: launchd/systemd on a host, restart policy in docker (PID 1 exits with the daemon's code).
     loop = asyncio.get_running_loop()
@@ -39,10 +48,12 @@ def schedule_self_terminate(delay: float = 0.2) -> None:
 
 
 def _self_terminate() -> None:
+    global _respawn_requested
+    _respawn_requested = True
     try:
         os.kill(os.getpid(), signal.SIGTERM)
     except OSError:
         pass
 
 
-__all__ = ["register", "schedule_self_terminate"]
+__all__ = ["RESPAWN_EXIT_CODE", "register", "respawn_requested", "schedule_self_terminate"]

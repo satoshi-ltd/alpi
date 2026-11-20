@@ -209,6 +209,9 @@ def serve_all(root: Path) -> None:
         _clear_daemon_pid(root)
         lock.close()
         log.info("central service stopped")
+    from alpi.host import daemon as host_daemon
+    if host_daemon.respawn_requested():
+        raise SystemExit(host_daemon.RESPAWN_EXIT_CODE)
 
 
 # Delayed past the boot reconnection storm on purpose: a chromium unzip + ONNX load at boot+5s starved small Docker hosts right while clients were re-pairing, which read as "the machine is blocked".
@@ -4491,6 +4494,31 @@ def daemon_running(root: Path) -> bool:
     return daemon_running_pid(root) is not None
 
 
+# systemd leaves a unit that exited 0 stopped, and `start` on one still shutting down is a no-op; `restart` is right in every state. Only a daemon the unit itself started is handed back to it.
+def restart_daemon(root: Path, *, timeout: float = 5.0) -> bool:
+    pid = daemon_running_pid(root)
+    supervised = pid is not None and _detect_backend() == "systemd" and daemon_installed() and _systemd_main_pid() == pid
+    stop_daemon(root, timeout=timeout)
+    if not supervised:
+        return True
+    try:
+        return _run(["systemctl", "--user", "restart", "alpi-daemon.service"], check=False, timeout=30).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def _systemd_main_pid() -> int | None:
+    try:
+        res = _run(
+            ["systemctl", "--user", "show", "-p", "MainPID", "--value", "alpi-daemon.service"],
+            check=False, timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    text = (res.stdout or "").strip()
+    return int(text) if res.returncode == 0 and text.isdigit() else None
+
+
 def install_daemon(root: Path) -> str:
     """Register the central daemon unit."""
     backend = _detect_backend()
@@ -4733,8 +4761,8 @@ def _systemd_hint(result: subprocess.CompletedProcess) -> str:
     return ""
 
 
-def _run(cmd: list[str], *, check: bool) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, capture_output=True, text=True, check=check)
+def _run(cmd: list[str], *, check: bool, timeout: float | None = None) -> subprocess.CompletedProcess:
+    return subprocess.run(cmd, capture_output=True, text=True, check=check, timeout=timeout)
 
 
 def _uptime_seconds(pid: int) -> int | None:

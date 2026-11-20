@@ -582,7 +582,7 @@ def load(home: Path) -> Config:
 
 
 def save(cfg: Config) -> None:
-    """Persist cfg to ~/.alpi/config.yaml. Only non-default values survive."""
+    """Rewrite config.yaml from cfg; `_carry_unmanaged` decides which unmodelled keys of the old file survive."""
     data: dict[str, Any] = {
         "model": cfg.model,
         "providers": cfg.providers,
@@ -658,7 +658,44 @@ def save(cfg: Config) -> None:
     if cfg.compaction.prune_after_tokens != CompactionConfig().prune_after_tokens:
         data["compaction"] = {"prune_after_tokens": cfg.compaction.prune_after_tokens}
 
+    if cfg.memory.review_interval:
+        data["memory"] = {"review_interval": cfg.memory.review_interval}
+
+    _carry_unmanaged(data, cfg.raw if isinstance(cfg.raw, dict) else {})
     atomic_write_yaml(cfg.config_path, data)
+
+
+_SAVED_KEYS = frozenset({
+    "model", "providers", "mcp", "email", "workspace", "relay", "public_bio", "paused", "fallback_models",
+    "tiers", "tools", "model_reasoning", "tui", "alp", "host", "network", "budget", "runtime", "retention",
+    "compaction", "memory",
+})
+_SAVED_TOOL_KEYS = frozenset({
+    "max_steps_per_turn", "max_parallel_tool_calls", "call_timeout_s", "deny", "execution", "web_extract",
+    "read_image", "terminal", "browser", "tts", "stt", "attachments",
+})
+
+
+# A key save() starts writing must join _SAVED_KEYS or _SAVED_TOOL_KEYS, or the stale value in cfg.raw overwrites it.
+def _carry_unmanaged(data: dict[str, Any], raw: dict[str, Any]) -> None:
+    for key, value in raw.items():
+        if key not in _SAVED_KEYS and key != "service":
+            data[key] = value
+    raw_tools = raw.get("tools")
+    if isinstance(raw_tools, dict):
+        tools = dict(data.get("tools") or {})
+        for name, value in raw_tools.items():
+            if name not in _SAVED_TOOL_KEYS:
+                tools[name] = value
+            elif isinstance(value, dict) and "max_result_chars" in value:
+                tools[name] = {**(tools.get(name) or {}), "max_result_chars": value["max_result_chars"]}
+        if tools:
+            data["tools"] = tools
+    raw_email = raw.get("email")
+    if isinstance(raw_email, dict):
+        for key in ("signing_key", "encrypt_when_pubkey_available"):
+            if key in raw_email:
+                data["email"][key] = raw_email[key]
 
 
 def atomic_write_yaml(path: Path, data: dict[str, Any] | list[Any]) -> None:

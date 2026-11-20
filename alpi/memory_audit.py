@@ -39,10 +39,7 @@ from alpi.memory import (
 )
 
 
-# The dedup similarity used here mirrors production: `overlap / min(|a|, |b|)`,
-# i.e. the Szymkiewicz–Simpson overlap coefficient (NOT Jaccard, which would
-# be `overlap / union`). The threshold sweep calibrates that exact metric so
-# audit findings stay comparable to the live dedup cutoff in `_find_duplicate_index`.
+# Overlap coefficient `overlap / min(|a|, |b|)`, not Jaccard: the same metric and 0.7 cutoff `memory._match_entry` uses to call an entry "similar".
 DEFAULT_THRESHOLDS: tuple[float, ...] = (0.5, 0.6, 0.7, 0.8)
 USAGE_PRESSURE_WARN_PCT = 0.80
 
@@ -248,7 +245,7 @@ def _duplicates(
 
 
 def _overlap_clusters(entries: list[str], threshold: float) -> list[list[int]]:
-    """Union-find clustering by overlap-coefficient token similarity at ``threshold`` (``overlap / min(|a|, |b|)``, same metric as the live dedup in ``_find_duplicate_index``). Singletons omitted."""
+    """Union-find clustering by overlap-coefficient token similarity at ``threshold`` (``overlap / min(|a|, |b|)``, same metric as the live dedup in ``memory._match_entry``). Singletons omitted."""
     n = len(entries)
     if n < 2:
         return []

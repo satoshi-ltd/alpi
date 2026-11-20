@@ -58,16 +58,39 @@ def _operational_warning(text: str) -> str:
     return ""
 
 
-def _cross_file_duplicate(store: MemoryStore, target: str, content: str) -> str | None:
-    """If ``content`` is near-duplicate of an entry in the OTHER memory
-    file, return the other file's name. Used to catch facts that land
-    twice (e.g. vehicle list in both USER.md and MEMORY.md)."""
+def _cross_file_duplicate(store: MemoryStore, target: str, content: str, distinct: bool = False) -> str | None:
     key = target.upper()
     other = "MEMORY.md" if key == "USER.MD" else "USER.md" if key == "MEMORY.MD" else None
     if other is None:
         return None
     other_text = store.snapshot()[other]
-    return other if _is_duplicate(other_text, content) else None
+    return other if _is_duplicate(other_text, content, repeats_only=distinct) else None
+
+
+# `distinct` counts only for a text this process already refused as similar, so a model that sets it by habit writes nothing it would not have written before.
+_refused: set[tuple[str, str, str]] = set()
+
+
+def _refusal_key(target: str, item: str) -> tuple[str, str, str]:
+    return (str(get_home()), target.upper(), " ".join(_clean_entry(item).split()).casefold())
+
+
+def _note_refused(target: str, item: str) -> None:
+    if len(_refused) >= 256:
+        _refused.clear()
+    _refused.add(_refusal_key(target, item))
+
+
+def refused_as_similar(target: str, item: str) -> bool:
+    return _refusal_key(target, item) in _refused
+
+
+def _similar_note(store: MemoryStore, target: str, item: str) -> str:
+    return (
+        f'NOT ADDED "{item[:80]}": similar to an entry already in {target}: "{store.last_matched}". '
+        "Same fact: nothing to do. To change that entry: `replace`. "
+        "A different fact: send it again with `distinct: true`."
+    )
 
 
 class Memory(Tool):
@@ -246,6 +269,14 @@ class Memory(Tool):
                     "counter and upgrades low → normal)."
                 ),
             },
+            "distinct": {
+                "type": "boolean",
+                "description": (
+                    "``add`` only. Set true to store an entry the tool just "
+                    "reported as similar to an existing one, when it is a "
+                    "different fact. Ignored on a first attempt."
+                ),
+            },
         },
         "required": ["action"],
     }
@@ -254,7 +285,9 @@ class Memory(Tool):
             match: str = "",
             entries: list[str] | None = None,
             confidence: str = "normal",
-            id: str = "") -> ToolResult:
+            id: str = "",
+            distinct: bool = False) -> ToolResult:
+        distinct = distinct is True or (isinstance(distinct, str) and distinct.strip().lower() == "true")
         h = get_home()
 
         if action.startswith("promotion_"):
@@ -292,7 +325,7 @@ class Memory(Tool):
                     )
 
                 if batch:
-                    res = _add_memory_batch(self, store, target, batch, confidence)
+                    res = _add_memory_batch(self, store, target, batch, confidence, distinct)
                     if res.ok:
                         _notify_changed(h)
                     return res
@@ -300,6 +333,7 @@ class Memory(Tool):
                 items = [content]
                 added = 0
                 reinforced = 0
+                similar: list[str] = []
                 warnings: list[str] = []
                 for item in items:
                     item = item.strip()
@@ -308,20 +342,30 @@ class Memory(Tool):
                     blocked = _safety_error(item)
                     if blocked is not None:
                         return ToolResult(ok=False, output="", error=blocked)
-                    other = _cross_file_duplicate(store, target, item)
+                    told = distinct and refused_as_similar(target, item)
+                    other = _cross_file_duplicate(store, target, item, told)
                     if other is not None:
+                        if not told:
+                            _note_refused(target, item)
                         if len(items) == 1:
                             return ToolResult(
                                 ok=False, output="",
                                 error=(
+                                    f"already written in {other}." if told else
                                     f"looks like a near-duplicate of an entry "
-                                    f"already in {other}. Use `replace` there or "
-                                    f"confirm this is a genuinely distinct fact."
+                                    f"already in {other}. Use `replace` there, or "
+                                    f"send it again with `distinct: true` if it is "
+                                    f"a different fact."
                                 ),
                             )
                         warnings.append(f"skipped (duplicate of {other}): {item[:60]!r}")
                         continue
-                    outcome = store.add(target, item, confidence=confidence)
+                    outcome = store.add(target, item, confidence=confidence, distinct=told)
+                    if outcome == "similar":
+                        _note_refused(target, item)
+                        similar.append(_similar_note(store, target, item))
+                        continue
+                    _refused.discard(_refusal_key(target, item))
                     if outcome == "reinforced":
                         reinforced += 1
                     else:
@@ -330,7 +374,7 @@ class Memory(Tool):
                     if warn:
                         warnings.append(warn)
 
-                if added == 0 and reinforced == 0:
+                if added == 0 and reinforced == 0 and not similar:
                     return ToolResult(
                         ok=False, output="",
                         error="no entries added: " + " | ".join(warnings),
@@ -347,6 +391,8 @@ class Memory(Tool):
                     )
                 if header_parts:
                     output = f"{' · '.join(header_parts)} in {target}.\n\n{output}"
+                if similar:
+                    output = "\n".join(similar) + f"\n\n{output}"
                 if warnings:
                     output = f"{output}\n\n" + "\n".join(warnings)
                 _notify_changed(h)
@@ -429,9 +475,11 @@ def _add_memory_batch(
     target: str,
     entries: list[str],
     confidence: str = "normal",
+    distinct: bool = False,
 ) -> ToolResult:
     added = 0
     reinforced = 0
+    similar: list[str] = []
     warnings: list[str] = []
 
     for raw in entries:
@@ -442,15 +490,23 @@ def _add_memory_batch(
         if blocked is not None:
             warnings.append(f"skipped ({blocked}): {item[:60]!r}")
             continue
-        other = _cross_file_duplicate(store, target, item)
+        told = distinct and refused_as_similar(target, item)
+        other = _cross_file_duplicate(store, target, item, told)
         if other is not None:
+            if not told:
+                _note_refused(target, item)
             warnings.append(f"skipped (duplicate of {other}): {item[:60]!r}")
             continue
         try:
-            outcome = store.add(target, item, confidence=confidence)
+            outcome = store.add(target, item, confidence=confidence, distinct=told)
         except ValueError as e:
             warnings.append(f"skipped ({e}): {item[:60]!r}")
             continue
+        if outcome == "similar":
+            _note_refused(target, item)
+            similar.append(_similar_note(store, target, item))
+            continue
+        _refused.discard(_refusal_key(target, item))
         if outcome == "reinforced":
             reinforced += 1
         else:
@@ -459,7 +515,7 @@ def _add_memory_batch(
         if warn:
             warnings.append(warn)
 
-    if added == 0 and reinforced == 0:
+    if added == 0 and reinforced == 0 and not similar:
         return ToolResult(
             ok=False, output="",
             error="no entries added: " + " | ".join(warnings),
@@ -472,10 +528,11 @@ def _add_memory_batch(
         header_parts.append(
             f"reinforced {reinforced} existing entr{'ies' if reinforced != 1 else 'y'}"
         )
-    out = (
-        f"{' · '.join(header_parts)} in {target}.\n\n"
-        f"{tool._state_snapshot(store, target)}"
-    )
+    out = tool._state_snapshot(store, target)
+    if header_parts:
+        out = f"{' · '.join(header_parts)} in {target}.\n\n{out}"
+    if similar:
+        out = "\n".join(similar) + f"\n\n{out}"
     if warnings:
         out = f"{out}\n\n" + "\n".join(warnings)
     return ToolResult(ok=True, output=out)

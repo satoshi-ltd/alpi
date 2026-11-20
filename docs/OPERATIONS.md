@@ -178,8 +178,11 @@ linger setup manually.
 
 On macOS the launchd plist declares `KeepAlive=true`, so `alpi daemon stop`
 is followed by a respawn within seconds. On Linux the systemd unit is
-`Restart=on-failure` and a clean stop stays stopped. To stop it permanently
-on macOS:
+`Restart=on-failure` and a clean stop stays stopped. A restart the daemon
+asks for itself (an update or a restart from an app) ends with exit status
+75 instead, so systemd, launchd and Docker's restart policy all bring it
+back; systemd records that exit as a failure before it restarts the unit.
+To stop it permanently on macOS:
 
 ```bash
 alpi setup → Services → Daemon → Uninstall
@@ -212,7 +215,8 @@ still holds the old binary's code. Use:
 
 ```bash
 alpi daemon restart      # macOS: stop and let launchd respawn
-                         # Linux: start it again yourself if it stays down
+                         # Linux: stop, then `systemctl --user restart` the unit
+                         #        (only when the unit is what runs the daemon)
 ```
 
 `alpi doctor` flags "stale binary — `alpi daemon restart` to

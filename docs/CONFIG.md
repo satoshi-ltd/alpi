@@ -35,6 +35,16 @@ Everything else (tool limits, TUI flags, fallback models, workspace)
 falls back to the defaults below at load time. Add a key to the YAML
 only when you want to override it.
 
+A wizard or an app that changes a setting rewrites the file. The settings
+alpi models are written from their current values, and a value back at its
+default leaves the file. What it keeps as you wrote it: a top-level section
+alpi does not model (one a skill names in `requires_config`, for example),
+a section under `tools` it does not model (`tools.research`,
+`tools.web_search`, `tools.budget`, `tools.db`), `tools.<name>.max_result_chars`,
+and the two PGP keys under `email`. An unknown key inside a section alpi
+does model (`runtime`, `tiers`, `tools.terminal`, an email account) is not
+kept, and neither is the retired `service` section.
+
 ## How to change settings
 
 Three options:

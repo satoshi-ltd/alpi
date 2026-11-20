@@ -166,6 +166,7 @@ User-owned dirs under `{home}/skills/<category>/<name>/`. Runtime self-knowledge
 - `MEMORY.md` — durable user world/context, cap 5000 chars.
 - `AGENT.md` — profile voice/persona, uncapped.
 - Low-confidence memories with no reinforcement expire after 30 days.
+- `memory add` does not write an entry whose text is already inside an existing one word for word (it reinforces it). An entry that only resembles one is not written either, but the tool answers `NOT ADDED` and quotes both: if it is a different fact, send the same `add` again with `distinct: true` (the flag does nothing on a first attempt); to change the existing entry use `replace`. `alpi memory promote` writes a similar candidate when the owner applies it one by one, not under `--apply-all`.
 - Compaction yields promotion candidates; only `alpi memory promote` applies them.
 
 ## Daemon and env
