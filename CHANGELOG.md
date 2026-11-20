@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.19.25 — 2026-11-20 — console commands start instantly
+
+- `alpi --version`, `alpi runs list`, `alpi schedule list`, `alpi daemon status` and other commands that only read files or ask the daemon no longer load the agent engine or the model library, so they answer in a fraction of a second instead of over one.
+
 ## v0.19.24 — 2026-11-19 — no empty PATH, no stuck console call
 
 - A script job whose `PATH` would be left with no folder outside the profile, the workspace and the temp folders is refused before it starts and says why; an empty `PATH` would have searched the current folder.

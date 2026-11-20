@@ -1,6 +1,13 @@
-from alpi.tui._links import install as _install_link_style
-from alpi.tui.app import AlpiApp
+def __getattr__(name: str):
+    if name == "AlpiApp":
+        from alpi.tui.app import AlpiApp
 
-_install_link_style()
+        return AlpiApp
+    raise AttributeError(f"module 'alpi.tui' has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted({*globals(), "AlpiApp"})
+
 
 __all__ = ["AlpiApp"]

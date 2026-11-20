@@ -106,6 +106,8 @@ alpi workgroup kick <wg_id> <member-id|pubkey>     hub-only; rotates the group k
 
 **Command ordering** in `--help` is frequency-first, not alphabetical: `chat → setup → doctor → logs → profile → peers → workgroup → schedule → daemon`. See `_OrderedGroup` in `cli.py`.
 
+**Start-up cost.** `cli.py` and the `alpi.tui` package import neither `alpi.engine` nor `litellm` at module level: `Engine` is imported inside `_run_once_with_authority`, the daemon imports it in `serve_all` before any thread starts (the CLI skips its background update check for `alpi daemon …`, and `serve_all` starts that check after the import), and `alpi.tui.AlpiApp` resolves on first access, so commands that only read files or call the daemon (`--version`, `runs list`, `schedule list`, `daemon status`, `profile list`) start in well under a second. `tests/core/test_cli_cold_start.py` fails if a top-level import brings them back.
+
 **`alpi/ui.py`** is the shared interactive layer. Raw `questionary.*` is forbidden outside it. Helpers: `banner`, `menu`, `text`, `password`, `confirm`, `row`, `ok/fail/warn/dim/saved/cancelled`. The close item is added automatically with value `None` (callers treat `None` as "out").
 
 **Menu close wording**: top-level (`alpi setup`) → `Exit`. Sub-menus (`Email:`, `MCP servers:`, `Manage saved keys`) → `← Back`. Wizard aborted mid-flow → `cancelled`. Mixing `Exit/Back/Cancel` in one context is a bug.

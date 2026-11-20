@@ -579,17 +579,6 @@ Each entry is written to be worked without that report:
   pronoun-routing block and the language rule each appear once; a test builds the prompt for a profile that denies
   `skill`, `memory` and the web tools and finds none of the four headings; the part order stays `PART_ORDER`.
 
-- **HARN.COLD-START** — Starting alpi makes no network call and a console command does not load the model library (H5)
-  `chore · alpi · agent · normal`
-  note: since 0.19.17 `import litellm` makes no network call (`alpi/__init__.py` defaults
-  `LITELLM_LOCAL_MODEL_COST_MAP`, and alpi registers `alpi/providers/native_models.yaml`), so the first clause of the
-  accept below and the SECURITY.md line are done. [cli.py](../alpi/cli.py) (`:18`) still imports the engine at
-  module top, so `alpi --version` and `alpi runs list` take a second.
-  accept: `_silence_litellm` sets the variable with `os.environ.setdefault` before the import; a test in
-  `tests/test_llm_privacy.py` imports the library with sockets blocked and records no connection attempt; a
-  subprocess test runs `alpi --version` and finds neither `litellm` nor `alpi.engine` in `sys.modules`; the chat and
-  TUI commands import the engine when they run; SECURITY.md's `litellm` row says the price map is the bundled one.
-
 - **HARN.MCP-START** — MCP servers start together (H6)
   `chore · alpi · agent · low`
   note: servers spawn one after another inside `Engine.__init__`

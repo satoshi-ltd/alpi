@@ -6,6 +6,7 @@
 - Desktop/mobile never read `~/.alpi/` directly; they call `host.*`.
 - ALP is not the app API; ALP is peer-to-peer between alpi profiles. Host plane is client-to-daemon. Different sockets, different auth.
 - alpi self-knowledge is native: `alpi_knowledge` reads `alpi/knowledge/references/`, not a skill.
+- "Why is `alpi --version` fast / slow?" -> `cli.py` and `alpi.tui` never import `alpi.engine` or `litellm` at module level; only chat, `--once` and the TUI load them. A slow short command means a top-level import regressed (`tests/core/test_cli_cold_start.py`).
 
 ## Mental model
 

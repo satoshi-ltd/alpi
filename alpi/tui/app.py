@@ -13,6 +13,7 @@ from textual.message import Message
 from alpi import config, home
 from alpi.engine import AgentEvent, Engine
 from alpi.tui import commands as slash
+from alpi.tui._links import install as _install_link_style
 from alpi.tui.screens import (
     ApprovalPanel,
     ClarificationPanel,
@@ -125,6 +126,9 @@ def _copy_to_os_clipboard(text: str) -> str:
         except Exception:
             continue
     return "osc52-only"
+
+
+_install_link_style()
 
 
 class AlpiApp(App):

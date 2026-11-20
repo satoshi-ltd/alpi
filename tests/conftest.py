@@ -165,10 +165,7 @@ def _disable_scheduler_autoinstall(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture(autouse=True)
 def _disable_update_check(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Stop the updater's background daemon thread from reaching PyPI
-    during the unit suite. The check spawns from ``cli.py::main`` on
-    every alpi invocation; tests that import alpi shouldn't trigger
-    network traffic."""
+    """Keep the updater thread (started by most CLI commands and by serve_all) off PyPI."""
     monkeypatch.setenv("ALPI_SKIP_UPDATE_CHECK", "1")
 
 

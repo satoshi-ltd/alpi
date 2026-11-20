@@ -86,7 +86,7 @@ def test_run_once_forwards_attachments(tmp_path, monkeypatch) -> None:
         def request_interrupt(self, reason="unknown"):
             return None
 
-    monkeypatch.setattr(cli, "Engine", FakeEngine)
+    monkeypatch.setattr("alpi.engine.Engine", FakeEngine)
     monkeypatch.setattr(cli, "_bootstrap", lambda h: None)
     monkeypatch.setattr(cli.config, "load", lambda h: SimpleNamespace(model="x"))
     img = tmp_path / "room.png"

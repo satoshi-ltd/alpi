@@ -188,6 +188,15 @@ def serve_all(root: Path) -> None:
     profiles = home_mod.list_profiles(root)
     log.info("central service starting · profiles=%s", ",".join(profiles))
     _set_proctitle_daemon(len(profiles))
+    # Load litellm before the daemon starts any thread: its import points fd 1/2 at /dev/null for seconds.
+    try:
+        import alpi.engine  # noqa: F401
+    except BaseException:
+        log.exception("daemon could not load the agent engine")
+        lock.close()
+        raise
+    from alpi import updater
+    updater.trigger_background_check_if_enabled()
     _write_daemon_pid(root)
     try:
         asyncio.run(_main_all(root, profiles))

@@ -175,8 +175,30 @@ def _update_check_threads() -> list[str]:
     return [t.name for t in threading.enumerate() if t.name == "alpi-update-check"]
 
 
+@pytest.fixture
+def stub_serve_all(monkeypatch: pytest.MonkeyPatch, tmp_home) -> None:
+    from alpi import service
+
+    class Lock:
+        def close(self) -> None:
+            pass
+
+    async def main(root, profiles) -> None:
+        return None
+
+    monkeypatch.setattr("alpi.provider_pause.activate", lambda: None)
+    monkeypatch.setattr(service, "_configure_logging_daemon", lambda root: None)
+    monkeypatch.setattr(service, "_acquire_singleton_lock", lambda root: Lock())
+    monkeypatch.setattr(service, "register_stack_dump", lambda root: None)
+    monkeypatch.setattr(service, "_set_proctitle_daemon", lambda n: None)
+    monkeypatch.setattr(service, "_write_daemon_pid", lambda root: None)
+    monkeypatch.setattr(service, "_clear_daemon_pid", lambda root: None)
+    monkeypatch.setattr(service, "_main_all", main)
+    monkeypatch.setattr(cli, "_serve_daemon", lambda root: service.serve_all(tmp_home))
+
+
 def test_pid1_forks_the_daemon_before_the_update_check_thread_exists(
-    monkeypatch: pytest.MonkeyPatch, blocked_update_check: threading.Event,
+    monkeypatch: pytest.MonkeyPatch, blocked_update_check: threading.Event, stub_serve_all,
 ) -> None:
     at_fork: list[list[str]] = []
     children: list[Callable[[], None]] = []
@@ -187,7 +209,6 @@ def test_pid1_forks_the_daemon_before_the_update_check_thread_exists(
 
     monkeypatch.setattr(pid1, "is_pid1", lambda: True)
     monkeypatch.setattr(pid1, "run", run)
-    monkeypatch.setattr(cli, "_serve_daemon", lambda root: None)
 
     result = CliRunner().invoke(cli.main, ["daemon", "start"])
 
@@ -199,10 +220,9 @@ def test_pid1_forks_the_daemon_before_the_update_check_thread_exists(
 
 
 def test_a_daemon_that_is_not_pid1_still_checks_for_updates(
-    monkeypatch: pytest.MonkeyPatch, blocked_update_check: threading.Event,
+    monkeypatch: pytest.MonkeyPatch, blocked_update_check: threading.Event, stub_serve_all,
 ) -> None:
     monkeypatch.setattr(pid1, "is_pid1", lambda: False)
-    monkeypatch.setattr(cli, "_serve_daemon", lambda root: None)
 
     result = CliRunner().invoke(cli.main, ["daemon", "start"])
 

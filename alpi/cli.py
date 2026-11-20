@@ -9,13 +9,15 @@ import sys
 import time
 from importlib import resources
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import click
 
 from alpi import __version__, config, home, memory, runtime
 from alpi.alp import client as alp_client
-from alpi.engine import AgentEvent, Engine
+
+if TYPE_CHECKING:
+    from alpi.engine import AgentEvent, Engine
 
 
 def _is_local_chat_session_payload(data: dict[str, Any]) -> bool:
@@ -243,6 +245,8 @@ def _run_once_with_authority(
     continue_last: bool,
 ) -> None:
     import json
+
+    from alpi.engine import Engine
 
     _bootstrap(h)
     cfg = config.load(h)
@@ -587,8 +591,8 @@ def main(ctx: click.Context, profile: str | None, continue_last: bool) -> None:
     # ALPI_PROFILE env var is the source of truth for downstream get_home() calls; without it tools silently write to the default profile.
     if profile:
         os.environ["ALPI_PROFILE"] = profile
-    # PID 1 forks the daemon from `daemon start`: a thread alive at that fork leaves its half-finished imports locked in the child forever.
-    if ctx.invoked_subcommand != "update" and not (ctx.invoked_subcommand == "daemon" and _is_init()):
+    # No thread may start before `daemon start`: PID 1 forks it, and serve_all must import litellm with no other thread alive.
+    if ctx.invoked_subcommand not in ("update", "daemon"):
         from alpi import updater
         updater.trigger_background_check_if_enabled()
     _bootstrap(h)
@@ -1060,22 +1064,9 @@ def daemon_start() -> None:
 
     root = _root()
     if pid1.is_pid1():
-        pid1.run(lambda: _serve_forked_daemon(root))
+        pid1.run(lambda: _serve_daemon(root))
     else:
         _serve_daemon(root)
-
-
-def _is_init() -> bool:
-    from alpi import pid1
-
-    return pid1.is_pid1()
-
-
-def _serve_forked_daemon(root: Path) -> None:
-    from alpi import updater
-
-    updater.trigger_background_check_if_enabled()
-    _serve_daemon(root)
 
 
 def _serve_daemon(root: Path) -> None:
