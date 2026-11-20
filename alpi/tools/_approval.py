@@ -7,7 +7,7 @@ import re
 import threading
 from dataclasses import dataclass
 from enum import Enum
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from alpi.tools._command_paths import INDIRECT_RE, _nested_commands, touches_credential_path
 from alpi.tools._pipe_to_interpreter import (
@@ -238,16 +238,26 @@ def _persist_always(pattern_desc: str) -> None:
     import yaml
     from alpi.home import get_home
     p = get_home() / "config.yaml"
-    try:
-        data = yaml.safe_load(p.read_text()) if p.exists() else {}
-    except Exception:  # noqa: BLE001
+    if p.exists():
+        try:
+            data = yaml.safe_load(p.read_text())
+        except Exception:  # noqa: BLE001
+            raise ValueError("config.yaml could not be read as YAML, so the pattern was not saved") from None
+        data = {} if data is None else data
+    else:
         data = {}
-    if not isinstance(data, dict):
-        data = {}
-    tools = data.setdefault("tools", {}) if isinstance(data.get("tools", {}), dict) else data.setdefault("tools", {})
-    terminal = tools.setdefault("terminal", {}) if isinstance(tools.get("terminal", {}), dict) else tools.setdefault("terminal", {})
-    approval = terminal.setdefault("approval", {}) if isinstance(terminal.get("approval", {}), dict) else terminal.setdefault("approval", {})
-    allow = approval.setdefault("allowlist", []) if isinstance(approval.get("allowlist", []), list) else approval.setdefault("allowlist", [])
+    node: Any = data
+    for key in ("tools", "terminal", "approval"):
+        if not isinstance(node, dict):
+            break
+        if node.get(key) is None:
+            node[key] = {}
+        node = node[key]
+    if isinstance(node, dict) and node.get("allowlist") is None:
+        node["allowlist"] = []
+    allow = node.get("allowlist") if isinstance(node, dict) else None
+    if not isinstance(allow, list):
+        raise ValueError("config.yaml does not hold tools.terminal.approval.allowlist as a list, so the pattern was not saved")
     if pattern_desc not in allow:
         allow.append(pattern_desc)
     from alpi.config import atomic_write_yaml
@@ -484,7 +494,10 @@ def _check_inner(cmd: str, cwd: str | None = None) -> Decision:
         except Exception as e:  # noqa: BLE001
             return Decision(
                 allowed=False, severity=severity, pattern=desc,
-                reason=f"could not persist allowlist: {e}",
+                reason=(
+                    f"could not persist allowlist: {e}. The user chose Always but the command did not run; "
+                    "do not retry it. Tell them to fix config.yaml, or to choose Once or Session next time."
+                ),
             )
     return Decision(
         allowed=True, severity=severity, pattern=desc,

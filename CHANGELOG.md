@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.19.28 — 2026-11-20 — "Always" no longer wipes a broken config
+
+- Choosing `Always` on a terminal approval while `config.yaml` has a syntax error, or holds something other than settings, no longer replaces the file with just the allowlist, which lost the model, providers, MCP servers, email accounts and every other setting. The file is now left as it is, the command is refused and the agent is told the pattern was not saved.
+
 ## v0.19.27 — 2026-11-20 — turning on PGP keeps your email accounts
 
 - Turning PGP signing on or off in the email step of `alpi setup` no longer deletes the email accounts in `config.yaml`. It used to replace the whole `email` section with the two PGP keys, so every IMAP and Gmail account disappeared and had to be added again.

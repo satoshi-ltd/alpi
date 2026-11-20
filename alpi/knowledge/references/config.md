@@ -143,7 +143,7 @@ tools:
         - git reset --hard origin/main
 ```
 
-Dangerous classifications are always blocked. Globs do not apply to compound commands with pipes, `&&`, `;`, backticks, or command substitution.
+Dangerous classifications are always blocked. Globs do not apply to compound commands with pipes, `&&`, `;`, backticks, or command substitution. Pressing `Always` saves the pattern only when `config.yaml` parses as a mapping and `tools.terminal.approval.allowlist` is a list (or absent); otherwise the file is left as it is and the command is refused with "the pattern was not saved" — fix the file, then approve again.
 
 ## Tool denylist
 

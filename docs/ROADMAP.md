@@ -324,15 +324,6 @@ Reported by the same reading of commit `b6a7cc14`. Each note says how far the fa
 on a temporary home), **read** (followed in the code, not run) or **suspected**. A suspected entry starts with the
 failing test that settles it; if the test cannot be made to fail, the entry is deleted.
 
-- **APPROVAL.ALWAYS-WIPE** — "Always allow" on a command never rewrites an unreadable `config.yaml` from scratch
-  `bug · alpi · agent · medium`
-  note: read. `tools/_approval.py::_persist_always` falls back to `data = {}` when `config.yaml` does not parse or is
-  not a mapping, then writes the file back holding only `tools.terminal.approval.allowlist`: model, providers, MCP,
-  email accounts and every other setting are gone. A non-mapping `tools`/`terminal`/`approval` value is kept by
-  `setdefault` and then indexed as a dict.
-  accept: with a broken or non-mapping `config.yaml`, "always allow" leaves the file byte-identical and says the
-  pattern was not saved; a non-mapping nested section is refused the same way.
-
 - **BROWSER.STATE** — A profile's browser session is its own and survives a crash
   `bug · alpi · agent · normal`
   note: suspected. `tools/browser.py` keeps one module-global browser, context and page on a worker thread, and

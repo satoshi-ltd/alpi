@@ -224,3 +224,54 @@ def test_daemon_and_container_loggers_redact(monkeypatch, tmp_path: Path) -> Non
             root.removeHandler(h)
         for h in saved:
             root.addHandler(h)
+
+
+@pytest.mark.parametrize("text", [
+    "model: x\nproviders: [unclosed\n",
+    "- just\n- a list\n",
+    "model: x\ntools: 3\n",
+    "model: x\ntools:\n  terminal:\n    approval: nope\n",
+    "model: x\ntools:\n  terminal:\n    approval:\n      allowlist: {a: 1}\n",
+])
+def test_approval_always_leaves_an_unusable_config_untouched(tmp_path: Path, text: str) -> None:
+    from alpi.tools import _approval
+
+    path = tmp_path / "config.yaml"
+    path.write_text(text)
+    with pytest.raises(ValueError, match="the pattern was not saved"):
+        _approval._persist_always("sudo")
+    assert path.read_text() == text
+
+
+def test_approval_always_keeps_every_other_setting(tmp_path: Path) -> None:
+    import yaml
+    from alpi.tools import _approval
+
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump({
+        "model": "x", "email": {"accounts": {"me_x_com": {"type": "gmail", "address": "me@x.com"}}},
+        "tools": None,
+    }))
+    _approval._persist_always("sudo")
+    _approval._persist_always("sudo")
+    data = yaml.safe_load(path.read_text())
+    assert data["model"] == "x"
+    assert data["email"]["accounts"]["me_x_com"]["address"] == "me@x.com"
+    assert data["tools"]["terminal"]["approval"]["allowlist"] == ["sudo"]
+
+
+def test_always_on_a_broken_config_refuses_and_tells_the_agent_not_to_retry(tmp_path: Path) -> None:
+    from alpi.tools import _approval
+
+    path = tmp_path / "config.yaml"
+    path.write_text("model: x\nproviders: [unclosed\n")
+    _approval.set_prompt_callback(lambda command, desc, severity, cwd: "always")
+    try:
+        decision = _approval.check("sudo ls")
+    finally:
+        _approval.set_prompt_callback(None)
+    assert decision.allowed is False
+    assert "the pattern was not saved" in decision.reason
+    assert "do not retry" in decision.reason
+    assert str(tmp_path) not in decision.reason
+    assert path.read_text() == "model: x\nproviders: [unclosed\n"

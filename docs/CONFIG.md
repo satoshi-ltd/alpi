@@ -320,7 +320,10 @@ severities:
   `DROP TABLE`, `kill -9`. These pause for user approval in the TUI
   with four options: `Once` (this call only), `Session` (allowlist
   the pattern until restart), `Always` (persist the pattern
-  description to `tools.terminal.approval.allowlist` in config), or
+  description to `tools.terminal.approval.allowlist` in config; a
+  `config.yaml` that cannot be read as a YAML mapping, or whose path to
+  that list holds something else, is left untouched and the command is
+  refused), or
   `Deny` (abort the tool call). On non-interactive surfaces
   (schedule) these are refused with a clear error telling the
   user to rerun from the TUI or edit the config allowlist; a prompt
