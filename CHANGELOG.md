@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.19.27 — 2026-11-20 — turning on PGP keeps your email accounts
+
+- Turning PGP signing on or off in the email step of `alpi setup` no longer deletes the email accounts in `config.yaml`. It used to replace the whole `email` section with the two PGP keys, so every IMAP and Gmail account disappeared and had to be added again.
+
 ## v0.19.26 — 2026-11-20 — four things that were quietly lost
 
 - Memory no longer loses a fact that resembles one it already has. "Ana's flight to Bangkok is on Friday" after "Ana's flight to Madrid is on Friday" was taken for a repeat and dropped without a word. The agent is now told which entry it matched and can store the new one as a different fact; what gets written without that step does not change, and an entry is skipped silently only when its text is already inside an existing one. A candidate you approve one by one in `alpi memory promote` is no longer dropped for resembling an entry.

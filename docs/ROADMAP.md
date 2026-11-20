@@ -324,14 +324,14 @@ Reported by the same reading of commit `b6a7cc14`. Each note says how far the fa
 on a temporary home), **read** (followed in the code, not run) or **suspected**. A suspected entry starts with the
 failing test that settles it; if the test cannot be made to fail, the entry is deleted.
 
-- **MAIL.PGP-ACCOUNTS** — Turning on PGP signing keeps the email accounts
-  `bug · alpi · agent · high`
-  note: run. `mail/pgp_setup.py::_write_email_cfg` assigns `data["email"] = {signing_key, encrypt_when_pubkey_available}`
-  and writes the file, so `email.accounts` is gone; with no signing key it removes `email` whole. It is reached from
-  `mail/setup.py` and `mail/gmail_setup.py` through `maybe_offer`. Whether a later `config.save` of the same wizard
-  puts the accounts back was not followed.
-  accept: after the wizard turns PGP on, and after it turns it off, every account that was in `config.yaml` is still
-  there, through the wizard's real sequence of writes.
+- **APPROVAL.ALWAYS-WIPE** — "Always allow" on a command never rewrites an unreadable `config.yaml` from scratch
+  `bug · alpi · agent · medium`
+  note: read. `tools/_approval.py::_persist_always` falls back to `data = {}` when `config.yaml` does not parse or is
+  not a mapping, then writes the file back holding only `tools.terminal.approval.allowlist`: model, providers, MCP,
+  email accounts and every other setting are gone. A non-mapping `tools`/`terminal`/`approval` value is kept by
+  `setdefault` and then indexed as a dict.
+  accept: with a broken or non-mapping `config.yaml`, "always allow" leaves the file byte-identical and says the
+  pattern was not saved; a non-mapping nested section is refused the same way.
 
 - **BROWSER.STATE** — A profile's browser session is its own and survives a crash
   `bug · alpi · agent · normal`

@@ -58,11 +58,16 @@ def _read_yaml(home: Path) -> dict[str, Any]:
 def _write_email_cfg(home: Path, signing_key: str, encrypt: bool) -> Path:
     cfg_path = home / "config.yaml"
     data = _read_yaml(home)
+    email = data.get("email")
+    email = dict(email) if isinstance(email, dict) else {}
     if signing_key:
-        data["email"] = {
-            "signing_key": signing_key,
-            "encrypt_when_pubkey_available": bool(encrypt),
-        }
+        email["signing_key"] = signing_key
+        email["encrypt_when_pubkey_available"] = bool(encrypt)
+    else:
+        email.pop("signing_key", None)
+        email.pop("encrypt_when_pubkey_available", None)
+    if email:
+        data["email"] = email
     else:
         data.pop("email", None)
     from alpi.config import atomic_write_yaml
