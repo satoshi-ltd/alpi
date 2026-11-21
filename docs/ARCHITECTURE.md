@@ -691,8 +691,18 @@ ExecStart. It:
    `setproctitle`.
 4. Writes `~/.alpi/service.pid`.
 5. Spawns the fixed task set for every profile and waits. `_guard_task`
-   wraps each one so a crash leaves siblings
-   running.
+   hands each one to `daemon_tasks.supervise`, so a crash leaves siblings
+   running and the crashed task starts again after 5 s, doubling up to
+   5 minutes; a run that lasts 5 minutes resets the count. The third
+   failure in a row files one `error` output and `schedule.failed` with
+   `kind: daemon` for the task's profile, and the first run that then lasts
+   5 minutes files an `info` output saying it recovered. A task that returns
+   without raising is left `stopped`. Each task's state (`running`,
+   `restarting` with `failures`, `last_error` redacted and capped, and
+   `retry_at`, or `stopped`) is written to `~/.alpi/service.tasks.json`
+   (0600) with the daemon's PID, removed on exit. A `CancelledError` the
+   task raises without being cancelled (a server closed from elsewhere)
+   counts as a failure, not a shutdown.
 6. SIGTERM / SIGINT cancels every task cooperatively; PID file
    removed on exit.
 
@@ -738,8 +748,10 @@ the env. Without it, another profile's memory tool would write to default's
 
 `daemon_status(root)` is the snapshot used by `alpi daemon status`
 and by `alpi setup → Services → Daemon`: PID, uptime (via `ps -o
-etime`), install backend (launchd / systemd / none), and the
-per-profile services map.
+etime`), install backend (launchd / systemd / none), the profiles and,
+while the daemon runs, `tasks` from `service.tasks.json` (ignored when its
+PID is not the running daemon's). `alpi daemon status --json` prints it whole;
+the plain form counts the running tasks and lists the others.
 
 ### Host plane (`alpi/host/`)
 

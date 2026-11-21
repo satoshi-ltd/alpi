@@ -170,6 +170,14 @@ def _disable_update_check(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _forget_daemon_task_snapshot():
+    yield
+    from alpi import daemon_tasks
+    daemon_tasks._snapshot_path = None
+    daemon_tasks._states.clear()
+
+
+@pytest.fixture(autouse=True)
 def _clear_bind_ip_cache() -> None:
     """detect_bind_ip is lru_cached once-per-daemon; clear it so mocked detection never leaks between tests."""
     try:

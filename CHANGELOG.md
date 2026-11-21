@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.19.30 — 2026-11-21 — a daemon task that crashes comes back
+
+- When one of the daemon's tasks crashes (a profile's scheduler, ALP listener, workgroup poller or the host plane the apps connect to), it now starts again by itself after a few seconds, waiting longer each time up to five minutes. It used to stay down until the daemon was restarted, with only a line in the log.
+- After three failures in a row you get one error message naming the task and its last error, and an info message once it has run normally again for five minutes.
+- `alpi daemon status` lists any task that is not running, and `alpi daemon status --json` shows every task with its state, failure count and last error.
+
 ## v0.19.29 — 2026-11-21 — the agent cannot read a skill's secrets
 
 - The agent can no longer read a file under a skill's `secrets/` folder through the `skill` tool, whether by viewing it, by patching it to test guesses or by running a skill without a script, nor a skill file that links to it or to another protected file such as `.env`. What it read entered the conversation and the session history. The skill's own scripts still read their secrets when they run.

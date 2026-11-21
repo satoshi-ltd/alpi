@@ -324,6 +324,22 @@ Reported by the same reading of commit `b6a7cc14`. Each note says how far the fa
 on a temporary home), **read** (followed in the code, not run) or **suspected**. A suspected entry starts with the
 failing test that settles it; if the test cannot be made to fail, the entry is deleted.
 
+- **SCHED.RESTART-TICK** — A restarted scheduler never runs a second tick beside an orphaned one
+  `bug · alpi · agent · low`
+  note: read, dormant. Since 0.19.30 a daemon task that raises restarts after 5 s. `scheduler/run.py::serve` ends with
+  `executor.shutdown(wait=False)`, so if `serve` ever raised while a tick thread sat in `run_job` (up to 24 h), the new
+  `serve` would tick the same profile beside it: double fires, and one profile's fires no longer serial. Today `serve`
+  swallows every exception from `tick`, so it cannot happen yet.
+  accept: two `serve` loops for one home never run `tick` at the same time (a per-home tick lock or equivalent), with a
+  test that raises out of `serve` mid-tick.
+
+- **DAEMON.START-LEAK** — A listener whose start fails half-way is closed before the retry
+  `bug · alpi · agent · low`
+  note: read. `_run_alp` and `_run_host` call `await server.start()` outside the `try/finally: await server.stop()`, so a
+  `start()` that raises after binding (for example in `sock.chmod`) leaks the socket and ALP's replay cache; with the
+  0.19.30 restarts that repeats on every retry (every 5 s at first, every 5 minutes at the slowest).
+  accept: a `start()` that raises after binding leaves no open listener, checked by a test that restarts it twice.
+
 - **BROWSER.STATE** — A profile's browser session is its own and survives a crash
   `bug · alpi · agent · normal`
   note: suspected. `tools/browser.py` keeps one module-global browser, context and page on a worker thread, and
@@ -360,14 +376,6 @@ failing test that settles it; if the test cannot be made to fail, the entry is d
   note: read. `Peer.budget` is stored and shown (`alp/peers.py:74`) and nothing reads it; only the callee's own
   daily budget stops a peer's request.
   accept: a peer over its budget is refused with a reason, or the field leaves the file, the wizard and the docs.
-
-- **DAEMON.TASK-HEALTH** — A supervised task that dies is restarted or reported
-  `bug · alpi · agent · normal`
-  note: read. A crashed per-profile task is logged and not started again (`service.py`, the supervisor around
-  `_run_profile`), so an ALP or host server that fails once stays dead in a live process, and `alpi daemon status`
-  has no per-task state.
-  accept: a task that raises is started again with a backoff, and after repeated failures the owner gets one alert;
-  `daemon status --json` lists each task and its state.
 
 - **TTS.ONLINE** — `tts` says where the text goes
   `bug · alpi · agent · normal`

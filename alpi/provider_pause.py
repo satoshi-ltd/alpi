@@ -190,7 +190,7 @@ def notify_closed(home: Path, profile: str, state: PauseState) -> None:
     _file_alert(home, profile, title=f"{profile}: model provider recovered", body=body, code=state.code, type="info")
 
 
-def _file_alert(home: Path, profile: str, *, title: str, body: str, code: str, type: str = "error") -> None:
+def _file_alert(home: Path, profile: str, *, title: str, body: str, code: str, type: str = "error", kind: str = "provider") -> None:
     try:
         from alpi import outputs as outputs_mod
         from alpi.host import events as host_events
@@ -203,7 +203,7 @@ def _file_alert(home: Path, profile: str, *, title: str, body: str, code: str, t
             "profile": profile,
             "job_id": "",
             "title": title,
-            "kind": "provider",
+            "kind": kind,
             "message": body,
             "reply": "",
             "delivered_to": "",
@@ -216,7 +216,7 @@ def _file_alert(home: Path, profile: str, *, title: str, body: str, code: str, t
         host_events.emit("schedule.failed" if type == "error" else "schedule.done", payload)
         host_events.emit("output.created", {"profile": profile, "id": output_id, "type": type})
     except Exception:  # noqa: BLE001
-        log.exception("profile %s: cannot file the provider pause alert", profile)
+        log.exception("profile %s: cannot file the %s alert", profile, kind)
 
 
 __all__ = [

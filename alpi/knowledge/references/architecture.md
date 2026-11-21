@@ -172,6 +172,7 @@ User-owned dirs under `{home}/skills/<category>/<name>/`. Runtime self-knowledge
 ## Daemon and env
 
 - One daemon supervises every profile on the machine.
+- Each profile's daemon tasks (schedule, alp, workgroups, workgroup-preempt; host on default) are supervised: a task that raises restarts after 5 s, doubling up to 5 min (a 5 min run resets the count); the 3rd failure in a row files one error output and `schedule.failed` with `kind: daemon`, and the next 5 min run files an info "recovered" output. `~/.alpi/service.tasks.json` holds each task's `state` (running|restarting|stopped), `failures`, `last_error` (redacted) and `retry_at`; `alpi daemon status --json` returns it as `tasks`.
 - Profile `.env` loaded via `effective_profile_env`; the daemon does not mutate global `os.environ`.
 - Before a profile's services start, the daemon binds legacy QA rewind counters/checklists to each workgroup's latest pipeline trigger and prunes workgroups without `meta.yaml`; a workgroup whose transcript cannot be read keeps its state and never holds the profile back (a trigger on it is refused). Trigger admission migrates the same way, also from the CLI with the daemon stopped.
 - Hub baseline hashing and transcript writes run off the event loop under the transcript lock; peer post admission and cost settlement wait for it outside the loop and re-check membership and pause under it.

@@ -206,6 +206,8 @@ def serve_all(root: Path) -> None:
         from alpi.host import workers
         with _signals_held():
             workers.shutdown()
+        from alpi import daemon_tasks
+        daemon_tasks.clear(root)
         _clear_daemon_pid(root)
         lock.close()
         log.info("central service stopped")
@@ -310,6 +312,8 @@ async def _main_all(root: Path, profiles: list[str]) -> None:
     from alpi import updater
     loop.run_in_executor(None, updater.install_kind)
 
+    from alpi import daemon_tasks
+    daemon_tasks.configure(root)
     registry: dict[str, dict[str, Any]] = {}
     _start_new_profiles(root, profiles, registry)
 
@@ -674,16 +678,14 @@ def _task_group(home: Path, profile: str, name: str) -> list[asyncio.Task]:
 
 
 async def _guard_task(coro_fn, home: Path, profile: str, name: str) -> None:
-    """Keep one daemon task failure from taking down unrelated capabilities."""
-    try:
+    from alpi import daemon_tasks
+
+    def run():
         if name in ("alp", "workgroups", "workgroup-preempt", "host"):
-            await coro_fn(home, profile)
-        else:
-            await coro_fn(home)
-    except asyncio.CancelledError:
-        raise
-    except Exception:  # noqa: BLE001
-        log.exception("daemon task %s crashed — unrelated tasks remain available", name)
+            return coro_fn(home, profile)
+        return coro_fn(home)
+
+    await daemon_tasks.supervise(run, home, profile, name)
 
 
 async def _run_scheduler(home: Path) -> None:
@@ -4564,6 +4566,10 @@ def daemon_status(root: Path) -> dict[str, Any]:
     }
     if pid is not None:
         info["uptime_seconds"] = _uptime_seconds(pid)
+        from alpi import daemon_tasks
+        tasks = daemon_tasks.read(root, pid)
+        if tasks is not None:
+            info["tasks"] = tasks
     return info
 
 

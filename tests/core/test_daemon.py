@@ -223,15 +223,24 @@ def test_systemd_install_runs_enable_linger(
 
 
 @pytest.mark.asyncio
-async def test_guard_task_isolates_task_crash() -> None:
-    """Crashes stay isolated inside the supervisor."""
+async def test_guard_task_isolates_task_crash(monkeypatch) -> None:
+    from alpi import daemon_tasks
+    monkeypatch.setattr(daemon_tasks, "RESTART_BASE_S", 0.01)
+    monkeypatch.setattr(daemon_tasks, "RESTART_MAX_S", 0.01)
+    monkeypatch.setattr("alpi.provider_pause._file_alert", lambda *a, **k: None)
+    calls: list[int] = []
 
     async def boom(home: Path, profile: str) -> None:
+        calls.append(1)
         raise RuntimeError("synthetic crash")
 
-    # ``alp`` exercises the (home, profile) call shape.
-    await service._guard_task(boom, Path("/tmp"), "alice", "alp")
-    # If we got here, the crash was swallowed.
+    guard = asyncio.create_task(service._guard_task(boom, Path("/tmp"), "alice", "alp"))
+    await asyncio.sleep(0.1)
+    assert not guard.done()
+    assert len(calls) > 1
+    guard.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await guard
 
 
 async def _run_host_with_recorded_ws(monkeypatch, root: Path, caplog) -> tuple[list, list]:

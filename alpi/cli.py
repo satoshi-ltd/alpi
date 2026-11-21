@@ -1122,11 +1122,16 @@ def daemon_restart() -> None:
 
 
 @daemon.command("status")
-def daemon_status_cmd() -> None:
-    """Print PID, uptime, and managed profiles."""
+@click.option("--json", "as_json", is_flag=True, help="Print the status, each daemon task's state included, as JSON.")
+def daemon_status_cmd(as_json: bool) -> None:
+    """Print PID, uptime, managed profiles and daemon tasks that are not running."""
     from alpi import service as svc
 
     info = svc.daemon_status(_root())
+    if as_json:
+        import json
+        click.echo(json.dumps(info))
+        return
     if info["running"]:
         up = info.get("uptime_seconds")
         up_s = f"  · uptime {up}s" if up is not None else ""
@@ -1146,6 +1151,15 @@ def daemon_status_cmd() -> None:
             click.echo(f"  {name}  · provider paused until {until} ({pause.get('code')})")
         else:
             click.echo(f"  {name}")
+    tasks = info.get("tasks")
+    if tasks is not None:
+        troubled = [t for t in tasks if t.get("state") != "running"]
+        click.echo(f"tasks: {len(tasks) - len(troubled)} running")
+        for row in troubled:
+            line = f"  {row.get('task')}  · {row.get('state')}"
+            if row.get("state") == "restarting":
+                line += f" after {row.get('failures')} failure(s): {row.get('last_error')}"
+            click.echo(line)
 
 
 def _provider_pauses() -> dict:
