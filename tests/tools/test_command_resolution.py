@@ -328,3 +328,11 @@ def test_bare_cd_goes_home(tmp_path: Path) -> None:
     (home / ".alpi").symlink_to(tmp_path / ".alpi")
     assert classify("cd; tar czf /tmp/a.tgz .alpi", cwd=str(tmp_path))[0] == Severity.DANGEROUS
     assert classify("cd; cat .env", cwd=root)[0] == Severity.SAFE
+
+
+def test_an_archived_skills_secrets_are_as_private_as_a_live_skills(tmp_path: Path) -> None:
+    root = str(tmp_path / ".alpi")
+    assert classify("cat skills/misc/demo/secrets/token", cwd=root)[0] == Severity.DANGEROUS
+    assert classify("cat skills/.archive/misc/demo__20261120T000000Z/secrets/token", cwd=root)[0] == Severity.DANGEROUS
+    assert classify("tar czf /tmp/a.tgz skills/.archive/misc/demo__20261120T000000Z", cwd=root)[0] == Severity.DANGEROUS
+    assert classify("cp -r skills/.archive/misc/demo__20261120T000000Z /tmp/x", cwd=root)[0] == Severity.DANGEROUS

@@ -945,6 +945,35 @@ def _list(home: Path) -> ToolResult:
     return ToolResult(ok=True, output="\n".join(lines))
 
 
+_SECRETS_UNREADABLE = "a skill's secrets/ is not readable; its scripts read it at run time"
+
+
+def _protected_target(skill_dir: Path, target: Path, label: str) -> str | None:
+    from alpi.tools._paths import _always_private_area, _is_sensitive
+    try:
+        resolved = target.resolve()
+        typed = skill_dir.resolve() / target.relative_to(skill_dir)
+    except (OSError, RuntimeError, ValueError):
+        return f"{label} cannot be resolved and is not readable"
+    secrets = skill_dir / "secrets"
+    folded = {str(skill_dir.resolve() / "secrets").casefold()}
+    try:
+        folded.add(str(secrets.resolve()).casefold())
+    except (OSError, RuntimeError):
+        pass
+    for parent in resolved.parents:
+        if str(parent).casefold() in folded:
+            return _SECRETS_UNREADABLE
+        try:
+            if secrets.exists() and os.path.samefile(parent, secrets):
+                return _SECRETS_UNREADABLE
+        except OSError:
+            continue
+    if resolved != typed and (_is_sensitive(resolved) or _always_private_area(target, resolved, for_write=False)):
+        return f"{label} links to a protected file and is not readable"
+    return None
+
+
 def _view(home: Path, name: str, file: str) -> ToolResult:
     if not name:
         return ToolResult(ok=False, output="", error="'name' is required")
@@ -962,7 +991,12 @@ def _view(home: Path, name: str, file: str) -> ToolResult:
         sub, _, fn = file.partition("/")
         if sub not in ALLOWED_SUBDIRS or not _FILENAME_RE.match(fn):
             return ToolResult(ok=False, output="", error=f"invalid file: {file}")
+        if sub == "secrets":
+            return ToolResult(ok=False, output="", error=_SECRETS_UNREADABLE)
         target = skill_dir / sub / fn
+    refused = _protected_target(skill_dir, target, file or "SKILL.md")
+    if refused:
+        return ToolResult(ok=False, output="", error=refused)
     if not target.is_file():
         return ToolResult(ok=False, output="", error=f"not found: {file or 'SKILL.md'}")
     try:
@@ -1240,6 +1274,9 @@ def _edit(
     err = _require_confirmation(skill_dir, confirm_user_skill)
     if err:
         return ToolResult(ok=False, output="", error=err)
+    refused = _protected_target(skill_dir, md, "SKILL.md")
+    if refused:
+        return ToolResult(ok=False, output="", error=refused)
 
     flags = scan_skill_body(body, allowed_env=_declared_env_for_skill(skill_dir))
     if flags:
@@ -1299,9 +1336,14 @@ def _patch(
             )
         if not _FILENAME_RE.match(filename or ""):
             return ToolResult(ok=False, output="", error="invalid filename")
+        if subdir == "secrets":
+            return ToolResult(ok=False, output="", error=f"{_SECRETS_UNREADABLE}; replace a secret whole with add_file")
         target = skill_dir / subdir / filename
         effective_subdir = subdir
 
+    refused = _protected_target(skill_dir, target, f"{subdir}/{filename}" if subdir else "SKILL.md")
+    if refused:
+        return ToolResult(ok=False, output="", error=refused)
     if not target.exists():
         return ToolResult(ok=False, output="", error=f"not found: {target}")
 
@@ -1495,6 +1537,10 @@ def _run_or_test(home: Path, name: str, args: list[str], *, mode: str) -> ToolRe
         )
 
     script = skill_dir / "scripts" / "run.py"
+    if script.is_symlink() or script.exists():
+        refused = _protected_target(skill_dir, script, "scripts/run.py")
+        if refused:
+            return ToolResult(ok=False, output="", error=refused)
 
     if not script.is_file():
         if mode in {"test", "invoke"}:
@@ -1513,6 +1559,9 @@ def _run_or_test(home: Path, name: str, args: list[str], *, mode: str) -> ToolRe
         from alpi.tools import _state
         declared_env = _parse_env_list(eligibility_meta.get("requires_env", ""))
         declared_env += _parse_env_list(eligibility_meta.get("env", ""))
+        refused = _protected_target(skill_dir, skill_md, "SKILL.md")
+        if refused:
+            return ToolResult(ok=False, output="", error=refused)
         if declared_env:
             _state.add_skill_env(declared_env)
         body = skill_md.read_text()
@@ -1724,6 +1773,9 @@ def _set_meta(
         return ToolResult(ok=False, output="", error=err)
 
     md = skill_dir / "SKILL.md"
+    refused = _protected_target(skill_dir, md, "SKILL.md")
+    if refused:
+        return ToolResult(ok=False, output="", error=refused)
     if not md.exists():
         return ToolResult(ok=False, output="", error="SKILL.md not found")
     text = md.read_text()

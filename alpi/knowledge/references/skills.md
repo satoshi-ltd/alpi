@@ -57,7 +57,7 @@ created_at: 2026-04-20
 | `<skill>/secrets/` | OAuth tokens, cookies, sessions, credentials. |
 | `<skill>/state/` | Non-secret cache, JSONL, SQLite, sync cursors. |
 
-Never put secret values in `SKILL.md`, scripts, references, assets, or the skill root. `secrets/` mode `0700`; credential files `0600`.
+Never put secret values in `SKILL.md`, scripts, references, assets, or the skill root. `secrets/` mode `0700`; credential files `0600`. You cannot read `secrets/` back: `skill` refuses `view`, `patch`, `edit` and `set_meta` on a file there (or a skill file linked to it or to another protected file) and will not show or run a `SKILL.md` or `scripts/run.py` linked that way; `read_file` refuses the path and `terminal` treats a command naming it as dangerous, an archived skill's `secrets/` included; to change a secret, write it whole with `add_file`. To check a credential, run the skill's script that uses it, and never make a script print a secret: its output reaches you and the session.
 
 ## Generated files (where a skill writes its artifacts)
 

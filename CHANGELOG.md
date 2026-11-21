@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.19.29 — 2026-11-21 — the agent cannot read a skill's secrets
+
+- The agent can no longer read a file under a skill's `secrets/` folder through the `skill` tool, whether by viewing it, by patching it to test guesses or by running a skill without a script, nor a skill file that links to it or to another protected file such as `.env`. What it read entered the conversation and the session history. The skill's own scripts still read their secrets when they run.
+- The secrets of a deleted skill, kept in `skills/.archive/`, are now as protected from the file tools and the terminal as those of a live skill.
+
 ## v0.19.28 — 2026-11-20 — "Always" no longer wipes a broken config
 
 - Choosing `Always` on a terminal approval while `config.yaml` has a syntax error, or holds something other than settings, no longer replaces the file with just the allowlist, which lost the model, providers, MCP servers, email accounts and every other setting. The file is now left as it is, the command is refused and the agent is told the pattern was not saved.

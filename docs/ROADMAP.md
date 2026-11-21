@@ -369,12 +369,6 @@ failing test that settles it; if the test cannot be made to fail, the entry is d
   accept: a task that raises is started again with a backoff, and after repeated failures the owner gets one alert;
   `daemon status --json` lists each task and its state.
 
-- **SKILL.SECRETS-READ** — The agent cannot read back a skill's secrets
-  `bug · alpi · agent · normal`
-  note: read. `skill(action="view")` returns files under a skill's `secrets/`, which only the host verbs hide
-  (`tools/skill.py`). `SEC.SKILL-ENV` covers the environment a skill script inherits.
-  accept: `view` refuses or masks a file under `secrets/` for every caller; a script still reads its own.
-
 - **TTS.ONLINE** — `tts` says where the text goes
   `bug · alpi · agent · normal`
   note: read. The tool and its module call the voice "local, no API key"; it uses `edge_tts`, which sends the text

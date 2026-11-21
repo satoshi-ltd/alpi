@@ -36,12 +36,12 @@ _HOME_FILES = (".netrc", ".npmrc", ".pypirc", ".pgpass", ".sentryclirc")
 _PRIVATE_REL_RE = re.compile(
     r"(?:profiles/[^/]+/)?(?:"
     r"\.env(?:\.(?!(?:example|sample|template|dist)(?:/|$))[^/]*)?"
-    r"|config\.yaml|secrets|alp/secrets|host/connections\.yaml|skills/[^/]+/[^/]+/secrets"
+    r"|config\.yaml|secrets|alp/secrets|host/connections\.yaml|skills/(?:\.archive/)?[^/]+/[^/]+/secrets"
     r")(?:/|$)",
     re.I,
 )
 _ANCESTOR_REL_RE = re.compile(
-    r"(?:profiles(?:/[^/]+)?|(?:profiles/[^/]+/)?(?:skills(?:/[^/]+){0,2}|alp|host))?", re.I,
+    r"(?:profiles(?:/[^/]+)?|(?:profiles/[^/]+/)?(?:skills(?:/\.archive)?(?:/[^/]+){0,2}|alp|host))?", re.I,
 )
 _CREDENTIAL_DIR_RE = re.compile(r"(?:^|/)\.(?:ssh|aws|gnupg)$|(?:^|/)\.config(?:/(?:gh|gcloud))?$", re.I)
 _INPUT_SUB_RE = re.compile(r"\$\(\s*<\s*([^()\s]+)\s*\)|`\s*<\s*([^`\s]+)\s*`")

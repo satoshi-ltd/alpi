@@ -37,6 +37,16 @@ design — `secrets/` holds credentials whose entropy looks like the
 patterns the scanner catches, and `state/` holds opaque runtime data
 (SQLite blobs, JSONL logs) the agent itself manages.
 
+The agent's tools do not read `secrets/` back: `skill` refuses to view,
+patch, edit or `set_meta` a file there, or a skill file linked to it (even
+through a linked `secrets/` folder) or to another protected file (`.env`,
+the profile's `secrets/`), and refuses to show or run a `SKILL.md` or
+`scripts/run.py` linked that way; the file tools refuse the path and
+`terminal` treats a command naming it as dangerous, an archived skill's
+`secrets/` included; the apps show only a count. The skill's own
+scripts read it at run time, and whatever a script prints does reach the
+agent, so a script should never print a secret.
+
 This rigidity is intentional: it makes skills **portable** (copy the
 directory), **auditable** (`ls` shows you everything in one glance),
 **cleanly deletable** (`rm -rf` the directory removes every trace),

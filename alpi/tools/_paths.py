@@ -36,7 +36,7 @@ _SENSITIVE_PATH_REGEX: tuple[re.Pattern[str], ...] = (
     # .env* blocked except .env.example/.sample/.template/.dist
     re.compile(r"(?:^|/)\.env(?!\.(?:example|sample|template|dist)$)[^/]*$", re.I),
     # Skill secrets dir (mode 0700, scanner-skipped) — never via file tools.
-    re.compile(r"(?:^|/)skills/[^/]+/[^/]+/secrets/", re.I),
+    re.compile(r"(?:^|/)skills/(?:\.archive/)?[^/]+/[^/]+/secrets/", re.I),
 )
 
 
