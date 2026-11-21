@@ -46,10 +46,10 @@ async def _schedule_list(
         raise host_server.HandlerError(
             -32603, "internal-error", data={"detail": f"jobs.json corrupt: {e}"},
         )
-    from alpi.scheduler.run import describe_run_timeout, next_fire
+    from alpi.scheduler.run import describe_run_timeout, job_state
     for j in jobs:
         if isinstance(j, dict):
-            nf = next_fire(j, home=home)
+            j["status"], nf = job_state(j, home=home)
             j["next_fire"] = nf.isoformat() if nf else None
             j.update(describe_run_timeout(j))
     return {"jobs": jobs}
@@ -142,11 +142,17 @@ async def _schedule_fire(
         raise host_server.HandlerError(
             -32004, "fire-failed", data={"detail": f"no job with id {job_id!r}"},
         )
+    if await asyncio.to_thread(jobs_store.is_running, home, job_id):
+        raise host_server.HandlerError(
+            -32009, "conflict", data={"detail": f"job {job_id!r} is already running; wait for that run to finish"},
+        )
 
     async def _run() -> None:
         from alpi.host import workers
         try:
-            await workers.submit("turn", fire_by_id, home, job_id)
+            result = await workers.submit("turn", fire_by_id, home, job_id)
+            if isinstance(result, tuple) and not result[0]:
+                logging.getLogger("alpi.host.schedule").info("fire of %s/%s did not run: %s", home, job_id, result[1])
         except Exception as exc:  # noqa: BLE001
             logging.getLogger("alpi.host.schedule").exception(
                 "background fire crashed for %s/%s: %s", home, job_id, exc,

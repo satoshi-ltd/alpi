@@ -193,16 +193,10 @@ def is_due(job: dict, now: datetime | None = None, home: Path | None = None) -> 
         return next_run <= now
 
     if kind == "once":
-        # Fires once when run_at is reached, then tick() deletes it.
-        # last_run_at is a guard in case deletion failed on a previous tick.
-        if last is not None:
+        if _once_spent(job):
             return False
-        run_at = _parse_iso(job.get("run_at"))
-        if run_at is None:
-            return False
-        if run_at.tzinfo is None:
-            run_at = run_at.replace(tzinfo=now.tzinfo)
-        return run_at <= now
+        run_at = _once_run_at(job)
+        return run_at is not None and run_at <= now
 
     if kind == "inactivity":
         after_hours = float(job.get("after_hours") or 0)
@@ -241,15 +235,42 @@ def next_fire(job: dict, now: datetime | None = None, home: Path | None = None) 
             nxt = nxt.replace(tzinfo=now.tzinfo)
         return nxt
     if kind == "once":
-        if _parse_iso(job.get("last_run_at")) is not None:
-            return None
-        run_at = _parse_iso(job.get("run_at"))
-        if run_at is None:
-            return None
-        if run_at.tzinfo is None:
-            run_at = run_at.replace(tzinfo=now.tzinfo)
-        return run_at
+        return None if _once_spent(job) else _once_run_at(job)
     return None
+
+
+def _once_run_at(job: dict) -> datetime | None:
+    run_at = _parse_iso(job.get("run_at"))
+    if run_at is not None and run_at.tzinfo is None:
+        run_at = run_at.astimezone()
+    return run_at
+
+
+def _once_spent(job: dict) -> bool:
+    # An ad-hoc fire before run_at is a test and leaves the job due; a run at or after run_at is its one run.
+    last = _parse_iso(job.get("last_run_at"))
+    if last is None:
+        return False
+    if last.tzinfo is None:
+        last = last.astimezone()
+    run_at = _once_run_at(job)
+    return run_at is None or last >= run_at
+
+
+def job_state(job: dict, now: datetime | None = None, home: Path | None = None) -> tuple[str, datetime | None]:
+    if job.get("paused"):
+        return "paused", None
+    if job.get("kind", "cron") == "once" and _once_spent(job):
+        return ("failed" if job.get("last_run_status") == "error" else "done"), None
+    now = now or _now()
+    nxt = next_fire(job, now, home)
+    if nxt is None:
+        return ("idle-gated" if job.get("kind") == "inactivity" else "none"), None
+    return ("due" if nxt <= now else "scheduled"), nxt
+
+
+def job_status(job: dict, now: datetime | None = None, home: Path | None = None) -> str:
+    return job_state(job, now, home)[0]
 
 
 def _last_user_activity(home: Path) -> datetime | None:
@@ -714,7 +735,11 @@ def fire_from_console(home: Path, job_id: str) -> tuple[bool, str]:
         }))
     except host_client.HostNotConnected:
         return fire_by_id(home, job_id)
-    except (host_client.HostError, host_client.HostUnavailable) as exc:
+    except host_client.HostError as exc:
+        if getattr(exc, "code", None) == -32009:
+            return False, f"job {job_id!r} is already running; wait for that run to finish"
+        return False, f"daemon fire failed: {exc}; check Activity before retrying"
+    except host_client.HostUnavailable as exc:
         return False, f"daemon fire failed: {exc}; check Activity before retrying"
     if not isinstance(result, dict) or result.get("ok") is not True:
         return False, "invalid daemon fire response; check Activity before retrying"
@@ -722,13 +747,6 @@ def fire_from_console(home: Path, job_id: str) -> tuple[bool, str]:
 
 
 def fire_by_id(home: Path, job_id: str) -> tuple[bool, str]:
-    """Run one specific job ad-hoc, bypassing the schedule check. Same
-    threat-scan + dispatch path as the daemon tick, so what you test is
-    exactly what the daemon would fire. Does NOT delete ``once`` jobs —
-    ad-hoc fire is deliberate testing, not the natural trigger. Emits
-    ``schedule.done`` / ``schedule.failed`` on the host event stream so
-    a UI-triggered fire-and-forget run still surfaces the result.
-    """
     try:
         jobs = jobs_store.read(home)
     except jobs_store.CorruptJobsFile as e:
@@ -741,23 +759,39 @@ def fire_by_id(home: Path, job_id: str) -> tuple[bool, str]:
         hit = difflib.get_close_matches(job_id, available, n=1, cutoff=0.6)
         hint = f". Did you mean {hit[0]!r}?" if hit else ""
         return False, f"no job with id {job_id!r}{hint}"
-    log.info("firing job %s ad-hoc (%s)", job_id, target.get("kind", "?"))
-    outcome = _run_guarded(target, home)
-    _note_provider_outcome(home, target, outcome)
-    log.info("job %s ad-hoc %s — %s", job_id,
-             "OK" if outcome.ok else "FAIL", outcome.message)
-    stamp_at = _now().isoformat()
-    def _stamp(current: list[dict]) -> list[dict] | None:
-        for j in current:
-            if j.get("id") == job_id:
-                _record_outcome(j, outcome.ok, outcome.message, stamp_at)
-                return current
-        return None
-    try:
-        jobs_store.update(home, _stamp)
-    except Exception as e:  # noqa: BLE001
-        log.error("could not stamp ad-hoc run of %s: %s", job_id, e)
+    with jobs_store.run_lock(home, job_id) as acquired:
+        if not acquired:
+            return False, f"job {job_id!r} is already running; wait for that run to finish"
+        try:
+            target = next((j for j in jobs_store.read(home) if j.get("id") == job_id), None)
+        except jobs_store.CorruptJobsFile as e:
+            return False, f"jobs.json corrupt: {e}"
+        if target is None:
+            return False, f"job {job_id!r} was removed before it could run"
+        # The start time decides test vs real run of a once job: a fire begun before run_at must leave it due.
+        stamp_at = _now().isoformat()
+        log.info("firing job %s ad-hoc (%s)", job_id, target.get("kind", "?"))
+        started = time.time()
+        outcome = _run_guarded(target, home)
+        elapsed = time.time() - started
+        _note_provider_outcome(home, target, outcome)
+        log.info("job %s ad-hoc %s — %s", job_id,
+                 "OK" if outcome.ok else "FAIL", outcome.message)
+
+        def _stamp(current: list[dict]) -> list[dict] | None:
+            for i, j in enumerate(current):
+                if j.get("id") == job_id:
+                    _record_outcome(j, outcome.ok, outcome.message, stamp_at)
+                    if outcome.ok and j.get("kind") == "once" and _once_spent(j):
+                        del current[i]
+                    return current
+            return None
+        try:
+            jobs_store.update(home, _stamp)
+        except Exception as e:  # noqa: BLE001
+            log.error("could not stamp ad-hoc run of %s: %s", job_id, e)
     _emit_schedule_event(home, target, outcome)
+    _record_schedule_run(home, target, outcome, started=started, elapsed=elapsed)
     return outcome.ok, outcome.message
 
 
@@ -1098,27 +1132,33 @@ def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]
         # per-job re-check (a job may run for hours; pause can land mid-tick); break, not return — finished jobs must keep their stamp
         if _profile_paused(home):
             break
-        try:
-            current = next((j for j in jobs_store.read(home) if j.get("id") == job.get("id")), None)
-        except Exception as e:  # noqa: BLE001
-            log.error("jobs.json unreadable — ending the pass: %s", e)
-            break
-        current = _overlay_pending(current, pending) if current is not None else None
-        if current is None or not _due(current):
-            continue
-        job = current
         job_id = str(job.get("id", "?"))
-        # Unstamped on purpose: the job stays due and fires on the first tick after the pause lifts.
-        if _provider_paused_skip(home, job):
-            continue
-        log.info("firing job %s (%s)", job_id, job.get("kind", "cron"))
-        _started = time.time()
-        outcome = _run_guarded(job, home)
-        _elapsed = time.time() - _started
-        _note_provider_outcome(home, job, outcome)
-        # Stamp even on failure to avoid a tight re-fire loop; keep it ahead of the I/O below.
-        _stamp({job_id: (str(job.get("kind", "cron")), outcome.ok, outcome.message, job.get("run_at"))})
-        stamped = True
+        with jobs_store.run_lock(home, job_id) as acquired:
+            # Unstamped on purpose: a job a manual fire is running stays due for the next tick.
+            if not acquired:
+                log.info("job %s skipped: a manual fire of it is running", job_id)
+                continue
+            # Re-read under the run lock: a manual fire that just finished has stamped the job.
+            try:
+                current = next((j for j in jobs_store.read(home) if j.get("id") == job.get("id")), None)
+            except Exception as e:  # noqa: BLE001
+                log.error("jobs.json unreadable — ending the pass: %s", e)
+                break
+            current = _overlay_pending(current, pending) if current is not None else None
+            if current is None or not _due(current):
+                continue
+            job = current
+            # Unstamped on purpose: the job stays due and fires on the first tick after the pause lifts.
+            if _provider_paused_skip(home, job):
+                continue
+            log.info("firing job %s (%s)", job_id, job.get("kind", "cron"))
+            _started = time.time()
+            outcome = _run_guarded(job, home)
+            _elapsed = time.time() - _started
+            _note_provider_outcome(home, job, outcome)
+            # Stamp even on failure to avoid a tight re-fire loop; keep it ahead of the I/O below.
+            _stamp({job_id: (str(job.get("kind", "cron")), outcome.ok, outcome.message, job.get("run_at"))})
+            stamped = True
         log.info("job %s %s — %s", job_id,
                  "OK" if outcome.ok else "FAIL", outcome.message)
         _emit_schedule_event(home, job, outcome)

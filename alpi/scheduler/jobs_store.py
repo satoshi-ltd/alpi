@@ -57,6 +57,44 @@ def locked(home: Path) -> Iterator[None]:
             f.close()
 
 
+def _run_lock_path(home: Path, job_id: str) -> Path:
+    import hashlib
+    return home / "schedule" / "running" / f"{hashlib.sha256(job_id.encode()).hexdigest()[:16]}.lock"
+
+
+@contextlib.contextmanager
+def run_lock(home: Path, job_id: str) -> Iterator[bool]:
+    # Never unlink the lock file: a waiter holding the old inode would then run beside a new holder.
+    lp = _run_lock_path(home, job_id)
+    lp.parent.mkdir(parents=True, exist_ok=True)
+    f = open(lp, "a")
+    try:
+        try:
+            if sys.platform == "win32":
+                f.seek(0)
+                msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                _fcntl.flock(f.fileno(), _fcntl.LOCK_EX | _fcntl.LOCK_NB)
+        except OSError:
+            yield False
+            return
+        try:
+            yield True
+        finally:
+            if sys.platform == "win32":
+                f.seek(0)
+                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                _fcntl.flock(f.fileno(), _fcntl.LOCK_UN)
+    finally:
+        f.close()
+
+
+def is_running(home: Path, job_id: str) -> bool:
+    with run_lock(home, job_id) as acquired:
+        return not acquired
+
+
 def _load_json(p: Path, expect: type) -> list | dict:
     if not p.exists():
         return expect()

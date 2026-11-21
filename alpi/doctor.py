@@ -617,13 +617,17 @@ def _check_services(home: Path, profile: str) -> list[Check]:
 
     jobs_file = home / "schedule" / "jobs.json"
     if jobs_file.exists():
-        import json
+        from alpi.scheduler import jobs_store as _jobs_store
+        from alpi.scheduler.run import job_status
         try:
-            n = len(json.loads(jobs_file.read_text() or "[]"))
+            statuses = [job_status(j, home=home) for j in _jobs_store.read(home) if isinstance(j, dict)]
         except Exception:  # noqa: BLE001
-            n = -1
-        if n >= 0:
-            out.append(Check("Services", "Jobs", "info", f"{n} scheduled"))
+            statuses = None
+        if statuses is not None:
+            failed = statuses.count("failed")
+            n = len(statuses) - failed - statuses.count("done")
+            out.append(Check("Services", "Jobs", "info",
+                             f"{n} scheduled" + (f", {failed} failed one-shot" if failed else "")))
     runs_file = home / "schedule" / "runs.json"
     if runs_file.exists():
         from alpi.scheduler import jobs_store

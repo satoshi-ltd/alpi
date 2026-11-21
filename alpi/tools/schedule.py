@@ -33,11 +33,15 @@ class Schedule(Tool):
         "success means accepted, not completed. Follow Activity or outputs for "
         "the result. Without a daemon it runs locally and returns the result. "
         "Both use the scheduler's threat-scan and dispatch path. "
-        "Once-jobs are NOT consumed by fire.\n"
+        "A fire is refused while the same job is running. Firing a once-job "
+        "before its `run_at` is a test and leaves it scheduled; firing it after "
+        "`run_at` is its run, and it is deleted when that run succeeds.\n"
         "\n"
         "Pick `kind`:\n"
-        "  once       — fires on a single date/time, then deletes itself "
-        "(field: `run_at`, ISO 8601, e.g. '2026-04-21T09:00:00')\n"
+        "  once       — fires on a single date/time, then deletes itself; "
+        "if that run fails it stays listed with `status: failed` until you "
+        "fire it again or remove it (field: `run_at`, ISO 8601, e.g. "
+        "'2026-04-21T09:00:00')\n"
         "  cron       — recurring cron expression (field: `expression`, e.g. '0 9 * * *')\n"
         "  inactivity — fires after N hours of user silence (field: `after_hours`)\n"
         "\n"
@@ -217,7 +221,11 @@ class Schedule(Tool):
                 jobs = jobs_store.read(home)
             except jobs_store.CorruptJobsFile as e:
                 return ToolResult(ok=False, output="", error=f"jobs.json corrupt: {e}")
-            listed = [{**j, **describe_run_timeout(j)} if isinstance(j, dict) else j for j in jobs]
+            from alpi.scheduler.run import job_status
+            listed = [
+                {**j, **describe_run_timeout(j), "status": job_status(j, home=home)} if isinstance(j, dict) else j
+                for j in jobs
+            ]
             return ToolResult(ok=True, output=json.dumps(listed, indent=2))
 
         if action == "add":

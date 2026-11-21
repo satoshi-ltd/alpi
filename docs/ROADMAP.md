@@ -350,13 +350,12 @@ failing test that settles it; if the test cannot be made to fail, the entry is d
   accept: two profiles that browse in one process keep separate cookies; state written after a login survives
   `SIGKILL`; `read_file` on `browser/state.json` is refused for every caller.
 
-- **SCHED.ONCE-FAILED** — A one-shot job that failed says so and does not linger
-  `bug · alpi · agent · normal`
-  note: read. A failed `once` job is stamped and never fires again, yet stays in the list
-  (`scheduler/run.py:198-199`, `:1064-1066`). An ad-hoc `fire` has no guard against the tick running the same job
-  and skips the run ledger (`:724-761`).
-  accept: a failed one-shot is shown as failed with its message and is not counted as pending; a `fire` during the
-  job's own run is refused or queued, and it writes its ledger row.
+- **MOBILE.FAILED-ONESHOT** — The phone's Activity does not count a failed one-shot as next up
+  `bug · mobile · agent · low`
+  note: read. Since alpi 0.19.31 a `once` job whose run failed stays in `host.activity.list`'s `scheduled` with
+  `status: failed` and no `next_fire`; `mobile/src/features/shell/ActivityList.jsx` counts `scheduled.length` and lists
+  it under "No fixed time" as "not scheduled". Desktop already drops it from upcoming (`common/activityGroups.mjs`).
+  accept: a row with `status: failed` is shown as failed and left out of the next-up count, with a test.
 
 - **HOST.RUNS-ADMIN** — An admin follows and cancels a scheduled run from an app
   `bug · alpi · agent · normal`

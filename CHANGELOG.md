@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.19.31 — 2026-11-21 — a one-shot job that failed says so
+
+- A one-time job whose run failed is now shown as failed, with its error, in `alpi schedule list`, `alpi activity`, `alpi doctor` and the agent's schedule list. It used to sit there as if it were still pending, with no next run and no reason, although it would never run again.
+- Firing a failed one-time job by hand is its retry: when that run succeeds the job is removed, as if it had run on time.
+- Firing a one-time job by hand before its time is a test again: the job still runs at its time. The test used to cancel the real run without saying so; a one-time job tested that way by an older version whose time has already passed runs once after the update.
+- Firing a job while it is already running is refused, also from the apps, and a scheduled run that comes due during a manual one is skipped, so the same job never runs twice at once. A manual fire now appears in the run history (`runs.jsonl`, `alpi digest`) like a scheduled run.
+
 ## v0.19.30 — 2026-11-21 — a daemon task that crashes comes back
 
 - When one of the daemon's tasks crashes (a profile's scheduler, ALP listener, workgroup poller or the host plane the apps connect to), it now starts again by itself after a few seconds, waiting longer each time up to five minutes. It used to stay down until the daemon was restarted, with only a line in the log.

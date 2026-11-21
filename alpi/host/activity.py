@@ -380,20 +380,21 @@ def _jobs(home: Path) -> list[dict[str, Any]]:
 
 
 def _scheduled(profiles: list[tuple[str, Path]]) -> list[dict[str, Any]]:
-    from alpi.scheduler.run import next_fire
+    from alpi.scheduler.run import job_state
     rows: list[dict[str, Any]] = []
     for profile, home in profiles:
         for job in _jobs(home):
             if job.get("paused"):
                 continue
             try:
-                nf = next_fire(job, home=home)
+                status, nf = job_state(job, home=home)
             except Exception:  # noqa: BLE001
-                nf = None
+                nf, status = None, "none"
             rows.append({
                 "profile": profile,
                 "job_id": str(job.get("id") or ""),
                 "title": _job_title(job),
+                "status": status,
                 "next_fire": nf.isoformat() if nf else None,
                 "last_run_at": job.get("last_run_at"),
                 "last_run_status": job.get("last_run_status"),

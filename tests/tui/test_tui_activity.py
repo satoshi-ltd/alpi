@@ -343,3 +343,21 @@ async def test_a_remote_prompt_with_no_time_left_reads_expired(tui_home) -> None
         panel = await activity.open_review(app, item)
         assert panel.deadline is not None
         assert panel.hint_text() == "esc back · expired"
+
+
+@pytest.mark.asyncio
+async def test_activity_does_not_count_a_failed_one_shot_as_scheduled(tui_home, monkeypatch) -> None:
+    data = _activity()
+    data["scheduled"].append({"profile": "casa", "job_id": "j2", "title": "Call the bank", "status": "failed",
+                              "next_fire": None, "last_run_at": None, "last_run_status": "error"})
+
+    async def fake(method, params=None, *, timeout=5.0):
+        return data
+
+    monkeypatch.setattr(host_client, "acall", fake)
+    app = AlpiApp(home_dir=tui_home)
+    async with app.run_test(size=(120, 50)) as pilot:
+        panel = await _open_activity(app, pilot)
+        assert panel.message == "2 need you · 2 running · 1 scheduled · 1 failed one-shot"
+        rendered = " ".join(str(w.render()) for w in panel.query(".list-row"))
+        assert "Call the bank · one-shot failed" in rendered

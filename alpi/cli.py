@@ -775,6 +775,13 @@ def _activity_lines(data: dict[str, Any], now: float) -> list[str]:
             f"  {row.get('source') or 'turn':<13} {row.get('profile') or '-':<12} "
             f"{row.get('title') or row.get('session_id') or '-'}  ({_ago(now - started) if started else '-'})"
         )
+    ended = [row for row in scheduled if row.get("status") in ("failed", "done")]
+    failed = [row for row in ended if row.get("status") == "failed"]
+    if failed:
+        lines.append(f"Failed one-shot · {len(failed)}")
+        for row in failed:
+            lines.append(f"  {row.get('profile') or '-':<12} {row.get('title') or row.get('job_id')}  failed")
+    scheduled = [row for row in scheduled if row not in ended]
     lines.append(f"Scheduled · {len(scheduled)}")
     for row in scheduled:
         nxt = _epoch(row.get("next_fire"))
@@ -1223,22 +1230,12 @@ def schedule_list(ctx: click.Context, as_json: bool) -> None:
         ctx.exit(1)
 
     def _fire_state(job: dict) -> tuple[str, "object"]:
-        # Delegate to the daemon's own semantics so console and scheduler never disagree.
-        if job.get("paused"):
-            return "paused", None
-        if scheduler_run.is_due(job, home=h):
-            return "due", scheduler_run.next_fire(job, home=h)
-        nxt = scheduler_run.next_fire(job, home=h)
-        if nxt is None:
-            if job.get("kind") == "inactivity":
-                return "idle-gated", None
-            return "none", None
-        return "scheduled", nxt
+        return scheduler_run.job_state(job, home=h)
 
     def _next_fire(job: dict) -> str:
         status, nxt = _fire_state(job)
-        if status == "paused":
-            return "paused"
+        if status in ("paused", "failed", "done"):
+            return status
         if status == "due":
             return "due now"
         if status == "idle-gated":
@@ -1283,7 +1280,8 @@ def schedule_list(ctx: click.Context, as_json: bool) -> None:
         elif j.get("timeout") is not None:
             flags.append(f"timeout:{run_timeout}s")
         last = j.get("last_run_status") or "never ran"
-        click.echo(f"{jid}  [{kind}] {when}  → next {_next_fire(j)}")
+        nxt_text = _next_fire(j)
+        click.echo(f"{jid}  [{kind}] {when}  → {nxt_text if nxt_text in ('failed', 'done') else 'next ' + nxt_text}")
         click.echo(f"        {title}")
         if description:
             click.echo(f"        {description}")

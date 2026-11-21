@@ -533,9 +533,12 @@ def test_next_fire_shares_due_semantics() -> None:
     assert next_fire({"kind": "once", "run_at": "2020-01-01T00:00:00"}, now) == now
     # future `once` → its run_at
     assert next_fire({"kind": "once", "run_at": "2030-01-01T00:00:00"}, now) is not None
-    # `once` already run → done, no next fire
-    assert next_fire({"kind": "once", "run_at": "2030-01-01T00:00:00",
+    # `once` that ran at or after its run_at → spent, no next fire
+    assert next_fire({"kind": "once", "run_at": "2020-01-01T00:00:00",
                       "last_run_at": now.isoformat()}, now) is None
+    # `once` test-fired before its run_at → still scheduled for run_at
+    assert next_fire({"kind": "once", "run_at": "2030-01-01T00:00:00",
+                      "last_run_at": now.isoformat()}, now) is not None
 
 
 @pytest.mark.asyncio

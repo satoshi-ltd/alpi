@@ -80,6 +80,8 @@ def running_line(item: dict) -> str:
 
 
 def scheduled_line(item: dict) -> str:
+    if item.get("status") in ("failed", "done"):
+        return f"{item.get('profile') or ''} · {item.get('title') or item.get('job_id') or 'job'} · one-shot {item['status']}"
     line = f"{item.get('profile') or ''} · {item.get('title') or item.get('job_id') or 'job'} · next {_when(item.get('next_fire'))}"
     if item.get("last_run_status") == "error":
         line += " · last run failed"
@@ -130,9 +132,13 @@ class ActivityPanel(FloatingPanel):
         self.data = data
         needs = [n for n in data.get("needs_you") or [] if isinstance(n, dict)]
         running = [r for r in data.get("running") or [] if isinstance(r, dict)]
-        scheduled = [s for s in data.get("scheduled") or [] if isinstance(s, dict)]
+        rows = [s for s in data.get("scheduled") or [] if isinstance(s, dict)]
+        scheduled = [s for s in rows if s.get("status") not in ("failed", "done")]
+        ended = [s for s in rows if s.get("status") in ("failed", "done")]
+        failed = sum(1 for s in ended if s.get("status") == "failed")
         self._show_message(
             f"{len(needs)} need you · {len(running)} running · {len(scheduled)} scheduled"
+            + (f" · {failed} failed one-shot" if failed else "")
         )
         body = self.query_one("#activity-body", VerticalScroll)
         await body.remove_children()
@@ -154,8 +160,8 @@ class ActivityPanel(FloatingPanel):
         if not running:
             widgets.append(Static("nothing running", classes="entry-desc"))
         widgets.append(Static("scheduled", classes="help-section"))
-        widgets.extend(Static(scheduled_line(s), classes="list-row") for s in scheduled)
-        if not scheduled:
+        widgets.extend(Static(scheduled_line(s), classes="list-row") for s in scheduled + ended)
+        if not scheduled + ended:
             widgets.append(Static("nothing scheduled", classes="entry-desc"))
         await body.mount(*widgets)
         if needs:

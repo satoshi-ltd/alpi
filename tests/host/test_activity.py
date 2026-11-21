@@ -85,7 +85,7 @@ def test_snapshot_shape(monkeypatch, tmp_path: Path) -> None:
     }
     assert isinstance(turn["started_at"], float)
     assert snap["scheduled"] == [{
-        "profile": "default", "job_id": "brief", "title": "daily brief",
+        "profile": "default", "job_id": "brief", "title": "daily brief", "status": "scheduled",
         "next_fire": "2099-01-01T08:00:00+00:00", "last_run_at": None, "last_run_status": None, "last_ok_at": None,
     }]
 
