@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.19.32 — 2026-11-22 — a listener that fails to start leaves nothing open
+
+- When the host socket the console and apps connect to, or a profile's ALP listener, fails half-way through starting (for example when it cannot set the socket's permissions), it now closes what it had already opened before it is started again. Since 0.19.30 restarts a failed listener (every 5 seconds at first, up to every 5 minutes), each failed attempt used to leave another open socket behind, and for ALP its replay journal, until the daemon restarted.
+
 ## v0.19.31 — 2026-11-21 — a one-shot job that failed says so
 
 - A one-time job whose run failed is now shown as failed, with its error, in `alpi schedule list`, `alpi activity`, `alpi doctor` and the agent's schedule list. It used to sit there as if it were still pending, with no next run and no reason, although it would never run again.

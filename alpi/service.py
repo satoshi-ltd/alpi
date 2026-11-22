@@ -4334,11 +4334,11 @@ async def _run_alp(home: Path, profile: str) -> None:
         tcp_host=tcp_host,
         tcp_port=tcp_port,
     )
-    alp_handlers.register_link_ask(server, home)
-    alp_blobs.register(server, home)
-    alp_workgroup.register(server, home)
-    await server.start()
     try:
+        alp_handlers.register_link_ask(server, home)
+        alp_blobs.register(server, home)
+        alp_workgroup.register(server, home)
+        await server.start()
         await server.serve_forever()
     finally:
         await server.stop()
@@ -4400,8 +4400,8 @@ async def _run_host(home: Path, profile: str) -> None:
     host_usage.register(server)
     host_attachments.register(server)
     host_admin_audit.register(server)
-    await server.start()  # host.sock up immediately — never blocked on network detection
     try:
+        await server.start()  # host.sock up immediately — never blocked on network detection
         # TCP bind needs network detection (slow under launchd); resolve off-loop, and a bind failure must NOT take down host.sock.
         try:
             tcp_bind = await asyncio.to_thread(resolve_host_tcp_bind, home)

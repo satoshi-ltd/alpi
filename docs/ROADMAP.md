@@ -333,13 +333,6 @@ failing test that settles it; if the test cannot be made to fail, the entry is d
   accept: two `serve` loops for one home never run `tick` at the same time (a per-home tick lock or equivalent), with a
   test that raises out of `serve` mid-tick.
 
-- **DAEMON.START-LEAK** — A listener whose start fails half-way is closed before the retry
-  `bug · alpi · agent · low`
-  note: read. `_run_alp` and `_run_host` call `await server.start()` outside the `try/finally: await server.stop()`, so a
-  `start()` that raises after binding (for example in `sock.chmod`) leaks the socket and ALP's replay cache; with the
-  0.19.30 restarts that repeats on every retry (every 5 s at first, every 5 minutes at the slowest).
-  accept: a `start()` that raises after binding leaves no open listener, checked by a test that restarts it twice.
-
 - **BROWSER.STATE** — A profile's browser session is its own and survives a crash
   `bug · alpi · agent · normal`
   note: suspected. `tools/browser.py` keeps one module-global browser, context and page on a worker thread, and
