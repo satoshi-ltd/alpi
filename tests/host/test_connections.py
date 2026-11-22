@@ -1977,3 +1977,46 @@ def test_console_promotion_to_admin_says_it_grants_full_control(monkeypatch, tmp
     assert prompts and "full control of this machine" in prompts[0]
     stored = next(row for row in connections.list_connections() if row["id"] == member["id"])
     assert stored["role"] == "member"
+
+
+def _stored_device() -> dict:
+    return yaml.safe_load(connections.store_path().read_text())["connections"][0]["devices"][0]
+
+
+def test_a_registered_device_name_and_version_are_capped_and_printable(monkeypatch, tmp_path: Path) -> None:
+    _root(monkeypatch, tmp_path)
+    _row, device = connections.create_connection("Javi")
+
+    assert connections.register_device(
+        device["token"], client="mobile", name="\x1b[2J" + "A" * 1_000_000, app_version="\x9b1.2\x07" + "9" * 500,
+    ) == (True, True)
+
+    stored = _stored_device()
+    assert stored["name"] == "[2J" + "A" * 125
+    assert stored["app_version"] == "1.2" + "9" * 61
+    assert connections.store_path().stat().st_size < 4096
+
+
+def test_a_paired_device_name_is_stripped_of_control_characters(monkeypatch, tmp_path: Path) -> None:
+    _root(monkeypatch, tmp_path)
+    _row, pairing = connections.create_pairing_connection("Javi")
+
+    connections.exchange_pairing(pairing["token"], client="mobile", name="\x1b]0;pwned\x07iPh\ud800one", app_version="1.0\r\n")
+
+    assert _stored_device()["name"] == "]0;pwnediPhone"
+    assert _stored_device()["app_version"] == "1.0"
+
+
+def test_an_existing_store_with_an_oversized_name_is_normalised_when_loaded(monkeypatch, tmp_path: Path) -> None:
+    _root(monkeypatch, tmp_path)
+    _row, device = connections.create_connection("Javi")
+    raw = yaml.safe_load(connections.store_path().read_text())
+    raw["connections"][0]["devices"][0]["name"] = "\x1b[2J" + "B" * 200_000
+    connections.store_path().write_text(yaml.safe_dump(raw))
+    connections.invalidate_cache()
+
+    [loaded] = connections.load_store()["connections"][0]["devices"]
+    assert loaded["name"] == "[2J" + "B" * 125
+
+    connections.register_device(device["token"], client="mobile", name="", app_version="2.0")
+    assert _stored_device()["name"] == "[2J" + "B" * 125

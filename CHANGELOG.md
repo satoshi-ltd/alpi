@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.19.34 — 2026-11-22 — a device cannot bloat or scramble the connections list
+
+- A paired app that reports its name and version again now gets the same limits as at pairing: 128 and 64 characters. It used to be stored as sent, so one paired device, even a member's, could make the connections file tens of megabytes and slow down every device's sign-in.
+- Control characters are removed from those fields, so a device name can no longer clear or rewrite the terminal in `alpi setup` → Connections or in new audit-log entries. A connections file that already holds such a name is cleaned when it is loaded.
+
 ## v0.19.33 — 2026-11-22 — the agent can remember where your aliases live
 
 - The agent can now save a plain fact that names a system file or command, such as "the aliases are in `~/.zshrc`", "the backup runs from `crontab`" or "the NAS key is in `~/.ssh`". Memory used to refuse these as if they were an attack, because it was checked with the same rules as a skill's code.

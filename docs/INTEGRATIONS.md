@@ -93,7 +93,8 @@ You get a QR code and an
 after ten minutes and can be exchanged once. A normal Desktop/Mobile client
 does that automatically. A headless integration sends
 `host.connections.exchange_pairing` as its first unauthenticated WebSocket
-message with `pairing_token`, `client`, `name` and `app_version`, and stores
+message with `pairing_token`, `client`, `name` and `app_version` (alpi keeps at most 128 and 64
+characters of them, without control characters), and stores
 the device token it returns — the grant is consumed by that one exchange, so
 a token you fail to persist cannot be requested again. Every later request
 carries it as `params.auth_token`. Add another

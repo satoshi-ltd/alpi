@@ -38,6 +38,9 @@ _VALID_STATUSES = frozenset({"active", "disabled", "deleted"})
 _VALID_CLIENTS = frozenset({"desktop", "mobile", "web", "unknown"})
 _VALID_SESSION_SCOPES = frozenset({"connection", "device"})
 _SAFE_PROFILE = re.compile(r"^[A-Za-z0-9_-]+$")
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f\ud800-\udfff]")
+DEVICE_NAME_MAX = 128
+DEVICE_VERSION_MAX = 64
 log = logging.getLogger(__name__)
 _CORRUPT_SCOPE = "<corrupt>"
 _cache_lock = threading.Lock()
@@ -256,6 +259,10 @@ def validate_profiles(value: Any) -> list[str]:
     return out
 
 
+def _device_text(value: Any, limit: int) -> str:
+    return _CONTROL_CHARS.sub("", str(value or "")).strip()[:limit].strip()
+
+
 def _normalise_device(row: Any, fallback_label: str = "") -> dict[str, Any] | None:
     if not isinstance(row, dict):
         return None
@@ -271,9 +278,9 @@ def _normalise_device(row: Any, fallback_label: str = "") -> dict[str, Any] | No
         "token_hash": token_hash,
         "revoked_token_hash": revoked_hash,
         "token_id": token_id,
-        "name": str(row.get("name") or fallback_label or "").strip(),
+        "name": _device_text(row.get("name") or fallback_label, DEVICE_NAME_MAX),
         "client": client if client in _VALID_CLIENTS else "unknown",
-        "app_version": str(row.get("app_version") or "").strip(),
+        "app_version": _device_text(row.get("app_version"), DEVICE_VERSION_MAX),
         "created": int(row.get("created") or time.time()),
         "last_seen": int(row["last_seen"]) if row.get("last_seen") else None,
         "status": _status(row.get("status")),
@@ -811,9 +818,9 @@ def exchange_pairing(
                     32,
                     connection.get("label") or "",
                     id=_new_id("dev"),
-                    name=name.strip()[:128],
+                    name=_device_text(name, DEVICE_NAME_MAX),
                     client=clean_client,
-                    app_version=app_version.strip()[:64],
+                    app_version=_device_text(app_version, DEVICE_VERSION_MAX),
                     created=now,
                     status="active",
                     provisioner=bool(pairing.get("provisioner")),
@@ -1003,8 +1010,8 @@ def revoke_by_token_id(token_id: str) -> bool:
 
 def register_device(token: str, *, client: str, name: str, app_version: str) -> tuple[bool, bool]:
     client = client if client in _VALID_CLIENTS else "unknown"
-    clean_name = name.strip()
-    clean_version = app_version.strip()
+    clean_name = _device_text(name, DEVICE_NAME_MAX)
+    clean_version = _device_text(app_version, DEVICE_VERSION_MAX)
     presented = _hash_token(token) if token else ""
     with _locked():
         data = _load_inside_lock()

@@ -420,16 +420,14 @@ Each entry is written to be worked without that report:
 
 #### Security — daemon
 
-- **SEC.DEVICE-FIELDS** — A device's name and version are capped and printable (S8)
-  `bug · alpi · agent · high`
-  note: `register_device` in [connections.py](../alpi/host/connections.py) (`:1004-1026`) stores `name` and
-  `app_version` as sent, while `exchange_pairing` caps them at 128 and 64 (`:812-814`). Any paired member calls it.
-  A 20 MB name made `connections.yaml` 21 MB: 5.4 s per store write under the lock and 2 s per cold authentication
-  of every device; the minute-ly `last_seen` touch rewrites the store. Escape bytes in the name reach
-  `alpi audit-log` and the Connections view.
-  accept: both fields are cut to 128 and 64 characters and stripped of C0, C1 and ESC characters on write, and an
-  existing store is normalised when loaded; a 1 MB name with `\x1b[2J` is stored as at most 128 printable
-  characters; the existing registration tests stay green.
+- **AUDIT.MARKUP** — A device name cannot break or disguise `alpi audit-log`
+  `bug · alpi · agent · low`
+  note: read (reproduced with a rich `Table`, not through the command). `audit_log_cmd` in `alpi/cli.py` (`:2003-2010`) passes `device_name` and `target_device_name` to rich's
+  `Table.add_row` as markup, so a member device registered as `[/]x` makes the admin's `alpi audit-log` raise
+  `MarkupError`, and `[white on white]` hides text. Older audit rows also keep escape bytes, since `list_entries` does
+  not clean on read.
+  accept: names with rich markup print literally and escape bytes are removed when read, with a test that registers
+  `[/]x` and `\x1b[2J` names and runs `alpi audit-log`.
 
 - **SEC.LOG-FLOOD** — A client-supplied value cannot fill the service log (S9)
   `bug · alpi · agent · normal`

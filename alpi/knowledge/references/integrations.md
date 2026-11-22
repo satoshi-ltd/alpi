@@ -40,7 +40,8 @@ daemon's plaintext listener private behind the reverse proxy.
 3. **Exchange (machine A).** Open `ws://<private-ip>:<port>` or
    `wss://your.domain.com` and send `host.connections.exchange_pairing` as the
    first unauthenticated message with `pairing_token`, `client`, `name` and
-   `app_version`. Store the returned device token before probing or doing any
+   `app_version` (stored as at most 128 and 64 characters, control characters
+   removed; `register_device` applies the same limits). Store the returned device token before probing or doing any
    other fallible setup; the grant expires after ten minutes and the first
    successful exchange consumes it atomically.
 4. **Use.** Reconnect and put the device token in `params.auth_token` on every

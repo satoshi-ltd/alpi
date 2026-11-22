@@ -1104,7 +1104,9 @@ Verb namespaces in current shape:
   same contract.
 - **`host.connections.{list,create,add_device,exchange_pairing,pairing_status,cancel_pairing,update,set_status,delete,revoke_device,register_device,summary,usage_daily}`**
   — connection/device management and 14-day aggregate usage for the
-  WebSocket transport. The server requires
+  WebSocket transport. A device's `name` and `app_version` are stored as at most
+  128 and 64 characters with control characters (C0, DEL, C1) and lone surrogates removed, on pairing,
+  on `register_device` and when the store is loaded. The server requires
   scoped members to pass `params.profile` explicitly on every
   profile-aware RPC (a small allowlist of profile-agnostic verbs is
   exempt) and returns `-32001 forbidden` if missing or out of scope;
