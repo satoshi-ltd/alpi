@@ -342,7 +342,14 @@ instructions inside them that ask alpi to ignore rules, reveal secrets,
 change config, or run unrelated commands.
 
 A shared scanner (`alpi/scan.py`) backs every check: skill bodies, memory
-writes, tool-result sanitizing, and fetched email/web content. Recalled
+writes, tool-result sanitizing, and fetched email/web content. Memory writes
+are checked only for prompt injection, literal secrets in a recognisable form
+(`api_key = "…"`, `sk-…`, `ghp_…`, `AKIA…`), common forms of
+runnable payloads (`curl … | sh`, base64 piped to a shell, `printenv` dumps,
+secret env sent by curl/wget, webhook exfiltration services, socket and
+`/dev/tcp` shells, fork bombs, `rm -rf ~`) and invisible unicode: a fact that names `.zshrc`,
+`crontab`, `~/.ssh`, `systemctl` or `ngrok` is stored. Skills keep the full
+command and persistence patterns. Recalled
 `USER.md` / `MEMORY.md` are scanned again when loaded into the system prompt
 — if they look injected they get a warning-first marker labelling them as
 untrusted data. `AGENT.md` is the profile persona (instruction by design) and

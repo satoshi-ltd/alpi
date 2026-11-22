@@ -43,6 +43,16 @@ def test_scan_memory_content_flags_bidi_override() -> None:
     assert "invisible / bidi-override unicode characters" in flags
 
 
+def test_skills_keep_the_command_patterns_memory_drops() -> None:
+    text = "Add the job to crontab and source ~/.zshrc."
+    assert {"modifies crontab", "shell rc file"} <= set(scan.scan_skill_body(text))
+    assert scan.scan_memory_content(text) == []
+
+
+def test_every_memory_label_names_a_skill_pattern() -> None:
+    assert {label for _, label in scan._MEMORY_PATTERNS} == scan._MEMORY_LABELS
+
+
 def test_single_source_skill_scanner() -> None:
     from alpi.tools import skill
     assert skill.scan_skill_body is scan.scan_skill_body

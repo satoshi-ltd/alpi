@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.19.33 — 2026-11-22 — the agent can remember where your aliases live
+
+- The agent can now save a plain fact that names a system file or command, such as "the aliases are in `~/.zshrc`", "the backup runs from `crontab`" or "the NAS key is in `~/.ssh`". Memory used to refuse these as if they were an attack, because it was checked with the same rules as a skill's code.
+- Memory is still refused when the text tries to override the agent's instructions, holds an API key or token in a recognisable form, carries a common form of a command meant to run (such as `curl … | sh`, dumping the environment or sending a key to a webhook), or hides invisible characters. Skills keep every rule.
+
 ## v0.19.32 — 2026-11-22 — a listener that fails to start leaves nothing open
 
 - When the host socket the console and apps connect to, or a profile's ALP listener, fails half-way through starting (for example when it cannot set the socket's permissions), it now closes what it had already opened before it is started again. Since 0.19.30 restarts a failed listener (every 5 seconds at first, up to every 5 minutes), each failed attempt used to leave another open socket behind, and for ALP its replay journal, until the daemon restarted.

@@ -30,7 +30,7 @@ Local agent runtime, per turn:
 | `alpi/attachments.py` | Input/output attachment validation, mime/magic checks, text rendering for non-rich surfaces. |
 | `alpi/tools/` | Tool registry + implementations (registered via `__init__.py`). |
 | `alpi/tools/skill.py` | User skill management. |
-| `alpi/scan.py` | Shared scanner library — skill/code danger patterns, prompt-injection detection, invisible-unicode; used by skills, memory writes, and the recalled-memory guard. |
+| `alpi/scan.py` | Shared scanner library — skill/code danger patterns, prompt-injection detection, invisible-unicode; skills get every pattern, memory writes only the injection, literal-secret, runnable-payload and invisible-unicode checks. |
 | `alpi/tools/knowledge.py` | `alpi_knowledge` tool. |
 | `alpi/knowledge/references/` | Packaged Markdown answer packs. |
 | `alpi/memory.py` | `USER.md`, `MEMORY.md`, `AGENT.md`. |

@@ -178,8 +178,34 @@ _INVISIBLE_CHARS_RE = re.compile(
 )
 
 
+# Memory is prose: a fact naming .zshrc or crontab must be storable, so no command or persistence labels here.
+_MEMORY_LABELS = frozenset({
+    "prompt injection: ignore instructions",
+    "prompt injection: disregard rules",
+    "prompt injection: system prompt override",
+    "hidden instructions in html comment",
+    "hardcoded api key",
+    "hardcoded secret",
+    "openai-style key",
+    "github pat",
+    "aws access key id",
+    "pipe to interpreter",
+    "base64 decode to interpreter",
+    "echo piped to interpreter",
+    "curl leaking secret env",
+    "wget leaking secret env",
+    "exfiltration webhook service",
+    "bash reverse shell via /dev/tcp",
+    "python socket one-liner",
+    "dumps all env",
+    "fork bomb",
+    "rm -rf on root/home",
+})
+_MEMORY_PATTERNS = [(pat, label) for pat, label in _DANGER_PATTERNS if label in _MEMORY_LABELS]
+
+
 def scan_memory_content(text: str) -> list[str]:
-    findings = scan_skill_body(text)
+    findings = [label for pat, label in _MEMORY_PATTERNS if pat.search(text)]
     if _INVISIBLE_CHARS_RE.search(text):
         findings.append("invisible / bidi-override unicode characters")
     return findings

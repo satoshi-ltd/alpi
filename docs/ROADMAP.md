@@ -376,12 +376,6 @@ failing test that settles it; if the test cannot be made to fail, the entry is d
   accept: the tool description, [CONFIG.md](CONFIG.md), [SECURITY.md](SECURITY.md) and the knowledge reference say
   the text leaves the machine and to whom; a profile with `allow_network: false` does not offer the tool.
 
-- **MEM.SCAN-FACTS** — A fact that names a system file is not refused as an attack
-  `bug · alpi · agent · low`
-  note: read. Memory writes pass the skill scanner (`scan.py`), so "the user's aliases live in `.zshrc`" or a note
-  about `crontab` is refused.
-  accept: a plain sentence naming those files is stored; the injection and credential patterns still refuse.
-
 - **EDIT.ATOMIC** — `edit_file` does what its description says
   `bug · alpi · agent · low`
   note: read. The description promises a `.bak`; none is written, and the write is not atomic
