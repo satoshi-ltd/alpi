@@ -332,6 +332,8 @@ class Server:
         self._ws_metrics = WebSocketMetrics()
         self._ws_preauth: dict[str, int] = defaultdict(int)
         self._rejections_logged: dict[tuple[str, str], float] = {}
+        self._forbidden_logged: dict[tuple[str, str, str], float] = {}
+        self._forbidden_windows: dict[str, list[Any]] = {}
         self._rejection_window: list[float] = [0.0, 0, 0.0]
         self._unlisted_proxies_logged: dict[str, float] = {}
         self._unlisted_proxy_logged_at = -_UNLISTED_PROXY_LOG_GAP_S
@@ -724,6 +726,35 @@ class Server:
             self._release_preauth(source, preauth)
             self._unregister_websocket(ws)
 
+    def _log_forbidden(self, ctx: Any, method: Any, message: str, *args: Any) -> None:
+        now = time.monotonic()
+        for connection, window in list(self._forbidden_windows.items()):
+            if now - window[0] < _REJECTION_LOG_EVERY_S:
+                continue
+            if window[2]:
+                log.warning(
+                    "host forbidden: %d more refusals were not logged in the minute from %s (%s)",
+                    window[2], time.strftime("%H:%M:%S", time.gmtime(window[3])), window[4],
+                )
+            del self._forbidden_windows[connection]
+        connection = str(ctx.connection_id or "")
+        window = self._forbidden_windows.setdefault(connection, [now, 0, 0, time.time(), _actor(ctx)])
+        # The method is client text: only a registered one may open its own bucket, or a flood of invented names would.
+        key = (connection, method if method in self.handlers else "?", message)
+        if len(self._forbidden_logged) >= _REJECTION_LOG_KEYS:
+            for stale in [k for k, at in self._forbidden_logged.items() if now - at >= _REJECTION_LOG_EVERY_S]:
+                del self._forbidden_logged[stale]
+        if (
+            now - self._forbidden_logged.get(key, -_REJECTION_LOG_EVERY_S) < _REJECTION_LOG_EVERY_S
+            or window[1] >= _FORBIDDEN_LOG_PER_CONNECTION
+            or len(self._forbidden_logged) >= _REJECTION_LOG_KEYS
+        ):
+            window[2] += 1
+            return
+        self._forbidden_logged[key] = now
+        window[1] += 1
+        log.warning("host forbidden: " + message + " (%s)", *args, _actor(ctx))
+
     def _log_rejection(self, kind: str, source: str, origin: str, detail: str = "") -> None:
         now = time.monotonic()
         key = (kind, source)
@@ -1105,7 +1136,7 @@ class Server:
             })
             return
         if require_token and method in _LOCAL_ONLY_METHODS:
-            log.warning("host forbidden: %s blocked over remote transport (%s)", method, _actor(request_context))
+            self._log_forbidden(request_context, method, "%s blocked over remote transport", _loggable(method))
             from alpi.host import admin_audit
             await asyncio.to_thread(
                 admin_audit.record_denied,
@@ -1126,7 +1157,7 @@ class Server:
         if require_token and method in ("host.config.set_field", "host.config.unset_field"):
             params = body.get("params") if isinstance(body.get("params"), dict) else {}
             if _touches_local_only_config(str(params.get("key") or "")):
-                log.warning("host forbidden: config key %r is local-only (%s)", params.get("key"), _actor(request_context))
+                self._log_forbidden(request_context, method, "config key %s is local-only", _loggable(params.get("key")))
                 from alpi.host import admin_audit
                 await asyncio.to_thread(
                     admin_audit.record_denied,
@@ -1148,7 +1179,7 @@ class Server:
             require_token and method in _ADMIN_METHODS and role != "admin"
             and not _self_service_allowed(method, remote_meta, audit_params)
         ):
-            log.warning("host forbidden: %s blocked for role=%s (%s)", method, role, _actor(request_context))
+            self._log_forbidden(request_context, method, "%s blocked for role=%s", _loggable(method), _loggable(role))
             from alpi.host import admin_audit
             await asyncio.to_thread(
                 admin_audit.record_denied,
@@ -1179,9 +1210,8 @@ class Server:
                 from alpi.host import clarification
                 target = clarification.pending_profile(params.get("request_id"))
             if not isinstance(target, str) or not target:
-                log.warning(
-                    "host forbidden: %s requires explicit profile for scoped token (%s)",
-                    _loggable(method), _actor(request_context),
+                self._log_forbidden(
+                    request_context, method, "%s requires explicit profile for scoped token", _loggable(method),
                 )
                 await send({
                     "id": body.get("id"),
@@ -1193,9 +1223,9 @@ class Server:
                 })
                 return
             if target not in profile_scope:
-                log.warning(
-                    "host forbidden: %s blocked for token, profile=%r not in scope=%s (%s)",
-                    _loggable(method), target, profile_scope, _actor(request_context),
+                self._log_forbidden(
+                    request_context, method, "%s blocked for token, profile=%s not in scope=%s",
+                    _loggable(method), _loggable(target), _loggable_list(profile_scope),
                 )
                 await send({
                     "id": body.get("id"),
@@ -1429,6 +1459,7 @@ _UNLISTED_PROXY_LOG_KEYS = 64
 _REJECTION_LOG_EVERY_S = 60.0
 _REJECTION_LOG_PER_MINUTE = 120
 _REJECTION_LOG_KEYS = 4096
+_FORBIDDEN_LOG_PER_CONNECTION = 20
 _LOGGABLE = re.compile(r"[A-Za-z0-9._-]{1,64}")
 
 
@@ -1744,6 +1775,12 @@ def _loggable(value: Any) -> str:
     # Anything a client sends is reduced to an identifier before it reaches a log line, so it cannot forge one.
     text = str(value)
     return text if _LOGGABLE.fullmatch(text) else "?"
+
+
+def _loggable_list(values: Any) -> str:
+    items = list(values) if isinstance(values, (list, tuple, set, frozenset)) else [values]
+    text = ",".join(_loggable(item) for item in items[:16])
+    return text if len(text) <= 120 and len(items) <= 16 else text[:120] + "…"
 
 
 def _actor_id(value: Any) -> str:

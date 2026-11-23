@@ -126,9 +126,12 @@ never triggers the line and cannot be listed. `unlisted_proxy_refusals` in the `
 
 An authenticated call refused for lack of permission (a member on an admin verb, a local-only verb or config
 key over the network, a profile outside a scoped connection) leaves `host forbidden: <what was refused>
-(connection=<id> device=<id>)` in `service.log`. The ids are the ones `alpi audit-log` and Connections show;
-the caller is the last parenthesised group on the line, since a refused config key or profile is quoted before
-it. Devices paired before connections existed all read `legacy` and cannot be told apart there.
+(connection=<id> device=<id>)` in `service.log`. The ids are the ones `alpi audit-log` and Connections show.
+A refused config key, profile or method that is not a plain name of at most 64 characters (letters, digits,
+`.`, `_`, `-`) is written as `?`. One connection gets at most one line a minute for the same refusal (all
+unknown methods count as one) and 20 lines a minute in all; the next refusal after that minute, from any
+connection, first writes a line counting what was left out. Refused administrative verbs are also in `logs/admin-audit.jsonl`, scope refusals are not. Devices
+paired before connections existed all read `legacy` and cannot be told apart there.
 
 ## Daemon — one process per machine, every profile inside
 

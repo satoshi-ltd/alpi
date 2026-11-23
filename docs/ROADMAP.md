@@ -429,18 +429,6 @@ Each entry is written to be worked without that report:
   accept: names with rich markup print literally and escape bytes are removed when read, with a test that registers
   `[/]x` and `\x1b[2J` names and runs `alpi audit-log`.
 
-- **SEC.LOG-FLOOD** — A client-supplied value cannot fill the service log (S9)
-  `bug · alpi · agent · normal`
-  note: [server.py](../alpi/host/server.py) logs `profile=%r` for a refused request with no cap and no rate limit
-  (`:1192-1195`; `:1125` has the same shape for a config key). Four `host.sessions.list` calls with a 2 MB `profile`
-  from a scoped member rotated every earlier line out of `service.log` and its backups, including the refusal lines
-  added in 0.18.9 and 0.19.7, and blocked the loop 0.9 s each.
-  `_loggable()` (`:1739`) already reduces the method to an identifier, but the profile and the scope list are
-  logged raw.
-  accept: every client-supplied value on those lines goes through `_loggable()` or is cut to 120 characters;
-  `host forbidden` lines are limited to one per connection, method and minute; a test sends the 2 MB value 100 times and finds lines under 300
-  bytes and no more than one per minute bucket.
-
 - **SEC.DOCKER-CWD** — A fenced turn's shell runs inside the workspace under the Docker backend (S11)
   `bug · alpi · agent · normal`
   note: with `tools.execution.backend: docker`, [terminal.py](../alpi/tools/terminal.py) (`:208-228`) refuses only

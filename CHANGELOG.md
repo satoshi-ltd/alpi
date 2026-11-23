@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.19.36 — 2026-11-23 — a refused client cannot flood the service log
+
+- When the daemon refuses a paired device's call for lack of permission, `service.log` now gets at most one line a minute for the same refusal from the same connection, and at most 20 a minute from that connection in all; a later line says how many were left out. A profile, config key or method that is not a plain short name is written as `?`.
+- Before, the value the device sent was written in full on every refusal, so a member sending a very large profile name a few times could push every earlier line out of `service.log` and its backups, including the refusal lines meant as evidence, and stall the daemon for about a second each time.
+
 ## v0.19.35 — 2026-11-23 — a symlink cannot make the app fetch another file
 
 - `host.attachments.fetch`, which the mobile app uses to show images and documents, now decides whether a file is an image or a document, and whether it may be served, from the file a path actually points to. It used to go by the requested name, so a link named `a.png` in the workspace could be served as an image while pointing at a session, `config.yaml` or `memories/USER.md`.

@@ -28,8 +28,8 @@ def root(monkeypatch):
         shutil.rmtree(d, ignore_errors=True)
 
 
-async def _forbidden_lines(root: Path, caplog, method: str, params: dict) -> list[str]:
-    srv = host_server.Server(home=root)
+async def _forbidden_lines(root: Path, caplog, method: str, params: dict, srv=None) -> list[str]:
+    srv = srv or host_server.Server(home=root)
     sent: list[dict] = []
 
     async def send(payload):
@@ -84,7 +84,7 @@ async def test_a_local_only_config_key_refusal_names_the_caller(root: Path, capl
     )
 
     assert lines == [
-        "host forbidden: config key 'alp.tcp_port' is local-only "
+        "host forbidden: config key alp.tcp_port is local-only "
         f"(connection={connection['id']} device={connection['devices'][0]['id']})"
     ]
     assert issued["token"] not in lines[0]
@@ -103,7 +103,7 @@ async def test_scoped_profile_refusals_name_the_caller(root: Path, caplog) -> No
 
     assert missing == [f"host forbidden: host.sessions.list requires explicit profile for scoped token {actor}"]
     assert outside == [
-        f"host forbidden: host.sessions.list blocked for token, profile='home' not in scope=['work'] {actor}"
+        f"host forbidden: host.sessions.list blocked for token, profile=home not in scope=work {actor}"
     ]
 
 
@@ -140,3 +140,118 @@ def test_an_actor_id_cannot_forge_a_log_line() -> None:
     forged = ConnectionContext(connection_id="conn_1\nhost forbidden: fake", device_id=None, source="remote")
 
     assert host_server._actor(forged) == "connection=? device=-"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method, field", [("host.sessions.list", "profile"), ("host.config.set_field", "key")])
+async def test_a_huge_client_value_logs_one_short_line_a_minute(root: Path, caplog, monkeypatch, method, field) -> None:
+    role = "admin" if field == "key" else "member"
+    _connection, issued = connections.create_connection("phone", role=role, profile_scope=["work"])
+    clock = [1000.0]
+    monkeypatch.setattr(host_server.time, "monotonic", lambda: clock[0])
+    srv = host_server.Server(home=root)
+    huge = "alp.tcp_port." + "x" * 2_000_000 if field == "key" else "p" * 2_000_000
+    params = {"auth_token": issued["token"], "profile": "work", field: huge, "value": 1}
+
+    lines: list[str] = []
+    for minute in range(2):
+        clock[0] = 1000.0 + 61 * minute
+        for _ in range(50):
+            caplog.clear()
+            lines += await _forbidden_lines(root, caplog, method, params, srv)
+
+    refusals = [line for line in lines if "more refusals were not logged" not in line]
+    assert len(refusals) == 2
+    assert len(lines) == 3
+    assert all(len(line.encode()) < 300 for line in lines)
+
+
+@pytest.mark.asyncio
+async def test_invented_method_names_cannot_defeat_the_limit(root: Path, caplog, monkeypatch) -> None:
+    _connection, issued = connections.create_connection("phone", role="member", profile_scope=["work"])
+    clock = [1000.0]
+    monkeypatch.setattr(host_server.time, "monotonic", lambda: clock[0])
+    srv = host_server.Server(home=root)
+
+    lines: list[str] = []
+    for n in range(5000):
+        caplog.clear()
+        lines += await _forbidden_lines(
+            root, caplog, f"x.{n:060d}", {"auth_token": issued["token"], "profile": "home"}, srv,
+        )
+    assert len(lines) == 1
+    clock[0] += 61
+    caplog.clear()
+    lines = await _forbidden_lines(root, caplog, "x.again", {"auth_token": issued["token"], "profile": "home"}, srv)
+    assert lines[0].startswith("host forbidden: 4999 more refusals were not logged in the minute from ")
+
+
+@pytest.mark.asyncio
+async def test_one_connection_cannot_spend_another_ones_lines(root: Path, caplog) -> None:
+    srv = host_server.Server(home=root)
+    first, first_issued = connections.create_connection("a", role="member")
+    second, second_issued = connections.create_connection("b", role="member")
+    for _ in range(30):
+        caplog.clear()
+        await _forbidden_lines(root, caplog, "host.peers.ping", {"auth_token": first_issued["token"]}, srv)
+
+    lines = await _forbidden_lines(root, caplog, "host.peers.ping", {"auth_token": second_issued["token"]}, srv)
+
+    assert any(second["id"] in line for line in lines)
+
+
+@pytest.mark.asyncio
+async def test_legacy_devices_are_limited_apart(root: Path, caplog) -> None:
+    srv = host_server.Server(home=root)
+    tokens = [devices.add(label=f"seed{n}", role="member")["token"] for n in range(2)]
+
+    counts = []
+    for token in tokens:
+        caplog.clear()
+        counts.append(len(await _forbidden_lines(root, caplog, "host.peers.ping", {"auth_token": token}, srv)))
+
+    assert counts == [1, 1]
+
+
+@pytest.mark.asyncio
+async def test_a_suppressed_count_is_reported_when_another_connection_is_refused_later(
+    root: Path, caplog, monkeypatch,
+) -> None:
+    noisy, noisy_issued = connections.create_connection("a", role="member", profile_scope=["work"])
+    _quiet, quiet_issued = connections.create_connection("b", role="member")
+    clock = [1000.0]
+    monkeypatch.setattr(host_server.time, "monotonic", lambda: clock[0])
+    srv = host_server.Server(home=root)
+    for n in range(100):
+        await _forbidden_lines(
+            root, caplog, f"x.{n}", {"auth_token": noisy_issued["token"], "profile": "home"}, srv,
+        )
+    clock[0] += 61
+    caplog.clear()
+
+    lines = await _forbidden_lines(root, caplog, "host.peers.ping", {"auth_token": quiet_issued["token"]}, srv)
+
+    assert len(lines) == 2
+    assert lines[0].startswith("host forbidden: 99 more refusals were not logged in the minute from ")
+    assert lines[0].endswith(f"(connection={noisy['id']} device={noisy['devices'][0]['id']})")
+
+
+@pytest.mark.asyncio
+async def test_each_registered_method_logs_once_a_minute_for_a_connection(root: Path, caplog) -> None:
+    _connection, issued = connections.create_connection("phone", role="member")
+    srv = host_server.Server(home=root)
+
+    async def unused(params, _server):
+        return {}
+
+    methods = ["host.peers.ping", "host.providers.ollama_models"]
+    for method in methods:
+        srv.register(method, unused)
+
+    lines: list[str] = []
+    for _ in range(3):
+        for method in methods:
+            caplog.clear()
+            lines += await _forbidden_lines(root, caplog, method, {"auth_token": issued["token"]}, srv)
+
+    assert [line.split()[2] for line in lines] == methods

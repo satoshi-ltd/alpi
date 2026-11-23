@@ -247,9 +247,12 @@ and source a minute and 120 a minute in all. An authenticated call refused for l
 of permission (member on an admin verb, local-only verb or config key over the
 network, profile outside the connection's scope) instead logs `host forbidden: <what
 was refused> (connection=<id> device=<id>)`: ids only, the same ones `alpi audit-log`
-and `host.connections.list` show. The caller is the LAST parenthesised group on the
-line (a refused config key or profile is client text quoted before it); devices of a
-store that predates connections all read `legacy` and cannot be told apart. Read
+and `host.connections.list` show. A refused config key, profile or method that is
+not a plain identifier of at most 64 characters is written as `?`; one connection
+logs the same refusal at most once a minute (unknown methods count as one) and 20
+lines a minute in all; the next refusal after that minute (from any connection) first
+logs a line counting the ones left out; devices of a store that
+predates connections all read `legacy` and cannot be told apart. Read
 verbs are not in the audit trail, so this line is the only record of who was refused
 one. The rate-limit refusal is a temporary block on that
 source address, shown by the clients as `rate-limited` — never as a rejected
