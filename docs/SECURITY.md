@@ -142,7 +142,13 @@ not reach.
   declared secrets are not passed to the shell; a workspace inside or around
   `~/.ssh`, `~/.aws` or `~/.gnupg` is refused too. With
   `tools.execution.backend: docker` the command runs in that container
-  instead. Everywhere else the command is refused before it runs (before any
+  instead, as the daemon's own user with no way to gain privileges (on rootful
+  Docker or Docker Desktop, with a daemon that is not root), and with the
+  workspace as its only mount (plus the paths a scoped workgroup phase may
+  write): a working directory that resolves outside the workspace, through a
+  symlink included, is refused, and the working directory is never mounted on
+  its own, so its `cwd` cannot get `/etc` or another host folder bind-mounted,
+  not even by swapping the directory for a link. Everywhere else the command is refused before it runs (before any
   approval is asked), with no fallback: in the supported Docker
   runtime, on Linux without `bubblewrap`, and on macOS, whose sandbox cannot
   hide other processes' arguments and environment (scheduled prompts, profile

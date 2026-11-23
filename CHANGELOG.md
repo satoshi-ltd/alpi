@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.19.38 — 2026-11-23 — a member's Docker shell stays inside the workspace
+
+- With `tools.execution.backend: docker`, a command from a member device or from a peer without a tool policy is now refused when its working directory is outside the profile's workspace, a symlink out of it included. It used to be mounted read-write into the container as it was, so `cwd=/etc` put the host's `/etc` inside.
+- Those commands now run in the container as the daemon's own user, unable to gain privileges, and with the workspace as the only folder mounted. They used to run as the image's root. This assumes rootful Docker or Docker Desktop.
+- Nothing changes for an admin turn, or for the default `local` backend.
+
 ## v0.19.37 — 2026-11-23 — a stale activity timer does nothing
 
 - No change for a running daemon. The short timer that groups activity updates for the apps now does nothing when the activity feed was reset before it fired. That only happened between tests, where a timer left by one test could fire into the next and fail the release pipeline at random.

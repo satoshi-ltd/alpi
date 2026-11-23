@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextvars
+import os
 import shutil
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -57,8 +58,14 @@ class DockerExecutionWorld(ExecutionWorld):
             raise RuntimeError("Docker execution workspace and profile home must be directories")
         workspace = self.context.workspace.resolve()
         home = self.context.home.resolve()
-        mounts = {workspace, cwd.resolve()} if member else {workspace, home, cwd.resolve()}
+        working = cwd.resolve()
+        if member and working != workspace and workspace not in working.parents:
+            raise RuntimeError(f"Docker execution cwd is outside the workspace of a fenced turn: {cwd}")
+        # A fenced turn can swap its own cwd for a symlink before Docker resolves a bind source: mount the workspace alone.
+        mounts = {workspace} if member else {workspace, home, working}
         args = ["docker", "run", "--rm", "-i", "--network", "bridge" if self.allow_network else "none"]
+        if member:
+            args.extend(["--user", f"{os.getuid()}:{os.getgid()}", "--security-opt", "no-new-privileges"])
         if container_name is not None:
             args.extend(["--name", container_name])
         if write_rules is None:

@@ -15,7 +15,7 @@ import pytest
 from alpi.core.execution_world import DockerExecutionWorld
 from alpi.core.run_context import RunContext
 from alpi.host.connection_context import ConnectionContext, use
-from alpi.tools import _sandbox, _state, terminal
+from alpi.tools import _policy, _sandbox, _state, terminal
 
 MEMBER = ConnectionContext(connection_id="c1", device_id="d1", source="remote", role="member")
 OTHER_MEMBER = ConnectionContext(connection_id="c2", device_id="d2", source="remote", role="member")
@@ -88,6 +88,94 @@ def test_docker_world_does_not_mount_the_profile_home_for_a_member(home: Path, m
     mount = f"{home.resolve()}:{home.resolve()}"
     assert mount not in world.command("ls", ws, (), member=True)
     assert mount in world.command("ls", ws, ())
+
+
+def _docker_world(home: Path, monkeypatch) -> DockerExecutionWorld:
+    monkeypatch.setattr("alpi.core.execution_world.shutil.which", lambda *args, **kwargs: "/usr/bin/docker")
+    return DockerExecutionWorld(context=RunContext("r1", home, home.parent / "ws", "default", "user", "s1", "c1"))
+
+
+def _volumes(args: list[str]) -> list[str]:
+    return [args[index + 1] for index, value in enumerate(args[:-1]) if value == "--volume"]
+
+
+def _peer_without_policy():
+    return _policy.use(None, "peer 'carol'", fence_without_policy=True)
+
+
+def test_docker_world_refuses_a_member_cwd_outside_the_workspace(home: Path, monkeypatch, tmp_path: Path) -> None:
+    world = _docker_world(home, monkeypatch)
+    ws = home.parent / "ws"
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    (ws / "escape").symlink_to(outside)
+
+    for cwd in (outside, Path("/etc"), ws / "escape", ws.parent):
+        with pytest.raises(RuntimeError, match="outside the workspace"):
+            world.command("ls", cwd, (), member=True)
+
+
+def test_docker_world_mounts_only_the_workspace_for_a_member_whatever_its_cwd(home: Path, monkeypatch) -> None:
+    world = _docker_world(home, monkeypatch)
+    ws = (home.parent / "ws").resolve()
+    (ws / "sub").mkdir()
+    (ws / "assets").mkdir()
+
+    plain = world.command("ls", ws / "sub", (), member=True)
+    assert _volumes(plain) == [f"{ws}:{ws}"]
+    assert plain[plain.index("--workdir") + 1] == str(ws / "sub")
+
+    scoped = world.command("ls", ws / "sub", (), member=True, write_rules=(("subpath", ws / "assets"),))
+    assert _volumes(scoped) == [f"{ws}:{ws}:ro", f"{ws / 'assets'}:{ws / 'assets'}:rw"]
+
+
+def test_docker_world_runs_a_member_unprivileged_and_an_admin_as_before(home: Path, monkeypatch, tmp_path: Path) -> None:
+    world = _docker_world(home, monkeypatch)
+    ws = home.parent / "ws"
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+
+    member = world.command("ls", ws, (), member=True)
+    assert member[member.index("--user") + 1] == f"{os.getuid()}:{os.getgid()}"
+    assert member[member.index("--security-opt") + 1] == "no-new-privileges"
+    assert member.index("--user") < member.index(world.image)
+
+    admin = world.command("ls", outside, ())
+    assert "--user" not in admin and "--security-opt" not in admin
+    assert f"{outside.resolve()}:{outside.resolve()}" in _volumes(admin)
+
+
+@pytest.mark.parametrize("fenced", ["member", "peer"])
+def test_a_fenced_terminal_under_docker_is_refused_a_cwd_outside_the_workspace(home: Path, monkeypatch, tmp_path: Path, fenced) -> None:
+    from alpi.core import execution_world
+
+    monkeypatch.setattr(terminal.subprocess, "Popen", lambda *a, **kw: pytest.fail("spawned"))
+    world = _docker_world(home, monkeypatch)
+    ws = (home.parent / "ws").resolve()
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    fence = use(MEMBER) if fenced == "member" else _peer_without_policy()
+
+    with execution_world.use(world), fence:
+        refused = terminal.Terminal().run(command="ls", cwd=str(outside))
+        allowed = terminal._resolve_popen_args("ls", str(ws))
+    assert refused.ok is False
+    assert "only inside the profile's workspace" in refused.error
+    assert allowed[:2] == ["docker", "run"] and _volumes(allowed) == [f"{ws}:{ws}"]
+
+    with execution_world.use(world), use(ADMIN):
+        admin = terminal._resolve_popen_args("ls", str(outside))
+    assert f"{outside.resolve()}:{outside.resolve()}" in _volumes(admin)
+
+
+def test_a_member_under_docker_is_refused_when_the_turns_workspace_holds_the_alpi_home(home: Path, monkeypatch) -> None:
+    from alpi.core import execution_world
+
+    monkeypatch.setattr("alpi.core.execution_world.shutil.which", lambda *args, **kwargs: "/usr/bin/docker")
+    stale = DockerExecutionWorld(context=RunContext("r1", home, home.parent, "default", "user", "s1", "c1"))
+
+    with execution_world.use(stale), use(MEMBER), pytest.raises(_sandbox.SandboxUnavailable, match="inside the alpi home"):
+        terminal._resolve_popen_args("ls", str(home.parent / "ws"))
 
 
 @pytest.mark.parametrize("action", ["run", "background"])

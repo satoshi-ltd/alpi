@@ -116,6 +116,11 @@ _MEMBER_NO_SANDBOX = (
     "provides outside Docker (the macOS sandbox cannot hide other processes' arguments and "
     "environment). An admin device can run it."
 )
+_MEMBER_OUTSIDE_WORKSPACE = (
+    "terminal is unavailable to member devices and peers without a tool policy for cwd {path}: with the "
+    "Docker execution backend their commands run only inside the profile's workspace ({workspace}). "
+    "Use a directory inside it, or run it from an admin device."
+)
 _MEMBER_INSIDE_HOME = (
     "terminal is unavailable to member devices and peers without a tool policy for {what} {path}: "
     "it is inside the alpi home or a credentials folder, or contains one, which their commands never "
@@ -209,19 +214,27 @@ def _resolve_popen_args(
     if member_root is not None:
         home_dir = Path(os.path.expanduser("~"))
         hidden = (*member_root_paths(alpi_root()), *(home_dir / d for d in (".ssh", ".aws", ".gnupg")))
-        for what, path in (("workspace", wp), ("cwd", Path(cwd or _default_cwd()))):
+        checked = [("workspace", wp), ("cwd", Path(cwd or _default_cwd()))]
+        if world is not None and world.backend != "local":
+            # The container mounts the workspace bound at turn start, which a config edit mid-turn does not move.
+            checked.append(("workspace", world.context.workspace))
+        for what, path in checked:
             for form in (path.absolute(), path.resolve()):
                 if any(_overlaps(form, root) for root in hidden):
                     raise SandboxUnavailable(_MEMBER_INSIDE_HOME.format(what=what, path=path))
     if world is not None and world.backend != "local":
         if unbounded is not None:
             raise unbounded
+        working = Path(cwd or _default_cwd()).resolve()
+        fenced_root = world.context.workspace.resolve()
+        if member_root is not None and working != fenced_root and fenced_root not in working.parents:
+            raise SandboxUnavailable(_MEMBER_OUTSIDE_WORKSPACE.format(path=working, workspace=fenced_root))
         profile_env, extra_path = ({}, "") if member_root is not None else _profile_env()
         if extra_path:
             # The image has its own PATH; the forwarded host PATH may point at nothing inside it.
             command = f"PATH={shlex.quote(extra_path)}:\"$PATH\"; export PATH; {command}"
         return world.command(
-            command, Path(cwd or _default_cwd()).resolve(),
+            command, working,
             _SAFE_ENV_KEYS + ("ALPI_HOME", "ALPI_WORKSPACE", "WORKSPACE", authority.ENV) + tuple(sorted(profile_env)),
             container_name=docker_container_name, write_rules=write_rules,
             member=member_root is not None,

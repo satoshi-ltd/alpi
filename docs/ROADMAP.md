@@ -429,17 +429,6 @@ Each entry is written to be worked without that report:
   accept: names with rich markup print literally and escape bytes are removed when read, with a test that registers
   `[/]x` and `\x1b[2J` names and runs `alpi audit-log`.
 
-- **SEC.DOCKER-CWD** — A fenced turn's shell runs inside the workspace under the Docker backend (S11)
-  `bug · alpi · agent · normal`
-  note: with `tools.execution.backend: docker`, [terminal.py](../alpi/tools/terminal.py) (`:208-228`) refuses only
-  the alpi home, `~/.ssh`, `~/.aws` and `~/.gnupg` as `cwd`, and
-  [execution_world.py](../alpi/core/execution_world.py) (`:60-66`) mounts `cwd.resolve()` read-write with no
-  `--user`. A member's call with `cwd=/etc` builds `docker run … --volume /etc:/etc`. SECURITY.md (`:110-118`)
-  says otherwise. The argv was verified; the escape was not run.
-  accept: a fenced turn (member, peer without `tools.allow`) is refused a `cwd` that resolves outside the profile's
-  workspace; the argv carries `--user <uid>:<gid>`; a unit test on the argv builder needs no Docker; an admin turn
-  is unchanged.
-
 - **SEC.MEMBER-ORACLES** — Two member-reachable verbs validate before they read (S12, S13)
   `bug · alpi · agent · normal`
   note: `host.chat.send` loads `sessions/<session_id>.json` before `_check_id`
@@ -1194,6 +1183,30 @@ Each entry is written to be worked without that report:
   accept: each site either scrubs or is shown not to receive agent or tool text; a post carrying a lone surrogate
   reaches a peer with a valid signature, and a `--once` turn whose tool output holds one prints its events; tests
   drive the ALP client and server, the CLI line and a provider-bound message.
+
+### Found while shipping alpi 0.19.38
+
+- **SEC.DOCKER-RULE-MOUNTS** — A scoped phase's writable mounts cannot be swapped for a host folder
+  `bug · alpi · agent · low`
+  note: suspected, traced from the argv, Docker not run. With `tools.execution.backend: docker` a scoped workgroup
+  phase mounts each write rule as `--volume <path>:<path>:rw` ([execution_world.py](../alpi/core/execution_world.py)
+  `:77-78`). The path is inside the workspace and writable by the turn, and it is resolved when the argv is built
+  while Docker resolves a bind source when the container starts, so a second session can swap the folder for a
+  symlink in between. The working directory of a fenced turn is no longer mounted on its own for this reason.
+  A phase scoped to the whole workspace also builds `<ws>:<ws>:ro` and `<ws>:<ws>:rw`, one mount point twice,
+  for every turn.
+  accept: a fenced turn's rule mount cannot resolve outside the workspace at container start (the workspace is
+  bound once and writes are narrowed inside it, or the source is pinned so a later swap changes nothing); a
+  whole-workspace phase builds one mount; a test on the argv covers both.
+
+- **EXEC.DOCKER-USER** — A fenced Docker turn is the daemon's unprivileged user on every engine
+  `bug · alpi · agent · low`
+  note: suspected, not run. A fenced turn runs with `--user <uid>:<gid>`. Under rootless Docker or Podman the
+  container's root already is the daemon's user and that uid maps to a subordinate one, so the command loses write
+  (and on a `0700` workspace read) access it had before 0.19.38. A daemon running as root emits `--user 0:0`, so
+  its fenced command is still root in the container. `docs/CONFIG.md` states both assumptions.
+  accept: the daemon detects a rootless engine once and leaves `--user` out there, and refuses a fenced Docker
+  command when it runs as root, each with a message that names the cause; a test covers them without Docker.
 
 ### Found while shipping alpi 0.19.37
 

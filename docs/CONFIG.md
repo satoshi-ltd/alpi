@@ -180,8 +180,17 @@ are appended to the conversation in the model's original call order.
 `tools.execution.backend=docker` runs terminal shell processes in an ephemeral
 `docker run --rm` world. The workspace, profile home, and explicit working
 directory are mounted at their existing absolute paths so filesystem tools
-and processes see the same namespace. Network is disabled unless
-`tools.terminal.allow_network=true`. Background terminal jobs are refused in
+and processes see the same namespace. A fenced turn (a member device, or a peer
+without `tools.allow`) gets a narrower container: the workspace is its only
+mount (a scoped workgroup phase adds the paths it may write), the profile home
+and the working directory are not mounted on their own, the process runs as the
+daemon's own user (`--user <uid>:<gid>`, `--security-opt no-new-privileges`)
+instead of the image's root, and a working directory that resolves outside the
+workspace is refused before anything starts. This assumes rootful Docker or
+Docker Desktop and a daemon that is not root: under rootless Docker or Podman
+that uid is not the daemon's user inside the container, so a fenced command
+may not be able to write the workspace, and a root daemon's fenced command is
+still root in the container. Network is disabled unless `tools.terminal.allow_network=true`. Background terminal jobs are refused in
 this backend so a detached container cannot outlive its run. The `local` backend remains the default
 and continues to compose with `tools.terminal.sandbox` as before. Dedicated
 workers such as skill scripts and speech transcription remain host-side; this
