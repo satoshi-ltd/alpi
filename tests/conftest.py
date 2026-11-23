@@ -198,6 +198,18 @@ def _reset_session_search_state() -> None:
 
 
 @pytest.fixture(autouse=True)
+def _activity_stays_off_between_tests():
+    yield
+    import sys
+    activity = sys.modules.get("alpi.host.activity")
+    if activity is None:
+        return
+    from alpi.host import events
+    events.remove_listener(activity._on_event)
+    activity._reset_for_tests()
+
+
+@pytest.fixture(autouse=True)
 def _provider_pause_isolated():
     from alpi import provider_pause
     provider_pause.reset()

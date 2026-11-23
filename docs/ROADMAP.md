@@ -1195,15 +1195,17 @@ Each entry is written to be worked without that report:
   reaches a peer with a valid signature, and a `--once` turn whose tool output holds one prints its events; tests
   drive the ALP client and server, the CLI line and a provider-bound message.
 
-### Found while shipping alpi 0.19.34
+### Found while shipping alpi 0.19.37
 
-- **ACTIVITY.STALE-FLUSH** — A debounce timer left from before a reset emits nothing
+- **TESTS.EVENTS-HISTORY** — A test that starts the host leaves the event history where it found it
   `bug · alpi · agent · low`
-  note: suspected. `publish` for 0.19.34 failed once (run 45006952718, green on rerun):
-  `tests/host/test_activity.py::test_changes_are_debounced_per_profile` saw an extra `activity.changed` for `default`.
-  `activity._flush` emits without checking `_enabled` or that its name is still in `_trailing`, so a `threading.Timer`
-  armed by an earlier test (1 s debounce) can fire after `_reset_for_tests` into the next test.
-  accept: a flush armed before `_reset_for_tests` emits nothing, with a test that arms one, resets and waits past it.
+  note: read and counted, not fixed. `host_events.register` ([events.py](../alpi/host/events.py) `:173-178`) points
+  `_history_path` at the home of the test that called it and nothing restores it, so every later `emit` in the suite
+  recreates `host/events.jsonl` under a temporary home already removed. One development machine held 377 leftover
+  `/tmp/alp-activity-*` and `/tmp/alpi-host-*` directories. Three tests reach it through `service._run_host`
+  (`tests/core/test_listener_start_failure.py`, `tests/core/test_daemon.py`, `tests/host/test_tcp_listener.py`).
+  accept: after any test the history path is the session's isolated one again and a suite run leaves no new
+  directory under `/tmp`, with a test that pins it.
 
 ### Found while shipping alpi 0.19.24
 

@@ -77,3 +77,10 @@ async def test_a_host_start_that_fails_after_binding_leaves_nothing_open(home: P
 
     assert len(listeners) == 2 and not any(listener.is_serving() for listener in listeners)
     assert not (home / "host" / "host.sock").exists()
+
+
+def test_the_host_runner_test_above_left_no_activity_running() -> None:
+    from alpi.host import activity, events
+
+    assert activity._enabled is False
+    assert activity._on_event not in events._listeners

@@ -349,6 +349,47 @@ def test_changes_are_debounced_per_profile(monkeypatch, _clean) -> None:
     assert _changes(_clean) == ["a", "b", "a"]
 
 
+def test_a_flush_armed_before_a_reset_emits_nothing(monkeypatch, _clean) -> None:
+    _enable()
+    armed: list[tuple] = []
+    monkeypatch.setattr(activity, "DEBOUNCE_S", 60.0)
+    monkeypatch.setattr(activity, "_later", lambda delay, fn, *args: armed.append((fn, args)))
+    activity.changed("a")
+    activity.changed("a")
+    assert _changes(_clean) == ["a"]
+    assert len(armed) == 1
+
+    activity._reset_for_tests()
+    activity._enabled = True
+    armed[0][0](*armed[0][1])
+    assert _changes(_clean) == ["a"]
+
+    activity.changed("a")
+    activity.changed("a")
+    armed[1][0](*armed[1][1])
+    assert _changes(_clean) == ["a", "a", "a"]
+
+
+def test_a_phase_check_queued_before_a_reset_checks_nothing(monkeypatch, _clean) -> None:
+    _enable()
+    armed: list[tuple] = []
+    checked: list[str] = []
+    monkeypatch.setattr(activity, "_later", lambda delay, fn, *args: armed.append((fn, args)))
+    monkeypatch.setattr(activity, "_wg_check", lambda profile, wg_id: checked.append(wg_id))
+    host_events.emit("wg.post", {"profile": "hub", "wg_id": "w1", "seq": 3})
+    assert ("hub", "w1") in activity._wg_checks
+    assert len(armed) == 1
+
+    activity._reset_for_tests()
+    activity._enabled = True
+    armed[0][0](*armed[0][1])
+    assert checked == []
+
+    host_events.emit("wg.post", {"profile": "hub", "wg_id": "w1", "seq": 4})
+    armed[1][0](*armed[1][1])
+    assert checked == ["w1"]
+
+
 def test_schedule_events_trigger_activity_changed(_clean) -> None:
     _enable()
     host_events.emit("schedule.failed", {"profile": "doc", "job_id": "x"})

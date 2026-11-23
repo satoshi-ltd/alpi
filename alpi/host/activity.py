@@ -65,6 +65,8 @@ def changed(profile: str | None) -> None:
 
 def _flush(name: str) -> None:
     with _emit_lock:
+        if name not in _trailing:
+            return
         _trailing.discard(name)
         _last_emit[name] = time.monotonic()
     _emit(name)
@@ -96,12 +98,18 @@ def _queue_wg_check(profile: str, wg_id: str) -> None:
         if key in _wg_checks:
             return
         _wg_checks.add(key)
-    _later(DEBOUNCE_S, _wg_check, profile, wg_id)
+    _later(DEBOUNCE_S, _queued_wg_check, profile, wg_id)
+
+
+def _queued_wg_check(profile: str, wg_id: str) -> None:
+    with _cache_lock:
+        if (profile, wg_id) not in _wg_checks:
+            return
+        _wg_checks.discard((profile, wg_id))
+    _wg_check(profile, wg_id)
 
 
 def _wg_check(profile: str, wg_id: str) -> None:
-    with _cache_lock:
-        _wg_checks.discard((profile, wg_id))
     try:
         home = _home_for(profile)
         row = _hub_row(home, profile, wg_id) or _member_row(home, profile, wg_id)

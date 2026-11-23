@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.19.37 — 2026-11-23 — a stale activity timer does nothing
+
+- No change for a running daemon. The short timer that groups activity updates for the apps now does nothing when the activity feed was reset before it fired. That only happened between tests, where a timer left by one test could fire into the next and fail the release pipeline at random.
+
 ## v0.19.36 — 2026-11-23 — a refused client cannot flood the service log
 
 - When the daemon refuses a paired device's call for lack of permission, `service.log` now gets at most one line a minute for the same refusal from the same connection, and at most 20 a minute from that connection in all; a later line says how many were left out. A profile, config key or method that is not a plain short name is written as `?`.
