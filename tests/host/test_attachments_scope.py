@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -302,5 +304,109 @@ async def test_a_failed_marker_write_leaves_no_upload_behind(short_tmp, monkeypa
 
         assert "error" in response
         assert {p.name for p in (short_tmp / "host" / "attachments" / "tmp").glob("*")} == before
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_a_link_named_like_an_image_never_serves_what_it_points_at(short_tmp, monkeypatch) -> None:
+    server, url, a, *_ = await _world(short_tmp, monkeypatch, "device")
+    try:
+        other, _device = connections.create_connection("Other", role="member", session_scope="device")
+        their_session = _save(short_tmp, other["id"], _device["id"], Turn(1, "private", [], "secret plans"))
+        their_chart = short_tmp / "out" / "theirs.png"
+        their_chart.write_bytes(PNG)
+        (short_tmp / "config.yaml").write_text("model: x\n")
+        (short_tmp / "memories").mkdir(exist_ok=True)
+        (short_tmp / "memories" / "USER.md").write_text("private facts")
+        targets = {
+            "session.png": next((short_tmp / "sessions").rglob(f"*{their_session}*")),
+            "config.png": short_tmp / "config.yaml",
+            "user.png": short_tmp / "memories" / "USER.md",
+            "chart.png": their_chart,
+        }
+        links = []
+        for name, target in targets.items():
+            link = short_tmp / f"link-{name}"
+            link.symlink_to(target)
+            links.append(str(link))
+        mine = short_tmp / "mine.png"
+        mine.write_bytes(PNG)
+        _save(short_tmp, a["connection"], a["id"], Turn(
+            1, "list the workspace", [], "Files: " + " ".join([*links, str(mine)]),
+        ))
+
+        for link in links:
+            assert _forbidden(await _call(url, a["token"], "host.attachments.fetch", path=link)), link
+        assert _fetch_ok(await _call(url, a["token"], "host.attachments.fetch", path=str(mine)))
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_the_mime_of_a_fetch_comes_from_the_file_actually_read(short_tmp, monkeypatch) -> None:
+    server, url, *_ = await _world(short_tmp, monkeypatch, "device")
+    try:
+        report = short_tmp / "out" / "report.md"
+        link = short_tmp / "out" / "report.png"
+        link.symlink_to(report)
+        local = await server._dispatch({
+            "id": "1", "method": "host.attachments.fetch", "params": {"profile": "default", "path": str(link)},
+        })
+        assert local["result"]["mime"] == "text/markdown"
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("swap", ["link", "rename", "fifo"])
+async def test_a_file_swapped_after_the_checks_is_not_read(short_tmp, monkeypatch, swap) -> None:
+    server, url, a, *_ = await _world(short_tmp, monkeypatch, "device")
+    try:
+        (short_tmp / "memories").mkdir(exist_ok=True)
+        secret = short_tmp / "memories" / "USER.md"
+        secret.write_text("private facts")
+        mine = short_tmp / "mine.png"
+        mine.write_bytes(PNG)
+        _save(short_tmp, a["connection"], a["id"], Turn(1, "show it", [], f"Here: {mine}"))
+        real_check = attachments_rpc._caller_may_fetch
+
+        def swap_after_check(home, requested, real):
+            allowed = real_check(home, requested, real)
+            mine.unlink()
+            if swap == "link":
+                mine.symlink_to(secret)
+            elif swap == "rename":
+                copy = short_tmp / "copy.md"
+                copy.write_text("private facts")
+                copy.rename(mine)
+            else:
+                os.mkfifo(mine)
+            return allowed
+
+        monkeypatch.setattr(attachments_rpc, "_caller_may_fetch", swap_after_check)
+        response = await asyncio.wait_for(_call(url, a["token"], "host.attachments.fetch", path=str(mine)), 10)
+        assert _forbidden(response)
+        assert b"private facts" not in json.dumps(response).encode()
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_a_member_reaches_a_workspace_by_its_configured_link_but_not_by_another_alias(short_tmp, monkeypatch) -> None:
+    server, url, a, *_ = await _world(short_tmp, monkeypatch, "device")
+    try:
+        real_ws = short_tmp / "real-ws"
+        real_ws.mkdir()
+        (short_tmp / "ws").symlink_to(real_ws)
+        (short_tmp / "alias").symlink_to(real_ws)
+        (short_tmp / "config.yaml").write_text(f"workspace: {short_tmp / 'ws'}\n")
+        (real_ws / "notes.md").write_text("# notes")
+        configured = str(short_tmp / "ws" / "notes.md")
+        aliased = str(short_tmp / "alias" / "notes.md")
+        _save(short_tmp, a["connection"], a["id"], Turn(1, "notes", [], f"See {configured} and {aliased}"))
+
+        assert _fetch_ok(await _call(url, a["token"], "host.attachments.fetch", path=configured))
+        assert _forbidden(await _call(url, a["token"], "host.attachments.fetch", path=aliased))
     finally:
         await server.stop()

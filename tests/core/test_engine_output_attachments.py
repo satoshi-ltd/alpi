@@ -9,6 +9,12 @@ from alpi.engine import Engine
 from alpi.tools.base import ToolResult
 
 
+def _servable(home, *, image, real):
+    from alpi import attachments as att
+    from alpi.host import attachments_rpc as rpc
+    return rpc._under_any(real, att.servable_roots(home, rpc._workspace(home), image=image))
+
+
 @pytest.fixture
 def bootstrapped_home(tmp_home_no_env: Path) -> Path:
     home.ensure_home(tmp_home_no_env)
@@ -100,7 +106,7 @@ def test_a_document_the_app_cannot_serve_is_not_announced(bootstrapped_home, mon
     )
     final = [e for e in events if e.kind == "assistant_done" and e.final]
     assert final and final[-1].attachments == []
-    assert not attachments_rpc._fetch_nonimage_allowed(bootstrapped_home, md.resolve())
+    assert not _servable(bootstrapped_home, image=False, real=md.resolve())
 
 
 def test_a_document_in_the_workspace_or_staging_is_still_announced(bootstrapped_home, monkeypatch, tmp_path_factory):
@@ -129,7 +135,7 @@ def test_an_image_outside_out_is_still_announced_and_served(bootstrapped_home, m
     )
     final = [e for e in events if e.kind == "assistant_done" and e.final]
     assert final and len(final[-1].attachments) == 1
-    assert attachments_rpc._fetch_allowed(bootstrapped_home, img.resolve())
+    assert _servable(bootstrapped_home, image=True, real=img.resolve())
 
 
 def test_non_skill_tool_does_not_promote(bootstrapped_home, monkeypatch):

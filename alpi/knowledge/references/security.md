@@ -324,8 +324,12 @@ or what appears in a session its connection owns; under `session_scope: device`
 it is narrowed further to its own device. Offered paths come from those sessions
 (attachments, output attachments, tool args and results, the assistant's text,
 never a path the user typed). An upload with no `.owner` marker, or with an
-unreadable or malformed one, is refused to every remote member. Admins and the
-local socket are not narrowed. Documents
+unreadable or malformed one, is refused to every remote member. The kind, roots and deny
+check come from the resolved file, not the requested name, and a remote member
+is refused any path that crosses a symlink below its serving root (the
+configured workspace path counts as a root); the bytes come from the inode that
+was checked. Admins and
+the local socket are not narrowed beyond that. Documents
 are served only from the profile's `out/`, the workspace and the upload staging
 area, and only those are offered as attachments; `attach_file` refuses the rest.
 A remote device's chat attachments must be files uploaded to the profile's

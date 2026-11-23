@@ -441,18 +441,6 @@ Each entry is written to be worked without that report:
   `host forbidden` lines are limited to one per connection, method and minute; a test sends the 2 MB value 100 times and finds lines under 300
   bytes and no more than one per minute bucket.
 
-- **SEC.FETCH-REALPATH** — `host.attachments.fetch` judges the file it will actually read (S10)
-  `bug · alpi · agent · normal`
-  note: [attachments_rpc.py](../alpi/host/attachments_rpc.py) (`:217-239`) takes the kind (image or document) from
-  the requested name and the containment from the resolved path; image roots include the whole profile home
-  ([attachments.py](../alpi/attachments.py) `:81`) and `_caller_may_fetch` adds the lexical alias (`:165-168`). A
-  member whose turn can create a symlink (a sandboxed shell on Linux, the Docker backend, a skill) links `a.png` in
-  the workspace to another connection's session; the agent lists the workspace, so the path is offered; the fetch
-  returns the session as `image/png`. The same works for `config.yaml` and `memories/USER.md`.
-  accept: the extension, the kind and the deny check come from the resolved path; for a member a path whose
-  `realpath` differs from its `normpath` is refused and `_member_home_area(real)` applies; a test plants the three
-  links and each is refused for a member while a real image in the workspace is still served.
-
 - **SEC.DOCKER-CWD** — A fenced turn's shell runs inside the workspace under the Docker backend (S11)
   `bug · alpi · agent · normal`
   note: with `tools.execution.backend: docker`, [terminal.py](../alpi/tools/terminal.py) (`:208-228`) refuses only
@@ -1218,6 +1206,16 @@ Each entry is written to be worked without that report:
   accept: each site either scrubs or is shown not to receive agent or tool text; a post carrying a lone surrogate
   reaches a peer with a valid signature, and a `--once` turn whose tool output holds one prints its events; tests
   drive the ALP client and server, the CLI line and a provider-bound message.
+
+### Found while shipping alpi 0.19.34
+
+- **ACTIVITY.STALE-FLUSH** — A debounce timer left from before a reset emits nothing
+  `bug · alpi · agent · low`
+  note: suspected. `publish` for 0.19.34 failed once (run 45006952718, green on rerun):
+  `tests/host/test_activity.py::test_changes_are_debounced_per_profile` saw an extra `activity.changed` for `default`.
+  `activity._flush` emits without checking `_enabled` or that its name is still in `_trailing`, so a `threading.Timer`
+  armed by an earlier test (1 s debounce) can fire after `_reset_for_tests` into the next test.
+  accept: a flush armed before `_reset_for_tests` emits nothing, with a test that arms one, resets and waits past it.
 
 ### Found while shipping alpi 0.19.24
 

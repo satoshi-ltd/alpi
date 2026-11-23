@@ -587,7 +587,13 @@ what appears in a session its connection owns (its own device under
 `session_scope: device`); an upload whose `.owner` marker is missing or
 unreadable is refused to every remote member. A path the agent itself lists or
 reads in one of the member's sessions counts as offered, so the gate stops
-guessing a path, not an agent-mediated read.
+guessing a path, not an agent-mediated read. The kind (image or document), the
+roots and the deny check are taken from the file the path resolves to, never
+from the requested name, and a remote member is refused any path that crosses a
+symlink below the root that serves it (the workspace path as configured counts
+as a root), so a link named `a.png` in the workspace cannot hand out a session,
+`config.yaml` or another connection's file. The bytes are read from the same
+inode the checks judged, opened without following a final link.
 
 Documents (every attachment that is not an image) are narrower: the daemon
 serves them only from the profile's `out/`, its workspace and the upload

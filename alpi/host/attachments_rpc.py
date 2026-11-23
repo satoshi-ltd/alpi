@@ -7,6 +7,7 @@ import os
 import re
 import secrets
 import shutil
+import stat
 import time
 from pathlib import Path
 from typing import Any
@@ -181,14 +182,6 @@ def _workspace(home: Path) -> Path | None:
         return None
 
 
-def _fetch_allowed(home: Path, real: Path) -> bool:
-    return _under_any(real, att.servable_roots(home, _workspace(home), image=True))
-
-
-def _fetch_nonimage_allowed(home: Path, real: Path) -> bool:
-    return _under_any(real, att.servable_roots(home, _workspace(home), image=False))
-
-
 def _under_any(real: Path, roots: list[Path]) -> bool:
     for r in roots:
         try:
@@ -211,35 +204,83 @@ def _fetch_denied(real: Path) -> bool:
     return name.startswith(".env") or real.suffix.lower() in _DENIED_FETCH_EXT
 
 
+def _fetch_roots(home: Path, real: Path) -> tuple[str, list[Path]]:
+    ext = real.suffix.lower().lstrip(".")
+    mime = _FETCH_IMG_MIME.get(ext) or att._PRODUCED_EXT_MIME.get("." + ext)
+    if mime is None:
+        # Opaque bytes are served only from the attachment staging area — never out/ or the workspace.
+        return "application/octet-stream", [_stage_root(home)]
+    roots = att.servable_roots(home, _workspace(home), image=mime.startswith("image/"))
+    configured = _configured_workspace(home)
+    return mime, [*roots, configured] if configured is not None else roots
+
+
+def _configured_workspace(home: Path) -> Path | None:
+    try:
+        from alpi import config as cfg_mod
+        raw = (cfg_mod.load(home).workspace or "").strip()
+    except Exception:  # noqa: BLE001
+        return None
+    return Path(os.path.normpath(Path(raw).expanduser().absolute())) if raw else None
+
+
+def _read_same_file(real: Path, checked: os.stat_result) -> bytes:
+    try:
+        fd = os.open(real, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+    except OSError:
+        raise host_server.HandlerError(-32001, "forbidden", {"detail": "path not readable"}) from None
+    with os.fdopen(fd, "rb") as f:
+        opened = os.fstat(f.fileno())
+        if not stat.S_ISREG(opened.st_mode) or (opened.st_dev, opened.st_ino) != (checked.st_dev, checked.st_ino):
+            raise host_server.HandlerError(-32001, "forbidden", {"detail": "path not readable"})
+        data = f.read(_MAX_FETCH_BYTES + 1)
+    if len(data) > _MAX_FETCH_BYTES:
+        raise host_server.HandlerError(-32602, f"file exceeds {_MAX_FETCH_BYTES}-byte cap")
+    return data
+
+
+def _links_below_root(requested: str, real: Path, roots: list[Path]) -> bool:
+    lexical = Path(os.path.normpath(requested))
+    if os.path.realpath(lexical) != str(real):
+        return True
+    forms: set[Path] = set()
+    for root in roots:
+        forms.add(Path(os.path.normpath(root.absolute())))
+        try:
+            forms.add(root.resolve())
+        except OSError:
+            pass
+    under = [r for r in forms if r == lexical or r in lexical.parents]
+    if not under:
+        return True
+    step = max(under, key=lambda r: len(r.parts))
+    for part in lexical.relative_to(step).parts:
+        step = step / part
+        if step.is_symlink():
+            return True
+    return False
+
+
 async def _fetch(params: dict[str, Any], server: host_server.Server) -> dict[str, Any]:
     profile = str(params.get("profile") or "")
     path = str(params.get("path") or "")
-    ext = path.rsplit(".", 1)[-1].lower() if "." in path else ""
-    mime = _FETCH_IMG_MIME.get(ext) or att._PRODUCED_EXT_MIME.get("." + ext)
-    opaque = mime is None
-    if opaque:
-        mime = "application/octet-stream"
     home = _resolve_home(profile)
     try:
         real = Path(path).resolve(strict=True)
+        checked = os.stat(real)
     except OSError:
         raise host_server.HandlerError(-32004, "not-found") from None
-    is_image = mime.startswith("image/")
-    if opaque:
-        # Opaque bytes are served only from the attachment staging area — never out/ or the workspace.
-        allowed = _under_any(real, [_stage_root(home)])
-    elif is_image:
-        allowed = _fetch_allowed(home, real)
-    else:
-        allowed = _fetch_nonimage_allowed(home, real)
-    if not real.is_file() or not allowed or _fetch_denied(real):
+    mime, roots = _fetch_roots(home, real)
+    if not stat.S_ISREG(checked.st_mode) or not _under_any(real, roots) or _fetch_denied(real):
         raise host_server.HandlerError(-32001, "forbidden", {"detail": "path not readable"})
     from alpi.host.connection_context import current
-    if _caller_bound(current()) and not await asyncio.to_thread(_caller_may_fetch, home, path, real):
+    if _caller_bound(current()) and (
+        _links_below_root(path, real, roots)
+        or not await asyncio.to_thread(_caller_may_fetch, home, path, real)
+    ):
         raise host_server.HandlerError(-32001, "forbidden", {"detail": "path not readable"})
-    data = real.read_bytes()
-    if len(data) > _MAX_FETCH_BYTES:
-        raise host_server.HandlerError(-32602, f"file exceeds {_MAX_FETCH_BYTES}-byte cap")
+    # Every check above judged `checked`; the bytes must come from that same inode, not whatever the name points at now.
+    data = await asyncio.to_thread(_read_same_file, real, checked)
     return {
         "name": real.name,
         "mime": mime,

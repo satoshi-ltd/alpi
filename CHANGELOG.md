@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.19.35 — 2026-11-23 — a symlink cannot make the app fetch another file
+
+- `host.attachments.fetch`, which the mobile app uses to show images and documents, now decides whether a file is an image or a document, and whether it may be served, from the file a path actually points to. It used to go by the requested name, so a link named `a.png` in the workspace could be served as an image while pointing at a session, `config.yaml` or `memories/USER.md`.
+- A remote member is refused any path that goes through a link inside the workspace or the profile, other than the workspace path as configured, so a link the agent listed cannot point it at another connection's files. The bytes are read from the very file that was checked, so swapping it for a link half-way through a request does not work either. Admins and the local socket keep working through links.
+
 ## v0.19.34 — 2026-11-22 — a device cannot bloat or scramble the connections list
 
 - A paired app that reports its name and version again now gets the same limits as at pairing: 128 and 64 characters. It used to be stored as sent, so one paired device, even a member's, could make the connections file tens of megabytes and slow down every device's sign-in.

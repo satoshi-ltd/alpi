@@ -9,6 +9,11 @@ from alpi import attachments as att
 from alpi.host import attachments_rpc
 from alpi.host import server as host_server
 
+
+def _servable(home, *, image, real):
+    return attachments_rpc._under_any(real, att.servable_roots(home, attachments_rpc._workspace(home), image=image))
+
+
 PNG = b"\x89PNG\r\n\x1a\nstaged-bytes"
 
 
@@ -235,7 +240,7 @@ async def test_fetch_not_found(tmp_path, monkeypatch):
 
 def test_fetch_allowed_rejects_outside_roots(tmp_path):
     # A real file outside workspace/home/temp must be refused.
-    assert not attachments_rpc._fetch_allowed(tmp_path / "home", Path("/etc/hosts").resolve())
+    assert not _servable(tmp_path / "home", image=True, real=Path("/etc/hosts").resolve())
 
 
 def test_fetch_allowed_includes_profile_workspace(tmp_path, monkeypatch):
@@ -245,9 +250,9 @@ def test_fetch_allowed_includes_profile_workspace(tmp_path, monkeypatch):
 
     target = Path("/etc/hosts").resolve()
     monkeypatch.setattr(cfg_mod, "load", lambda h: SimpleNamespace(workspace_path=None))
-    assert not attachments_rpc._fetch_allowed(tmp_path / "home", target)
+    assert not _servable(tmp_path / "home", image=True, real=target)
     monkeypatch.setattr(cfg_mod, "load", lambda h: SimpleNamespace(workspace_path=Path("/etc")))
-    assert attachments_rpc._fetch_allowed(tmp_path / "home", target)
+    assert _servable(tmp_path / "home", image=True, real=target)
 
 
 def test_fetch_nonimage_allowed_includes_home_out(tmp_path):
@@ -255,11 +260,11 @@ def test_fetch_nonimage_allowed_includes_home_out(tmp_path):
     doc = home / "out" / "report.pdf"
     doc.parent.mkdir(parents=True)
     doc.write_text("pdf")
-    assert attachments_rpc._fetch_nonimage_allowed(home, doc.resolve())
+    assert _servable(home, image=False, real=doc.resolve())
     elsewhere = home / "memories" / "USER.md"
     elsewhere.parent.mkdir(parents=True)
     elsewhere.write_text("private")
-    assert not attachments_rpc._fetch_nonimage_allowed(home, elsewhere.resolve())
+    assert not _servable(home, image=False, real=elsewhere.resolve())
 
 
 def test_fetch_nonimage_denies_symlinked_out_root(tmp_path):
@@ -270,7 +275,7 @@ def test_fetch_nonimage_denies_symlinked_out_root(tmp_path):
     home = tmp_path / "home"
     home.mkdir()
     (home / "out").symlink_to(outside)
-    assert not attachments_rpc._fetch_nonimage_allowed(home, secret.resolve())
+    assert not _servable(home, image=False, real=secret.resolve())
 
 
 def test_fetch_cap_matches_attachment_contract():
