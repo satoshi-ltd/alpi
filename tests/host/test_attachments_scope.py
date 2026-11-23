@@ -369,17 +369,19 @@ async def test_a_file_swapped_after_the_checks_is_not_read(short_tmp, monkeypatc
         mine = short_tmp / "mine.png"
         mine.write_bytes(PNG)
         _save(short_tmp, a["connection"], a["id"], Turn(1, "show it", [], f"Here: {mine}"))
+        # Exists before the swap: a file created after `mine` is unlinked can be handed the same inode number on Linux.
+        other = short_tmp / "other.md"
+        other.write_text("private facts")
         real_check = attachments_rpc._caller_may_fetch
 
         def swap_after_check(home, requested, real):
             allowed = real_check(home, requested, real)
+            if swap == "rename":
+                other.rename(mine)
+                return allowed
             mine.unlink()
             if swap == "link":
                 mine.symlink_to(secret)
-            elif swap == "rename":
-                copy = short_tmp / "copy.md"
-                copy.write_text("private facts")
-                copy.rename(mine)
             else:
                 os.mkfifo(mine)
             return allowed
