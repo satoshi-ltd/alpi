@@ -60,7 +60,7 @@
   border: 0;
 }
 
-.rowTs { display: inline-flex; color: var(--ink-3); }
+.rowTs { display: inline-flex; color: var(--ink-3); font-size: var(--text-meta); }
 .rowUnread .rowTs { color: var(--ink); font-weight: var(--fw-semibold); }
 .rowDelete { display: none !important; }
 .rowDelete button { width: var(--ctl-32); height: var(--ctl-32); }
@@ -92,7 +92,7 @@
 .rowProfile { color: var(--ink); font-weight: var(--fw-regular); }
 .rowUnread .rowProfile { font-weight: var(--fw-semibold); }
 
-.rowConn { color: var(--ink-3); }
+.rowConn { color: var(--ink-3); font-size: var(--text-meta); }
 
 .rowTitle {
   font-size: var(--text-ui);
@@ -166,7 +166,6 @@
   font-size: var(--text-meta);
 }
 .detailMetaSpacer { flex: 1; }
-.detailMeta :global(.mono) { font-size: var(--text-meta); color: var(--ink-3); }
 .article > .detailMeta + * { margin-top: var(--sp-16); }
 
 .detailMetaProfile {

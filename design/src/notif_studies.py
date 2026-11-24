@@ -110,14 +110,14 @@ def ground(p, inner, pad=10):
     return f'<div style="padding: {pad}px; background: {p["bg"]}; border-radius: 20px">{inner}</div>'
 
 
-def unread_time(p, r, size):
-    return mono(r["at"], size, p["ink"], 600) if r["unread"] else mono(r["at"], size, p["ink3"])
+def unread_time(p, r, size, draw=mono):
+    return draw(r["at"], size, p["ink"], 600) if r["unread"] else draw(r["at"], size, p["ink3"])
 
 
 def a_row(p, r, active=False, pad_left=10):
     weight, colour = (600, p["ink"]) if r["unread"] else (400, p["ink2"])
-    line1 = flex(text(f'@{r["who"]}', 11.5, colour, weight, f"font-family: {MONO}"), mono(f'· {r["conn"]}', 9.5, p["ink3"]), spacer(),
-                 level_chip(r["type"]), unread_time(p, r, 10), gap=6)
+    line1 = flex(text(f'@{r["who"]}', 11.5, colour, weight, f"font-family: {MONO}"), text(f'· {r["conn"]}', 9.5, p["ink3"]), spacer(),
+                 level_chip(r["type"]), unread_time(p, r, 10, text), gap=6)
     title = ell(row_title(r), 12.5, colour, weight)
     summ = clamp(row_summary(r), 11, p["ink3"])
     bg = p["pane"] if active else "transparent"

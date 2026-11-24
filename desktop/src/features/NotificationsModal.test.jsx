@@ -812,6 +812,26 @@ describe("NotificationsModal triage", () => {
     expect(h.markRead).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps the whole meta line of a row at the meta size: the name, the connection and the time", () => {
+    h.rows = [
+      { ...h.ROW, id: "a", connectionId: "c1", connectionName: "casa", status: "read", title: "On casa" },
+      { ...h.ROW, id: "b", connectionId: "c2", connectionName: "work", status: "read", title: "On work", created_at: h.ROW.created_at - 5 },
+    ];
+    render(<NotificationsModal open onClose={() => {}} connections={[{ id: "c1", name: "casa" }, { id: "c2", name: "work" }]} onSelect={() => {}} onOpenChat={() => {}} />);
+    const meta = option("On casa").querySelector('[class*="rowMeta"]');
+    const [name, connection] = meta.firstElementChild.children;
+    const time = meta.lastElementChild.querySelector("span:not([class*=rowDelete])");
+    expect(name.classList.contains("mono")).toBe(true);
+    expect(connection.textContent).toBe("· casa");
+    expect(connection.className).toMatch(/rowConn/);
+    expect(time.className).toMatch(/rowTs/);
+    expect(time.textContent).not.toBe("");
+    const css = readFileSync(join(import.meta.dirname, "NotificationsModal.module.css"), "utf8");
+    expect(css).toContain(".rowMeta :global(.mono) { font-size: var(--text-meta); }");
+    expect(css).toContain(".rowConn { color: var(--ink-3); font-size: var(--text-meta); }");
+    expect(css).toContain(".rowTs { display: inline-flex; color: var(--ink-3); font-size: var(--text-meta); }");
+  });
+
   it("hides Mark unread only for the daemon that does not know the verb", async () => {
     h.markUnread.mockRejectedValue(new Error("-32601 method-not-found"));
     h.rows = [

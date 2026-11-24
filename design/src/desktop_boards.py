@@ -493,11 +493,11 @@ def desktop_connections():
             f'<span>Connection</span><span style="text-align: right">Last activity</span><span style="text-align: right">Sessions</span><span style="text-align: right">14-day spend</span></div>')
 
     def metric(v, cap):
-        return f'<span style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px"><span style="font-size: 14px; font-weight: 500; color: {INK}">{v}</span><span style="font-size: 14px; color: {INK3}">{cap}</span></span>'
+        return f'<span style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px"><span style="font-size: 12px; font-weight: 500; color: {INK}">{v}</span><span style="font-size: 12px; color: {INK3}">{cap}</span></span>'
 
     def crow(label, sub, seen, sessions, spend, expanded=False, host=False, scope=None):
         meta = (f'<span style="font-family: {MONO}; font-size: 12px; color: {INK3}">{sub}</span>' if host
-                else f'<span style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px">{access_line(scope or [], "card" if expanded else "bgPane")}<span style="font-size: 14px; color: {INK3}">{sub}</span></span>')
+                else f'<span style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px">{access_line(scope or [], "card" if expanded else "bgPane", 12)}<span style="font-size: 12px; color: {INK3}">{sub}</span></span>')
         return (f'<div style="display: grid; grid-template-columns: minmax(240px, 1fr) 126px 88px 112px; min-height: 74px; align-items: center; padding: 0 12px; {"" if expanded else BLEED}">'
                 f'<span style="display: flex; flex-direction: column; gap: 6px"><strong style="font-size: 15px; font-weight: 600; line-height: 1.3; color: {INK}">{label}</strong>{meta}</span>'
                 f'{metric(seen, "LAST SEEN")}{metric(sessions, "SESSIONS")}{metric(spend, "14-DAY")}</div>')
@@ -507,11 +507,11 @@ def desktop_connections():
 {usage_chart(ALPI_ACCENT, "$0.00", "0", "0", None, None, "14-day total $0.00 · 0 in / 0 out", empty=True)}
 <div style="padding-top: 16px; display: flex; flex-direction: column">
 <div style="display: flex; align-items: center; justify-content: space-between"><h2 style="margin: 0; font-size: 16px; font-weight: 600; color: {INK}">Devices</h2><span style="display: inline-flex; align-items: center; gap: 10px"><label style="display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: {INK3}"><input type="checkbox" style="width: 16px; height: 16px; margin: 0">may add and revoke devices</label>{button("Add device", "ghost", "sm", "plus")}</span></div>
-<div style="display: flex; align-items: center; min-height: 56px"><span style="flex: 1; display: flex; flex-direction: column; gap: 3px"><span style="font-size: 15px; font-weight: 500">sdk_gphone64_arm64</span><span style="font-size: 12px; color: {INK3}">mobile · 0.4.11</span></span>{mono12("7d ago", INK3)}<span style="width: 16px"></span>{alink("Revoke", danger=True)}</div>
-<div style="display: flex; align-items: center; min-height: 56px"><span style="flex: 1; display: flex; flex-direction: column; gap: 3px"><span style="font-size: 15px; font-weight: 500">sdk_gphone64_arm64</span><span style="font-size: 12px; color: {INK3}">mobile · 0.5.0</span></span>{mono12("now", INK3)}<span style="width: 16px"></span>{alink("Revoke", danger=True)}</div>
+<div style="display: flex; align-items: center; min-height: 56px"><span style="flex: 1; display: flex; flex-direction: column; gap: 3px"><span style="font-size: 15px; font-weight: 500">sdk_gphone64_arm64</span><span style="font-size: 12px; color: {INK3}">mobile · 0.4.11</span></span><span style="font-size: 12px; color: {INK3}">7d ago</span><span style="width: 16px"></span>{alink("Revoke", danger=True)}</div>
+<div style="display: flex; align-items: center; min-height: 56px"><span style="flex: 1; display: flex; flex-direction: column; gap: 3px"><span style="font-size: 15px; font-weight: 500">sdk_gphone64_arm64</span><span style="font-size: 12px; color: {INK3}">mobile · 0.5.0</span></span><span style="font-size: 12px; color: {INK3}">now</span><span style="width: 16px"></span>{alink("Revoke", danger=True)}</div>
 </div>
 </div>"""
-    toolbar = search_toolbar("Search connections…", f'<span style="font-size: 14px; color: {INK3}">4 of 4</span>')
+    toolbar = search_toolbar("Search connections…", f'<span style="font-size: 12px; color: {INK3}">4 of 4</span>')
     table = f"""<div style="display: flex; flex-direction: column">
 {toolbar}
 {head}
@@ -553,13 +553,13 @@ def desktop_workgroups(stale=False):
         lines = (f'<span style="display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: {INK2}; white-space: nowrap">'
                  f'<span style="width: 8px; height: 8px; border-radius: 999px; background: {dot}; flex-shrink: 0"></span>{status}</span>')
         if note:
-            lines += f'<span style="min-width: 0; font-family: {MONO}; font-size: 12px; color: {INK3}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{note}</span>'
-        cell = lambda v, color: f'<span style="text-align: right; font-family: {MONO}; font-size: 12px; color: {color}">{v}</span>'
+            lines += f'<span style="min-width: 0; font-size: 12px; color: {INK3}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{note}</span>'
+        cell = lambda v, color: f'<span style="text-align: right; font-size: 12px; font-variant-numeric: tabular-nums slashed-zero; color: {color}">{v}</span>'
         return (f'<div style="display: grid; {WG_GRID}; {BLEED}; align-items: center; min-height: 40px">'
                 f'<span style="display: flex; align-items: center; gap: 12px; min-width: 0">{wg_mark(accent, **(mark or {}))}<span style="font-size: 15px; font-weight: 400; line-height: 1; color: {INK2}">{name}</span></span>'
                 f'<span style="display: flex; align-items: center; gap: 8px; min-width: 0">{lines}</span>{cell(members, INK2)}{cell(spend, INK2)}{cell(age, INK3)}</div>')
 
-    toolbar = search_toolbar("Search workgroups…", seg(("All", "Active", "Queued", "Paused"), "All") + f'<span style="font-family: {MONO}; font-size: 12px; color: {INK3}">3 of 3</span>')
+    toolbar = search_toolbar("Search workgroups…", seg(("All", "Active", "Queued", "Paused"), "All") + f'<span style="font-size: 12px; color: {INK3}">3 of 3</span>')
     table = (toolbar + head
              + wrow("alpha", LINGO_ACCENT, "#3fb37a", "Working · media · @lingo", 3, "$0.40", "2m", "setup done", dict(state="running", phase=(2, 4)))
              + wrow("launch-crew", AMBER, "#e08a3c", "Queued · #2", 4, "$1.12", "9m", "setup done · media next", dict(state="queued"))

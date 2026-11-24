@@ -164,7 +164,7 @@ export default function SessionsButton({
                     <span className={styles.preview}>
                       {displaySessionTitle(s, { connectionId, profile, max: 56 })}
                     </span>
-                    <span className="tnum">
+                    <span className={`tnum ${styles.turns}`}>
                       {s.turn_count} turn{s.turn_count === 1 ? "" : "s"}
                     </span>
                   </button>

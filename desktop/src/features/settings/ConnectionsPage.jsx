@@ -246,7 +246,7 @@ export default function ConnectionsPage({
                   aria-label="Search connections"
                 />
               </label>
-              <span>{visibleRows.length} of {rows.length}</span>
+              <span className={styles.count}>{visibleRows.length} of {rows.length}</span>
             </div>
           )}
           {!data && !loadError && <SkeletonRows count={3} label="Loading connections" />}
@@ -586,7 +586,7 @@ function AuditActivity({ sourceConnectionId, connections }) {
           <div className={styles.auditRows}>
             {visibleEntries.map((entry) => (
               <div key={entry.id} className={styles.auditRow}>
-                <span>{auditTime(entry.timestamp)}</span>
+                <span className={styles.auditWhen}>{auditTime(entry.timestamp)}</span>
                 <span className={styles.auditIdentity}>
                   <strong>{auditActor(entry)}</strong>
                   <small>{auditActorMeta(entry)}</small>
@@ -682,7 +682,7 @@ function ConnectionDetail({
               <div key={device.id} className={styles.deviceRow}>
                 <span><strong>{device.name || "Unnamed device"}</strong><small>{device.client} · {device.app_version || "version unknown"}</small></span>
                 <span>
-                  <span>{since(device.last_seen)}</span>
+                  <span className={styles.deviceSeen}>{since(device.last_seen)}</span>
                   <ConfirmDeleteAction
                     label="Revoke"
                     title={`Revoke ${device.name || "device"}?`}

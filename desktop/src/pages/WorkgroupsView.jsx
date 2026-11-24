@@ -174,7 +174,7 @@ export default function WorkgroupsView({
                   </button>
                 ))}
               </div>
-              <span>{rows.length} of {workgroups.length}</span>
+              <span className={styles.count}>{rows.length} of {workgroups.length}</span>
             </div>
           </div>
 
@@ -211,8 +211,8 @@ export default function WorkgroupsView({
                       <span className={styles.statusNote} title={workgroup.pipeline_note}>{workgroup.pipeline_note}</span>
                     )}
                   </span>
-                  <span className="tnum">{workgroup.members ?? 0}</span>
-                  <span className={"tnum " + styles.spend}>{money(workgroup.spent_usd)}</span>
+                  <span className={"tnum " + styles.num}>{workgroup.members ?? 0}</span>
+                  <span className={"tnum " + styles.num}>{money(workgroup.spent_usd)}</span>
                   <span className={styles.updated}>
                     {workgroup.mtime ? <RelativeTime ts={workgroup.mtime} /> : "—"}
                   </span>

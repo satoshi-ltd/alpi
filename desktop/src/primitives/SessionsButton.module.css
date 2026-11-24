@@ -86,6 +86,12 @@
   text-overflow: ellipsis;
 }
 
+.turns {
+  flex-shrink: 0;
+  font-size: var(--text-meta);
+  color: var(--ink-3);
+}
+
 .popFooter {
   display: flex;
   align-items: center;

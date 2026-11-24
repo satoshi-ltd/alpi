@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.10.17 — 2026-11-25 — numbers under their headings
+
+- In the Workgroups list the member count sits under its heading again: right-aligned and at the small size of the columns beside it. Since 0.10.0 it stood at the left of its column, in large text. The spend returns to the same soft ink.
+- The "N of M" count beside the search field of Workgroups and of Connections, and the When column of the Connections audit log, are back at their small size; the When column is soft again.
+- In Notifications the connection name and the time of each row are back at the small size of the name beside them.
+- When each device of a connection was last seen, and the turn count of each session in the Sessions menu, are small and soft; since 0.10.0 they stood as large as the name beside them.
+- Needs alpi ≥ 0.19.23.
+
 ## v0.10.16 — 2026-11-19 — Settings from the menu, and the ALP port where it applies
 
 - Choosing Settings… or ⌘, while the window is hidden or minimized brings it back on Settings, even if it was left there; it closes Settings only when the window is already in front.

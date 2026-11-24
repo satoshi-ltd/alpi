@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -5,6 +7,7 @@ const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a) => invokeMock(...a) }));
 
 import SessionsButton, { invalidateSessionsButtonCache } from "./SessionsButton.jsx";
+import styles from "./SessionsButton.module.css";
 import { setSessionTitle } from "../lib/session-titles.js";
 
 globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} };
@@ -95,6 +98,16 @@ describe("SessionsButton — profile switch", () => {
 
     await waitFor(() => expect(screen.getByText("hello from A")).toBeTruthy());
     expect(screen.getByText("Manage sessions →")).toBeTruthy();
+  });
+
+  it("writes a session's turn count small and soft beside its title", async () => {
+    invokeMock.mockResolvedValue(sessWithTurns);
+    const { rerender } = render(<SessionsButton profile="A" openTick={0} />);
+    await waitFor(() => expect(screen.getByText("Sessions")).toBeTruthy());
+    rerender(<SessionsButton profile="A" openTick={1} />);
+    const turns = await screen.findByText("2 turns");
+    expect(turns.className).toBe(`tnum ${styles.turns}`);
+    expect(readFileSync(join(import.meta.dirname, "SessionsButton.module.css"), "utf8")).toMatch(/\.turns \{\s*flex-shrink: 0;\s*font-size: var\(--text-meta\);\s*color: var\(--ink-3\);\s*\}/);
   });
 
   it("does not auto-open a remounted dropdown with a stale external tick", async () => {

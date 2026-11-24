@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ConnectionsPage from "./ConnectionsPage.jsx";
@@ -42,6 +44,10 @@ describe("ConnectionsPage", () => {
     fireEvent.click(screen.getByText("Javi"));
 
     expect(await screen.findByText("iPhone")).toBeInTheDocument();
+    const seen = screen.getByText("iPhone").closest(`.${styles.deviceRow}`).lastElementChild.firstElementChild;
+    expect(seen.textContent).not.toBe("");
+    expect(seen.className).toBe(styles.deviceSeen);
+    expect(readFileSync(join(import.meta.dirname, "ConnectionsPage.module.css"), "utf8")).toContain(".deviceSeen { color: var(--ink-3); font-size: var(--text-meta); }");
     expect(screen.getByText("14-day total $0.42 · 100 in / 20 out")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Audit log" })).toHaveLength(1);
   });
@@ -249,6 +255,8 @@ describe("ConnectionsPage", () => {
     expect(screen.getByText("Recent")).toBeInTheDocument();
     expect(screen.queryByText("Javi")).toBeNull();
     expect(screen.getByText("1 of 2")).toBeInTheDocument();
+    expect(screen.getByText("1 of 2").className).toBe(styles.count);
+    expect(readFileSync(join(import.meta.dirname, "ConnectionsPage.module.css"), "utf8")).toContain(".count { flex-shrink: 0; font-size: var(--text-meta); }");
   });
 
   it("confirms before disabling and enables directly", async () => {
@@ -351,6 +359,10 @@ describe("ConnectionsPage", () => {
     expect(await screen.findByRole("heading", { name: "Audit log" })).toBeInTheDocument();
     expect(screen.getByText("Administrative changes only · messages are never recorded here")).toBeInTheDocument();
     expect(await screen.findByText("Revoked device")).toBeInTheDocument();
+    const when = screen.getByText("Revoked device").closest(`.${styles.auditRow}`).firstElementChild;
+    expect(when.textContent).toBe(new Date("2026-08-08T10:00:00.000Z").toLocaleString([], { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }));
+    expect(when.className).toBe(styles.auditWhen);
+    expect(readFileSync(join(import.meta.dirname, "ConnectionsPage.module.css"), "utf8")).toContain(".auditWhen { color: var(--ink-3); font-size: var(--text-meta); }");
     expect(screen.getByText("MacBook Pro")).toBeInTheDocument();
     expect(screen.getByText(/iPhone/, { selector: "span" })).toBeInTheDocument();
     expect(invoke).toHaveBeenCalledWith("audit_list", {

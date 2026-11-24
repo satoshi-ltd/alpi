@@ -1184,6 +1184,35 @@ Each entry is written to be worked without that report:
   reaches a peer with a valid signature, and a `--once` turn whose tool output holds one prints its events; tests
   drive the ALP client and server, the CLI line and a provider-bound message.
 
+### Found while shipping desktop 0.10.17
+
+- **DESK.WG-STATUS-CLIP** — A Workgroups row shows its whole status before it shows the note
+  `bug · desktop · agent · normal`
+  note: seen in the creator's screenshot of 61 workgroups on desktop 0.10.16: "Queued · #N" reads "Queued ·" with
+  the position cut away, and "Working · upgrade-build · @pixel" ends at "@p", both with no ellipsis, while the note
+  beside them ends in one. In [WorkgroupsView.module.css](../desktop/src/pages/WorkgroupsView.module.css) the status
+  column is `10.5rem` (`9.75rem` under 900px), the label (`.status`) and the note (`.statusNote`) both shrink, each
+  in proportion to its width (`min-width: 0`), and the label is an `inline-flex` box, where `text-overflow: ellipsis`
+  does not reach its text, so it is clipped at the pixel. The queue position and the owner are what the row is read
+  for. The `desktop_workgroups` board already draws the label whole, so the app is what differs. Not measured: how
+  wide the column must be for the longest real label.
+  accept: with a label and a note that do not fit together, the label is whole and the note gives way first; a
+  label longer than the column ends in an ellipsis and carries its full text as a title; both hold in the wide and
+  the under-900px layouts; a test covers a queued row with a note and a working row with a step and an owner.
+
+- **DESIGN.NOTIF-VIEW** — The Notifications view in the kit is drawn in the faces, sizes and inks the app ships
+  `chore · design · agent · low`
+  note: three differences are left in [notif_studies.py](../design/src/notif_studies.py) after desktop 0.10.17 redrew
+  the connection and the time of each row. `a_detail` (`:160`) draws the reader's "@abby" and
+  "· casa · Today 6:31 AM" in Geist Mono, while the app has shipped both in the sans face since desktop 0.10.0
+  (`.detailMetaProfile` in [NotificationsModal.module.css](../desktop/src/features/NotificationsModal.module.css)).
+  `a_row` (`:118`) draws a read row's handle and title in ink-2, while `.rowProfile` and `.rowTitle` are `--ink`.
+  The row title is 14px on the board and `--text-ui` (15px) in the app. Not swept: the other boards for an element
+  that lost its `Mono` in 0.10.0.
+  accept: the reader's meta line and the rows on the board use the faces, sizes and inks of `.detailMetaName`,
+  `.detailMetaWhen`, `.rowProfile` and `.rowTitle`; `python3 design/build.py` leaves no other diff; the kit tests
+  pass.
+
 ### Found while shipping alpi 0.19.39
 
 - **SEC.SCRIPT-JOB-SHARED-TEMP** — A script job's interpreter cannot live in a folder everyone can write

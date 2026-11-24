@@ -44,6 +44,6 @@ describe("one left edge", () => {
     expect(css).toMatch(/\.row \{ min-height: var\(--ctl-40\);/);
     expect(css).toMatch(/\.statusCell \{[^}]*flex-direction: row|\.statusCell \{ min-width: 0; display: flex; align-items: center/);
     expect(css).toMatch(/\.tableHead span:nth-child\(n \+ 3\) \{ text-align: right; \}/);
-    expect(css).toMatch(/\.row > :global\(\.mono\) \{ text-align: right;/);
+    expect(css).toMatch(/\.num \{ min-width: 0; text-align: right;/);
   });
 });

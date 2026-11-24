@@ -877,9 +877,13 @@ def test_kit_panels_and_charts_match_the_shipped_rows_and_bars():
     job = pps.job_row({**pps.JOBS[0], "state": "paused", "word": "paused"})
     assert "margin-left" not in job and "border-radius: 999px" not in job
     assert "padding-left: 15px" not in mas.list_row(pps.JOBS[1]) and "border-radius: 999px" not in mas.list_row(pps.JOBS[1])
-    unread = ns.a_row(ns.VIEW, ns.ROWS[0]) + ns.phone_row(ns.VIEW, ns.ROWS[0])
-    assert "width: 6px; padding-top" not in unread and "border-radius: 999px; background: #141414" not in unread
-    assert f'color: {ns.VIEW["ink"]}; font-weight: 600' in unread
+    desk, phone = ns.a_row(ns.VIEW, ns.ROWS[0]), ns.phone_row(ns.VIEW, ns.ROWS[0])
+    for unread in (desk, phone):
+        assert "width: 6px; padding-top" not in unread and "border-radius: 999px; background: #141414" not in unread
+    assert f'color: {ns.VIEW["ink"]}; font-weight: 600' in phone
+    when = re.search(rf'<span style="([^"]*)">{re.escape(ns.ROWS[0]["at"])}</span>', desk).group(1)
+    assert "font-weight: 600" in when and f'color: {ns.VIEW["ink"]}' in when and "Mono" not in when
+    assert "Mono" not in re.search(rf'<span style="([^"]*)">· {re.escape(ns.ROWS[0]["conn"])}</span>', desk).group(1)
 
 
 def test_kit_profile_names_pass_4_5_to_1_on_the_ground_of_each_theme():

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import WorkgroupsView from "./WorkgroupsView.jsx";
+import styles from "./WorkgroupsView.module.css";
 import { nameTone } from "../../../common/name.mjs";
 import { palettes } from "../../../common/tokens.mjs";
 
@@ -255,6 +256,26 @@ describe("WorkgroupsView", () => {
     };
     render(<WorkgroupsView workgroups={[wg]} runByWorkgroup={{ "mira/wg-r": { phase: "media", phasesDone: 1, phasesTotal: 3 } }} />);
     expect(screen.getByText("Working · media · @lingo")).toBeInTheDocument();
+  });
+
+  it("sets the member count and the spend under their right-aligned headings, at the meta size", () => {
+    render(<WorkgroupsView workgroups={[WORKGROUPS[0]]} profiles={[]} />);
+    const css = readFileSync(join(import.meta.dirname, "WorkgroupsView.module.css"), "utf8");
+    expect(css).toContain(".tableHead span:nth-child(n + 3) { text-align: right; }");
+    expect(css).toContain(".num { min-width: 0; text-align: right; color: var(--ink-2); font-size: var(--text-meta); }");
+    expect(css).toContain(".updated { text-align: right;");
+    const row = screen.getByText("Active hotel").closest("button");
+    expect([...row.children].slice(2).map((cell) => cell.textContent)).toEqual(["7", "$1.20", expect.any(String)]);
+    expect([...row.children].slice(2, 4).map((cell) => cell.className)).toEqual([`tnum ${styles.num}`, `tnum ${styles.num}`]);
+    expect(row.children[4].className).toBe(styles.updated);
+  });
+
+  it("sizes the toolbar count through its own class, and no rule waits for a mono or tnum element", () => {
+    render(<WorkgroupsView workgroups={[WORKGROUPS[0]]} profiles={[]} />);
+    const css = readFileSync(join(import.meta.dirname, "WorkgroupsView.module.css"), "utf8");
+    expect(css).toContain(".count { flex-shrink: 0; font-size: var(--text-meta); }");
+    expect(screen.getByText("1 of 1").className).toBe(styles.count);
+    expect(css).not.toMatch(/:global\(\.(mono|tnum)\)/);
   });
 
   it("ellipsizes a long name through the global row class", () => {
