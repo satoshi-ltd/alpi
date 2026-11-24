@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.19.39 — 2026-11-24 — a script job is judged the same from any folder
+
+- A `no_agent` job is now checked the same way whatever folder the check runs from. Before, a valid job such as `python3 ${ALPI_HOME}/skills/<category>/<name>/scripts/run.py` was refused with "the script must exist as a regular file" when it was created or checked from inside a skill's `scripts/` folder, because the bare `python3` was read as a file of that folder.
+- The script must be an absolute path, normally written with `${ALPI_HOME}`. A relative one (`run.py`, `./run.py`) is refused everywhere and the refusal says how to write it. It used to pass or fail depending on the folder. A stored job with a relative script, which only ever worked on a daemon started by hand from the matching folder, stops at its next fire with that refusal: rewrite it with `${ALPI_HOME}`. The Docker image never ran one.
+- This also closes a way around the rule against inline code: checked from a folder that held a file named like the interpreter, `python3 -c '...'` passed as if `python3` were the script. It needed alpi itself to be started from such a folder, which the Docker image and the installed services never are.
+
 ## v0.19.38 — 2026-11-23 — a member's Docker shell stays inside the workspace
 
 - With `tools.execution.backend: docker`, a command from a member device or from a peer without a tool policy is now refused when its working directory is outside the profile's workspace, a symlink out of it included. It used to be mounted read-write into the container as it was, so `cwd=/etc` put the host's `/etc` inside.

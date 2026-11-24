@@ -294,6 +294,8 @@ _INTERPRETER_FIX = (
     "name an absolute interpreter outside the profile, the workspace and the temp folders, "
     "for example /usr/bin/python3"
 )
+_SCRIPT_FIX = "write the script as ${ALPI_HOME}/skills/<category>/<name>/scripts/<file>"
+_SCRIPT_SUFFIXES = (".py", ".sh")
 
 
 def _agent_writable_roots(home: Path) -> list[Path]:
@@ -346,7 +348,14 @@ def _script_job_path(path: str, home: Path) -> str:
     return os.pathsep.join(d for d in ("/usr/bin", "/bin") if _under_any(d, roots) is None)
 
 
+def _relative_hint(tok: str, is_a_script: bool = True) -> str:
+    if Path(tok).is_absolute() or not is_a_script:
+        return ""
+    return f"; a relative path is never accepted, {_SCRIPT_FIX}"
+
+
 def validate_no_agent_command(prompt: str, home: Path) -> str | None:
+    home = Path(os.path.abspath(home))
     expanded = prompt.replace("${ALPI_HOME}", str(home)).replace(
         "$ALPI_HOME", str(home),
     )
@@ -360,6 +369,9 @@ def validate_no_agent_command(prompt: str, home: Path) -> str | None:
     skills_root = (home / "skills").resolve()
 
     def _under_skills(tok: str) -> bool:
+        # Never resolve a relative token: the verdict would follow the caller's folder, and a file named python3 there would pass any flags as a script.
+        if not Path(tok).is_absolute():
+            return False
         try:
             rel = Path(tok).resolve().relative_to(skills_root)
         except (OSError, ValueError, RuntimeError):
@@ -382,7 +394,7 @@ def validate_no_agent_command(prompt: str, home: Path) -> str | None:
     if not _INTERPRETER_NAME_RE.fullmatch(Path(exe).name):
         return (
             f"no_agent executable must be python or a script under "
-            f"{home}/skills/ — got: {exe!r}"
+            f"{home}/skills/ — got: {exe!r}{_relative_hint(exe, Path(exe).suffix in _SCRIPT_SUFFIXES)}"
         )
     problem = _interpreter_problem(exe, home)
     if problem:
@@ -400,7 +412,7 @@ def validate_no_agent_command(prompt: str, home: Path) -> str | None:
             return _script_problem(tok)
         return (
             f"first non-flag python arg must be a script under "
-            f"{home}/skills/ — got: {tok!r}"
+            f"{home}/skills/ — got: {tok!r}{_relative_hint(tok)}"
         )
     return f"no_agent python invocation needs a script under {home}/skills/"
 

@@ -1184,6 +1184,30 @@ Each entry is written to be worked without that report:
   reaches a peer with a valid signature, and a `--once` turn whose tool output holds one prints its events; tests
   drive the ALP client and server, the CLI line and a provider-bound message.
 
+### Found while shipping alpi 0.19.39
+
+- **SEC.SCRIPT-JOB-SHARED-TEMP** — A script job's interpreter cannot live in a folder everyone can write
+  `bug · alpi · agent · normal`
+  note: confirmed on the validator by the review of 0.19.39, nothing spawned. `_agent_writable_roots`
+  ([run.py](../alpi/scheduler/run.py)) lists the profile home, the workspace, the temp folder, `/tmp` and
+  `/private/tmp`, and on macOS `/private/var/folders`. `/var/tmp` and `/dev/shm` are as writable and are not in it:
+  `/var/tmp/python3 <skill script>` is accepted as an interpreter, and a `PATH` entry there from the profile `.env`
+  survives `_script_job_path`, so a bare `python3` can resolve to a file that an agent with a shell wrote.
+  accept: an interpreter or a `PATH` entry under a folder everyone can write is refused or dropped (the known ones by
+  name, any other by its mode), with a test for `/var/tmp` and `/dev/shm` that needs neither to exist.
+
+- **SCHED.NOAGENT-EDGES** — A script job that cannot run says why instead of raising
+  `bug · alpi · agent · low`
+  note: confirmed by the same review; none of these passes the rule. A token with a NUL byte raises `ValueError` out
+  of `validate_no_agent_command` (in `_under_any`). A script named alone that lacks the execute bit raises
+  `PermissionError` at the spawn, where only `FileNotFoundError` is caught. `<script>/` with a trailing slash is
+  accepted and then fails with rc 2. A skill script that is itself named `python3` and written first is accepted when
+  the job is added and refused at every fire. A home with a space splits `$ALPI_HOME` unless the job quotes it. And
+  `get_home()` ([home.py](../alpi/home.py)) returns a relative `ALPI_HOME` as given, which the validator reads against
+  the current folder while every other caller does as it pleases.
+  accept: each of these answers with a refusal that names the cause, the same when the job is added and when it
+  fires, and a relative `ALPI_HOME` is made absolute once, where it is read; one test per case.
+
 ### Found while shipping alpi 0.19.38
 
 - **SEC.DOCKER-RULE-MOUNTS** — A scoped phase's writable mounts cannot be swapped for a host folder

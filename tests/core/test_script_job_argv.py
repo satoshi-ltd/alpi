@@ -87,6 +87,56 @@ def test_a_symlink_or_a_directory_is_not_a_script(home: Path, tmp_path: Path) ->
     assert validate_no_agent_command("python3 $ALPI_HOME/skills/a/b/scripts/../../../../../outside.py", home) is not None
 
 
+@pytest.mark.parametrize("command", [f"python3 {SCRIPT}", f"python3.12 -u {SCRIPT} --days 3", SCRIPT])
+def test_a_valid_script_job_is_accepted_from_inside_a_skills_scripts_folder(home: Path, monkeypatch, command: str) -> None:
+    monkeypatch.chdir(home / "skills" / "a" / "b" / "scripts")
+    assert validate_no_agent_command(command, home) is None, command
+
+
+@pytest.mark.parametrize("command", ["python3 run.py", "python3 ./run.py", "python3 -u ../scripts/run.py", "./run.py", "run.py", "scripts/run.py"])
+@pytest.mark.parametrize("where", ["skills/a/b/scripts", "skills/a/b", "."])
+def test_a_relative_script_is_refused_from_every_folder_and_told_how_to_write_it(home: Path, monkeypatch, command: str, where: str) -> None:
+    monkeypatch.chdir(home / where)
+    reason = validate_no_agent_command(command, home)
+    assert reason is not None, command
+    assert "${ALPI_HOME}/skills/" in reason, reason
+
+
+@pytest.mark.parametrize("command", [
+    f"bash {SCRIPT}",
+    f"python3.12t {SCRIPT}",
+    f"pypy3.10 {SCRIPT}",
+    f"bin/uv run {SCRIPT}",
+    "python3 /etc/x.py",
+    "/etc/x.py",
+])
+def test_the_advice_about_relative_paths_is_only_given_for_a_relative_script(home: Path, command: str) -> None:
+    reason = validate_no_agent_command(command, home)
+    assert reason is not None and "never accepted" not in reason, reason
+
+
+def test_a_relative_home_is_read_against_the_current_folder_as_before(home: Path, monkeypatch) -> None:
+    monkeypatch.chdir(home.parent)
+    assert validate_no_agent_command(f"python3 {SCRIPT}", Path(home.name)) is None
+    assert "never accepted" in validate_no_agent_command("python3 run.py", Path(home.name))
+
+
+@pytest.mark.parametrize("planted", ["python3", "python", "python3.12"])
+def test_a_file_named_like_the_interpreter_in_the_current_folder_cannot_pass_inline_code(home: Path, monkeypatch, planted: str) -> None:
+    scripts = home / "skills" / "a" / "b" / "scripts"
+    (scripts / planted).write_text("print('planted')\n")
+    monkeypatch.chdir(scripts)
+    spawned: list = []
+    monkeypatch.setattr(scheduler.subprocess, "run", lambda *a, **kw: spawned.append(a))
+
+    for command in (f"{planted} -c 'print(1)'", f"{planted} -c 'print(1)' {SCRIPT}", f"{planted} -m http.server"):
+        assert validate_no_agent_command(command, home) is not None, command
+        outcome = scheduler._run_script_only({"prompt": command, "no_agent": True}, home, 5)
+        assert not outcome.ok and "rejected" in outcome.message, command
+    assert spawned == []
+    assert validate_no_agent_command(f"{planted} {SCRIPT}", home) is None
+
+
 def test_a_stored_job_with_inline_code_is_refused_when_it_fires(home: Path, monkeypatch) -> None:
     spawned: list = []
     monkeypatch.setattr(scheduler.subprocess, "run", lambda *a, **kw: spawned.append(a))
