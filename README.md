@@ -49,7 +49,8 @@ The design goal is sovereignty:
 
 - **Chat surfaces.** A Textual TUI with streaming replies, slash commands,
   live tool cards, interrupt and session resume; a desktop app and a mobile
-  app that pair with your own daemon over the host plane. The Android app is
+  app that pair with your own daemon over the host plane. The mobile app is
+  on the [App Store](https://apps.apple.com/us/app/alpi-agent/id6771675807) and
   on [Google Play](https://play.google.com/store/apps/details?id=com.satoshilimited.alpi).
 - **Attachments and knowledge.** Attach images, PDFs and source files to a
   turn. Ask alpi to learn a document and it synthesises durable Markdown

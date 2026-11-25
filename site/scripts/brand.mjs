@@ -195,8 +195,11 @@ export function demoProfiles(byName, size = 13) {
   }));
 }
 
-export function lockup({ height = 34 } = {}) {
-  return `<span class="logo">${twinMark({ height, className: 'logo-mark' })}<span class="logo-word display">alpi</span></span>`;
+export const LOGO_LOOK = { turnX: 21.6, turnY: 14.4, eyeX: 6, eyeY: 4 };
+
+export function lockup({ height = 34, live = false } = {}) {
+  const mark = twinMark({ height, className: 'logo-mark' });
+  return `<span class="logo">${live ? `<span class="logo-gaze">${mark}</span>` : mark}<span class="logo-word display">alpi</span></span>`;
 }
 
 export const heroTone = (hex, ground) => toneAgainst(hex, ground, AGENTS_FLOOR);
@@ -237,6 +240,9 @@ export function brandCss() {
     `.logo .logo-word.display,.hero h1 .display,h1.display-heading,h2.display-heading,.display-name{font-family:"${NAME_FONT}",Geist,system-ui,sans-serif}`,
     `.display{font-weight:800;letter-spacing:-.04em;color:var(--brand-ink);display:inline-block}`,
     `.logo-mark .mark-body{fill:var(--brand-ink)}`,
+    `.logo-gaze{display:inline-flex;perspective:96px}`,
+    `.logo-gaze .logo-mark{transform-origin:50% 55%;transform:rotateY(calc(var(--gx, 0) * ${LOGO_LOOK.turnX}deg)) rotateX(calc(var(--gy, 0) * -${LOGO_LOOK.turnY}deg))}`,
+    `.logo-gaze .mark-eye{transform:translate(calc(var(--gx, 0) * ${LOGO_LOOK.eyeX}px), calc(var(--gy, 0) * ${LOGO_LOOK.eyeY}px))}`,
     `:root .logo .logo-word.display{color:var(--brand-ink);font-weight:800;letter-spacing:-.04em}`,
     `.hero h1 .display{display:block;width:fit-content}`,
     `.profile-name{display:inline-flex;align-items:center;gap:.45em;vertical-align:middle}`,

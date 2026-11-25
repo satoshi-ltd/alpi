@@ -548,11 +548,12 @@ test('the blog leads with the newest post, lists the rest by year and files ever
   for (const [, href] of post.matchAll(/<a class="chip" href="(tag-[^"]+)"/g)) assert.ok(existsSync(join(dist, 'blog', href)), href);
 });
 
-test('the landing links the Android app on Google Play, and the App Store is no link while iOS is in testing', () => {
+test('the landing links the phone app on the App Store and on Google Play, side by side', () => {
   const apps = section('apps');
-  assert.match(apps, /<a class="btn btn-ground" href="https:\/\/play\.google\.com\/store\/apps\/details\?id=com\.satoshilimited\.alpi"><svg [^>]*aria-hidden="true">[\s\S]*?<\/svg>Google Play<\/a>/);
-  assert.match(apps, /<p class="meta">iOS in internal testing<\/p>/);
-  assert.doesNotMatch(read('index.html'), /apps\.apple\.com|App Store/);
+  assert.match(apps, /<p class="cta-line stores"><a class="btn btn-ground" href="https:\/\/apps\.apple\.com\/us\/app\/alpi-agent\/id6771675807"><svg [^>]*aria-hidden="true">[\s\S]*?<\/svg>App Store<\/a><a class="btn btn-ground" href="https:\/\/play\.google\.com\/store\/apps\/details\?id=com\.satoshilimited\.alpi"><svg [^>]*aria-hidden="true">[\s\S]*?<\/svg>Google Play<\/a><\/p>/);
+  assert.match(apps, /<p class="meta">iPhone and iPad &middot; Android, foldables included<\/p>/);
+  assert.doesNotMatch(read('index.html'), /internal testing|<!-- (APPLE|ANDROID) -->/);
+  assert.match(read('index.html'), /\.surface \.stores\{display:flex;flex-wrap:wrap;gap:8px\}/);
 });
 
 test('the docs rail is the app sidebar: side ground, 40 px rows of radius 12 and the current page on the selected fill', () => {
@@ -806,6 +807,39 @@ test('the cast stacks above the console, so a hover label below a mark is never 
   assert.match(cast, /;position:relative;z-index:7$/);
 });
 
+test('alpi in the nav follows the pointer once the hero alpi is off screen, and on every page without a hero', async () => {
+  const { LOGO_LOOK, twinParts, halfPose } = await import('./brand.mjs');
+  const pages = { landing: read('index.html'), doc: read('docs/QUICKSTART.html'), blog: read('blog/index.html') };
+  for (const [name, html] of Object.entries(pages)) {
+    const nav = html.match(/<nav class="top[\s\S]*?<\/nav>/)[0];
+    assert.match(nav, /<a class="brand"[^>]*>\s*<span class="logo"><span class="logo-gaze"><svg[^>]*class="logo-mark"/, name);
+    assert.equal((html.match(/class="logo-gaze"/g) || []).length, 1, name);
+    const script = [...html.matchAll(/<script type="module">([\s\S]*?)<\/script>/g)].map((m) => m[1]).find((s) => s.includes('.logo-gaze'));
+    assert.ok(script, name);
+    assert.match(script, name === 'landing' ? /from '\.\/gaze\.js\?v=\d+\.\d+\.\d+'/ : /from '\.\.\/gaze\.js\?v=\d+\.\d+\.\d+'/, name);
+    assert.match(script, /matchMedia\('\(pointer: fine\)'\)/);
+    assert.match(script, /prefers-reduced-motion: reduce/);
+    assert.match(script, /\(!hero \|\| hero\.classList\.contains\('is-away'\)\)/);
+  }
+  assert.doesNotMatch(pages.landing.match(/<footer>[\s\S]*?<\/footer>/)[0], /logo-gaze/);
+  const css = read('brand.css');
+  assert.ok(css.includes(`.logo-gaze .logo-mark{transform-origin:50% 55%;transform:rotateY(calc(var(--gx, 0) * ${LOGO_LOOK.turnX}deg)) rotateX(calc(var(--gy, 0) * -${LOGO_LOOK.turnY}deg))}`));
+  assert.ok(css.includes(`.logo-gaze .mark-eye{transform:translate(calc(var(--gx, 0) * ${LOGO_LOOK.eyeX}px), calc(var(--gy, 0) * ${LOGO_LOOK.eyeY}px))}`));
+  const { body, eyes } = twinParts(100, halfPose());
+  const inside = ([x, y]) => {
+    let hit = false;
+    for (let i = 0, j = body.length - 1; i < body.length; j = i++) {
+      const [xi, yi] = body[i];
+      const [xj, yj] = body[j];
+      if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) hit = !hit;
+    }
+    return hit;
+  };
+  for (const gx of [-1, 0, 1]) for (const gy of [-1, 0, 1]) {
+    assert.ok(eyes.flat().every(([x, y]) => inside([x + gx * LOGO_LOOK.eyeX, y + gy * LOGO_LOOK.eyeY])), `eyes leave the body looking ${gx},${gy}`);
+  }
+});
+
 test('alpi in the hero follows the pointer like the desktop hero mark, only with a fine pointer, motion allowed and the hero on screen', () => {
   const html = read('index.html');
   assert.equal(read('gaze.js'), readFileSync(join(site, '../common/gaze.mjs'), 'utf8'));
@@ -818,7 +852,7 @@ test('alpi in the hero follows the pointer like the desktop hero mark, only with
   assert.ok(css.includes('.cast-look{transform:translate(calc(var(--gx, 0) * 6px), calc(var(--gy, 0) * 4px))}'));
   assert.ok(css.includes('.cast-gaze.is-following .vt-a{animation:none;transform:none!important}'));
   assert.match(twin, /vt-turn-idle/);
-  const script = html.match(/<script type="module">([\s\S]*?)<\/script>/)[1];
+  const script = [...html.matchAll(/<script type="module">([\s\S]*?)<\/script>/g)].map((m) => m[1]).find((s) => s.includes('.cast-gaze'));
   assert.match(script, /import \{ followPointer \} from '\.\/gaze\.js\?v=\d+\.\d+\.\d+'/);
   assert.match(script, /matchMedia\('\(pointer: fine\)'\)/);
   assert.match(script, /prefers-reduced-motion: reduce/);
