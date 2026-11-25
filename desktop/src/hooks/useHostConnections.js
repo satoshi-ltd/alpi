@@ -122,7 +122,7 @@ export function useHostConnections({
     }
   }, []);
 
-  // Local mtime patch for background workgroup activity — keeps the sidebar's unread dot and recency order truthful without a per-post workgroups RPC. Capped at one patch per second per workgroup.
+  // Local mtime patch for background workgroup activity — keeps the sidebar's recency order and time truthful without a per-post workgroups RPC. Capped at one patch per second per workgroup.
   const touchWorkgroup = useCallback((profile, wgId) => {
     const now = Math.floor(Date.now() / 1000);
     setWorkgroups((rows) => {

@@ -779,7 +779,6 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
 .sb-name.is-unr { font-weight: var(--fw-semibold); color: var(--ink); }
 
 .sb-ts          { font-family: var(--font-sans); font-variant-numeric: tabular-nums slashed-zero; font-size: var(--text-meta); font-weight: var(--fw-medium); line-height: var(--lh-tight); color: var(--ink-3); }
-.sb-ts.is-unr   { font-weight: var(--fw-semibold); color: var(--ink); }
 
 
 .sb-row-trailing {

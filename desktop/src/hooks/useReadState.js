@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-// Frontend-only read-state: localStorage keyed by `<connId>:profile:<name>` / `<connId>:workgroup:<profile>/<id>`; compare against latest_session.updated_at / workgroup.mtime to decide unread.
+// Frontend-only read-state: localStorage keyed by `<connId>:profile:<name>`; compare against latest_session.updated_at to decide unread.
 
 const STORAGE_KEY = "alpi:read-state:v1";
 const listeners = new Set();
@@ -44,8 +44,6 @@ function isUnread(key, latestTs) {
 const safeConn = (connId) => connId || "local";
 const profileKey = (connId, name) =>
   name ? `${safeConn(connId)}:profile:${name}` : "";
-const workgroupKey = (connId, profile, id) =>
-  profile && id ? `${safeConn(connId)}:workgroup:${profile}/${id}` : "";
 
 export function markProfileRead(connId, name, ts) {
   setKey(profileKey(connId, name), ts);
@@ -53,10 +51,6 @@ export function markProfileRead(connId, name, ts) {
 
 export function isProfileUnread(connId, name, sessionUpdatedAt) {
   return isUnread(profileKey(connId, name), sessionUpdatedAt);
-}
-
-export function markWorkgroupRead(connId, profile, id, ts) {
-  setKey(workgroupKey(connId, profile, id), ts);
 }
 
 export function purgeConnectionReadState(connId) {
@@ -75,10 +69,6 @@ export function purgeConnectionReadState(connId) {
   emit();
 }
 
-export function isWorkgroupUnread(connId, profile, id, latestTs) {
-  return isUnread(workgroupKey(connId, profile, id), latestTs);
-}
-
 export function useReadState(connId) {
   const [, force] = useState(0);
   useEffect(() => {
@@ -90,9 +80,5 @@ export function useReadState(connId) {
     (name, ts) => isProfileUnread(connId, name, ts),
     [connId],
   );
-  const checkWorkgroup = useCallback(
-    (profile, id, ts) => isWorkgroupUnread(connId, profile, id, ts),
-    [connId],
-  );
-  return { checkProfile, checkWorkgroup };
+  return { checkProfile };
 }

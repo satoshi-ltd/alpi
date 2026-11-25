@@ -25,11 +25,7 @@ import RelativeTime from "../primitives/RelativeTime.jsx";
 import { nameVars } from "../lib/nameVars.js";
 import { MARK_SIZES } from "../../../common/agentMarks.mjs";
 import { profileLabel } from "../lib/profile-display.js";
-import {
-  useReadState,
-  markProfileRead,
-  markWorkgroupRead,
-} from "../hooks/useReadState.js";
+import { useReadState, markProfileRead } from "../hooks/useReadState.js";
 import { compareProfiles, orderedSidebarProfiles, orderPinnedItems } from "../lib/profile-order.js";
 import { isDefaultProfile, splitDefaultProfile, withoutDefaultPin } from "../../../common/rosterOrder.mjs";
 import Skeleton from "../primitives/Skeleton.jsx";
@@ -137,8 +133,7 @@ function Sidebar({
     connectionSyncing && !rosterAnswered && profiles.length === 0 && workgroups.length === 0,
     300,
   );
-  const { checkProfile: checkUnread, checkWorkgroup: checkWorkgroupUnread } =
-    useReadState(connId);
+  const { checkProfile: checkUnread } = useReadState(connId);
   const openProfile = useCallback(
     (p) => {
       if (inSettings) {
@@ -156,10 +151,9 @@ function Sidebar({
         onSetSettingsTarget?.({ kind: "workgroup", id: w.id, profile: w.profile });
         return;
       }
-      markWorkgroupRead(connId, w.profile, w.id);
       onOpenWorkgroup?.(w);
     },
-    [inSettings, onSetSettingsTarget, connId, onOpenWorkgroup],
+    [inSettings, onSetSettingsTarget, onOpenWorkgroup],
   );
   const activeProfileName = inSettings
     ? settingsTarget?.kind === "profile"
@@ -497,8 +491,6 @@ function Sidebar({
         busy={!!activityByWorkgroup[key]}
         run={rosterState?.workgroups?.[key] ?? null}
         active={activeWorkgroupId === key}
-        connId={connId}
-        checkUnread={checkWorkgroupUnread}
         onOpen={openWorkgroup}
         onContextMenu={openWorkgroupCtx}
       />
@@ -520,8 +512,6 @@ function Sidebar({
         run={rosterState?.workgroups?.[key] ?? null}
         active={activeWorkgroupId === key}
         isPinned={pinnedWorkgroupKeys.includes(key)}
-        connId={connId}
-        checkUnread={checkWorkgroupUnread}
         onOpen={openWorkgroup}
         onTogglePin={onTogglePin}
         onContextMenu={openWorkgroupCtx}
@@ -896,7 +886,7 @@ const ProfileRow = memo(function ProfileRow({
     ? <RowStateChip state={rowState} />
     : sessionRecency > 0
       ? (
-        <span className={`tnum sb-ts${unread ? " is-unr" : ""}`}>
+        <span className="tnum sb-ts">
           <RelativeTime ts={sessionRecency} />
         </span>
       )
@@ -1017,30 +1007,22 @@ const WorkgroupTile = memo(function WorkgroupTile({
   busy,
   run = null,
   active,
-  connId,
-  checkUnread,
   onOpen,
   onContextMenu,
 }) {
   const handleClick = useCallback(() => onOpen(workgroup), [onOpen, workgroup]);
   const handleContextMenu = useCallback((e) => onContextMenu?.(e, workgroup), [onContextMenu, workgroup]);
   const label = workgroup.name ?? workgroup.id;
-  const mtime = workgroup.mtime ?? 0;
   const paused = !!workgroup.paused;
   const mark = workgroupMark({ workgroup, run, task, busy });
   const markColor = workgroupMarkAccent(mark, hubAccent, accentOf);
-  useEffect(() => {
-    if (active && mtime > 0) markWorkgroupRead(connId, workgroup.profile, workgroup.id, mtime);
-  }, [active, connId, workgroup.profile, workgroup.id, mtime]);
-  const unread = !paused && !active && checkUnread?.(workgroup.profile, workgroup.id, mtime);
   return (
     <Tile
       label={label}
       sel={active}
-      unread={unread}
       dim={paused}
       pip={TILE_PIP[mark.state] ?? null}
-      ariaLabel={paused ? `${label}, paused` : unread ? `${label}, unread` : label}
+      ariaLabel={paused ? `${label}, paused` : label}
       tip={paused ? null : workgroupStatusLine(mark)}
       mark={<Fold shape={WORKGROUP_SHAPE} color={markColor || undefined} state={mark.state} phase={mark.phase} seed={`${workgroup.profile}/${workgroup.id}`} size={MARK_SIZES.tile} still={!active} />}
       onClick={handleClick}
@@ -1058,8 +1040,6 @@ const WorkgroupRow = memo(function WorkgroupRow({
   run = null,
   active,
   isPinned,
-  connId,
-  checkUnread,
   onOpen,
   onTogglePin,
   onContextMenu,
@@ -1082,11 +1062,6 @@ const WorkgroupRow = memo(function WorkgroupRow({
   const markColor = workgroupMarkAccent(mark, hubAccent, accentOf);
   const tip = paused ? null : workgroupStatusLine(mark);
 
-  useEffect(() => {
-    if (active && mtime > 0) markWorkgroupRead(connId, workgroup.profile, workgroup.id, mtime);
-  }, [active, connId, workgroup.profile, workgroup.id, mtime]);
-  const unread =
-    !paused && !active && checkUnread?.(workgroup.profile, workgroup.id, mtime);
   const glyph = <Fold shape={WORKGROUP_SHAPE} color={markColor || undefined} state={mark.state} phase={mark.phase} seed={`${workgroup.profile}/${workgroup.id}`} still={!active} />;
   const hasPhases = run?.phasesTotal > 0 && run?.phasesDone != null;
   const trailing = hasPhases
@@ -1097,7 +1072,7 @@ const WorkgroupRow = memo(function WorkgroupRow({
     )
     : mtime > 0
       ? (
-        <span className={`tnum sb-ts${unread ? " is-unr" : ""}`}>
+        <span className="tnum sb-ts">
           <RelativeTime ts={mtime} />
         </span>
       )
@@ -1110,9 +1085,7 @@ const WorkgroupRow = memo(function WorkgroupRow({
         id={label}
         color={hubAccent || undefined}
         sel={active}
-        unread={unread}
         state={paused ? "paused" : undefined}
-        ariaLabel={unread ? `${label} unread` : undefined}
         leading={
           <span className={styles.workgroupLeading} style={{ color: hubAccent || "var(--ink-3)" }}>
             {tip ? <Tip text={tip} side="up-l">{glyph}</Tip> : glyph}

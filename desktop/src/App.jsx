@@ -61,7 +61,6 @@ import { usePinned } from "./hooks/usePinned.js";
 import { useActiveRole } from "./hooks/useActiveRole.js";
 import { useCloseAdminSurfacesOnDemotion } from "./hooks/useCloseAdminSurfacesOnDemotion.js";
 import { useWorkgroupTasks } from "./hooks/useWorkgroupTasks.js";
-import { markWorkgroupRead } from "./hooks/useReadState.js";
 import { isTtsActive, subscribeTts } from "./lib/tts.js";
 import { useWindowChrome } from "./hooks/useWindowChrome.js";
 import {
@@ -795,7 +794,7 @@ export default function App() {
         const key = `${ev.profile}/${ev.wg_id}`;
         const connectionId = hostConnectionsRef.current?.active_id;
         setActivityByWorkgroup((prev) => ({ ...prev, [key]: Date.now() }));
-        // No reload and no fetch for background workgroups: the badge comes from the activity map, unread/ordering from the local mtime patch. Transcript work happens only for the open view.
+        // No reload and no fetch for background workgroups: the badge comes from the activity map, the order and the time from the local mtime patch. Transcript work happens only for the open view.
         touchWorkgroup(ev.profile, ev.wg_id);
         if (!isActiveWorkgroupView(v, ev)) break;
         fetchWorkgroupTranscript(connectionId, ev.profile, ev.wg_id)
@@ -1806,7 +1805,6 @@ export default function App() {
           setCreateWorkgroupOpen(false);
           await reload();
           if (wgId) {
-            markWorkgroupRead(hostConnections.active_id, hubName, wgId);
             setSettingsTarget({ kind: "workgroup", id: wgId, profile: hubName });
             setView({ kind: "settings" });
           }

@@ -11,6 +11,12 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.10.18 — 2026-11-25 — unread, said once
+
+- A workgroup no longer turns bold in the sidebar when something is posted in it. With many workgroups working on their own, every row was bold; their order and the time beside each already say which moved last. A pinned workgroup is no longer announced as unread either.
+- A profile with a reply you have not opened keeps its name in bold; the time beside it stays at its normal weight.
+- Needs alpi ≥ 0.19.23.
+
 ## v0.10.17 — 2026-11-25 — numbers under their headings
 
 - In the Workgroups list the member count sits under its heading again: right-aligned and at the small size of the columns beside it. Since 0.10.0 it stood at the left of its column, in large text. The spend returns to the same soft ink.
