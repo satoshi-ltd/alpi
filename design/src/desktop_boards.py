@@ -266,9 +266,10 @@ def d_sidebar(h, selected="doc", settings_mode=False, wg_selected=False, states=
 </div>"""
 
 
-def d_hero(title_html, meta_html, actions_html, accent):
+def d_hero(title_html, meta_html, actions_html, accent, menu=True):
+    chevron = ic("chev-d", 16, INK3) if menu else ""
     return (f'<div data-header="" style="position: relative; z-index: 2; box-sizing: content-box; height: {HEADER_H}px; flex-shrink: 0; display: flex; align-items: center; padding: {TITLEBAR_H}px 24px 0 32px; background: {PANE}">'
-            f'<span style="display: inline-flex; align-items: center; gap: 4px; height: 40px; margin-left: -4px; padding: 0 8px 0 4px; border-radius: 999px">{title_html}{ic("chev-d", 16, INK3)}</span>'
+            f'<span style="display: inline-flex; align-items: center; gap: 4px; height: 40px; margin-left: -4px; padding: 0 8px 0 4px; border-radius: 999px">{title_html}{chevron}</span>'
             f'<span style="flex: 1"></span><span style="display: flex; align-items: center; gap: 4px">{actions_html}</span>'
             f'<div style="position: absolute; left: 0; right: 0; top: 100%; height: 24px; background: linear-gradient({PANE}, transparent); pointer-events: none"></div></div>')
 
@@ -488,19 +489,23 @@ def desktop_wg_settings():
 
 
 def desktop_connections():
-    hero = d_hero(h1("alpi", identity_glyph("alpi", AMBER, 28), "ink") + '<span style="font-size: 20px; font-weight: 400; color: #6b6b6b; margin-left: 2px">Connections</span>', "", button("Audit log", "ghost", "sm", "history") + button("New connection", "ghost", "sm", "plus") + iconbtn("arrow-left", "Back to chat"), AMBER)
-    head = (f'<div style="display: grid; grid-template-columns: minmax(240px, 1fr) 126px 88px 112px; {BLEED}; min-height: 32px; align-items: center; padding: 0 12px; font-size: 14px; color: {INK3}">'
-            f'<span>Connection</span><span style="text-align: right">Last activity</span><span style="text-align: right">Sessions</span><span style="text-align: right">14-day spend</span></div>')
+    hero = d_hero(h1("alpi", identity_glyph("alpi", AMBER, 28), "ink") + '<span style="font-size: 20px; font-weight: 400; color: #6b6b6b; margin-left: 2px">Connections</span>', "", button("Audit log", "ghost", "sm", "history") + button("New connection", "ghost", "sm", "plus") + iconbtn("arrow-left", "Back to chat"), AMBER, menu=False)
+    grid = "grid-template-columns: minmax(240px, 1fr) 126px 88px 112px"
+    head = (f'<div style="display: grid; {grid}; {BLEED}; min-height: 32px; align-items: center; padding: 0 12px; font-size: 14px; color: {INK3}">'
+            f'<span>Connection</span><span style="text-align: right">Last seen</span><span style="text-align: right">Sessions</span><span style="text-align: right">14-day spend</span></div>')
 
-    def metric(v, cap):
-        return f'<span style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px"><span style="font-size: 12px; font-weight: 500; color: {INK}">{v}</span><span style="font-size: 12px; color: {INK3}">{cap}</span></span>'
+    def metric(v, color=INK):
+        return f'<span style="text-align: right; font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; color: {color}">{v}</span>'
 
     def crow(label, sub, seen, sessions, spend, expanded=False, host=False, scope=None):
         meta = (f'<span style="font-family: {MONO}; font-size: 12px; color: {INK3}">{sub}</span>' if host
                 else f'<span style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px">{access_line(scope or [], "card" if expanded else "bgPane", 12)}<span style="font-size: 12px; color: {INK3}">{sub}</span></span>')
-        return (f'<div style="display: grid; grid-template-columns: minmax(240px, 1fr) 126px 88px 112px; min-height: 74px; align-items: center; padding: 0 12px; {"" if expanded else BLEED}">'
+        return (f'<div style="display: grid; {grid}; min-height: 60px; align-items: center; padding: 0 12px; {"" if expanded else BLEED}">'
                 f'<span style="display: flex; flex-direction: column; gap: 6px"><strong style="font-size: 15px; font-weight: 600; line-height: 1.3; color: {INK}">{label}</strong>{meta}</span>'
-                f'{metric(seen, "LAST SEEN")}{metric(sessions, "SESSIONS")}{metric(spend, "14-DAY")}</div>')
+                f'{metric(seen)}{metric(sessions)}{metric(spend)}</div>')
+
+    total = (f'<div aria-label="Total" style="display: grid; {grid}; {BLEED}; min-height: 40px; margin-top: 8px; align-items: center; padding: 0 12px; font-size: 12px; color: {INK3}">'
+             f'<span>Total</span><span></span>{metric("529", INK2)}{metric("$1.61", INK2)}</div>')
 
     detail = f"""<div style="padding: 16px 12px 12px; display: flex; flex-direction: column; gap: 16px">
 <div style="display: flex; align-items: baseline; gap: 8px"><span style="font-size: 16px; font-weight: 600; color: {INK}">Usage</span><span style="font-size: 12px; color: {INK3}">last 14 days</span></div>
@@ -511,25 +516,26 @@ def desktop_connections():
 <div style="display: flex; align-items: center; min-height: 56px"><span style="flex: 1; display: flex; flex-direction: column; gap: 3px"><span style="font-size: 15px; font-weight: 500">sdk_gphone64_arm64</span><span style="font-size: 12px; color: {INK3}">mobile · 0.5.0</span></span><span style="font-size: 12px; color: {INK3}">now</span><span style="width: 16px"></span>{alink("Revoke", danger=True)}</div>
 </div>
 </div>"""
-    toolbar = search_toolbar("Search connections…", f'<span style="font-size: 12px; color: {INK3}">4 of 4</span>')
+    toolbar = search_toolbar("Search connections…", f'<span style="font-size: 12px; color: {INK3}">4 paired · 3 connected</span>')
     table = f"""<div style="display: flex; flex-direction: column">
 {toolbar}
 {head}
 {crow("Local host", "host.sock", "now", "10", "$1.09", host=True)}
 <div style="{BLEED}; border-radius: {R_SURFACE}px; background: {CARD}"><div>{crow("emulator-android", "admin · 2 devices", "now", "4", "$0.00", expanded=True)}</div>{detail}</div>
 <div style="opacity: 0.55">{crow("front-desk", "member · 1 device", "now", "1", "$0.12", scope=["lingo"])}{crow("ops-team", "member · 3 devices", "9m ago", "514", "$0.40", scope=["doc", "abby", "yuri", "galt"])}</div>
+{total}
 </div>"""
     body = f"""<div style="display: flex; height: 100%">
 {d_sidebar(900, selected="", settings_mode=True)}
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: {PANE}">
-<div style="width: 100%; max-width: 1024px; align-self: center">{hero}</div>{d_body(table, column=960)}
+{hero}{d_body(table, column=960)}
 </div>
 </div>
 """
     return page("Desktop · connections", 1280, 900, body, bg=PANE)
 
 
-WG_GRID = "grid-template-columns: minmax(240px, 1fr) 10.5rem 76px 112px 92px; gap: 12px; padding: 0 12px"
+WG_GRID = "grid-template-columns: minmax(200px, 1fr) minmax(15rem, 1.4fr) 76px 96px 80px; gap: 12px; padding: 0 12px"
 BLEED = "width: calc(100% + 24px); margin: 0 -12px; box-sizing: border-box"
 
 
@@ -545,31 +551,52 @@ def seg(options, on, h=40):
     return f'<span role="radiogroup" style="display: inline-flex; align-items: center; gap: 2px; padding: 4px; border-radius: 999px; background: {FILL}; box-sizing: border-box">{cells}</span>'
 
 
+def seg_counts(options, on, h=40):
+    def cell(label, n):
+        active = label == on
+        off = n == 0 and not active
+        lift = "background: " + PANE + "; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);" if active else ""
+        dim = " aria-disabled=\"true\"" if off else ""
+        return (f'<span role="radio" aria-checked="{"true" if active else "false"}"{dim} style="display: inline-flex; align-items: center; gap: 4px; height: {h - 8}px; padding: 0 14px; border-radius: 999px; font-size: 15px; '
+                f'font-weight: {600 if active else 400}; line-height: 1; color: {INK if active else INK2}; {"opacity: 0.45; " if off else ""}{lift}">{label}<span style="font-weight: 400; color: {INK3}; font-variant-numeric: tabular-nums">{n}</span></span>')
+    return f'<span role="radiogroup" style="display: inline-flex; align-items: center; gap: 2px; padding: 4px; border-radius: 999px; background: {FILL}; box-sizing: border-box">{"".join(cell(*o) for o in options)}</span>'
+
+
 def desktop_workgroups(stale=False):
     head = "".join(f'<span style="{"text-align: right" if i > 2 else ""}">{t}</span>' for i, t in enumerate(("Workgroup", "Status", "Members", "Spend", "Updated"), start=1))
     head = f'<div style="display: grid; {WG_GRID}; {BLEED}; align-items: center; min-height: 32px; font-size: 14px; color: {INK3}">{head}</div>'
 
-    def wrow(name, accent, dot, status, members, spend, age, note="", mark=None):
-        lines = (f'<span style="display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: {INK2}; white-space: nowrap">'
-                 f'<span style="width: 8px; height: 8px; border-radius: 999px; background: {dot}; flex-shrink: 0"></span>{status}</span>')
+    def group(label, n, color=INK3, first=False):
+        return (f'<div role="group" aria-label="{label}" style="display: flex; align-items: center; gap: 8px; min-height: 32px; margin-top: {4 if first else 16}px; padding: 0 12px; {BLEED}; font-size: 14px; font-weight: 500; color: {color}">'
+                f'{label}<span style="font-weight: 400; color: {INK3}">{n}</span></div>')
+
+    def wrow(name, accent, dot, status, members, spend, age, note="", mark=None, color=INK2):
+        lines = (f'<span title="{status}" style="flex: 0 0 auto; max-width: 100%; min-width: 0; display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: {color}">'
+                 f'<span style="width: 8px; height: 8px; border-radius: 999px; background: {dot}; flex-shrink: 0"></span><span style="min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{status}</span></span>') if status else ""
         if note:
-            lines += f'<span style="min-width: 0; font-size: 12px; color: {INK3}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{note}</span>'
+            lines += f'<span style="flex: 1 1 0; min-width: 0; font-size: 12px; color: {INK3}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{note}</span>'
         cell = lambda v, color: f'<span style="text-align: right; font-size: 12px; font-variant-numeric: tabular-nums slashed-zero; color: {color}">{v}</span>'
         return (f'<div style="display: grid; {WG_GRID}; {BLEED}; align-items: center; min-height: 40px">'
                 f'<span style="display: flex; align-items: center; gap: 12px; min-width: 0">{wg_mark(accent, **(mark or {}))}<span style="font-size: 15px; font-weight: 400; line-height: 1; color: {INK2}">{name}</span></span>'
                 f'<span style="display: flex; align-items: center; gap: 8px; min-width: 0">{lines}</span>{cell(members, INK2)}{cell(spend, INK2)}{cell(age, INK3)}</div>')
 
-    toolbar = search_toolbar("Search workgroups…", seg(("All", "Active", "Queued", "Paused"), "All") + f'<span style="font-size: 12px; color: {INK3}">3 of 3</span>')
+    toolbar = search_toolbar("Search workgroups…", seg_counts((("All", 5), ("Working", 2), ("Queued", 1), ("Paused", 0)), "All"))
     table = (toolbar + head
+             + group("Needs you", 1, "#b3470e", first=True)
+             + wrow("release-train", "#df4b9d", "#e08a3c", "Needs you · approval · @yuri", 3, "$4.80", "now", "", dict(state="needs"), color="#b3470e")
+             + group("Working", 1)
              + wrow("alpha", LINGO_ACCENT, "#3fb37a", "Working · media · @lingo", 3, "$0.40", "2m", "setup done", dict(state="running", phase=(2, 4)))
+             + group("Queued", 1)
              + wrow("launch-crew", AMBER, "#e08a3c", "Queued · #2", 4, "$1.12", "9m", "setup done · media next", dict(state="queued"))
-             + wrow("digest", "#9b5ad9", INK4, "Idle", 2, "$0.08", "1d"))
-    hero = d_hero(h1("Workgroups", wg_mark(AMBER, 28), "ink"), "", button("New workgroup", "ghost", "sm", "plus"), AMBER)
+             + group("Idle", 2)
+             + wrow("digest", "#9b5ad9", INK4, "", 2, "$0.08", "1d", "last run done")
+             + wrow("weekly-report", "#3899e2", INK4, "", 3, "$0.52", "3d"))
+    hero = d_hero(h1("Workgroups", wg_mark(AMBER, 28), "ink"), "", button("New workgroup", "ghost", "sm", "plus"), AMBER, menu=False)
     warning = banner_bar("warning", "Workgroups may be out of date. Retrying automatically.", "Retry") if stale else ""
     body = f"""<div style="display: flex; height: 100%">
 {d_sidebar(740, selected="", settings_mode=False)}
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: {PANE}">
-{hero}{warning}{d_body(table)}
+{hero}{warning}{d_body(table, column=960)}
 </div>
 </div>
 """

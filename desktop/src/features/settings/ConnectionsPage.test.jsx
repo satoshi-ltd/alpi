@@ -39,8 +39,18 @@ describe("ConnectionsPage", () => {
     expect(await screen.findByText("Javi")).toBeInTheDocument();
     expect(container.querySelector(".ds-chat-header")).toBeInTheDocument();
     expect(screen.queryByText("pairing endpoint")).toBeNull();
-    expect(screen.getByText("4", { selector: "strong" })).toBeInTheDocument();
-    expect(screen.getByText("SESSIONS")).toBeInTheDocument();
+    expect(screen.getByText("4", { selector: `.${styles.rowToggle} .${styles.metric}` })).toBeInTheDocument();
+    expect(screen.queryByText(/^(LAST SEEN|SESSIONS|14-DAY)$/)).toBeNull();
+    expect(screen.getByText("Last seen")).toBeInTheDocument();
+    expect(screen.queryByText("Last activity")).toBeNull();
+    expect(container.querySelector(".ds-chat-header [aria-haspopup]")).toBeNull();
+    expect(screen.getByText("1 paired · 1 connected").className).toBe(styles.count);
+    const total = container.querySelector(`.${styles.totalRow}`);
+    expect([...total.children].map((cell) => cell.textContent)).toEqual(["Total", "", "4", "$0.42"]);
+    expect([...total.children].slice(2).map((cell) => cell.className)).toEqual([styles.metric, styles.metric]);
+    const css = readFileSync(join(import.meta.dirname, "ConnectionsPage.module.css"), "utf8");
+    expect(css).toMatch(/\.rowToggle \{ width: 100%; min-height: 60px;/);
+    expect(css).not.toMatch(/\.metric small/);
     fireEvent.click(screen.getByText("Javi"));
 
     expect(await screen.findByText("iPhone")).toBeInTheDocument();
@@ -50,6 +60,16 @@ describe("ConnectionsPage", () => {
     expect(readFileSync(join(import.meta.dirname, "ConnectionsPage.module.css"), "utf8")).toContain(".deviceSeen { color: var(--ink-3); font-size: var(--text-meta); }");
     expect(screen.getByText("14-day total $0.42 · 100 in / 20 out")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Audit log" })).toHaveLength(1);
+  });
+
+  it("totals the rows it lists, not the usage of connections deleted since", async () => {
+    invoke.mockImplementation((command) => command === "connections_summary"
+      ? Promise.resolve({ ...summary, totals: { ...summary.totals, sessions: 99, cost_14d: 9.99 } })
+      : Promise.resolve({ ok: true }));
+    const { container } = render(<ConnectionsPage profiles={[{ name: "atlas" }]} activeConnection={{ id: "local" }} />);
+    await screen.findByText("Javi");
+    const total = container.querySelector(`.${styles.totalRow}`);
+    expect([...total.children].slice(2).map((cell) => cell.textContent)).toEqual(["4", "$0.42"]);
   });
 
   it("keeps host network setup out of connection administration", async () => {
@@ -256,6 +276,7 @@ describe("ConnectionsPage", () => {
     expect(screen.queryByText("Javi")).toBeNull();
     expect(screen.getByText("1 of 2")).toBeInTheDocument();
     expect(screen.getByText("1 of 2").className).toBe(styles.count);
+    expect(container.querySelector(`.${styles.totalRow}`)).toBeNull();
     expect(readFileSync(join(import.meta.dirname, "ConnectionsPage.module.css"), "utf8")).toContain(".count { flex-shrink: 0; font-size: var(--text-meta); }");
   });
 

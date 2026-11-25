@@ -32,7 +32,7 @@ describe("one left edge", () => {
   });
 
   it.each([
-    ["pages/WorkgroupsView.module.css", /\.toolbar, \.tableHead, \.row \{[^}]*margin-inline: calc\(-1 \* var\(--row-bleed\)\)/],
+    ["pages/WorkgroupsView.module.css", /\.toolbar, \.tableHead, \.row, \.groupHead \{[^}]*margin-inline: calc\(-1 \* var\(--row-bleed\)\)/],
     ["features/settings/ConnectionsPage.module.css", /\.tableToolbar, \.tableHead, \.group[^{]*\{[^}]*margin-inline: calc\(-1 \* var\(--row-bleed\)\)/],
   ])("%s bleeds the hover fill so cell text sits on the header edge", (file, pattern) => {
     expect(read(file)).toMatch(pattern);

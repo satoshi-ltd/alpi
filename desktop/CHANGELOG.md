@@ -11,6 +11,15 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.10.19 — 2026-11-25 — workgroups by state, connections across the pane
+
+- Workgroups has no details popover behind its title anymore. Each filter carries its own count (All, Working, Queued, Paused), and a filter with nothing in it is dimmed. The "N of M" counter is gone.
+- In All, workgroups are listed under Needs you, Working, Queued, Idle and Paused, each with its count. An idle row shows its last note instead of repeating "Idle".
+- A queued or working status is shown whole: "Queued · #12" and "Working · build · @pixel" no longer get cut at the pixel. The note beside it gives way first, and a status longer than its column ends in an ellipsis with the full text on hover.
+- The Workgroups and Connections headers run across the whole pane like every other page, and the table sits in a centred column below them.
+- Connections names each column once, so rows are shorter. The toolbar reads how many connections are paired and connected, the table ends in a total of sessions and 14-day spend, and the title has no details popover.
+- Needs alpi ≥ 0.19.23.
+
 ## v0.10.18 — 2026-11-25 — unread, said once
 
 - A workgroup no longer turns bold in the sidebar when something is posted in it. With many workgroups working on their own, every row was bold; their order and the time beside each already say which moved last. A pinned workgroup is no longer announced as unread either.

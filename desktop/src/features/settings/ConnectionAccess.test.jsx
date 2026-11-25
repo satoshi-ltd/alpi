@@ -61,10 +61,10 @@ describe("ConnectionAccess", () => {
     expect(el.firstElementChild.style.getPropertyValue("--name-light")).toBe(nameTone("#9b5ad9", palettes.light.card));
   });
 
-  it("centres the header, the table and the audit log on one column", () => {
+  it("centres the table and the audit log on one column under a header that runs the pane", () => {
     const css = readFileSync(join(import.meta.dirname, "ConnectionsPage.module.css"), "utf8");
     expect(css).toMatch(/\.table \{[^}]*max-width: var\(--connections-col\);[^}]*margin-inline: auto/);
     expect(css).toMatch(/\.audit \{[^}]*max-width: var\(--connections-col\);[^}]*margin-inline: auto/);
-    expect(css).toMatch(/\.page > header:global\(\.ds-chat-header\) \{[^}]*padding-left: max\(var\(--pane-pad-x\), calc\(\(100% - var\(--connections-col\)\) \/ 2\)\)/);
+    expect(css).not.toMatch(/header:global\(\.ds-chat-header\)/);
   });
 });

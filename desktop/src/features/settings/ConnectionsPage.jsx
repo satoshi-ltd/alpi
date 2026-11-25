@@ -164,15 +164,7 @@ export default function ConnectionsPage({
           || String(left.label || "").localeCompare(String(right.label || ""));
       });
   }, [query, rows]);
-  const connectionsHeroMeta = (
-    <>
-      <span>{totals.paired || 0} paired · {totals.connected || 0} connected</span>
-      <span className="sep" aria-hidden />
-      <span>14-day spend <span>{usd(totals.cost_14d)}</span></span>
-      <span className="sep" aria-hidden />
-      <span><span>{totals.sessions || 0}</span> sessions</span>
-    </>
-  );
+  const searching = query.trim() !== "";
 
   async function setStatus(row, status) {
     try {
@@ -205,7 +197,7 @@ export default function ConnectionsPage({
         kind="connections"
         id={showActivity ? "Audit log" : heroTitle}
         accent={heroAccent}
-        meta={showActivity ? <span>Administrative changes only · messages are never recorded here</span> : connectionsHeroMeta}
+        meta={showActivity ? <span>Administrative changes only · messages are never recorded here</span> : null}
         actions={(
           <>
             {showActivity ? (
@@ -246,7 +238,9 @@ export default function ConnectionsPage({
                   aria-label="Search connections"
                 />
               </label>
-              <span className={styles.count}>{visibleRows.length} of {rows.length}</span>
+              <span className={styles.count}>
+                {searching ? `${visibleRows.length} of ${rows.length}` : `${totals.paired || 0} paired · ${totals.connected || 0} connected`}
+              </span>
             </div>
           )}
           {!data && !loadError && <SkeletonRows count={3} label="Loading connections" />}
@@ -259,7 +253,7 @@ export default function ConnectionsPage({
           {data && visibleRows.length > 0 && (
             <div className={styles.tableHead} aria-hidden>
               <span>Connection</span>
-              <span>Last activity</span>
+              <span>Last seen</span>
               <span>Sessions</span>
               <span>14-day spend</span>
             </div>
@@ -291,9 +285,9 @@ export default function ConnectionsPage({
                         </span>
                       )}
                     </span>
-                    <span className={styles.metric}><strong>{since(row.last_seen)}</strong><small>LAST SEEN</small></span>
-                    <span className={styles.metric}><strong>{row.sessions || 0}</strong><small>SESSIONS</small></span>
-                    <span className={`${styles.metric} ${styles.spend}`}><strong>{usd(row.cost_14d)}</strong><small>14-DAY</small></span>
+                    <span className={styles.metric}>{since(row.last_seen)}</span>
+                    <span className={styles.metric}>{row.sessions || 0}</span>
+                    <span className={`${styles.metric} ${styles.spend}`}>{usd(row.cost_14d)}</span>
                   </button>
                   {manageable && (
                     <div className={styles.rowActions}>
@@ -349,6 +343,14 @@ export default function ConnectionsPage({
               </div>
             );
           })}
+          {data && !searching && visibleRows.length > 0 && (
+            <div className={styles.totalRow}>
+              <span>Total</span>
+              <span />
+              <span className={styles.metric}>{visibleRows.reduce((sum, row) => sum + Number(row.sessions || 0), 0)}</span>
+              <span className={styles.metric}>{usd(visibleRows.reduce((sum, row) => sum + Number(row.cost_14d || 0), 0))}</span>
+            </div>
+          )}
           {data && rows.length > 0 && visibleRows.length === 0 && (
             <div className={styles.empty}>No connections match this search.</div>
           )}

@@ -1203,20 +1203,6 @@ Each entry is written to be worked without that report:
 
 ### Found while shipping desktop 0.10.17
 
-- **DESK.WG-STATUS-CLIP** — A Workgroups row shows its whole status before it shows the note
-  `bug · desktop · agent · normal`
-  note: seen in the creator's screenshot of 61 workgroups on desktop 0.10.16: "Queued · #N" reads "Queued ·" with
-  the position cut away, and "Working · upgrade-build · @pixel" ends at "@p", both with no ellipsis, while the note
-  beside them ends in one. In [WorkgroupsView.module.css](../desktop/src/pages/WorkgroupsView.module.css) the status
-  column is `10.5rem` (`9.75rem` under 900px), the label (`.status`) and the note (`.statusNote`) both shrink, each
-  in proportion to its width (`min-width: 0`), and the label is an `inline-flex` box, where `text-overflow: ellipsis`
-  does not reach its text, so it is clipped at the pixel. The queue position and the owner are what the row is read
-  for. The `desktop_workgroups` board already draws the label whole, so the app is what differs. Not measured: how
-  wide the column must be for the longest real label.
-  accept: with a label and a note that do not fit together, the label is whole and the note gives way first; a
-  label longer than the column ends in an ellipsis and carries its full text as a title; both hold in the wide and
-  the under-900px layouts; a test covers a queued row with a note and a working row with a step and an owner.
-
 - **DESIGN.NOTIF-VIEW** — The Notifications view in the kit is drawn in the faces, sizes and inks the app ships
   `chore · design · agent · low`
   note: three differences are left in [notif_studies.py](../design/src/notif_studies.py) after desktop 0.10.17 redrew
@@ -1368,7 +1354,7 @@ Each entry is written to be worked without that report:
 - **DESK.FILTERS** — One filter control for Notifications, Activity, Workgroups and Sessions
   `chore · desktop · agent · normal`
   note: the same "All / Needs you / …" row is four implementations: `NotificationsModal.jsx:449-465` (buttons with
-  `aria-pressed`), `ActivityPanel.jsx:84-114` (`radiogroup` with arrow keys), `WorkgroupsView.jsx:160-171`
+  `aria-pressed`), `ActivityPanel.jsx:84-114` (`radiogroup` with arrow keys), `WorkgroupsView.jsx:132-145`
   (`.ds-seg`, no arrow keys) and `ManageSessionsModal.jsx:299-309` (`Chip` with no pressed state, so a screen
   reader cannot tell which is on). No new look: the shipped `.ds-seg` with Activity's semantics.
   accept: one primitive with `radiogroup`/`radio`, roving focus and Arrow/Home/End, used by the four sites with
@@ -1394,7 +1380,7 @@ Each entry is written to be worked without that report:
   `chore · desktop · common · agent · normal`
   note: `common/emptyCopy.mjs:35` defines `matches` but only Notifications uses it; the sidebar
   (`Sidebar.jsx:617`), the palette (`Panels.jsx:349`), Settings search (`SettingsNav.jsx:131`), the workgroups
-  list (`WorkgroupsView.jsx:224`) and Settings' "No selection" / "Admin access required" (`Settings.jsx:103,106`)
+  list (`noMatchLine` in `common/workgroupList.mjs`) and Settings' "No selection" / "Admin access required" (`Settings.jsx:103,106`)
   each write and size their own, and the last two offer no action. `LoadFailed.jsx:19` prints `String(error)`,
   the daemon's raw text, where the phone passes `plainError` and draws the failure as an `EmptyState`. "Nothing
   needs you / running / upcoming" lives as literals in `ActivityPanel.jsx:18-21` and `activityFeed.js:8-11`.

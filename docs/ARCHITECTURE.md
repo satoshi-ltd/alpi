@@ -2296,12 +2296,18 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   Context and Cost today (a workgroup's holds hub, members, status and budget); there is no meta line under the name. A
   passive 8 px dot beside the name (warning, danger at 100 %, spoken by its label) shows when the context or the daily
   budget reaches 80 %, and for a workgroup while its pipeline needs the user or failed; the phone header carries the same
-  dot beside the chip, and its popover speaks the full model id. The settings pages (profile, workgroup, connections) wear the same
-  56 px bar: the mark, the name, a 20 px sentence-case "Settings" or "Connections" in `ink3`, the chevron opening their
-  details, and the page's actions ending in Back to chat. The workgroups list wears that bar too: the honeycomb, the name
-  "Workgroups" and its counts behind the chevron. Connections and its audit log put the bar, the search and the table in
-  one centred column the width of the table (`--stream-max` + 200 px; the settings forms keep the left edge beside their
-  rail); each paired connection reads its access first (`common/connectionAccess.mjs`): "All profiles" for an admin or an
+  dot beside the chip, and its popover speaks the full model id. The settings pages (profile, workgroup) wear the same
+  56 px bar: the mark, the name, a 20 px sentence-case "Settings" in `ink3`, the chevron opening their details, and the
+  page's actions ending in Back to chat. The two list pages, Workgroups and Connections, wear the bar with no chevron and no
+  details (the audit log keeps its one-line note behind the chevron): the bar runs the whole pane on `--pane-pad-x` like
+  every page, and the search and the table sit in one centred column the width of the table (`--stream-max` + 200 px; the
+  settings forms keep the left edge beside their rail). The workgroups list counts the whole set on its filter
+  (`common/workgroupList.mjs`: All, Working with needs-you and needs-attention in it, Queued, Paused), a zero segment
+  disabled unless it is on; in All the rows fall under Needs you, Working, Queued, Idle and Paused with their counts, a
+  status keeps its whole label (an ellipsis and a title past the column) while the note gives way first, and an idle row
+  shows only its note. Connections names each column once (Last seen, Sessions, 14-day spend), its rows are 60 px, the
+  toolbar reads paired and connected (N of M while a search narrows it) and the table ends in a total row of sessions and
+  14-day spend when nothing is searched; each paired connection reads its access first (`common/connectionAccess.mjs`): "All profiles" for an admin or an
   empty scope, otherwise up to three profiles in scope as their 16 px mark and their name in its `nameTone`, then +N with
   the rest in the tooltip and every name in the accessible label, and a name the roster no longer has struck in ink 3
   with no mark; the role and the devices follow in ink 3. The phone's connection list and the Profiles row of its

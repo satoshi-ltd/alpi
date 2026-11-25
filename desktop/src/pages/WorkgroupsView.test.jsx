@@ -15,15 +15,104 @@ const WORKGROUPS = [
 ];
 
 describe("WorkgroupsView", () => {
-  it("uses the compact page header every other page wears, the counts behind its details", () => {
+  it("uses the compact page header every other page wears, with no details popover", () => {
     const { container } = render(<WorkgroupsView workgroups={WORKGROUPS} profiles={[]} onOpenWorkgroup={vi.fn()} />);
     const header = container.querySelector("header.ds-chat-header");
     const h1 = header.querySelector("h1");
     expect(h1.textContent).toBe("Workgroups");
     expect(h1.className).toBe("ds-name");
     expect(header.querySelector(".title-row [data-mark='soft-honeycomb']")).not.toBeNull();
-    expect(header.querySelector("[role='dialog']").textContent).toContain("4 workgroups");
+    expect(header.querySelector("[role='dialog']")).toBeNull();
+    expect(header.querySelector("[aria-haspopup]")).toBeNull();
     expect(container.querySelector(".meta-row")).toBeNull();
+  });
+
+  it("counts the whole set on each filter, dims an empty one and drops the N of M counter", () => {
+    render(<WorkgroupsView workgroups={WORKGROUPS} profiles={[]} />);
+    expect(screen.getByRole("button", { name: "All, 4" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Working, 1" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Queued, 1" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Paused, 1" })).toBeEnabled();
+    expect(screen.queryByText(/\d+ of \d+/)).toBeNull();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search workgroups" }), { target: { value: "paused" } });
+    expect(screen.getByRole("button", { name: "All, 4" })).toBeInTheDocument();
+  });
+
+  it("disables a filter with nothing in it, the creator's all-idle day", () => {
+    const idle = Array.from({ length: 3 }, (_, i) => ({ id: `wg-${i}`, name: `Idle ${i}`, profile: "mira", pipeline_status: "completed", mtime: i }));
+    render(<WorkgroupsView workgroups={idle} profiles={[]} />);
+    expect(screen.getByRole("button", { name: "Working, 0" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Queued, 0" })).toBeDisabled();
+    expect(screen.getByRole("group", { name: "Idle" })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Working" })).toBeNull();
+  });
+
+  it("files the rows of All under their state with a count, needs you and attention first", () => {
+    render(
+      <WorkgroupsView
+        workgroups={[
+          { id: "wg-i", name: "Idle hotel", profile: "mira", pipeline_status: "completed", mtime: 9 },
+          { id: "wg-b", name: "Blocked hotel", profile: "mira", pipeline_status: "blocked", mtime: 1 },
+          { id: "wg-f", name: "Failed hotel", profile: "mira", mtime: 2 },
+          { id: "wg-r", name: "Running hotel", profile: "mira", pipeline_status: "running", mtime: 3 },
+          { id: "wg-q", name: "Queued hotel", profile: "mira", pipeline_status: "queued", queue_position: 1, mtime: 4 },
+          { id: "wg-p", name: "Paused hotel", profile: "mira", paused: true, mtime: 5 },
+        ]}
+        taskByWorkgroup={{ "mira/wg-f": { state: "error", slug: "x" } }}
+      />,
+    );
+    const groups = screen.getAllByRole("group");
+    expect(groups.map((g) => g.getAttribute("aria-label"))).toEqual(["Needs you", "Working", "Queued", "Idle", "Paused"]);
+    expect(groups[0].textContent).toMatch(/^Needs you2/);
+    expect(groups[0].firstElementChild.className).toMatch(/groupNeeds/);
+    fireEvent.click(screen.getByRole("button", { name: "Queued, 1" }));
+    expect(screen.queryAllByRole("group").map((g) => g.getAttribute("aria-label"))).toEqual([null]);
+    expect(screen.getByText("Queued hotel")).toBeInTheDocument();
+  });
+
+  it("answers an empty search with one line naming the filter", () => {
+    render(<WorkgroupsView workgroups={WORKGROUPS} profiles={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Paused, 1" }));
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search workgroups" }), { target: { value: "deploy" } });
+    expect(screen.getByText("No paused workgroup matches deploy.")).toBeInTheDocument();
+    expect(screen.queryAllByRole("group")).toHaveLength(0);
+  });
+
+  it("keeps a queued or working label whole, titled, and lets the note give way first", () => {
+    render(
+      <WorkgroupsView
+        workgroups={[
+          { id: "wg-q", name: "Queued hotel", profile: "mira", pipeline_status: "queued", queue_position: 12, pipeline_note: "setup done · media next", mtime: 4 },
+          { id: "wg-r", name: "Running hotel", profile: "mira", pipeline_status: "running", pipeline_phase: "build", phase_map: { build: { owner: "@pixel" } }, pipeline_note: "setup done", mtime: 5 },
+        ]}
+      />,
+    );
+    const queued = screen.getByText("Queued · #12");
+    expect(queued.className).toBe(styles.statusText);
+    expect(queued.parentElement).toHaveAttribute("title", "Queued · #12");
+    expect(queued.parentElement.className).toBe(`${styles.status} ${styles.status_queued}`);
+    expect(queued.previousElementSibling.className).toBe(styles.dot);
+    expect(screen.getByText("setup done · media next").className).toBe(styles.statusNote);
+    expect(screen.getByText("Working · build · @pixel").parentElement).toHaveAttribute("title", "Working · build · @pixel");
+    const css = readFileSync(join(import.meta.dirname, "WorkgroupsView.module.css"), "utf8");
+    expect(css).toMatch(/\.status \{ flex: 0 0 auto; max-width: 100%; min-width: 0;/);
+    expect(css).toMatch(/\.statusText \{ min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; \}/);
+    expect(css).toMatch(/\.statusNote \{ flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis;/);
+    expect(css).toMatch(/@media \(max-width: 900px\) \{\s*\.tableHead, \.row \{ grid-template-columns: minmax\(180px, 1fr\) minmax\(12rem, 1\.2fr\)/);
+    expect(css).toMatch(/\.tableHead, \.row \{ display: grid; grid-template-columns: minmax\(200px, 1fr\) minmax\(15rem, 1\.4fr\)/);
+  });
+
+  it("drops the repeated Idle from idle rows and keeps their note", () => {
+    render(<WorkgroupsView workgroups={[{ id: "wg-i", name: "Idle hotel", profile: "mira", pipeline_status: "completed", pipeline_note: "last run done", mtime: 1 }]} />);
+    const row = screen.getByText("Idle hotel").closest("button");
+    expect(row.textContent).not.toMatch(/Idle(?! hotel)/);
+    expect(screen.getByText("last run done")).toBeInTheDocument();
+    expect(row.querySelector('[class*="status_"]')).toBeNull();
+  });
+
+  it("centres the table column under a header that runs the pane", () => {
+    const css = readFileSync(join(import.meta.dirname, "WorkgroupsView.module.css"), "utf8");
+    expect(css).toMatch(/\.table \{ width: 100%; max-width: calc\(var\(--stream-max\) \+ 200px\); margin-inline: auto; \}/);
   });
 
   it("lists every workgroup and opens the selected row", () => {
@@ -40,11 +129,10 @@ describe("WorkgroupsView", () => {
       />,
     );
 
-    expect(screen.getByText("4 workgroups")).toBeInTheDocument();
-    expect(screen.getByText("1 working · 1 queued · 1 idle · 1 paused")).toBeInTheDocument();
     expect(screen.getByText("Active hotel")).toBeInTheDocument();
     expect(screen.getByText("Working · content")).toBeInTheDocument();
     expect(screen.getAllByText("Idle")).toHaveLength(1);
+    expect(screen.getAllByText("Idle")[0].closest("button")).toBeNull();
     expect(screen.getByText("Queued · #2")).toBeInTheDocument();
     expect(screen.queryByText("Complete")).not.toBeInTheDocument();
     expect(screen.queryByText("wg-active")).not.toBeInTheDocument();
@@ -72,7 +160,7 @@ describe("WorkgroupsView", () => {
     expect(document.querySelectorAll('[class*="statusNote"]')).toHaveLength(2);
   });
 
-  it("groups working first, then queued, then paused and idle by last update", () => {
+  it("groups working first, then queued, idle and paused", () => {
     const now = Math.floor(Date.now() / 1000);
     render(
       <WorkgroupsView
@@ -88,8 +176,8 @@ describe("WorkgroupsView", () => {
     expect(screen.getAllByText(/^(Fresh paused|Queued hotel|Old active|Older idle)$/).map((node) => node.textContent)).toEqual([
       "Old active",
       "Queued hotel",
-      "Fresh paused",
       "Older idle",
+      "Fresh paused",
     ]);
   });
 
@@ -150,11 +238,11 @@ describe("WorkgroupsView", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Active" }));
+    fireEvent.click(screen.getByRole("button", { name: "Working, 1" }));
     expect(screen.getByText("Active hotel")).toBeInTheDocument();
     expect(screen.queryByText("Finished hotel")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    fireEvent.click(screen.getByRole("button", { name: "All, 4" }));
     fireEvent.change(screen.getByRole("searchbox", { name: "Search workgroups" }), {
       target: { value: "paused" },
     });
@@ -164,7 +252,7 @@ describe("WorkgroupsView", () => {
     fireEvent.change(screen.getByRole("searchbox", { name: "Search workgroups" }), {
       target: { value: "" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Queued" }));
+    fireEvent.click(screen.getByRole("button", { name: "Queued, 1" }));
     expect(screen.getByText("Queued hotel")).toBeInTheDocument();
     expect(screen.queryByText("Finished hotel")).not.toBeInTheDocument();
   });
@@ -223,6 +311,18 @@ describe("WorkgroupsView", () => {
     expect(active.getAttribute("style")).toBeNull();
   });
 
+  it("counts a workgroup with a live run and no pipeline status as working", () => {
+    render(
+      <WorkgroupsView
+        workgroups={[{ id: "wg-r", name: "Running hotel", profile: "mira", mtime: 1 }, { id: "wg-i", name: "Idle hotel", profile: "mira", mtime: 2 }]}
+        runByWorkgroup={{ "mira/wg-r": { phase: "media", phasesDone: 1, phasesTotal: 3 } }}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Working, 1" })).toBeEnabled();
+    expect(screen.getByRole("group", { name: "Working" }).textContent).toContain("Running hotel");
+    expect(screen.getByText("Working · media")).toBeInTheDocument();
+  });
+
   it("asks for attention with the needs-you honeycomb when the pipeline is blocked", () => {
     render(<WorkgroupsView workgroups={[{ id: "wg-b", name: "Blocked hotel", profile: "mira", pipeline_status: "blocked", mtime: 1 }]} profiles={[{ name: "mira", accent: "#3388ff" }]} />);
     expect(screen.getByText("Blocked hotel").closest("button").querySelector("[data-shape]").dataset.state).toBe("needs");
@@ -238,15 +338,15 @@ describe("WorkgroupsView", () => {
     const blocked = { id: "wg-b", name: "Blocked hotel", profile: "mira", pipeline_status: "blocked", pipeline_phase: "approval", phase_map: { approval: { owner: "yuri" } }, mtime: 2 };
     const failed = { id: "wg-f", name: "Failed hotel", profile: "mira", mtime: 1 };
     render(<WorkgroupsView workgroups={[blocked, failed]} taskByWorkgroup={{ "mira/wg-f": { state: "error", slug: "x" } }} />);
-    const needs = screen.getByText("Needs you · approval · @yuri");
+    const needs = screen.getByText("Needs you · approval · @yuri").parentElement;
     expect(needs.className).toMatch(/status_needs/);
     expect(needs.className).not.toMatch(/status_error/);
-    expect(screen.getByText("Needs attention").className).toMatch(/status_error/);
-    expect(screen.getByText(/1 need you · 1 need attention/)).toBeInTheDocument();
+    expect(screen.getByText("Needs attention").parentElement.className).toMatch(/status_error/);
+    expect(screen.getByRole("button", { name: "Working, 2" })).toBeInTheDocument();
     const css = readFileSync(join(import.meta.dirname, "WorkgroupsView.module.css"), "utf8");
     expect(css).toContain(".status_needs { color: var(--c-warning-text); }");
-    expect(css).toContain(".status_needs > span { background: var(--c-warning); }");
-    expect(css).toContain(".status_error > span { background: var(--c-danger); }");
+    expect(css).toContain(".status_needs > .dot { background: var(--c-warning); }");
+    expect(css).toContain(".status_error > .dot { background: var(--c-danger); }");
   });
 
   it("takes the step and its owner from the same phase", () => {
@@ -270,11 +370,11 @@ describe("WorkgroupsView", () => {
     expect(row.children[4].className).toBe(styles.updated);
   });
 
-  it("sizes the toolbar count through its own class, and no rule waits for a mono or tnum element", () => {
+  it("sets each filter count in its own quiet class, and no rule waits for a mono or tnum element", () => {
     render(<WorkgroupsView workgroups={[WORKGROUPS[0]]} profiles={[]} />);
     const css = readFileSync(join(import.meta.dirname, "WorkgroupsView.module.css"), "utf8");
-    expect(css).toContain(".count { flex-shrink: 0; font-size: var(--text-meta); }");
-    expect(screen.getByText("1 of 1").className).toBe(styles.count);
+    expect(css).toContain(".segCount { margin-left: var(--sp-4); color: var(--ink-3);");
+    expect(screen.getByRole("button", { name: "All, 1" }).querySelector("span").className).toBe(styles.segCount);
     expect(css).not.toMatch(/:global\(\.(mono|tnum)\)/);
   });
 
