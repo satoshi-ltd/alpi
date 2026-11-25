@@ -2318,7 +2318,16 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   names @ mentions), the 16 px input, the model picker (it opens the effort choice, which applies on pick; the label is
   truncated before its effort) and a round send whose tooltip names ⌘↵; there is no hint row, and a composer error or
   paused reason shows on its status line. **Shell (phone)**: the roster leads with the default profile and pinned profiles
-  as 48 px tiles with names under them (three equal columns, as on desktop), then 64 px rows with 40 px marks, a 15 px name and a 14 px preview; the chat header of a ready profile
+  as 48 px tiles with names under them (three equal columns, as on desktop), then 64 px rows with 40 px marks, a 15 px name and a 14 px preview; a
+  workgroup's preview is its status line from `common/workgroupList.mjs` ("Working · build · @pixel", "Queued · #2", "Needs you"
+  in the warning ink, "Needs attention" in the danger ink), an idle one's its pipeline note, else its last post or briefing; a
+  workgroup the pipeline calls idle but the activity feed sees working counts as Working, named by the feed's phase and its
+  owner (`withActivity` in `lib/roster.js`). With more than five workgroups and no search, the Workgroups section of the roster (phone and
+  fold sidebar) lists every workgroup that needs the user, works or is queued (by queue position), fills up to five rows with the
+  most recent of the rest and ends in an All workgroups row with the full count; with five or fewer, or a search, it lists them all
+  in roster order. All workgroups opens `/workgroups`, a page the fold's detail pane holds like Activity: search, the four desktop filters as a
+  `Segmented` with the whole set's count on each (a zero segment disabled unless on), and in All the rows under Needs you, Working,
+  Queued, Idle and Paused with their counts, two-line rows even on the fold; the chat header of a ready profile
   is one 56 pt row: Back at the left, the profile chip centred between two 88 pt side columns (the mark at 28, the name at 20
   and a chevron, 44 pt high, pill radius), Sessions and More at the right (a read-aloud wave sits beside the chip), and no model line; a tap on the chip opens a popover
   with Model (mono, the full id beneath), Context and Cost today meters (a row is left out when the daemon sent no value, and with none the chip has no popover), closed by a tap outside or Back, and the profile

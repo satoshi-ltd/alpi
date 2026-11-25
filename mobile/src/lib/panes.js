@@ -57,10 +57,11 @@ export function stacksRow(width) {
 export const SETTINGS_PATH = '/settings';
 export const OUTPUTS_PATH = '/outputs';
 export const ACTIVITY_PATH = '/activity';
+export const WORKGROUPS_PATH = '/workgroups';
 
 const FULL_BLEED = ['/onboarding', '/pair', '/paired', '/biometric'];
 // Shell destinations own the detail pane, so they are roots not drills
-const PANE_ROOT_PATHS = ['/', SETTINGS_PATH, OUTPUTS_PATH, ACTIVITY_PATH];
+const PANE_ROOT_PATHS = ['/', SETTINGS_PATH, OUTPUTS_PATH, ACTIVITY_PATH, WORKGROUPS_PATH];
 const PANE_ROOT_KINDS = ['chat', 'wg'];
 const SELECTION_KINDS = ['chat', 'wg', 'profile'];
 const PROFILE_SECTIONS = ['brain/memory', 'brain/skills', 'brain/tools', 'email', 'mcp', 'peers', 'providers', 'schedule'];

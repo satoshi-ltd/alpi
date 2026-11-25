@@ -14,6 +14,13 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.10.12 — 2026-11-25 — a page for every workgroup
+
+- The Workgroups section of the list shows what needs you, is working or is queued, then your most recent other workgroups up to five rows. It ends in "All workgroups" with the total count, so 59 workgroups no longer take a long scroll under your profiles. A search still lists every match.
+- All workgroups opens a page with search, the filters All, Working, Queued and Paused with their counts, and the workgroups grouped by state. On an unfolded phone or a tablet it opens beside the list.
+- A workgroup's second line now says its status ("Working · build · @pixel", "Queued · #2", "Needs you" in orange). An idle one shows its last note, or its last post.
+- Needs alpi ≥ 0.19.20.
+
 ## v0.10.11 — 2026-11-25 — unread, said once
 
 - A workgroup no longer turns bold in the list, or shows a dot on its pinned tile, when something is posted in it. With many workgroups working on their own, every row was bold; their order and the time beside each already say which moved last.

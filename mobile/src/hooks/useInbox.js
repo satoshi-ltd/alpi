@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { FALLBACK_ACCENT } from '../../../common/shapes.mjs';
 import { accentLookup } from '../../../common/workgroupMarkState.mjs';
+import { workgroupRowState } from '../../../common/workgroupList.mjs';
 import { useEndpoint } from '../lib/EndpointContext';
 import { profileEmptyState } from '../lib/profileReady';
 import { profileLabel } from '../lib/profileName';
@@ -52,6 +53,14 @@ function workgroupPreview(workgroup) {
     String(workgroup.last_body || workgroup.briefing || '').trim()
     || (workgroup.paused ? PREVIEW_WG_PAUSED : PREVIEW_WG_NO_POSTS)
   );
+}
+
+const PREVIEW_TONE = { needs: 'warning', error: 'danger' };
+
+export function workgroupLine(workgroup, state) {
+  if (state.id === 'paused') return workgroupPreview(workgroup);
+  if (state.id === 'idle') return String(workgroup.pipeline_note || '').trim() || workgroupPreview(workgroup);
+  return state.label;
 }
 
 function fmtRelative(sec) {
@@ -120,6 +129,7 @@ export function useInbox() {
       const wgTs = w.mtime ?? 0;
       // Workgroups borrow the hub profile's accent — they don't carry their own.
       const hub = profileByName.get(w.hub_id);
+      const { state } = workgroupRowState({ workgroup: w, busy: !!activity[w.id] });
       return {
         kind: 'workgroup',
         id: w.id,
@@ -129,7 +139,9 @@ export function useInbox() {
         accent: hub?.accent ?? FALLBACK_ACCENT,
         accentOf,
         paused: w.paused,
-        preview: workgroupPreview(w),
+        preview: workgroupLine(w, state),
+        previewTone: PREVIEW_TONE[state.id] ?? null,
+        stateId: state.id,
         state: activity[w.id] ? 'working' : undefined,
         ts: fmtRelative(wgTs),
         sortKey: wgTs,

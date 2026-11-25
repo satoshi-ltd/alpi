@@ -21,9 +21,9 @@ import { usePullRefresh } from '../src/hooks/usePullRefresh';
 import { useUnifiedOutputs } from '../src/hooks/useUnifiedOutputs';
 import { useEndpoint } from '../src/lib/EndpointContext';
 import { endpointHost } from '../src/lib/endpoint';
-import { ACTIVITY_PATH, openVerb, OUTPUTS_PATH, SETTINGS_PATH, subjectPath } from '../src/lib/panes';
+import { ACTIVITY_PATH, openVerb, OUTPUTS_PATH, SETTINGS_PATH, subjectPath, WORKGROUPS_PATH } from '../src/lib/panes';
 import { usePins } from '../src/lib/pins';
-import { isFirstProfile, useSettledOnce } from '../src/lib/roster';
+import { isFirstProfile, useSettledOnce, withActivity } from '../src/lib/roster';
 import { useTheme } from '../src/theme/ThemeContext';
 import { useCanAdminEarly } from '../src/hooks/useActiveRole';
 import { HomePane } from '../src/features/shell/HomePane';
@@ -72,11 +72,10 @@ function InboxScreen({ items, loading, refresh, invalidate = null, error = null 
       if (seen.has(key)) continue;
       seen.add(key);
       out.push({
-        ...it,
+        ...withActivity(it, rowStateFor(activity.states, it)),
         pinned: it.kind === 'profile'
           ? pins.isProfilePinned(it.name)
           : pins.isWorkgroupPinned(it.profile, it.id),
-        activity: rowStateFor(activity.states, it),
       });
     }
     return out;
@@ -140,6 +139,7 @@ function InboxScreen({ items, loading, refresh, invalidate = null, error = null 
     router[openVerb({ twoPane, pathname })](ACTIVITY_PATH);
   }, [router, twoPane, pathname]);
   const activityEntry = activity.supported ? openActivity : null;
+  const openWorkgroups = useCallback(() => router.push(WORKGROUPS_PATH), [router]);
 
   const renderRow = useCallback(
     ({ item, tile }) => <InboxRow item={item} tile={tile} onPress={openItem} onLongPress={handleLongPress} offline={activeFailed} />,
@@ -185,6 +185,7 @@ function InboxScreen({ items, loading, refresh, invalidate = null, error = null 
         daemonDown={activeFailed}
         error={error}
         endpointId={endpoint?.id}
+        onViewAllWorkgroups={openWorkgroups}
       />
       <ShellFooter
         unread={unreadCount}

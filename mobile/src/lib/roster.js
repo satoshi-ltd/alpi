@@ -1,6 +1,10 @@
 import { useRef } from 'react';
 
 import { splitDefaultProfile } from '../../../common/rosterOrder.mjs';
+import { groupWorkgroupRows, inFilter, rosterWorkgroups, stateRank } from '../../../common/workgroupList.mjs';
+import { workgroupMark, workgroupStatusLine } from '../../../common/workgroupMarkState.mjs';
+
+export const ROSTER_WORKGROUP_CAP = 5;
 
 const MATCH_FIELDS = ['label', 'name', 'id', 'preview'];
 const CREATABLE_SECTIONS = ['profiles', 'workgroups'];
@@ -19,19 +23,47 @@ export function matchesQuery(item, query) {
   return MATCH_FIELDS.some((field) => String(item?.[field] ?? '').toLowerCase().includes(q));
 }
 
+export const ALL_WORKGROUPS_KEY = 'all-workgroups';
+
+function capWorkgroups(rows, total, cap) {
+  if (!cap || rows.length <= cap) return rows;
+  return [...rosterWorkgroups(rows, cap), { kind: ALL_WORKGROUPS_KEY, id: ALL_WORKGROUPS_KEY, count: total }];
+}
+
 export function rosterSections(items, query, options) {
   const { front, rest: others } = splitDefaultProfile(items ?? [], profileOf);
   const hits = others.filter((item) => matchesQuery(item, query));
   const rest = hits.filter((item) => !item.pinned);
-  const kept = needle(query)
+  const searching = !!needle(query);
+  const kept = searching
     ? []
     : (options?.keepEmpty ?? []).filter((key) => CREATABLE_SECTIONS.includes(key));
+  const workgroups = rest.filter((item) => item.kind === 'workgroup');
+  const total = others.filter((item) => item.kind === 'workgroup').length;
   return [
     { key: 'front', label: SECTION_LABELS.front, data: front && matchesQuery(front, query) ? [front] : [] },
     { key: 'pinned', label: SECTION_LABELS.pinned, data: hits.filter((item) => item.pinned) },
     { key: 'profiles', label: SECTION_LABELS.profiles, data: rest.filter((item) => item.kind === 'profile') },
-    { key: 'workgroups', label: SECTION_LABELS.workgroups, data: rest.filter((item) => item.kind === 'workgroup') },
+    { key: 'workgroups', label: SECTION_LABELS.workgroups, data: searching ? workgroups : capWorkgroups(workgroups, total, options?.workgroupCap) },
   ].filter((section) => section.data.length > 0 || kept.includes(section.key));
+}
+
+export function withActivity(item, rowState) {
+  const next = { ...item, activity: rowState };
+  if (item?.kind !== 'workgroup' || item.stateId !== 'idle' || rowState?.state !== 'working') return next;
+  const mark = workgroupMark({ workgroup: item.raw ?? {}, run: rowState.phase ? { phase: rowState.phase } : null, busy: true });
+  return { ...next, stateId: 'active', preview: workgroupStatusLine(mark) ?? 'Working', previewTone: null };
+}
+
+export function workgroupSections(items, filter, query) {
+  const rows = (items ?? [])
+    .filter((item) => item.kind === 'workgroup' && inFilter(item.stateId, filter) && matchesQuery(item, query))
+    .sort((a, b) => stateRank(a.stateId) - stateRank(b.stateId)
+      || Number(a.raw?.queue_position || 0) - Number(b.raw?.queue_position || 0)
+      || b.sortKey - a.sortKey);
+  if (filter !== 'all') return rows.length ? [{ key: filter, label: null, data: rows }] : [];
+  return groupWorkgroupRows(rows.map((item) => ({ ...item, state: { id: item.stateId } })))
+    .map((group) => ({ key: group.id, label: group.label, data: group.rows }));
 }
 
 export function rosterIsEmpty(sections) {

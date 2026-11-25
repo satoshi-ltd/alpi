@@ -29,6 +29,7 @@ vi.mock('react-native', () => {
       ...plain(p),
       'data-slop': typeof hitSlop === 'number' ? String(hitSlop) : undefined,
       'data-h': typeof p.style === 'function' ? String(p.style({ pressed: false }).height) : undefined,
+      'data-fill': typeof p.style === 'function' ? String(p.style({ pressed: false }).backgroundColor) : undefined,
     }, children);
   const TextInput = ({ value, onChangeText, accessibilityLabel, placeholder }) =>
     React.createElement('input', {
@@ -485,5 +486,42 @@ describe('Roster pull to refresh', () => {
     h.list.refreshControl.props.onRefresh();
     expect(haptics.selection).not.toHaveBeenCalled();
     expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Roster workgroup cap', () => {
+  const wgs = Array.from({ length: 7 }, (_, i) => ({ kind: 'workgroup', id: `w${i}`, profile: 'mira', label: `wg-${i}`, preview: 'idle', stateId: i === 6 ? 'queued' : 'idle', sortKey: 10 - i }));
+
+  it('stops at five workgroups and ends in an All workgroups row with the count that opens the page', () => {
+    const onViewAllWorkgroups = vi.fn();
+    render(<Roster items={[pixel, ...wgs]} query="" onQueryChange={() => {}} renderRow={plainRow} onViewAllWorkgroups={onViewAllWorkgroups} />);
+    expect(rows()).toEqual(['pixel', 'w6', 'w0', 'w1', 'w2', 'w3']);
+    const more = screen.getByRole('button', { name: 'All workgroups, 7' });
+    expect(more.textContent).toBe('All workgroups7');
+    expect(more.querySelector('[data-icon="chevron-right"]')).not.toBeNull();
+    fireEvent.click(more);
+    expect(onViewAllWorkgroups).toHaveBeenCalledTimes(1);
+  });
+
+  it('lists every workgroup when no page is wired', () => {
+    render(<Roster items={[pixel, ...wgs]} query="" onQueryChange={() => {}} renderRow={plainRow} />);
+    expect(rows()).toHaveLength(8);
+    expect(screen.queryByRole('button', { name: /All workgroups/ })).toBeNull();
+  });
+});
+
+describe('Roster workgroup cap in two panes', () => {
+  it('draws All workgroups without a fill on the fold sidebar ground', async () => {
+    const { PaneContext } = await import('../../nav/PaneContext');
+    const wgs = Array.from({ length: 6 }, (_, i) => ({ kind: 'workgroup', id: `w${i}`, profile: 'mira', label: `wg-${i}`, preview: '', stateId: 'idle', sortKey: 10 - i }));
+    const view = (twoPane) => (
+      <PaneContext.Provider value={{ twoPane, side: 'list' }}>
+        <Roster items={wgs} query="" onQueryChange={() => {}} renderRow={plainRow} onViewAllWorkgroups={() => {}} />
+      </PaneContext.Provider>
+    );
+    const { rerender } = render(view(true));
+    expect(screen.getByRole('button', { name: 'All workgroups, 6' }).getAttribute('data-fill')).toBe('transparent');
+    rerender(view(false));
+    expect(screen.getByRole('button', { name: 'All workgroups, 6' }).getAttribute('data-fill')).toBe('#f1f3f5');
   });
 });

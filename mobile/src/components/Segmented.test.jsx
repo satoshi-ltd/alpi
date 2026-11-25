@@ -98,3 +98,22 @@ describe('Segmented', () => {
     expect(selection).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('Segmented disabled cells', () => {
+  it('dims a disabled cell, ignores its tap and speaks its own label, unless it is the one on', () => {
+    const onChange = vi.fn();
+    const options = [
+      { value: 'all', label: 'All 3', spoken: 'All, 3' },
+      { value: 'queued', label: 'Queued 0', spoken: 'Queued, 0', disabled: true },
+    ];
+    const { rerender } = render(<Segmented label="Filter" options={options} value="all" onChange={onChange} />);
+    const queued = screen.getByLabelText('Queued, 0');
+    expect(JSON.parse(queued.getAttribute('data-style')).opacity).toBe(0.45);
+    fireEvent.click(queued);
+    expect(onChange).not.toHaveBeenCalled();
+    rerender(<Segmented label="Filter" options={options} value="queued" onChange={onChange} />);
+    expect(JSON.parse(screen.getByLabelText('Queued, 0').getAttribute('data-style')).opacity).toBe(1);
+    fireEvent.click(screen.getByLabelText('All, 3'));
+    expect(onChange).toHaveBeenCalledWith('all');
+  });
+});

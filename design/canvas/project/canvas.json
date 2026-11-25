@@ -496,9 +496,25 @@
    "title": "Phone \u00b7 activity",
    "page": "mobile"
   },
+  "Phone-RosterWorkgroups.dc.html": {
+   "x": 932,
+   "y": 30264,
+   "w": 390,
+   "h": 844,
+   "title": "Phone \u00b7 roster, workgroups that move, then recent ones up to five, then All workgroups",
+   "page": "mobile"
+  },
+  "Phone-Workgroups.dc.html": {
+   "x": 1402,
+   "y": 30264,
+   "w": 390,
+   "h": 844,
+   "title": "Phone \u00b7 all workgroups, the four filters with counts and the rows by state",
+   "page": "mobile"
+  },
   "Fold-Sheet.dc.html": {
    "x": 0,
-   "y": 30264,
+   "y": 31348,
    "w": 852,
    "h": 884,
    "title": "Fold \u00b7 sheet as a centred dialog",
@@ -506,7 +522,7 @@
   },
   "Phone-Sheet.dc.html": {
    "x": 932,
-   "y": 30264,
+   "y": 31348,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 sheet",
@@ -514,7 +530,7 @@
   },
   "Phone-ActionSheet.dc.html": {
    "x": 1402,
-   "y": 30264,
+   "y": 31348,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 action sheet",
@@ -522,7 +538,7 @@
   },
   "Phone-TypedConfirm.dc.html": {
    "x": 1872,
-   "y": 30264,
+   "y": 31348,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 typed confirm",
@@ -530,7 +546,7 @@
   },
   "Phone-ConnectionSheet.dc.html": {
    "x": 2342,
-   "y": 30264,
+   "y": 31348,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 connection sheet",
@@ -538,7 +554,7 @@
   },
   "Fold-ActionPopover.dc.html": {
    "x": 0,
-   "y": 31388,
+   "y": 32472,
    "w": 852,
    "h": 884,
    "title": "Fold \u00b7 action sheet as a popover under its trigger",
@@ -546,7 +562,7 @@
   },
   "Phone-ToolSheet.dc.html": {
    "x": 932,
-   "y": 32512,
+   "y": 33596,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 tool step sheet",
@@ -554,7 +570,7 @@
   },
   "Phone-SelectText.dc.html": {
    "x": 1402,
-   "y": 32512,
+   "y": 33596,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 select text",
@@ -562,7 +578,7 @@
   },
   "Phone-MessageActions.dc.html": {
    "x": 1872,
-   "y": 32512,
+   "y": 33596,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 message actions",
@@ -570,7 +586,7 @@
   },
   "Phone-FallbacksSheet.dc.html": {
    "x": 2342,
-   "y": 32512,
+   "y": 33596,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 fallback models, reorder and remove",
@@ -578,7 +594,7 @@
   },
   "Fold-Schedule.dc.html": {
    "x": 0,
-   "y": 33596,
+   "y": 34680,
    "w": 1104,
    "h": 620,
    "title": "Fold \u00b7 schedule, list and job side by side",
@@ -586,7 +602,7 @@
   },
   "Fold-Notifications.dc.html": {
    "x": 1180,
-   "y": 33596,
+   "y": 34680,
    "w": 1104,
    "h": 620,
    "title": "Fold \u00b7 notifications, list and reader side by side",
@@ -594,7 +610,7 @@
   },
   "Phone-States.dc.html": {
    "x": 0,
-   "y": 34456,
+   "y": 35540,
    "w": 1280,
    "h": 1460,
    "title": "Phone \u00b7 empty, error and offline states",
@@ -732,6 +748,8 @@
   "Fold-Activity.dc.html",
   "Phone-Roster.dc.html",
   "Phone-Activity.dc.html",
+  "Phone-RosterWorkgroups.dc.html",
+  "Phone-Workgroups.dc.html",
   "Fold-Sheet.dc.html",
   "Phone-Sheet.dc.html",
   "Phone-ActionSheet.dc.html",
@@ -1004,9 +1022,17 @@
    "maxW": 2600,
    "page": "mobile"
   },
-  "m-Overlays": {
+  "m-Workgroups": {
    "x": 0,
    "y": 30041,
+   "text": "Workgroups",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "mobile"
+  },
+  "m-Overlays": {
+   "x": 0,
+   "y": 31125,
    "text": "Overlays",
    "kind": "title1",
    "maxW": 2600,
@@ -1014,7 +1040,7 @@
   },
   "m-Fold overlays": {
    "x": 0,
-   "y": 31165,
+   "y": 32249,
    "text": "Fold overlays",
    "kind": "title1",
    "maxW": 2600,
@@ -1022,7 +1048,7 @@
   },
   "m-Sheets": {
    "x": 0,
-   "y": 32289,
+   "y": 33373,
    "text": "Sheets",
    "kind": "title1",
    "maxW": 2600,
@@ -1030,7 +1056,7 @@
   },
   "m-Schedule": {
    "x": 0,
-   "y": 33373,
+   "y": 34457,
    "text": "Schedule",
    "kind": "title1",
    "maxW": 2600,
@@ -1038,7 +1064,7 @@
   },
   "m-States": {
    "x": 0,
-   "y": 34233,
+   "y": 35317,
    "text": "States",
    "kind": "title1",
    "maxW": 2600,

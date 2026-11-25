@@ -496,7 +496,7 @@ M_PINNED = ("doc",)
 FRONT = "alpi"
 PREVIEWS = {"doc": "Triglycerides moved most: 142 → 88 mg/dL", "alpi": "Summarizing yesterday’s deploys…", "abby": "Wants to send the invoice reminder",
             "clonara": "weekly labs failed · timeout", "galt": "Filed the Q3 receipts", "lingo": "Ready for today’s Basque drill?", "yuri": "Translation of the letter is in",
-            "etxea": "needs provider — tap to set up"}
+            "etxea": "needs provider — tap to set up", "alpha": "Working · media · @lingo", "launch-crew": "last run done"}
 
 
 def m_row_state(state, phases=None, profile=None):
@@ -770,6 +770,63 @@ def phone_roster():
 </div>
 """
     return page("Phone · roster", 390, 844, body)
+
+
+WG_LIST = (("release-train", "#df4b9d", "Needs you · approval · @yuri", "now", "needs", "needs", None),
+           ("upgrade-build", "#3899e2", "Working · build · @pixel", "2m", "active", "running", (2, 4)),
+           ("alpha", "#9b5ad9", "Working · media · @lingo", "4m", "active", "running", (3, 4)),
+           ("launch-crew", "#f0b447", "Queued · #2", "9m", "queued", "queued", None),
+           ("digest", "#9b5ad9", "last run done", "2h", "idle", "idle", None),
+           ("weekly-report", "#3899e2", "Report for the week is in", "1d", "idle", "idle", None),
+           ("triage", "#f36a8a", "last run done", "3d", "idle", "idle", None))
+
+
+def m_wg_list_row(name, color, line, ts, tone, state, phase):
+    import marks
+    ink = WARNING_TEXT if tone == "needs" else "#454545"
+    return (f'<div style="display: flex; align-items: center; gap: 12px; min-height: 64px; margin: 0 8px; padding: 8px; border-radius: {R_CONTROL}px; box-sizing: border-box">'
+            f'<span style="width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">{marks.workgroup(color, 40, state, phase=phase)}</span>'
+            f'<span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 15px; font-weight: 600; line-height: 21px; color: #141414; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{name}</span>'
+            f'<span style="font-size: 14px; line-height: 20px; color: {ink}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{line}</span></span>'
+            f'<span style="flex-shrink: 0; font-weight: 500; font-size: 12px; color: #6b6b6b">{ts}</span></div>')
+
+
+def m_all_workgroups(count):
+    return (f'<div role="button" aria-label="All workgroups, {count}" style="display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 4px 16px 0; padding: 0 16px; border-radius: {R_SURFACE}px; background: {M_FILL}">'
+            f'<span style="flex: 1; font-weight: 500; font-size: 15px; color: #141414">All workgroups</span><span style="font-size: 15px; color: #6b6b6b">{count}</span>{mi("chev-r", 20, "#b4b4b4")}</div>')
+
+
+def m_count_segmented(options, value):
+    cells = "".join(
+        f'<span role="radio" aria-checked="{"true" if o == value else "false"}" style="flex: 1; height: 44px; padding: 0 8px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; white-space: nowrap; '
+        f'{"background: #ffffff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);" if o == value else ""}{"opacity: 0.45;" if n == 0 and o != value else ""} font-size: 15px; font-weight: {600 if o == value else 400}; color: {"#141414" if o == value else "#454545"}">{o} {n}</span>' for o, n in options)
+    return f'<div role="radiogroup" style="display: flex; gap: 2px; padding: 4px; border-radius: 999px; background: #f2f2f2">{cells}</div>'
+
+
+def phone_roster_workgroups():
+    rows = "".join(m_wg_list_row(*w) for w in WG_LIST[:5])
+    body = f"""<div style="display: flex; flex-direction: column; height: 100%; background: #ffffff">
+{m_conn_header(ring="#ffffff", collapse=False, bg="#ffffff")}
+<div style="flex: 1; min-height: 0; overflow: hidden">{m_roster_label("Workgroups", True, 4)}{rows}{m_all_workgroups(59)}</div>
+{m_shell_footer(ring="#ffffff", border=True)}
+</div>
+"""
+    return page("Phone · roster, workgroups", 390, 844, body)
+
+
+def phone_workgroups():
+    groups = (("Needs you · 1", WG_LIST[:1], WARNING_TEXT), ("Working · 2", WG_LIST[1:3], "#6b6b6b"), ("Queued · 1", WG_LIST[3:4], "#6b6b6b"), ("Idle · 55", WG_LIST[4:], "#6b6b6b"))
+    listed = "".join(f'<div style="padding: 16px 16px 4px">{m_eyebrow(label, tone)}</div>' + "".join(m_wg_list_row(*w) for w in rows) for label, rows, tone in groups)
+    search = (f'<div style="margin: 0 16px 8px; display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 16px; border-radius: {R_CONTROL}px; {M_WELL}; box-sizing: border-box">'
+              f'{mi("search", 20, "#6b6b6b")}<span style="font-size: 15px; color: #6b6b6b">Search workgroups</span></div>')
+    body = f"""<div style="display: flex; flex-direction: column; height: 100%; background: #ffffff">
+{m_screen_header("Workgroups", "59 · 3 working", glyph="")}
+{search}
+<div style="padding: 0 16px 4px">{m_count_segmented((("All", 59), ("Working", 3), ("Queued", 1), ("Paused", 0)), "All")}</div>
+<div style="flex: 1; min-height: 0; overflow: hidden">{listed}</div>
+</div>
+"""
+    return page("Phone · workgroups", 390, 844, body)
 
 
 def phone_notifications():
@@ -1286,6 +1343,7 @@ def build(desktop_boards):
         ("App settings", [("Phone-Settings.dc.html", phone_settings(), X_PHONE, 390, 1100, "Phone · app settings")]),
         ("Notifications", [("Phone-Notifications.dc.html", phone_notifications(), X_PHONE, 390, 844, "Phone · notifications, filters and swipe"), ("Phone-NotificationPage.dc.html", phone_notification_page(), X_PHONE + 470, 390, 844, "Phone · notification page, actions at the thumb")]),
         ("Activity", [("Fold-Activity.dc.html", fold_activity(), X_FOLD, 852, FOLD_ACTIVITY_H, "Fold · activity"), ("Phone-Roster.dc.html", phone_roster(), X_PHONE, 390, 844, "Phone · roster"), ("Phone-Activity.dc.html", phone_activity(), X_PHONE + 470, 390, PHONE_ACTIVITY_H, "Phone · activity")]),
+        ("Workgroups", [("Phone-RosterWorkgroups.dc.html", phone_roster_workgroups(), X_PHONE, 390, 844, "Phone · roster, workgroups that move, then recent ones up to five, then All workgroups"), ("Phone-Workgroups.dc.html", phone_workgroups(), X_PHONE + 470, 390, 844, "Phone · all workgroups, the four filters with counts and the rows by state")]),
         ("Overlays", [("Fold-Sheet.dc.html", MOBILE_OVERLAYS["fold_sheet"](), X_FOLD, 852, 884, "Fold · sheet as a centred dialog"), ("Phone-Sheet.dc.html", MOBILE_OVERLAYS["phone_sheet"](), X_PHONE, 390, 844, "Phone · sheet"), ("Phone-ActionSheet.dc.html", MOBILE_OVERLAYS["phone_action"](), X_PHONE + 470, 390, 844, "Phone · action sheet"), ("Phone-TypedConfirm.dc.html", MOBILE_OVERLAYS["phone_confirm"](), X_PHONE + 940, 390, 844, "Phone · typed confirm"), ("Phone-ConnectionSheet.dc.html", MOBILE_OVERLAYS["phone_connection"](), X_PHONE + 1410, 390, 844, "Phone · connection sheet")]),
         ("Fold overlays", [("Fold-ActionPopover.dc.html", MOBILE_OVERLAYS["fold_popover"](), X_FOLD, 852, 884, "Fold · action sheet as a popover under its trigger")]),
         ("Sheets", [("Phone-ToolSheet.dc.html", MOBILE_OVERLAYS["phone_tool"](), X_PHONE, 390, 844, "Phone · tool step sheet"), ("Phone-SelectText.dc.html", MOBILE_OVERLAYS["phone_select"](), X_PHONE + 470, 390, 844, "Phone · select text"), ("Phone-MessageActions.dc.html", MOBILE_OVERLAYS["phone_message"](), X_PHONE + 940, 390, 844, "Phone · message actions"), ("Phone-FallbacksSheet.dc.html", MOBILE_OVERLAYS["phone_fallbacks"](), X_PHONE + 1410, 390, 844, "Phone · fallback models, reorder and remove")]),

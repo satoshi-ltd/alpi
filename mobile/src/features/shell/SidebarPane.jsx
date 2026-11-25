@@ -22,8 +22,9 @@ import { usePullRefresh } from '../../hooks/usePullRefresh';
 import { useUnifiedOutputs } from '../../hooks/useUnifiedOutputs';
 import { useEndpoint } from '../../lib/EndpointContext';
 import { endpointHost } from '../../lib/endpoint';
-import { ACTIVITY_PATH, OUTPUTS_PATH, SETTINGS_PATH, SIDEBAR_W, openVerb, sidebarSelection } from '../../lib/panes';
+import { ACTIVITY_PATH, OUTPUTS_PATH, SETTINGS_PATH, SIDEBAR_W, WORKGROUPS_PATH, openVerb, sidebarSelection } from '../../lib/panes';
 import { usePins } from '../../lib/pins';
+import { withActivity } from '../../lib/roster';
 import { NEW_PROFILE, NEW_WORKGROUP, useCreateGate } from './useCreateGate';
 import { PaneContext } from '../../nav/PaneContext';
 import { useTheme } from '../../theme/ThemeContext';
@@ -73,11 +74,10 @@ export function SidebarPane({ onCollapse }) {
       if (seen.has(key)) continue;
       seen.add(key);
       out.push({
-        ...it,
+        ...withActivity(it, rowStateFor(activity.states, it)),
         pinned: it.kind === 'profile'
           ? pins.isProfilePinned(it.name)
           : pins.isWorkgroupPinned(it.profile, it.id),
-        activity: rowStateFor(activity.states, it),
       });
     }
     return out;
@@ -144,6 +144,10 @@ export function SidebarPane({ onCollapse }) {
   const openNotifications = useCallback(() => {
     setSheet(null);
     router[openVerb({ twoPane: true, pathname })](OUTPUTS_PATH);
+  }, [router, pathname]);
+
+  const openWorkgroups = useCallback(() => {
+    router[openVerb({ twoPane: true, pathname })](WORKGROUPS_PATH);
   }, [router, pathname]);
 
   const openActivity = useCallback(() => {
@@ -213,6 +217,7 @@ export function SidebarPane({ onCollapse }) {
           daemonDown={activeFailed}
           error={inboxError}
           endpointId={endpoint?.id}
+          onViewAllWorkgroups={openWorkgroups}
         />
         <ShellFooter
           unread={unreadCount}

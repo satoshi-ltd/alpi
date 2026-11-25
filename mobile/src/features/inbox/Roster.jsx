@@ -10,7 +10,7 @@ import { Eyebrow } from '../../components/Eyebrow';
 import { Fold } from '../../components/Fold';
 import { Icon } from '../../components/Icon';
 import { firstRun, firstRunType, foldMarkStyle } from '../../lib/firstRun';
-import { isFirstProfile, rosterIsEmpty, rosterSections, TILES_KEY, tileSections, useSettledOnce } from '../../lib/roster';
+import { ALL_WORKGROUPS_KEY, isFirstProfile, ROSTER_WORKGROUP_CAP, rosterIsEmpty, rosterSections, TILES_KEY, tileSections, useSettledOnce } from '../../lib/roster';
 import { usePane } from '../../nav/PaneContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { InboxSkeleton } from './InboxSkeleton';
@@ -23,7 +23,7 @@ import { Busy } from '../../components/Busy';
 const CONTENT_PAD_BOTTOM = space.s9;
 
 function rosterKey(item) {
-  if (item.kind === TILES_KEY) return TILES_KEY;
+  if (item.kind === TILES_KEY || item.kind === ALL_WORKGROUPS_KEY) return item.kind;
   return `${item.kind}:${item.kind === 'workgroup' ? `${item.profile}/` : ''}${item.id}`;
 }
 
@@ -86,6 +86,32 @@ function SectionAdd({ label, onPress }) {
   );
 }
 
+export function AllWorkgroupsRow({ count, onPress, gutter, quiet = false }) {
+  const { colors, fonts, fontSizes } = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`All workgroups, ${count}`}
+      style={({ pressed }) => ({
+        minHeight: mobile.tap,
+        marginHorizontal: gutter,
+        marginTop: space.s2,
+        paddingHorizontal: space.s5,
+        borderRadius: radii.surface,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: space.s3,
+        backgroundColor: pressed ? colors.pressed : quiet ? 'transparent' : colors.fill,
+      })}
+    >
+      <Text numberOfLines={1} style={{ flex: 1, fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.ink }}>All workgroups</Text>
+      <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink3 }}>{count}</Text>
+      <Icon name="chevron-right" size="md" color={colors.ink4} />
+    </Pressable>
+  );
+}
+
 function RosterFirstRun({ device, member, onCreate }) {
   const theme = useTheme();
   const type = firstRunType(theme, theme.fontSizes.xxl);
@@ -139,11 +165,13 @@ export function Roster({
   daemonDown = false,
   error = null,
   endpointId,
+  onViewAllWorkgroups = null,
 }) {
   const { colors, fonts, fontSizes } = useTheme();
   const { twoPane } = usePane();
   const keepEmpty = useMemo(() => Object.keys(addActions ?? {}), [addActions]);
-  const allSections = useMemo(() => rosterSections(items, query, { keepEmpty }), [items, query, keepEmpty]);
+  const workgroupCap = onViewAllWorkgroups ? ROSTER_WORKGROUP_CAP : 0;
+  const allSections = useMemo(() => rosterSections(items, query, { keepEmpty, workgroupCap }), [items, query, keepEmpty, workgroupCap]);
   const initialLoading = useSettledOnce(loading, endpointId);
   const first = isFirstProfile({ empty: rosterIsEmpty(allSections), initialLoading, paired, query, daemonDown, error });
   const sections = useMemo(() => (first ? [] : tileSections(allSections)), [first, allSections]);
@@ -184,7 +212,9 @@ export function Roster({
 
   const renderItem = useCallback(
     (info) =>
-      info.item.kind === TILES_KEY ? (
+      info.item.kind === ALL_WORKGROUPS_KEY ? (
+        <AllWorkgroupsRow count={info.item.count} onPress={onViewAllWorkgroups} gutter={gutter} quiet={twoPane} />
+      ) : info.item.kind === TILES_KEY ? (
         <View testID="pinned-tiles" accessibilityRole="list" style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: gutter - space.s2, paddingTop: space.s1, paddingBottom: space.s2 }}>
           {info.item.items.map((item) => (
             <View key={rosterKey(item)} style={{ width: '33.3333%' }}>{renderRow({ item, tile: true })}</View>
@@ -193,7 +223,7 @@ export function Roster({
       ) : (
         renderRow(info)
       ),
-    [renderRow, gutter],
+    [renderRow, gutter, onViewAllWorkgroups, twoPane],
   );
 
   const pull = useCallback(() => onRefresh?.(), [onRefresh]);

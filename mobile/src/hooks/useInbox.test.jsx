@@ -405,3 +405,36 @@ describe('useInbox order matches the desktop sidebar', () => {
     ]);
   });
 });
+
+describe('useInbox workgroup status line', () => {
+  const item = (id) => seen.items.find((i) => i.id === id);
+
+  it('reads the status the desktop table shows while a workgroup works, waits or needs you, toned by state', () => {
+    h.workgroups = [
+      { id: 'run', name: 'run', profile: 'doc', pipeline_status: 'running', pipeline_phase: 'build', phase_map: { build: { owner: '@pixel' } }, last_body: 'posted' },
+      { id: 'q', name: 'q', profile: 'doc', pipeline_status: 'queued', queue_position: 12, last_body: 'posted' },
+      { id: 'b', name: 'b', profile: 'doc', pipeline_status: 'blocked', last_body: 'posted' },
+    ];
+    render(<Probe />);
+    expect(item('run')).toMatchObject({ preview: 'Working · build · @pixel', stateId: 'active', previewTone: null });
+    expect(item('q')).toMatchObject({ preview: 'Queued · #12', stateId: 'queued' });
+    expect(item('b')).toMatchObject({ preview: 'Needs you', stateId: 'needs', previewTone: 'warning' });
+  });
+
+  it('gives an idle workgroup its last note before its last post', () => {
+    h.workgroups = [
+      { id: 'noted', name: 'noted', profile: 'doc', pipeline_status: 'completed', pipeline_note: 'last run done', last_body: 'posted' },
+      { id: 'plain', name: 'plain', profile: 'doc', last_body: 'posted' },
+    ];
+    render(<Probe />);
+    expect(item('noted')).toMatchObject({ preview: 'last run done', stateId: 'idle' });
+    expect(item('plain')).toMatchObject({ preview: 'posted', stateId: 'idle' });
+  });
+
+  it('counts a posting workgroup as working', () => {
+    h.workgroups = [{ id: 'wg1', name: 'alpha', profile: 'doc', last_body: 'posted' }];
+    render(<Probe />);
+    emit('wg.post', { profile: 'doc', wg_id: 'wg1' });
+    expect(item('wg1')).toMatchObject({ preview: 'Working', stateId: 'active' });
+  });
+});

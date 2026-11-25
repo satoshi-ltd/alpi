@@ -35,6 +35,7 @@ import {
   CHROME_BTN,
   tapSlop,
   ACTIVITY_PATH,
+  WORKGROUPS_PATH,
   SETTINGS_COLUMN_MAX_W,
   settingsContentStyle,
 } from "./panes.js";
@@ -478,5 +479,14 @@ describe("settingsContentStyle", () => {
       const src = readFileSync(join(import.meta.dirname, "..", "..", "app", "connections", file), "utf8");
       expect(src).toContain("settingsContentStyle(twoPane, 'center')");
     }
+  });
+});
+
+describe("workgroups page", () => {
+  it("is a shell destination the detail pane holds, like activity", () => {
+    expect(WORKGROUPS_PATH).toBe("/workgroups");
+    expect(isPaneRoot(WORKGROUPS_PATH)).toBe(true);
+    expect(openVerb({ twoPane: true, pathname: WORKGROUPS_PATH })).toBe("replace");
+    expect(backFallback(WORKGROUPS_PATH)).toBe("/");
   });
 });

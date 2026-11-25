@@ -52,7 +52,7 @@ vi.mock('../../theme/ThemeContext', async () => {
     useTheme: () => ({
       colors: {
         ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999',
-        accent: '#b8954a', bg: '#fff', bgPane: '#fafafa', danger: '#c14545', hover: '#eee', selected: '#eee',
+        accent: '#b8954a', bg: '#fff', bgPane: '#fafafa', danger: '#c14545', hover: '#eee', selected: '#eee', warningText: '#b3470e', dangerText: '#b73737',
       },
       fonts: {
         sans: {
@@ -743,5 +743,26 @@ describe('InboxRow as a pinned tile', () => {
     expect(pip).toBeTruthy();
     expect(pip.parentElement).not.toBe(pressable(container));
     expect(pip.parentElement.parentElement).toBe(pressable(container));
+  });
+});
+
+describe('InboxRow workgroup status line', () => {
+  const lineOf = (container, text) => styleOf([...container.querySelectorAll('span')].find((el) => el.textContent === text));
+
+  it('tones the second line of a workgroup that needs you or failed, and leaves the rest in ink 2', () => {
+    const { container, unmount } = renderRow({ item: { ...WORKGROUP, preview: 'Needs you', previewTone: 'warning' } });
+    expect(lineOf(container, 'Needs you').color).toBe('#b3470e');
+    unmount();
+    const failed = renderRow({ item: { ...WORKGROUP, preview: 'Needs attention', previewTone: 'danger' } });
+    expect(lineOf(failed.container, 'Needs attention').color).toBe('#b73737');
+    failed.unmount();
+    const plain = renderRow({ item: { ...WORKGROUP, preview: 'Queued · #2' } });
+    expect(lineOf(plain.container, 'Queued · #2').color).toBe('#333');
+  });
+
+  it('keeps the two-line phone row inside the fold pane when asked for the full row', () => {
+    const { container } = renderRow({ item: WORKGROUP, full: true }, { twoPane: true, side: 'detail' });
+    expect(container.textContent).toContain('status?');
+    expect(styleOf(pressable(container)).minHeight).toBe(64);
   });
 });

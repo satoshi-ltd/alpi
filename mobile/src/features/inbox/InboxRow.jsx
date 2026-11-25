@@ -56,9 +56,10 @@ const STATIC = StyleSheet.create({
   pip: { width: 16, height: 16 },
 });
 
-export const InboxRow = memo(function InboxRow({ item, onPress, onLongPress, selected = false, showState = false, offline = false, tile = false }) {
+export const InboxRow = memo(function InboxRow({ item, onPress, onLongPress, selected = false, showState = false, offline = false, tile = false, full = false }) {
   const { colors, fonts, fontSizes } = useTheme();
   const { twoPane } = usePane();
+  const compact = twoPane && !full;
   const accent = item.accent ?? FALLBACK_ACCENT;
 
   const unread = !!item.unread && !item.needsProvider;
@@ -89,14 +90,14 @@ export const InboxRow = memo(function InboxRow({ item, onPress, onLongPress, sel
 
   const rowStyle = useCallback(
     ({ pressed }) => [
-      tile ? STATIC.tile : twoPane ? STATIC.compactRow : STATIC.row,
+      tile ? STATIC.tile : compact ? STATIC.compactRow : STATIC.row,
       { backgroundColor: pressed ? colors.pressed : selected ? colors.selected : 'transparent' },
     ],
-    [tile, twoPane, colors, selected],
+    [tile, compact, colors, selected],
   );
 
   const nameVariant = useMemo(() => {
-    if (!twoPane) {
+    if (!compact) {
       return {
         fontFamily: unread || needsYou ? fonts.sans.bold : fonts.sans.semibold,
         fontSize: fontSizes.md,
@@ -114,16 +115,16 @@ export const InboxRow = memo(function InboxRow({ item, onPress, onLongPress, sel
       lineHeight: Math.round(fontSizes.md * typeLeading.ui),
       color: muted ? colors.ink3 : unread || selected || needsYou ? colors.ink : colors.ink2,
     };
-  }, [twoPane, unread, needsYou, selected, muted, fonts, fontSizes, colors]);
+  }, [compact, unread, needsYou, selected, muted, fonts, fontSizes, colors]);
   const previewVariant = useMemo(
     () => ({
       fontFamily: fonts.sans.regular,
       fontSize: fontSizes.sm,
       lineHeight: Math.round(fontSizes.sm * typeLeading.small),
       fontStyle: needsProvider ? 'italic' : 'normal',
-      color: needsProvider ? colors.ink3 : colors.ink2,
+      color: needsProvider ? colors.ink3 : item.previewTone === 'warning' ? colors.warningText : item.previewTone === 'danger' ? colors.dangerText : colors.ink2,
     }),
-    [needsProvider, fonts, fontSizes, colors],
+    [needsProvider, item.previewTone, fonts, fontSizes, colors],
   );
   const tsVariant = useMemo(
     () => ({
@@ -186,7 +187,7 @@ export const InboxRow = memo(function InboxRow({ item, onPress, onLongPress, sel
       accessibilityState={{ selected }}
       style={rowStyle}
     >
-      <View style={twoPane ? STATIC.compactGlyph : STATIC.glyph}>
+      <View style={compact ? STATIC.compactGlyph : STATIC.glyph}>
         <Glyph
           kind={item.kind}
           color={accent}
@@ -204,14 +205,14 @@ export const InboxRow = memo(function InboxRow({ item, onPress, onLongPress, sel
           phaseSlug={rowState?.phase ?? null}
           workgroup={item.raw ?? null}
           accentOf={item.accentOf ?? null}
-          size={twoPane ? MARK_SIZES.row : MARK_SIZES.list}
+          size={compact ? MARK_SIZES.row : MARK_SIZES.list}
         />
       </View>
       <View style={STATIC.body}>
         <Text numberOfLines={1} style={nameVariant}>
           {label}
         </Text>
-        {twoPane ? null : (
+        {compact ? null : (
           <Text numberOfLines={1} style={previewVariant}>
             {item.preview}
           </Text>

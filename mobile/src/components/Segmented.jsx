@@ -2,7 +2,7 @@ import { Pressable, Text, View } from 'react-native';
 
 import { selection } from '../lib/haptics';
 import { useTheme } from '../theme/ThemeContext';
-import { mobile, radii, space } from '../theme/tokens';
+import { alpha, mobile, radii, space } from '../theme/tokens';
 import { focusRingStyle, useFocusRing } from './focusRing';
 
 export const SEGMENT_INSET = space.s1;
@@ -26,18 +26,21 @@ export function Segmented({ options, value, onChange, label }) {
 function Segment({ option, on, onChange }) {
   const { colors, fonts, fontSizes, mode } = useTheme();
   const [focused, focusHandlers] = useFocusRing();
+  const off = !!option.disabled && !on;
   return (
     <Pressable
       onPress={() => {
-        if (on) return;
+        if (on || off) return;
         selection();
         onChange?.(option.value);
       }}
+      disabled={off}
       accessibilityRole="radio"
-      accessibilityState={{ selected: on }}
-      accessibilityLabel={option.label}
+      accessibilityState={{ selected: on, disabled: off }}
+      accessibilityLabel={option.spoken ?? option.label}
       {...focusHandlers}
       style={{
+        opacity: off ? alpha.disabled : 1,
         flex: 1,
         minHeight: mobile.tap,
         paddingHorizontal: space.s4,
