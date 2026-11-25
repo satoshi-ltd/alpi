@@ -1184,6 +1184,23 @@ Each entry is written to be worked without that report:
   reaches a peer with a valid signature, and a `--once` turn whose tool output holds one prints its events; tests
   drive the ALP client and server, the CLI line and a provider-bound message.
 
+### Found while shipping alpi 0.19.40
+
+- **LOG.PROFILE-MIX** — Each profile's `llm.log`, `agent.log` and `approval.log` hold only that profile's lines
+  `bug · alpi · agent · normal`
+  note: `get_subsystem_logger(home, subsystem)` in [_log.py](../alpi/_log.py) configures the process-wide logger
+  `alpi.<subsystem>` once (`_alpi_configured`), with a file handler in the home of the first caller, and hands that
+  same logger to every later caller whatever its home. In a daemon that runs several profiles, the first profile to
+  log receives every profile's `llm`, `agent` and `approval` lines. Seen on a deployed daemon with nine profiles on
+  2026-11-25: the `llm.log` of one profile held the 13 model calls of two admin chats with two other profiles, and
+  its `agent.log` their `user=` prompt snippets, while those two profiles' own logs had no line for them and their
+  run journals were in their own `runs/`. A line names no profile, so the file cannot be split afterwards, the
+  per-profile cleanup acts on mixed data, and whoever reads one profile's log reads the others' prompts. Not
+  checked: `compaction.jsonl` and the scheduler's `log_path` users.
+  accept: a process that runs turns for two homes writes each home's `llm`, `agent` and `approval` lines to that
+  home's own `logs/`, and neither file holds a line of the other; a test drives both homes in one process; a
+  `chat --once` child still logs to its own home.
+
 ### Found while shipping desktop 0.10.17
 
 - **DESK.WG-STATUS-CLIP** — A Workgroups row shows its whole status before it shows the note

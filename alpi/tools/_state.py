@@ -6,6 +6,7 @@ import os
 import threading
 import uuid
 from contextvars import ContextVar
+from pathlib import Path
 from typing import Callable, Optional
 
 EmitFn = Callable[[str, bool], None]
@@ -339,6 +340,19 @@ def set_turn_attachments(items: Optional[list]) -> None:
 
 def get_turn_attachments() -> list:
     return list(_turn_attachments.get() or [])
+
+
+def turn_attachment_paths() -> set[Path]:
+    paths: set[Path] = set()
+    for item in get_turn_attachments():
+        path = item.get("path") if isinstance(item, dict) else None
+        if not isinstance(path, str) or not path:
+            continue
+        try:
+            paths.add(Path(path).expanduser().resolve())
+        except (OSError, RuntimeError, ValueError):
+            continue
+    return paths
 
 
 def emit_state(label: str, *, error: bool = False) -> None:

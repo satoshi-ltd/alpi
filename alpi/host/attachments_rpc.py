@@ -151,6 +151,16 @@ def owns_upload(owner: dict[str, str] | None) -> bool:
     return bool(owner) and owns_session(owner["connection_id"], owner["device_id"])
 
 
+def caller_owns_upload(home: Path, real: Path) -> bool:
+    # A staged name never starts with a dot (_safe_name), and the marker must stay closed on a case-insensitive volume.
+    if real.name.startswith("."):
+        return False
+    try:
+        return owns_upload(_staged_owner(home, real))
+    except host_server.HandlerError:
+        return False
+
+
 def _caller_bound(ctx: Any) -> bool:
     return ctx.source == "remote" and ctx.role != "admin"
 

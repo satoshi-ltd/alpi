@@ -129,7 +129,13 @@ not reach.
   profile's `host/`, `secrets/`, `gateway/`, `cache/`, `logs/`, `outputs/`,
   `out/`, `sessions/`, `memories/`, `schedule/`, `skills/`, `runs/`, `run/`,
   `mentions/`, `browser/` and `recipes/`, and its `config.yaml`, for reads and writes, and `search` leaves them out of its
-  results; `alp/` transcripts stay readable (its `secrets/` never). `out/`, where every connection's produced
+  results; `alp/` transcripts stay readable (its `secrets/` never). Under `host/` a turn started from a remote
+  member device reads only a file that was attached to that same turn and that its own connection uploaded (its
+  own device under `session_scope: device`): the file itself and read-only, through any tool that takes a file
+  path (`read_file`, `read_image`, `search` on the file, `knowledge` with `source_path`, `stt`, and `attach_file`
+  or an email attachment, which send the member's own file back out). The folder it sits in, its `.owner` marker,
+  another connection's upload and the same file once the turn has ended stay refused, and a turn fenced because a
+  workgroup post woke it gets no such opening. `out/`, where every connection's produced
   files land, is open only to the files the turn itself created there (`write_file`) or its skill produced; the next
   turn cannot reread, edit or overwrite them, and a file that already exists in `out/` is never overwritten by a
   fenced turn (two turns that pick the same new name in the same instant can still collide). The rule covers the
@@ -617,7 +623,8 @@ resolves, symlinks followed, to a file in that profile's staging area
 whole message otherwise. A remote member also needs the upload to be its own:
 its connection staged it (its device too under `session_scope: device`), and a
 missing, unreadable or malformed `.owner` marker refuses it, so knowing another
-connection's path is not enough to attach its bytes. A remote admin is checked
+connection's path is not enough to attach its bytes. The marker itself, like any file whose name starts with a dot,
+is never an attachment a member may send. A remote admin is checked
 only against the staging area. The local socket and `host.chat.delegate` still pass
 local paths, which is how the desktop on the same machine attaches a file.
 

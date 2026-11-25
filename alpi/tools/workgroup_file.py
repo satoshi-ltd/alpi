@@ -19,12 +19,7 @@ def _source_path(value: str) -> Path:
         return resolve_path(value)
     except ValueError:
         requested = Path(value).expanduser().resolve()
-        staged = {
-            Path(item["path"]).expanduser().resolve()
-            for item in _state.get_turn_attachments()
-            if isinstance(item, dict) and item.get("path")
-        }
-        if requested not in staged:
+        if requested not in _state.turn_attachment_paths():
             raise
         return requested
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.19.40 — 2026-11-25 — a member's turn can open the file it was sent
+
+- A turn started from a member device can now open the file attached to it with the tools that take a file path, such as `read_file`, `read_image`, `search` on the file and `knowledge` with `source_path`. Before, the agent received the attachment and those tools refused its path with "cannot read the profile host/ area", so it could not open what the message itself did not carry in full.
+- The opening is as narrow as the upload: a file attached to that same turn and uploaded by the caller's own connection (its own device under `session_scope: device`), for reading only, and only until the turn ends. Another connection's upload, the folder around the file and the rest of `host/` stay refused. `attach_file` and an email attachment accept the same file, so a member can send its own upload back out.
+- A member device can no longer attach the ownership marker that alpi keeps beside each upload.
+- No file format is added; the tools read what they already read.
+
 ## v0.19.39 — 2026-11-24 — a script job is judged the same from any folder
 
 - A `no_agent` job is now checked the same way whatever folder the check runs from. Before, a valid job such as `python3 ${ALPI_HOME}/skills/<category>/<name>/scripts/run.py` was refused with "the script must exist as a regular file" when it was created or checked from inside a skill's `scripts/` folder, because the bare `python3` was read as a file of that folder.

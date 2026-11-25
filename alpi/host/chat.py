@@ -128,11 +128,8 @@ def _persistable_frame(frame: dict[str, Any]) -> dict[str, Any]:
 
 
 def _owns_staged_upload(home: Path, real: Path) -> bool:
-    from alpi.host.attachments_rpc import _staged_owner, owns_upload
-    try:
-        return owns_upload(_staged_owner(home, real))
-    except host_server.HandlerError:
-        return False
+    from alpi.host.attachments_rpc import caller_owns_upload
+    return caller_owns_upload(home, real)
 
 
 def _unstaged_attachment(home: Path, attachments: Any) -> str | None:

@@ -553,6 +553,8 @@ class Engine:
                 pass
             raise
         finally:
+            from alpi.tools import _state as turn_state
+            turn_state.reset_turn_attachments()
             self.active_run_id = ""
             self.turn_in_flight = False
             runs_mod.unregister_active(run_context)

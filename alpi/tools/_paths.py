@@ -167,7 +167,20 @@ def _member_denied_area(p: Path | str, resolved: Path, *, for_write: bool) -> st
             return None
     if area == "out" and _own_out_path(resolved, for_write):
         return None
+    if area == "host" and not for_write and _own_upload_path(resolved):
+        return None
     return area
+
+
+def _own_upload_path(resolved: Path) -> bool:
+    from alpi.home import get_home
+    from alpi.host.attachments_rpc import caller_owns_upload
+    from alpi.host.connection_context import current
+    from alpi.tools import _state
+    # Only a remote device's attachments were checked against their owner when the turn was sent.
+    if current().source != "remote" or resolved not in _state.turn_attachment_paths():
+        return False
+    return caller_owns_upload(get_home().resolve(), resolved)
 
 
 def _own_out_path(resolved: Path, for_write: bool) -> bool:
