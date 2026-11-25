@@ -138,6 +138,7 @@ const WORKGROUP = {
 };
 
 const PROFILE = { kind: 'profile', id: 'agora', name: 'agora', label: 'agora', preview: 'ready' };
+const UNREAD = { ...PROFILE, unread: true, ts: '3m' };
 
 function styleOf(el) {
   return JSON.parse(el.getAttribute('data-style'));
@@ -266,7 +267,7 @@ describe('InboxRow working state', () => {
   });
 
   it('marks unread with neither a pip nor a dot — typography carries it', () => {
-    const { container } = sidebarRow({ item: { ...WORKGROUP, unread: true }, showState: true });
+    const { container } = sidebarRow({ item: UNREAD, showState: true });
     expect(container.querySelector('[data-pip]')).toBeNull();
     expect(container.querySelector('[data-dot]')).toBeNull();
   });
@@ -377,7 +378,7 @@ describe('InboxRow selection and muting', () => {
 describe('InboxRow name weight ladder', () => {
   const nameFont = (props, pane) => {
     renderRow(props, pane);
-    return styleOf(screen.getByText('alpha')).fontFamily;
+    return styleOf(screen.getByText(props.item.label)).fontFamily;
   };
 
   it('steps resting → selected → unread in the sidebar', () => {
@@ -386,7 +387,7 @@ describe('InboxRow name weight ladder', () => {
     cleanup();
     expect(nameFont({ item: WORKGROUP, selected: true }, pane)).toBe('Geist_500Medium');
     cleanup();
-    expect(nameFont({ item: { ...WORKGROUP, unread: true } }, pane)).toBe('Geist_600SemiBold');
+    expect(nameFont({ item: UNREAD }, pane)).toBe('Geist_600SemiBold');
   });
 
   it('lifts the ink only off the resting step', () => {
@@ -396,30 +397,35 @@ describe('InboxRow name weight ladder', () => {
     sidebarRow({ item: WORKGROUP, selected: true });
     expect(styleOf(screen.getByText('alpha')).color).toBe('#000');
     cleanup();
-    sidebarRow({ item: { ...WORKGROUP, unread: true } });
-    expect(styleOf(screen.getByText('alpha')).color).toBe('#000');
+    sidebarRow({ item: UNREAD });
+    expect(styleOf(screen.getByText('agora')).color).toBe('#000');
   });
 
   it('leaves the phone ladder as it was', () => {
     expect(nameFont({ item: WORKGROUP })).toBe('Geist_600SemiBold');
     cleanup();
-    expect(nameFont({ item: { ...WORKGROUP, unread: true } })).toBe('Geist_700Bold');
+    expect(nameFont({ item: UNREAD })).toBe('Geist_700Bold');
   });
 });
 
 describe('InboxRow unread mark', () => {
   it('draws no dot on either surface', () => {
-    const { container } = renderRow({ item: { ...WORKGROUP, unread: true } });
+    const { container } = renderRow({ item: UNREAD });
     expect(container.querySelector('[data-dot]')).toBeNull();
     cleanup();
-    expect(sidebarRow({ item: { ...WORKGROUP, unread: true } }).container.querySelector('[data-dot]')).toBeNull();
+    expect(sidebarRow({ item: UNREAD }).container.querySelector('[data-dot]')).toBeNull();
   });
 
-  it('anchors unread at both ends — name weight on the left, timestamp on the right', () => {
-    renderRow({ item: { ...WORKGROUP, unread: true } });
-    expect(styleOf(screen.getByText('alpha')).fontFamily).toBe('Geist_700Bold');
-    expect(styleOf(screen.getByText('3m')).fontFamily).toBe('Geist_600SemiBold');
-    expect(styleOf(screen.getByText('3m')).color).toBe('#000');
+  it('says unread once, in the weight of the name: the timestamp rests as on a read row', () => {
+    renderRow({ item: UNREAD });
+    expect(styleOf(screen.getByText('agora')).fontFamily).toBe('Geist_700Bold');
+    expect(styleOf(screen.getByText('3m')).fontFamily).toBe('Geist_500Medium');
+    expect(styleOf(screen.getByText('3m')).color).toBe('#666');
+    cleanup();
+    sidebarRow({ item: UNREAD });
+    expect(styleOf(screen.getByText('agora')).fontFamily).toBe('Geist_600SemiBold');
+    expect(styleOf(screen.getByText('3m')).fontFamily).toBe('Geist_500Medium');
+    expect(styleOf(screen.getByText('3m')).color).toBe('#666');
   });
 
   it('rests the timestamp on a read row', () => {
@@ -433,13 +439,13 @@ describe('InboxRow unread mark', () => {
     expect(styleOf(screen.getByText('status?')).color).toBe('#333');
     expect(styleOf(screen.getByText('status?')).fontSize).toBe(14);
     cleanup();
-    renderRow({ item: { ...WORKGROUP, unread: true } });
-    expect(styleOf(screen.getByText('status?')).color).toBe('#333');
+    renderRow({ item: UNREAD });
+    expect(styleOf(screen.getByText('ready')).color).toBe('#333');
   });
 
   it('announces unread now that no dot carries the label', () => {
-    renderRow({ item: { ...WORKGROUP, unread: true } });
-    expect(screen.getByLabelText('alpha, unread, status?, 3m')).toBeTruthy();
+    renderRow({ item: UNREAD });
+    expect(screen.getByLabelText('agora, unread, ready, 3m')).toBeTruthy();
     cleanup();
     renderRow({ item: WORKGROUP });
     expect(screen.getByLabelText('alpha, status?, 3m')).toBeTruthy();
@@ -716,6 +722,19 @@ describe('InboxRow as a pinned tile', () => {
     expect(styleOf(tile).backgroundColor).toBe('#eee');
     expect(styleOf(tile).borderWidth).toBeUndefined();
     expect(tile.getAttribute('aria-label') ?? tile.getAttribute('accessibilityLabel')).toContain('agora');
+  });
+
+  it('puts an ink pip on a pinned profile with an unread reply, and none on a tile with nothing to say', () => {
+    const pipOf = (item) => {
+      const { container, unmount } = renderRow({ item, tile: true });
+      const pip = container.querySelector('[testid="tile-pip"]') ?? container.querySelector('[data-testid="tile-pip"]');
+      const colour = pip ? styleOf(pip).backgroundColor : null;
+      unmount();
+      return colour;
+    };
+    expect(pipOf(UNREAD)).toBe('#000');
+    expect(pipOf(PROFILE)).toBeNull();
+    expect(pipOf(WORKGROUP)).toBeNull();
   });
 
   it('puts a warning pip on a tile that needs you', () => {

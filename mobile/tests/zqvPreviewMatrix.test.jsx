@@ -13,7 +13,7 @@ vi.mock('../src/hooks/useDaemonData', () => ({
 }));
 vi.mock('../src/lib/EndpointContext', () => ({ useEndpoint: () => ({ endpoint: { id: 'c1' } }) }));
 vi.mock('../src/lib/readState', () => ({
-  useReadState: () => ({ checkProfile: () => false, checkWorkgroup: () => false }),
+  useReadState: () => ({ checkProfile: () => false }),
 }));
 
 import { useInbox } from '../src/hooks/useInbox';

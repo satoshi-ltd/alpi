@@ -422,9 +422,12 @@ describe('SidebarPane rows', () => {
   });
 
   it('leaves the phone row untouched — no pip, and unread carries no mark either', () => {
-    const { container } = render(<InboxRow item={{ ...ITEMS[2], unread: true }} />);
-    expect(container.querySelector('[data-pip]')).toBeNull();
-    expect(container.querySelector('[data-dot]')).toBeNull();
+    for (const item of [ITEMS[2], { ...ITEMS[0], unread: true }]) {
+      const { container, unmount } = render(<InboxRow item={item} />);
+      expect(container.querySelector('[data-pip]')).toBeNull();
+      expect(container.querySelector('[data-dot]')).toBeNull();
+      unmount();
+    }
   });
 });
 

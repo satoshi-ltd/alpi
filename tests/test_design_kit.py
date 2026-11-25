@@ -866,6 +866,7 @@ def test_kit_panels_and_charts_match_the_shipped_rows_and_bars():
     import notif_studies as ns
     import profile_panel_studies as pps
     import mobile_attention_studies as mas
+    import gen
 
     svg = cs.vbar_svg([("AI", [3, 4], "#000"), ("Human", [1, 2], "#666")], ["Mon", "Tue"], 200, 120, stacked=True)
     assert "<rect" not in svg and svg.count("A4,4 0 0 1") == 4
@@ -877,6 +878,10 @@ def test_kit_panels_and_charts_match_the_shipped_rows_and_bars():
     job = pps.job_row({**pps.JOBS[0], "state": "paused", "word": "paused"})
     assert "margin-left" not in job and "border-radius: 999px" not in job
     assert "padding-left: 15px" not in mas.list_row(pps.JOBS[1]) and "border-radius: 999px" not in mas.list_row(pps.JOBS[1])
+    for compact, name_weight in ((True, 600), (False, 700)):
+        roster = gen.m_roster_row("yuri", "#f36a8a", ts="6w", unread=True, compact=compact)
+        assert 'font-weight: 500; font-size: 12px; line-height: 1; color: #6b6b6b">6w<' in roster
+        assert re.search(rf'font-weight: {name_weight};[^"]*">yuri<', roster)
     desk, phone = ns.a_row(ns.VIEW, ns.ROWS[0]), ns.phone_row(ns.VIEW, ns.ROWS[0])
     for unread in (desk, phone):
         assert "width: 6px; padding-top" not in unread and "border-radius: 999px; background: #141414" not in unread

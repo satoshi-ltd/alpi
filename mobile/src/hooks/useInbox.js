@@ -70,7 +70,7 @@ export function useInbox() {
   const wgsQ = useWorkgroups();
   const { endpoint } = useEndpoint();
   // connId-partitioned so switching paired daemons doesn't bleed unreads.
-  const { checkProfile, checkWorkgroup } = useReadState(endpoint?.id);
+  const { checkProfile } = useReadState(endpoint?.id);
   const [activity, setActivity] = useState({});
 
   // Keyed by wg_id alone — the event names the emitting profile, which needn't be the deduped row's.
@@ -118,7 +118,6 @@ export function useInbox() {
     const accentOf = accentLookup(profilesQ.data?.profiles);
     const wgItems = (wgsQ.data?.workgroups ?? []).map((w) => {
       const wgTs = w.mtime ?? 0;
-      const unread = !w.paused && wgTs > 0 && checkWorkgroup(w.profile, w.id, wgTs);
       // Workgroups borrow the hub profile's accent — they don't carry their own.
       const hub = profileByName.get(w.hub_id);
       return {
@@ -131,7 +130,6 @@ export function useInbox() {
         accentOf,
         paused: w.paused,
         preview: workgroupPreview(w),
-        unread,
         state: activity[w.id] ? 'working' : undefined,
         ts: fmtRelative(wgTs),
         sortKey: wgTs,
@@ -143,7 +141,7 @@ export function useInbox() {
       if (!!a.needsProvider !== !!b.needsProvider) return a.needsProvider ? 1 : -1;
       return b.sortKey - a.sortKey;
     });
-  }, [profilesQ.data, wgsQ.data, activity, checkProfile, checkWorkgroup]);
+  }, [profilesQ.data, wgsQ.data, activity, checkProfile]);
 
   // Stable ref so useFocusEffect(useCallback(refresh, [refresh])) doesn't infinite-loop.
   const refresh = useCallback(

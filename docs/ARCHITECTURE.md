@@ -1618,7 +1618,9 @@ hand, `design/drift.py` fails when they drift). Both clients, the site and the i
   mark faded. Motion starts at `MOTION_MIN` (20 px) and never runs under reduce motion, where the still form shows.
 - **Mark states**: a profile row (desktop sidebar, phone roster) reads paused when the profile is paused, needs when it has no
   model (needs a provider) or a question or approval is pending, failed after a recent failed job, working while a turn runs or a
-  sent prompt still waits for output, done for an unread reply, otherwise idle. `busy` is never a row state: it is only the loading
+  sent prompt still waits for output, done for an unread reply, otherwise idle. Unread is a profile's state only: besides
+  the done mark its name is semibold (bold on the phone list) and the time beside it keeps its resting weight; a workgroup
+  row has no unread state, its place in the list and its time say what moved last. `busy` is never a row state: it is only the loading
   indicator (`BusyMark` on desktop, `Busy` on the phone, Twin waiting). In the sidebar and the roster only the active row (the
   selected profile or workgroup) animates; every other row draws the still pose and expression of its state (`TURN.still`,
   `STILL`) with no animation loop, and still updates live. The chat header mark is animated and follows the open session:

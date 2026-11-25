@@ -127,12 +127,12 @@ export const InboxRow = memo(function InboxRow({ item, onPress, onLongPress, sel
   );
   const tsVariant = useMemo(
     () => ({
-      fontFamily: unread ? fonts.sans.semibold : fonts.sans.medium,
+      fontFamily: fonts.sans.medium,
       fontSize: fontSizes.xs,
       lineHeight: fontSizes.xs * lineHeights.tight,
-      color: unread ? colors.ink : selected ? colors.ink2 : colors.ink3,
+      color: selected ? colors.ink2 : colors.ink3,
     }),
-    [unread, selected, fonts, fontSizes, colors],
+    [selected, fonts, fontSizes, colors],
   );
 
   if (tile) {

@@ -138,7 +138,6 @@ vi.mock('../src/lib/EndpointContext', () => ({
   }),
 }));
 vi.mock('../src/lib/readAloud', () => ({ enqueueReadAloud: vi.fn() }));
-vi.mock('../src/lib/readState', () => ({ markWorkgroupRead: vi.fn() }));
 
 import WorkgroupChat from '../app/wg/[id].jsx';
 

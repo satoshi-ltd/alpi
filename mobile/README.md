@@ -43,8 +43,9 @@ older daemons that contain a final `token` remain readable.
 - **Multi-connection.** Persist many paired daemons; switch the active
   one from the `ConnectionSheet`. Per-connection probe status
   (online / offline / disabled / auth-failed / probing).
-- **Inbox.** Profiles + workgroups sorted by recency (unread float to
-  top), pinned strip up top, long-press for pin/settings actions,
+- **Inbox.** Profiles + workgroups sorted by recency (a profile with
+  an unread reply shows its name in bold), pinned strip up top,
+  long-press for pin/settings actions,
   pull-to-refresh, FAB → ComposeSheet. A Needs you band above the
   roster lists up to three approvals, questions and failed jobs.
 - **Activity.** Needs you, Running and Next up across profiles (admin:

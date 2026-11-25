@@ -14,6 +14,12 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.10.11 — 2026-11-25 — unread, said once
+
+- A workgroup no longer turns bold in the list, or shows a dot on its pinned tile, when something is posted in it. With many workgroups working on their own, every row was bold; their order and the time beside each already say which moved last.
+- A profile with a reply you have not opened keeps its name in bold; the time beside it stays at its normal weight.
+- Needs alpi ≥ 0.19.20.
+
 ## v0.10.10 — 2026-11-19 — the admin role says what it grants
 
 - The Admin role now reads "full control: can run commands where alpi runs" when you create or open a connection, and promoting one says the same, so admin is kept for your own devices.

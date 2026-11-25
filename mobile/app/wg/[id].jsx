@@ -55,7 +55,6 @@ import { useEndpoint } from '../../src/lib/EndpointContext';
 import { describeError } from '../../src/lib/rpc';
 import { isForeignConnection } from '../../src/features/aln/deeplink';
 import { CONTENT_MAX_W, PANE_PAD_X } from '../../src/lib/panes';
-import { markWorkgroupRead } from '../../src/lib/readState';
 import { usePane } from '../../src/nav/PaneContext';
 import { resolveMembers } from '../../src/lib/workgroupMembers';
 import { useTheme } from '../../src/theme/ThemeContext';
@@ -353,12 +352,6 @@ function WorkgroupChatInner() {
   const transcript = useWorkgroupTranscript(profile, id);
   const taskState = useWorkgroupTasks(profile, id);
   const memberList = useWorkgroupMembers(profile, id);
-
-  // Mark read on entry + each turn — wg.mtime advances with every post.
-  useEffect(() => {
-    if (!profile || !id || !wg?.mtime) return;
-    markWorkgroupRead(endpoint?.id, profile, id, wg.mtime);
-  }, [endpoint?.id, profile, id, wg?.mtime]);
 
   const hub = useMemo(() => {
     if (!wg) return null;

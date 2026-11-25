@@ -156,7 +156,7 @@ vi.mock('../src/lib/EndpointContext', () => ({
   }),
 }));
 vi.mock('../src/lib/readAloud', () => ({ enqueueReadAloud: vi.fn() }));
-vi.mock('../src/lib/readState', () => ({ markProfileRead: vi.fn(), markWorkgroupRead: vi.fn() }));
+vi.mock('../src/lib/readState', () => ({ markProfileRead: vi.fn() }));
 
 import ProfileChat from '../app/chat/[id].jsx';
 import WorkgroupChat from '../app/wg/[id].jsx';

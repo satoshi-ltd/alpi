@@ -3,8 +3,6 @@ import * as SecureStore from "expo-secure-store";
 import {
   markProfileRead,
   isProfileUnread,
-  markWorkgroupRead,
-  isWorkgroupUnread,
   resetReadState,
 } from "./readState.js";
 
@@ -40,21 +38,6 @@ describe("isProfileUnread", () => {
   });
 });
 
-describe("isWorkgroupUnread", () => {
-  it("scopes per (connId, profile, id)", () => {
-    markWorkgroupRead("conn-a", "doc", "wg-1", 100);
-    expect(isWorkgroupUnread("conn-a", "doc", "wg-1", 100)).toBe(false);
-    expect(isWorkgroupUnread("conn-a", "doc", "wg-1", 150)).toBe(true);
-    expect(isWorkgroupUnread("conn-a", "doc", "wg-2", 100)).toBe(true);   // different wg
-    expect(isWorkgroupUnread("conn-b", "doc", "wg-1", 100)).toBe(true);   // different conn
-  });
-
-  it("missing parts → false", () => {
-    expect(isWorkgroupUnread("conn-a", "", "wg-1", 100)).toBe(false);
-    expect(isWorkgroupUnread("conn-a", "doc", "", 100)).toBe(false);
-  });
-});
-
 describe("resetReadState", () => {
   it("drops marks: a previously-read profile is unread again after reset", () => {
     // 250 > 200 was unread; mark catches up; after reset there's no mark again so the same ts surfaces as unread.
@@ -83,6 +66,40 @@ describe("a mark made before the keychain has answered", () => {
       expect(written).toEqual({ "local:profile:abby": 90, "local:profile:doc": 200 });
       expect(isProfileUnread("local", "abby", 80)).toBe(false);
       expect(isProfileUnread("local", "doc", 150)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("marks a workgroup once kept", () => {
+  it("are dropped from the keychain value on the next write, and the profile marks beside them stay", async () => {
+    vi.useFakeTimers();
+    try {
+      SecureStore.getItemAsync.mockResolvedValue(JSON.stringify({
+        "local:profile:abby": 90,
+        "local:workgroup:abby/site-one": 120,
+        "conn_9:workgroup:doc/roma": 300,
+      }));
+      SecureStore.setItemAsync.mockResolvedValue(undefined);
+      markProfileRead("local", "doc", 200);
+      await vi.advanceTimersByTimeAsync(300);
+      const written = JSON.parse(SecureStore.setItemAsync.mock.calls[0][1]);
+      expect(written).toEqual({ "local:profile:abby": 90, "local:profile:doc": 200 });
+      expect(isProfileUnread("local", "abby", 80)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("leave a profile whose own name holds the word untouched", async () => {
+    vi.useFakeTimers();
+    try {
+      SecureStore.getItemAsync.mockResolvedValue(JSON.stringify({ "local:profile:x:workgroup:y": 90 }));
+      SecureStore.setItemAsync.mockResolvedValue(undefined);
+      markProfileRead("local", "doc", 200);
+      await vi.advanceTimersByTimeAsync(300);
+      expect(JSON.parse(SecureStore.setItemAsync.mock.calls[0][1])).toEqual({ "local:profile:x:workgroup:y": 90, "local:profile:doc": 200 });
     } finally {
       vi.useRealTimers();
     }

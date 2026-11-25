@@ -1042,9 +1042,9 @@ Each entry is written to be worked without that report:
   invalidation 800 ms after reconnect at `app/index.jsx:93-110`), workgroups, activity and event history twice
   each, and a finished turn costs about six requests. `usePolledCall` refetches on every mount
   ([useDaemonData.js](../mobile/src/hooks/useDaemonData.js) `:178-189`). First fix the latent bug these refetches
-  hide: `useInbox` memoises its items on `checkProfile` and `checkWorkgroup`, which never change identity
-  ([readState.js](../mobile/src/lib/readState.js) `:117-124`), so unread dots clear only because the data arrives
-  again.
+  hide: `useInbox` memoises its items on `checkProfile`, which never changes identity
+  ([readState.js](../mobile/src/lib/readState.js), `useReadState`), so an unread mark clears only because the data
+  arrives again.
   accept: an unread dot clears with no refetch (a test); the probe's summaries go through `fetchAndStore`; a mount
   or invalidation is skipped when the data is under two seconds old; `session_changed` no longer invalidates
   workgroups; a test with an rpc counter, a fake `AppState` change to active and a `subscribed` frame counts one

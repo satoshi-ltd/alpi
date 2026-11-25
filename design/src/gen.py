@@ -532,7 +532,7 @@ def m_roster_row(name, color, kind="profile", ts="", state=None, phases=None, se
     unfolded = paused or offline
     meta = []
     if ts:
-        meta.append(f'<span style="font-weight: {600 if unread else 500}; font-size: 12px; line-height: 1; color: {"#141414" if unread else "#454545" if selected else "#6b6b6b"}">{ts}</span>')
+        meta.append(f'<span style="font-weight: 500; font-size: 12px; line-height: 1; color: {"#454545" if selected else "#6b6b6b"}">{ts}</span>')
     if paused:
         meta.append('<span style="font-weight: 500; font-size: 12px; line-height: 1; color: #6b6b6b">paused</span>')
     if state:

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
 
 const STORAGE_KEY = 'alpi.read-state.v1';
+const STALE_WORKGROUP_KEY = /^[^:]*:workgroup:/;
 
 let cache = {};
 let loaded = false;
@@ -19,6 +20,7 @@ async function ensureLoaded() {
     persisted = {};
   }
   if (!persisted || typeof persisted !== 'object') persisted = {};
+  persisted = Object.fromEntries(Object.entries(persisted).filter(([key]) => !STALE_WORKGROUP_KEY.test(key)));
   if (!loaded) {
     cache = { ...persisted, ...cache };
     loaded = true;
@@ -68,8 +70,6 @@ function isUnread(key, latestTs) {
 
 const safeConn = (connId) => connId || 'local';
 const profileKey = (connId, name) => (name ? `${safeConn(connId)}:profile:${name}` : '');
-const workgroupKey = (connId, profile, id) =>
-  profile && id ? `${safeConn(connId)}:workgroup:${profile}/${id}` : '';
 
 export function markProfileRead(connId, name, ts) {
   setKey(profileKey(connId, name), ts);
@@ -77,14 +77,6 @@ export function markProfileRead(connId, name, ts) {
 
 export function isProfileUnread(connId, name, sessionUpdatedAt) {
   return isUnread(profileKey(connId, name), sessionUpdatedAt);
-}
-
-export function markWorkgroupRead(connId, profile, id, ts) {
-  setKey(workgroupKey(connId, profile, id), ts);
-}
-
-export function isWorkgroupUnread(connId, profile, id, latestTs) {
-  return isUnread(workgroupKey(connId, profile, id), latestTs);
 }
 
 // Drop in-memory cache (sign-out path); SecureStore deletion is the caller's job.
@@ -118,9 +110,5 @@ export function useReadState(connId) {
     (name, ts) => isProfileUnread(connId, name, ts),
     [connId],
   );
-  const checkWorkgroup = useCallback(
-    (profile, id, ts) => isWorkgroupUnread(connId, profile, id, ts),
-    [connId],
-  );
-  return { checkProfile, checkWorkgroup };
+  return { checkProfile };
 }

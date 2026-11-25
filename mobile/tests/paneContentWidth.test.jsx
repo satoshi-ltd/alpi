@@ -97,7 +97,7 @@ vi.mock('../src/lib/EndpointContext', () => ({
   useEndpoint: () => ({ activeId: 'e1', endpoint: { id: 'e1' }, call: vi.fn(() => new Promise(() => {})) }),
 }));
 vi.mock('../src/lib/readAloud', () => ({ enqueueReadAloud: vi.fn() }));
-vi.mock('../src/lib/readState', () => ({ markProfileRead: vi.fn(), markWorkgroupRead: vi.fn() }));
+vi.mock('../src/lib/readState', () => ({ markProfileRead: vi.fn() }));
 vi.mock('../src/hooks/useActiveRole', () => ({ useCanAdminEarly: () => false }));
 vi.mock('../src/hooks/useEvents', () => ({ useEventEffect: () => {} }));
 vi.mock('../src/hooks/useChatSend', () => ({

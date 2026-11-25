@@ -42,7 +42,6 @@ vi.mock('../lib/EndpointContext', () => ({ useEndpoint: () => ({ endpoint: { id:
 vi.mock('../lib/readState', () => ({
   useReadState: () => ({
     checkProfile: (name) => h.unread.has(name),
-    checkWorkgroup: (profile, id) => h.unread.has(id),
   }),
 }));
 vi.mock('../lib/profileReady', () => ({
@@ -348,12 +347,12 @@ describe('useInbox order matches the desktop sidebar', () => {
     expect(seen.items[1].unread).toBe(true);
   });
 
-  it('leaves an unread workgroup behind a more recent read one', () => {
-    h.unread = new Set(['wg-stale']);
+  it('orders workgroups by recency and gives none an unread state', () => {
+    h.unread = new Set(['wg-stale', 'wg-recent']);
     h.workgroups = [wg('wg-stale', 7200), wg('wg-recent', 60)];
     render(<Probe />);
     expect(ids()).toEqual(['wg-recent', 'wg-stale']);
-    expect(seen.items[1].unread).toBe(true);
+    expect(seen.items.map((item) => 'unread' in item)).toEqual([false, false]);
   });
 
   it('ignores unread when ordering inside the paused group', () => {
