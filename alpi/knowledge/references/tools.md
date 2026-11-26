@@ -137,7 +137,7 @@ Output attachments (MM.2):
   `out/` and attaches it to the reply (the apps and the console show it; a
   scheduled run delivers only text; to email it, pass the file to `email` as an
   attachment). Say in one line what you attached; do not paste the document into
-  the reply as well. Supported: headings, bold/italic, inline code, lists, quotes,
+  the reply as well. Supported: headings, bold/italic, `~~strikethrough~~`, inline code, lists, quotes,
   tables (long ones continue on the next page with their header), code blocks,
   `---`, `http(s)`/`mailto` links, ```` ```chart ```` blocks (drawn as tables) and
   `<!-- pagebreak -->` on its own line to start a new page (one page per section,
@@ -145,7 +145,7 @@ Output attachments (MM.2):
   embedded yet (their alt text shows). Characters outside the Latin and
   Cyrillic alphabets print as `?` (Greek beyond a few symbols such as μ and Ω,
   Chinese, Arabic…); symbol emoji are dropped. Limits: 150,000 characters of
-  Markdown, 300 pages, 20,000 cells per table, 20 MiB.
+  Markdown, 300 pages, 20,000 cells per table or chart, 20 MiB.
 - A report someone only wants to read can stay a reply: the apps export any
   reply to a styled PDF too (see `notifications`).
 

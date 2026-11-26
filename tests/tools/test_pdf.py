@@ -376,3 +376,60 @@ def test_many_long_columns_never_get_a_cell_narrower_than_its_padding() -> None:
     layout_._lines = spy
     layout_.table([[[layout.Span(c)] for c in rows.strip("|\n").split(" | ")]], 0)
     assert min(widths_seen) > 0
+
+
+def _strokes(data: bytes) -> int:
+    page = _reader(data).pages[0]
+    return page.get_contents().get_data().count(b" l S Q")
+
+
+def test_struck_text_keeps_a_line_through_it_in_text_headings_and_tables() -> None:
+    plain = _strokes(_render("Precio: 100 € 75 €"))
+    struck = _render("Precio: ~~100 €~~ 75 €")
+    assert _strokes(struck) == plain + 1
+    assert "Precio: 100 € 75 €" in _text(struck)[0]
+    assert _strokes(_render("# Oferta ~~vieja~~ nueva")) > _strokes(_render("# Oferta vieja nueva"))
+    table = "| Precio |\n|---|\n| ~~100 €~~ 75 € |\n"
+    assert _strokes(_render(table)) == _strokes(_render(table.replace("~~", ""))) + 1
+
+
+def test_an_oversized_chart_is_refused_before_its_cells_are_built() -> None:
+    import tracemalloc
+
+    chart = json.dumps({"type": "bar", "x": [1] * 30000,
+                        "series": [{"name": f"s{i}", "values": []} for i in range(300)]}, separators=(",", ":"))
+    assert len(chart) < layout.MAX_MARKDOWN_CHARS
+    tracemalloc.start()
+    try:
+        with pytest.raises(layout.DocumentTooLarge, match="chart"):
+            layout.render(f"```chart\n{chart}\n```\n")
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    assert peak < 100 * 1024 * 1024
+
+
+def _strike_segments(data: bytes) -> int:
+    import re
+
+    content = _reader(data).pages[0].get_contents().get_data().decode("latin-1")
+    return len([m for m in re.findall(r"q [\d. ]+RG [\d.]+ w [\d. ]+m [\d. ]+l S Q", content)])
+
+
+def test_a_struck_phrase_with_mixed_styles_gets_one_unbroken_line() -> None:
+    footer_only = _strike_segments(_render("old price"))
+    assert _strike_segments(_render("~~**old** *price*~~ now")) == footer_only + 1
+    assert _strike_segments(_render("~~old price~~ now")) == footer_only + 1
+    assert _strike_segments(_render("~~![old logo](x.png)~~")) == footer_only + 1
+
+
+def test_a_long_chart_unit_and_string_series_cannot_amplify_the_work() -> None:
+    import time
+
+    started = time.monotonic()
+    chart = json.dumps({"x": ["a"] * 1000, "series": [{"name": "s", "values": [1] * 1000}], "unit": "u" * 5000})
+    rendered = layout.render(f"```chart\n{chart}\n```\n")
+    assert time.monotonic() - started < 15
+    assert "1uuuuuuuuuuuuuuuu" in _text(rendered.data)[0] and "1uuuuuuuuuuuuuuuuu" not in _text(rendered.data)[0]
+    strings = json.dumps({"x": "a" * 1000, "series": [{"name": "s", "values": "1" * 1000}]})
+    assert "aaaa" in "".join(_text(_render(f"```chart\n{strings}\n```\n")))

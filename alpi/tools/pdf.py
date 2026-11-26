@@ -33,7 +33,7 @@ def _destination(out_dir: Path, stem: str) -> Path:
 class Pdf(Tool):
     name = "pdf"
     description = (
-        "Make a PDF from Markdown and attach it to your reply. Supports headings, bold/italic, inline code, "
+        "Make a PDF from Markdown and attach it to your reply. Supports headings, bold/italic, ~~strikethrough~~, inline code, "
         "lists, quotes, tables, code blocks, links, `---` rules, ```chart blocks (drawn as tables) and "
         "`<!-- pagebreak -->` on its own line to start a new page. Pass the Markdown in `markdown`, or the "
         "`path` of a .md file you already wrote. The PDF is written as a new file in the profile's `out/` "

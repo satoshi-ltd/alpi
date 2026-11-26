@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from markdown_it import MarkdownIt
 
@@ -13,6 +13,7 @@ from alpi.pdf.writer import PAGE_HEIGHT, PAGE_WIDTH, Document, Page
 MAX_MARKDOWN_CHARS = 150_000
 MAX_PAGES = 300
 MAX_TABLE_CELLS = 20_000
+MAX_CHART_UNIT = 16
 MAX_NESTING = 60
 PAGE_BREAK = re.compile(r"^<!--\s*pagebreak\s*-->$", re.I)
 
@@ -54,6 +55,7 @@ class Span:
     italic: bool = False
     code: bool = False
     href: str = ""
+    strike: bool = False
 
 
 def _font(span: Span) -> ttf.TrueTypeFont:
@@ -101,11 +103,15 @@ class _Fragment:
 
 def _inline(children) -> list[Span]:
     spans: list[Span] = []
-    bold = italic = 0
+    bold = italic = strike = 0
     href = ""
     for tok in children or []:
         kind = tok.type
-        if kind == "strong_open":
+        if kind == "s_open":
+            strike += 1
+        elif kind == "s_close":
+            strike = max(0, strike - 1)
+        elif kind == "strong_open":
             bold += 1
         elif kind == "strong_close":
             bold = max(0, bold - 1)
@@ -118,16 +124,16 @@ def _inline(children) -> list[Span]:
         elif kind == "link_close":
             href = ""
         elif kind == "text":
-            spans.append(Span(tok.content, bool(bold), bool(italic), False, href))
+            spans.append(Span(tok.content, bool(bold), bool(italic), False, href, bool(strike)))
         elif kind == "code_inline":
-            spans.append(Span(tok.content, bool(bold), bool(italic), True, href))
+            spans.append(Span(tok.content, bool(bold), bool(italic), True, href, bool(strike)))
         elif kind == "softbreak":
-            spans.append(Span(" ", bool(bold), bool(italic), False, href))
+            spans.append(Span(" ", bool(bold), bool(italic), False, href, bool(strike)))
         elif kind == "hardbreak":
             spans.append(Span("\n", bool(bold), bool(italic), False, href))
         elif kind == "image":
             alt = tok.content or "image"
-            spans.append(Span(f"[{alt}]", bool(bold), True, False, href))
+            spans.append(Span(f"[{alt}]", bool(bold), True, False, href, bool(strike)))
         elif kind == "html_inline":
             continue
     return spans
@@ -227,12 +233,27 @@ class Layout:
                 runs[-1] = _Fragment(last.text + frag.text, last.span, last.size, last.color, last.width + frag.width)
             else:
                 runs.append(frag)
+        strike: list | None = None
         for run in runs:
             self.doc.text(self.page, _font(run.span), run.size, x, baseline, run.text, run.color)
+            key = (run.size, run.color)
+            if not run.span.strike or (strike and strike[3] != key and run.text.strip()):
+                self._strike(strike, baseline)
+                strike = None
+            if run.span.strike and run.text.strip():
+                strike = strike or [x, x, run.size, key]
+                strike[1] = x + run.width
             href = _safe_href(run.span.href)
             if href:
                 self.doc.link(self.page, x, baseline - run.size * 0.25, run.width, run.size * 1.15, href)
             x += run.width
+        self._strike(strike, baseline)
+
+    def _strike(self, segment: list | None, baseline: float) -> None:
+        if segment:
+            start, end, size, (_, color) = segment
+            rise = baseline + size * 0.3
+            self.doc.line(self.page, start, rise, end, rise, color, max(0.5, size * 0.06))
 
     def paragraph(self, spans: list[Span], *, size: float = BODY, indent: float = 0.0,
                   color=INK, prefix: str = "", bar: float | None = None,
@@ -259,7 +280,7 @@ class Layout:
 
     def heading(self, level: int, spans: list[Span]) -> None:
         size = HEADINGS.get(level, BODY)
-        bold = [Span(s.text, True, s.italic, s.code, s.href) for s in spans]
+        bold = [replace(s, bold=True) for s in spans]
         before = {1: 16.0, 2: 14.0, 3: 10.0}.get(level, 8.0)
         self.paragraph(bold, size=size, before=before, after=6.0 if level <= 2 else 4.0,
                        keep=BODY * LEADING * 2)
@@ -302,7 +323,7 @@ class Layout:
         if columns * len(rows) > MAX_TABLE_CELLS:
             raise DocumentTooLarge(f"a table has over {MAX_TABLE_CELLS:,} cells")
         rows = [
-            [[Span(s.text, s.bold or i < header_rows, s.italic, s.code, s.href) for s in cell] for cell in r]
+            [[replace(s, bold=s.bold or i < header_rows) for s in cell] for cell in r]
             + [[]] * (columns - len(r))
             for i, r in enumerate(rows)
         ]
@@ -400,11 +421,17 @@ def _chart_rows(info: str, content: str) -> tuple[str, list[list[list[Span]]]] |
         return None
     try:
         spec = json.loads(content)
+        if not isinstance(spec["x"], list) or not isinstance(spec["series"], list):
+            return None
         labels = [str(x) for x in spec["x"]]
-        series = [(str(s.get("name") or ""), list(s.get("values") or [])) for s in spec["series"]]
+        series = [(str(s.get("name") or ""), s.get("values") or []) for s in spec["series"]]
+        if not all(isinstance(values, list) for _, values in series):
+            return None
     except (ValueError, KeyError, TypeError, AttributeError):
         return None
-    unit = str(spec.get("unit") or "")
+    if (len(labels) + 1) * (len(series) + 1) > MAX_TABLE_CELLS:
+        raise DocumentTooLarge(f"a chart has over {MAX_TABLE_CELLS:,} cells")
+    unit = str(spec.get("unit") or "")[:MAX_CHART_UNIT]
     header = [[Span("")]] + [[Span(name)] for name, _ in series]
     rows = [header]
     for i, label in enumerate(labels):

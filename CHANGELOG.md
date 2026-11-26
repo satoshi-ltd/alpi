@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.19.46 — 2026-11-27 — struck-through text stays struck in a PDF
+
+- `~~text~~` in a document made with `pdf` is now drawn with a line through it, in paragraphs, headings and tables. Before it printed like the text around it, so a quote such as `Price: ~~100 €~~ 75 €` lost which price was the old one.
+- A ```chart block too large for a PDF table (over 20,000 cells) is refused before alpi builds it, a chart's `unit` is cut to 16 characters, and a chart whose `x` or `values` are not lists prints as code. Before, a small chart could make alpi lay out millions of characters, taking minutes and a lot of memory on a small server before the refusal came.
+
 ## v0.19.45 — 2026-11-26 — the agent makes PDFs
 
 - New `pdf` tool: the agent writes a document in Markdown and alpi turns it into a PDF in the profile's `out/` folder, attached to the reply. The apps and the console show it on the reply, it can be sent with `email` like any other file, and asking for a PDF no longer depends on exporting from the app; a scheduled job still delivers only its text. It never overwrites an earlier file.
