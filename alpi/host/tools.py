@@ -19,7 +19,7 @@ from alpi.tools import _policy as _tool_policy
 # name-based map is plenty without burdening every Tool class with
 # metadata that only the UI consumes.
 _CATEGORIES: list[tuple[str, tuple[str, ...]]] = [
-    ("Filesystem", ("read_file", "write_file", "edit_file", "delete_file", "read_image", "search", "attach_file")),
+    ("Filesystem", ("read_file", "write_file", "edit_file", "delete_file", "read_image", "search", "attach_file", "pdf")),
     ("Knowledge", ("knowledge",)),
     ("Web", ("web_search", "web_fetch", "web_extract", "browser")),
     ("Memory", ("memory", "session_search", "session_read", "recall_sessions", "index_sessions")),
@@ -57,7 +57,7 @@ async def _tools_list(
     deny: frozenset[str] = frozenset()
     try:
         cfg = cfg_mod.load(home_mod.home_for(profile))
-        deny = frozenset(cfg.tools.deny or ())
+        deny = _tool_policy.profile_denies(cfg)
     except Exception:  # noqa: BLE001 — config absent / malformed → no deny filter, list everything
         deny = frozenset()
 

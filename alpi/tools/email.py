@@ -8,7 +8,7 @@ from alpi.home import get_home
 from alpi.mail import accounts as accounts_mod
 from alpi.mail.gmail import GmailError
 from alpi.mail.imap import ImapError, EmailMessageFull
-from alpi.tools._paths import resolve_path
+from alpi.tools._paths import release_unused_claim, resolve_path
 from alpi.tools.base import Tool, ToolResult
 
 
@@ -239,9 +239,13 @@ def _dispatch(client, action: str, kw: dict) -> ToolResult:
         uid = _require(kw, "uid")
         name = _require(kw, "attachment_name")
         dest = resolve_path(_require(kw, "dest_path"), for_write=True)
-        client.download_attachment(
-            uid=uid, attachment_name=name, dest=dest, folder=folder,
-        )
+        try:
+            client.download_attachment(
+                uid=uid, attachment_name=name, dest=dest, folder=folder,
+            )
+        except BaseException:
+            release_unused_claim(dest)
+            raise
         return ToolResult(ok=True, output=f"saved {name} → {dest}")
 
     return ToolResult(ok=False, output="", error=f"unknown action: {action}")

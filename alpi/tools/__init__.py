@@ -27,6 +27,7 @@ from alpi.tools import (
     knowledge_base as knowledge_base_tool,
     memory as memory_tool,
     notify as notify_tool,
+    pdf as pdf_tool,
     recall as recall_tool,
     workgroup_search as workgroup_search_tool,
     read_file,
@@ -202,7 +203,7 @@ def _execute_registered(
         return ToolResult(ok=False, output="", error=f"{name} crashed: {e}")
 
 
-_PRODUCING_TOOLS = frozenset({"skill", "attach_file"})
+_PRODUCING_TOOLS = frozenset({"skill", "attach_file", "pdf"})
 
 
 def _note_produced_output(name: str, arguments: dict, result: ToolResult) -> None:
@@ -219,7 +220,7 @@ def _note_produced_output(name: str, arguments: dict, result: ToolResult) -> Non
     home = get_home()
     try:
         produced = attachments.produced_attachment(
-            arguments.get("name") or name, result.output,
+            (arguments.get("name") if name == "skill" else None) or name, result.output,
             roots=attachments.servable_roots(home, workspace, image=True),
             doc_roots=attachments.servable_roots(home, workspace, image=False),
         )
@@ -320,6 +321,7 @@ for _mod in (
     workflow_tool,
     ask_user_tool,
     attach_file_tool,
+    pdf_tool,
     decline_tool,
 ):
     _cls = getattr(_mod, "TOOL", None)

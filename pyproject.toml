@@ -2,7 +2,7 @@
 # PyPI distribution name. The CLI binary, the import path, and
 # ``~/.alpi/`` all remain ``alpi`` (see ``[project.scripts]`` below).
 name = "alpi-agent"
-version = "0.19.44"
+version = "0.19.45"
 description = "A profile-based personal AI agent for terminal, desktop & mobile apps, and private ALP networks"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
@@ -31,6 +31,7 @@ classifiers = [
 dependencies = [
     "litellm>=1.104.1,<1.105",
     "rich>=13.7.0",
+    "markdown-it-py>=3.0.0",
     "prompt_toolkit>=3.0.43",
     "pyyaml>=6.0",
     "python-dotenv>=1.0.0",
@@ -80,7 +81,7 @@ build-backend = "setuptools.build_meta"
 include = ["alpi*"]
 
 [tool.setuptools.package-data]
-alpi = ["prompts/*.md", "tui/*.tcss", "knowledge/references/*.md", "providers/*.yaml"]
+alpi = ["prompts/*.md", "tui/*.tcss", "knowledge/references/*.md", "providers/*.yaml", "pdf/fonts/*.ttf", "pdf/fonts/OFL.txt"]
 
 [tool.ruff]
 # Bounded so the gate cannot change its own verdict on a ruff upgrade: a new

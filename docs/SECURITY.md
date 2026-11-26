@@ -165,7 +165,8 @@ not reach.
   or an email attachment, which send the member's own file back out). The folder it sits in, its `.owner` marker,
   another connection's upload and the same file once the turn has ended stay refused, and a turn fenced because a
   workgroup post woke it gets no such opening. `out/`, where every connection's produced
-  files land, is open only to the files the turn itself created there (`write_file`) or its skill produced; the next
+  files land, is open only to the files the turn itself created there (`write_file`, `pdf`) or its skill produced (a
+  write that is refused or fails claims no name; a `pdf` `path` read follows the same fence); the next
   turn cannot reread, edit or overwrite them, and a file that already exists in `out/` is never overwritten by a
   fenced turn (two turns that pick the same new name in the same instant can still collide). The rule covers the
   profile's own `out/` only, and a workspace configured at or under it locks itself the same way. A member

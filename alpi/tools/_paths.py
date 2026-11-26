@@ -216,7 +216,7 @@ def _workspace_root() -> Path:
 
 
 DISPATCH_FILE_MUTATION_TOOLS = frozenset({
-    "delete_file", "edit_file", "write_file",
+    "delete_file", "edit_file", "pdf", "write_file",
 })
 
 PIPELINE_SIDE_CHANNEL_TOOLS = frozenset({"peer"})
@@ -399,6 +399,17 @@ def resolve_path(path: str, *, for_write: bool = False) -> Path:
     hit = _is_sensitive(p, resolved)
     if hit is not None:
         raise ValueError(f"refusing to touch sensitive path: {path}")
+    from alpi.tools import _state
+    claimed = _state.is_turn_output(resolved)
+    try:
+        return _checked(p, resolved, path, for_write)
+    except ValueError:
+        if for_write and not claimed:
+            _state.forget_turn_output(resolved)
+        raise
+
+
+def _checked(p: Path, resolved: Path, path: str, for_write: bool) -> Path:
     if private_areas_fenced():
         area = _member_denied_area(p, resolved, for_write=for_write)
         if area is not None:
@@ -478,6 +489,12 @@ def _enforce_dispatch_write_scope(resolved: Path, original: str) -> None:
         raise ValueError(f"path is outside the active phase boundary: {original}")
 
 
+def release_unused_claim(resolved: Path) -> None:
+    from alpi.tools import _state
+    if not resolved.exists():
+        _state.forget_turn_output(resolved)
+
+
 def resolve_workspace_path(path: str, *, for_write: bool = False) -> Path:
     """Resolve a path that must remain inside the active workspace."""
     typed = Path(path).expanduser()
@@ -490,6 +507,8 @@ def resolve_workspace_path(path: str, *, for_write: bool = False) -> Path:
     try:
         resolved.relative_to(root)
     except ValueError as exc:
+        if for_write:
+            release_unused_claim(resolved)
         raise ValueError(f"path must stay inside the active workspace: {path}") from exc
     return resolved
 

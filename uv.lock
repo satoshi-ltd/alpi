@@ -8,7 +8,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-11-19T01:23:36.398462Z"
+exclude-newer = "2026-11-19T13:50:30.520094Z"
 exclude-newer-span = "P7D"
 
 [[package]]
@@ -113,7 +113,7 @@ wheels = [
 
 [[package]]
 name = "alpi-agent"
-version = "0.19.44"
+version = "0.19.45"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
@@ -128,6 +128,7 @@ dependencies = [
     { name = "httpcore" },
     { name = "httpx" },
     { name = "litellm" },
+    { name = "markdown-it-py" },
     { name = "pillow" },
     { name = "playwright" },
     { name = "playwright-stealth" },
@@ -169,6 +170,7 @@ requires-dist = [
     { name = "httpcore", specifier = ">=1.0,<2" },
     { name = "httpx", specifier = ">=0.27.0,<0.29" },
     { name = "litellm", specifier = ">=1.104.1,<1.105" },
+    { name = "markdown-it-py", specifier = ">=3.0.0" },
     { name = "pillow", specifier = ">=10.0" },
     { name = "pip-audit", marker = "extra == 'dev'", specifier = ">=2.7" },
     { name = "playwright", specifier = ">=1.64,<1.65" },

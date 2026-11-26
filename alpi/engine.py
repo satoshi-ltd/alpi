@@ -86,7 +86,7 @@ _GENERIC_ERROR_TOOLS = frozenset({"terminal"})
 # Past this many the hint did not help, so the escalation below is allowed to fire.
 _SAME_ERROR_ESCALATE_AFTER = 5
 _BUDGET_ESCALATION_GUARD = 0.8
-_DELIVERY_TOOLS = frozenset({"notify", "workgroup_post", "attach_file"})
+_DELIVERY_TOOLS = frozenset({"notify", "workgroup_post", "attach_file", "pdf"})
 _WORKGROUP_FINALIZE_SECONDS = 45.0
 
 
@@ -1438,11 +1438,11 @@ class Engine:
                             dispatch_delivered
                             or not _wg_tasks.is_working_only(str(args.get("text") or ""))
                         )
-                    if result.ok and name in ("skill", "attach_file"):
+                    if result.ok and name in ("skill", "attach_file", "pdf"):
                         from alpi import attachments as _att
                         _ws = self.cfg.workspace_path
                         produced = _att.produced_attachment(
-                            args.get("name") or name, result.output,
+                            (args.get("name") if name == "skill" else None) or name, result.output,
                             roots=_att.servable_roots(self.home, _ws, image=True),
                             doc_roots=_att.servable_roots(self.home, _ws, image=False),
                         )

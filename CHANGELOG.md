@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.19.45 — 2026-11-26 — the agent makes PDFs
+
+- New `pdf` tool: the agent writes a document in Markdown and alpi turns it into a PDF in the profile's `out/` folder, attached to the reply. The apps and the console show it on the reply, it can be sent with `email` like any other file, and asking for a PDF no longer depends on exporting from the app; a scheduled job still delivers only its text. It never overwrites an earlier file.
+- The PDF uses the apps' typeface, Geist, embedded in the file so the text can be selected and searched. It lays out headings, bold and italic, lists, quotes, tables (a long table continues on the next page with its header), code, links you can click, charts as tables, and `<!-- pagebreak -->` to start a new page; every page carries the title and page n / m.
+- Spanish, Basque, Portuguese, Catalan, French, English and the rest of the Latin and Cyrillic alphabets print as written, with €, arrows and quotes. Most Greek, and Chinese or Arabic, characters print as `?`, emoji are dropped, and images show their description instead of the picture.
+- Made entirely by alpi, with no browser and nothing new to install. A profile that denies `write_file` also has no `pdf`, and `tools.write_paths` applies to it like any other write.
+- The agent is now told to use `pdf` when someone asks for a PDF; a report someone only wants to read can still stay a reply and be exported from the app.
+
 ## v0.19.44 — 2026-11-26 — each profile keeps its own browser session and its own logs
 
 - Each profile now has its own `browser` session. On a daemon that runs several profiles they used to share one page and one set of cookies, so a profile could continue on a site another had signed in to. Tabs, cookies, downloads and traces are now separate, and `close` or `logout` affect only the profile that asks. Cookies are now saved while the browser is in use, not only on `close`, into that profile's own `browser/state.json`, so a login that sets a cookie survives a crash; the file is private and the file tools refuse it. If the browser process dies, each profile's next use starts it again and says so. What a site keeps outside cookies is saved on `close` and when the daemon stops normally. After updating, every profile signs in once more: a session saved by an earlier version may hold sign-ins of any profile, so it is not loaded and is kept aside as `browser/state.json.shared` until `logout` deletes it. `logout` now fails, naming the file, when it could not delete a saved session.

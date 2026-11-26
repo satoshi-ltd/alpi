@@ -248,7 +248,8 @@ only searches its knowledge lists `knowledge:ingest`, `knowledge:maintain`,
 `action`, `query` and `k`: a tool that declares which parameters each action
 reads drops the ones no remaining action needs. An `action` spelled outside
 the trimmed enum (another case, extra spaces) is refused as well. Denying
-`write_file` or `terminal` also denies the `skill` actions that write skill
+`write_file` also denies `pdf`, and denying
+`write_file` or `terminal` denies the `skill` actions that write skill
 files (`create`, `edit`, `patch`, `add_file`, `remove_file`, `delete`,
 `reset_state`, `set_meta`), because a skill's scripts would write and run code
 past that deny: such a profile runs the skills you install and cannot author
@@ -260,7 +261,7 @@ allowed, under `tools.allow` in its `peers.yaml` record; see
 [ALP.md → Per-peer tool policy](ALP.md#per-peer-tool-policy).
 
 Canonical names are the strings used at registration time —
-`write_file`, `edit_file`, `terminal`, `email`,
+`write_file`, `edit_file`, `pdf`, `terminal`, `email`,
 `schedule`, `delegate`, `peer`, `knowledge`, `alpi_knowledge`,
 `research`, `browser`, `workgroup_post`, `workgroup_file`,
 `workgroup_search`, etc. See `alpi/tools/__init__.py`

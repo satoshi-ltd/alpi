@@ -49,7 +49,7 @@ PLATFORM_HINTS: dict[str, str] = {
         "auto-delivered to the job's configured destination; put the "
         "primary content directly in your response. The scheduled run's "
         "automatic delivery carries only your reply text, not "
-        "attachments: do not write a report to a file to attach it, and "
+        "attachments (a `pdf` included): do not write a report to a file to attach it, and "
         "write files only where the job says. A notified report that presents "
         "three or more values over time, or three or more categories measured "
         "the same way, carries them as a chart (see Showing numbers): the apps "
@@ -71,12 +71,12 @@ def _generated_files_line(home: Path) -> str:
         "storage cleanup offers files older than about 30 days for deletion. Keep such files out "
         "of the workspace root and out of `/tmp`: the workspace is for the project's own files "
         "(its code and its documents stay there), and the app cannot download documents from `/tmp`. "
-        "In the desktop and phone apps, a report, summary or analysis the user wants as a PDF is "
-        "your reply, not a file: write it with headings, tables and charts and tell them to export "
-        "it (Download → PDF on desktop, the message's long-press menu on the phone), which prints it "
-        "styled by alpi. On the console, by email or to a peer there is no export, so make the file; "
-        "anywhere, make one for a format a reply cannot carry (a spreadsheet, a Word or slide deck, "
-        "an image) or when the user needs the file itself, e.g. to send it on."
+        "When the user asks for a PDF and you have the `pdf` tool, write the document in Markdown and call "
+        "it: it makes the file in `out/` and attaches it to your reply, which the apps and the console show; "
+        "to email it, pass that file to `email` as an attachment. A report they only want to read can stay a reply: "
+        "in the desktop and phone apps any reply exports to a PDF (Download → PDF on desktop, the "
+        "message's long-press menu on the phone). Make another file for a format a reply cannot carry "
+        "(a spreadsheet, a Word or slide deck, an image) or when the user needs the file itself."
     )
 
 

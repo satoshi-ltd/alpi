@@ -1158,6 +1158,21 @@ Each entry is written to be worked without that report:
   reaches a peer with a valid signature, and a `--once` turn whose tool output holds one prints its events; tests
   drive the ALP client and server, the CLI line and a provider-bound message.
 
+### Found shipping alpi 0.19.45
+
+- **TEST.GIT-ENV-ISOLATION** — Tests that run git never act on the repository that runs them
+  `bug · tooling · agent · high`
+  note: on 2026-11-26 a `git commit` from a linked worktree (`git worktree add`) ran the pre-commit hook, which
+  runs `uv run pytest`; git exports `GIT_DIR` and `GIT_INDEX_FILE` to hooks, the tests inherited them, and
+  `_git(tmp_path, "init", "-q", "--bare", ...)` in [test_docker_release_workflow.py](../tests/core/test_docker_release_workflow.py)
+  reinitialized the real repository instead of the temporary one: the shared `.git/config` got `core.bare=true`,
+  every later git command in both checkouts failed with `this operation must be run in a work tree`, and the
+  module's tests errored. Restored by hand with `git config core.bare false`. Any test or helper that spawns git
+  with the parent environment has the same exposure.
+  accept: a conftest fixture (or the helpers) strips `GIT_DIR`, `GIT_INDEX_FILE`, `GIT_WORK_TREE`,
+  `GIT_COMMON_DIR` and `GIT_OBJECT_DIRECTORY` from every git subprocess the suite starts; a test that runs the
+  suite's git helpers with those variables pointing at a scratch repository shows that repository untouched.
+
 ### Found shipping alpi 0.19.44
 
 - **BROWSER.STATE-EDGES** — The saved browser session is closed to the terminal and survives a kill

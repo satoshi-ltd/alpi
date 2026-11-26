@@ -163,7 +163,7 @@ Three trust tiers:
   the file tools refuse every profile's `host/`, `secrets/`, `gateway/`,
   `cache/`, `logs/`, `outputs/`, `out/`, `sessions/`, `memories/`, `schedule/`,
   `skills/`, `runs/`, `run/`, `mentions/` and `browser/` (read, write and `search` results;
-  `alp/` transcripts readable). Under `host/` a member turn from a remote device reads only a file attached to that same turn that its own connection uploaded: the file itself (not its folder or its `.owner` marker), read-only, through any tool that takes a path, and not once the turn has ended, so ask for the file again when a follow-up needs it. `out/` is open only to files the turn itself created there or its skill produced (never an existing file, never the next turn). A member turn's `terminal` runs only in Linux
+  `alp/` transcripts readable). Under `host/` a member turn from a remote device reads only a file attached to that same turn that its own connection uploaded: the file itself (not its folder or its `.owner` marker), read-only, through any tool that takes a path, and not once the turn has ended, so ask for the file again when a follow-up needs it. `out/` is open only to files the turn itself created there (`write_file`, `pdf`) or its skill produced (never an existing file, never the next turn). A member turn's `terminal` runs only in Linux
   bubblewrap (whatever `tools.terminal.sandbox` says) with the alpi home not
   mounted, other processes hidden and a private /tmp; the workspace and cwd must
   be outside the home, skill secrets are not passed, and it is refused before

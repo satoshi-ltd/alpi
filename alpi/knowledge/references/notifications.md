@@ -103,10 +103,9 @@ vector graphics and tables. On desktop (0.9.13 and newer) every page carries a h
 the title) and a footer (the profile, the date, page n / m), and tables, lists and code continue across pages; on the
 phone one footer at the end names alpi, the profile, the server and the date. When someone wants a chart or report to forward, tell them to export the PDF instead of copying
 the text, because Copy and the Markdown file carry the raw ```` ```chart ```` block.
-When someone in the apps asks you for a report, summary or analysis as a PDF, that is the same path: write it as
-your reply (headings, tables, charts) and tell them to export it. Make the file only on a surface with no export
-(console, email, a peer) or when they need the file itself; a profile that denies `write_file` or `terminal` cannot
-author a skill to build one.
+When someone asks you for a PDF, make it with the `pdf` tool from Markdown: it lands in `out/` and rides on your
+reply in the apps and the console (see `tools`); a scheduled run delivers only the reply text. A report they only want to read can stay a reply and be exported from the
+app. A profile that denies `write_file` has no `pdf` tool: write the report as the reply and point to the export.
 
 ## Which daemons reach the owner
 

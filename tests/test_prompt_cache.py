@@ -39,12 +39,12 @@ def test_env_block_names_the_profile_out_folder_for_generated_files(workspace) -
 
 
 @pytest.mark.parametrize("workspace", (Path("/tmp/ws"), None))
-def test_a_pdf_report_is_written_as_the_reply_for_the_app_to_export(workspace) -> None:
+def test_a_requested_pdf_is_made_with_the_pdf_tool_where_the_profile_has_it(workspace) -> None:
     block = pc._env_block(Path("/tmp/home"), workspace)
     line = next(ln for ln in block.splitlines() if ln.startswith("- **generated files**"))
-    assert "In the desktop and phone apps" in line and "wants as a PDF is your reply, not a file" in line
+    assert "When the user asks for a PDF and you have the `pdf` tool, write the document in Markdown" in line
+    assert "which the apps and the console show" in line and "pass that file to `email`" in line
     assert "Download → PDF" in line
-    assert "On the console, by email or to a peer there is no export, so make the file" in line
 
 
 def test_a_scheduled_run_is_told_attachments_are_not_delivered(monkeypatch) -> None:

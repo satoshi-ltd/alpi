@@ -305,6 +305,10 @@ def note_turn_output(path: os.PathLike[str] | str) -> None:
     current.add(str(path))
 
 
+def forget_turn_output(path: os.PathLike[str] | str) -> None:
+    (_turn_outputs.get() or set()).discard(str(path))
+
+
 def is_turn_output(path: os.PathLike[str] | str) -> bool:
     return str(path) in (_turn_outputs.get() or ())
 

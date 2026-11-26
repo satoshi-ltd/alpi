@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from alpi.tools._paths import resolve_path, suggest_similar_paths
+from alpi.tools._paths import release_unused_claim, resolve_path, suggest_similar_paths
 from alpi.tools.base import Tool, ToolResult
 
 
@@ -53,6 +53,7 @@ class EditFile(Tool):
                 ),
             )
         if not p.exists():
+            release_unused_claim(p)
             hints = suggest_similar_paths(p)
             msg = f"File not found: {p}"
             if hints:

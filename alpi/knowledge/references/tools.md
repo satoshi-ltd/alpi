@@ -33,6 +33,7 @@
 | Session recall | `session_search`, `session_read`, `recall_sessions`, `index_sessions` | Lexical then semantic search over past local chat sessions; `session_read` lists recent sessions and opens a windowed turn slice (around a phrase or index) with no LLM call. |
 | Workgroup recall | `workgroup_search`, `index_workgroups` | Semantic search over hub-owned workgroup transcripts. |
 | Files | `read_file`, `write_file`, `edit_file`, `delete_file`, `search` | Direct filesystem work; deletion is workspace-only. |
+| Documents | `attach_file`, `pdf` | Attach a file you made; `pdf` makes a PDF from Markdown in `out/` and attaches it. |
 | Terminal | `terminal` | Shell commands when no native tool fits. Approval + guards apply. |
 | Web/browser | `web_search`, `web_fetch`, `web_extract`, `browser`, `research` | Web information; `research` is read-only sub-agent work. |
 | Memory | `memory`, `todo` | Durable profile memory and per-turn task tracking. |
@@ -131,11 +132,22 @@ Output attachments (MM.2):
   channel is authoritative.
 - Supported output kinds: `image`, `pdf`, `text`, `sheet`, `doc`, `deck`, `file`
   (Office files must be real ZIP-based `xlsx/docx/pptx`).
-- In the desktop and phone apps, a report, summary or analysis wanted as a PDF
-  is the reply itself, written with headings, tables and charts: the apps export
-  any reply to a styled PDF (see `notifications`). Make a file on a surface with
-  no export (console, email, a peer), for a format a reply cannot carry, or when
-  the user needs the file itself.
+- A PDF the user asks for: write the document in Markdown and call
+  `pdf(markdown=…)` (or `pdf(path=<a .md you wrote>)`). It writes a new file in
+  `out/` and attaches it to the reply (the apps and the console show it; a
+  scheduled run delivers only text; to email it, pass the file to `email` as an
+  attachment). Say in one line what you attached; do not paste the document into
+  the reply as well. Supported: headings, bold/italic, inline code, lists, quotes,
+  tables (long ones continue on the next page with their header), code blocks,
+  `---`, `http(s)`/`mailto` links, ```` ```chart ```` blocks (drawn as tables) and
+  `<!-- pagebreak -->` on its own line to start a new page (one page per section,
+  per profile…). `title` sets the footer; `name` the file name. Images are not
+  embedded yet (their alt text shows). Characters outside the Latin and
+  Cyrillic alphabets print as `?` (Greek beyond a few symbols such as μ and Ω,
+  Chinese, Arabic…); symbol emoji are dropped. Limits: 150,000 characters of
+  Markdown, 300 pages, 20,000 cells per table, 20 MiB.
+- A report someone only wants to read can stay a reply: the apps export any
+  reply to a styled PDF too (see `notifications`).
 
 ## Knowledge wiki
 

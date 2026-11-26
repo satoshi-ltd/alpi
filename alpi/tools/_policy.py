@@ -74,6 +74,8 @@ def effective_denies(profile_denies: Iterable[str], *, write_limited: bool = Fal
     from alpi.tools._paths import dispatch_tool_denies
     profile_denies = frozenset(profile_denies) | ({WRITE_PATHS_GUARD} if write_limited else frozenset())
     denies = profile_denies | dispatch_tool_denies()
+    if is_denied("write_file", profile_denies):
+        denies |= {"pdf"}
     if _authoring_guard(profile_denies) is None:
         return denies
     return denies | {f"skill:{action}" for action in SKILL_AUTHORING_ACTIONS}
