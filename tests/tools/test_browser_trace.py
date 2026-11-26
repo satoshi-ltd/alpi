@@ -60,14 +60,14 @@ def test_body_budget_and_record_limit_are_explicit(trace,monkeypatch):
 def test_browser_actions_stay_in_recorded_context(monkeypatch,trace):
     page = MagicMock()
     page.url='https://example.com/'
-    page.locator.return_value.aria_snapshot.return_value='Page'
+    page.aria_snapshot.return_value='- button "Confirm" [ref=e2]'
     monkeypatch.setattr(browser,'_on_browser_thread',lambda fn:fn())
     monkeypatch.setattr(browser,'_ensure_page_blocking',lambda:(page,None))
     monkeypatch.setitem(browser._state,'trace',trace)
     monkeypatch.setitem(browser._state,'page',page)
     result=browser.Browser().run('click',role='button',name='Confirm')
     assert result.ok
-    page.get_by_role.assert_called_once_with('button',name='Confirm')
+    page.get_by_ref.assert_called_once_with('e2')
     assert trace.steps[-1]['action']=='click'
     page.get_by_role.return_value.first.is_visible.return_value=True
     result=browser.Browser().run('trace_stop',role='heading',name='Confirmed')

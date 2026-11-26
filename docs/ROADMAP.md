@@ -340,6 +340,9 @@ failing test that settles it; if the test cannot be made to fail, the entry is d
   process may load and save the same `browser/state.json`. Read: the login state is written only on `close` and at
   exit, so a killed process loses it; the file has default permissions; and it is not in the read denylist of
   `tools/_paths.py`, so an owner-role turn can read its cookies with `read_file`.
+  Run on 2026-11-26: `trace_start` resolves `.browser-traces/` on that thread too, so a trace one profile starts is
+  written into another profile's workspace; and at interpreter exit `_shutdown` submits to an executor that is
+  already shut down, so the cookies are not saved then either.
   accept: two profiles that browse in one process keep separate cookies; state written after a login survives
   `SIGKILL`; `read_file` on `browser/state.json` is refused for every caller.
 
@@ -1183,6 +1186,51 @@ Each entry is written to be worked without that report:
   accept: each site either scrubs or is shown not to receive agent or tool text; a post carrying a lone surrogate
   reaches a peer with a valid signature, and a `--once` turn whose tool output holds one prints its events; tests
   drive the ALP client and server, the CLI line and a provider-bound message.
+
+### Found shipping the browser view
+
+- **SEC.BROWSER-REDIRECT** — The browser's URL guard checks the target of a redirect
+  `bug · alpi · agent · high`
+  note: run on 2026-11-26. `_route_guard` is a context route, and Playwright calls a route only for the first URL
+  of a request, not for the redirects it follows. With a guard that refuses `/forbidden`, `navigate` to a page
+  answering `302 → /forbidden` loaded it and returned its content; the guard saw only the first URL. The same holds
+  for an image, a `fetch` and an iframe. So a public URL that redirects to a loopback, private or cloud-metadata
+  address is fetched and, for a navigation or an iframe, read back to the model. Related to SEC.BROWSER-PIN.
+  accept: a navigation, an iframe and a subresource that are redirected to a refused address never reach it
+  (a local server proves no request arrived), with a stub guard and with a real loopback target while
+  `allow_local` is off; SECURITY.md states what is checked.
+
+- **BROWSER.NEW-HEADLESS** — Is the headless shell what gets the browser blocked?
+  `chore · alpi · agent · low`
+  note: one run on 2026-11-26 from one residential IP, playwright 1.64.1, status and snapshot size per site.
+  `amazon.es/s?k=…` answers 503 to the headless shell `browser` launches (with or without `playwright-stealth`)
+  and 200 with a full page to `launch(channel="chromium")`, the new headless mode of the full Chromium build.
+  `linkedin.com/jobs` answers 429 to the shell alone and 200 once stealth is applied, as today. `idealista.com`
+  and `zara.com` answer 403 and `booking.com` search 202 in all four combinations. The shell was chosen for its
+  size: the full build costs a larger download, a wider `install-deps` set in the image, and changes to
+  `_wanted_chromium_dirs`, the prune, `alpi doctor` and the image smoke test.
+  accept: the same matrix repeated on three days from a residential and a datacenter IP, with the download and
+  image size of each build; the entry is replaced by the decision it supports.
+
+- **HOOK.GIT-ENV** — A commit from a linked worktree cannot reconfigure the repository
+  `bug · alpi · agent · normal`
+  note: run on 2026-11-26. In a linked worktree git exports `GIT_DIR` (and `GIT_INDEX_FILE`) to the pre-commit
+  hook, the hook runs `pytest` with them, and tests that shell out to git in a temporary folder act on the real
+  repository instead: `tests/core/test_docker_release_workflow.py` runs `git init --bare`, which set
+  `core.bare = true` in the shared `.git/config`, so every checkout answered "this operation must be run in a
+  work tree" until it was set back; 18 tests failed and 15 errored for the same reason. Neither `.githooks/pre-commit`
+  nor `tests/conftest.py` clears the `GIT_*` variables.
+  accept: a commit made from a linked worktree runs the hook's suites green and leaves `.git/config` byte-identical;
+  a test sets `GIT_DIR` to a scratch repository and shows a git-calling test does not touch it.
+
+- **TEST.PY313** — The suite finishes on Python 3.13
+  `bug · alpi · agent · low`
+  note: run on 2026-11-26. `pyproject.toml` accepts Python up to 3.13, but on CPython 3.13.13 `pytest -q` never
+  ends: `tests/core/test_host_client_unresponsive.py` stops in its first test (alone too), while it passes in
+  seconds on 3.11.15. Read, not run: its teardown awaits `server.wait_closed()` while the handler still holds the
+  connection, which newer asyncio waits for. Whether it is the test or `host_client` that needs the change is not
+  known.
+  accept: the fast suite passes on 3.11 and 3.13.
 
 ### Found while shipping alpi 0.19.40
 

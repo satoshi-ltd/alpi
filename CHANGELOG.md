@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.19.42 — 2026-11-26 — the browser acts on the exact element
+
+- Every element the `browser` tool can act on now carries a reference in the page it returns, and `click`, `type` and the new actions take that reference. Before, an element was found by role and name and the first match was used, so on a list with three "Delete" buttons the agent could only ever press the first. A role and name that match several elements now fail with the candidates listed instead of pressing one of them.
+- The agent sees what is on screen instead of the first 8,000 characters of the page, which on a long page was mostly the navigation. `scroll` moves one screen, and the new `find` searches the whole page. Content inside iframes (embedded payment and sign-in forms) is now listed and can be used.
+- New actions: `select` an option, `hover`, `back`, `wait` for a text, `upload` a file, and `tab` to switch tabs. A tab the site opens becomes the active one.
+- The result of an action now includes what happened around it: a confirmation dialog (dismissed unless the action asks to accept it), content that arrives from a request the action started, and a download. A download that follows a click or a key press is saved under the workspace's `.browser-downloads/`, 50 MB at most; one a page starts before any click is cancelled.
+- alpi now requires Playwright 1.64. An install that held an older one downloads a new Chromium headless shell (~340 MB) the first time the browser is used after updating; the Docker image already shipped 1.64.
+
 ## v0.19.41 — 2026-11-26 — a long reply no longer breaks `chat --once` on a running daemon
 
 - `alpi chat --once … --connection-id …` now reads the daemon's stream with the same 16 MiB line limit as the TUI. Before, it used Python's default of 64 KiB, so a turn whose reply, or the arguments of one of its tool calls (a long `write_file`, for example), came to more than that failed with `delegated chat failed: Separator is not found, and chunk exceed the limit`. The turn itself kept running in the daemon and was saved and paid for, but the command printed nothing of it.

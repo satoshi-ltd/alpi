@@ -270,6 +270,18 @@ Output attachments (MM.2):
 `config` (denylist, sandbox, approvals) · `security` (guards/sandbox) ·
 `alp` (peer/workgroup tool context)
 
+## Interactive browser
+
+`browser` drives a headless Chromium whose session and cookies persist across turns. Use `web_fetch` for static pages and `browser` when the page needs clicks, forms or JavaScript.
+
+Every action returns the **view**: an accessibility tree in which each element that can be acted on carries a ref such as `[ref=e12]` or `[ref=f2e12]`. Pass that `ref` to `click`, `hover`, `type`, `select` or `upload` to act on exactly that element. A ref is valid only while it appears in the latest view; one that left the page is refused at once with the current view, and so is any target when a new tab became active after the view was taken. `role` + `name` (or `text` for click and hover) still work, but when several elements match, the call fails and clicks nothing: repeat with the ref it lists, or get it with `find`.
+
+A page that fits 12,000 characters is shown whole. A longer one shows only what is on screen, under `view: screen 2 of 9`: `scroll` moves one screen (they overlap), and `find` searches the whole page, iframes included, returning up to 40 matches with refs and link URLs. Link URLs appear only in `find`. One very long line (a JSON document, a log) is cut; read that kind of page with `web_fetch`.
+
+Other actions: `press` (keyboard key), `back`, `wait` (until a text appears, 15 s at most — for content a page renders on a timer; a navigation or request an action starts is already waited for), `tab` (switch to a tab by the number the view lists; a tab the page opens becomes active by itself), `screenshot`, `close`, `logout`.
+
+What the page does on its own is reported above the view. A `confirm`, `prompt` or `alert` is dismissed unless the action carries `dialog: "accept"`. A download that follows a click or a key press (even seconds later: it is reported by the next action, so `wait` or `snapshot` to collect it) or a `navigate` to the file is saved to the workspace's `.browser-downloads/` and its path given; one above 50 MB, unfinished after 60 s, started by the page before any click or in another tab, or on a turn that may not call `write_file`, is not saved and the view says why. When a page an action started loading has not answered in 10 s the result says so and carries no view: use `wait` or `snapshot`. `upload` takes a `path` under the same rules as `read_file`.
+
 ## Interactive browser evidence
 
 Use `browser(action="trace_start")` before navigating to a workflow's start. All following browser actions record network evidence in that same authenticated context. Finish with `browser(action="trace_stop", role="heading", name="<exact observed confirmation>")`; omit the confirmation selector to save a partial trace. The returned path is a workspace JSON report, not a raw HAR. It checkpoints after actions, caps requests/actions/bodies, removes cookies, headers, query values and form values (path segments made only of letters are kept, so do not put secrets in them), preserves selected financial/state fields, and correlates other JSON values through per-trace keyed references. Response bodies with unknown or excessive lengths are explicitly omitted. A complete result needs successful navigation/actions, no pending, failed or 4xx/5xx document/API requests, no trace truncation or write error, and a visible confirmation. It does not prove server-side validation. `close` saves any active trace as incomplete. Ordinary browser network and workspace restrictions remain in force.

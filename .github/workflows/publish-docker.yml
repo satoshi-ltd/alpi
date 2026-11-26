@@ -138,7 +138,7 @@ jobs:
           found=$(docker run --rm --entrypoint python "alpi-smoke:$VERSION" -c 'import importlib.metadata as m; print(m.version("alpi-agent"))')
           test "$found" = "$VERSION" || { echo "image carries alpi $found, publishing $VERSION"; exit 1; }
 
-      - name: smoke — chromium headless shell must launch
+      - name: smoke — chromium headless shell must launch, snapshot and click by ref
         run: |
           docker run --rm --entrypoint sh "alpi-smoke:$VERSION" -c '
             set -e
@@ -161,11 +161,14 @@ jobs:
           with sync_playwright() as pw:
               b = pw.chromium.launch(headless=True)
               page = b.new_page()
-              page.set_content(\"<h1>alpi smoke</h1>\")
-              snap = page.locator(\"body\").aria_snapshot()
+              page.set_content(\"<h1>alpi smoke</h1><a href=#done>Go</a>\")
+              snap = page.aria_snapshot(mode=\"ai\", boxes=True)
+              line = [l for l in snap.splitlines() if \"link\" in l][0]
+              page.get_by_ref(line.split(\"[ref=\")[1].split(\"]\")[0]).click()
+              url = page.url
               b.close()
-          assert \"alpi smoke\" in snap, snap
-          print(\"launch OK:\", snap.strip())
+          assert \"alpi smoke\" in snap and url.endswith(\"#done\"), (snap, url)
+          print(\"launch, ai snapshot and click by ref OK:\", snap.strip())
           "
           '
 
