@@ -177,7 +177,9 @@ Output attachments (MM.2):
 - `knowledge(action="index", path?, force?)` indexes valid pages into separate
   `okf_*` tables with sqlite-vec embeddings plus SQLite FTS. Called without a
   `path` it also creates the required `index.md` / `log.md` and links any page
-  nothing points at, so a page written with `write_file` still lints clean. Any
+  nothing points at, so a page written with `write_file` still lints clean,
+  unless the base is outside the profile's `tools.write_paths`: then it only
+  builds the search index. Any
   explicit `path` is indexed read-only. Link destinations are percent-encoded and
   titles escaped, and the graph reads bare, angle-bracketed and encoded forms.
   Indexing skips pages whose text fingerprint is unchanged (touching or re-saving a page
@@ -261,8 +263,13 @@ Output attachments (MM.2):
 - `tool action denied for this profile: knowledge:ingest … allowed: search`:
   the profile denies that action in `tools.deny`; use an allowed one.
 - `tool action denied for this profile: skill:create. tools.deny … denies
-  write_file …`: this profile cannot author skills; do the job with the tools
-  you have, and for a report or a PDF write it as your reply (the apps export it).
+  write_file …` (or `… tools.write_paths … limits where this profile writes`):
+  this profile cannot author skills; do the job with the tools you have, and for
+  a report or a PDF write it as your reply (the apps export it).
+- `cannot write <path>: this profile writes only inside <folders>
+  (tools.write_paths in config.yaml)`: write the file inside one of those
+  folders, with the absolute path the error gives; never try another tool to
+  reach the refused place.
 
 ## Related topics
 

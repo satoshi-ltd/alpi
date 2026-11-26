@@ -53,15 +53,26 @@ SKILL_AUTHORING_ACTIONS = frozenset({
     "create", "edit", "patch", "add_file", "remove_file", "delete", "reset_state", "set_meta",
 })
 _AUTHORING_GUARDS = ("write_file", "terminal")
+WRITE_PATHS_GUARD = "tools.write_paths"
 
 
 def _authoring_guard(deny: Iterable[str] | None) -> str | None:
+    if WRITE_PATHS_GUARD in (deny or ()):
+        return WRITE_PATHS_GUARD
     return next((tool for tool in _AUTHORING_GUARDS if is_denied(tool, deny)), None)
 
 
-def effective_denies(profile_denies: Iterable[str]) -> frozenset[str]:
+def write_limited(cfg) -> bool:
+    return cfg.tools.write_paths != []
+
+
+def profile_denies(cfg) -> frozenset[str]:
+    return effective_denies(cfg.tools.deny, write_limited=write_limited(cfg))
+
+
+def effective_denies(profile_denies: Iterable[str], *, write_limited: bool = False) -> frozenset[str]:
     from alpi.tools._paths import dispatch_tool_denies
-    profile_denies = frozenset(profile_denies)
+    profile_denies = frozenset(profile_denies) | ({WRITE_PATHS_GUARD} if write_limited else frozenset())
     denies = profile_denies | dispatch_tool_denies()
     if _authoring_guard(profile_denies) is None:
         return denies
@@ -134,12 +145,15 @@ def action_denied(name: str, arguments: object, deny: Iterable[str] | None, sche
         return None
     shown = f"{name}:{action}" if action else name
     tail = f"; allowed: {', '.join(allowed)}" if allowed else ""
-    guard = (
-        _authoring_guard(deny)
-        if name == "skill" and action in SKILL_AUTHORING_ACTIONS
-        and os.environ.get("ALPI_WORKGROUP_WRITE_SCOPE") is None
-        else None
-    )
+    guard = _authoring_guard(deny) if name == "skill" and action in SKILL_AUTHORING_ACTIONS else None
+    if guard is not None and guard != WRITE_PATHS_GUARD and os.environ.get("ALPI_WORKGROUP_WRITE_SCOPE") is not None:
+        guard = None
+    if guard == WRITE_PATHS_GUARD:
+        return (
+            f"tool action denied for this profile: {shown}. tools.write_paths in config.yaml limits where "
+            "this profile writes, and a skill's files and scripts would write and run code past it, so skills "
+            f"here are installed by the operator, not authored in a turn{tail}"
+        )
     if guard is not None:
         return (
             f"tool action denied for this profile: {shown}. tools.deny in config.yaml denies {guard}, "

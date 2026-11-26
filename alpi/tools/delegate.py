@@ -74,7 +74,7 @@ def _system_prompt(workspace: Path | None) -> str:
 
 def _turn_denies(cfg: Any) -> frozenset[str]:
     # The sub-agent runs inside the calling turn: phase write denies and the peer tool policy apply to it too.
-    return _tool_policy.effective_denies(cfg.tools.deny)
+    return _tool_policy.profile_denies(cfg)
 
 
 def _resolve_tools(toolsets: list[str] | None) -> tuple[set[str], list[str]]:

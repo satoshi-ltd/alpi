@@ -301,6 +301,57 @@ def test_docker_owner_pipeline_turn_hides_terminal(
     assert "terminal" not in schema_names[0]
 
 
+def test_write_paths_drops_skill_authoring_and_follows_the_file_each_turn(
+    engine: Engine, monkeypatch,
+) -> None:
+    enums: list[set[str]] = []
+
+    def capturing_stream(messages, tools, **kwargs):
+        skill = next(s for s in tools if s["function"]["name"] == "skill")
+        enums.append(set(skill["function"]["parameters"]["properties"]["action"]["enum"]))
+        yield from _stream_one("ok")
+
+    monkeypatch.setattr("alpi.llm.stream", capturing_stream)
+    (engine.home / "config.yaml").write_text(yaml.safe_dump({
+        "model": "gpt-5.4-mini", "tools": {"write_paths": ["out"]},
+    }))
+    engine.run_turn("first", emit=lambda _e: None)
+    (engine.home / "config.yaml").write_text(yaml.safe_dump({"model": "gpt-5.4-mini", "tools": {}}))
+    engine.run_turn("second", emit=lambda _e: None)
+    assert "create" not in enums[0] and "run" in enums[0]
+    assert "create" in enums[1]
+
+
+def test_a_stale_skill_create_under_write_paths_is_refused(engine: Engine, monkeypatch) -> None:
+    import json
+
+    (engine.home / "config.yaml").write_text(yaml.safe_dump({
+        "model": "gpt-5.4-mini", "tools": {"write_paths": ["out"]},
+    }))
+    calls = {"count": 0}
+
+    def stream(messages, tools, **kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            yield {
+                "final": True, "input_tokens": 1, "output_tokens": 1, "cost_usd": 0.0,
+                "tool_calls": [{"id": "s", "name": "skill", "arguments": json.dumps({
+                    "action": "create", "name": "grep-helper", "category": "miscellaneous",
+                    "description": "d", "body": "b",
+                })}],
+            }
+        else:
+            yield from _stream_one("done")
+
+    monkeypatch.setattr("alpi.llm.stream", stream)
+    engine.run_turn("go", emit=lambda _e: None)
+    journal = engine.home / "runs" / f"{engine.last_run_id}.jsonl"
+    rows = [json.loads(line) for line in journal.read_text().splitlines()]
+    finished = next(r for r in rows if r["kind"] == "tool.finished" and r["data"]["name"] == "skill")
+    assert "tools.write_paths" in finished["data"]["error"]
+    assert not (engine.home / "skills" / "miscellaneous" / "grep-helper").exists()
+
+
 def test_budget_exceeded_mid_turn_aborts(engine: Engine, monkeypatch) -> None:
     """A turn that crosses the daily cap mid-flight aborts instead of
     spending all the way to max_steps (the gate is re-checked per step)."""

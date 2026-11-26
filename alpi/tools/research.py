@@ -247,7 +247,7 @@ class Research(Tool):
         cfg = cfg_mod.load(get_home())
         call_kwargs = cfg_mod.resolve_model(cfg, tier=depth)
         max_steps = _resolve_depth(cfg, depth)
-        deny_tools = _tool_policy.effective_denies(cfg.tools.deny)
+        deny_tools = _tool_policy.profile_denies(cfg)
 
         tools_schema = [
             s for s in all_schemas(deny=deny_tools)

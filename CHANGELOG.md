@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.19.43 — 2026-11-26 — a profile can be kept to the folders it may write in
+
+- New `tools.write_paths` in a profile's `config.yaml`: the folders its file tools may write in. A relative entry is under the profile home, so `write_paths: [out]` keeps the profile to `<home>/out`. A write anywhere else, a symlink out of a listed folder included, is refused with a message that names the folders, whoever asked for it.
+- It covers alpi's own file-writing tools: `write_file`, `edit_file`, `delete_file`, files saved by `workgroup_file` and `email`, browser traces and downloads, and `knowledge`, which refuses to apply `ingest` and `maintain` on a base outside the folders, before any model call, and indexes it without rewriting its `index.md` and `log.md`. A profile with the list set also cannot author skills in a turn, as with a `write_file` deny; it still runs the skills its operator installed.
+- `terminal`, MCP servers and the scripts of installed skills are not covered: a profile that must stay inside its folders denies `terminal` too. `write_paths: out` without a list is one folder; any other shape, or an entry that cannot be resolved, refuses every write until it is fixed.
+- Why: a profile whose workspace is shared, such as an assistant that reads another profile's knowledge base, could write into that base with `write_file` or the `knowledge` tool; until now only its instructions stopped it.
+- Nothing changes for a profile without the setting, except that its file tools now refuse to write while its `config.yaml` does not load; before, only relative paths were refused then.
+
 ## v0.19.42 — 2026-11-26 — the browser acts on the exact element
 
 - Every element the `browser` tool can act on now carries a reference in the page it returns, and `click`, `type` and the new actions take that reference. Before, an element was found by role and name and the first match was used, so on a list with three "Delete" buttons the agent could only ever press the first. A role and name that match several elements now fail with the candidates listed instead of pressing one of them.

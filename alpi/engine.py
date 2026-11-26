@@ -492,7 +492,7 @@ class Engine:
         profile_denies = frozenset(self.cfg.tools.deny)
         executor = ToolExecutor(
             run_context,
-            deny=_tool_policy.effective_denies(profile_denies),
+            deny=_tool_policy.effective_denies(profile_denies, write_limited=_tool_policy.write_limited(self.cfg)),
             deny_reasons=_dispatch_tool_deny_reasons(profile_denies),
             max_workers=self.cfg.tools.max_parallel_tool_calls,
             call_timeout_s=self.cfg.tools.call_timeout_s,
@@ -618,6 +618,7 @@ class Engine:
             return
         self.cfg.budget = fresh.budget
         self.cfg.tools.deny = fresh.tools.deny
+        self.cfg.tools.write_paths = fresh.tools.write_paths
         self.cfg.tools.max_parallel_tool_calls = fresh.tools.max_parallel_tool_calls
         self.cfg.tools.call_timeout_s = fresh.tools.call_timeout_s
         self.cfg.tools.execution = fresh.tools.execution
@@ -803,7 +804,7 @@ class Engine:
             except Exception:  # noqa: BLE001
                 pass
 
-        deny_tools = _tool_policy.effective_denies(self.cfg.tools.deny)
+        deny_tools = _tool_policy.profile_denies(self.cfg)
         schemas = tools.schemas(deny=deny_tools)
         if relay_peer:
             schemas = [s for s in schemas if _schema_name(s) in ("peer", "decline")]

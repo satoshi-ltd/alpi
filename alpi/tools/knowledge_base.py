@@ -19,7 +19,7 @@ from alpi.core import embed as embed_mod
 from alpi.core.store import open_store
 from alpi.home import get_home
 from alpi.tools import _state
-from alpi.tools._paths import resolve_path
+from alpi.tools._paths import enforce_write_paths, resolve_path
 from alpi.tools.base import Tool, ToolResult
 from alpi.tools.workspace import (
     EmbedderMismatch,
@@ -114,6 +114,16 @@ def _workspace_root_for(home: Path) -> Path:
     # A broken config must not silently downgrade the root to cwd.
     wp = cfg_mod.load(home.resolve()).workspace_path
     return wp if wp is not None else Path.cwd().resolve()
+
+
+def _repair_allowed(root: Path) -> bool:
+    try:
+        enforce_write_paths(root, str(root))
+        for name in _REQUIRED_FILES:
+            enforce_write_paths((root / name).resolve(), name)
+        return True
+    except (OSError, RuntimeError, ValueError):
+        return False
 
 
 def _knowledge_root(home: Path, path: str = "") -> Path:
@@ -618,7 +628,7 @@ def index_knowledge(
         if not force and _root_conflict(stored, root, adopt_missing=True):
             raise _mismatch_error(str(stored), root, indexing=True)
         # Repair only the default workspace bundle, and only when the caller asked for no other root: any explicit path may be someone else's vault.
-        if repair and root == _knowledge_root(home):
+        if repair and root == _knowledge_root(home) and _repair_allowed(root):
             _ensure_bundle(root)
             _update_index(root, _orphan_pages(root))
         _ensure_schema(
@@ -1073,6 +1083,9 @@ def _apply_maintenance(
     *,
     seen_full: frozenset[str],
 ) -> dict[str, Any]:
+    enforce_write_paths(root.resolve(), str(root))
+    for required in _REQUIRED_FILES:
+        enforce_write_paths((root / required).resolve(), required)
     pages = proposal.get("pages") or []
     if not isinstance(pages, list):
         raise ValueError("proposal.pages must be a list")
@@ -1110,8 +1123,9 @@ def _apply_maintenance(
             "sources": [_strip_invisible(str(s)).strip() for s in sources if _strip_invisible(str(s)).strip()],
         }
         target = (root / rel).resolve()
-        if not str(target).startswith(str(root.resolve())):
+        if not target.is_relative_to(root.resolve()):
             raise ValueError(f"{rel}: resolved path escapes knowledge bundle")
+        enforce_write_paths(target, rel)
         if target.is_file() and rel not in seen_full:
             skipped.append({"path": rel, "reason": _READ_ONLY_REASON})
             continue
@@ -1294,6 +1308,8 @@ def maintain_knowledge(
     source_text: str | None = None,
     source_ref: str = "",
 ) -> dict[str, Any]:
+    if apply:
+        enforce_write_paths(root.resolve(), str(root))
     source = resolve_path(source_path) if source_path else None
     if source is not None and not source.is_file():
         raise ValueError(f"source file not found: {source_path}")

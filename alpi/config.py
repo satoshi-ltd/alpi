@@ -29,6 +29,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "max_parallel_tool_calls": 4,
         "call_timeout_s": 600,
         "deny": [],
+        "write_paths": [],
         "execution": {"backend": "local", "docker_image": "python:3.12-slim"},
         "web_extract": {"model": ""},
         "read_image": {"model": ""},
@@ -205,6 +206,8 @@ class ToolsConfig:
     call_timeout_s: float = 600.0
     # Tool names hidden from the LLM schema AND refused by the executor; unknown names are no-ops so typos are harmless.
     deny: list[str] = field(default_factory=list)
+    # Folders the file tools may write in (relative entries root at the profile home); empty means no limit, None an invalid value that refuses every write.
+    write_paths: list[str] | None = field(default_factory=list)
     execution: ExecutionToolConfig = field(default_factory=ExecutionToolConfig)
     web_extract: WebExtractToolConfig = field(default_factory=WebExtractToolConfig)
     read_image: ReadImageToolConfig = field(default_factory=ReadImageToolConfig)
@@ -377,6 +380,14 @@ def _normalize_deny(raw: Any) -> list[str]:
     return out
 
 
+def _normalize_write_paths(raw: Any) -> list[str] | None:
+    if isinstance(raw, str):
+        return [raw.strip()] if raw.strip() else None
+    if not isinstance(raw, list) or any(not isinstance(item, str) or not item.strip() for item in raw):
+        return None
+    return _normalize_deny(raw)
+
+
 def _parse_tier(raw: Any) -> TierConfig:
     if not isinstance(raw, dict):
         return TierConfig()
@@ -456,6 +467,7 @@ def load(home: Path) -> Config:
         )),
         call_timeout_s=_call_timeout(tools_raw.get("call_timeout_s")),
         deny=_normalize_deny(tools_raw.get("deny")),
+        write_paths=_normalize_write_paths(tools_raw.get("write_paths", [])),
         execution=ExecutionToolConfig(
             backend=(
                 str(execution_raw.get("backend") or "local").strip().lower()
@@ -671,7 +683,8 @@ _SAVED_KEYS = frozenset({
     "compaction", "memory",
 })
 _SAVED_TOOL_KEYS = frozenset({
-    "max_steps_per_turn", "max_parallel_tool_calls", "call_timeout_s", "deny", "execution", "web_extract",
+    "max_steps_per_turn", "max_parallel_tool_calls", "call_timeout_s", "deny", "write_paths", "execution",
+    "web_extract",
     "read_image", "terminal", "browser", "tts", "stt", "attachments",
 })
 
@@ -760,6 +773,10 @@ def _tools_delta(cfg: Config) -> dict:
         out["call_timeout_s"] = cfg.tools.call_timeout_s
     if cfg.tools.deny:
         out["deny"] = list(cfg.tools.deny)
+    if cfg.tools.write_paths is None:
+        out["write_paths"] = (cfg.raw.get("tools") or {}).get("write_paths")
+    elif cfg.tools.write_paths:
+        out["write_paths"] = list(cfg.tools.write_paths)
     execution_out: dict[str, Any] = {}
     if cfg.tools.execution.backend != d["execution"]["backend"]:
         execution_out["backend"] = cfg.tools.execution.backend

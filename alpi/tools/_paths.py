@@ -414,10 +414,46 @@ def resolve_path(path: str, *, for_write: bool = False) -> Path:
     if area is not None:
         raise ValueError(_always_private_error(area, path, for_write=for_write))
     if for_write:
+        enforce_write_paths(resolved, path)
         _enforce_dispatch_write_scope(resolved, path)
     from alpi.core.execution_world import current as current_world
     world = current_world()
     return world.filesystem_path(resolved) if world is not None else resolved
+
+
+def _profile_write_roots() -> list[Path]:
+    from alpi.home import get_home
+    from alpi import config as cfg_mod
+    home = get_home().resolve()
+    try:
+        tools_cfg = cfg_mod.load(home).tools
+    except Exception as exc:  # noqa: BLE001
+        raise ValueError(f"config failed to load; refusing to write: {exc}") from exc
+    if tools_cfg.write_paths is None:
+        raise ValueError(
+            "tools.write_paths in config.yaml is invalid: it must be a list of folder names; "
+            "every write is refused until it is fixed"
+        )
+    roots = []
+    for entry in tools_cfg.write_paths:
+        try:
+            root = Path(entry).expanduser()
+            roots.append((root if root.is_absolute() else home / root).resolve())
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise ValueError(
+                f"tools.write_paths entry {entry!r} cannot be resolved ({exc}); every write is refused until it is fixed"
+            ) from exc
+    return roots
+
+
+def enforce_write_paths(resolved: Path, original: str) -> None:
+    roots = _profile_write_roots()
+    if not roots or any(resolved.is_relative_to(root) for root in roots):
+        return
+    raise ValueError(
+        f"cannot write {original}: this profile writes only inside {', '.join(str(r) for r in roots)} "
+        "(tools.write_paths in config.yaml); write the file there, with its absolute path"
+    )
 
 
 def _enforce_dispatch_write_scope(resolved: Path, original: str) -> None:

@@ -91,6 +91,7 @@ providers:
 | `tools.terminal.docker_scoped` | Next turn. Default `false`; a YAML boolean true (strings and numbers do not count). In the Docker runtime it lets this profile run `terminal`, unsandboxed, in the scoped workgroup phases it owns (non-owners and background commands stay refused, a process left running with `&` is killed when its command returns, but one that detaches into its own session with `setsid` survives and can write after the gate; member-device turns keep their own rule). No effect outside Docker, nor while `tools.terminal.sandbox` is on or `terminal` is in `tools.deny`. The gate audits only the project's source files, and that shell can reach the alpi home and every profile's `.env`, so it belongs only in a container with one trust scope; `alpi doctor` and `alpi audit` warn while it is on. |
 | `tools.terminal.sandbox` | Next terminal call (member turns and peers without `tools.allow` run only in Linux bubblewrap or the Docker execution backend, and are refused in the Docker runtime and on macOS). |
 | `tools.deny` | Next turn (re-read from disk per turn, same as `budget`). |
+| `tools.write_paths` | Next file write (read on every write); the skill-authoring deny, next turn. |
 | `tools.call_timeout_s` | Next turn (re-read from disk per turn). |
 | `providers.openrouter.ignore` | Next turn (re-read from disk per turn, same as `tools.deny`). |
 | `tools.max_steps_per_turn` | Next turn. |
@@ -164,6 +165,16 @@ Use the canonical registered name. `knowledge` is the user's workspace Markdown 
 `alpi_knowledge` is packaged docs about alpi itself. Unknown names are no-ops
 (typos are harmless). A bare string (`deny: terminal`) collapses to `[]`, not a
 per-char iteration.
+
+## Write folders
+
+`tools.write_paths` lists the only folders this profile's file tools may write in, for every caller (admin and CLI included). Relative entries root at the profile home (`out` = `<home>/out`), `~` expands, absolute entries stay as they are; symlinks are resolved before the check. A write elsewhere is refused with `cannot write <path>: this profile writes only inside <absolute folders> (tools.write_paths in config.yaml)`: write the file inside one of those folders, using the absolute path the refusal gives (a relative tool path roots at the workspace, not the home; documents for people go in `out/`). Covered: `write_file`, `edit_file`, `delete_file`, `workgroup_file` saves, `email` attachment saves, browser traces and downloads, and `knowledge` (`ingest`/`maintain` refuse to apply on a base outside the folders, before any model call; `index` still builds the search index but does not repair that base's `index.md`/`log.md`). A non-empty list also denies the `skill` authoring actions, like a `write_file` deny. Not covered: `terminal`, MCP servers, installed skill scripts; deny `terminal` too when the profile must stay inside the folders. Omitted or empty list = no limit; null and blank strings refuse writes; a non-blank string is one folder; any other shape, an entry that cannot be resolved, or a `config.yaml` that does not load refuses every write until fixed.
+
+```yaml
+tools:
+  deny: [terminal]
+  write_paths: [out]
+```
 
 ## Relay (read-only front door to one peer)
 

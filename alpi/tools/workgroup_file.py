@@ -117,9 +117,13 @@ class WorkgroupFileTool(Tool):
                     raise ValueError("sha256 required for get")
                 metadata, data = asyncio.run(wc.get_file(get_home(), wg_id, digest))
                 raw_dest = str(kwargs.get("dest") or metadata["name"])
-                destination = _available_destination(resolve_path(raw_dest, for_write=True))
+                requested = resolve_path(raw_dest, for_write=True)
+                destination = _available_destination(requested)
+                if destination != requested:
+                    destination = resolve_path(str(destination), for_write=True)
                 destination.parent.mkdir(parents=True, exist_ok=True)
-                destination.write_bytes(data)
+                with destination.open("xb") as handle:
+                    handle.write(data)
                 return ToolResult(
                     ok=True,
                     output=f"downloaded {metadata['name']} to {destination}",

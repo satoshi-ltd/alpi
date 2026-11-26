@@ -109,6 +109,7 @@ removes the key.
 | `tools.max_parallel_tool_calls` | `4` | int — maximum concurrent calls in an all-parallel-safe tool batch | next turn |
 | `tools.call_timeout_s` | `600` | seconds one tool call may run before the engine moves on without it (`0` = off; tools with their own bound are exempt) | next turn |
 | `tools.deny` | `[]` | list of tool names or `tool:action` entries | next turn |
+| `tools.write_paths` | `[]` | list of folders the file tools may write in; relative entries root at the profile home; empty = no limit | next file write (skill authoring: next turn) |
 | `tools.execution.backend` | `"local"` | `local` \| `docker` — terminal shell backend; background jobs are refused in Docker | next turn |
 | `tools.execution.docker_image` | `"python:3.12-slim"` | Docker image used when the execution backend is `docker` | next turn |
 | `tools.web_extract.model` | `""` (use main) | string — a model id, or the literal `fast` / `deep` to reference a tier | next turn |
@@ -286,6 +287,40 @@ tools:
 Today this is YAML-only. There is no `alpi setup` wizard for `deny`
 and no surface for it in the desktop/mobile apps — the surface is
 power-user enough that raw names beat any UI we'd build right now.
+
+`tools.write_paths` limits where a profile's file tools write, for every
+caller, admin and CLI included. Each entry is a folder: a relative one roots
+at the profile home (`out` is `<home>/out`), `~` expands, an absolute one is
+taken as it is. A write is allowed only when its resolved path, symlinks
+followed, is one of those folders or inside one; anything else is refused
+with `cannot write <path>: this profile writes only inside …`, naming the
+folders by absolute path. It covers alpi's built-in tools that write files:
+`write_file`, `edit_file`, `delete_file`, `workgroup_file` saves, `email`
+attachment saves, browser traces and downloads, and the `knowledge` tool: `ingest` and
+`maintain` refuse to apply on a base outside the folders before any model
+call (a dry run with `apply: false` still returns its proposal), every page
+and the base's `index.md` and `log.md` are checked one by one, and `index`
+still builds the search index without repairing that base's `index.md` and
+`log.md`. It is read on every write, so an edit applies to the next one. A
+non-empty list also denies the `skill` actions that write skill files, as a
+`write_file` deny does. It does not reach `terminal`, MCP servers or the
+scripts of installed skills: they write where the OS lets them, so a profile
+that must stay inside these folders also denies `terminal` and only gets the
+servers and skills its operator trusts. An empty list sets no limit; a bare
+string (`write_paths: out`) is one folder, and any other shape (a mapping, a
+number, null, a blank string, an empty or non-text entry), an entry that cannot be resolved, or a
+`config.yaml` that does not load refuses every write until it is fixed; saving
+the config keeps the invalid value as it was. On a case-insensitive disk the
+folder must be written in its own case.
+
+A knowledge assistant that reads a shared workspace and only hands people
+documents keeps those documents in `out/` and nothing else:
+
+```yaml
+tools:
+  deny: [terminal]
+  write_paths: [out]
+```
 
 `tools.terminal.sandbox` enables OS-level isolation on shell commands
 (macOS `sandbox-exec`, Linux `bubblewrap`). Toggle via `alpi setup →

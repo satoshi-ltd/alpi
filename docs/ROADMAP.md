@@ -1240,6 +1240,22 @@ Each entry is written to be worked without that report:
   known.
   accept: the fast suite passes on 3.11 and 3.13.
 
+### Found reviewing curator 2026-11-25
+
+- **ENGINE.TOOL-FANOUT** — One model reply cannot run hundreds of identical tool calls
+  `bug · alpi · agent · normal`
+  note: on a deployed daemon on 2026-11-24 13:34–13:42 UTC a single turn of a profile with no tool budget of its own
+  made 1,425 tool calls in 5 model calls; 1,411 of them were `lobby__lobby_get_knowledge` with the same `channelId`,
+  all but the first emitted by one reply at 13:42, each returning the whole knowledge document again (about 2.8 K
+  tokens each, by the size of the next request); that request asked for ~4.0 M input tokens and failed with
+  `context_length`. `tools.max_steps_per_turn` (100, [config.py](../alpi/config.py)) counts model
+  rounds and `tools.max_parallel_tool_calls` (4) only bounds concurrency in `ToolExecutor`
+  ([engine.py](../alpi/engine.py)), so nothing caps how many calls one reply may carry or folds identical calls with
+  identical arguments. Not measured: how often the fleet sees replies with more than a handful of calls.
+  accept: a reply with more calls than a per-step ceiling runs only up to it and tells the model the rest were not
+  run; identical read-only calls (same name and arguments) in one reply run once and share the result; a test drives
+  a reply with hundreds of identical calls and shows the turn ends without a context-length failure.
+
 ### Found while shipping alpi 0.19.40
 
 - **LOG.PROFILE-MIX** — Each profile's `llm.log`, `agent.log` and `approval.log` hold only that profile's lines
