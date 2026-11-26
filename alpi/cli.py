@@ -420,6 +420,12 @@ def _run_once_with_authority(
     sys.stdout.flush()
 
 
+async def _open_host_socket() -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+    from alpi.tui import host_client
+
+    return await asyncio.open_unix_connection(str(host_client.socket_path()), limit=host_client.READ_LIMIT)
+
+
 async def _host_chat_delegate(
     profile: str,
     connection_id: str,
@@ -432,7 +438,7 @@ async def _host_chat_delegate(
     import json
     import uuid
 
-    reader, writer = await asyncio.open_unix_connection(str(home.alpi_root() / "host" / "host.sock"))
+    reader, writer = await _open_host_socket()
     request_id = f"cli-chat-{uuid.uuid4().hex}"
     params: dict[str, Any] = {
         "profile": profile,
@@ -674,7 +680,7 @@ def runs_show(ctx: click.Context, run_id: str, as_json: bool) -> None:
 async def _host_run_cancel(profile: str, run_id: str) -> bool:
     import json as json_mod
 
-    reader, writer = await asyncio.open_unix_connection(str(home.alpi_root() / "host" / "host.sock"))
+    reader, writer = await _open_host_socket()
     try:
         request = {
             "id": "cli-runs-cancel", "method": "host.run.cancel",
@@ -703,15 +709,10 @@ def runs_cancel(ctx: click.Context, run_id: str) -> None:
     click.echo(f"cancellation requested for {run_id}")
 
 
-_ACTIVITY_READ_LIMIT = 16 * 1024 * 1024
-
-
 async def _host_activity() -> dict[str, Any]:
     import json as json_mod
 
-    reader, writer = await asyncio.open_unix_connection(
-        str(home.alpi_root() / "host" / "host.sock"), limit=_ACTIVITY_READ_LIMIT,
-    )
+    reader, writer = await _open_host_socket()
     try:
         request = {"id": "cli-activity", "method": "host.activity.list", "params": {}}
         writer.write((json_mod.dumps(request) + "\n").encode())

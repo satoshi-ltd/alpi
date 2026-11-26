@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.19.41 — 2026-11-26 — a long reply no longer breaks `chat --once` on a running daemon
+
+- `alpi chat --once … --connection-id …` now reads the daemon's stream with the same 16 MiB line limit as the TUI. Before, it used Python's default of 64 KiB, so a turn whose reply, or the arguments of one of its tool calls (a long `write_file`, for example), came to more than that failed with `delegated chat failed: Separator is not found, and chunk exceed the limit`. The turn itself kept running in the daemon and was saved and paid for, but the command printed nothing of it.
+- Every other CLI command that talks to the daemon reads with the same limit.
+
 ## v0.19.40 — 2026-11-25 — a member's turn can open the file it was sent
 
 - A turn started from a member device can now open the file attached to it with the tools that take a file path, such as `read_file`, `read_image`, `search` on the file and `knowledge` with `source_path`. Before, the agent received the attachment and those tools refused its path with "cannot read the profile host/ area", so it could not open what the message itself did not carry in full.
