@@ -30,7 +30,7 @@ describe("WorkgroupsView", () => {
   it("counts the whole set on each filter, dims an empty one and drops the N of M counter", () => {
     render(<WorkgroupsView workgroups={WORKGROUPS} profiles={[]} />);
     expect(screen.getByRole("button", { name: "All, 4" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "Working, 1" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Active, 1" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Queued, 1" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Paused, 1" })).toBeEnabled();
     expect(screen.queryByText(/\d+ of \d+/)).toBeNull();
@@ -41,7 +41,7 @@ describe("WorkgroupsView", () => {
   it("disables a filter with nothing in it, the creator's all-idle day", () => {
     const idle = Array.from({ length: 3 }, (_, i) => ({ id: `wg-${i}`, name: `Idle ${i}`, profile: "mira", pipeline_status: "completed", mtime: i }));
     render(<WorkgroupsView workgroups={idle} profiles={[]} />);
-    expect(screen.getByRole("button", { name: "Working, 0" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Active, 0" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Queued, 0" })).toBeDisabled();
     expect(screen.getByRole("group", { name: "Idle" })).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "Working" })).toBeNull();
@@ -238,7 +238,7 @@ describe("WorkgroupsView", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Working, 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Active, 1" }));
     expect(screen.getByText("Active hotel")).toBeInTheDocument();
     expect(screen.queryByText("Finished hotel")).not.toBeInTheDocument();
 
@@ -318,7 +318,7 @@ describe("WorkgroupsView", () => {
         runByWorkgroup={{ "mira/wg-r": { phase: "media", phasesDone: 1, phasesTotal: 3 } }}
       />,
     );
-    expect(screen.getByRole("button", { name: "Working, 1" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Active, 1" })).toBeEnabled();
     expect(screen.getByRole("group", { name: "Working" }).textContent).toContain("Running hotel");
     expect(screen.getByText("Working · media")).toBeInTheDocument();
   });
@@ -342,7 +342,7 @@ describe("WorkgroupsView", () => {
     expect(needs.className).toMatch(/status_needs/);
     expect(needs.className).not.toMatch(/status_error/);
     expect(screen.getByText("Needs attention").parentElement.className).toMatch(/status_error/);
-    expect(screen.getByRole("button", { name: "Working, 2" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Active, 2" })).toBeInTheDocument();
     const css = readFileSync(join(import.meta.dirname, "WorkgroupsView.module.css"), "utf8");
     expect(css).toContain(".status_needs { color: var(--c-warning-text); }");
     expect(css).toContain(".status_needs > .dot { background: var(--c-warning); }");

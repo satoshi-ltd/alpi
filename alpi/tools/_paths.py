@@ -135,6 +135,8 @@ def _always_private_area(typed: Path | str, resolved: Path | str, *, for_write: 
                 return head
             if head in _NO_ACCESS_AREAS or parts[:2] == ["alp", "secrets"]:
                 return head if head != "alp" else "alp/secrets"
+            if head == "browser" and len(parts) == 2 and "state.json" in parts[1]:
+                return "browser/state.json"
             if for_write and (head in _NO_WRITE_AREAS or parts[:2] == ["alp", "peers.yaml"]):
                 return head if head != "alp" else "alp/peers.yaml"
     return None

@@ -461,6 +461,8 @@ async def _host_chat_delegate(
     produced: list[dict] = []
     errors: list[str] = []
     last_model_state_at = 0.0
+    finished = False
+    started = False
     try:
         while True:
             raw = await reader.readline()
@@ -477,6 +479,8 @@ async def _host_chat_delegate(
                 produced = list(frame.get("attachments") or [])
             elif event == "error":
                 errors.append(str(frame.get("text") or "delegated chat failed"))
+            elif event not in ("done", "preparing", "heartbeat"):
+                started = True
             if emit_events:
                 payload: dict[str, Any] | None = None
                 if event == "tool_start":
@@ -500,10 +504,17 @@ async def _host_chat_delegate(
                     sys.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
                     sys.stdout.flush()
             if event == "done":
+                finished = True
                 break
     finally:
         writer.close()
         await writer.wait_closed()
+    if not finished:
+        cut = "the daemon closed the connection before the turn finished; its outcome is unknown"
+        # A refusal (busy or unknown session) is one error frame and no `done`; an error after turn frames is a turn that was cut.
+        if errors:
+            raise RuntimeError("; ".join(errors) if not started else "; ".join([*errors, cut]))
+        raise RuntimeError(cut)
     if not final and errors:
         final = "\n\n".join(f"[error] {error}" for error in errors)
     return final, produced
@@ -1116,7 +1127,9 @@ def daemon_restart() -> None:
         if respawning:
             click.echo("daemon stopped — supervisor will respawn it shortly")
         else:
-            click.echo("daemon stopped — systemd did not start it again; run `systemctl --user start alpi-daemon.service`")
+            raise click.ClickException(
+                "daemon stopped — systemd did not start it again; run `systemctl --user start alpi-daemon.service`"
+            )
         return
     alpi_bin = shutil.which("alpi") or "alpi"
     subprocess.Popen(

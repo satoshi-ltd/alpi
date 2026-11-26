@@ -10,7 +10,7 @@ from alpi.alp import client as alp_client
 from alpi.alp import workgroup_client as wc
 from alpi.home import get_home
 from alpi.tools import _state
-from alpi.tools._paths import resolve_path
+from alpi.tools._paths import resolve_path, resolve_workspace_path
 from alpi.tools.base import Tool, ToolResult
 
 
@@ -116,11 +116,13 @@ class WorkgroupFileTool(Tool):
                 if not digest:
                     raise ValueError("sha256 required for get")
                 metadata, data = asyncio.run(wc.get_file(get_home(), wg_id, digest))
-                raw_dest = str(kwargs.get("dest") or metadata["name"])
-                requested = resolve_path(raw_dest, for_write=True)
+                # The hub names the file: without a dest of the agent's own, it lands inside the workspace or nowhere.
+                chosen = str(kwargs.get("dest") or "")
+                resolve = resolve_path if chosen else resolve_workspace_path
+                requested = resolve(chosen or str(metadata["name"]), for_write=True)
                 destination = _available_destination(requested)
                 if destination != requested:
-                    destination = resolve_path(str(destination), for_write=True)
+                    destination = resolve(str(destination), for_write=True)
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 with destination.open("xb") as handle:
                     handle.write(data)

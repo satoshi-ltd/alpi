@@ -11,6 +11,11 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.10.20 — 2026-11-26 — the Active filter says what it holds
+
+- The Workgroups filter that lists what is working together with what needs you is now called Active. It was called Working, the same word as the group of workgroups that are actually working, so its count read as if all of them were.
+- Needs alpi ≥ 0.19.23.
+
 ## v0.10.19 — 2026-11-25 — workgroups by state, connections across the pane
 
 - Workgroups has no details popover behind its title anymore. Each filter carries its own count (All, Working, Queued, Paused), and a filter with nothing in it is dimmed. The "N of M" counter is gone.

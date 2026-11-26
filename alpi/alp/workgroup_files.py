@@ -76,6 +76,8 @@ def _validate_name(value: Any) -> str:
         not name
         or name in {".", ".."}
         or name != raw
+        or "/" in raw
+        or "\\" in raw
         or any(ord(char) < 32 or ord(char) == 127 for char in name)
         or len(name) > _MAX_NAME_CHARS
     ):

@@ -577,3 +577,203 @@ async def test_list_reports_the_effective_timeout_and_a_bad_one(tmp_path: Path, 
     assert rows["long"]["run_timeout"] == 5400 and "timeout_error" not in rows["long"]
     assert rows["plain"]["run_timeout"] == 900
     assert rows["bad"]["run_timeout"] is None and "timeout_error" in rows["bad"]
+
+
+async def _fire(srv: host_server.Server, job_id: str) -> dict:
+    return await srv._dispatch({"id": "r", "method": "host.schedule.fire", "params": {"profile": "default", "id": job_id}})
+
+
+@pytest.mark.asyncio
+async def test_a_second_fire_before_the_first_one_starts_is_refused(tmp_path: Path, monkeypatch) -> None:
+    import asyncio
+    import threading
+
+    home = tmp_path / "h"
+    home.mkdir()
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    _seed_jobs(
+        home,
+        {"id": "twice001", "kind": "cron", "expression": "* * * * *", "prompt": "send the invoice"},
+        {"id": "other001", "kind": "cron", "expression": "* * * * *", "prompt": "y"},
+    )
+    srv = host_server.Server(home=home)
+    data_schedule.register(srv)
+    release = threading.Event()
+    fired: list[str] = []
+
+    def waiting_fire(h, jid):  # noqa: ANN001
+        release.wait(5)
+        fired.append(jid)
+        return True, "fired"
+
+    monkeypatch.setattr("alpi.scheduler.run.fire_by_id", waiting_fire)
+
+    first = await _fire(srv, "twice001")
+    second = await _fire(srv, "twice001")
+    other = await _fire(srv, "other001")
+
+    assert first["result"] == {"ok": True, "id": "twice001"}
+    assert second["error"]["code"] == -32009
+    assert "already fired" in second["error"]["data"]["detail"]
+    assert other["result"] == {"ok": True, "id": "other001"}
+    release.set()
+    for _ in range(100):
+        if len(fired) == 2 and not data_schedule._ACCEPTED_FIRES:
+            break
+        await asyncio.sleep(0.02)
+    assert sorted(fired) == ["other001", "twice001"]
+    assert data_schedule._ACCEPTED_FIRES == set()
+
+    again = await _fire(srv, "twice001")
+    assert again["result"] == {"ok": True, "id": "twice001"}
+    for _ in range(100):
+        if len(fired) == 3 and not data_schedule._ACCEPTED_FIRES:
+            break
+        await asyncio.sleep(0.02)
+    assert fired.count("twice001") == 2
+
+
+@pytest.mark.asyncio
+async def test_a_fire_cancelled_before_it_starts_frees_the_job(tmp_path: Path, monkeypatch) -> None:
+    import asyncio
+
+    home = tmp_path / "h"
+    home.mkdir()
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    _seed_jobs(home, {"id": "early001", "kind": "cron", "expression": "* * * * *", "prompt": "x"})
+    srv = host_server.Server(home=home)
+    data_schedule.register(srv)
+    calls: list[str] = []
+    monkeypatch.setattr("alpi.scheduler.run.fire_by_id", lambda h, jid: calls.append(jid) or (True, "fired"))
+
+    assert (await _fire(srv, "early001"))["result"] == {"ok": True, "id": "early001"}
+    pending = list(data_schedule._BACKGROUND_FIRES)
+    for task in pending:
+        task.cancel()
+    await asyncio.gather(*pending, return_exceptions=True)
+
+    assert calls == [] and all(task.cancelled() for task in pending)
+    assert data_schedule._ACCEPTED_FIRES == set() and not data_schedule._BACKGROUND_FIRES
+    assert (await _fire(srv, "early001"))["result"] == {"ok": True, "id": "early001"}
+    for _ in range(100):
+        if calls and not data_schedule._ACCEPTED_FIRES:
+            break
+        await asyncio.sleep(0.02)
+    assert calls == ["early001"]
+
+
+@pytest.mark.asyncio
+async def test_a_finished_fire_never_frees_the_reservation_of_the_fire_after_it(tmp_path: Path, monkeypatch) -> None:
+    import asyncio
+
+    home = tmp_path / "h"
+    home.mkdir()
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    _seed_jobs(home, {"id": "again001", "kind": "cron", "expression": "* * * * *", "prompt": "x"})
+    srv = host_server.Server(home=home)
+    data_schedule.register(srv)
+    loop = asyncio.get_running_loop()
+    runs: list[asyncio.Future] = []
+    checks: list[asyncio.Future] = []
+    held = False
+
+    def submit(kind, fn, *args):  # noqa: ANN001
+        runs.append(loop.create_future())
+        return runs[-1]
+
+    async def to_thread(fn, *args):  # noqa: ANN001
+        if held and fn is data_schedule.jobs_store.is_running:
+            checks.append(loop.create_future())
+            return await checks[-1]
+        return fn(*args)
+
+    monkeypatch.setattr("alpi.host.workers.submit", submit)
+    monkeypatch.setattr(asyncio, "to_thread", to_thread)
+
+    assert "result" in await _fire(srv, "again001")
+    await asyncio.sleep(0)
+    held = True
+    second = asyncio.create_task(_fire(srv, "again001"))
+    while not checks:
+        await asyncio.sleep(0)
+    runs[0].set_result((True, "fired"))
+    checks[0].set_result(False)
+    await second
+    held = False
+    for _ in range(5):
+        await asyncio.sleep(0)
+
+    await _fire(srv, "again001")
+    await _fire(srv, "again001")
+    await asyncio.sleep(0)
+    try:
+        assert sum(not run.done() for run in runs) == 1
+    finally:
+        for run in runs:
+            if not run.done():
+                run.set_result((True, "fired"))
+        for _ in range(5):
+            await asyncio.sleep(0)
+    assert data_schedule._ACCEPTED_FIRES == set()
+
+
+@pytest.mark.asyncio
+async def test_a_fire_that_crashes_frees_the_job_for_the_next_fire(tmp_path: Path, monkeypatch) -> None:
+    import asyncio
+
+    home = tmp_path / "h"
+    home.mkdir()
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    _seed_jobs(home, {"id": "crash001", "kind": "cron", "expression": "* * * * *", "prompt": "x"})
+    srv = host_server.Server(home=home)
+    data_schedule.register(srv)
+    calls: list[str] = []
+
+    def crash(h, jid):  # noqa: ANN001
+        calls.append(jid)
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("alpi.scheduler.run.fire_by_id", crash)
+
+    for expected in (1, 2):
+        assert (await _fire(srv, "crash001"))["result"] == {"ok": True, "id": "crash001"}
+        for _ in range(100):
+            if len(calls) == expected and not data_schedule._ACCEPTED_FIRES:
+                break
+            await asyncio.sleep(0.02)
+        assert len(calls) == expected
+        assert data_schedule._ACCEPTED_FIRES == set()
+
+
+@pytest.mark.asyncio
+async def test_two_profiles_with_the_same_job_id_fire_independently(tmp_path: Path, monkeypatch) -> None:
+    import asyncio
+    import threading
+
+    homes = {"one": tmp_path / "one", "two": tmp_path / "two"}
+    for home in homes.values():
+        home.mkdir()
+        _seed_jobs(home, {"id": "same0001", "kind": "cron", "expression": "* * * * *", "prompt": "x"})
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: homes[p])
+    srv = host_server.Server(home=homes["one"])
+    data_schedule.register(srv)
+    release = threading.Event()
+    fired: list[Path] = []
+
+    def waiting_fire(h, jid):  # noqa: ANN001
+        release.wait(5)
+        fired.append(h)
+        return True, "fired"
+
+    monkeypatch.setattr("alpi.scheduler.run.fire_by_id", waiting_fire)
+    answers = [
+        await srv._dispatch({"id": "r", "method": "host.schedule.fire", "params": {"profile": name, "id": "same0001"}})
+        for name in ("one", "two")
+    ]
+    assert [answer.get("result") for answer in answers] == [{"ok": True, "id": "same0001"}] * 2
+    release.set()
+    for _ in range(100):
+        if len(fired) == 2:
+            break
+        await asyncio.sleep(0.02)
+    assert sorted(fired) == sorted(homes.values())

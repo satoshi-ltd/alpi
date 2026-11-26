@@ -10,6 +10,8 @@ from alpi.scheduler import jobs_store
 
 # asyncio.create_task is weak-ref; this set keeps the task alive until done_callback drops it.
 _BACKGROUND_FIRES: set[asyncio.Task] = set()
+# A fire is reserved from the moment it is accepted: the run lock is taken only once a worker picks it up.
+_ACCEPTED_FIRES: set[tuple[str, str]] = set()
 
 
 def register(server: host_server.Server) -> None:
@@ -146,6 +148,13 @@ async def _schedule_fire(
         raise host_server.HandlerError(
             -32009, "conflict", data={"detail": f"job {job_id!r} is already running; wait for that run to finish"},
         )
+    reservation = (str(home), job_id)
+    if reservation in _ACCEPTED_FIRES:
+        raise host_server.HandlerError(
+            -32009, "conflict",
+            data={"detail": f"job {job_id!r} was already fired and is waiting to start; wait for that run to finish"},
+        )
+    _ACCEPTED_FIRES.add(reservation)
 
     async def _run() -> None:
         from alpi.host import workers
@@ -158,9 +167,14 @@ async def _schedule_fire(
                 "background fire crashed for %s/%s: %s", home, job_id, exc,
             )
 
+    def _finished(done: asyncio.Task) -> None:
+        # The only release, and not a `finally` in `_run`: a task cancelled before its first step never enters the coroutine, and a second release would free the next fire's reservation.
+        _BACKGROUND_FIRES.discard(done)
+        _ACCEPTED_FIRES.discard(reservation)
+
     task = asyncio.create_task(_run())
     _BACKGROUND_FIRES.add(task)
-    task.add_done_callback(_BACKGROUND_FIRES.discard)
+    task.add_done_callback(_finished)
     return {"ok": True, "id": job_id}
 
 

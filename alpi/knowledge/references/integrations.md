@@ -88,7 +88,11 @@ uses `alpi -p <profile> chat --once <text> --connection-id <id>`. The CLI calls
 the Unix-socket-only `host.chat.delegate`, validates that the connection is
 active and in scope, and then reuses `host.chat.send`; clients therefore see
 the canonical sidecar and `in_flight` state. Never expose delegation over the
-WebSocket or implement a second run-to-chat reconstruction path.
+WebSocket or implement a second run-to-chat reconstruction path. The command exits 0 only when the daemon's
+stream ended with its `done` frame. When the daemon refuses the request (busy or unknown session) it exits 1 with
+`delegated chat failed: <the daemon's reason>`. When the daemon stops or the connection drops first it exits 1 with a
+message ending in `the daemon closed the connection before the turn finished`, prints no reply, and the turn's
+outcome has to be read from the session.
 
 ## Workgroup methods (member-callable, all take `profile`, scope-checked)
 

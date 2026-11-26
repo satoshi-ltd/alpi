@@ -178,3 +178,71 @@ def test_validates_action_arguments(kwargs, message) -> None:
 
     assert not result.ok
     assert message in result.error
+
+
+def _hub_names_the_file(monkeypatch, name: str) -> None:
+    async def get_file(home, wg_id, digest):
+        return {"name": name}, b"bytes the hub chose"
+
+    monkeypatch.setattr(tool_mod.wc, "get_file", get_file)
+
+
+def test_get_without_a_dest_lands_in_the_workspace(tmp_path: Path, monkeypatch) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.chdir(workspace)
+    monkeypatch.setattr(tool_mod, "get_home", lambda: tmp_path / "home")
+    _hub_names_the_file(monkeypatch, "brief.md")
+
+    first = WorkgroupFileTool().run(action="get", wg_id="wg", sha256="0" * 64)
+    second = WorkgroupFileTool().run(action="get", wg_id="wg", sha256="0" * 64)
+
+    assert first.ok and second.ok
+    assert sorted(p.name for p in workspace.iterdir()) == ["brief-1.md", "brief.md"]
+
+
+@pytest.mark.parametrize("name", ["{outside}/planted.txt", "../outside/planted.txt", "../../outside/planted.txt", "~/planted.txt"])
+def test_get_never_follows_a_hub_file_name_out_of_the_workspace(tmp_path: Path, monkeypatch, name: str) -> None:
+    workspace, outside = tmp_path / "workspace", tmp_path / "outside"
+    workspace.mkdir()
+    outside.mkdir()
+    monkeypatch.chdir(workspace)
+    monkeypatch.setenv("HOME", str(outside))
+    monkeypatch.setattr(tool_mod, "get_home", lambda: tmp_path / "home")
+    _hub_names_the_file(monkeypatch, name.format(outside=outside))
+
+    result = WorkgroupFileTool().run(action="get", wg_id="wg", sha256="0" * 64)
+
+    assert not result.ok
+    assert "inside the active workspace" in result.error
+    assert list(outside.iterdir()) == []
+    assert list(workspace.iterdir()) == []
+
+
+def test_get_follows_no_symlink_out_of_the_workspace(tmp_path: Path, monkeypatch) -> None:
+    workspace, outside = tmp_path / "workspace", tmp_path / "outside"
+    workspace.mkdir()
+    outside.mkdir()
+    (workspace / "notes.md").symlink_to(outside / "notes.md")
+    monkeypatch.chdir(workspace)
+    monkeypatch.setattr(tool_mod, "get_home", lambda: tmp_path / "home")
+    _hub_names_the_file(monkeypatch, "notes.md")
+
+    result = WorkgroupFileTool().run(action="get", wg_id="wg", sha256="0" * 64)
+
+    assert not result.ok
+    assert list(outside.iterdir()) == []
+
+
+def test_get_with_a_dest_the_agent_chose_still_writes_there(tmp_path: Path, monkeypatch) -> None:
+    workspace, elsewhere = tmp_path / "workspace", tmp_path / "elsewhere"
+    workspace.mkdir()
+    elsewhere.mkdir()
+    monkeypatch.chdir(workspace)
+    monkeypatch.setattr(tool_mod, "get_home", lambda: tmp_path / "home")
+    _hub_names_the_file(monkeypatch, "brief.md")
+
+    result = WorkgroupFileTool().run(action="get", wg_id="wg", sha256="0" * 64, dest=str(elsewhere / "kept.md"))
+
+    assert result.ok
+    assert (elsewhere / "kept.md").read_bytes() == b"bytes the hub chose"

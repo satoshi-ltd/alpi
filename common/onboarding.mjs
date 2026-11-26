@@ -1,5 +1,23 @@
 export const PAIRING_STEPS = ["read", "reach", "sign-in"];
 
+export function pairHostConfirmation({ fact, scanned }) {
+  return {
+    title: "Pair with this daemon?",
+    body: scanned
+      ? `This phone has no connection to the daemon in that code. Pair only if it is yours: ${fact}`
+      : `This link was opened from outside the app. Pair only if you created it: ${fact}`,
+    confirmLabel: "Pair",
+  };
+}
+
+export function pairMoveConfirmation({ label, from, to }) {
+  return {
+    title: "Move this connection?",
+    body: `This code moves ${label} from ${from} to ${to} and replaces its sign-in. Move it only if that daemon changed address.`,
+    confirmLabel: "Move",
+  };
+}
+
 export function pairingStepLabel(step, host) {
   if (step === "read") return "Link read";
   if (step === "reach") return `Reaching ${host || "the host"}`;
@@ -48,6 +66,12 @@ const FAILURES = {
     action: "Use a new link",
     keepLink: false,
   },
+  "move-declined": {
+    title: () => "Connection move canceled",
+    hint: "Your connection is still at its original address. This code has been used. Get a new pairing code from the host to try again.",
+    action: "Use a new link",
+    keepLink: false,
+  },
   disabled: {
     title: () => "The host disabled this connection",
     hint: "Ask the host admin to enable it in Settings → Connections.",
@@ -69,6 +93,12 @@ const FAILURES = {
   invalid: {
     title: () => "That is not an alpi link",
     hint: "Paste the whole alpi:// link the host made for this device.",
+    action: "Use a new link",
+    keepLink: false,
+  },
+  "scanned-token": {
+    title: () => "That code carries a device token",
+    hint: "Scan the code the host shows when you add a device, or paste the pairing JSON here.",
     action: "Use a new link",
     keepLink: false,
   },
@@ -114,7 +144,7 @@ export function pairingLinkHost(link) {
 }
 
 export function failedStep(kind) {
-  if (kind === "invalid") return "read";
+  if (kind === "invalid" || kind === "scanned-token") return "read";
   if (kind === "unreachable" || kind === "rate-limited") return "reach";
   return "sign-in";
 }

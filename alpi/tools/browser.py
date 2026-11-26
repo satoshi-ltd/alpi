@@ -1,16 +1,18 @@
-"""Headless browser tool — Playwright-backed, per-profile context."""
-
 from __future__ import annotations
 
 import atexit
 import contextvars
+import json
 import math
 import os
+import queue
 import re
 import shutil
 import tempfile
+import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future
+from functools import partial
 from pathlib import Path
 from typing import Any, Callable
 
@@ -57,27 +59,49 @@ _CHROMIUM_SONAMES = (
     "libatspi.so.0",
 )
 
-_executor: ThreadPoolExecutor | None = None
-_state: dict[str, Any] = {
-    "playwright": None,
-    "browser": None,
-    "context": None,
-    "page": None,
-    "trace": None,
-    "downloads_dir": None,
-    "downloads": [],
-    "watched": [],
-    "navigating": set(),
-    "stalled": set(),
-    "inflight": set(),
-    "events": [],
-    "dialog": "dismiss",
-    "caller": None,
-    "opening": False,
-    "previous": None,
-    "viewed": None,
-    "save_from": [],
-}
+def _fresh() -> dict[str, Any]:
+    return {
+        "home": None, "context": None, "page": None, "trace": None, "downloads": [], "watched": [],
+        "navigating": set(), "stalled": set(), "inflight": set(), "events": [], "dialog": "dismiss",
+        "caller": None, "opening": False, "previous": None, "viewed": None, "save_from": [], "cookies": None,
+        "origins": [],
+    }
+
+
+_jobs: queue.SimpleQueue | None = None
+_starting = threading.Lock()
+# One Chromium, one context per profile home. `_state` holds the shared browser plus the session of the profile being served; `_parked` holds the other profiles' sessions. Both are touched only on the browser thread.
+_state: dict[str, Any] = {"playwright": None, "browser": None, "downloads_dir": None, "dead": False, **_fresh()}
+_parked: dict[Any, dict[str, Any]] = {}
+_lost: dict[Any, str] = {}
+_NOTES_MAX = 20
+_reached_browser = threading.local()
+
+
+def _activate(home: Path) -> None:
+    if _state["home"] == home:
+        return
+    incoming = _parked.pop(home, None)
+    if _state["home"] is None and incoming is None:
+        _state["home"] = home
+        return
+    if _state["context"] is not None or _state["trace"] is not None:
+        _parked[_state["home"]] = {key: _state[key] for key in _fresh()}
+    _state.update(incoming or {**_fresh(), "home": home})
+
+
+# Notes wait for their profile's next view, which a page that raises dialogs in a loop could otherwise fill.
+def _note(text: str, session: dict[str, Any] | None = None) -> None:
+    notes = (_state if session is None else session)["events"]
+    if notes and notes[-1] == text:
+        return
+    notes.append(text)
+    del notes[:-_NOTES_MAX]
+
+
+# Page events arrive whenever any call pumps Playwright, so a handler may run for a profile that is not the one being served.
+def _session(home: Any) -> dict[str, Any] | None:
+    return _state if _state["home"] == home else _parked.get(home)
 
 
 def missing_chromium_libs() -> list[str]:
@@ -95,28 +119,98 @@ def missing_chromium_libs() -> list[str]:
 
 
 def _storage_dir():
-    d = get_home() / "browser"
+    d = (_state["home"] or get_home()) / "browser"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
-def _on_browser_thread(fn: Callable[[], Any]) -> Any:
-    """Run ``fn`` on the dedicated Playwright thread and return its result.
+def _serve(jobs: queue.SimpleQueue) -> None:
+    while True:
+        job = jobs.get()
+        if job is None:
+            return
+        done, fn = job
+        try:
+            done.set_result(fn())
+        except BaseException as error:  # noqa: BLE001
+            done.set_exception(error)
 
-    Playwright's sync API is greenlet-based and pinned to the thread that
-    started it. alpi's TUI spawns a fresh worker thread per turn, so we
-    funnel every browser call through a single-worker executor.
-    """
-    global _executor
-    if _executor is None:
-        _executor = ThreadPoolExecutor(
-            max_workers=1, thread_name_prefix="alpi-browser",
-        )
-        atexit.register(_shutdown)
-    return _executor.submit(fn).result()
+
+def _submit(fn: Callable[[], Any]) -> Future:
+    global _jobs
+    done: Future = Future()
+    # Playwright's sync API is pinned to the thread that started it. That thread is a daemon one because `_shutdown` runs at exit, when a ThreadPoolExecutor already refuses work.
+    with _starting:
+        if _jobs is None:
+            jobs: queue.SimpleQueue = queue.SimpleQueue()
+            threading.Thread(target=_serve, args=(jobs,), name="alpi-browser", daemon=True).start()
+            _jobs = jobs
+        _jobs.put((done, fn))
+    return done
+
+
+def _on_browser_thread(fn: Callable[[], Any]) -> Any:
+    return _submit(fn).result()
+
+
+_GONE = "the browser had stopped and was started again: its open pages are gone, saved cookies are kept"
+
+
+# Chromium is shared: when it has died every profile's session died with it, and no single profile's `close` could bring it back while others stay parked. `is_connected` stays true when only the Playwright driver died, hence `dead`.
+def _forget_dead_browser() -> None:
+    browser = _state["browser"]
+    if browser is None or (not _state["dead"] and _call(browser.is_connected)):
+        return
+    for session in (_state, *_parked.values()):
+        recording = session["trace"] is not None
+        if recording:
+            _call(session["trace"].close)
+        if session["context"] is not None or recording:
+            _lost[session["home"]] = _GONE + ("; the trace that was recording was saved incomplete" if recording else "")
+    _parked.clear()
+    _state.update({**_fresh(), "home": _state["home"], "caller": _state["caller"], "dialog": _state["dialog"], "dead": False})
+    _stop_browser()
+    if _state["home"] in _lost:
+        _note(_lost.pop(_state["home"]))
+
+
+# The first call after the Playwright driver dies raises a bare Exception, later ones TargetClosedError.
+def _connection_lost(error: BaseException) -> bool:
+    return type(error).__name__ == "TargetClosedError" or "connection closed" in str(error).lower()
+
+
+def _browser_answers() -> bool:
+    try:
+        _state["browser"].new_context().close()
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+# A saved session that cannot be used is kept beside the live one, which the next cookie change overwrites.
+def _set_aside(storage_file: Path, why: str, aside: str = "state.json.unreadable") -> None:
+    try:
+        os.replace(storage_file, storage_file.with_name(aside))
+        kept = f"was set aside as browser/{aside}"
+    except OSError:
+        kept = "could not be moved away, so nothing this session saves will be kept until browser/state.json is removed"
+    _note(f"the saved browser session {why} and {kept}: this one starts signed out")
+
+
+# A file without `per_profile` was written while every profile shared one session, so whose sign-ins it holds is unknown.
+def _saved_session(storage_file: Path) -> dict[str, Any] | None:
+    try:
+        saved = json.loads(storage_file.read_text(encoding="utf-8"))
+        return {
+            "cookies": list(saved["cookies"]), "origins": list(saved.get("origins") or []),
+            "per_profile": saved.get("per_profile") is True,
+        }
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _ensure_page_blocking():
+    _forget_dead_browser()
     page = _state["page"]
     if page is not None:
         if not page.is_closed():
@@ -140,22 +234,51 @@ def _ensure_page_blocking():
             "playwright import failed — your alpi install is incomplete. "
             "Try: uv tool install alpi-agent --reinstall"
         )
-    pw = sync_playwright().start()
-    downloads_dir = tempfile.mkdtemp(prefix="alpi-browser-")
-    try:
-        browser = _launch_chromium(pw, downloads_dir)
-    except Exception as e:  # noqa: BLE001
-        pw.stop()
-        shutil.rmtree(downloads_dir, ignore_errors=True)
-        return None, f"failed to launch chromium: {e}"
+    if _state["browser"] is None:
+        pw = sync_playwright().start()
+        downloads_dir = tempfile.mkdtemp(prefix="alpi-browser-")
+        try:
+            browser = _launch_chromium(pw, downloads_dir)
+        except Exception as e:  # noqa: BLE001
+            pw.stop()
+            shutil.rmtree(downloads_dir, ignore_errors=True)
+            return None, f"failed to launch chromium: {e}"
+        _state.update(playwright=pw, browser=browser, downloads_dir=downloads_dir)
+        # Exit hooks run last-registered first, and greenlet's own hook (set when Playwright is imported) ends the sync API: ours has to be the later one.
+        atexit.unregister(_shutdown)
+        atexit.register(_shutdown)
+    home = _state["home"]
+    if home in _lost:
+        _note(_lost.pop(home))
     storage_file = _storage_dir() / "state.json"
-    context_args: dict[str, Any] = {}
-    if storage_file.exists():
-        context_args["storage_state"] = str(storage_file)
-    context = browser.new_context(**context_args)
+    saved = None
+    if storage_file.is_symlink():
+        _set_aside(storage_file, "is a link")
+    elif storage_file.exists():
+        _call(lambda: os.chmod(storage_file, 0o600))
+        saved = _saved_session(storage_file)
+        if saved is None:
+            _set_aside(storage_file, "could not be read")
+        elif not saved.pop("per_profile"):
+            saved = None
+            _set_aside(storage_file, "dates from when every profile shared one browser session", "state.json.shared")
+    try:
+        try:
+            context = _state["browser"].new_context(**({"storage_state": saved} if saved else {}))
+        except Exception:
+            if not saved:
+                raise
+            saved = None
+            context = _state["browser"].new_context()
+            _set_aside(storage_file, "was not accepted by the browser")
+    except Exception:
+        if not _parked:
+            _stop_browser()
+        raise
+    _state["origins"] = saved["origins"] if saved else []
     _apply_stealth(context)
 
-    allow_local = _allow_local()
+    allow_local = _in_caller(_allow_local)
     def _route_guard(route, request):  # noqa: ANN001
         ok, reason = check_url(request.url, allow_loopback=allow_local)
         if not ok:
@@ -173,10 +296,11 @@ def _ensure_page_blocking():
         context.route("**/*", _route_guard)
     except Exception:  # noqa: BLE001
         pass
-    context.on("page", _on_page)
-    context.on("dialog", _on_dialog)
-    page = _open_page(context)
-    _state.update(playwright=pw, browser=browser, context=context, page=page, downloads_dir=downloads_dir)
+    context.on("page", partial(_on_page, home))
+    context.on("dialog", partial(_on_dialog, home))
+    _state["context"] = context
+    _state["cookies"] = _call(lambda: json.dumps(context.cookies(), sort_keys=True))
+    _state["page"] = page = _open_page(context)
     return page, None
 
 
@@ -188,75 +312,96 @@ def _open_page(context):
         _state["opening"] = False
 
 
-def _watch(page):
-    if any(page is seen for seen in _state["watched"]):
+def _watch(page, session: dict[str, Any] | None = None):
+    session = _state if session is None else session
+    if any(page is seen for seen in session["watched"]):
         return page
-    _state["watched"].append(page)
+    session["watched"].append(page)
+    home = session["home"]
     page.set_default_timeout(_DEFAULT_TIMEOUT_MS)
-    page.on("download", _on_download)
-    page.on("request", _on_request)
-    page.on("framenavigated", _on_navigated)
-    page.on("requestfinished", _on_request_done)
-    page.on("requestfailed", _on_request_done)
-    page.on("response", _on_response)
+    page.on("download", partial(_on_download, home))
+    page.on("request", partial(_on_request, home))
+    page.on("framenavigated", partial(_on_navigated, home))
+    page.on("requestfinished", partial(_on_request_done, home))
+    page.on("requestfailed", partial(_on_request_done, home))
+    page.on("response", partial(_on_response, home))
     return page
 
 
-def _on_page(page) -> None:
-    if _state["opening"] or any(page is seen for seen in _state["watched"]):
+def _on_page(home, page) -> None:
+    session = _session(home)
+    if session is None or session["opening"] or any(page is seen for seen in session["watched"]):
         return
-    _state["previous"] = _state["page"]
-    _state["page"] = _watch(page)
-    if _state["save_from"]:
-        _state["save_from"].append(page)
-    _state["events"].append("a new tab opened and is now the active one")
+    session["previous"] = session["page"]
+    session["page"] = _watch(page, session)
+    if session["save_from"]:
+        session["save_from"].append(page)
+    _note("a new tab opened and is now the active one", session)
 
 
-def _on_download(download) -> None:
-    _state["downloads"].append(download)
+def _on_download(home, download) -> None:
+    session = _session(home)
+    if session is None:
+        _call(download.cancel)
+        return
+    session["downloads"].append(download)
 
 
-def _on_request(request) -> None:
+def _on_request(home, request) -> None:
+    session = _session(home)
+    if session is None:
+        return
     try:
         if request.resource_type in ("xhr", "fetch"):
-            _state["inflight"].add(request)
+            session["inflight"].add(request)
         elif request.is_navigation_request() and request.frame.parent_frame is None:
-            _state["stalled"].discard(request.frame)
-            _state["navigating"].add(request.frame)
+            session["stalled"].discard(request.frame)
+            session["navigating"].add(request.frame)
     except Exception:  # noqa: BLE001
         pass
 
 
-def _on_request_done(request) -> None:
-    _state["inflight"].discard(request)
+def _on_request_done(home, request) -> None:
+    session = _session(home)
+    if session is None:
+        return
+    session["inflight"].discard(request)
     if _call(request.is_navigation_request):
         frame = _call(lambda: request.frame)
-        _state["navigating"].discard(frame)
-        _state["stalled"].discard(frame)
+        session["navigating"].discard(frame)
+        session["stalled"].discard(frame)
 
 
-def _on_navigated(frame) -> None:
-    _state["navigating"].discard(frame)
-    _state["stalled"].discard(frame)
+def _on_navigated(home, frame) -> None:
+    session = _session(home)
+    if session is None:
+        return
+    session["navigating"].discard(frame)
+    session["stalled"].discard(frame)
     if _call(lambda: frame.parent_frame) is None:
-        _state["inflight"].clear()
+        session["inflight"].clear()
 
 
 # A navigation answered 204/205 never commits, so no `framenavigated` would clear it.
-def _on_response(response) -> None:
+def _on_response(home, response) -> None:
+    session = _session(home)
+    if session is None:
+        return
     try:
         if response.status in (204, 205) and response.request.is_navigation_request():
-            _state["navigating"].discard(response.request.frame)
+            session["navigating"].discard(response.request.frame)
     except Exception:  # noqa: BLE001
         pass
 
 
 # The note is recorded before answering: answering lets the page go on, and the action may fail before this handler returns.
-def _on_dialog(dialog) -> None:
-    accept = _state["dialog"] == "accept"
+def _on_dialog(home, dialog) -> None:
+    session = _session(home)
+    accept = session is not None and session["dialog"] == "accept"
     message = _one_line(dialog.message, 200).replace('"', "'")
     done = "accepted" if accept else 'dismissed (repeat the action with dialog="accept" to accept it)'
-    _state["events"].append(f'{dialog.type} dialog "{message}" was {done}')
+    if session is not None:
+        _note(f'{dialog.type} dialog "{message}" was {done}', session)
     try:
         if accept:
             dialog.accept()
@@ -299,6 +444,27 @@ def _launch_chromium(pw, downloads_path: str | None = None):
     return pw.chromium.launch(**options)
 
 
+# Cookies cost under a millisecond to read; the rest of the storage costs a hidden page per origin ever visited, so it is read on close only and carried over in between.
+def _save_state(*, full: bool = False) -> None:
+    context = _state["context"]
+    if context is None:
+        return
+    try:
+        found = context.cookies()
+        cookies = json.dumps(found, sort_keys=True)
+        if not full and cookies == _state["cookies"]:
+            return
+        if full:
+            whole = context.storage_state()
+            found, _state["origins"] = whole["cookies"], whole["origins"]
+            cookies = json.dumps(found, sort_keys=True)
+        from alpi.secrets_io import safe_write_secret
+        safe_write_secret(_storage_dir() / "state.json", json.dumps({"per_profile": True, "cookies": found, "origins": _state["origins"]}))
+        _state["cookies"] = cookies
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _close_blocking() -> None:
     trace = _state.get("trace")
     if trace is not None:
@@ -306,45 +472,51 @@ def _close_blocking() -> None:
             trace.close()
         except Exception:
             pass
-        _state["trace"] = None
-    try:
-        if _state["context"] is not None:
-            _state["context"].storage_state(path=str(_storage_dir() / "state.json"))
-    except Exception:  # noqa: BLE001
-        pass
-    for key in ("context", "browser"):
+    _save_state(full=True)
+    context = _state["context"]
+    if context is not None:
+        _call(context.close)
+    _lost.pop(_state["home"], None)
+    _state.update(_fresh())
+    if not _parked:
+        _stop_browser()
+
+
+def _stop_browser() -> None:
+    for key, stop in (("browser", "close"), ("playwright", "stop")):
         obj = _state.get(key)
         if obj is not None:
-            try:
-                obj.close()
-            except Exception:  # noqa: BLE001
-                pass
+            _call(getattr(obj, stop))
         _state[key] = None
-    pw = _state.get("playwright")
-    if pw is not None:
-        try:
-            pw.stop()
-        except Exception:  # noqa: BLE001
-            pass
-        _state["playwright"] = None
     if _state["downloads_dir"]:
         shutil.rmtree(_state["downloads_dir"], ignore_errors=True)
-    _state.update(page=None, downloads_dir=None, downloads=[], watched=[], navigating=set(), inflight=set(), events=[],
-                  previous=None, viewed=None, save_from=[], stalled=set())
+    _state["downloads_dir"] = None
+    _state["dead"] = False
 
 
-def _shutdown() -> None:
-    global _executor
-    if _executor is None:
+def _close_all() -> None:
+    while True:
+        _close_blocking()
+        if not _parked:
+            return
+        _activate(next(iter(_parked)))
+
+
+def _shutdown(wait: float = 5.0) -> None:
+    global _jobs
+    with _starting:
+        jobs, _jobs = _jobs, None
+    if jobs is None:
         return
+    done: Future = Future()
+    jobs.put((done, _close_all))
     try:
-        _executor.submit(_close_blocking).result(timeout=5)
+        done.result(timeout=wait)
     except Exception:  # noqa: BLE001
         pass
     if _state["downloads_dir"]:
         shutil.rmtree(_state["downloads_dir"], ignore_errors=True)
-    _executor.shutdown(wait=False, cancel_futures=True)
-    _executor = None
+    jobs.put(None)
 
 
 def _one_line(value: Any, limit: int) -> str:
@@ -474,7 +646,9 @@ def _current_view(page, settle: bool) -> str:
         raw = _settled(page) if settle else _raw(page)
     except _StillLoading:
         raise
-    except Exception:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001
+        if _connection_lost(e) and _state["browser"] is not None and not _browser_answers():
+            raise
         if _state["page"] is None or not page.is_closed():
             if _state["context"] is not None and _loading(page):
                 raise _StillLoading from None
@@ -535,6 +709,17 @@ def _in_caller(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
     return caller.run(fn, *args, **kwargs) if caller is not None else fn(*args, **kwargs)
 
 
+# The folder is shared by every profile's context, so only this session's own files are watched; the artifact path is not public API, hence the whole-folder fallback.
+def _own_files(downloads: list) -> set[str] | None:
+    names = set()
+    for download in downloads:
+        path = _call(lambda: download._impl_obj._artifact.absolute_path)
+        if not isinstance(path, str) or not path:
+            return None
+        names.add(os.path.basename(path))
+    return names
+
+
 # Chromium writes `<guid>.crdownload` and renames it when the file is complete, or removes it when the transfer fails: the only completion signal that does not block, since Download.path() and failure() wait for ever.
 def _collect_downloads(page) -> None:
     pending = _state["downloads"]
@@ -556,11 +741,12 @@ def _collect_downloads(page) -> None:
         if id(download) in why_not:
             _call(download.cancel)
     wanted = [download for download in batch if id(download) not in why_not]
+    own = _own_files(wanted)
     refused = ""
     started = time.monotonic()
     seen_partial = False
     while wanted and not refused:
-        names = os.listdir(folder)
+        names = [n for n in os.listdir(folder) if own is None or n.removesuffix(".crdownload") in own]
         partial = [n for n in names if n.endswith(".crdownload")]
         seen_partial = seen_partial or bool(partial)
         elapsed = time.monotonic() - started
@@ -594,7 +780,7 @@ def _collect_downloads(page) -> None:
         if target is not None:
             _call(target.unlink)
         _call(download.delete)
-        _state["events"].append(note)
+        _note(note)
         pending.remove(download)
 
 
@@ -691,7 +877,7 @@ def _do_trace_start() -> ToolResult:
     page, err = _ensure_page_blocking()
     if err:
         return ToolResult(ok=False, output="", error=err)
-    trace = BrowserTrace(_state["context"])
+    trace = _in_caller(BrowserTrace, _state["context"])
     _state["trace"] = trace
     return ToolResult(ok=True, output=json.dumps({"path": str(trace.path), "recording": True,
         "next": "Navigate to the start of the workflow; subsequent browser actions use this same session"}))
@@ -699,6 +885,7 @@ def _do_trace_start() -> ToolResult:
 
 def _do_trace_stop(role: str, name: str) -> ToolResult:
     import json
+    _forget_dead_browser()
     trace = _state.get("trace")
     if trace is None:
         return ToolResult(ok=False, output="", error="No active trace")
@@ -1018,10 +1205,12 @@ class Browser(Tool):
         index: int = 0,
         dialog: str = "dismiss",
     ) -> ToolResult:
-        recorded = _trace_steps()
+        _reached_browser.value = False
         result = self._run_action(action, url, role, name, text, direction, key, question, ref, path, index, dialog)
-        if not result.ok and action not in ("trace_start", "trace_stop") and _state.get("trace") is not None and _trace_steps() == recorded:
-            _on_browser_thread(lambda: _state["trace"].step(action, False))
+        # A racy read on purpose: a refused call must not queue behind another profile's action when nobody records a trace.
+        recording = any(session["trace"] is not None for session in (_state, *list(_parked.values())))
+        if not result.ok and not _reached_browser.value and recording:
+            _as_profile(lambda: _state["trace"] is not None and _state["trace"].step(action, False))
         return result
 
     def _run_action(
@@ -1049,16 +1238,16 @@ class Browser(Tool):
         if action == "trace_stop":
             return _run(_do_trace_stop, role, name)
         if action == "close":
-            _on_browser_thread(_close_blocking)
+            _as_profile(_close_blocking)
             return ToolResult(ok=True, output="browser context closed")
 
         if action == "logout":
-            _on_browser_thread(_close_blocking)
-            state_file = _storage_dir() / "state.json"
-            try:
-                state_file.unlink()
-            except FileNotFoundError:
-                pass
+            left = _as_profile(_logout)
+            if left:
+                return ToolResult(ok=False, output="", error=(
+                    f"browser closed, but the saved session could not be deleted: {', '.join(left)}. "
+                    "What is listed is still on disk, and a browser/state.json left there is loaded by the next browser use."
+                ))
             return ToolResult(ok=True, output="browser closed and saved cookies deleted")
 
         if action == "navigate":
@@ -1143,9 +1332,28 @@ class Browser(Tool):
         return ToolResult(ok=False, output="", error=f"unknown action: {action}")
 
 
-def _trace_steps() -> int | None:
-    trace = _state.get("trace")
-    return None if trace is None else len(trace.steps)
+def _logout() -> list[str]:
+    state_file = _storage_dir() / "state.json"
+    _close_blocking()
+    left = []
+    for saved in (state_file, state_file.with_name("state.json.unreadable"), state_file.with_name("state.json.shared")):
+        try:
+            saved.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError as error:
+            left.append(f"browser/{saved.name} ({error.strerror or type(error).__name__})")
+    return left
+
+
+def _as_profile(fn: Callable[[], Any]) -> Any:
+    home = get_home()
+    _reached_browser.value = True
+
+    def serve():
+        _activate(home)
+        return fn()
+    return _on_browser_thread(serve)
 
 
 def _run(fn: Callable[..., ToolResult], *args: Any, dialog: str = "dismiss") -> ToolResult:
@@ -1153,26 +1361,32 @@ def _run(fn: Callable[..., ToolResult], *args: Any, dialog: str = "dismiss") -> 
 
     def execute():
         trace = _state.get("trace")
-        _state["events"] = []
         _state["inflight"].clear()
         _state["dialog"] = dialog
         _state["caller"] = caller
         try:
             result = fn(*args)
-        except Exception:
-            if trace is not None and fn not in (_do_trace_start, _do_trace_stop):
-                trace.step(fn.__name__.removeprefix("_do_"), False)
-            raise
+        except Exception as e:  # noqa: BLE001
+            error = f"{type(e).__name__}: {e}"
+            if _connection_lost(e) and _state["browser"] is not None and not _browser_answers():
+                _state["dead"] = True
+                error += " — the browser stopped; repeat the action to start it again"
+            result = ToolResult(ok=False, output="\n".join(_state["events"]), error=error)
         finally:
             _state["dialog"] = "dismiss"
             _state["caller"] = None
-        if trace is not None and fn not in (_do_trace_start, _do_trace_stop):
+        # A note leaves only with a result that printed it: one recorded while another profile was served, or before a result with no view, waits for the next.
+        _state["events"] = [note for note in _state["events"] if note not in result.output]
+        if trace is not None and _state["trace"] is trace and fn not in (_do_trace_start, _do_trace_stop):
             trace.step(fn.__name__.removeprefix("_do_"), result.ok)
+        # Not after a failure: with Chromium frozen the cookie read has no timeout and would hold the one browser thread.
+        if result.ok:
+            _save_state()
         return result
     try:
-        return _on_browser_thread(execute)
+        return _as_profile(execute)
     except Exception as e:  # noqa: BLE001
-        return ToolResult(ok=False, output="\n".join(_state["events"]), error=f"{type(e).__name__}: {e}")
+        return ToolResult(ok=False, output="", error=f"{type(e).__name__}: {e}")
 
 
 TOOL = Browser

@@ -1,7 +1,8 @@
 import * as SecureStore from 'expo-secure-store';
 
 import { deviceOnlyOpts, readMovedItem } from './secureOpts';
-import { endpointUrl } from './endpoint.js';
+import { endpointUrl, routeKey } from './endpoint.js';
+import { AddressChange } from './pairing.js';
 
 const KEY = 'alpi.connections.v2';
 const LEGACY_CONNECTIONS_KEY = 'alpi.connections';
@@ -116,7 +117,7 @@ export function setRoles(idToRole) {
   });
 }
 
-export function saveConnection(endpoint) {
+export function saveConnection(endpoint, { moveAddress = null } = {}) {
   return mutate(async () => {
     if (!endpoint?.deviceId || typeof endpoint.deviceId !== 'string') {
       throw new Error('saveConnection requires a deviceId — pair against an alpi daemon v0.6.6 or newer.');
@@ -129,18 +130,29 @@ export function saveConnection(endpoint) {
       ? state.connections.findIndex((c) => c.id === endpoint.id)
       : -1;
     if (existingIdx < 0 && connectionId) {
-      existingIdx = state.connections.findIndex(
-        (c) => c.deviceId === endpoint.deviceId && c.connectionId === connectionId,
-      );
+      // Matched on the connection id alone: straight after the exchange `deviceId` is this phone's device on the daemon, not the daemon's identity that saved rows hold. The id comes from the pairing and a row's own daemon reports it, so it proves nothing about who answers: another address replaces a saved one only once the user has seen both, `moveAddress` names the row they saw, and with several candidates none is guessed.
+      const route = routeKey(endpoint);
+      const named = state.connections
+        .map((connection, index) => ({ connection, index }))
+        .filter(({ connection }) => connection.connectionId === connectionId);
+      const moved = named.find(({ connection }) => routeKey(connection) === route) ?? (named.length === 1 ? named[0] : null);
+      if (moved && routeKey(moved.connection) !== route && moveAddress !== moved.connection.id) {
+        throw new AddressChange(moved.connection, endpointUrl(endpoint));
+      }
+      if (moved) existingIdx = moved.index;
     }
+    // The answering daemon reports its own deviceId, so that id alone never replaces a saved address and token.
     if (existingIdx < 0 && !endpoint.id) {
-      const sameDaemon = state.connections
+      const route = routeKey(endpoint);
+      const sameRoute = state.connections
         .map((connection, index) => ({ connection, index }))
         .filter(({ connection }) => (
           connection.deviceId === endpoint.deviceId
           && (!connectionId || !connection.connectionId)
+          && route !== ''
+          && routeKey(connection) === route
         ));
-      if (sameDaemon.length === 1) existingIdx = sameDaemon[0].index;
+      if (sameRoute.length === 1) existingIdx = sameRoute[0].index;
     }
     const existing = existingIdx >= 0 ? state.connections[existingIdx] : null;
     const id = endpoint.id ?? existing?.id ?? genId();

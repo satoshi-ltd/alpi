@@ -10,6 +10,15 @@ from alpi.tools import browser
 from alpi.tools import _browser_trace as tracing
 
 
+@pytest.fixture(autouse=True)
+def _no_session_left_over(monkeypatch):
+    for key, value in browser._fresh().items():
+        monkeypatch.setitem(browser._state, key, value)
+    monkeypatch.setattr(browser, "_parked", {})
+    monkeypatch.setattr(browser, "_lost", {})
+    monkeypatch.setitem(browser._state, "dead", False)
+
+
 @pytest.fixture
 def trace(monkeypatch, tmp_path):
     monkeypatch.setattr(tracing, 'resolve_workspace_path', lambda p, **kw: tmp_path / p if not str(p).startswith('/') else __import__('pathlib').Path(p))

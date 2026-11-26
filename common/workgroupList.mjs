@@ -2,7 +2,7 @@ import { workgroupMark, workgroupStatusLine } from "./workgroupMarkState.mjs";
 
 export const WORKGROUP_FILTERS = [
   { id: "all", label: "All" },
-  { id: "active", label: "Working" },
+  { id: "active", label: "Active" },
   { id: "queued", label: "Queued" },
   { id: "paused", label: "Paused" },
 ];
@@ -16,7 +16,7 @@ export const WORKGROUP_GROUPS = [
 ];
 
 const URGENT = new Set(["active", "needs", "error"]);
-const FILTER_NOUN = { all: "workgroup", active: "working workgroup", queued: "queued workgroup", paused: "paused workgroup" };
+const FILTER_NOUN = { all: "workgroup", active: "active workgroup", queued: "queued workgroup", paused: "paused workgroup" };
 
 export function workgroupState(workgroup, task, busy, mark) {
   if (workgroup.paused) return { id: "paused", label: "Paused" };
@@ -55,6 +55,16 @@ export function inFilter(stateId, filter) {
 export function filterCounts(stateIds) {
   const ids = [...stateIds];
   return Object.fromEntries(WORKGROUP_FILTERS.map(({ id }) => [id, ids.filter((stateId) => inFilter(stateId, id)).length]));
+}
+
+// The Active filter holds what is working and what waits for the owner; a line that says "working" counts only the first.
+export function workgroupSummaryLine(stateIds) {
+  const ids = [...stateIds];
+  const working = ids.filter((stateId) => stateId === "active").length;
+  const waiting = ids.filter((stateId) => stateId === "needs" || stateId === "error").length;
+  const parts = [String(ids.length), `${working} working`];
+  if (waiting) parts.push(`${waiting} ${waiting === 1 ? "needs" : "need"} you`);
+  return parts.join(" · ");
 }
 
 export function groupWorkgroupRows(rows) {

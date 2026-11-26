@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.19.44 — 2026-11-26 — each profile keeps its own browser session and its own logs
+
+- Each profile now has its own `browser` session. On a daemon that runs several profiles they used to share one page and one set of cookies, so a profile could continue on a site another had signed in to. Tabs, cookies, downloads and traces are now separate, and `close` or `logout` affect only the profile that asks. Cookies are now saved while the browser is in use, not only on `close`, into that profile's own `browser/state.json`, so a login that sets a cookie survives a crash; the file is private and the file tools refuse it. If the browser process dies, each profile's next use starts it again and says so. What a site keeps outside cookies is saved on `close` and when the daemon stops normally. After updating, every profile signs in once more: a session saved by an earlier version may hold sign-ins of any profile, so it is not loaded and is kept aside as `browser/state.json.shared` until `logout` deletes it. `logout` now fails, naming the file, when it could not delete a saved session.
+- `llm.log`, `agent.log` and `approval.log` of a profile hold only that profile's lines. On a daemon with several profiles, the first one to write received everyone's lines, prompt snippets included, and the others got none. Lines already written stay where they are.
+- A file fetched with `workgroup_file` and no destination is written inside the workspace, and a file name from the hub that is not a plain name (a path, `..`, a backslash) is refused before anything is written. It used to be written wherever that name pointed.
+- Firing a job again while its first fire is still waiting to start is refused; with every worker busy, both used to run. A daemon task that keeps failing is now retried every five minutes for as long as it fails: after about three and a half days of failures it used to stop being restarted and disappear from `alpi daemon status`.
+- `alpi chat --once … --connection-id …` exits 1 when the daemon stops or the connection drops before the turn finishes (it used to print an empty reply and exit 0), and when the daemon refuses the request, with its reason. `alpi daemon restart` exits 1 when systemd does not start the daemon again.
+
 ## v0.19.43 — 2026-11-26 — a profile can be kept to the folders it may write in
 
 - New `tools.write_paths` in a profile's `config.yaml`: the folders its file tools may write in. A relative entry is under the profile home, so `write_paths: [out]` keeps the profile to `<home>/out`. A write anywhere else, a symlink out of a listed folder included, is refused with a message that names the folders, whoever asked for it.

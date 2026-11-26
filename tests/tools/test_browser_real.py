@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
+import signal
+import subprocess
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
+from alpi import home as home_mod
 from alpi.tools import _browser_view, browser
 
 pytestmark = pytest.mark.integration
@@ -61,6 +67,7 @@ LONG = "<html><head><title>Long</title></head><body><h1>Catalogue</h1>" + "".joi
 
 class Site(BaseHTTPRequestHandler):
     hits: list[str] = []
+    armed = False
 
     def reply(self, body, kind="text/html", headers=()):
         raw = body if isinstance(body, bytes) else body.encode()
@@ -82,6 +89,24 @@ class Site(BaseHTTPRequestHandler):
             return self.reply(PRICES)
         if self.path == "/hostile":
             return self.reply(HOSTILE)
+        if self.path.startswith("/login"):
+            who = self.path.partition("=")[2] or "someone"
+            return self.reply(f"<html><head><title>Account of {who}</title></head><body><h1>Inbox of {who}</h1><a href='/file'>Export</a></body></html>",
+                              headers=[("Set-Cookie", f"session={who}; Path=/; Max-Age=3600")])
+        if self.path == "/whoami":
+            return self.reply(f"<html><head><title>Who</title></head><body><p>cookie seen: {self.headers.get('Cookie') or 'none'}</p></body></html>")
+        if self.path == "/remember":
+            return self.reply("<html><head><title>Remember</title></head><body><p id='out'></p><script>"
+                              "document.getElementById('out').textContent='remembered: '+(localStorage.getItem('seen')||'no');"
+                              "localStorage.setItem('seen','yes')</script></body></html>")
+        if self.path == "/asklater":
+            return self.reply("<html><head><title>Ask later</title></head><body><h1>Main</h1><script>"
+                              "const t=setInterval(async()=>{if((await (await fetch('/armed')).text())==='yes'){clearInterval(t);"
+                              "document.title='answer='+confirm('Pay now?')}},300)</script></body></html>")
+        if self.path == "/armed":
+            return self.reply("yes" if type(self).armed else "no", "text/plain")
+        if self.path == "/selfbig":
+            return self.reply("<html><head><title>Self big</title></head><body><h1>Quiet for now</h1><script>setTimeout(()=>{location.href='/big'},1500)</script></body></html>")
         if self.path == "/driveby":
             return self.reply("<html><head><title>Drive-by</title></head><body><h1>Quiet page</h1><iframe src='/file' hidden></iframe></body></html>")
         if self.path == "/never":
@@ -447,3 +472,377 @@ def test_a_navigate_to_a_file_does_not_leave_the_page_free_to_save_more(site) ->
     after = ok(site(action="snapshot"))
     assert 'download "invoice.pdf" not saved: the page started it on its own' in after
     assert sorted(p.name for p in (site.workspace / ".browser-downloads").iterdir()) == ["big.bin"]
+
+
+@pytest.fixture
+def profiles(tmp_path, monkeypatch):
+    Site.hits = []
+    Site.armed = False
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Site)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    homes = {}
+    for name in ("first", "second"):
+        home = tmp_path / "root" / "profiles" / name
+        home.mkdir(parents=True)
+        workspace = tmp_path / f"{name}-workspace"
+        workspace.mkdir()
+        (home / "config.yaml").write_text(f"workspace: {json.dumps(str(workspace))}\ntools:\n  browser:\n    allow_local: true\n")
+        homes[name] = home
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path / "root"))
+    monkeypatch.setattr(browser, "HUMAN_TYPING", False)
+
+    def call(profile, **arguments):
+        if "path_of" in arguments:
+            arguments["url"] = f"http://127.0.0.1:{server.server_port}{arguments.pop('path_of')}"
+        answer = []
+
+        def turn():
+            home_mod.set_active_home(homes[profile])
+            answer.append(browser.Browser().run(**arguments))
+
+        thread = threading.Thread(target=turn)
+        thread.start()
+        thread.join()
+        return answer[0]
+
+    call.homes = homes
+    call.root = tmp_path / "root"
+    call.url = lambda path: f"http://127.0.0.1:{server.server_port}{path}"
+    call.workspace = lambda name: tmp_path / f"{name}-workspace"
+    try:
+        yield call
+    finally:
+        for name in homes:
+            call(name, action="logout")
+        server.shutdown()
+
+
+def _saved_cookies(home) -> list[str]:
+    path = home / "browser" / "state.json"
+    return [cookie["value"] for cookie in json.loads(path.read_text())["cookies"]] if path.exists() else []
+
+
+def test_two_profiles_in_one_process_never_see_each_others_page_or_cookies(profiles) -> None:
+    assert "Inbox of first" in ok(profiles("first", action="navigate", path_of="/login?who=first"))
+
+    untouched = ok(profiles("second", action="snapshot"))
+    assert "Inbox" not in untouched and "first" not in untouched
+    assert "cookie seen: none" in ok(profiles("second", action="navigate", path_of="/whoami"))
+
+    assert "Inbox of first" in ok(profiles("first", action="snapshot"))
+    assert "cookie seen: session=first" in ok(profiles("first", action="navigate", path_of="/whoami"))
+    assert "cookie seen: none" in ok(profiles("second", action="snapshot"))
+
+
+def test_each_profile_saves_its_session_in_its_own_private_file_without_closing(profiles) -> None:
+    ok(profiles("first", action="navigate", path_of="/login?who=first"))
+    ok(profiles("second", action="navigate", path_of="/login?who=second"))
+
+    assert _saved_cookies(profiles.homes["first"]) == ["first"]
+    assert _saved_cookies(profiles.homes["second"]) == ["second"]
+    assert not (profiles.root / "browser").exists()
+    for home in profiles.homes.values():
+        assert (home / "browser" / "state.json").stat().st_mode & 0o777 == 0o600
+
+
+def test_logout_of_one_profile_leaves_the_other_signed_in_on_its_page(profiles) -> None:
+    ok(profiles("first", action="navigate", path_of="/login?who=first"))
+    ok(profiles("second", action="navigate", path_of="/login?who=second"))
+
+    assert profiles("second", action="logout").ok
+
+    assert not (profiles.homes["second"] / "browser" / "state.json").exists()
+    assert _saved_cookies(profiles.homes["first"]) == ["first"]
+    assert "Inbox of first" in ok(profiles("first", action="snapshot"))
+    assert "cookie seen: none" in ok(profiles("second", action="navigate", path_of="/whoami"))
+    assert "cookie seen: session=first" in ok(profiles("first", action="navigate", path_of="/whoami"))
+
+
+def test_a_profile_that_closed_its_browser_is_signed_in_again_on_the_next_use(profiles) -> None:
+    ok(profiles("first", action="navigate", path_of="/login?who=first"))
+    ok(profiles("second", action="navigate", path_of="/login?who=second"))
+
+    assert profiles("first", action="close").ok
+
+    assert "Inbox of second" in ok(profiles("second", action="snapshot"))
+    assert "cookie seen: session=first" in ok(profiles("first", action="navigate", path_of="/whoami"))
+
+
+def test_a_trace_and_a_screenshot_stay_with_the_profile_that_asked(profiles) -> None:
+    started = profiles("second", action="trace_start")
+    assert started.ok, started.error
+    trace_path = json.loads(started.output)["path"]
+    ok(profiles("second", action="navigate", path_of="/orders"))
+    shot = profiles("second", action="screenshot")
+    assert profiles("second", action="trace_stop").ok
+
+    assert trace_path.startswith(str(profiles.workspace("second").resolve()))
+    assert shot.output.startswith(str(profiles.homes["second"] / "browser"))
+    assert not (profiles.workspace("first") / ".browser-traces").exists()
+    assert not (profiles.homes["first"] / "browser").exists()
+
+
+def test_each_profile_downloads_into_its_own_workspace(profiles) -> None:
+    for name in ("first", "second"):
+        view = ok(profiles(name, action="navigate", path_of=f"/login?who={name}"))
+        assert "downloaded" in ok(profiles(name, action="click", ref=refs(view, 'link "Export')[0]))
+    for name in ("first", "second"):
+        saved = list((profiles.workspace(name) / ".browser-downloads").iterdir())
+        assert [path.name for path in saved] == ["invoice.pdf"]
+
+
+def test_a_file_another_profile_left_unclaimed_does_not_count_against_this_download(profiles, monkeypatch) -> None:
+    monkeypatch.setattr(browser, "_DOWNLOAD_MAX_BYTES", 100_000)
+    ok(profiles("second", action="navigate", path_of="/selfbig"))
+    view = ok(profiles("first", action="navigate", path_of="/login?who=first"))
+    deadline = time.monotonic() + 8
+    while "/big" not in Site.hits and time.monotonic() < deadline:
+        ok(profiles("first", action="snapshot"))
+        time.sleep(0.2)
+    assert "/big" in Site.hits
+    ok(profiles("first", action="snapshot"))
+
+    result = ok(profiles("first", action="click", ref=refs(view, 'link "Export')[0]))
+
+    assert "downloaded" in result and "not saved" not in result
+    assert not (profiles.workspace("second") / ".browser-downloads").exists()
+    later = ok(profiles("second", action="snapshot"))
+    assert 'download "big.bin" not saved: the page started it on its own' in later
+
+
+def test_a_login_survives_the_process_being_killed(profiles) -> None:
+    home = profiles.homes["first"]
+    script = (
+        "import os, signal, sys\n"
+        "from pathlib import Path\n"
+        "from alpi import home as home_mod\n"
+        "from alpi.tools import browser\n"
+        "home_mod.set_active_home(Path(sys.argv[1]))\n"
+        "browser.HUMAN_TYPING = False\n"
+        "result = browser.Browser().run(action='navigate', url=sys.argv[2])\n"
+        "sys.stdout.write('ok' if result.ok else str(result.error))\n"
+        "sys.stdout.flush()\n"
+        "os.kill(os.getpid(), signal.SIGKILL)\n"
+    )
+    child = subprocess.run(
+        [sys.executable, "-c", script, str(home), profiles.url("/login?who=first")],
+        capture_output=True, text=True, timeout=120, env={**os.environ},
+    )
+
+    assert child.stdout == "ok", child.stderr
+    assert child.returncode == -signal.SIGKILL
+    assert _saved_cookies(home) == ["first"]
+    assert "cookie seen: session=first" in ok(profiles("first", action="navigate", path_of="/whoami"))
+
+
+def test_a_browser_that_died_is_replaced_and_each_profile_keeps_its_cookies(profiles) -> None:
+    ok(profiles("first", action="navigate", path_of="/login?who=first"))
+    ok(profiles("second", action="navigate", path_of="/login?who=second"))
+    browser._on_browser_thread(lambda: browser._state["browser"].close())
+
+    back = ok(profiles("first", action="navigate", path_of="/whoami"))
+
+    assert "the browser had stopped and was started again" in back
+    assert "cookie seen: session=first" in back
+    other = ok(profiles("second", action="navigate", path_of="/whoami"))
+    assert "the browser had stopped and was started again" in other and "cookie seen: session=second" in other
+
+
+def test_a_saved_session_that_cannot_be_read_starts_signed_out_and_says_so(profiles) -> None:
+    state_file = profiles.homes["first"] / "browser" / "state.json"
+    state_file.parent.mkdir()
+    state_file.write_text('{"cookies": [{"name": "half')
+
+    view = ok(profiles("first", action="navigate", path_of="/whoami"))
+
+    assert "the saved browser session could not be read" in view and "cookie seen: none" in view
+    assert state_file.with_name("state.json.unreadable").read_text() == '{"cookies": [{"name": "half'
+    ok(profiles("first", action="navigate", path_of="/login?who=first"))
+    assert _saved_cookies(profiles.homes["first"]) == ["first"]
+
+
+def test_a_saved_session_the_browser_rejects_is_set_aside_not_overwritten(profiles) -> None:
+    state_file = profiles.homes["first"] / "browser" / "state.json"
+    state_file.parent.mkdir()
+    good = {"name": "session", "value": "kept", "domain": "127.0.0.1", "path": "/", "expires": -1, "httpOnly": False, "secure": False, "sameSite": "Lax"}
+    rejected = json.dumps({"per_profile": True, "cookies": [good, {"name": "broken", "value": "x"}], "origins": []})
+    state_file.write_text(rejected)
+
+    view = ok(profiles("first", action="navigate", path_of="/login?who=first"))
+
+    assert "was not accepted by the browser and was set aside as browser/state.json.unreadable" in view
+    assert state_file.with_name("state.json.unreadable").read_text() == rejected
+    assert _saved_cookies(profiles.homes["first"]) == ["first"]
+
+    assert profiles("first", action="logout").ok
+    assert list(state_file.parent.iterdir()) == []
+
+
+def test_a_saved_session_that_is_a_link_is_set_aside_without_touching_its_target(profiles, tmp_path) -> None:
+    target = tmp_path / "elsewhere.json"
+    target.write_text('{"cookies": [], "origins": []}')
+    target.chmod(0o644)
+    state_file = profiles.homes["first"] / "browser" / "state.json"
+    state_file.parent.mkdir()
+    state_file.symlink_to(target)
+
+    view = ok(profiles("first", action="navigate", path_of="/login?who=first"))
+
+    assert "the saved browser session is a link and was set aside" in view
+    assert target.stat().st_mode & 0o777 == 0o644 and target.read_text() == '{"cookies": [], "origins": []}'
+    assert not state_file.is_symlink() and _saved_cookies(profiles.homes["first"]) == ["first"]
+
+
+def test_a_saved_session_that_cannot_be_moved_away_is_said_so_and_logout_says_it_is_still_there(profiles) -> None:
+    state_dir = profiles.homes["first"] / "browser" / "state.json"
+    state_dir.mkdir(parents=True)
+    (state_dir / "inside").write_text("x")
+    state_dir.with_name("state.json.unreadable").write_text("older")
+
+    view = ok(profiles("first", action="navigate", path_of="/whoami"))
+
+    assert "could not be moved away" in view and "was set aside" not in view
+    left = profiles("first", action="logout")
+    assert not left.ok and "could not be deleted: browser/state.json (" in left.error
+    assert not state_dir.with_name("state.json.unreadable").exists()
+    state_dir.chmod(0o700)
+    shutil.rmtree(state_dir)
+    assert profiles("first", action="logout").ok
+
+
+def test_a_session_saved_while_profiles_shared_the_browser_is_set_aside_not_loaded(profiles) -> None:
+    state_file = profiles.homes["first"] / "browser" / "state.json"
+    state_file.parent.mkdir()
+    someone = {"name": "session", "value": "someone", "domain": "127.0.0.1", "path": "/", "expires": -1, "httpOnly": False, "secure": False, "sameSite": "Lax"}
+    shared = json.dumps({"cookies": [someone], "origins": []})
+    state_file.write_text(shared)
+
+    view = ok(profiles("first", action="navigate", path_of="/whoami"))
+
+    assert "cookie seen: none" in view
+    assert "dates from when every profile shared one browser session and was set aside as browser/state.json.shared" in view
+    assert state_file.with_name("state.json.shared").read_text() == shared
+    assert state_file.with_name("state.json.shared").stat().st_mode & 0o777 == 0o600
+
+    ok(profiles("first", action="navigate", path_of="/login?who=first"))
+    assert json.loads(state_file.read_text())["per_profile"] is True
+    assert profiles("first", action="close").ok
+    again = ok(profiles("first", action="navigate", path_of="/whoami"))
+    assert "cookie seen: session=first" in again and "set aside" not in again
+
+    assert profiles("first", action="logout").ok
+    assert list(state_file.parent.iterdir()) == []
+
+
+def test_storage_a_site_keeps_is_saved_when_the_process_exits_without_a_close(profiles) -> None:
+    home = profiles.homes["first"]
+    script = (
+        "import sys\n"
+        "from pathlib import Path\n"
+        "from alpi import home as home_mod\n"
+        "from alpi.tools import browser\n"
+        "home_mod.set_active_home(Path(sys.argv[1]))\n"
+        "result = browser.Browser().run(action='navigate', url=sys.argv[2])\n"
+        "assert result.ok, result.error\n"
+    )
+
+    done = subprocess.run(
+        [sys.executable, "-c", script, str(home), profiles.url("/remember")],
+        capture_output=True, text=True, timeout=120, env={**os.environ, "ALPI_HOME": str(profiles.root)},
+    )
+
+    assert done.returncode == 0, done.stderr
+    kept = json.loads((home / "browser" / "state.json").read_text())["origins"]
+    assert kept and "seen" in json.dumps(kept)
+
+
+def test_storage_a_site_keeps_is_saved_when_a_daemon_under_pid_1_stops(profiles) -> None:
+    home = profiles.homes["first"]
+    script = (
+        "import os, sys\n"
+        "from pathlib import Path\n"
+        "from alpi import home as home_mod, pid1, service\n"
+        "from alpi.tools import browser\n"
+        "def daemon():\n"
+        "    home_mod.set_active_home(Path(sys.argv[1]))\n"
+        "    try:\n"
+        "        result = browser.Browser().run(action='navigate', url=sys.argv[2])\n"
+        "        assert result.ok, result.error\n"
+        "    finally:\n"
+        "        service._close_browser()\n"
+        "os._exit(pid1._run_child(daemon))\n"
+    )
+
+    done = subprocess.run(
+        [sys.executable, "-c", script, str(home), profiles.url("/remember")],
+        capture_output=True, text=True, timeout=120, env={**os.environ, "ALPI_HOME": str(profiles.root)},
+    )
+
+    assert done.returncode == 0, done.stderr
+    kept = json.loads((home / "browser" / "state.json").read_text())["origins"]
+    assert kept and "seen" in json.dumps(kept)
+
+
+def test_storage_saved_at_the_last_close_survives_a_cookie_change_without_another_close(profiles) -> None:
+    state_file = profiles.homes["first"] / "browser" / "state.json"
+    ok(profiles("first", action="navigate", path_of="/remember"))
+    assert profiles("first", action="close").ok
+    kept = json.loads(state_file.read_text())["origins"]
+    assert kept and "seen" in json.dumps(kept)
+
+    ok(profiles("first", action="navigate", path_of="/login?who=first"))
+
+    saved = json.loads(state_file.read_text())
+    assert [cookie["value"] for cookie in saved["cookies"]] == ["first"]
+    assert saved["origins"] == kept
+
+
+def _kill_playwright_driver() -> None:
+    found = subprocess.run(["pgrep", "-P", str(os.getpid()), "-f", "playwright"], capture_output=True, text=True).stdout.split()
+    assert found, "no Playwright driver process under this one"
+    for pid in found:
+        os.kill(int(pid), signal.SIGKILL)
+    time.sleep(1)
+
+
+def test_a_playwright_driver_that_died_is_replaced_for_every_profile(profiles) -> None:
+    ok(profiles("first", action="navigate", path_of="/login?who=first"))
+    ok(profiles("second", action="navigate", path_of="/login?who=second"))
+    _kill_playwright_driver()
+
+    broken = profiles("first", action="snapshot")
+    assert not broken.ok and "the browser stopped; repeat the action" in broken.error
+
+    back = ok(profiles("first", action="navigate", path_of="/whoami"))
+    assert "the browser had stopped and was started again" in back and "cookie seen: session=first" in back
+    other = ok(profiles("second", action="navigate", path_of="/whoami"))
+    assert "the browser had stopped and was started again" in other and "cookie seen: session=second" in other
+    assert "started again" not in ok(profiles("second", action="snapshot"))
+
+
+def test_what_a_site_stores_without_cookies_is_kept_across_close(profiles) -> None:
+    ok(profiles("first", action="navigate", path_of="/remember"))
+    assert profiles("first", action="close").ok
+
+    assert "remembered: yes" in ok(profiles("first", action="navigate", path_of="/remember"))
+    ok(profiles("first", action="navigate", path_of="/login?who=first"))
+    assert profiles("first", action="close").ok
+    assert "remembered: yes" in ok(profiles("first", action="navigate", path_of="/remember"))
+
+
+def test_a_dialog_raised_while_another_profile_browses_is_reported_to_its_own_profile(profiles) -> None:
+    ok(profiles("first", action="navigate", path_of="/asklater"))
+    Site.armed = True
+    deadline = time.monotonic() + 8
+    while time.monotonic() < deadline:
+        ok(profiles("second", action="navigate", path_of="/whoami"))
+        if browser._on_browser_thread(lambda: bool((browser._session(profiles.homes["first"]) or {}).get("events"))):
+            break
+        time.sleep(0.2)
+
+    seen_by_second = ok(profiles("second", action="snapshot"))
+    seen_by_first = ok(profiles("first", action="snapshot"))
+
+    assert "dialog" not in seen_by_second
+    assert 'confirm dialog "Pay now?" was dismissed' in seen_by_first
+    assert "title: answer=false" in seen_by_first

@@ -184,6 +184,7 @@ def test_console_restart_says_so_when_systemd_does_not_start_it(monkeypatch) -> 
 
     result = CliRunner().invoke(cli.main, ["daemon", "restart"])
 
+    assert result.exit_code == 1
     assert "respawn" not in result.output
     assert "systemctl --user start alpi-daemon.service" in result.output
 
@@ -228,3 +229,60 @@ def test_restart_treats_an_unreachable_systemd_as_not_supervising(monkeypatch, t
 
     assert service.restart_daemon(tmp_path) is True
     assert commands == ["stop"]
+
+
+def test_stopping_the_daemon_closes_the_browser_after_the_workers_and_before_the_lock(monkeypatch, tmp_path: Path) -> None:
+    from alpi import service
+    from alpi.host import workers
+
+    order: list[str] = []
+
+    class Lock:
+        def close(self) -> None:
+            order.append("lock")
+
+    async def main(root, profiles) -> None:
+        order.append("served")
+
+    import signal
+
+    monkeypatch.setattr(workers, "shutdown", lambda: order.append("workers"))
+    monkeypatch.setattr(
+        service, "_close_browser",
+        lambda: order.append("browser, signals held" if signal.getsignal(signal.SIGINT) is signal.SIG_IGN else "browser"),
+    )
+    monkeypatch.setattr(service, "_configure_logging_daemon", lambda root: None)
+    monkeypatch.setattr(service, "_acquire_singleton_lock", lambda root: Lock())
+    monkeypatch.setattr(service, "register_stack_dump", lambda root: None)
+    monkeypatch.setattr(service, "_set_proctitle_daemon", lambda n: None)
+    monkeypatch.setattr(service, "_write_daemon_pid", lambda root: None)
+    monkeypatch.setattr(service, "_clear_daemon_pid", lambda root: None)
+    monkeypatch.setattr(service, "_main_all", main)
+    monkeypatch.setattr("alpi.provider_pause.activate", lambda: None)
+    monkeypatch.setattr(data_daemon, "_respawn_requested", False)
+
+    service.serve_all(tmp_path)
+
+    assert order == ["served", "workers", "browser, signals held", "lock"]
+
+
+def test_closing_the_browser_at_stop_never_loads_it_and_never_stops_the_shutdown(monkeypatch) -> None:
+    import sys
+    import types
+
+    from alpi import service
+
+    monkeypatch.delitem(sys.modules, "alpi.tools.browser", raising=False)
+    service._close_browser()
+    assert "alpi.tools.browser" not in sys.modules
+
+    closed: list[str] = []
+    monkeypatch.setitem(sys.modules, "alpi.tools.browser", types.SimpleNamespace(_shutdown=lambda wait: closed.append(wait)))
+    service._close_browser()
+    assert len(closed) == 1 and closed[0] < 5
+
+    def broken(wait: float) -> None:
+        raise RuntimeError("chromium is gone")
+
+    monkeypatch.setitem(sys.modules, "alpi.tools.browser", types.SimpleNamespace(_shutdown=broken))
+    service._close_browser()

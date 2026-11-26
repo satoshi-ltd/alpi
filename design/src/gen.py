@@ -820,9 +820,9 @@ def phone_workgroups():
     search = (f'<div style="margin: 0 16px 8px; display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 16px; border-radius: {R_CONTROL}px; {M_WELL}; box-sizing: border-box">'
               f'{mi("search", 20, "#6b6b6b")}<span style="font-size: 15px; color: #6b6b6b">Search workgroups</span></div>')
     body = f"""<div style="display: flex; flex-direction: column; height: 100%; background: #ffffff">
-{m_screen_header("Workgroups", "59 · 3 working", glyph="")}
+{m_screen_header("Workgroups", "59 · 2 working · 1 needs you", glyph="")}
 {search}
-<div style="padding: 0 16px 4px">{m_count_segmented((("All", 59), ("Working", 3), ("Queued", 1), ("Paused", 0)), "All")}</div>
+<div style="padding: 0 16px 4px">{m_count_segmented((("All", 59), ("Active", 3), ("Queued", 1), ("Paused", 0)), "All")}</div>
 <div style="flex: 1; min-height: 0; overflow: hidden">{listed}</div>
 </div>
 """

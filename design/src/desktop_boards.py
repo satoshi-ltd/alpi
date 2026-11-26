@@ -580,7 +580,7 @@ def desktop_workgroups(stale=False):
                 f'<span style="display: flex; align-items: center; gap: 12px; min-width: 0">{wg_mark(accent, **(mark or {}))}<span style="font-size: 15px; font-weight: 400; line-height: 1; color: {INK2}">{name}</span></span>'
                 f'<span style="display: flex; align-items: center; gap: 8px; min-width: 0">{lines}</span>{cell(members, INK2)}{cell(spend, INK2)}{cell(age, INK3)}</div>')
 
-    toolbar = search_toolbar("Search workgroups…", seg_counts((("All", 5), ("Working", 2), ("Queued", 1), ("Paused", 0)), "All"))
+    toolbar = search_toolbar("Search workgroups…", seg_counts((("All", 5), ("Active", 2), ("Queued", 1), ("Paused", 0)), "All"))
     table = (toolbar + head
              + group("Needs you", 1, "#b3470e", first=True)
              + wrow("release-train", "#df4b9d", "#e08a3c", "Needs you · approval · @yuri", 3, "$4.80", "now", "", dict(state="needs"), color="#b3470e")

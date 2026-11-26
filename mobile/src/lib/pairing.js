@@ -1,6 +1,16 @@
-import { normalizeEndpointUrl } from './endpoint.js';
+import { normalizeEndpointUrl, routeKey } from './endpoint.js';
 
 export class PairingError extends Error {}
+
+export class AddressChange extends Error {
+  constructor(saved, to) {
+    super('This pairing would move a saved connection to another address');
+    this.id = saved.id;
+    this.label = saved.name ?? 'alpi';
+    this.from = saved.url;
+    this.to = to;
+  }
+}
 
 const LINK_PARAMS = ['url', 'host', 'port', 'pairing_token', 'name', 'connection_id'];
 
@@ -107,6 +117,20 @@ function parseJson(obj) {
   } catch (error) {
     throw new PairingError(error.message);
   }
+}
+
+// A camera reads whatever is put in front of it: a scan never carries a device token, and a daemon this phone has no connection to is confirmed first.
+export function scanDecision(data, connections) {
+  let endpoint;
+  try {
+    endpoint = parsePairing(data);
+  } catch {
+    return { action: 'pair' };
+  }
+  if (endpoint.token) return { action: 'refuse' };
+  const route = routeKey(endpoint);
+  const known = (connections ?? []).some((connection) => routeKey(connection) === route);
+  return known ? { action: 'pair' } : { action: 'confirm', fact: pairingLinkFact(data) };
 }
 
 export function pairingLinkFact(text) {

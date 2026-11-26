@@ -2,28 +2,13 @@
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
 from alpi._log import get_subsystem_logger
 from alpi.tools import _approval
 
 
-def _reset_logger(name: str) -> None:
-    """Tear down the cached handlers so a test-local ``home`` is picked up."""
-    logger = logging.getLogger(name)
-    for h in list(logger.handlers):
-        logger.removeHandler(h)
-        try:
-            h.close()
-        except Exception:  # noqa: BLE001
-            pass
-    if hasattr(logger, "_alpi_configured"):
-        delattr(logger, "_alpi_configured")
-
-
 def test_subsystem_logger_writes_to_expected_path(tmp_path: Path) -> None:
-    _reset_logger("alpi.demo")
     logger = get_subsystem_logger(tmp_path, "demo")
     logger.info("hello world")
     for h in logger.handlers:
@@ -40,7 +25,6 @@ def test_subsystem_logger_writes_to_expected_path(tmp_path: Path) -> None:
 
 
 def test_approval_logs_caution_decision(tmp_path: Path, monkeypatch) -> None:
-    _reset_logger("alpi.approval")
     from alpi import home as home_mod
     monkeypatch.setattr(home_mod, "get_home", lambda: tmp_path)
 
@@ -61,7 +45,6 @@ def test_approval_logs_caution_decision(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_approval_does_not_log_safe_commands(tmp_path: Path, monkeypatch) -> None:
-    _reset_logger("alpi.approval")
     from alpi import home as home_mod
     monkeypatch.setattr(home_mod, "get_home", lambda: tmp_path)
 
@@ -74,7 +57,6 @@ def test_approval_does_not_log_safe_commands(tmp_path: Path, monkeypatch) -> Non
 
 
 def test_approval_logs_allow_when_user_approves(tmp_path: Path, monkeypatch) -> None:
-    _reset_logger("alpi.approval")
     from alpi import home as home_mod
     monkeypatch.setattr(home_mod, "get_home", lambda: tmp_path)
 
@@ -91,7 +73,6 @@ def test_approval_logs_allow_when_user_approves(tmp_path: Path, monkeypatch) -> 
 
 def test_agent_log_emits_one_line_per_turn(tmp_path: Path, monkeypatch) -> None:
     """End-to-end: the engine's _log_agent_turn helper must write to agent.log."""
-    _reset_logger("alpi.agent")
 
     # Minimal fake session object — only the attributes the helper reads.
     class _FakeSession:

@@ -173,8 +173,8 @@ export function EndpointProvider({ children }) {
     probeByIdFrom(list, id).catch(() => {});
   }, [activeId, probeByIdFrom]);
 
-  const addConnection = useCallback(async (endpoint) => {
-    await saveConnection({ ...endpoint, added_at: Date.now() });
+  const addConnection = useCallback(async (endpoint, options) => {
+    await saveConnection({ ...endpoint, added_at: Date.now() }, options);
     await refresh();
   }, [refresh]);
 

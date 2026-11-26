@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  WORKGROUP_FILTERS,
   filterCounts,
   groupWorkgroupRows,
   inFilter,
@@ -7,6 +8,7 @@ import {
   rosterWorkgroups,
   workgroupRowState,
   workgroupStatusLabel,
+  workgroupSummaryLine,
 } from "../../../common/workgroupList.mjs";
 
 const state = (workgroup, extra = {}) => workgroupRowState({ workgroup: { id: "w", ...workgroup }, ...extra }).state;
@@ -25,7 +27,17 @@ describe("workgroup list", () => {
     expect(state({ pipeline_status: "completed" }).id).toBe("idle");
   });
 
-  it("counts every filter over the whole set, with needs you and attention under Working", () => {
+  it("says how many work and how many wait for the owner, never the two as one number", () => {
+    expect(workgroupSummaryLine(["needs", "error", "idle"])).toBe("3 · 0 working · 2 need you");
+    expect(workgroupSummaryLine(["active", "needs", "error", "queued", "idle", "idle", "paused"])).toBe("7 · 1 working · 2 need you");
+    expect(workgroupSummaryLine(["active", "active", "needs"])).toBe("3 · 2 working · 1 needs you");
+    expect(workgroupSummaryLine(["active", "idle"])).toBe("2 · 1 working");
+    expect(workgroupSummaryLine([])).toBe("0 · 0 working");
+    expect(WORKGROUP_FILTERS.map((item) => item.label)).toEqual(["All", "Active", "Queued", "Paused"]);
+    expect(noMatchLine("active", "")).toBe("No active workgroups right now.");
+  });
+
+  it("counts every filter over the whole set, with needs you and attention under Active", () => {
     expect(filterCounts(["active", "needs", "error", "queued", "idle", "idle", "paused"])).toEqual({ all: 7, active: 3, queued: 1, paused: 1 });
     expect(filterCounts(Array(59).fill("idle"))).toEqual({ all: 59, active: 0, queued: 0, paused: 0 });
     expect(inFilter("needs", "active")).toBe(true);

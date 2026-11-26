@@ -1297,6 +1297,10 @@ async def get_file(
             for key in ("name", "size", "sha256", "key_version", "nonce", "ciphertext_size")
         }
         if metadata is None:
+            try:
+                wf._validate_name(current["name"])
+            except wf.WorkgroupFileError as e:
+                raise alp_client.ClientError("hub returned an invalid file name") from e
             metadata = current
         elif current != metadata:
             raise alp_client.ClientError("workgroup file metadata changed during download")

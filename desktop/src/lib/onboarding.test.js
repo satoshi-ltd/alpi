@@ -55,6 +55,8 @@ describe("onboarding copy", () => {
     expect(pairingFailure("link-used", "casa")).toMatchObject({ keepLink: false, action: "Use a new link" });
     expect(pairingFailure("nonsense", "casa").kind).toBe("unknown");
     expect(failedStep("invalid")).toBe("read");
+    expect(failedStep("scanned-token")).toBe("read");
+    expect(pairingFailure("scanned-token", null)).toMatchObject({ kind: "scanned-token", keepLink: false });
     expect(failedStep("unreachable")).toBe("reach");
     expect(failedStep("link-used")).toBe("sign-in");
     expect(pairingStepLabel("reach", "casa")).toBe("Reaching casa");

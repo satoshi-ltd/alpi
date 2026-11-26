@@ -295,3 +295,47 @@ async def test_each_streak_alerts_once_and_recovers_once(fast, monkeypatch) -> N
         await guard
     codes = [a["code"] for a in fast["alerts"]]
     assert codes == ["task_failing", "task_recovered", "task_failing", "task_recovered"]
+
+
+@pytest.mark.asyncio
+async def test_a_task_that_never_stops_failing_is_still_supervised(fast, monkeypatch) -> None:
+    monkeypatch.setattr(daemon_tasks, "RESTART_BASE_S", 5.0)
+    monkeypatch.setattr(daemon_tasks, "RESTART_MAX_S", 300.0)
+    monkeypatch.setattr(daemon_tasks, "HEALTHY_AFTER_S", 300.0)
+    monkeypatch.setattr(daemon_tasks, "_write", lambda: None)
+    monkeypatch.setattr(daemon_tasks.log, "error", lambda *args, **kwargs: None)
+    delays: list[float] = []
+    real_sleep = asyncio.sleep
+
+    async def instant(delay: float) -> None:
+        delays.append(delay)
+        await real_sleep(0)
+
+    monkeypatch.setattr(daemon_tasks.asyncio, "sleep", instant)
+    calls = 0
+    stop = asyncio.Event()
+
+    async def broken(home: Path) -> None:
+        nonlocal calls
+        calls += 1
+        if calls <= 1100:
+            raise RuntimeError("still broken")
+        await stop.wait()
+
+    guard = asyncio.create_task(service._guard_task(broken, fast["root"], "alice", "schedule"))
+    for _ in range(20000):
+        if calls > 1100 or guard.done():
+            break
+        await real_sleep(0)
+    assert not guard.done(), guard.exception()
+    assert calls == 1101
+    assert delays[:7] == [5.0, 10.0, 20.0, 40.0, 80.0, 160.0, 300.0]
+    assert set(delays[6:]) == {300.0}
+    assert daemon_tasks._states["alice/schedule"]["failures"] == 1100
+    guard.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await guard
+
+
+def test_the_restart_delay_grows_to_its_cap_for_any_failure_count() -> None:
+    assert [daemon_tasks.restart_delay(n) for n in (0, 1, 2, 7, 1025, 10**9)] == [5.0, 5.0, 10.0, 300.0, 300.0, 300.0]

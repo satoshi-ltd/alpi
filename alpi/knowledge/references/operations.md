@@ -72,6 +72,8 @@ Rotated text caps at **1 MB** (`.log.1` = previous gen); `compaction.jsonl` does
 | `ledger.json` | per profile | daily budget gate (live counters, UTC reset) + 30-day per-day spend history (USD, input/output/cache tokens, provider-reported cache discount, and cost-source counts; ALL spend incl. non-token costs like image generation); served by `host.usage.daily`. Every writer process holds `logs/ledger.lock` across read-modify-write, so concurrent charges add up; an unwritable charge is dropped with a log warning, never raised into the turn. |
 | `prefix_shapes.json` | per profile | best-effort hash-only request-shape history for up to 20 recent conversation affinities; stores no prompt text and is safe to delete. |
 
+`llm.log`, `agent.log` and `approval.log` hold only their own profile's lines, also in a daemon that runs several profiles. Lines written before 0.19.44 by such a daemon may sit in the log of whichever profile logged first.
+
 Cache interpretation: `provider` cost is the endpoint's own figure; `litellm` and `table` are cache-blind list-price arithmetic; `none` means unavailable. Reconcile billing against the provider dashboard. `cache_diag` reasons such as `first_contact`, model/tools changes, compaction, resume, reset, or rewrite-from-turn explain expected cold prefixes.
 
 ```bash
@@ -106,7 +108,7 @@ alpi --version
 alpi doctor
 ```
 
-`alpi daemon restart` stops the daemon and, on Linux when its systemd unit is what runs it, restarts that unit (launchd respawns it by itself; a daemon started by hand is only stopped); it says so when systemd could not, and the same happens when `alpi setup` restarts the daemon after a change. A restart or update asked from an app ends the daemon with exit status 75 so systemd, launchd and Docker all bring it back; `systemctl --user status alpi-daemon` shows that exit as a failure followed by a restart, which is expected.
+`alpi daemon restart` stops the daemon and, on Linux when its systemd unit is what runs it, restarts that unit (launchd respawns it by itself; a daemon started by hand is only stopped); when systemd could not it says so and exits with status 1 (check that status in a deploy script before going on), and `alpi setup` reports the same when it restarts the daemon after a change. A restart or update asked from an app ends the daemon with exit status 75 so systemd, launchd and Docker all bring it back; `systemctl --user status alpi-daemon` shows that exit as a failure followed by a restart, which is expected.
 
 - Use the same installer family as the original install (`uv`, `pipx`, …).
 - No silent migrations: if a CHANGELOG entry calls for file moves, apply them for **every profile**.

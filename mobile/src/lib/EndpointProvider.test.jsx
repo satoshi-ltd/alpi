@@ -25,8 +25,8 @@ const storeMutations = [];
 
 vi.mock("./store", () => ({
   loadConnections: async () => structuredClone(storeState),
-  saveConnection: async (conn) => {
-    storeMutations.push({ op: "save", conn });
+  saveConnection: async (conn, options) => {
+    storeMutations.push({ op: "save", conn, ...(options ? { options } : {}) });
     const existing = storeState.connections.findIndex((c) => c.id === conn.id);
     if (existing >= 0) storeState.connections[existing] = conn;
     else storeState.connections.push(conn);
@@ -236,6 +236,14 @@ describe("EndpointProvider lifecycle", () => {
     expect(beta.name).toBe("macbook-pro");
     expect(beta.token).toBe("b");
     expect(captureRef.current.activeId).toBe("alpha");
+  });
+
+  it("addConnection hands the store the permission to move a saved address", async () => {
+    const { captureRef } = await mount();
+    const moved = { id: "beta", name: "macbook", url: "wss://moved.example.com", token: "b2", deviceId: "d", kind: "remote" };
+    await act(async () => { await captureRef.current.addConnection(moved, { moveAddress: "beta" }); });
+    expect(storeMutations.at(-1)).toMatchObject({ op: "save", options: { moveAddress: "beta" } });
+    expect(captureRef.current.connections.find((c) => c.id === "beta").url).toBe("wss://moved.example.com");
   });
 
   it("forget drops only the targeted endpoint's pool", async () => {

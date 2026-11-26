@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Keyboard, Linking, Platform, ScrollView, Text, TextInput, View } from 'react-native';
 import { TWIN_SHAPE } from '../../common/shapes.mjs';
 import { MARK_SIZES } from '../../common/agentMarks.mjs';
-import { LINK_SOURCE_ROWS, PAIRING_STEPS, failedStep, pairingFailure, pairingFailureKind, pairingLinkHost, pairingStepLabel } from '../../common/onboarding.mjs';
+import { LINK_SOURCE_ROWS, PAIRING_STEPS, failedStep, pairHostConfirmation, pairMoveConfirmation, pairingFailure, pairingFailureKind, pairingLinkHost, pairingStepLabel } from '../../common/onboarding.mjs';
 import { KeyboardPane } from '../src/components/KeyboardPane';
 import { palettes, space } from '../src/theme/tokens';
 import {
@@ -29,7 +29,7 @@ import { StepLadder, ladderSteps } from '../src/components/StepLadder';
 import { useWell } from '../src/components/well';
 import { useFirstRunLayout, useKeyboardOpen } from '../src/hooks/useFirstRunLayout';
 import { useEndpoint } from '../src/lib/EndpointContext';
-import { exchangePairing, pairingLinkFact, pairingLinkFromParams, parsePairing } from '../src/lib/pairing';
+import { AddressChange, exchangePairing, pairingLinkFact, pairingLinkFromParams, parsePairing, scanDecision } from '../src/lib/pairing';
 import { ConfirmDialog } from '../src/components/ConfirmDialog';
 import { RATE_LIMITED_STATUS } from '../src/lib/rateLimit';
 import { isSpentPairing, rememberSpentPairing } from '../src/lib/spentPairings';
@@ -38,6 +38,8 @@ import { call } from '../src/lib/rpc';
 import { ThemeContext, useTheme } from '../src/theme/ThemeContext';
 
 const CAMERA_GROUND = '#000';
+
+class MoveDeclined extends Error {}
 
 export default function Pair() {
   const theme = useTheme();
@@ -53,6 +55,7 @@ export default function Pair() {
   const hasConnection = (connections?.length ?? 0) > 0;
   const inFlight = useRef(false);
   const mounted = useRef(true);
+  const pendingMove = useRef(null);
   const params = useLocalSearchParams();
   const routedLink = pairingLinkFromParams(params);
   const [mode, setMode] = useState(params.mode === 'scan' && !routedLink ? 'scan' : 'paste');
@@ -61,12 +64,16 @@ export default function Pair() {
   const [current, setCurrent] = useState(null);
   const [failure, setFailure] = useState(null);
   const [confirmHost, setConfirmHost] = useState(null);
+  const [confirmMove, setConfirmMove] = useState(null);
   const [permission, requestPermission, getPermission] = useCameraPermissions();
   const darkTheme = useMemo(() => ({ ...theme, mode: 'dark', colors: palettes.dark }), [theme]);
 
   useEffect(() => {
     mounted.current = true;
-    return () => { mounted.current = false; };
+    return () => {
+      mounted.current = false;
+      pendingMove.current?.(false);
+    };
   }, []);
 
   useEffect(() => {
@@ -123,12 +130,34 @@ export default function Pair() {
       if (routedLink && text === routedLink) {
         const fact = pairingLinkFact(text);
         if (fact) {
-          setConfirmHost(fact);
+          setConfirmHost({ fact, scanned: false });
           return;
         }
       }
       tryPair(text);
     }
+  };
+
+  const save = async (endpoint) => {
+    try {
+      await addConnection(endpoint);
+    } catch (error) {
+      if (!(error instanceof AddressChange)) throw error;
+      if (!mounted.current) throw new MoveDeclined();
+      const { label, from, to } = error;
+      const agreed = await new Promise((resolve) => {
+        pendingMove.current = resolve;
+        setConfirmMove({ label, from, to });
+      });
+      if (!agreed) throw new MoveDeclined();
+      await addConnection(endpoint, { moveAddress: error.id });
+    }
+  };
+
+  const answerMove = (agreed) => {
+    pendingMove.current?.(agreed);
+    pendingMove.current = null;
+    setConfirmMove(null);
   };
 
   const tryPair = async (input) => {
@@ -141,6 +170,7 @@ export default function Pair() {
     const host = pairingLinkHost(input);
     let exchangedCredentialSaved = false;
     let endpoint;
+    let grant;
     try {
       endpoint = parsePairing(input);
     } catch {
@@ -151,14 +181,14 @@ export default function Pair() {
     }
     try {
       setCurrent('reach');
-      const grant = endpoint.pairingToken;
+      grant = endpoint.pairingToken;
       const usesOneTimeGrant = Boolean(grant);
       const clientName = Platform.constants?.Model || Platform.OS;
       const appVersion = Constants.expoConfig?.version || '';
       endpoint = await exchangePairing(endpoint, {
         name: clientName,
         appVersion,
-      }, call, addConnection);
+      }, call, save);
       if (usesOneTimeGrant) {
         exchangedCredentialSaved = true;
         rememberSpentPairing(grant);
@@ -179,7 +209,7 @@ export default function Pair() {
         app_version: appVersion,
       }).catch(() => {});
       const finalEndpoint = { ...endpoint, deviceId, ...(deviceName ? { name: deviceName } : {}) };
-      await addConnection(finalEndpoint);
+      await save(finalEndpoint);
       setCurrent('done');
       if (!mounted.current) return;
       const shared = Array.isArray(summaries?.profiles) ? summaries.profiles.length : Array.isArray(summaries) ? summaries.length : null;
@@ -188,7 +218,19 @@ export default function Pair() {
         params: { host: finalEndpoint.name ?? host ?? '', role: role ?? '', ...(shared != null ? { shared: String(shared) } : {}) },
       });
     } catch (e) {
-      fail(pairingFailureKind(e), host, null, exchangedCredentialSaved);
+      if (e instanceof MoveDeclined) {
+        if (grant) {
+          rememberSpentPairing(grant);
+          if (mounted.current) {
+            setCurrent('sign-in');
+            fail('move-declined', host, 'sign-in');
+          }
+        } else if (mounted.current) {
+          editLink('');
+        }
+      } else {
+        fail(pairingFailureKind(e), host, null, exchangedCredentialSaved);
+      }
     } finally {
       setBusy(false);
       inFlight.current = false;
@@ -203,7 +245,20 @@ export default function Pair() {
   const handleScan = async ({ data }) => {
     if (busy || inFlight.current) return;
     setMode('paste');
+    const decision = scanDecision(data, connections);
+    if (decision.action === 'refuse') {
+      setText('');
+      setCurrent('read');
+      fail('scanned-token', null, 'read');
+      return;
+    }
     setText(data);
+    if (decision.action === 'confirm') {
+      setFailure(null);
+      setCurrent(null);
+      setConfirmHost({ fact: decision.fact, scanned: true });
+      return;
+    }
     await tryPair(data);
   };
 
@@ -356,16 +411,26 @@ export default function Pair() {
       {confirmHost ? (
         <ConfirmDialog
           open
-          onClose={() => setConfirmHost(null)}
-          title="Pair with this daemon?"
-          body={`This link was opened from outside the app. Pair only if you created it: ${confirmHost}`}
+          onClose={() => {
+            if (confirmHost.scanned) setText('');
+            setConfirmHost(null);
+          }}
+          {...pairHostConfirmation(confirmHost)}
           typed={false}
           tone="neutral"
-          confirmLabel="Pair"
           onConfirm={() => {
             setConfirmHost(null);
             tryPair(text);
           }}
+        />
+      ) : null}
+      {confirmMove ? (
+        <ConfirmDialog
+          open
+          onClose={() => answerMove(false)}
+          {...pairMoveConfirmation(confirmMove)}
+          typed={false}
+          onConfirm={() => answerMove(true)}
         />
       ) : null}
     </View>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { PairingError, exchangePairing, pairingLinkFact, pairingLinkFromParams, parsePairing } from './pairing.js';
+import { PairingError, exchangePairing, pairingLinkFact, pairingLinkFromParams, parsePairing, scanDecision } from './pairing.js';
 
 describe('parsePairing', () => {
   it('accepts the URL payload without a version marker', () => {
@@ -111,5 +111,41 @@ describe('pairingLinkFact', () => {
 
   it('says nothing for text that is not a link', () => {
     expect(pairingLinkFact('hello')).toBeNull();
+  });
+});
+
+describe('scanDecision', () => {
+  const grant = (url, extra = {}) => JSON.stringify({ u: url, n: 'casa', g: 'one-time', ...extra });
+  const saved = [{ id: 'c-1', url: 'ws://100.1.2.3:49200', deviceId: 'daemon-1', token: 'kept' }];
+
+  it('refuses a scanned code that carries a device token, in either spelling', () => {
+    for (const code of [
+      JSON.stringify({ u: 'ws://100.1.2.3:49200', t: 'device-token' }),
+      JSON.stringify({ url: 'ws://100.1.2.3:49200', token: 'device-token' }),
+      grant('ws://100.1.2.3:49200', { t: 'device-token' }),
+    ]) {
+      expect(scanDecision(code, saved)).toEqual({ action: 'refuse' });
+      expect(scanDecision(code, [])).toEqual({ action: 'refuse' });
+    }
+  });
+
+  it('asks before pairing with a daemon this phone has no connection to', () => {
+    expect(scanDecision(grant('ws://203.0.113.9:49200'), saved)).toEqual({ action: 'confirm', fact: 'casa · ws://203.0.113.9:49200' });
+    expect(scanDecision(grant('ws://100.1.2.3:49201'), saved)).toMatchObject({ action: 'confirm' });
+    expect(scanDecision(grant('ws://100.1.2.3:49200'), [])).toMatchObject({ action: 'confirm' });
+    expect(scanDecision(grant('wss://100.1.2.3:49200'), saved)).toMatchObject({ action: 'confirm' });
+    expect(scanDecision(grant('ws://home.example'), [{ url: 'wss://home.example' }])).toMatchObject({ action: 'confirm' });
+    expect(scanDecision(grant('ws://[fd7a::1]:49200'), [{ url: 'ws://[fd7a::2]:49200' }])).toMatchObject({ action: 'confirm' });
+    expect(scanDecision('alpi://device?url=ws%3A%2F%2F203.0.113.9%3A49200&name=casa&pairing_token=g', saved)).toMatchObject({ action: 'confirm' });
+  });
+
+  it('pairs at once with a host this phone already has a connection to', () => {
+    expect(scanDecision(grant('ws://100.1.2.3:49200'), saved)).toEqual({ action: 'pair' });
+    expect(scanDecision(grant('ws://CASA.example:49200'), [{ url: 'ws://casa.example:49200' }])).toEqual({ action: 'pair' });
+    expect(scanDecision(grant('ws://100.64.0.1:49200'), [{ ip: '100.64.0.1', port: 49200 }])).toEqual({ action: 'pair' });
+  });
+
+  it('leaves a code it cannot read to the pairing ladder, which reports it', () => {
+    expect(scanDecision('not a pairing code', saved)).toEqual({ action: 'pair' });
   });
 });

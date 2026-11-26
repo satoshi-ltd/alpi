@@ -60,7 +60,7 @@ describe('Workgroups page', () => {
   it('counts the whole set on the filter, groups All by state and opens a row', () => {
     h.items = [wg('idle-a', 'idle', 'last run done', 3), wg('build', 'active', 'Working · build', 2), wg('ship', 'needs', 'Needs you', 1), { kind: 'profile', id: 'doc', label: 'doc' }];
     render(<WorkgroupsScreen />);
-    expect(screen.getByText('Workgroups | 3 · 2 working')).toBeTruthy();
+    expect(screen.getByText('Workgroups | 3 · 1 working · 1 needs you')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'All, 3' }).getAttribute('aria-checked')).toBe('true');
     expect(screen.getByRole('button', { name: 'Queued, 0' }).disabled).toBe(true);
     expect([...document.querySelectorAll('h3')].map((el) => el.textContent)).toEqual(['Needs you · 1', 'Working · 1', 'Idle · 1']);
@@ -73,11 +73,11 @@ describe('Workgroups page', () => {
   it('filters to one unlabelled list and answers an empty search with one line', () => {
     h.items = [wg('idle-a', 'idle', 'x', 3), wg('build', 'active', 'Working', 2)];
     render(<WorkgroupsScreen />);
-    fireEvent.click(screen.getByRole('button', { name: 'Working, 1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Active, 1' }));
     expect(document.querySelectorAll('h3')).toHaveLength(0);
     expect([...document.querySelectorAll('[data-row]')].map((el) => el.getAttribute('data-row'))).toEqual(['build']);
     fireEvent.change(screen.getByLabelText('Search workgroups'), { target: { value: 'deploy' } });
-    expect(screen.getByText('No working workgroup matches deploy.')).toBeTruthy();
+    expect(screen.getByText('No active workgroup matches deploy.')).toBeTruthy();
   });
 });
 
@@ -87,7 +87,7 @@ describe('Workgroups page, live state', () => {
     h.states = new Map([['long', { state: 'working' }]]);
     h.status = 'offline';
     render(<WorkgroupsScreen />);
-    expect(screen.getByRole('button', { name: 'Working, 1' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Active, 1' })).toBeTruthy();
     expect([...document.querySelectorAll('h3')].map((el) => el.textContent)).toEqual(['Working · 1', 'Idle · 1']);
     expect([...document.querySelectorAll('[data-row]')].map((el) => el.getAttribute('data-offline'))).toEqual(['true', 'true']);
     h.states = new Map();

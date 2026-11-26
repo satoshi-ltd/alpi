@@ -206,6 +206,7 @@ def serve_all(root: Path) -> None:
         from alpi.host import workers
         with _signals_held():
             workers.shutdown()
+            _close_browser()
         from alpi import daemon_tasks
         daemon_tasks.clear(root)
         _clear_daemon_pid(root)
@@ -214,6 +215,18 @@ def serve_all(root: Path) -> None:
     from alpi.host import daemon as host_daemon
     if host_daemon.respawn_requested():
         raise SystemExit(host_daemon.RESPAWN_EXIT_CODE)
+
+
+# Called here and not left to an exit hook: under PID 1 the daemon is a forked child that ends with os._exit.
+def _close_browser() -> None:
+    browser = sys.modules.get("alpi.tools.browser")
+    if browser is None:
+        return
+    try:
+        # Shorter than the wait of `stop_daemon`, which kills a daemon whose pidfile is still there after five seconds.
+        browser._shutdown(wait=2.5)
+    except Exception:  # noqa: BLE001
+        log.exception("could not close the browser")
 
 
 # Delayed past the boot reconnection storm on purpose: a chromium unzip + ONNX load at boot+5s starved small Docker hosts right while clients were re-pairing, which read as "the machine is blocked".

@@ -74,7 +74,6 @@ def test_subsystem_log_is_redacted_and_private(tmp_path: Path) -> None:
     for handler in list(logger.handlers):
         handler.close()
         logger.removeHandler(handler)
-    logging.getLogger(f"alpi.{name}")._alpi_configured = False
 
 
 @posix_only

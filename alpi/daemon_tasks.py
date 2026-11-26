@@ -101,6 +101,11 @@ def _alert(home: Path, profile: str, name: str, *, failures: int, error: str, re
     )
 
 
+def restart_delay(failures: int) -> float:
+    # The exponent is capped first: 2 ** 1024 no longer fits a float and the OverflowError would end the supervisor.
+    return min(RESTART_BASE_S * 2 ** min(max(failures - 1, 0), 32), RESTART_MAX_S)
+
+
 async def supervise(
     run: Callable[[], Awaitable[None]], home: Path, profile: str, name: str,
 ) -> None:
@@ -119,7 +124,7 @@ async def supervise(
                 return
             failures += 1
             error = _error_text(exc)
-            delay = min(RESTART_BASE_S * 2 ** (failures - 1), RESTART_MAX_S)
+            delay = restart_delay(failures)
             log.error(
                 "daemon task %s crashed (failure %d in a row) — restarting in %.0fs; unrelated tasks remain available",
                 key, failures, delay, exc_info=exc,

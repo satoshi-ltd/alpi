@@ -7,7 +7,7 @@ import { Linking, flip, reset, state } from './mocks/firstRun.js';
 
 afterEach(cleanup);
 
-const h = vi.hoisted(() => ({ cam: null, call: vi.fn(), permission: { granted: true }, request: vi.fn(), refresh: vi.fn() }));
+const h = vi.hoisted(() => ({ cam: null, connections: [], call: vi.fn(), permission: { granted: true }, request: vi.fn(), refresh: vi.fn() }));
 
 vi.mock('react-native', () => import('./mocks/firstRun.js'));
 vi.mock('../src/theme/ThemeContext', () => import('./mocks/firstRun.js'));
@@ -31,7 +31,7 @@ vi.mock('expo-router', () => ({
   usePathname: () => '/pair',
   useLocalSearchParams: () => ({ mode: 'scan' }),
 }));
-vi.mock('../src/lib/EndpointContext', () => ({ useEndpoint: () => ({ addConnection: vi.fn() }) }));
+vi.mock('../src/lib/EndpointContext', () => ({ useEndpoint: () => ({ addConnection: vi.fn(), connections: h.connections }) }));
 vi.mock('../src/lib/rpc', async () => ({ ...(await vi.importActual('../src/lib/rpc')), call: (...args) => h.call(...args) }));
 vi.mock('../src/lib/probe', () => ({ probe: vi.fn(async () => ({ status: 'offline' })) }));
 
@@ -42,6 +42,7 @@ const primaries = () => [...document.querySelectorAll('button[data-variant="prim
 
 beforeEach(() => {
   reset();
+  h.connections = [];
   h.permission = { granted: true };
   h.request.mockReset();
   h.refresh.mockReset();
@@ -80,6 +81,7 @@ describe('scan guards', () => {
   it('pairs once when the camera delivers two codes in the same tick', async () => {
     h.call.mockReset();
     h.call.mockReturnValue(new Promise(() => {}));
+    h.connections = [{ id: 'c-1', url: 'ws://100.1.2.3:49200', deviceId: 'daemon-1', token: 'kept' }];
     render(<Pair />);
     const data = 'alpi://device?url=ws%3A%2F%2F100.1.2.3%3A49200&name=casa&pairing_token=abc';
     await act(async () => {

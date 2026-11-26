@@ -175,7 +175,11 @@ connection and its profile scope, then executes through `host.chat.send`.
 Consequently the paired clients see the session as `in_flight` and can replay
 tool activity through `host.chat.events_since`. The method is rejected over
 WebSocket even for remote admins; it is an operator facility, not an integration
-API.
+API. The command exits 0 only when the daemon's stream ended with its `done`
+frame. It exits 1 with the daemon's reason when the request is refused (a busy
+or unknown session), and with `the daemon closed the connection before the turn
+finished` when the daemon stops or the connection drops first; in that last case
+the turn may have run.
 
 ## Step 4 — talk to a profile (Node)
 

@@ -153,8 +153,24 @@ describe("store.saveConnection", () => {
     expect(state.connections[0].token).toBe("t2");
   });
 
-  it("re-pairing the same server connection replaces its route and token", async () => {
+  it("re-pairing the same server connection at its address replaces the token", async () => {
     const { saveConnection } = await import("./store.js");
+    const first = await saveConnection({
+      name: "home", url: "ws://192.168.1.10:49200", token: "first-token", deviceId: "daemon-1", connectionId: "conn-1",
+    });
+
+    const state = await saveConnection({
+      name: "home", url: "ws://192.168.1.10:49200", token: "second-token", deviceId: "daemon-1", connectionId: "conn-1",
+    });
+
+    expect(state.connections).toHaveLength(1);
+    expect(state.connections[0].id).toBe(first.connections[0].id);
+    expect(state.connections[0].token).toBe("second-token");
+  });
+
+  it("a pairing that names a saved connection from another address changes nothing until it is allowed", async () => {
+    const { loadConnections, saveConnection } = await import("./store.js");
+    const { AddressChange } = await import("./pairing.js");
     const first = await saveConnection({
       name: "home",
       url: "ws://192.168.1.10:49200",
@@ -163,19 +179,70 @@ describe("store.saveConnection", () => {
       connectionId: "conn-1",
     });
     const originalId = first.connections[0].id;
-
-    const state = await saveConnection({
+    const moved = {
       name: "home",
       url: "wss://client.example.com",
       token: "public-token",
-      deviceId: "daemon-1",
+      deviceId: "dev_this_phone",
       connectionId: "conn-1",
-    });
+    };
+
+    const refused = await saveConnection(moved).catch((error) => error);
+
+    expect(refused).toBeInstanceOf(AddressChange);
+    expect(refused).toMatchObject({ label: "home", from: "ws://192.168.1.10:49200", to: "wss://client.example.com" });
+    expect(await loadConnections()).toEqual(first);
+
+    await expect(saveConnection(moved, { moveAddress: "c-some-other-row" })).rejects.toBeInstanceOf(AddressChange);
+    expect(refused.id).toBe(originalId);
+
+    const state = await saveConnection(moved, { moveAddress: refused.id });
 
     expect(state.connections).toHaveLength(1);
     expect(state.connections[0].id).toBe(originalId);
     expect(state.connections[0].url).toBe("wss://client.example.com");
     expect(state.connections[0].token).toBe("public-token");
+  });
+
+  it("the two saves of one pairing, first under the phone's device id and then under the daemon's, leave one row", async () => {
+    const { saveConnection } = await import("./store.js");
+    const exchanged = { name: "home", url: "ws://192.168.1.10:49200", token: "t", deviceId: "dev_this_phone", connectionId: "conn-1" };
+
+    const first = await saveConnection(exchanged);
+    const state = await saveConnection({ ...exchanged, deviceId: "daemon-1" });
+
+    expect(state.connections).toHaveLength(1);
+    expect(state.connections[0]).toMatchObject({ id: first.connections[0].id, deviceId: "daemon-1", connectionId: "conn-1" });
+  });
+
+  it("of two rows of one connection, a new pairing replaces the one at its address", async () => {
+    memory.set(KEY, JSON.stringify({
+      v: 1, active_id: "lan",
+      connections: [
+        validConn({ id: "lan", ip: "192.168.1.10", token: "lan-token", deviceId: "daemon-1", connectionId: "conn-1" }),
+        validConn({ id: "vpn", ip: "100.1.2.3", token: "vpn-token", deviceId: "daemon-1", connectionId: "conn-1" }),
+      ],
+    }));
+    const { saveConnection } = await import("./store.js");
+
+    const state = await saveConnection({ name: "home", url: "ws://100.1.2.3:49200", token: "new-token", deviceId: "dev_this_phone", connectionId: "conn-1" });
+
+    expect(state.connections.map((c) => [c.id, c.token])).toEqual([["lan", "lan-token"], ["vpn", "new-token"]]);
+  });
+
+  it("when several rows claim one connection and none is at the new address, none is moved and none is guessed", async () => {
+    const rows = [
+      validConn({ id: "claims-it", name: "casa", ip: "203.0.113.50", token: "other-token", deviceId: "daemon-2", connectionId: "conn-1" }),
+      validConn({ id: "home", name: "casa", ip: "100.1.2.3", token: "home-token", deviceId: "daemon-1", connectionId: "conn-1" }),
+    ];
+    memory.set(KEY, JSON.stringify({ v: 1, active_id: "home", connections: rows }));
+    const { saveConnection } = await import("./store.js");
+
+    const state = await saveConnection({ name: "casa", url: "ws://198.51.100.7:49200", token: "new-token", deviceId: "dev_this_phone", connectionId: "conn-1" });
+
+    expect(state.connections.map((c) => [c.id === "claims-it" || c.id === "home" ? c.id : "new", c.token])).toEqual([
+      ["claims-it", "other-token"], ["home", "home-token"], ["new", "new-token"],
+    ]);
   });
 
   it("keeps distinct connection scopes on the same daemon", async () => {
@@ -200,6 +267,47 @@ describe("store.saveConnection", () => {
       "admin-connection",
       "member-connection",
     ]);
+  });
+
+  it("never lets a daemon that claims a saved identity from another address take that connection", async () => {
+    const { saveConnection } = await import("./store.js");
+    const first = await saveConnection({ name: "home", url: "ws://a.example:49200", token: "home-token", deviceId: "D", role: "admin" });
+    const homeId = first.connections[0].id;
+
+    const state = await saveConnection({ name: "home", url: "ws://evil.example:49200", token: "evil-token", deviceId: "D" });
+
+    expect(state.connections).toHaveLength(2);
+    const home = state.connections.find((c) => c.id === homeId);
+    expect(home).toMatchObject({ url: "ws://a.example:49200", token: "home-token", role: "admin" });
+    expect(state.connections.find((c) => c.id !== homeId)).toMatchObject({ url: "ws://evil.example:49200", token: "evil-token" });
+  });
+
+  it("keeps a saved connection when the claimed identity comes with a connection id it never had", async () => {
+    const { saveConnection } = await import("./store.js");
+    await saveConnection({ name: "home", url: "ws://a.example:49200", token: "home-token", deviceId: "D", connectionId: "conn-home" });
+
+    const state = await saveConnection({ name: "home", url: "ws://evil.example:49200", token: "evil-token", deviceId: "D", connectionId: "conn-other" });
+
+    expect(state.connections.map((c) => c.token).sort()).toEqual(["evil-token", "home-token"]);
+  });
+
+  it("does not let the plain address of a daemon saved over TLS replace it", async () => {
+    const { saveConnection } = await import("./store.js");
+    await saveConnection({ name: "home", url: "wss://home.example", token: "tls-token", deviceId: "D" });
+
+    const state = await saveConnection({ name: "home", url: "ws://home.example", token: "plain-token", deviceId: "D" });
+
+    expect(state.connections.map((c) => `${c.url} ${c.token}`).sort()).toEqual(["ws://home.example plain-token", "wss://home.example tls-token"]);
+  });
+
+  it("re-pairing with the same daemon at the same address refreshes its token in place", async () => {
+    const { saveConnection } = await import("./store.js");
+    const first = await saveConnection({ name: "home", url: "ws://a.example:49200", token: "old-token", deviceId: "D" });
+
+    const state = await saveConnection({ name: "home", url: "ws://A.example:49200", token: "new-token", deviceId: "D", connectionId: "conn-1" });
+
+    expect(state.connections).toHaveLength(1);
+    expect(state.connections[0]).toMatchObject({ id: first.connections[0].id, token: "new-token", connectionId: "conn-1" });
   });
 
   it("refuses to save without a deviceId — pairing must capture daemon identity", async () => {

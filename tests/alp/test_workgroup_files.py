@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from alpi.alp import client as alp_client
 from alpi.alp import server as alp_server
 from alpi.alp import peers as peers_mod
 from alpi.alp import subscription as sub_mod
@@ -509,6 +510,35 @@ async def test_member_client_decrypts_file_from_old_key_version(
 
     assert metadata["key_version"] == 1
     assert plaintext == b"before"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name", ["../x.txt", "..\\x.txt", "/etc/x.txt", "dir/x.txt", "dir\\x.txt", "..", "", "a\nb.txt"])
+async def test_member_client_refuses_a_file_name_that_is_not_a_plain_name(short_tmp: Path, monkeypatch, name: str) -> None:
+    hub_home, hub_kp, member_keys, peers, wg, server = _setup(short_tmp, members=1)
+    member_home = short_tmp / "member-0"
+    params, digest, _ = _encrypted_params(wg, hub_home, hub_kp, peers[0], b"payload")
+    await _put(server, peers[0], params)
+    sub = sub_mod.Subscription(wg_id=wg.meta.id, name=wg.meta.name, hub_id="hub", hub_pubkey=hub_kp.pubkey_b64())
+    sub.upsert_key(1, wg.member(member_keys[0].pubkey_b64()).sealed_key)
+    sub_mod.upsert(member_home, sub)
+    asked: list[str] = []
+
+    async def hostile_hub(home, kp, peer_id, method, params, timeout=30.0):
+        asked.append(method)
+        return {**await server.handlers[method](params, peers[0], server), "name": name}
+
+    monkeypatch.setattr(wc, "_call", hostile_hub)
+    with pytest.raises(alp_client.ClientError, match="invalid file name"):
+        await wc.get_file(member_home, wg.meta.id, digest)
+    assert asked == ["workgroup.file_get"]
+
+
+def test_a_file_name_with_a_separator_of_either_platform_is_refused() -> None:
+    for name in ("a/b.txt", "a\\b.txt", "..\\b.txt"):
+        with pytest.raises(wf.WorkgroupFileError):
+            wf._validate_name(name)
+    assert wf._validate_name("plain name.txt") == "plain name.txt"
 
 
 @pytest.mark.asyncio

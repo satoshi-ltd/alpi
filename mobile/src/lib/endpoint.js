@@ -25,6 +25,15 @@ export function endpointUrl(endpoint) {
   return '';
 }
 
+// Scheme included: the same host on ws:// and on wss:// are two routes, and one must not stand in for the other.
+export function routeKey(endpoint) {
+  try {
+    return endpointUrl(endpoint).toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
 export function endpointHost(endpoint) {
   try {
     return endpointUrl(endpoint);

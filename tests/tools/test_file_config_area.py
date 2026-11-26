@@ -134,3 +134,34 @@ def test_member_search_from_the_home_skips_private_areas(home, monkeypatch, use_
     assert "abc.jsonl" not in out and "alexandra.json" not in out and "s.json" not in out
     admin = Search().run(pattern=pattern, path=str(home), target=target).output
     assert "abc.jsonl" in admin and "alexandra.json" in admin
+
+
+@pytest.mark.parametrize("rel", ["browser/state.json", "profiles/alexandra/browser/state.json", "browser/.state.json.ab12.tmp", "Browser/State.json", "browser/state.json.unreadable", "browser/state.json.shared"])
+@pytest.mark.parametrize("for_write", [False, True])
+def test_the_saved_browser_session_is_refused_to_every_caller(home, rel, for_write):
+    target = home / rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text('{"cookies": []}')
+    with pytest.raises(ValueError, match="browser/state.json is a daemon-owned area"):
+        resolve_path(str(target), for_write=for_write)
+    for caller in (MEMBER, ConnectionContext(connection_id="c2", device_id="d2", source="remote", role="admin")):
+        with use(caller):
+            with pytest.raises(ValueError):
+                resolve_path(str(target), for_write=for_write)
+
+
+def test_a_symlink_to_the_saved_browser_session_is_refused_too(home, tmp_path):
+    target = home / "browser" / "state.json"
+    target.parent.mkdir(parents=True)
+    target.write_text('{"cookies": []}')
+    link = tmp_path / "innocent.json"
+    link.symlink_to(target)
+    with pytest.raises(ValueError):
+        resolve_path(str(link), for_write=False)
+
+
+def test_a_screenshot_beside_the_saved_browser_session_stays_readable(home):
+    shot = home / "browser" / "screenshot-1.png"
+    shot.parent.mkdir(parents=True)
+    shot.write_bytes(b"png")
+    assert resolve_path(str(shot), for_write=False) == shot.resolve()

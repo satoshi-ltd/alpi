@@ -3,7 +3,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { SectionList, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { WORKGROUP_FILTERS, filterCounts, noMatchLine } from '../../common/workgroupList.mjs';
+import { WORKGROUP_FILTERS, filterCounts, noMatchLine, workgroupSummaryLine } from '../../common/workgroupList.mjs';
 import { Busy } from '../src/components/Busy';
 import { Eyebrow } from '../src/components/Eyebrow';
 import { Icon } from '../src/components/Icon';
@@ -66,6 +66,7 @@ export default function WorkgroupsScreen() {
     [items, activity.states],
   );
   const counts = useMemo(() => filterCounts(workgroups.map((item) => item.stateId)), [workgroups]);
+  const summary = useMemo(() => workgroupSummaryLine(workgroups.map((item) => item.stateId)), [workgroups]);
   const sections = useMemo(() => workgroupSections(workgroups, filter, query), [workgroups, filter, query]);
   const options = WORKGROUP_FILTERS.map((item) => ({
     value: item.id,
@@ -92,7 +93,7 @@ export default function WorkgroupsScreen() {
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-      <ScreenHeader title="Workgroups" subtitle={`${counts.all} · ${counts.active} working`} onBack={goBack} />
+      <ScreenHeader title="Workgroups" subtitle={summary} onBack={goBack} />
       {error && workgroups.length === 0 ? (
         <LoadFailed label="workgroups" error={error} onRetry={refresh} />
       ) : (

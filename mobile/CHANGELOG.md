@@ -14,6 +14,13 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.10.13 — 2026-11-26 — pairing never replaces a connection unseen
+
+- Pairing no longer replaces a saved connection just because the daemon that answers reports the same identity. A new pairing of a saved connection at its address replaces its sign-in in place, without leaving a second copy in the list; from another address it shows the old and the new address before anything is saved and moves it only when you agree, for a scanned and for a pasted code; anything else is added beside it, and the saved one keeps its address and its token.
+- Scanning a code for a daemon this phone has no connection to asks before pairing and shows its name and address. A scanned code that carries a device token is refused; pasting the pairing JSON still works.
+- The Workgroups header says how many are working and how many need you ("59 · 2 working · 1 needs you"). It used to count a blocked or failed workgroup as working. The filter that holds both is now called Active.
+- Needs alpi ≥ 0.19.20.
+
 ## v0.10.12 — 2026-11-25 — a page for every workgroup
 
 - The Workgroups section of the list shows what needs you, is working or is queued, then your most recent other workgroups up to five rows. It ends in "All workgroups" with the total count, so 59 workgroups no longer take a long scroll under your profiles. A search still lists every match.

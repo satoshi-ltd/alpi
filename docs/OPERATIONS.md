@@ -222,6 +222,9 @@ alpi daemon restart      # macOS: stop and let launchd respawn
                          #        (only when the unit is what runs the daemon)
 ```
 
+It exits non-zero when systemd does not start the unit again, and prints the
+command that starts it, so a deploy script stops there.
+
 `alpi doctor` flags "stale binary — `alpi daemon restart` to
 reload" when the binary on disk is newer than the running
 process.

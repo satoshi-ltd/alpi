@@ -333,19 +333,6 @@ failing test that settles it; if the test cannot be made to fail, the entry is d
   accept: two `serve` loops for one home never run `tick` at the same time (a per-home tick lock or equivalent), with a
   test that raises out of `serve` mid-tick.
 
-- **BROWSER.STATE** — A profile's browser session is its own and survives a crash
-  `bug · alpi · agent · normal`
-  note: suspected. `tools/browser.py` keeps one module-global browser, context and page on a worker thread, and
-  `_storage_dir()` runs on that thread, outside the `get_home()` context variable, so two profiles in one daemon
-  process may load and save the same `browser/state.json`. Read: the login state is written only on `close` and at
-  exit, so a killed process loses it; the file has default permissions; and it is not in the read denylist of
-  `tools/_paths.py`, so an owner-role turn can read its cookies with `read_file`.
-  Run on 2026-11-26: `trace_start` resolves `.browser-traces/` on that thread too, so a trace one profile starts is
-  written into another profile's workspace; and at interpreter exit `_shutdown` submits to an executor that is
-  already shut down, so the cookies are not saved then either.
-  accept: two profiles that browse in one process keep separate cookies; state written after a login survives
-  `SIGKILL`; `read_file` on `browser/state.json` is refused for every caller.
-
 - **MOBILE.FAILED-ONESHOT** — The phone's Activity does not count a failed one-shot as next up
   `bug · mobile · agent · low`
   note: read. Since alpi 0.19.31 a `once` job whose run failed stays in `host.activity.list`'s `scheduled` with
@@ -939,23 +926,6 @@ Each entry is written to be worked without that report:
 
 #### Mobile
 
-- **MOB.SEC-PAIR** — Pairing never replaces a saved connection's address or token unseen (M-S1, M-S2)
-  `bug · mobile · agent · high`
-  note: `saveConnection` in [store.js](../mobile/src/lib/store.js) (`:136-146`) replaces the single saved
-  connection whose `deviceId` equals the one the answering daemon reports, keeping its local id and role and taking
-  the new URL, token and label. Every authenticated client sees a daemon's `device_id` in `host.version`, so an
-  endpoint that answers `exchange_pairing` with a victim daemon's id redirects that connection and destroys its
-  token. `handleScan` in [pair.jsx](../mobile/app/pair.jsx) (`:203-208`) pairs at once, with no host confirmation
-  (the confirm at `:123` fires only for a link routed from outside), and `parseJson` in
-  [pairing.js](../mobile/src/lib/pairing.js) (`:88-105`) accepts a raw `token`, although the daemon's QR carries
-  only a one-time grant.
-  accept: a connection is replaced only when matched by its local id, by device id and connection id together, or
-  by device id when the URL host equals the saved one; otherwise a second row is added (two routes to one daemon
-  already work as a group); a scanned payload with `token` or `t` is refused, and a scan whose host matches no
-  saved connection opens the existing host confirm; tests: saving `{deviceId: 'D', url: 'ws://evil'}` over
-  `{deviceId: 'D', url: 'ws://a'}` yields two connections and the first keeps its token; `handleScan` with a token
-  never calls `addConnection`.
-
 - **MOB.RECOVER-PAGING** — Recovering a turn after a stall replays all of it (M8)
   `bug · mobile · agent · high`
   note: `tryRecoverFromSidecar` in [useChatSend.js](../mobile/src/hooks/useChatSend.js) (`:277-303`) asks
@@ -1135,11 +1105,12 @@ Each entry is written to be worked without that report:
 - **SEC.ALP-CONFINE** — ALP files, blobs and envelopes are confined before any peer is paired
   `bug · alpi · agent · normal`
   note: report ALP-1 to ALP-6; nothing on the fleet has peers or workgroups yet.
-  accept: `get_file` validates the hub's `name` (no `/` or `\` on any platform) and writes inside the workspace;
-  blobs have a per-profile quota, a TTL sweep and an in-flight cap per sender; `envelope.verify` raises
+  accept: `workgroup_file list` prints only names that pass the plain-name check the receiver applies to a fetched
+  file; a file fetched without `dest` cannot land in the workspace root under a name a tool loads by itself
+  (`conftest.py`, `.envrc`, `.npmrc`: a subfolder, or no leading dot); a file stored before 0.19.44 with a `\` in
+  its name is still listed and can be removed; blobs have a per-profile quota, a TTL sweep and an in-flight cap per sender; `envelope.verify` raises
   `EnvelopeError` for malformed fields; `_append_marker` takes the transcript lock; continuation requests need an
-  existing part; a Noise identity that does not match the envelope sender is cut before dispatch. A stub hub
-  returning `../x` and `..\x` is a test.
+  existing part; a Noise identity that does not match the envelope sender is cut before dispatch.
 
 - **SEC.REPO-GOVERNANCE** — GitHub controls for the release chain
   `chore · alpi · creator · high`
@@ -1186,6 +1157,58 @@ Each entry is written to be worked without that report:
   accept: each site either scrubs or is shown not to receive agent or tool text; a post carrying a lone surrogate
   reaches a peer with a valid signature, and a `--once` turn whose tool output holds one prints its events; tests
   drive the ALP client and server, the CLI line and a provider-bound message.
+
+### Found shipping alpi 0.19.44
+
+- **BROWSER.STATE-EDGES** — The saved browser session is closed to the terminal and survives a kill
+  `bug · alpi · agent · low`
+  note: read on 2026-11-26. `browser/state.json` is refused by the file tools, but an admin or CLI turn can still
+  `cat` it through `terminal`, and the macOS sandbox profile in `tools/_sandbox.py` denies `.env` and `secrets/`
+  but not that file. The session is written when its cookies change, so a site that keeps its login only in
+  `localStorage` is saved on `close` and on a normal exit, and lost on a kill.
+  accept: the terminal's secret-file denial and the sandbox profile cover `browser/state.json` and its set-aside
+  copies; a login kept in `localStorage` only survives `SIGKILL`.
+
+- **BROWSER.IDLE-CONTEXT** — A profile's browser context is closed after it sits unused
+  `chore · alpi · agent · low`
+  note: every profile that calls `browser` keeps its context, with its tabs and their renderer processes, until it
+  calls `close` or the daemon stops. With one context per profile that is one more idle context for each profile
+  that ever browsed. Not measured.
+  accept: a context unused for a configurable time is saved and closed the next time any profile uses the browser,
+  and the profile that comes back gets its cookies and a clear line that its page was closed; a test with two
+  profiles and a short limit.
+
+- **CLI.ONCE-ERROR-EXIT** — `chat --once` says with its exit status that the turn failed
+  `bug · alpi · agent · low`
+  note: run on 2026-11-26. A turn that ends in an `error` event prints `[error] …` and exits 0, with and without
+  `--connection-id`, so a script cannot tell it from a reply. The scheduler and the workgroup dispatcher read the
+  same command through `--emit-events`; check what they do with a non-zero status before changing it.
+  accept: a turn whose only outcome is an error exits non-zero on both paths, the scheduler and the dispatcher keep
+  reporting the same failures as today, and a test covers each path.
+
+- **SCHED.FIRE-DROPPED** — A fire the daemon accepted and then did not run is reported
+  `bug · alpi · agent · low`
+  note: read on 2026-11-26. `host.schedule.fire` answers `ok` and queues `fire_by_id`. If a scheduled tick starts
+  the same job before a worker picks the fire up, `fire_by_id` returns `already running` and the handler only
+  writes an info line: no `schedule.failed`, no output, nothing in the apps.
+  accept: a fire that was accepted and did not run emits an event the apps and `alpi schedule fire` show, naming
+  the reason; a test holds the run lock while a fire is queued.
+
+- **DESIGN.PAIR-SCAN** — The kit draws the pairing confirms and the refused code
+  `chore · mobile · agent · low`
+  note: `mobile/app/pair.jsx` shows a confirm with its own sentence when a scanned code names a daemon the phone
+  has no connection to, a "Move this connection?" confirm with both addresses when a pairing names a saved
+  connection from another address, and the `scanned-token` failure when a code carries a device token. The kit
+  draws only the routed-link confirm (`design/src/system_boards.py`) and the `unreachable` and `link-used` failures.
+  accept: Mobile shows the three states, in light and dark, built from the strings the screen uses.
+
+- **TEST.APPROVAL-ORDER** — The approval tests pass in any order
+  `chore · alpi · agent · low`
+  note: run on 2026-11-26. `pytest tests/core/test_subsystem_logs.py tests/core/test_private_persistence.py`
+  fails `test_always_on_a_broken_config_refuses_and_tells_the_agent_not_to_retry` with `reason='session
+  allowlist'`: a test of the first file leaves an entry in the approval session allowlist. The suite passes only
+  because it runs the files in the other order.
+  accept: every test that touches the session allowlist leaves it empty, and the two files pass in both orders.
 
 ### Found shipping the browser view
 
@@ -1255,23 +1278,6 @@ Each entry is written to be worked without that report:
   accept: a reply with more calls than a per-step ceiling runs only up to it and tells the model the rest were not
   run; identical read-only calls (same name and arguments) in one reply run once and share the result; a test drives
   a reply with hundreds of identical calls and shows the turn ends without a context-length failure.
-
-### Found while shipping alpi 0.19.40
-
-- **LOG.PROFILE-MIX** — Each profile's `llm.log`, `agent.log` and `approval.log` hold only that profile's lines
-  `bug · alpi · agent · normal`
-  note: `get_subsystem_logger(home, subsystem)` in [_log.py](../alpi/_log.py) configures the process-wide logger
-  `alpi.<subsystem>` once (`_alpi_configured`), with a file handler in the home of the first caller, and hands that
-  same logger to every later caller whatever its home. In a daemon that runs several profiles, the first profile to
-  log receives every profile's `llm`, `agent` and `approval` lines. Seen on a deployed daemon with nine profiles on
-  2026-11-25: the `llm.log` of one profile held the 13 model calls of two admin chats with two other profiles, and
-  its `agent.log` their `user=` prompt snippets, while those two profiles' own logs had no line for them and their
-  run journals were in their own `runs/`. A line names no profile, so the file cannot be split afterwards, the
-  per-profile cleanup acts on mixed data, and whoever reads one profile's log reads the others' prompts. Not
-  checked: `compaction.jsonl` and the scheduler's `log_path` users.
-  accept: a process that runs turns for two homes writes each home's `llm`, `agent` and `approval` lines to that
-  home's own `logs/`, and neither file holds a line of the other; a test drives both homes in one process; a
-  `chat --once` child still logs to its own home.
 
 ### Found while shipping desktop 0.10.17
 

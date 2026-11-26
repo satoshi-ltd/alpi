@@ -10,6 +10,9 @@ into stdout.
 from __future__ import annotations
 
 import logging
+import os
+import threading
+from collections import OrderedDict
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -17,6 +20,11 @@ FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
 MAX_BYTES = 1_000_000
 # RotatingFileHandler with backupCount=0 silently no-ops rollover (stdlib quirk).
 BACKUP_COUNT = 3
+
+# Each entry holds an open file; the cap keeps a process that sees many homes inside its descriptor limit.
+MAX_OPEN = 32
+_loggers: OrderedDict[str, logging.Logger] = OrderedDict()
+_guard = threading.Lock()
 
 
 class RedactingFormatter(logging.Formatter):
@@ -47,25 +55,57 @@ def log_path(home: Path, subsystem: str) -> Path:
     return log_dir(home) / f"{subsystem}.log"
 
 
+def _moved(handler: RotatingFileHandler) -> bool:
+    try:
+        on_disk = os.stat(handler.baseFilename)
+        held = os.fstat(handler.stream.fileno())
+    except (OSError, AttributeError, ValueError):
+        return True
+    return (on_disk.st_dev, on_disk.st_ino) != (held.st_dev, held.st_ino)
+
+
+def _handler(path: Path) -> logging.Handler:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handler: logging.Handler = PrivateRotatingFileHandler(path, maxBytes=MAX_BYTES, backupCount=BACKUP_COUNT)
+    except OSError:
+        return logging.NullHandler()
+    handler.setFormatter(RedactingFormatter(FORMAT))
+    return handler
+
+
+def _replace(logger: logging.Logger, handler: logging.Handler) -> None:
+    current = logger.handlers[0]
+    logger.addHandler(handler)
+    logger.removeHandler(current)
+    current.close()
+
+
 def get_subsystem_logger(home: Path, subsystem: str) -> logging.Logger:
-    """Return the dedicated logger for ``subsystem``, configured lazily."""
-    name = f"alpi.{subsystem}"
-    logger = logging.getLogger(name)
-    if getattr(logger, "_alpi_configured", False):
+    path = log_path(home, subsystem)
+    key = os.path.abspath(path)
+    with _guard:
+        logger = _loggers.get(key)
+        if logger is None:
+            # Not logging.getLogger: that is one logger per name for the whole process, so every home would share one file.
+            logger = _loggers[key] = logging.Logger(f"alpi.{subsystem}", logging.INFO)
+            logger.propagate = False
+            logger.addHandler(_handler(path))
+            while len(_loggers) > MAX_OPEN:
+                _, idle = _loggers.popitem(last=False)
+                _replace(idle, logging.NullHandler())
+            return logger
+        _loggers.move_to_end(key)
+        current = logger.handlers[0]
+        if not isinstance(current, RotatingFileHandler) or _moved(current):
+            _replace(logger, _handler(path))
         return logger
 
-    try:
-        d = log_dir(home)
-        d.mkdir(parents=True, exist_ok=True)
-        handler = PrivateRotatingFileHandler(
-            d / f"{subsystem}.log", maxBytes=MAX_BYTES, backupCount=BACKUP_COUNT,
-        )
-        handler.setFormatter(RedactingFormatter(FORMAT))
-        logger.addHandler(handler)
-    except OSError:
-        pass  # no-op logger — better than crashing if the dir can't be made
 
-    logger.setLevel(logging.INFO)
-    logger.propagate = False
-    logger._alpi_configured = True  # type: ignore[attr-defined]
-    return logger
+def _reset_after_fork() -> None:
+    global _guard
+    _guard = threading.Lock()
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_reset_after_fork)
