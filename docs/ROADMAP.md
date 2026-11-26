@@ -1223,6 +1223,14 @@ Each entry is written to be worked without that report:
   accept: a commit made from a linked worktree runs the hook's suites green and leaves `.git/config` byte-identical;
   a test sets `GIT_DIR` to a scratch repository and shows a git-calling test does not touch it.
 
+- **TEST.TUI-CLOCK** — Two prompt tests do not depend on how fast the runner is
+  `chore · alpi · agent · low`
+  note: read, not reproduced. `tests/tui/test_tui_prompts.py` asserts an exact countdown twice (`not run in 30s`
+  after two enqueues and a pause; `auto-cancel in 5m` after a panel mounted from a worker thread). `fmt_remaining`
+  rounds up, so each holds only while under about one second passes. The same pattern with a 0.3 s margin failed
+  the release pipeline once in `test_live_reasoning_collapses_into_a_thought_row`, now fixed by freezing the clock.
+  accept: both tests pass with a one-second sleep inserted before their assertion.
+
 - **TEST.PY313** — The suite finishes on Python 3.13
   `bug · alpi · agent · low`
   note: run on 2026-11-26. `pyproject.toml` accepts Python up to 3.13, but on CPython 3.13.13 `pytest -q` never

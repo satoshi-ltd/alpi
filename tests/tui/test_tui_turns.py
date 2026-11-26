@@ -63,9 +63,11 @@ def test_tool_family(name: str, family: str) -> None:
 
 
 @pytest.mark.asyncio
-async def test_live_reasoning_collapses_into_a_thought_row(tui_home) -> None:
+async def test_live_reasoning_collapses_into_a_thought_row(tui_home, monkeypatch) -> None:
     app = AlpiApp(home_dir=tui_home)
     async with app.run_test(size=(110, 40)) as pilot:
+        frozen = time.time()
+        monkeypatch.setattr(time, "time", lambda: frozen)
         _start_turn(app, seconds_ago=7.2)
         _feed(app, AgentEvent(kind="reasoning_delta", text="The user wants "),
               AgentEvent(kind="reasoning_delta", text="a summary."))
