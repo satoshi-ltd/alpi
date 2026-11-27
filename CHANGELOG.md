@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.19.48 — 2026-11-27 — signing out ends a pending ChatGPT sign-in
+
+- Signing out of ChatGPT from an app also ends a sign-in that was still waiting for its answer, so an address pasted afterwards is refused instead of signing the profile back in.
+- A sign-out that lands while a sign-in is finishing is no longer undone by it: the sign-in fails and the profile stays signed out.
+
 ## v0.19.47 — 2026-11-27 — run a profile on your ChatGPT plan, and every provider gets the request it reads
 
 - **New: use your ChatGPT plan instead of an API key.** Sign in with OpenAI's Sign in with ChatGPT from the console (`alpi chatgpt login`, or `alpi setup → Model → ChatGPT plan`), from the desktop app or from the phone; the plan's models then appear in every picker as `chatgpt-plan/<model>`. Requests count against the plan, with no cost in alpi's ledger, and a reached limit says so and points at ChatGPT's usage settings. On a machine without a browser, `alpi chatgpt login --paste` finishes with the address the browser ends on. `alpi chatgpt status` and `logout` show and end it. An OpenAI API key keeps working as before.

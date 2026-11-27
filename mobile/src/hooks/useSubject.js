@@ -81,6 +81,7 @@ export function useProfile(name, opts = {}) {
     refresh: summaries.refresh,
     invalidate: summaries.invalidate,
     refreshDetail,
+    detailLoaded: detail != null,
   };
 }
 

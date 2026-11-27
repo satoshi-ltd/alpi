@@ -307,6 +307,9 @@ def _with_tokens(record: dict[str, Any], tokens: dict[str, Any]) -> dict[str, An
     return out
 
 
+_SIGNED_OUT_MEANWHILE = "this profile signed out while the sign-in was finishing; nothing was saved"
+
+
 def finish(home: Path, attempt: Attempt, query: dict[str, str], *, keys: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     if not secrets.compare_digest(str(query.get("state") or "").encode(), attempt.state.encode()):
         raise PlanError("the browser came back with a different sign-in attempt; nothing was saved", code="state_mismatch")
@@ -335,6 +338,7 @@ def finish(home: Path, attempt: Attempt, query: dict[str, str], *, keys: list[di
                 raise PlanError("another sign-in finished for this profile meanwhile; nothing was replaced", code="superseded")
             # A failure after this point must not register alpi a second time on the next attempt.
             _save(home, {**saved, "issuer": ISSUER, "client_id": client_id})
+    ended = load(home).get("ended", 0)
     tokens = _token_request({
         "grant_type": "authorization_code", "client_id": client_id, "code": query["code"],
         "code_verifier": attempt.verifier, "redirect_uri": attempt.redirect_uri, "resource": RESOURCE,
@@ -342,6 +346,8 @@ def finish(home: Path, attempt: Attempt, query: dict[str, str], *, keys: list[di
     claims = verify_id_token(str(tokens.get("id_token") or ""), client_id=client_id, nonce=attempt.nonce, keys=keys)
     with _locked(home):
         saved = load(home)
+        if saved.get("client_id") != client_id or saved.get("ended", 0) != ended:
+            raise PlanError(_SIGNED_OUT_MEANWHILE, code="superseded")
         if attempt.client_id and saved.get("subject") and saved["subject"] != claims["sub"]:
             raise PlanError(
                 f"the browser signed in a different ChatGPT account than the one saved ({saved.get('email') or 'unknown'}); "
@@ -358,9 +364,12 @@ def finish(home: Path, attempt: Attempt, query: dict[str, str], *, keys: list[di
         _save(home, record)
     if granted:
         rows = _fetch_models(record["access_token"])
-        if rows:
-            with _locked(home):
-                record = {**load(home), "models": rows}
+        with _locked(home):
+            current = load(home)
+            if current.get("access_token") != record["access_token"]:
+                raise PlanError(_SIGNED_OUT_MEANWHILE, code="superseded")
+            if rows:
+                record = {**current, "models": rows}
                 _save(home, record)
     return {**record, "first_sign_in": first}
 
@@ -556,6 +565,7 @@ def refresh_models(home: Path) -> list[dict[str, str]]:
 
 
 def logout(home: Path, *, forget: bool = False) -> bool:
+    _PENDING.pop(str(Path(home)), None)
     if not record_path(home).exists():
         return True
     with _locked(home):
@@ -576,7 +586,8 @@ def logout(home: Path, *, forget: bool = False) -> bool:
             record_path(home).unlink(missing_ok=True)
         else:
             # The registration and the account it belongs to stay, so the next sign-in reuses the issued client.
-            _save(home, {k: v for k, v in record.items() if k not in ("access_token", "refresh_token", "id_token", "models")})
+            kept = {k: v for k, v in record.items() if k not in ("access_token", "refresh_token", "id_token", "models")}
+            _save(home, {**kept, "ended": int(record.get("ended", 0)) + 1})
         return revoked
 
 

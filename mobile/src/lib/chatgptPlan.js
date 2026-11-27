@@ -1,4 +1,4 @@
-export const CHATGPT_USAGE_URL = 'https://chatgpt.com/settings/usage';
+export { CHATGPT_USAGE_URL } from '../../../common/modelLabel.mjs';
 export const CHATGPT_CALLBACK_PORT = 1455;
 export const CALLBACK_START = `http://127.0.0.1:${CHATGPT_CALLBACK_PORT}/auth/callback`;
 export const PLAN_DECLINED = 'Plan use was declined. Sign in again to allow it.';

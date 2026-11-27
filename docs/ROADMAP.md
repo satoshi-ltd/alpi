@@ -1675,11 +1675,9 @@ Each entry is written to be worked without that report:
   note: desktop's provider form has a ChatGPT plan option (signed out, waiting for the browser, signed in, plan
   use declined) and mobile has a ChatGPT plan screen (the three steps and the address field, signed in) and a
   row in Providers. They are built from existing primitives and no board draws them or the provider lists they
-  sit in. Two things OpenAI's guidance asks for are not built: a dismissible "You're using your ChatGPT plan"
-  dialog after the first sign-in (alpi shows a notification) and a "Using ChatGPT plan · Manage usage" line
-  beside the model picker (Manage usage sits in Providers).
-  accept: Desktop and Mobile show those states, in light and dark, built from the strings the screens use; the
-  boards decide the first-sign-in dialog and the model-picker line.
+  sit in, nor the first-sign-in confirmation or the "Using ChatGPT plan · Manage usage" line in the model
+  pickers.
+  accept: Desktop and Mobile show those states, in light and dark, built from the strings the screens use.
 
 - **CHART.1** — The mobile Usage chart follows the cost too
   `feature · desktop, mobile, common · agent · normal`

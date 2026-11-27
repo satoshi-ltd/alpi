@@ -6,7 +6,9 @@ import { navigateMenu } from "../lib/menuNavigation.js";
 import { I } from "./icons.jsx";
 import Tip from "./Tip.jsx";
 import { fmtTok } from "../lib/format.js";
-import { modelLabel, modelProvider } from "../lib/modelLabel.js";
+import { CHATGPT_USAGE_URL, modelLabel, modelProvider, runsOnPlan } from "../lib/modelLabel.js";
+import { openExternal } from "../lib/openExternal.js";
+import ActionLink from "./ActionLink.jsx";
 import useExit from "../hooks/useExit.js";
 import styles from "./ModelPicker.module.css";
 
@@ -153,6 +155,12 @@ export default function ModelPicker({
               </div>
             ))}
           </div>
+          {runsOnPlan(picked) && (
+            <div className={`row ${styles.modelPickerPlan}`}>
+              <span>Using ChatGPT plan</span>
+              <ActionLink onClick={() => openExternal(CHATGPT_USAGE_URL).catch(() => {})}>Manage usage</ActionLink>
+            </div>
+          )}
           {supported && (
             <div className={styles.modelPickerEffort}>
               <div role="presentation" className={`eyebrow ${styles.modelPickerEyebrow}`}>Reasoning effort · saved for this profile</div>

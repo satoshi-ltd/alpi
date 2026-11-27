@@ -1,7 +1,7 @@
 import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Linking, Pressable, ScrollView, Text, View } from 'react-native';
+import { AccessibilityInfo, Linking, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '../../../../src/components/Button';
@@ -29,17 +29,27 @@ export default function ChatGPTPlan() {
   const toast = useToast();
   const { call } = useEndpoint();
   const { colors, fonts, fontSizes } = useTheme();
-  const { profile, refresh } = useProfile(id);
+  const { profile, refresh, refreshDetail, detailLoaded } = useProfile(id);
   const state = profile?.provider_chatgpt;
 
   const [opened, setOpened] = useState(false);
   const [busy, setBusy] = useState('');
   const [answer, setAnswer] = useState('');
   const [confirmSignOut, setConfirmSignOut] = useState(false);
+  const [welcome, setWelcome] = useState(false);
   const askBack = useDirtyBack(answer.trim().length > 0, goBack);
 
   const note = { fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3, lineHeight: fontSizes.sm * 1.5 };
   const frame = { flex: 1, backgroundColor: colors.bg };
+
+  // The plan state comes with the detail read: before it lands, its absence says nothing about the daemon.
+  if (profile && !detailLoaded) {
+    return (
+      <SafeAreaView edges={['top', 'left', 'right']} style={frame}>
+        <ScreenHeader title="ChatGPT plan" onBack={goBack} />
+      </SafeAreaView>
+    );
+  }
 
   if (profile && !state) {
     return (
@@ -49,6 +59,8 @@ export default function ChatGPTPlan() {
       </SafeAreaView>
     );
   }
+
+  const reread = () => Promise.all([refresh().catch(() => {}), refreshDetail()]);
 
   const start = async () => {
     setBusy('start');
@@ -75,10 +87,14 @@ export default function ChatGPTPlan() {
     setBusy('finish');
     try {
       const result = await call('host.providers.chatgpt_finish', { profile: id, callback: answer.trim() }, CHATGPT_CALL);
-      await refresh().catch(() => {});
+      await reread();
       setOpened(false);
       setAnswer('');
-      toast(result.signed_in ? signedInMessage(result) : { title: 'Plan use declined', message: 'Sign in again to allow it.' });
+      if (result.signed_in && result.first_sign_in) {
+        setWelcome(true);
+        const said = signedInMessage(result);
+        AccessibilityInfo.announceForAccessibility?.(`${said.title}. ${said.message}`);
+      } else toast(result.signed_in ? signedInMessage(result) : { title: 'Plan use declined', message: 'Sign in again to allow it.' });
     } catch (e) {
       toast({ title: 'Sign-in failed', message: failureMessage(e) });
     } finally {
@@ -91,7 +107,8 @@ export default function ChatGPTPlan() {
     setBusy('signout');
     try {
       const out = await call('host.providers.chatgpt_logout', { profile: id, forget: true }, CHATGPT_CALL);
-      await refresh().catch(() => {});
+      await reread();
+      setWelcome(false);
       toast(signedOutMessage(out, id));
     } catch (e) {
       toast({ title: 'Sign out failed', message: failureMessage(e) });
@@ -100,7 +117,7 @@ export default function ChatGPTPlan() {
     }
   };
 
-  const signedIn = !!state?.signed_in;
+  const signedIn = !!state?.signed_in || welcome;
   const answerOk = looksLikeCallback(answer);
 
   return (
@@ -110,9 +127,16 @@ export default function ChatGPTPlan() {
         <ScrollView contentContainerStyle={{ paddingBottom: space.s10 }} keyboardShouldPersistTaps="handled">
           {signedIn ? (
             <>
+              {welcome ? (
+                <View style={{ paddingHorizontal: space.s7, paddingTop: space.s8, gap: space.s5 }}>
+                  <Text accessibilityRole="header" style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.ink }}>You're using your ChatGPT plan</Text>
+                  <Text style={note}>Turns from @{id} count against it. Manage usage below.</Text>
+                  <Button title="Got it" size="md" fullWidth onPress={() => { setWelcome(false); refreshDetail(); }} />
+                </View>
+              ) : null}
               <SectionHeader>Account</SectionHeader>
               <RowGroup>
-                <Row label={state.email || 'Signed in'} chevron={false} />
+                <Row label={state?.email || 'Signed in'} chevron={false} />
                 <RowSeparator />
                 <Row label="Manage usage" onPress={() => Linking.openURL(CHATGPT_USAGE_URL).catch(() => {})} />
               </RowGroup>

@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => []) }));
 vi.mock("../primitives/Notification.jsx", () => ({ useNotify: () => () => {} }));
@@ -110,5 +112,119 @@ describe("cancelling the ChatGPT sign-in from New profile", () => {
     refuse("sign-in cancelled");
 
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith("work"));
+  });
+});
+
+describe("closing New profile during the ChatGPT sign-in", () => {
+  async function start(invoke, signIn) {
+    invoke.mockReset();
+    invoke.mockImplementation((command) => {
+      if (command === "chatgpt_status") return Promise.resolve({ signed_in: false });
+      if (command === "chatgpt_sign_in") return signIn();
+      return Promise.resolve([]);
+    });
+    const view = render(<CreateProfileModal open existingNames={["default"]} onCreated={() => {}} onClose={() => {}} />);
+    fireEvent.click(screen.getByText("Ollama"));
+    fireEvent.click(await screen.findByText("ChatGPT plan"));
+    fireEvent.change(screen.getAllByRole("textbox")[0], { target: { value: "work" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue with ChatGPT" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("chatgpt_sign_in", { profile: "work" }));
+    return view;
+  }
+
+  it("ends the wait when the dialog is closed by any route", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const view = await start(invoke, () => new Promise(() => {}));
+    expect(invoke).not.toHaveBeenCalledWith("chatgpt_sign_in_cancel");
+
+    view.rerender(<CreateProfileModal open={false} existingNames={["default"]} onCreated={() => {}} onClose={() => {}} />);
+
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("chatgpt_sign_in_cancel"));
+  });
+
+  it("sends no cancel when the sign-in finished and the dialog then closes", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const view = await start(invoke, () => Promise.resolve({ signed_in: true, email: "a@example.com", first_sign_in: true }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Continue with ChatGPT" }).disabled).toBe(false));
+
+    view.rerender(<CreateProfileModal open={false} existingNames={["default"]} onCreated={() => {}} onClose={() => {}} />);
+
+    expect(invoke).not.toHaveBeenCalledWith("chatgpt_sign_in_cancel");
+  });
+});
+
+describe("closing New profile before the ChatGPT sign-in starts", () => {
+  async function submitHeld(invoke, onCreated, onCreatedBehind = () => {}) {
+    const created = {};
+    invoke.mockReset();
+    invoke.mockImplementation((command, args) => {
+      if (command === "chatgpt_status") return Promise.resolve({ signed_in: false });
+      if (command === "profile_create") return new Promise((resolve) => { created[args.name] = resolve; });
+      if (command === "chatgpt_sign_in") return new Promise(() => {});
+      return Promise.resolve([]);
+    });
+    const props = { existingNames: ["default"], onCreated, onCreatedBehind, onClose: () => {} };
+    const view = render(<CreateProfileModal open {...props} />);
+    const fill = async (name) => {
+      fireEvent.click(screen.getByText("Ollama"));
+      fireEvent.click(await screen.findByText("ChatGPT plan"));
+      fireEvent.change(screen.getAllByRole("textbox")[0], { target: { value: name } });
+      fireEvent.click(screen.getByRole("button", { name: "Continue with ChatGPT" }));
+      await waitFor(() => expect(created[name]).toBeTypeOf("function"));
+    };
+    await fill("work");
+    const show = (open) => view.rerender(<CreateProfileModal open={open} {...props} />);
+    return { created, fill, show };
+  }
+
+  it("creates the profile without opening the browser", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const onCreated = vi.fn();
+    const { created, show } = await submitHeld(invoke, onCreated);
+
+    show(false);
+    created.work([]);
+
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith("work"));
+    expect(invoke).not.toHaveBeenCalledWith("chatgpt_sign_in", expect.anything());
+  });
+
+  it("stays out of the browser when the dialog was reopened meanwhile", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const onCreated = vi.fn();
+
+    const onCreatedBehind = vi.fn();
+    const { created, show } = await submitHeld(invoke, onCreated, onCreatedBehind);
+
+    show(false);
+    show(true);
+    created.work([]);
+
+    await waitFor(() => expect(onCreatedBehind).toHaveBeenCalledWith("work"));
+    expect(invoke).not.toHaveBeenCalledWith("chatgpt_sign_in", expect.anything());
+    expect(onCreated).not.toHaveBeenCalled();
+  });
+
+  it("has the app only reload its roster for a profile created behind the dialog", () => {
+    const app = readFileSync(join(import.meta.dirname, "..", "App.jsx"), "utf8");
+    expect(app).toMatch(/<CreateProfileModal[\s\S]{0,300}onCreatedBehind=\{\(\) => reload\(\)\}/);
+  });
+
+  it("leaves a second profile in the making alone when the first one lands", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const onCreated = vi.fn();
+    const onCreatedBehind = vi.fn();
+    const { created, fill, show } = await submitHeld(invoke, onCreated, onCreatedBehind);
+
+    show(false);
+    show(true);
+    await fill("home");
+    invoke.mockClear();
+    created.work([]);
+
+    await waitFor(() => expect(onCreatedBehind).toHaveBeenCalledWith("work"));
+    expect(onCreated).not.toHaveBeenCalled();
+    expect(invoke).not.toHaveBeenCalledWith("chatgpt_sign_in_cancel");
+    expect(screen.getByRole("button", { name: "Continue with ChatGPT" }).disabled).toBe(true);
   });
 });

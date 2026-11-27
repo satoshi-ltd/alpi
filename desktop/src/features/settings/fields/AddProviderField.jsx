@@ -13,6 +13,7 @@ import ProviderPickerForm, {
   defaultProviderValue,
   isProviderValueValid,
   signInCancelled,
+  signedInNotice,
 } from "../ProviderPickerForm.jsx";
 import { runsOnPlan } from "../../../lib/modelLabel.js";
 import { PAID_PROVIDERS } from "../util.js";
@@ -129,7 +130,7 @@ function ProviderEditor({ profile, onClose, onSaved }) {
       const msg = await applyProvider(profile.name, providerValue, {
         currentModel: profile.model,
       });
-      notify({ message: msg, variant: "success", duration: providerValue.id === CHATGPT_PLAN.id ? 6000 : undefined });
+      notify(providerValue.id === CHATGPT_PLAN.id ? signedInNotice(msg) : { message: msg, variant: "success" });
       await onSaved?.();
       onClose?.();
     } catch (e) {

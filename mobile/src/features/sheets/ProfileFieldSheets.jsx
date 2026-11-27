@@ -1,19 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Linking, Pressable, ScrollView, Text, View } from 'react-native';
 import { radii, space } from '../../theme/tokens';
 
 import { useConfirm } from '../../components/ConfirmProvider';
 import { Field } from '../../components/Field';
 import { PickerRow } from '../../components/PickerRow';
 import { Pill } from '../../components/Pill';
-import { RowSeparator, SectionHeader } from '../../components/Row';
+import { Row, RowSeparator, SectionHeader } from '../../components/Row';
 import { Sheet } from '../../components/Sheet';
 import { useToast } from '../../components/Toast';
 import { nextSheetValue } from '../../lib/sheet-value';
 import { useOllamaModels } from '../../hooks/useDaemonData';
 import { useEndpoint } from '../../lib/EndpointContext';
 import { noteFor } from '../../lib/curatedModels';
-import { modelProvider } from '../../lib/modelLabel';
+import { CHATGPT_USAGE_URL } from '../../lib/chatgptPlan';
+import { modelProvider, runsOnPlan } from '../../lib/modelLabel';
 import { VOICE_SHORTLIST } from '../../lib/voices';
 import {
   currentlyPlayingVoice,
@@ -358,6 +359,12 @@ export function ModelSheet({
                   </View>
                 );
               })}
+              {cat === 'chatgpt-plan' ? (
+                <>
+                  <RowSeparator />
+                  <Row label="Manage usage" helper={runsOnPlan(picked) ? 'Using ChatGPT plan' : undefined} onPress={() => Linking.openURL(CHATGPT_USAGE_URL).catch(() => {})} />
+                </>
+              ) : null}
             </View>
           ))
         )}

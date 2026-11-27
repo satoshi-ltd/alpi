@@ -4,14 +4,24 @@ import { ActionLink, Eyebrow, Field } from "../../primitives/index.js";
 import Dropdown from "../../primitives/Dropdown.jsx";
 import { PAID_PROVIDERS } from "./util.js";
 import { openExternal } from "../../lib/openExternal.js";
+import { CHATGPT_USAGE_URL } from "../../lib/modelLabel.js";
 import styles from "./ProviderPickerForm.module.css";
 
 // Ordered by how often a profile actually needs them, not alphabetically.
 const PROVIDER_ORDER = ["ollama", "openrouter", "anthropic", "openai", "chatgpt-plan", "gemini", "groq"];
 export const CHATGPT_PLAN = { id: "chatgpt-plan", label: "ChatGPT plan" };
-export const CHATGPT_USAGE_URL = "https://chatgpt.com/settings/usage";
 export const SIGN_IN_CANCELLED = "sign-in cancelled";
 const PLAN_DECLINED = "Plan use was declined. Sign in again to allow it.";
+export const PLAN_WELCOME = "You're using your ChatGPT plan";
+
+// OpenAI asks for a confirmation the person dismisses, the first time a sign-in turns plan use on.
+export function signedInNotice(message) {
+  if (!String(message).startsWith(PLAN_WELCOME)) return { message, variant: "success" };
+  return {
+    message, variant: "success", persistent: true, action: "Manage usage",
+    onAction: () => openExternal(CHATGPT_USAGE_URL).catch(() => {}),
+  };
+}
 
 // A daemon error reaches the app as "alp <code>: <name> — <what happened>"; people only need the last part.
 export function daemonMessage(error) {
@@ -99,7 +109,7 @@ export async function applyProvider(profile, value, { currentModel } = {}) {
     const out = await invoke("chatgpt_sign_in", { profile });
     if (!out?.signed_in) throw new Error(PLAN_DECLINED);
     const who = out.email || "your account";
-    return out.first_sign_in ? `You're using your ChatGPT plan · ${who}` : `Signed in as ${who}`;
+    return out.first_sign_in ? `${PLAN_WELCOME} · ${who}` : `Signed in as ${who}`;
   }
   const meta = PAID_PROVIDERS.find((p) => p.id === value.id);
   const trimmedKey = (value.keyValue || "").trim();

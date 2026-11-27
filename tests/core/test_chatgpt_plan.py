@@ -749,6 +749,31 @@ def test_a_stale_first_registration_cannot_replace_the_one_that_finished(tmp_hom
     assert failed.value.code == "superseded" and (saved["client_id"], saved["refresh_token"]) == ("oaiapp_1", "rt-1")
 
 
+@pytest.mark.parametrize("returning", [False, True])
+@pytest.mark.parametrize("forget", [False, True])
+@pytest.mark.parametrize("during", ["TOKEN_URL", "MODELS_URL"])
+def test_a_sign_out_that_lands_while_the_sign_in_finishes_is_not_undone(tmp_home: Path, web, returning: bool, forget: bool, during: str) -> None:
+    _, answers = web
+    if returning:
+        _sign_in(tmp_home, web)
+    attempt = chatgpt.begin(tmp_home, 1455)
+    replies = {"TOKEN_URL": (200, _tokens(attempt.nonce, access_token="at-2")), "MODELS_URL": (200, {"models": [{"slug": "m", "display_name": "M", "visibility": "list"}]})}
+    answers[chatgpt.TOKEN_URL], answers[chatgpt.MODELS_URL] = replies["TOKEN_URL"], replies["MODELS_URL"]
+
+    def interrupted(sent: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        chatgpt.logout(tmp_home, forget=forget)
+        return replies[during]
+
+    answers[getattr(chatgpt, during)] = interrupted
+    with pytest.raises(chatgpt.PlanError) as failed:
+        chatgpt.finish(tmp_home, attempt, {"code": "c-2", "state": attempt.state, "client_id": "oaiapp_1"}, keys=_jwks())
+
+    assert failed.value.code == "superseded"
+    assert not chatgpt.signed_in(tmp_home)
+    assert chatgpt.record_path(tmp_home).exists() is not forget
+    assert "access_token" not in chatgpt.load(tmp_home)
+
+
 @pytest.mark.parametrize("body", [{"refresh_token": "r"}, ["not", "an", "object"], {"access_token": ""}, b"<html>"])
 def test_a_token_answer_without_an_access_token_is_a_plan_error(tmp_home: Path, web, body) -> None:
     _, answers = web

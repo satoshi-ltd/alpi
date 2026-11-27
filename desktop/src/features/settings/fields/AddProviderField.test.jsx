@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-const h = vi.hoisted(() => ({ invoke: vi.fn(), notify: vi.fn() }));
+const h = vi.hoisted(() => ({ invoke: vi.fn(), notify: vi.fn(), openUrl: vi.fn(async () => {}) }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: h.invoke }));
-vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn(async () => {}) }));
+vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: h.openUrl }));
 vi.mock("../../../primitives/Notification.jsx", () => ({ useNotify: () => h.notify }));
 
 import { AddProviderField } from "./AddProviderField.jsx";
@@ -49,6 +49,41 @@ describe("ChatGPT plan in Providers", () => {
     settle(new Error("sign-in cancelled"));
     await waitFor(() => expect(h.invoke.mock.calls.filter((c) => c[0] === "chatgpt_sign_in")).toHaveLength(1));
     expect(h.notify).not.toHaveBeenCalled();
+  });
+
+  it("confirms plan use the first time with a notice the person dismisses, and briefly afterwards", async () => {
+    const answers = [{ signed_in: true, email: "a@example.com", first_sign_in: true }, { signed_in: true, email: "a@example.com", first_sign_in: false }];
+    h.invoke.mockImplementation(async (command) => {
+      if (command === "chatgpt_sign_in") return answers.shift();
+      return command === "ollama_models" ? [] : undefined;
+    });
+    open({ ...PROFILE, provider_chatgpt: { signed_in: false } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue with ChatGPT" }));
+    await waitFor(() => expect(h.notify).toHaveBeenCalledWith(expect.objectContaining({
+      message: "You're using your ChatGPT plan · a@example.com", persistent: true, action: "Manage usage",
+    })));
+    h.notify.mock.calls.at(-1)[0].onAction();
+    expect(h.openUrl).toHaveBeenCalledWith("https://chatgpt.com/settings/usage");
+
+    cleanup();
+    h.notify.mockReset();
+    open({ ...PROFILE, provider_chatgpt: { signed_in: false } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue with ChatGPT" }));
+    await waitFor(() => expect(h.notify).toHaveBeenCalledWith({ message: "Signed in as a@example.com", variant: "success" }));
+  });
+
+  it("ends the wait when the form goes away", async () => {
+    h.invoke.mockImplementation((command) => {
+      if (command === "chatgpt_sign_in") return new Promise(() => {});
+      return Promise.resolve(command === "ollama_models" ? [] : undefined);
+    });
+    open({ ...PROFILE, provider_chatgpt: { signed_in: false } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue with ChatGPT" }));
+    await waitFor(() => expect(screen.getByText("Waiting for your browser…")).toBeTruthy());
+
+    cleanup();
+
+    expect(h.invoke).toHaveBeenCalledWith("chatgpt_sign_in_cancel");
   });
 
   it("shows only what the daemon said when the sign-in fails", async () => {

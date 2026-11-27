@@ -18,6 +18,7 @@ vi.mock('react-native', () => {
     TextInput: (props) => React.createElement('input', props),
     useColorScheme: () => 'light',
     Alert: { alert: vi.fn() },
+    Linking: { openURL: (...args) => globalThis.__openURL(...args) },
   };
 });
 vi.mock('../../components/Sheet', () => ({
@@ -33,7 +34,11 @@ vi.mock('../../components/PickerRow', () => ({
   ),
 }));
 vi.mock('../../components/Pill', () => ({ Pill: ({ children }) => <em>{children}</em> }));
-vi.mock('../../components/Row', () => ({ RowSeparator: () => <hr />, SectionHeader: ({ children }) => <h2>{children}</h2> }));
+vi.mock('../../components/Row', () => ({
+  Row: ({ label, helper, onPress }) => <button type="button" data-row onClick={onPress}>{label} {helper}</button>,
+  RowSeparator: () => <hr />,
+  SectionHeader: ({ children }) => <h2>{children}</h2>,
+}));
 vi.mock('../../components/ConfirmProvider', () => ({ useConfirm: () => async () => false }));
 vi.mock('../../components/Field', () => ({ Field: () => null }));
 const toast = vi.hoisted(() => vi.fn());
@@ -124,5 +129,40 @@ describe('ModelSheet', () => {
     expect(screen.getByText('gpt-x')).toBeTruthy();
     expect(screen.queryByText('main')).toBeNull();
     expect(screen.queryByText('sonnet')).toBeNull();
+  });
+
+  it('names the plan group and gives it a way to manage usage that picks nothing', () => {
+    globalThis.__openURL = vi.fn(async () => true);
+    const onSave = vi.fn(async () => {});
+    render(
+      <ModelSheet
+        open
+        onClose={() => {}}
+        onSave={onSave}
+        profileName="doc"
+        title="Model"
+        initialValue="openai/gpt-x"
+        profileModels={['openai/gpt-x', 'chatgpt-plan/gpt-6.2-sol']}
+      />,
+    );
+
+    expect(screen.getByText('ChatGPT plan')).toBeTruthy();
+    expect(screen.queryByText('chatgpt-plan')).toBeNull();
+    expect(document.querySelectorAll('[data-row]')).toHaveLength(1);
+    const chosen = () => [...document.querySelectorAll('[data-selected="true"]')].map((row) => row.textContent);
+    expect(chosen()).toEqual(['gpt-x']);
+    expect(screen.queryByText(/Using ChatGPT plan/)).toBeNull();
+    fireEvent.click(screen.getByText(/Manage usage/));
+    expect(globalThis.__openURL).toHaveBeenCalledWith('https://chatgpt.com/settings/usage');
+    expect(chosen()).toEqual(['gpt-x']);
+
+    fireEvent.click(screen.getByText('gpt-6.2-sol'));
+    expect(chosen()).toEqual(['gpt-6.2-sol']);
+    expect(screen.getByText(/Using ChatGPT plan/)).toBeTruthy();
+  });
+
+  it('shows no usage row without plan models', () => {
+    render(<ModelSheet open onClose={() => {}} profileName="doc" title="Model" initialValue="" profileModels={['openai/gpt-x']} />);
+    expect(screen.queryByText(/Manage usage/)).toBeNull();
   });
 });

@@ -215,3 +215,14 @@ async def test_sign_out_keeps_the_registration_unless_asked_to_forget(srv, monke
     await _call(srv, "host.providers.chatgpt_logout", forget=True)
     assert not chatgpt.record_path(home).exists()
     assert (await _call(srv, "host.providers.chatgpt_status"))["result"]["registered"] is False
+
+
+@pytest.mark.asyncio
+async def test_signing_out_drops_a_sign_in_that_was_still_waiting(srv) -> None:
+    begun = (await _call(srv, "host.providers.chatgpt_begin", port=1455))["result"]
+    state = urllib.parse.parse_qs(urllib.parse.urlsplit(begun["url"]).query)["state"][0]
+
+    await _call(srv, "host.providers.chatgpt_logout", forget=True)
+    late = await _call(srv, "host.providers.chatgpt_finish", callback=f"?code=c&state={state}")
+
+    assert chatgpt._PENDING == {} and late["error"]["data"]["code"] == "no_attempt"

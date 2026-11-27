@@ -169,3 +169,10 @@
   background: var(--selected);
   font-weight: var(--fw-semibold);
 }
+
+.modelPickerPlan {
+  justify-content: space-between;
+  gap: var(--sp-8);
+  padding: var(--sp-8) var(--sp-12);
+  color: var(--ink-3);
+}

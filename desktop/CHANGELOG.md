@@ -11,6 +11,13 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.10.22 — 2026-11-27 — ChatGPT plan: confirmation and usage where you pick the model
+
+- The first time a sign-in turns plan use on, "You're using your ChatGPT plan" stays on screen until you dismiss it, with Manage usage beside it. Later sign-ins only name the account.
+- The model picker shows "Using ChatGPT plan · Manage usage" under its list while the chosen model runs on the plan.
+- Closing New profile ends the ChatGPT sign-in it started, or keeps it from starting: the profile is created and you sign in from its Providers. Before, the app could jump to Settings minutes later with a failure message. A profile that finishes being created after you reopened the dialog no longer closes it.
+- Needs alpi ≥ 0.19.47.
+
 ## v0.10.21 — 2026-11-27 — sign in with ChatGPT, and Groq in Providers
 
 - Providers and New profile offer **ChatGPT plan** next to OpenAI: Continue with ChatGPT opens your browser, and the profile then runs on your ChatGPT plan instead of an API key. It works with a daemon on this machine or on another one, and the wait can be cancelled. Once signed in, the form shows the account, Manage usage and Sign out.

@@ -5,14 +5,18 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 afterEach(cleanup);
 
 const h = vi.hoisted(() => ({
-  profile: null, call: null, toast: null, openURL: null, refresh: null, push: null, clip: '',
+  profile: null, call: null, toast: null, openURL: null, refresh: null, refreshDetail: null, detailLoaded: true, push: null, clip: '', said: null,
 }));
 
 vi.mock('react-native', () => {
   const View = ({ children }) => React.createElement('div', {}, children);
   const Text = ({ children }) => React.createElement('span', {}, children);
   const Pressable = ({ children, onPress, accessibilityLabel }) => React.createElement('button', { type: 'button', onClick: onPress, 'aria-label': accessibilityLabel }, children);
-  return { View, Text, Pressable, ScrollView: View, Linking: { openURL: (...args) => h.openURL(...args) } };
+  return {
+    View, Text, Pressable, ScrollView: View,
+    Linking: { openURL: (...args) => h.openURL(...args) },
+    AccessibilityInfo: { announceForAccessibility: (...args) => h.said(...args) },
+  };
 });
 vi.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ id: 'doc' }),
@@ -52,7 +56,7 @@ vi.mock('../src/components/Row', () => ({
 vi.mock('../src/hooks/useBack', () => ({ useBack: () => vi.fn() }));
 vi.mock('../src/hooks/useDirtyBack', () => ({ useDirtyBack: (_dirty, back) => back }));
 vi.mock('../src/hooks/useDaemonData', () => ({ useOllamaModels: () => ({ data: null }) }));
-vi.mock('../src/hooks/useSubject', () => ({ useProfile: () => ({ profile: h.profile, refresh: h.refresh }) }));
+vi.mock('../src/hooks/useSubject', () => ({ useProfile: () => ({ profile: h.profile, refresh: h.refresh, refreshDetail: h.refreshDetail, detailLoaded: h.detailLoaded }) }));
 vi.mock('../src/lib/EndpointContext', () => ({ useEndpoint: () => ({ call: (...args) => h.call(...args) }) }));
 
 import ChatGPTPlan from '../app/profile/[id]/providers/chatgpt.jsx';
@@ -65,7 +69,10 @@ beforeEach(() => {
   h.toast = vi.fn();
   h.openURL = vi.fn(async () => true);
   h.refresh = vi.fn(async () => {});
+  h.refreshDetail = vi.fn(async () => {});
+  h.detailLoaded = true;
   h.push = vi.fn();
+  h.said = vi.fn();
   h.clip = '';
   h.call = vi.fn(async (method) => {
     if (method === 'host.providers.chatgpt_begin') return { url: 'https://auth.openai.com/api/accounts/authorize?state=s', redirect_uri: 'http://127.0.0.1:1455/auth/callback' };
@@ -104,9 +111,79 @@ describe('ChatGPT plan on the phone', () => {
     await waitFor(() => expect(screen.getByLabelText('Address').value).toBe(ADDRESS));
     fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
 
-    await waitFor(() => expect(h.toast).toHaveBeenCalledWith({ title: "You're using your ChatGPT plan", message: 'a@example.com' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Finish' }).disabled).toBe(true));
     expect(h.call).toHaveBeenCalledWith('host.providers.chatgpt_finish', { profile: 'doc', callback: ADDRESS }, { timeoutMs: 120000 });
     expect(h.refresh).toHaveBeenCalled();
+    expect(h.toast).not.toHaveBeenCalled();
+  });
+
+  it('confirms plan use on the screen the first time, until Got it', async () => {
+    h.refreshDetail = vi.fn(async () => { h.profile = { ...h.profile, provider_chatgpt: { signed_in: true, email: 'a@example.com', models: 4 } }; });
+    const { rerender } = render(<ChatGPTPlan />);
+    fireEvent.change(screen.getByLabelText('Address'), { target: { value: ADDRESS } });
+    fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
+    await waitFor(() => expect(h.refreshDetail).toHaveBeenCalledTimes(1));
+    rerender(<ChatGPTPlan />);
+
+    expect(screen.getByText("You're using your ChatGPT plan")).toBeTruthy();
+    expect(h.said).toHaveBeenCalledWith("You're using your ChatGPT plan. a@example.com");
+    expect(screen.getAllByText(/Manage usage/).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Got it' }));
+    expect(screen.queryByText("You're using your ChatGPT plan")).toBeNull();
+    expect(screen.getByText(/a@example.com/)).toBeTruthy();
+    expect(h.refreshDetail).toHaveBeenCalledTimes(2);
+  });
+
+  it('waits for the profile to be read before saying anything about the daemon', () => {
+    h.profile = { name: 'doc', provider_keys: [], provider_ollama: [] };
+    h.detailLoaded = false;
+    render(<ChatGPTPlan />);
+
+    expect(screen.queryByText(/Update alpi/)).toBeNull();
+    expect(screen.queryByLabelText('Address')).toBeNull();
+  });
+
+  it('confirms a first sign-in even before the profile itself has loaded', async () => {
+    h.profile = null;
+    render(<ChatGPTPlan />);
+    fireEvent.change(screen.getByLabelText('Address'), { target: { value: ADDRESS } });
+    fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
+
+    expect(await screen.findByText("You're using your ChatGPT plan")).toBeTruthy();
+    expect(screen.getByText(/Signed in/)).toBeTruthy();
+  });
+
+  it('still confirms plan use when the profile could not be read again', async () => {
+    h.refresh = vi.fn(async () => { throw new Error('offline'); });
+    render(<ChatGPTPlan />);
+    fireEvent.change(screen.getByLabelText('Address'), { target: { value: ADDRESS } });
+    fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
+
+    expect(await screen.findByText("You're using your ChatGPT plan")).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy();
+    expect(h.toast).not.toHaveBeenCalled();
+  });
+
+  it('drops the confirmation when the person signs out instead', async () => {
+    render(<ChatGPTPlan />);
+    fireEvent.change(screen.getByLabelText('Address'), { target: { value: ADDRESS } });
+    fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
+    await screen.findByText("You're using your ChatGPT plan");
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+    fireEvent.click(screen.getByRole('button', { name: /^confirm / }));
+
+    await waitFor(() => expect(screen.queryByText("You're using your ChatGPT plan")).toBeNull());
+    expect(screen.getByLabelText('Address')).toBeTruthy();
+  });
+
+  it('only names the account on a later sign-in', async () => {
+    h.call = vi.fn(async (method) => (method === 'host.providers.chatgpt_finish' ? { signed_in: true, email: 'a@example.com', first_sign_in: false } : { url: 'https://auth.openai.com/x?state=s' }));
+    render(<ChatGPTPlan />);
+    fireEvent.change(screen.getByLabelText('Address'), { target: { value: ADDRESS } });
+    fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
+
+    await waitFor(() => expect(h.toast).toHaveBeenCalledWith({ title: 'Signed in', message: 'a@example.com' }));
   });
 
   it('takes from the clipboard only a sign-in address', async () => {

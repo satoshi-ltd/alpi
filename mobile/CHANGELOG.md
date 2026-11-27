@@ -14,6 +14,13 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.10.15 — 2026-11-27 — ChatGPT plan: confirmation and usage where you pick the model
+
+- The first time a sign-in turns plan use on, the ChatGPT plan screen says "You're using your ChatGPT plan" until you tap Got it, and a screen reader hears it. Later sign-ins only name the account.
+- The model picker has a Manage usage row under the plan's models, and says "Using ChatGPT plan" while the chosen model runs on it.
+- The ChatGPT plan screen shows the account as soon as the sign-in ends, and no longer asks you to update alpi for a moment while it opens.
+- Needs alpi ≥ 0.19.47.
+
 ## v0.10.14 — 2026-11-27 — sign in with ChatGPT, and Groq in Providers
 
 - Providers lists **ChatGPT plan** after OpenAI. Its screen opens the browser to sign in, and the profile then runs on your ChatGPT plan instead of an API key. OpenAI answers to an address the phone cannot open, so the screen says up front what to do: the last page will not load, copy its address and paste it in the app. Once signed in it shows the account, Manage usage and Sign out.

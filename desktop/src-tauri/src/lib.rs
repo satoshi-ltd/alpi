@@ -2514,6 +2514,15 @@ fn chatgpt_sign_in_cancel() {
     }
 }
 
+fn chatgpt_open_unless_cancelled(
+    cancelled: &std::sync::atomic::AtomicBool, url: &str, open: impl FnOnce(&str) -> Result<(), String>,
+) -> Result<(), String> {
+    if cancelled.load(std::sync::atomic::Ordering::SeqCst) {
+        return Err(CHATGPT_SIGN_IN_CANCELLED.into());
+    }
+    open(url)
+}
+
 fn chatgpt_wait_for_callback(
     listener: std::net::TcpListener,
     state: &str,
@@ -2587,7 +2596,9 @@ async fn chatgpt_sign_in(profile: String, connection_id: Option<String>) -> Resu
             return Err("the daemon returned an address that is not OpenAI's sign-in".to_string());
         }
         let state = chatgpt_query_value(&url, "state").unwrap_or("").to_string();
-        tauri_plugin_opener::open_url(&url, None::<&str>).map_err(|e| format!("could not open the browser: {e}"))?;
+        chatgpt_open_unless_cancelled(&cancelled, &url, |address| {
+            tauri_plugin_opener::open_url(address, None::<&str>).map_err(|e| format!("could not open the browser: {e}"))
+        })?;
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(300);
         let target = chatgpt_wait_for_callback(listener, &state, deadline, &cancelled)?;
         // Sent once and given time: the daemon talks to OpenAI inside it, and a second send would find the attempt spent.
@@ -4950,8 +4961,26 @@ mod workgroup_create_tests {
 
 #[cfg(test)]
 mod chatgpt_callback_tests {
-    use super::{chatgpt_callback_matches, chatgpt_query_value, chatgpt_wait_for_callback, is_chatgpt_auth_url};
+    use super::{
+        chatgpt_callback_matches, chatgpt_open_unless_cancelled, chatgpt_query_value, chatgpt_wait_for_callback, is_chatgpt_auth_url,
+    };
     use std::io::{Read, Write};
+
+    #[test]
+    fn a_cancel_that_lands_before_the_browser_opens_keeps_it_closed() {
+        let opened = std::cell::Cell::new(0);
+        let open = |_: &str| {
+            opened.set(opened.get() + 1);
+            Ok(())
+        };
+        let cancelled = std::sync::atomic::AtomicBool::new(true);
+        assert_eq!(chatgpt_open_unless_cancelled(&cancelled, "https://auth.openai.com/a", open).unwrap_err(), super::CHATGPT_SIGN_IN_CANCELLED);
+        assert_eq!(opened.get(), 0);
+
+        let wanted = std::sync::atomic::AtomicBool::new(false);
+        assert!(chatgpt_open_unless_cancelled(&wanted, "https://auth.openai.com/a", open).is_ok());
+        assert_eq!(opened.get(), 1);
+    }
 
     #[test]
     fn only_the_answer_that_carries_this_attempts_state_matches() {

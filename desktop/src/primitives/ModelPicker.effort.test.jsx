@@ -3,6 +3,9 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+const openUrl = vi.hoisted(() => vi.fn(async () => {}));
+vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl }));
+
 import ModelPicker from "./ModelPicker.jsx";
 
 const css = readFileSync(join(import.meta.dirname, "ModelPicker.module.css"), "utf8");
@@ -77,5 +80,33 @@ describe("ModelPicker effort", () => {
     mount();
     fireEvent.click(screen.getByRole("button"));
     expect(screen.queryByRole("radiogroup")).toBeNull();
+  });
+});
+
+describe("a model on the ChatGPT plan", () => {
+  const WITH_PLAN = { openai: [{ id: "openai/x", label: "x" }], "chatgpt-plan": [{ id: "chatgpt-plan/sol", label: "sol" }] };
+
+  it("says so under the list, outside it, with a way to manage usage", () => {
+    render(<ModelPicker currentModel="chatgpt-plan/sol" models={WITH_PLAN} onPick={() => {}} />);
+    fireEvent.click(screen.getByRole("button"));
+    const listbox = screen.getByRole("listbox");
+
+    expect(screen.getByText("ChatGPT plan")).toBeInTheDocument();
+    expect(screen.getByText("Using ChatGPT plan")).toBeInTheDocument();
+    expect(listbox.contains(screen.getByText("Using ChatGPT plan"))).toBe(false);
+    expect(listbox.contains(screen.getByText("Manage usage"))).toBe(false);
+    for (const child of listbox.querySelectorAll("*")) {
+      expect(["option", "group", "presentation", null]).toContain(child.getAttribute("role") ?? (child.tagName === "BUTTON" ? "button" : null));
+    }
+
+    fireEvent.click(screen.getByText("Manage usage"));
+    expect(openUrl).toHaveBeenCalledWith("https://chatgpt.com/settings/usage");
+  });
+
+  it("says nothing while the picked model is paid for with a key", () => {
+    render(<ModelPicker currentModel="openai/x" models={WITH_PLAN} onPick={() => {}} />);
+    fireEvent.click(screen.getByRole("button"));
+
+    expect(screen.queryByText("Using ChatGPT plan")).toBeNull();
   });
 });

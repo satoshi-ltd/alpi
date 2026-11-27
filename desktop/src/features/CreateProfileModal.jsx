@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { DialogFooter, Eyebrow, Field, Modal } from "../primitives/index.js";
 import { useNotify } from "../primitives/Notification.jsx";
@@ -8,7 +8,9 @@ import ProviderPickerForm, {
   daemonMessage,
   defaultProviderValue,
   isProviderValueValid,
+  SIGN_IN_CANCELLED,
   signInCancelled,
+  signedInNotice,
 } from "./settings/ProviderPickerForm.jsx";
 import styles from "./CreateProfileModal.module.css";
 import { isComposing } from "../lib/composition.js";
@@ -17,6 +19,7 @@ export default function CreateProfileModal({
   open,
   existingNames = [],
   onCreated,
+  onCreatedBehind,
   onClose,
 }) {
   const [name, setName] = useState("");
@@ -48,6 +51,19 @@ export default function CreateProfileModal({
     };
   }, [open, probeProfile]);
 
+  const waitingRef = useRef(false);
+  waitingRef.current = busy && providerValue.id === "chatgpt-plan";
+  const openRef = useRef(open);
+  const attemptRef = useRef(0);
+  if (openRef.current !== open) {
+    openRef.current = open;
+    attemptRef.current += 1;
+  }
+  // Closing the dialog by any route ends the wait: its answer would otherwise open Settings minutes later.
+  useEffect(() => {
+    if (!open && waitingRef.current) invoke("chatgpt_sign_in_cancel").catch(() => {});
+  }, [open]);
+
   const trimmed = name.trim();
   const reserved = RESERVED_PROFILE_NAMES.includes(trimmed);
   const errorId = useId();
@@ -59,12 +75,14 @@ export default function CreateProfileModal({
 
   async function submit() {
     if (!canSubmit) return;
+    const attempt = attemptRef.current;
     setBusy(true);
     try {
       await invoke("profile_create", { name: trimmed });
       try {
+        if (providerValue.id === "chatgpt-plan" && attempt !== attemptRef.current) throw new Error(SIGN_IN_CANCELLED);
         const msg = await applyProvider(trimmed, providerValue);
-        notify({ message: `Profile @${trimmed} created · ${msg}`, variant: "success" });
+        notify(providerValue.id === "chatgpt-plan" ? signedInNotice(msg) : { message: `Profile @${trimmed} created · ${msg}`, variant: "success" });
       } catch (e) {
         const plan = providerValue.id === "chatgpt-plan";
         notify(plan && signInCancelled(e)
@@ -77,7 +95,9 @@ export default function CreateProfileModal({
             duration: 6000,
           });
       }
-      onCreated?.(trimmed);
+      // The dialog was reopened for another profile: its owner must not close it or leave for this one.
+      if (attempt !== attemptRef.current && openRef.current) onCreatedBehind?.(trimmed);
+      else onCreated?.(trimmed);
     } catch (e) {
       notify({
         message: `create failed: ${String(e)}`,
@@ -85,7 +105,7 @@ export default function CreateProfileModal({
         duration: 4000,
       });
     } finally {
-      setBusy(false);
+      if (attempt === attemptRef.current) setBusy(false);
     }
   }
 

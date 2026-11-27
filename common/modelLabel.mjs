@@ -27,3 +27,5 @@ export const PLAN_BUDGET_HINT = "ChatGPT plan turns are not counted.";
 export function runsOnPlan(model) {
   return typeof model === "string" && model.trim().toLowerCase().startsWith("chatgpt-plan/");
 }
+
+export const CHATGPT_USAGE_URL = "https://chatgpt.com/settings/usage";

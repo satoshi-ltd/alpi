@@ -1789,6 +1789,7 @@ export default function App() {
         open={createProfileOpen}
         existingNames={profiles.map((p) => p.name)}
         onClose={() => setCreateProfileOpen(false)}
+        onCreatedBehind={() => reload()}
         onCreated={async (profileName) => {
           setCreateProfileOpen(false);
           await reload();
