@@ -996,9 +996,11 @@ Rolling back below 0.14.39 is not supported. Leftover copies are listed by
 `alpi doctor`; [OPERATIONS.md](OPERATIONS.md) has the removal procedure.
 
 `host.devices.*` remains as a compatibility RPC alias for older management
-clients; generated payloads use the new one-time grant contract. Desktop and
-Mobile continue to consume old QR/link payloads that contain a final `token`.
-All new management uses `host.connections.*`.
+clients; all new management uses `host.connections.*`. New pairing codes and
+links carry a one-time grant. Desktop still accepts legacy pairing links with
+a device token. Mobile accepts a scanned QR or an `alpi://` link (opened or
+pasted) only when it carries a one-time grant and refuses one that carries a
+device token; a legacy device token is accepted only as pasted pairing JSON.
 
 Verb namespaces in current shape:
 

@@ -1,6 +1,6 @@
 import marks
 from desktop_boards import MONO
-from first_run_parts import (COPY, PANE, desktop_states, fold_box, fold_first_profile, q_denied, q_first_profile, q_pair, q_paired,
+from first_run_parts import (COPY, PANE, desktop_states, fold_box, fold_first_profile, q_denied, q_first_profile, q_pair, q_pair_confirm, q_paired,
                              q_scan, q_welcome, Q_COL, Q_FOLD_EDGE, Q_FOLD_H, Q_FOLD_W)
 from gen import ic, page
 from notif_studies import VIEW, dot, ell, flex, mark, mono, spacer, stack, wrap
@@ -107,6 +107,9 @@ def phone_onboarding():
         "unreachable": phone_screen("Phone · host unreachable", q_pair(steps_fail, failure=unreachable)),
         "used": phone_screen("Phone · link used", q_pair(("done", "done", "fail"), value="", failure=used, focus=True)),
         "kept": phone_screen("Phone · failed, connection kept", q_pair(steps_fail, failure=kept)),
+        "scan_confirm": phone_screen("Phone · confirm scanned daemon", q_pair_confirm(COPY["scanConfirm"])),
+        "move_confirm": phone_screen("Phone · confirm address change", q_pair_confirm(COPY["moveConfirm"], moving=True)),
+        "refused": phone_screen("Phone · device token refused", q_pair(("fail", "todo", "todo"), value="", failure=COPY["refused"], labels=COPY["anonymousSteps"], focus=True)),
         "scan": phone_screen("Phone · scan", q_scan()),
         "camera": phone_screen("Phone · camera not allowed", q_denied()),
         "blocked": phone_screen("Phone · camera blocked", q_denied(blocked=True)),

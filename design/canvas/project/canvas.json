@@ -256,9 +256,33 @@
    "title": "Phone \u00b7 typing, keyboard open",
    "page": "mobile"
   },
-  "Phone-PairUnreachable.dc.html": {
+  "Phone-PairScanConfirm.dc.html": {
    "x": 932,
    "y": 2448,
+   "w": 390,
+   "h": 844,
+   "title": "Phone \u00b7 confirm scanned daemon",
+   "page": "mobile"
+  },
+  "Phone-PairMoveConfirm.dc.html": {
+   "x": 1402,
+   "y": 2448,
+   "w": 390,
+   "h": 844,
+   "title": "Phone \u00b7 confirm address change",
+   "page": "mobile"
+  },
+  "Phone-PairTokenRefused.dc.html": {
+   "x": 1872,
+   "y": 2448,
+   "w": 390,
+   "h": 844,
+   "title": "Phone \u00b7 device token refused",
+   "page": "mobile"
+  },
+  "Phone-PairUnreachable.dc.html": {
+   "x": 932,
+   "y": 3532,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 host unreachable, link kept",
@@ -266,7 +290,7 @@
   },
   "Phone-PairLinkUsed.dc.html": {
    "x": 1402,
-   "y": 2448,
+   "y": 3532,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 link used, cleared",
@@ -274,7 +298,7 @@
   },
   "Phone-PairKept.dc.html": {
    "x": 1872,
-   "y": 2448,
+   "y": 3532,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 failed, connection kept",
@@ -282,7 +306,7 @@
   },
   "Phone-PairSaved.dc.html": {
    "x": 2342,
-   "y": 2448,
+   "y": 3532,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 pair again, connection saved",
@@ -290,7 +314,7 @@
   },
   "Fold-Paired.dc.html": {
    "x": 0,
-   "y": 3532,
+   "y": 4616,
    "w": 852,
    "h": 884,
    "title": "Fold \u00b7 paired",
@@ -298,7 +322,7 @@
   },
   "Phone-Paired.dc.html": {
    "x": 932,
-   "y": 3532,
+   "y": 4616,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 paired, two optional rows",
@@ -306,7 +330,7 @@
   },
   "Phone-PairedDone.dc.html": {
    "x": 1402,
-   "y": 3532,
+   "y": 4616,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 paired, both on",
@@ -314,7 +338,7 @@
   },
   "Phone-PairedDenied.dc.html": {
    "x": 1872,
-   "y": 3532,
+   "y": 4616,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 paired, alerts denied",
@@ -322,7 +346,7 @@
   },
   "Fold-FirstProfile.dc.html": {
    "x": 0,
-   "y": 4656,
+   "y": 5740,
    "w": 852,
    "h": 884,
    "title": "Fold \u00b7 first profile, list and pane",
@@ -330,7 +354,7 @@
   },
   "Phone-FirstProfile.dc.html": {
    "x": 932,
-   "y": 4656,
+   "y": 5740,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 first profile",
@@ -338,7 +362,7 @@
   },
   "Phone-NothingShared.dc.html": {
    "x": 1402,
-   "y": 4656,
+   "y": 5740,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 member with nothing shared",
@@ -346,7 +370,7 @@
   },
   "Fold-FirstProfileFolded.dc.html": {
    "x": 0,
-   "y": 5780,
+   "y": 6864,
    "w": 852,
    "h": 884,
    "title": "Fold \u00b7 first profile, list folded",
@@ -354,7 +378,7 @@
   },
   "Fold-Chat.dc.html": {
    "x": 0,
-   "y": 6904,
+   "y": 7988,
    "w": 852,
    "h": 884,
    "title": "Fold \u00b7 chat",
@@ -362,7 +386,7 @@
   },
   "Phone-Chat.dc.html": {
    "x": 932,
-   "y": 6904,
+   "y": 7988,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 chat",
@@ -370,7 +394,7 @@
   },
   "Phone-ChatDetails.dc.html": {
    "x": 1402,
-   "y": 6904,
+   "y": 7988,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 chat, profile details",
@@ -378,7 +402,7 @@
   },
   "Fold-Home.dc.html": {
    "x": 0,
-   "y": 8028,
+   "y": 9112,
    "w": 852,
    "h": 884,
    "title": "Fold \u00b7 nothing selected",
@@ -386,7 +410,7 @@
   },
   "Fold-ProfileSettings.dc.html": {
    "x": 0,
-   "y": 9152,
+   "y": 10236,
    "w": 852,
    "h": 3960,
    "title": "Fold \u00b7 profile settings",
@@ -394,7 +418,7 @@
   },
   "Phone-ProfileSettings.dc.html": {
    "x": 932,
-   "y": 9152,
+   "y": 10236,
    "w": 390,
    "h": 4192,
    "title": "Phone \u00b7 profile settings",
@@ -402,7 +426,7 @@
   },
   "Fold-WorkgroupSettings.dc.html": {
    "x": 0,
-   "y": 13584,
+   "y": 14668,
    "w": 852,
    "h": 3310,
    "title": "Fold \u00b7 workgroup settings",
@@ -410,7 +434,7 @@
   },
   "Phone-WorkgroupSettings.dc.html": {
    "x": 932,
-   "y": 13584,
+   "y": 14668,
    "w": 390,
    "h": 3788,
    "title": "Phone \u00b7 workgroup settings",
@@ -418,7 +442,7 @@
   },
   "Phone-ProfilePanels.dc.html": {
    "x": 0,
-   "y": 17612,
+   "y": 18696,
    "w": 1280,
    "h": 7100,
    "title": "Phone \u00b7 profile panels",
@@ -426,7 +450,7 @@
   },
   "Fold-ConnectionDetail.dc.html": {
    "x": 0,
-   "y": 24952,
+   "y": 26036,
    "w": 852,
    "h": 1300,
    "title": "Fold \u00b7 connection detail",
@@ -434,7 +458,7 @@
   },
   "Phone-Connections.dc.html": {
    "x": 932,
-   "y": 24952,
+   "y": 26036,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 connections",
@@ -442,7 +466,7 @@
   },
   "Phone-ConnectionDetail.dc.html": {
    "x": 1402,
-   "y": 24952,
+   "y": 26036,
    "w": 390,
    "h": 1236,
    "title": "Phone \u00b7 connection detail",
@@ -450,7 +474,7 @@
   },
   "Phone-Settings.dc.html": {
    "x": 932,
-   "y": 26492,
+   "y": 27576,
    "w": 390,
    "h": 1268,
    "title": "Phone \u00b7 app settings",
@@ -458,7 +482,7 @@
   },
   "Phone-Notifications.dc.html": {
    "x": 932,
-   "y": 28000,
+   "y": 29084,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 notifications, filters and swipe",
@@ -466,7 +490,7 @@
   },
   "Phone-NotificationPage.dc.html": {
    "x": 1402,
-   "y": 28000,
+   "y": 29084,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 notification page, actions at the thumb",
@@ -474,7 +498,7 @@
   },
   "Fold-Activity.dc.html": {
    "x": 0,
-   "y": 29084,
+   "y": 30168,
    "w": 852,
    "h": 940,
    "title": "Fold \u00b7 activity",
@@ -482,7 +506,7 @@
   },
   "Phone-Roster.dc.html": {
    "x": 932,
-   "y": 29084,
+   "y": 30168,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 roster",
@@ -490,7 +514,7 @@
   },
   "Phone-Activity.dc.html": {
    "x": 1402,
-   "y": 29084,
+   "y": 30168,
    "w": 390,
    "h": 940,
    "title": "Phone \u00b7 activity",
@@ -498,7 +522,7 @@
   },
   "Phone-RosterWorkgroups.dc.html": {
    "x": 932,
-   "y": 30264,
+   "y": 31348,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 roster, workgroups that move, then recent ones up to five, then All workgroups",
@@ -506,7 +530,7 @@
   },
   "Phone-Workgroups.dc.html": {
    "x": 1402,
-   "y": 30264,
+   "y": 31348,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 all workgroups, the four filters with counts and the rows by state",
@@ -514,7 +538,7 @@
   },
   "Fold-Sheet.dc.html": {
    "x": 0,
-   "y": 31348,
+   "y": 32432,
    "w": 852,
    "h": 884,
    "title": "Fold \u00b7 sheet as a centred dialog",
@@ -522,7 +546,7 @@
   },
   "Phone-Sheet.dc.html": {
    "x": 932,
-   "y": 31348,
+   "y": 32432,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 sheet",
@@ -530,7 +554,7 @@
   },
   "Phone-ActionSheet.dc.html": {
    "x": 1402,
-   "y": 31348,
+   "y": 32432,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 action sheet",
@@ -538,7 +562,7 @@
   },
   "Phone-TypedConfirm.dc.html": {
    "x": 1872,
-   "y": 31348,
+   "y": 32432,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 typed confirm",
@@ -546,7 +570,7 @@
   },
   "Phone-ConnectionSheet.dc.html": {
    "x": 2342,
-   "y": 31348,
+   "y": 32432,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 connection sheet",
@@ -554,7 +578,7 @@
   },
   "Fold-ActionPopover.dc.html": {
    "x": 0,
-   "y": 32472,
+   "y": 33556,
    "w": 852,
    "h": 884,
    "title": "Fold \u00b7 action sheet as a popover under its trigger",
@@ -562,7 +586,7 @@
   },
   "Phone-ToolSheet.dc.html": {
    "x": 932,
-   "y": 33596,
+   "y": 34680,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 tool step sheet",
@@ -570,7 +594,7 @@
   },
   "Phone-SelectText.dc.html": {
    "x": 1402,
-   "y": 33596,
+   "y": 34680,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 select text",
@@ -578,7 +602,7 @@
   },
   "Phone-MessageActions.dc.html": {
    "x": 1872,
-   "y": 33596,
+   "y": 34680,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 message actions",
@@ -586,7 +610,7 @@
   },
   "Phone-FallbacksSheet.dc.html": {
    "x": 2342,
-   "y": 33596,
+   "y": 34680,
    "w": 390,
    "h": 844,
    "title": "Phone \u00b7 fallback models, reorder and remove",
@@ -594,7 +618,7 @@
   },
   "Fold-Schedule.dc.html": {
    "x": 0,
-   "y": 34680,
+   "y": 35764,
    "w": 1104,
    "h": 620,
    "title": "Fold \u00b7 schedule, list and job side by side",
@@ -602,7 +626,7 @@
   },
   "Fold-Notifications.dc.html": {
    "x": 1180,
-   "y": 34680,
+   "y": 35764,
    "w": 1104,
    "h": 620,
    "title": "Fold \u00b7 notifications, list and reader side by side",
@@ -610,7 +634,7 @@
   },
   "Phone-States.dc.html": {
    "x": 0,
-   "y": 35540,
+   "y": 36624,
    "w": 1280,
    "h": 1460,
    "title": "Phone \u00b7 empty, error and offline states",
@@ -718,6 +742,9 @@
   "Phone-PairCamera.dc.html",
   "Phone-PairCameraBlocked.dc.html",
   "Phone-PairKeyboard.dc.html",
+  "Phone-PairScanConfirm.dc.html",
+  "Phone-PairMoveConfirm.dc.html",
+  "Phone-PairTokenRefused.dc.html",
   "Phone-PairUnreachable.dc.html",
   "Phone-PairLinkUsed.dc.html",
   "Phone-PairKept.dc.html",
@@ -918,9 +945,17 @@
    "maxW": 2600,
    "page": "mobile"
   },
-  "m-Pairing failures": {
+  "m-Pairing safeguards": {
    "x": 0,
    "y": 2225,
+   "text": "Pairing safeguards",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "mobile"
+  },
+  "m-Pairing failures": {
+   "x": 0,
+   "y": 3309,
    "text": "Pairing failures",
    "kind": "title1",
    "maxW": 2600,
@@ -928,7 +963,7 @@
   },
   "m-Paired": {
    "x": 0,
-   "y": 3309,
+   "y": 4393,
    "text": "Paired",
    "kind": "title1",
    "maxW": 2600,
@@ -936,7 +971,7 @@
   },
   "m-First profile": {
    "x": 0,
-   "y": 4433,
+   "y": 5517,
    "text": "First profile",
    "kind": "title1",
    "maxW": 2600,
@@ -944,7 +979,7 @@
   },
   "m-First profile, list folded": {
    "x": 0,
-   "y": 5557,
+   "y": 6641,
    "text": "First profile, list folded",
    "kind": "title1",
    "maxW": 2600,
@@ -952,7 +987,7 @@
   },
   "m-Chat": {
    "x": 0,
-   "y": 6681,
+   "y": 7765,
    "text": "Chat",
    "kind": "title1",
    "maxW": 2600,
@@ -960,7 +995,7 @@
   },
   "m-Home": {
    "x": 0,
-   "y": 7805,
+   "y": 8889,
    "text": "Home",
    "kind": "title1",
    "maxW": 2600,
@@ -968,7 +1003,7 @@
   },
   "m-Profile settings": {
    "x": 0,
-   "y": 8929,
+   "y": 10013,
    "text": "Profile settings",
    "kind": "title1",
    "maxW": 2600,
@@ -976,7 +1011,7 @@
   },
   "m-Workgroup settings": {
    "x": 0,
-   "y": 13361,
+   "y": 14445,
    "text": "Workgroup settings",
    "kind": "title1",
    "maxW": 2600,
@@ -984,7 +1019,7 @@
   },
   "m-Profile panels": {
    "x": 0,
-   "y": 17389,
+   "y": 18473,
    "text": "Profile panels",
    "kind": "title1",
    "maxW": 2600,
@@ -992,7 +1027,7 @@
   },
   "m-Connections": {
    "x": 0,
-   "y": 24729,
+   "y": 25813,
    "text": "Connections",
    "kind": "title1",
    "maxW": 2600,
@@ -1000,7 +1035,7 @@
   },
   "m-App settings": {
    "x": 0,
-   "y": 26269,
+   "y": 27353,
    "text": "App settings",
    "kind": "title1",
    "maxW": 2600,
@@ -1008,7 +1043,7 @@
   },
   "m-Notifications": {
    "x": 0,
-   "y": 27777,
+   "y": 28861,
    "text": "Notifications",
    "kind": "title1",
    "maxW": 2600,
@@ -1016,7 +1051,7 @@
   },
   "m-Activity": {
    "x": 0,
-   "y": 28861,
+   "y": 29945,
    "text": "Activity",
    "kind": "title1",
    "maxW": 2600,
@@ -1024,7 +1059,7 @@
   },
   "m-Workgroups": {
    "x": 0,
-   "y": 30041,
+   "y": 31125,
    "text": "Workgroups",
    "kind": "title1",
    "maxW": 2600,
@@ -1032,7 +1067,7 @@
   },
   "m-Overlays": {
    "x": 0,
-   "y": 31125,
+   "y": 32209,
    "text": "Overlays",
    "kind": "title1",
    "maxW": 2600,
@@ -1040,7 +1075,7 @@
   },
   "m-Fold overlays": {
    "x": 0,
-   "y": 32249,
+   "y": 33333,
    "text": "Fold overlays",
    "kind": "title1",
    "maxW": 2600,
@@ -1048,7 +1083,7 @@
   },
   "m-Sheets": {
    "x": 0,
-   "y": 33373,
+   "y": 34457,
    "text": "Sheets",
    "kind": "title1",
    "maxW": 2600,
@@ -1056,7 +1091,7 @@
   },
   "m-Schedule": {
    "x": 0,
-   "y": 34457,
+   "y": 35541,
    "text": "Schedule",
    "kind": "title1",
    "maxW": 2600,
@@ -1064,7 +1099,7 @@
   },
   "m-States": {
    "x": 0,
-   "y": 35317,
+   "y": 36401,
    "text": "States",
    "kind": "title1",
    "maxW": 2600,

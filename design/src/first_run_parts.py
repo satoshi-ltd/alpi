@@ -5,17 +5,24 @@ import subprocess
 import agent_marks as am
 import marks
 from desktop_boards import INK, INK2, INK3, INK4, LINE2, MONO, PANE, SELECTED, SIDE
-from gen import COMMON, DOC_ACCENT, di, m_button, m_conn_header, m_eyebrow, m_row, m_shell_footer, mi, pill, switch, ladder_px, mono_px, section_label
+from gen import COMMON, DOC_ACCENT, di, m_button, m_confirm_dialog, m_conn_header, m_eyebrow, m_row, m_shell_footer, mi, pill, switch, ladder_px, mono_px, section_label
+
+
+Q_URL = "ws://100.99.29.84:49200"
 
 
 def _load_copy():
     script = (
         f"const m = await import({json.dumps(os.path.join(COMMON, 'onboarding.mjs'))});"
         f"const e = await import({json.dumps(os.path.join(COMMON, 'emptyCopy.mjs'))});"
+        f"const url = {json.dumps(Q_URL)};"
         "const g = (k, h) => m.pairingFailure(k, h);"
         "process.stdout.write(JSON.stringify({rows: m.LINK_SOURCE_ROWS, start: m.START_COMMAND,"
         "steps: m.PAIRING_STEPS.map((s) => m.pairingStepLabel(s, 'casa')), member: m.memberEmptyCopy('this phone'),"
         "admin: m.pairedRoleLine('admin'), roster: e.EMPTY.roster,"
+        "scanConfirm: m.pairHostConfirmation({fact: 'casa · ' + url, scanned: true}),"
+        "moveConfirm: m.pairMoveConfirmation({label: 'casa', from: 'ws://100.99.29.10:49200', to: url}),"
+        "refused: g('scanned-token'), anonymousSteps: m.PAIRING_STEPS.map(s => m.pairingStepLabel(s)),"
         "unreachable: g('unreachable', 'casa'), used: g('link-used', 'casa')}));"
     )
     out = subprocess.run(["node", "--input-type=module", "-e", script], capture_output=True, text=True, check=True)
@@ -261,7 +268,6 @@ Q_SAFE_BOTTOM = 34
 Q_KEYBOARD = 336
 Q_COL = 480
 Q_HOST = "casa"
-Q_URL = "ws://100.99.29.84:49200"
 Q_LINK = "alpi://device?url=…&amp;name=casa"
 Q_CAM = "#1c1c1c"
 Q_WHITE = "#fffffe"
@@ -317,9 +323,9 @@ def q_sources():
     return col(*[col(qt(r["label"], 12, 16, INK3), qm(r["path"], 14, 21, INK2), gap=0) for r in COPY["rows"]], gap=8)
 
 
-def q_ladder(states):
+def q_ladder(states, labels):
     rows = []
-    for state, label in zip(states, Q_STEPS):
+    for state, label in zip(states, labels):
         glyph = {
             "done": mi("check", 16, INK),
             "fail": mi("x", 16, "#c14545"),
@@ -364,11 +370,11 @@ def q_welcome(**kw):
     return q_screen(top, qb("Scan QR") + qb("Paste link", "ghost", "lg"), **kw)
 
 
-def q_pair(states=None, value=Q_LINK, failure=None, busy=None, keyboard=False, saved=False, focus=False, **kw):
+def q_pair(states=None, value=Q_LINK, failure=None, busy=None, keyboard=False, saved=False, focus=False, labels=Q_STEPS, **kw):
     parts = q_head("Pair this phone", fact=f"{Q_HOST} · {Q_URL}" if value else None, busy=busy, mark=not keyboard)
     parts.append((24, q_label("alpi:// link") + q_field(value, focus=focus or keyboard)))
     if states:
-        steps = q_ladder(states)
+        steps = q_ladder(states, labels)
         if failure:
             steps = col(steps, q_failure(failure), gap=16)
         parts.append((16, steps))
@@ -386,6 +392,14 @@ def q_pair(states=None, value=Q_LINK, failure=None, busy=None, keyboard=False, s
     else:
         bottom = qb("Pair", disabled=not value) + qb("Scan QR", "ghost", "lg") + inbox
     return q_screen(q_page(*parts), bottom, keyboard=keyboard, **kw)
+
+
+def q_pair_confirm(copy, moving=False):
+    from mobile_overlays import backdrop
+    screen = q_pair(("done", "now", "todo"), busy="fr_move") if moving else q_pair()
+    dialog = m_confirm_dialog(copy["title"], copy["body"], copy["confirmLabel"], tone="danger" if moving else "neutral")
+    return (f'<div style="position: relative">{screen}{backdrop(Q_W, Q_H)}'
+            f'<div style="position: absolute; left: 24px; right: 24px; top: 50%; transform: translateY(-50%)">{dialog}</div></div>')
 
 
 def q_scan():

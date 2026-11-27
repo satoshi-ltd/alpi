@@ -1,3 +1,4 @@
+import html
 import importlib.util
 import json
 import math
@@ -67,6 +68,29 @@ def test_design_system_covers_conversation_and_workgroups_on_both_clients(tmp_pa
     assert all(label in conversation for label in ("User message", "Alpi message", "Peer reply", "Work line", "Composer"))
     workgroup = (tmp_path / "canvas" / "project" / "System-DesktopWorkgroup.dc.html").read_text()
     assert all(f"Marker · {state}" in workgroup for state in ("task", "working", "done", "skip"))
+
+
+def test_mobile_draws_the_pairing_safeguards_with_the_copy_the_screen_uses(tmp_path):
+    subprocess.run([sys.executable, str(REPO / "design" / "build.py"), "--out", str(tmp_path)], check=True, capture_output=True)
+    project = tmp_path / "canvas" / "project"
+    boards = json.loads((project / "canvas.json").read_text())["boards"]
+    copy = _node_json(
+        "import * as m from './common/onboarding.mjs';"
+        "const scan = m.pairHostConfirmation({fact: '@@', scanned: true});"
+        "const move = m.pairMoveConfirmation({label: '@@', from: '@@', to: '@@'});"
+        "const refused = m.pairingFailure('scanned-token');"
+        "const parts = (c) => [c.title, c.confirmLabel, ...c.body.split('@@')];"
+        "console.log(JSON.stringify({ScanConfirm: parts(scan), MoveConfirm: parts(move),"
+        " TokenRefused: [refused.title, refused.hint, refused.action]}));"
+    )
+    for name, phrases in copy.items():
+        board = f"Phone-Pair{name}.dc.html"
+        assert boards[board]["page"] == "mobile", board
+        text = _html_text(html.unescape((project / board).read_text()))
+        for phrase in phrases:
+            assert phrase.strip() in text, (board, phrase)
+    refused = (project / "Phone-PairTokenRefused.dc.html").read_text()
+    assert "box-shadow: inset 0 0 0 1.5px #6b6b6b" in refused
 
 
 def test_design_kit_draws_what_desktop_0_7_and_mobile_0_6_shipped(tmp_path):

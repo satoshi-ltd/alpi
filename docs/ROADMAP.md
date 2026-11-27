@@ -1172,6 +1172,18 @@ Each entry is written to be worked without that report:
   reaches a peer with a valid signature, and a `--once` turn whose tool output holds one prints its events; tests
   drive the ALP client and server, the CLI line and a provider-bound message.
 
+### Found shipping alpi 0.19.50
+
+- **MOBILE.PAIR-LINK-QR-TOKEN** — A scanned QR that holds a link with a device token says why it was refused
+  `bug · mobile · agent · low`
+  note: `scanDecision` (`mobile/src/lib/pairing.js`) refuses a scanned pairing JSON that carries a device token with
+  the `scanned-token` failure. A QR that encodes an `alpi://` link with `token` and no `pairing_token` takes another
+  path: `parsePairing` throws, the scan is treated as a pairing attempt and fails as `invalid` ("That is not an alpi
+  link"). Desktop draws such a QR in `ConnectionsPage.jsx` when the daemon returns no `pairing_token`. The
+  `scanned-token` hint ("paste the pairing JSON here") is also no remedy for a link.
+  accept: a scanned link with a device token and no grant shows a failure that names the device token and a remedy
+  that works for a link; a test covers the JSON and the link form.
+
 ### Found shipping alpi 0.19.45
 
 - **TEST.GIT-ENV-ISOLATION** — Tests that run git never act on the repository that runs them
@@ -1222,14 +1234,6 @@ Each entry is written to be worked without that report:
   writes an info line: no `schedule.failed`, no output, nothing in the apps.
   accept: a fire that was accepted and did not run emits an event the apps and `alpi schedule fire` show, naming
   the reason; a test holds the run lock while a fire is queued.
-
-- **DESIGN.PAIR-SCAN** — The kit draws the pairing confirms and the refused code
-  `chore · mobile · agent · low`
-  note: `mobile/app/pair.jsx` shows a confirm with its own sentence when a scanned code names a daemon the phone
-  has no connection to, a "Move this connection?" confirm with both addresses when a pairing names a saved
-  connection from another address, and the `scanned-token` failure when a code carries a device token. The kit
-  draws only the routed-link confirm (`design/src/system_boards.py`) and the `unreachable` and `link-used` failures.
-  accept: Mobile shows the three states, in light and dark, built from the strings the screen uses.
 
 - **TEST.APPROVAL-ORDER** — The approval tests pass in any order
   `chore · alpi · agent · low`

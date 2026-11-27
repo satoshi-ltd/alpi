@@ -31,8 +31,8 @@ The QR / URL encodes the complete WS/WSS route, instance name, stable connection
 identity, and a one-time grant that expires after ten minutes. Mobile exchanges
 it once for a separate permanent device token, stores only that final token in
 `expo-secure-store` before probing the daemon, and can hold multiple paired
-daemons. Legacy QR/URLs from
-older daemons that contain a final `token` remain readable.
+daemons. A scanned QR or an `alpi://` link that carries a final device `token`
+is refused; a device token is accepted only as pasted pairing JSON.
 
 ## What works today
 

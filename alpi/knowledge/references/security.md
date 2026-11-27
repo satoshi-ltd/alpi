@@ -123,7 +123,9 @@ context, and terminal metadata is kept for seven days with a 50-row cap per
 connection. Desktop still reads legacy `token=` links; from mobile 0.9.14 the
 phone accepts an `alpi://` link only with a one-time `pairing_token` (a device
 `token` is accepted only in pasted pairing JSON) and asks the user to confirm the
-daemon's address before spending a grant that arrived from outside the app. The
+daemon's address before spending a grant that arrived from outside the app.
+From mobile 0.10.13 the phone also refuses scanned QRs carrying a device token. For these,
+paste the pairing JSON or generate a fresh one-time code on the host. The
 phone also opens only its own pages from a notification (a daemon's `deep_link`
 must be one of its in-app routes, without a query), moves device tokens,
 notification state and spent grants into this-device-only keychain items (new
@@ -131,8 +133,9 @@ keys, so updated phones migrate) with Android backup off, and caps what a daemon
 can make it keep (frames over 32 MiB discarded unparsed, 2 MiB of streamed reply
 text, 64 KiB per tool field, attachment-sized images, short notifications). Older clients
 cannot consume new grants; upgrade them before generating a new QR. Older QRs
-already contain permanent device tokens, remain valid after a daemon upgrade
-and must be revoked through their device row if they were exposed.
+already contain permanent device tokens: the token stays valid on the daemon after
+an upgrade, but the phone no longer takes it from a scan (only as pasted pairing
+JSON), and it must be revoked through its device row if it was exposed.
 
 `network.host` is the shared *advertised* address; the listener *binds* a
 local-safe address derived from it — a private/Tailscale IP binds itself, a

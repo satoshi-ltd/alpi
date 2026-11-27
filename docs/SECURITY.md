@@ -281,7 +281,8 @@ not reach.
   expire after `host.token_ttl_days` of inactivity, and authentication
   failures are throttled per source address, or per device when the failed
   token names one. The phone (from mobile 0.9.14) takes an `alpi://` pairing
-  link only with a one-time grant, confirms the daemon's address before
+  link only with a one-time grant, refuses a scanned QR that carries a device
+  token (from mobile 0.10.13), confirms the daemon's address before
   spending one that arrived from outside the app, opens only its own pages
   from a notification, moves tokens into this-device-only keychain items with
   Android backup off, and caps what it keeps from frames, streamed text, tool

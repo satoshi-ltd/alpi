@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.19.50 — 2026-11-27 — the agent knows which pairing codes the phone takes
+
+- Asked about pairing, the agent now says that the phone refuses a scanned QR that carries a device token, and what to do instead: paste the pairing JSON into the app or make a fresh one-time code on the host. It no longer suggests scanning an old QR again.
+
 ## v0.19.49 — 2026-11-27 — knowledge search says how old each page is
 
 - Every result of `knowledge(action="search")` now carries `updated_at`, the page's date as `YYYY-MM-DD` (empty when the page's date is not an ISO date). Before, the agent saw a page's date only after opening it, so it could answer from a page written years ago without knowing.
