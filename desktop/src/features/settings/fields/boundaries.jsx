@@ -7,6 +7,7 @@ import { Row } from "../primitives.jsx";
 import Field from "../../../primitives/Field.jsx";
 import { BudgetEdit } from "../../../primitives/index.js";
 import { saveOptimistic } from "../../../lib/optimisticProfiles.js";
+import { PLAN_BUDGET_HINT, runsOnPlan } from "../../../lib/modelLabel.js";
 import styles from "../Settings.module.css";
 
 export function BudgetField({ profile, connectionId = null, onSaved }) {
@@ -31,7 +32,7 @@ export function BudgetField({ profile, connectionId = null, onSaved }) {
   const triggerLabel = usd != null ? `$${usd.toFixed(2)}/day` : "unlimited";
 
   return (
-    <Row label="Budget">
+    <Row label="Budget" helper={runsOnPlan(profile.model) ? PLAN_BUDGET_HINT : undefined} stacked={runsOnPlan(profile.model)}>
       <BudgetEdit value={value} triggerLabel={triggerLabel} onSave={save} />
     </Row>
   );

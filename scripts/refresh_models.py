@@ -18,6 +18,7 @@ OUT = PROVIDERS / "openrouter_models.yaml"
 NATIVE_OUT = PROVIDERS / "native_models.yaml"
 CURATED = PROVIDERS / "curated_models.yaml"
 NATIVE_PROVIDERS = ("openai", "anthropic")
+CURATED_PREFIX = {"openai": "", "anthropic": "", "google": "gemini/", "groq": "groq/"}
 _DATED_SNAPSHOT = re.compile(r"-\d{4}-\d{2}-\d{2}$|-\d{8}$")
 _OUTPUT_RESERVE = 32_768
 _MAX_RESERVE_FRACTION = 4  # the reply margin never exceeds a quarter of the window
@@ -71,7 +72,7 @@ def write_atomic(path: Path, text: str) -> None:
 
 
 def curated_native_ids(curated: dict) -> list[str]:
-    return [str(entry["id"]) for provider in NATIVE_PROVIDERS for entry in (curated.get(provider) or []) if entry.get("id")]
+    return [f"{prefix}{entry['id']}" for provider, prefix in CURATED_PREFIX.items() for entry in (curated.get(provider) or []) if entry.get("id")]
 
 
 def bundled_ids() -> set[str]:

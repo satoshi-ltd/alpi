@@ -31,6 +31,7 @@ KNOWN_PROVIDER_KEYS = (
     "OPENAI_API_KEY",
     "OPENROUTER_API_KEY",
     "GEMINI_API_KEY",
+    "GROQ_API_KEY",
 )
 
 
@@ -265,7 +266,11 @@ def _has_any_provider(home: Path, cfg: cfg_mod.Config) -> bool:
     if ((cfg.providers.get("openrouter") or {}).get("models") or []):
         return True
     env = _env_keys(home)
-    return any(env.get(k) for k in KNOWN_PROVIDER_KEYS)
+    if any(env.get(k) for k in KNOWN_PROVIDER_KEYS):
+        return True
+    from alpi.providers import chatgpt
+
+    return chatgpt.signed_in(home)
 
 
 def _profile_detail_payload(home: Path) -> dict[str, Any]:
@@ -280,6 +285,7 @@ def _profile_detail_payload(home: Path) -> dict[str, Any]:
         "queued_pipelines": len(_pipeline_queue.entries(home)),
         "advertise_host": (cfg.network or {}).get("host"),  # shared accessible address
         "provider_keys": _provider_keys(home),
+        "provider_chatgpt": _chatgpt_summary(home),
         "provider_ollama": _ollama_providers(cfg),
         "sandbox": cfg.tools.terminal.sandbox,
         "sandbox_allow_network": cfg.tools.terminal.allow_network,
@@ -1410,6 +1416,16 @@ def _provider_keys(home: Path) -> list[dict[str, str]]:
     ]
 
 
+def _chatgpt_summary(home: Path) -> dict[str, Any]:
+    from alpi.providers import chatgpt
+
+    state = chatgpt.status(home)
+    return {
+        "signed_in": state["signed_in"], "email": state["email"], "plan_declined": state["plan_declined"],
+        "registered": state["registered"], "models": len(state["models"]),
+    }
+
+
 def _ollama_providers(cfg: cfg_mod.Config) -> list[dict[str, str]]:
     return [
         {"name": str(e.get("name") or ""), "url": str(e.get("url") or "")}
@@ -1508,7 +1524,9 @@ def _profile_peers(home: Path) -> list[dict[str, Any]]:
 def _models(cfg: cfg_mod.Config, home: Path) -> list[str]:
     env = _env_keys(home)
     out = []
-    if cfg.model and _model_provider_available(cfg.model, env):
+    from alpi.providers import chatgpt
+
+    if cfg.model and _model_provider_available(cfg.model, env, home):
         out.append(cfg.model)
     if env.get("OPENAI_API_KEY"):
         out.extend(_curated_ids_for("openai"))
@@ -1518,15 +1536,23 @@ def _models(cfg: cfg_mod.Config, home: Path) -> list[str]:
         for model in ((cfg.providers.get("openrouter") or {}).get("models") or []):
             out.append(f"openrouter/{model}")
         out.extend(_curated_ids_for("openrouter"))
+    if env.get("GEMINI_API_KEY"):
+        out.extend(_curated_ids_for("google"))
+    if env.get("GROQ_API_KEY"):
+        out.extend(_curated_ids_for("groq"))
+    out.extend(f"{chatgpt.PREFIX}/{m['slug']}" for m in chatgpt.models(home))
     seen = set()
     return [m for m in out if not (m in seen or seen.add(m))]
 
 
-def _model_provider_available(model: str, env: dict[str, str]) -> bool:
+def _model_provider_available(model: str, env: dict[str, str], home: Path) -> bool:
     # Ollama ids are "<server>/<model>" — no builtin prefix matches, so they stay visible.
     from alpi import providers as prov_mod
+    from alpi.providers import chatgpt
 
     head = model.split("/", 1)[0]
+    if head == chatgpt.PREFIX:
+        return chatgpt.signed_in(home)
     for p in prov_mod.builtin():
         if (p.model_prefix or p.name) == head:
             return bool(p.api_key_env) and bool(env.get(p.api_key_env))
@@ -1546,12 +1572,15 @@ def _provider_catalog() -> dict[str, int]:
 
 
 def _curated_ids_for(provider: str) -> list[str]:
+    from alpi import providers as prov_mod
+
     path = Path(__file__).parents[1] / "providers" / "curated_models.yaml"
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except OSError:
         return []
-    return [f"{provider}/{row['id']}" for row in data.get(provider, []) if row.get("id")]
+    prefix = next((p.model_prefix or p.name for p in prov_mod.builtin() if p.name == provider), provider)
+    return [f"{prefix}/{row['id']}" for row in data.get(provider, []) if row.get("id")]
 
 
 def _env_keys(home: Path) -> dict[str, str]:

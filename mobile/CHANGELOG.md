@@ -14,6 +14,13 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.10.14 — 2026-11-27 — sign in with ChatGPT, and Groq in Providers
+
+- Providers lists **ChatGPT plan** after OpenAI. Its screen opens the browser to sign in, and the profile then runs on your ChatGPT plan instead of an API key. OpenAI answers to an address the phone cannot open, so the screen says up front what to do: the last page will not load, copy its address and paste it in the app. Once signed in it shows the account, Manage usage and Sign out.
+- Providers lists Groq with its own key screen, and its models are grouped under Groq in the model picker. Before, the key could only be set from the console.
+- The model picker offers GPT-6.1 Terra and groups plan models under "ChatGPT plan"; on a plan profile, Budget says that plan turns are not counted.
+- Needs alpi ≥ 0.19.47.
+
 ## v0.10.13 — 2026-11-26 — pairing never replaces a connection unseen
 
 - Pairing no longer replaces a saved connection just because the daemon that answers reports the same identity. A new pairing of a saved connection at its address replaces its sign-in in place, without leaving a second copy in the list; from another address it shows the old and the new address before anything is saved and moves it only when you agree, for a scanned and for a pasted code; anything else is added beside it, and the saved one keeps its address and its token.

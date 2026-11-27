@@ -68,6 +68,10 @@ def register(server: host_server.Server) -> None:
     server.register(
         "host.providers.remove_openrouter_model", _providers_remove_or_model,
     )
+    server.register("host.providers.chatgpt_status", _chatgpt_status)
+    server.register("host.providers.chatgpt_begin", _chatgpt_begin)
+    server.register("host.providers.chatgpt_finish", _chatgpt_finish)
+    server.register("host.providers.chatgpt_logout", _chatgpt_logout)
     server.register("host.peers.add", _peers_add)
     server.register("host.peers.remove", _peers_remove)
     server.register("host.peers.pending_list", _peers_pending_list)
@@ -178,6 +182,65 @@ async def _providers_unset_key(
     else:
         _emit_config_changed(home, scope="env")
     return {"ok": True, "model_cleared": model_cleared}
+
+
+def _plan_failure(exc: Exception) -> host_server.HandlerError:
+    return host_server.HandlerError(
+        -32010, "chatgpt-sign-in", data={"detail": str(exc), "code": getattr(exc, "code", "")},
+    )
+
+
+async def _chatgpt_status(params: dict[str, Any], _server: host_server.Server) -> dict[str, Any]:
+    from alpi.providers import chatgpt
+
+    (profile,) = _params(params, "profile")
+    return chatgpt.status(_resolve_home(str(profile or "")))
+
+
+async def _chatgpt_begin(params: dict[str, Any], _server: host_server.Server) -> dict[str, Any]:
+    from alpi.providers import chatgpt
+
+    profile, port = _params(params, "profile", "port")
+    home = _resolve_home(str(profile or ""))
+    try:
+        attempt = chatgpt.begin_pending(home, port or chatgpt.CALLBACK_PORT)
+    except chatgpt.PlanError as exc:
+        raise _plan_failure(exc) from exc
+    # The address handed to a client carries no ID-token hint: tokens stay on the daemon.
+    return {"url": attempt.shown_url, "redirect_uri": attempt.redirect_uri, "expires_in": chatgpt.PENDING_S}
+
+
+async def _chatgpt_finish(params: dict[str, Any], _server: host_server.Server) -> dict[str, Any]:
+    import asyncio
+
+    from alpi.providers import chatgpt
+
+    profile, callback = _params(params, "profile", "callback")
+    home = _resolve_home(str(profile or ""))
+    try:
+        record = await asyncio.to_thread(chatgpt.finish_pending, home, str(callback or ""))
+    except chatgpt.PlanError as exc:
+        raise _plan_failure(exc) from exc
+    model = chatgpt.give_a_model(home)
+    _emit_config_changed(home, scope="env")
+    return {**chatgpt.status(home), "first_sign_in": bool(record.get("first_sign_in")), "model_set": model}
+
+
+async def _chatgpt_logout(params: dict[str, Any], _server: host_server.Server) -> dict[str, Any]:
+    import asyncio
+
+    from alpi.providers import chatgpt
+
+    profile, forget = _params(params, "profile", "forget")
+    home = _resolve_home(str(profile or ""))
+    revoked = await asyncio.to_thread(chatgpt.logout, home, forget=bool(forget))
+    cfg = cfg_mod.load(home)
+    model_cleared = cfg.model.startswith(chatgpt.PREFIX + "/")
+    if model_cleared:
+        cfg.model = ""
+        cfg_mod.save(cfg)
+    _emit_config_changed(home, scope="env")
+    return {"ok": True, "revoked": revoked, "model_cleared": model_cleared}
 
 
 async def _providers_add_ollama(

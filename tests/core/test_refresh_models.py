@@ -116,6 +116,15 @@ def test_the_uncurated_list_groups_by_provider_and_skips_dated_snapshots() -> No
     assert refresh.uncurated_chat_models(prices, ["gpt-6.2-sol"]) == {"anthropic": ["claude-fable-6"], "openai": ["gpt-6.3-sol"]}
 
 
-def test_curated_native_ids_come_from_the_openai_and_anthropic_lists() -> None:
-    curated = {"openai": [{"id": "a"}], "anthropic": [{"id": "b"}], "openrouter": [{"id": "c/d"}]}
-    assert refresh.curated_native_ids(curated) == ["a", "b"]
+def test_curated_native_ids_carry_the_prefix_litellm_uses_for_each_keyed_provider() -> None:
+    curated = {
+        "openai": [{"id": "a"}], "anthropic": [{"id": "b"}], "google": [{"id": "g"}],
+        "groq": [{"id": "openai/o"}], "openrouter": [{"id": "c/d"}],
+    }
+    assert refresh.curated_native_ids(curated) == ["a", "b", "gemini/g", "groq/openai/o"]
+
+
+def test_a_curated_google_or_groq_model_without_a_price_stops_the_refresh() -> None:
+    prices = {"gemini/g": {"litellm_provider": "gemini", "mode": "chat", "max_input_tokens": 1_000_000, "input_cost_per_token": 1e-6}}
+    native, missing = refresh.build_native(prices, ["gemini/g", "groq/gone"], bundled=set())
+    assert list(native) == ["gemini/g"] and missing == ["groq/gone"]

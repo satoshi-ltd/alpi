@@ -729,7 +729,7 @@ up instead of overwriting each other.
 
 | Key | Default | Notes |
 |---|---|---|
-| `budget.daily_usd` | unset | Hard daily USD cap. Exceeding it surfaces `budget-exceeded` (interactive) or JSON-RPC `-32005 budget-exceeded` (ALP). Unset = unlimited. |
+| `budget.daily_usd` | unset | Hard daily USD cap. Exceeding it surfaces `budget-exceeded` (interactive) or JSON-RPC `-32005 budget-exceeded` (ALP). Unset = unlimited. Turns on a ChatGPT plan cost $0 in alpi's ledger, so the cap does not count them; limit those in ChatGPT's usage settings. |
 
 ```yaml
 budget:
@@ -818,9 +818,32 @@ relay:
   peer: agora
 ```
 
+### ChatGPT plan
+
+A profile can run on the owner's ChatGPT plan instead of an API key, through OpenAI's Sign in with ChatGPT for open-source tools (a preview on OpenAI's side). `alpi chatgpt login` (or `alpi setup → Model → ChatGPT plan`) opens the browser, registers alpi for that ChatGPT account and saves the sign-in in the profile's `secrets/chatgpt.json`, owner-only. The account's models are then offered as `chatgpt-plan/<model>` in `alpi setup`, `/model` and the apps.
+
+```yaml
+model: chatgpt-plan/gpt-6.2-sol
+```
+
+| Command | What it does |
+|---|---|
+| `alpi chatgpt login` | Continue with ChatGPT in the browser of this machine (`--no-browser` prints the address). `--paste` is for a machine without a browser: open the printed address on any device, then paste the address the browser ends on. Signing in again reuses the saved registration. |
+| `alpi chatgpt status` | The account in use, the models its plan offers (`--refresh` asks again) and the link to manage usage. |
+| `alpi chatgpt logout` | Ends the session at OpenAI and deletes the tokens; `--forget` also deletes the registration. A profile whose model ran on the plan is left without a model, here and when signing out from an app. |
+
+- Each profile signs in on its own (`alpi -p <profile> chatgpt login`), as each has its own keys.
+- OpenAI answers the sign-in at `127.0.0.1` of the device whose browser was used. The console and the desktop app listen there themselves; the desktop app hands the answer to its daemon, so it works with a remote daemon too. Where nothing can listen (the phone, or `--paste` on a server), the browser ends on a page that does not load and the person copies its address back. The daemon keeps the secret half of the attempt and does the exchange, so tokens never pass through an app.
+- Moving a profile's `secrets/chatgpt.json` to another daemon also works. Do not keep a copy in use on the first machine: refresh tokens rotate, and OpenAI may end the session for both when it sees an old one again.
+- Usage counts against the ChatGPT plan and its limits, shared with every other app that uses the plan; alpi records these turns at no cost. Review or cap it in [ChatGPT settings → Usage](https://chatgpt.com/settings/usage). A reached limit stops the turn with that link; alpi never moves the request to another provider on its own, unless the profile has `fallback_models`.
+- On this route OpenAI accepts no sampling or output-length settings, so alpi sends none, and responses are never stored (`store: false`). alpi asks for the reasoning summary, so the model's thinking is shown as on other providers.
+- In the apps: Profile settings → Providers → ChatGPT plan (desktop also offers it in New profile), with Continue with ChatGPT, the account in use, Manage usage and Sign out. Signing out from an app also deletes the registration, so the next sign-in may use another ChatGPT account. A profile without a model gets the plan's first model when it signs in. Only an admin device can sign in, see the account or sign out.
+
 ### Ollama
 
-Ollama is a first-class provider. One entry per server — local, remote, different ports — each with its own user-chosen `name` that becomes the model prefix (`home/gemma4:e4b`, `gpu-box/qwen3:14b`). On every request against an Ollama server, `num_ctx` is auto-resolved from `/api/show` and injected so the model sees the full prompt instead of being truncated to Ollama's 2K default.
+Ollama is a first-class provider. One entry per server — local, remote, different ports — each with its own user-chosen `name` that becomes the model prefix (`home/gemma4:e4b`, `gpu-box/qwen3:14b`). alpi calls the server's native `/api/chat`, because Ollama's OpenAI-compatible `/v1` endpoint cannot set the context size and runs every model at the server's default, cutting a longer prompt without an error. A saved URL ending in `/v1` is called at the server root.
+
+Every request carries `num_ctx`, and alpi budgets and compacts against the same number: the `PARAMETER num_ctx` of the model's Modelfile when it has one, otherwise the model's own maximum capped at 32,768 tokens, because the maximum of a recent model (128K to 256K) is a memory budget most hosts do not have. To run a model with a larger window, give it one in a Modelfile (`FROM <model>` and `PARAMETER num_ctx <size>`, then `ollama create`).
 
 ```yaml
 providers:

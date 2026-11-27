@@ -11,6 +11,7 @@ const PROVIDER_NAMES = {
   ollama: "Ollama",
   ollama_chat: "Ollama",
   groq: "Groq",
+  "chatgpt-plan": "ChatGPT plan",
   gemini: "Google",
 };
 
@@ -19,4 +20,10 @@ export function modelProvider(model) {
   const segments = model.trim().split("/").filter(Boolean);
   if (segments.length < 2) return "";
   return PROVIDER_NAMES[segments[0].toLowerCase()] ?? segments[0];
+}
+
+export const PLAN_BUDGET_HINT = "ChatGPT plan turns are not counted.";
+
+export function runsOnPlan(model) {
+  return typeof model === "string" && model.trim().toLowerCase().startsWith("chatgpt-plan/");
 }

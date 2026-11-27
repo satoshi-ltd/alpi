@@ -61,7 +61,7 @@ _MACOS_PROFILE = """
     (subpath (param "HOME_AWS"))
     (subpath (param "HOME_GNUPG"))
     (regex #"/\\.alpi/(profiles/[^/]+/)?\\.env$")
-    (regex #"/\\.alpi/.*/secrets/"))
+    (regex #"/\\.alpi/(.*/)?secrets(/|$)"))
 (allow file-write*
 %PERSISTENT_WRITES%
 %TEMP_WRITES%
@@ -81,7 +81,9 @@ _MACOS_PROFILE = """
 (deny file-write*
     (regex #"/\\.alpi/(profiles/[^/]+/)?\\.env$")
     (regex #"/\\.alpi/(profiles/[^/]+/)?config\\.yaml$")
-    (regex #"/\\.alpi/.*/secrets/"))
+    (regex #"/\\.alpi/(.*/)?secrets(/|$)"))
+(deny file-write-unlink
+    (regex #"/\\.alpi(/profiles(/[^/]+)?)?$"))
 %NETWORK%
 """.strip()
 

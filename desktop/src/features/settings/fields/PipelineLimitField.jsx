@@ -82,7 +82,7 @@ export function PipelineLimitField({ profile, onSaved }) {
       {open && (
         <div className={styles.popover}>
           <div className={styles.field}>
-            <Eyebrow as="label">active workgroups</Eyebrow>
+            <Eyebrow as="label">Active workgroups</Eyebrow>
             <Field
               className={styles.input}
               value={value}

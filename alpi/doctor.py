@@ -515,7 +515,14 @@ def _check_model(cfg: cfg_mod.Config, env: dict[str, str]) -> list[Check]:
     out.append(Check("Model", "configured", "ok", cfg.model))
 
     key_var = _provider_api_key_var(cfg)
-    if key_var is None:
+    if cfg.model.startswith("chatgpt-plan/"):
+        from alpi.providers import chatgpt
+
+        if chatgpt.signed_in(cfg.home):
+            out.append(Check("Model", "ChatGPT sign-in", "ok", chatgpt.load(cfg.home).get("email") or "signed in"))
+        else:
+            out.append(Check("Model", "ChatGPT sign-in", "fail", "not signed in — run `alpi chatgpt login`"))
+    elif key_var is None:
         out.append(Check("Model", "API key", "ok", "ollama (no key required)"))
     elif env.get(key_var) or os.environ.get(key_var):
         out.append(Check("Model", "API key", "ok", f"{key_var} set"))
@@ -1149,6 +1156,10 @@ def _provider_api_key_var(cfg: cfg_mod.Config) -> str | None:
         return "ANTHROPIC_API_KEY"
     if head == "gemini":
         return "GEMINI_API_KEY"
+    if head == "groq":
+        return "GROQ_API_KEY"
+    if head == "chatgpt-plan":
+        return None
     return "OPENROUTER_API_KEY"  # safe default — most models go through openrouter
 
 

@@ -165,6 +165,20 @@ _None._
 
 ### Verification
 
+- **PROV.CHATGPT-PLAN-FLEET** — A deployed profile runs on the ChatGPT plan
+  `verify · alpi · creator · normal`
+  note: proved on 2026-11-27 against OpenAI with a real account: the sign-in from the desktop app, the model
+  list, and turns on a plan (text, two tool calls in a namespace, their results replayed, a forced call, a
+  reasoning effort with its summary, a background call). Not proved: the phone's paste step, `--paste` on a
+  server, the hourly renewal, a credential moved to another daemon, a scheduled job and a workgroup turn on the
+  plan, and what OpenAI's preview allows for unattended use and for one daemon serving several devices (its
+  pages do not say).
+  accept: on an iPhone and an Android phone the address the browser ends on can be copied and the app finishes
+  the sign-in with it (the ChatGPT app, if installed, does not take the link over); a profile on a remote
+  daemon, signed in from the phone or with `--paste`, answers a chat turn and a scheduled job on
+  `chatgpt-plan/<model>`, still answers after the hourly renewal, and `alpi chatgpt status` on it shows the
+  account; anything OpenAI refuses becomes a `bug` or a line in CONFIG.md.
+
 - **HARN.018-VERIFY** — The 0.18 line does what it shipped for on the deployed daemons
   `verify · alpi · creator · normal`
   note: on 2026-11-10, a day after 0.18.0, the fleet had no run error, no compaction (largest prompt a quarter
@@ -1621,16 +1635,19 @@ Each entry is written to be worked without that report:
   accept: the skipped pass is recorded with its reason; the trigger uses the previous step's measured input
   tokens plus an estimate of what was added; tests cover the oversized batch and a JSON-heavy turn.
 
-- **HARN.REASONING-FAMILIES** — The model's reasoning survives a tool call on Anthropic and Gemini
+- **HARN.REASONING-FAMILIES** — The model's reasoning survives a tool call on Anthropic, Gemini and OpenAI
   `feature · alpi · agent · low`
-  note: `engine.py` re-sends `reasoning_content` on the assistant message only for DeepSeek models; Anthropic
-  needs its signed thinking blocks and Gemini its thought signatures returned with the tool call, so with those
-  families through OpenRouter the thinking between tool calls is dropped (lower quality on long turns, or a 400).
-  Unverifiable without a live profile on one of those families: every fleet profile runs DeepSeek today.
-  promote when: a profile is configured on an Anthropic or Gemini model.
+  note: `engine.py` re-sends `reasoning_content` on the assistant message only for DeepSeek models. Anthropic
+  needs its signed thinking blocks returned with the tool call, Gemini its thought signatures (LiteLLM sends a
+  placeholder signature in their place) and OpenAI's Responses API its reasoning items, so on those families,
+  direct or through OpenRouter, the thinking between tool calls is dropped (lower quality on long turns, or a
+  400). A direct OpenAI reasoning turn also sends nothing while it thinks, because no reasoning summary is
+  requested, so only the first-token limit bounds it. Unverifiable without a live profile on one of those
+  families: every fleet profile runs DeepSeek today.
+  promote when: a profile is configured on an Anthropic, Gemini or OpenAI model.
   Related (H10): on providers that need explicit cache markers, [prompt_cache.py](../alpi/prompt_cache.py)
-  (`:223-227`) marks only `messages[0]`, so the growing history is never cached, and system-role notes in the
-  middle of the history are hoisted into the top system block.
+  marks only `messages[0]`, so the growing history is never cached; on Gemini, system-role notes in the middle
+  of the history are hoisted into the system instruction.
   accept: the blocks the provider returned are echoed unchanged on the assistant message for every family that
   returned them; a moving cache marker on the last message and mid-history notes sent as `user` for those families; a fake-provider test for each shape; a live `pytest --llm` case on the family that promoted it.
 
@@ -1652,6 +1669,17 @@ Each entry is written to be worked without that report:
   Document opt-in syntax, minimum daemon version and recovery in WORKGROUPS and its reference.
 
 ### Requires a design board
+
+- **DESIGN.CHATGPT-PLAN** — The kit draws the ChatGPT plan sign-in
+  `chore · desktop, mobile · agent · low`
+  note: desktop's provider form has a ChatGPT plan option (signed out, waiting for the browser, signed in, plan
+  use declined) and mobile has a ChatGPT plan screen (the three steps and the address field, signed in) and a
+  row in Providers. They are built from existing primitives and no board draws them or the provider lists they
+  sit in. Two things OpenAI's guidance asks for are not built: a dismissible "You're using your ChatGPT plan"
+  dialog after the first sign-in (alpi shows a notification) and a "Using ChatGPT plan · Manage usage" line
+  beside the model picker (Manage usage sits in Providers).
+  accept: Desktop and Mobile show those states, in light and dark, built from the strings the screens use; the
+  boards decide the first-sign-in dialog and the model-picker line.
 
 - **CHART.1** — The mobile Usage chart follows the cost too
   `feature · desktop, mobile, common · agent · normal`
@@ -1761,7 +1789,8 @@ Each names the condition that promotes it; none is worked on before.
 | Decision | Reason |
 |---|---|
 | Proving a daemon's identity to the phone (SEC.MOBILE-IDENTITY) | The phone trusts the id `host.version` reports, so a daemon the user pairs could claim another one's id and share its notification state. Closing it needs a host key, a signing RPC, verification in JS with new dependencies and a migration of the notification state, for an attack that requires the user to pair a malicious daemon; alpi's users pair only daemons they run. Reopen if pairing third-party daemons becomes a supported use. |
-| Vendor subscription OAuth | alpi respects every provider's ToS: a subscription tied to a vendor's own client is for that client, and reversing its private OAuth flow is a ToS violation and an account-ban risk. Users pay per token with their own keys; an official, documented third-party OAuth flow would be adopted. |
+| Vendor subscription OAuth outside an official flow | alpi respects every provider's ToS: a subscription tied to a vendor's own client is for that client, and reversing its private OAuth flow is a ToS violation and an account-ban risk. alpi uses OpenAI's documented Sign in with ChatGPT for open-source tools and nothing else; Anthropic forbids third-party tools from offering Claude.ai login or routing requests through plan credentials, so Claude runs on API keys. |
+| A generic OpenAI-compatible endpoint with its own key (PROV.COMPATIBLE-ENDPOINT) | Discarded by the creator on 2026-11-27. alpi offers the providers it tests and keeps current; other vendors are reached through OpenRouter and local servers through Ollama. |
 | Remote push to a closed phone (Live Activity, approval pushes; MOB.LIVE-ACTIVITY) | alpi puts no relay or third-party service between a daemon and its apps. APNs and FCM only take messages signed with the app's own keys, so reaching a closed phone needs a relay (Expo's push service or one the creator runs) between every daemon and every phone. The phone hears from its daemons through its own stream and poll, while the app runs and when the OS wakes it. |
 | Chat-app gateways (Telegram, Matrix, Signal, WhatsApp, Discord, …) | Retired in v0.10 — third-party chat bridges add attack surface and upkeep; the desktop/mobile/terminal apps are the surface, and email is an on-demand tool. |
 | Smart-home orchestration | Device protocols and physical-world policy belong in Home Assistant / MCP / user skills, not core. |

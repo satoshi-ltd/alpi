@@ -384,7 +384,7 @@ describe("CreateWorkgroupModal", () => {
     expect(document.querySelector(".anim-dialog").style.getPropertyValue("--dialog-width")).toBe("var(--modal-md)");
 
     fireEvent.click(screen.getByRole("button", { name: "Import recipe…" }));
-    await screen.findByText("PIPELINES");
+    await screen.findByText("Pipelines");
     expect(document.querySelector(".anim-dialog").style.getPropertyValue("--dialog-width")).toBe("var(--modal-lg)");
 
     const phases = screen.getAllByText(/^#[a-z0-9-]+$/).map((el) => el.textContent);
@@ -399,7 +399,7 @@ describe("CreateWorkgroupModal", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /hotel/ }));
     expect(screen.getByRole("button", { name: "Import recipe…" })).toBeInTheDocument();
-    expect(screen.queryByText("PIPELINES")).toBeNull();
+    expect(screen.queryByText("Pipelines")).toBeNull();
     expect(document.querySelector(".anim-dialog").style.getPropertyValue("--dialog-width")).toBe("var(--modal-md)");
   });
 
@@ -435,7 +435,7 @@ describe("CreateWorkgroupModal", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Import recipe…" }));
-    await screen.findByText("PIPELINES");
+    await screen.findByText("Pipelines");
     expect(
       screen.getByText("No launch pipeline · created idle, every chain awaits a trigger"),
     ).toBeInTheDocument();
@@ -486,7 +486,7 @@ describe("CreateWorkgroupModal", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Import recipe…" }));
     await screen.findByRole("button", { name: "Launch" });
-    expect(screen.queryByText("PIPELINES")).toBeNull();
+    expect(screen.queryByText("Pipelines")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Launch" }));
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith("wg-chat", "mira"));

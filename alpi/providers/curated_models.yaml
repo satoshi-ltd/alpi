@@ -5,6 +5,9 @@ openai:
   - id: gpt-6.2-sol
     note: balanced · coding · 1M
     reasoning: true
+  - id: gpt-6.1-terra
+    note: fast · efficient · 1M
+    reasoning: true
   - id: gpt-6-luna
     note: cheap · fast · 1M
     reasoning: true
@@ -21,6 +24,20 @@ anthropic:
   - id: claude-haiku-5-5
     note: cheap · fast · 1M
     reasoning: true
+google:
+  - id: gemini-4-carbon
+    note: strongest reasoning · 1M
+  - id: gemini-4-neon
+    note: frontier · fast · 1M
+  - id: gemini-4-hydrogen
+    note: everyday coding and agents · 1M
+  - id: gemini-3.5-flash-lite
+    note: cheap · high volume · 1M
+groq:
+  - id: openai/gpt-oss-120b
+    note: open weights · 131K
+  - id: openai/gpt-oss-20b
+    note: open weights · small · 131K
 openrouter:
   - id: deepseek/deepseek-v4.1-flash
     note: text+image · up to 1M · low cache-read price

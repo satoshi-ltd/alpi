@@ -188,7 +188,7 @@ describe("WorkgroupView pipeline strip", () => {
     expect(phaseEl("setup").querySelector("[data-shape]").dataset.state).toBe("idle");
     expect(phaseEl("setup").querySelector("animate")).toBeNull();
     expect(strip.textContent).not.toMatch(/Loading/);
-    expect(strip.textContent).toContain("pipeline");
+    expect(strip.textContent).toContain("Pipeline");
 
     resolveTasks({
       active: { slug: "enrich", title: "go", opened_seq: 42 },
@@ -1051,7 +1051,7 @@ describe("WorkgroupView pipeline strip owners", () => {
     expect([phaseEl("setup"), phaseEl("enrich")].map((el) => el.textContent)).toEqual(["#setup", "#enrich"]);
     expect(phaseEl("setup")).toHaveAccessibleName(/completed/);
     expect(phaseEl("enrich")).toHaveAccessibleName(/blocked/);
-    const label = screen.getByText("pipeline", { exact: true });
+    const label = screen.getByText("Pipeline", { exact: true });
     expect(label).toHaveClass(styles.pipelineLabel);
     expect(label.nextElementSibling).toContainElement(phaseEl("setup"));
     expect(screen.queryByText(/^pipeline · /)).toBeNull();

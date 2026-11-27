@@ -52,7 +52,14 @@ def test_normalise_effort_canonicalises_or_drops(raw, expected) -> None:
     "anthropic/claude-haiku-4-5", # custom-typed (regex fallback)
     "anthropic/claude-opus-4",    # custom-typed (regex fallback)
     "anthropic/claude-mythos-5",  # custom-typed (regex fallback: fable|mythos branch)
-    "google/gemini-2.5-pro",
+    "gemini/gemini-2.5-pro",
+    "gemini/gemini-3.5-flash-lite",
+    "gemini/gemini-3.8-flash",
+    "gemini/gemini-4-carbon",
+    "gemini/gemini-10-ultra",
+    "gemini/gemini-2.5-flash-lite",
+    "gemini/gemini-flash-latest",
+    "gemini/gemini-pro-latest",
     "deepseek/deepseek-r1",
     "openrouter/openai/o3-mini",
     "openrouter/anthropic/claude-sonnet-5.5",
@@ -68,8 +75,15 @@ def test_supports_reasoning_true_for_known_models(model) -> None:
     "openai/gpt-4.1",
     "anthropic/claude-3.5-sonnet",
     "anthropic/claude-3-haiku",
-    "google/gemini-1.5-pro",
-    "google/gemini-2.0-flash",
+    "gemini/gemini-1.5-pro",
+    "gemini/gemini-2.0-flash",
+    "gemini/gemini-2.50-pro",
+    "gemini/gemini-2.5-computer-use-preview-10-2025",
+    "gemini/gemini-2.5-pro-preview-tts",
+    "gemini/gemini-3-pro-image-preview",
+    "gemini/gemini-3.1-flash-live-preview",
+    "gemini/gemini-embedding-001",
+    "google/gemini-2.5-pro",
     "ollama/llama-3.3-70b",
     "groq/llama-3.1-70b",
 ])
@@ -125,7 +139,7 @@ def test_reasoning_kwargs_openrouter_uses_extra_body_shape() -> None:
     }
 
 
-def test_merge_into_kwargs_preserves_ollama_extra_body() -> None:
+def test_merge_into_kwargs_preserves_an_existing_extra_body() -> None:
     base = {"model": "openai/llama-3.3-70b", "extra_body": {"options": {"num_ctx": 32000}}}
     extra = {"extra_body": {"reasoning": {"effort": "medium"}}}
     merged = merge_into_kwargs(base, extra)
@@ -347,9 +361,9 @@ def test_resolve_model_attaches_effort_for_an_ollama_default_model(
     cfg.model_reasoning.effort = "high"
 
     assert cfg_mod.resolve_model(cfg) == {
-        "model": "openai/gpt-oss:20b",
-        "api_base": "http://localhost:11434/v1",
-        "api_key": "dummy",
+        "model": "ollama_chat/gpt-oss:20b",
+        "api_base": "http://localhost:11434",
+        "drop_params": True,
         "reasoning_effort": "high",
     }
     cfg.model = "macbook-pro/llama3:8b"

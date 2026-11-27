@@ -3,6 +3,7 @@ export const CLOUD_PROVIDERS = [
   { id: 'openai', label: 'OpenAI', env: 'OPENAI_API_KEY', placeholder: 'sk-…', console: 'platform.openai.com' },
   { id: 'openrouter', label: 'OpenRouter', env: 'OPENROUTER_API_KEY', placeholder: 'sk-or-…', console: 'openrouter.ai' },
   { id: 'gemini', label: 'Gemini', env: 'GEMINI_API_KEY', placeholder: 'AIza…', console: 'aistudio.google.com' },
+  { id: 'groq', label: 'Groq', env: 'GROQ_API_KEY', placeholder: 'gsk_…', console: 'console.groq.com' },
 ];
 
 export function cloudProvider(id) {

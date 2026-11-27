@@ -217,10 +217,18 @@ def test_resolve_model_ollama() -> None:
             {"name": "home", "url": "http://localhost:11434"}
         ]},
     )
-    kwargs = config.resolve_model(cfg)
-    assert kwargs["model"] == "openai/llama3.1"
-    assert kwargs["api_base"] == "http://localhost:11434/v1"
-    assert kwargs["api_key"] == "dummy"
+    assert config.resolve_model(cfg) == {
+        "model": "ollama_chat/llama3.1", "api_base": "http://localhost:11434", "drop_params": True,
+    }
+
+
+def test_resolve_model_ollama_calls_the_server_root_whatever_the_saved_url() -> None:
+    cfg = config.Config(
+        home=Path("/tmp"),
+        model="home/llama3.1",
+        providers={"ollama": [{"name": "home", "url": "http://box:11434/v1/"}]},
+    )
+    assert config.resolve_model(cfg)["api_base"] == "http://box:11434"
 
 
 def test_resolve_model_reads_api_key_from_profile_env(tmp_path: Path, monkeypatch) -> None:

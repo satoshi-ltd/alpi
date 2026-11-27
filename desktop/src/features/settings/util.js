@@ -55,6 +55,7 @@ export const PAID_PROVIDERS = [
   { id: "openai", env: "OPENAI_API_KEY", label: "OpenAI" },
   { id: "openrouter", env: "OPENROUTER_API_KEY", label: "OpenRouter" },
   { id: "gemini", env: "GEMINI_API_KEY", label: "Gemini" },
+  { id: "groq", env: "GROQ_API_KEY", label: "Groq" },
 ];
 
 export const ALLOW_METHODS = [
@@ -141,5 +142,6 @@ export function providerPills(profile, ollamaErrors = []) {
       error: err ? `${err.url} — ${err.detail}` : null,
     };
   });
-  return [...cloud, ...ollama].filter((p) => p.label);
+  const chatgpt = profile.provider_chatgpt?.signed_in ? [{ label: "chatgpt", error: null }] : [];
+  return [...cloud, ...chatgpt, ...ollama].filter((p) => p.label);
 }

@@ -23,3 +23,10 @@
   justify-content: space-between;
   gap: var(--sp-8);
 }
+
+.note {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--text-meta);
+  line-height: 1.5;
+}

@@ -463,3 +463,51 @@ def test_a_scheduled_job_on_a_host_install_keeps_the_native_advice(
             _sandbox.wrap_command("ls", workspace=ws, alpi_home=ah, allow_network=False)
 
     assert "apt install bubblewrap" in str(ei.value)
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(sys.platform != "darwin" or shutil.which("sandbox-exec") is None,
+                    reason="macOS-only, requires sandbox-exec")
+def test_macos_hides_the_secrets_folder_of_the_root_home_and_of_a_profile(tmp_path: Path) -> None:
+    import subprocess
+
+    root = tmp_path / ".alpi"
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    for folder in (root / "secrets", root / "profiles" / "p" / "secrets"):
+        folder.mkdir(parents=True)
+        (folder / "chatgpt.json").write_text("REFRESH-TOKEN")
+
+    for target in (root / "secrets" / "chatgpt.json", root / "profiles" / "p" / "secrets" / "chatgpt.json"):
+        read = subprocess.run(
+            _sandbox.wrap_command(f"cat {target}", workspace=workspace, alpi_home=root, allow_network=False),
+            capture_output=True, text=True, timeout=30,
+        )
+        assert read.returncode != 0 and "REFRESH-TOKEN" not in read.stdout, target
+        subprocess.run(
+            _sandbox.wrap_command(f"echo overwritten > {target}", workspace=workspace, alpi_home=root, allow_network=False),
+            capture_output=True, text=True, timeout=30,
+        )
+        assert target.read_text() == "REFRESH-TOKEN", target
+
+    profile_dir = root / "profiles" / "p"
+    for moved in (
+        f"mv {root / 'secrets'} {root / 's2'} && cat {root / 's2' / 'chatgpt.json'}",
+        f"mv {profile_dir / 'secrets'} {workspace / 's2'} && cat {workspace / 's2' / 'chatgpt.json'}",
+        f"mv {profile_dir} {workspace / 'p2'} && cat {workspace / 'p2' / 'secrets' / 'chatgpt.json'}",
+        f"mv {root} {workspace / 'home2'} && cat {workspace / 'home2' / 'secrets' / 'chatgpt.json'}",
+    ):
+        done = subprocess.run(
+            _sandbox.wrap_command(moved, workspace=workspace, alpi_home=root, allow_network=False),
+            capture_output=True, text=True, timeout=30,
+        )
+        assert done.returncode != 0 and "REFRESH-TOKEN" not in done.stdout, moved
+    kept = subprocess.run(
+        _sandbox.wrap_command(
+            f"mkdir -p {profile_dir / 'memories'} && echo ok > {profile_dir / 'memories' / 'M.md'} && echo ok > {root / 'note.txt'} "
+            f"&& touch {profile_dir} {root} && chmod 700 {profile_dir} && mkdir {root / 'profiles' / 'other'} && mkdir {root / 'out'}",
+            workspace=workspace, alpi_home=root, allow_network=False,
+        ),
+        capture_output=True, text=True, timeout=30,
+    )
+    assert kept.returncode == 0 and (profile_dir / "memories" / "M.md").read_text() == "ok\n", kept.stderr

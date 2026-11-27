@@ -4,6 +4,7 @@ export const CURATED_BY_PROVIDER = {
   openai: [
     { id: 'gpt-6.2-astra', note: 'flagship · 1M' },
     { id: 'gpt-6.2-sol', note: 'balanced · coding · 1M' },
+    { id: 'gpt-6.1-terra', note: 'fast · efficient · 1M' },
     { id: 'gpt-6-luna', note: 'cheap · fast · 1M' },
   ],
   anthropic: [

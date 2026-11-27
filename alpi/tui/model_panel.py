@@ -79,7 +79,7 @@ class ProviderPanel(FloatingPanel):
             self.cfg.providers.get("openrouter", {}).get("models", []) or []
         )
         for p in prov_mod.builtin():
-            if p.api_key_env and not p.has_key(env):
+            if not p.has_key(env):
                 continue
             # OpenRouter is usable only once the user has registered at
             # least one model id via `alpi setup` — we don't fetch the

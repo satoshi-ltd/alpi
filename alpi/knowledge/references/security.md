@@ -3,7 +3,7 @@
 ## Answer directly
 
 - alpi is local-first; no hosted control plane.
-- Secrets live in profile `.env` or skill `secrets/`.
+- Secrets live in profile `.env` or skill `secrets/`; a ChatGPT plan sign-in lives in the profile's `secrets/chatgpt.json` (owner-only, never readable by file tools, denied by the macOS sandbox but not hidden by the Linux one; whoever reads it can spend the plan until the owner disconnects alpi in ChatGPT settings).
 - The workspace is a default path, not a hard sandbox boundary.
 - Paired devices carry a `role` (`admin`/`member`) and optional
   `profile_scope`; dispatcher blocks sensitive verbs from members and

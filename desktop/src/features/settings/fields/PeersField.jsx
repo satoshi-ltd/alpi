@@ -343,17 +343,17 @@ function PeerDetailPopover({ peer, status, reason, anchorRef, onClose, onRemove 
       </div>
       {reason && status !== "on" && <span className={styles.muted}>{reason}</span>}
       <div className={styles.field}>
-        <Eyebrow as="label">pubkey</Eyebrow>
+        <Eyebrow as="label">Pubkey</Eyebrow>
         <span className={styles.mono}>{peer.pubkey}</span>
       </div>
       {peer.address && (
         <div className={styles.field}>
-          <Eyebrow as="label">address</Eyebrow>
+          <Eyebrow as="label">Address</Eyebrow>
           <span className={styles.mono}>{peer.address}</span>
         </div>
       )}
       <div className={styles.field}>
-        <Eyebrow as="label">allow</Eyebrow>
+        <Eyebrow as="label">Allow</Eyebrow>
         <span className={styles.inlineRow}>
           {(peer.allow ?? []).length === 0 ? (
             <span className={styles.muted}>{EMPTY.peerMethods.title}</span>
@@ -451,7 +451,7 @@ function AddPeerPopover({ profile, existingIds, anchorRef, onClose, onAdded }) {
       }}
     >
       <div className={styles.field}>
-        <Eyebrow as="label">id</Eyebrow>
+        <Eyebrow as="label">ID</Eyebrow>
         <Field
           className={styles.input}
           value={peerId}
@@ -462,7 +462,7 @@ function AddPeerPopover({ profile, existingIds, anchorRef, onClose, onAdded }) {
         />
       </div>
       <div className={styles.field}>
-        <Eyebrow as="label">pubkey</Eyebrow>
+        <Eyebrow as="label">Pubkey</Eyebrow>
         <Textarea
           className={styles.textarea}
           rows={2}
@@ -473,7 +473,7 @@ function AddPeerPopover({ profile, existingIds, anchorRef, onClose, onAdded }) {
         />
       </div>
       <div className={styles.field}>
-        <Eyebrow as="label">address (optional)</Eyebrow>
+        <Eyebrow as="label">Address (optional)</Eyebrow>
         <Field
           className={styles.input}
           value={address}
@@ -483,7 +483,7 @@ function AddPeerPopover({ profile, existingIds, anchorRef, onClose, onAdded }) {
         />
       </div>
       <div className={styles.field}>
-        <Eyebrow as="label">alias (optional)</Eyebrow>
+        <Eyebrow as="label">Alias (optional)</Eyebrow>
         <Field
           className={styles.input}
           value={alias}
@@ -493,7 +493,7 @@ function AddPeerPopover({ profile, existingIds, anchorRef, onClose, onAdded }) {
         />
       </div>
       <div className={styles.field}>
-        <Eyebrow as="label">allow</Eyebrow>
+        <Eyebrow as="label">Allow</Eyebrow>
         <span className={styles.inlineRow}>
           {ALLOW_METHODS.map((m) => (
             <Chip

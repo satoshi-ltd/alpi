@@ -4,7 +4,7 @@ CL.1 — name and order every contributor to the LLM system prompt so the
 rendered text stays byte-identical across calls. Providers that
 auto-cache (OpenAI, Gemini, OpenRouter on supported models) hit for
 free when the prefix is stable. For providers that need an explicit
-marker (Anthropic Claude, Bedrock Claude, Vertex / AI Studio Gemini),
+marker (Anthropic Claude, Bedrock Claude),
 ``cache_kwargs_for_model`` asks LiteLLM to inject ``cache_control`` on
 ``messages[0]`` via its native ``cache_control_injection_points`` —
 Alpi never mutates provider payloads itself.
@@ -186,8 +186,8 @@ def render_cacheable(parts: dict[str, str]) -> str:
     return "\n\n".join(p for p in ordered if p)
 
 
-# LiteLLM turns the marker into OpenAI's explicit mode, which switches off OpenAI's own prefix cache and drops the breakpoint when it bridges to /v1/responses.
-PREFIX_CACHING_PROVIDERS = frozenset({"openai"})
+# LiteLLM turns the marker into OpenAI's explicit mode, which switches off OpenAI's own prefix cache and drops the breakpoint when it bridges to /v1/responses; on Gemini it lists and creates a billed cachedContents object before every call.
+PREFIX_CACHING_PROVIDERS = frozenset({"openai", "gemini"})
 
 
 def _provider_of(model: str) -> str | None:
@@ -221,7 +221,8 @@ def cache_kwargs_for_model(model: str, api_base: str | None = None) -> dict:
             return {}
     except Exception:  # noqa: BLE001
         return {}
-    if _provider_of(model) in PREFIX_CACHING_PROVIDERS and _is_openai_endpoint(api_base):
+    provider = _provider_of(model)
+    if provider in PREFIX_CACHING_PROVIDERS and (provider != "openai" or _is_openai_endpoint(api_base)):
         return {}
     return {
         "cache_control_injection_points": [

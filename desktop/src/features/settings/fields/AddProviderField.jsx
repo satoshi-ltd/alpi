@@ -8,9 +8,13 @@ import { useDismissOnOutside } from "../../../hooks/useDismissOnOutside.js";
 import { ConfirmDeleteAction, ConfirmSheet, DialogFooter } from "../../../primitives/index.js";
 import ProviderPickerForm, {
   applyProvider,
+  CHATGPT_PLAN,
+  daemonMessage,
   defaultProviderValue,
   isProviderValueValid,
+  signInCancelled,
 } from "../ProviderPickerForm.jsx";
+import { runsOnPlan } from "../../../lib/modelLabel.js";
 import { PAID_PROVIDERS } from "../util.js";
 import useExit from "../../../hooks/useExit.js";
 import styles from "../Settings.module.css";
@@ -125,12 +129,13 @@ function ProviderEditor({ profile, onClose, onSaved }) {
       const msg = await applyProvider(profile.name, providerValue, {
         currentModel: profile.model,
       });
-      notify({ message: msg, variant: "success" });
+      notify({ message: msg, variant: "success", duration: providerValue.id === CHATGPT_PLAN.id ? 6000 : undefined });
       await onSaved?.();
       onClose?.();
     } catch (e) {
+      if (signInCancelled(e)) return;
       notify({
-        message: `add provider: ${String(e)}`,
+        message: providerValue.id === CHATGPT_PLAN.id ? daemonMessage(e) : `add provider: ${String(e)}`,
         variant: "error",
         duration: 4000,
       });
@@ -149,6 +154,31 @@ function ProviderEditor({ profile, onClose, onSaved }) {
     }
   }
 
+  async function signOutChatGPT() {
+    try {
+      const out = await invoke("chatgpt_sign_out", { profile: profile.name });
+      const left = out?.model_cleared ? ` · @${profile.name} has no model` : "";
+      notify(out?.revoked === false
+        ? { message: `Signed out here only. Remove alpi in ChatGPT settings.${left}`, variant: "error", duration: 8000 }
+        : { message: `Signed out${left}`, variant: "success" });
+      await onSaved?.();
+    } catch (e) {
+      notify({ message: `Sign out failed: ${daemonMessage(e)}`, variant: "error", duration: 4000 });
+    }
+  }
+
+  const waitingRef = useRef(false);
+  waitingRef.current = busy && providerValue.id === CHATGPT_PLAN.id;
+  // Leaving the form ends the wait: the browser's answer would otherwise land on nothing, five minutes later.
+  useEffect(() => () => {
+    if (waitingRef.current) invoke("chatgpt_sign_in_cancel").catch(() => {});
+  }, []);
+
+  function cancel() {
+    if (waitingRef.current) invoke("chatgpt_sign_in_cancel").catch(() => {});
+    onClose?.();
+  }
+
   async function removeOllama(name) {
     try {
       await invoke("provider_remove_ollama", { profile: profile.name, name });
@@ -163,11 +193,13 @@ function ProviderEditor({ profile, onClose, onSaved }) {
   const selectedConfigured =
     selectedPaid && configuredEnvs.has(selectedPaid.env) ? selectedPaid : null;
   const showOllamaEndpoints = providerValue.id === "ollama" && ollamas.length > 0;
+  const chatgpt = profile.provider_chatgpt;
+  const chatgptSelected = providerValue.id === CHATGPT_PLAN.id;
 
   return (
     <>
       <div className={styles.field}>
-        <Eyebrow as="label">providers</Eyebrow>
+        <Eyebrow as="label">Providers</Eyebrow>
         <ProviderPickerForm
           value={providerValue}
           onChange={setProviderValue}
@@ -177,6 +209,8 @@ function ProviderEditor({ profile, onClose, onSaved }) {
           ollamaModelCount={Object.values(ollamaCounts).reduce((a, b) => a + b, 0)}
           ollamaEndpointCount={ollamas.length}
           providerCatalog={profile.provider_catalog}
+          chatgpt={chatgpt}
+          signingIn={busy && chatgptSelected}
           autoFocusFirstField
         />
         {showOllamaEndpoints && (
@@ -228,10 +262,21 @@ function ProviderEditor({ profile, onClose, onSaved }) {
               confirmLabel="Remove"
               onConfirm={() => removePaid(selectedConfigured.env, selectedConfigured.label)}
             />
+          ) : chatgptSelected && (chatgpt?.signed_in || chatgpt?.plan_declined || chatgpt?.registered) ? (
+            <ConfirmDeleteAction
+              label="Sign out"
+              title="Sign out?"
+              consequence={runsOnPlan(profile.model)
+                ? `@${profile.name} is left without a model.`
+                : `@${profile.name} can no longer use plan models.`}
+              confirmLabel="Sign out"
+              onConfirm={signOutChatGPT}
+            />
           ) : null
         }
-        onCancel={onClose}
-        primaryLabel="Save"
+        onCancel={cancel}
+        cancelWhileLoading={busy && chatgptSelected}
+        primaryLabel={chatgptSelected ? (chatgpt?.signed_in ? undefined : "Continue with ChatGPT") : "Save"}
         primaryDisabled={!canSave}
         primaryLoading={busy}
         onPrimary={save}

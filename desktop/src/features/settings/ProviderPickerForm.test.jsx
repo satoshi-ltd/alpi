@@ -30,6 +30,12 @@ describe("providerHint", () => {
       .toBe("0 models · needs a key");
   });
 
+  it("offers Groq with what the daemon would list for its key", () => {
+    expect(providerHint("groq", { providerCatalog: { GROQ_API_KEY: 2 } })).toBe("2 models · needs a key");
+    expect(isProviderValueValid({ id: "groq", keyValue: "gsk_x" })).toBe(true);
+    expect(isProviderValueValid({ id: "groq", keyValue: " " })).toBe(false);
+  });
+
   it("falls back to the plain hint when the daemon sent no catalog", () => {
     expect(providerHint("openai", {})).toBe("needs a key");
   });
@@ -78,6 +84,74 @@ describe("ProviderPickerForm", () => {
     expect(onChange).toHaveBeenCalledWith(
       expect.objectContaining({ id: "openrouter", model: "" }),
     );
+  });
+});
+
+describe("ChatGPT plan", () => {
+  const VALUE = { id: "ollama", name: "", url: "http://localhost:11434" };
+  const SIGNED = { signed_in: true, email: "a@example.com", plan_declined: false, models: 4 };
+
+  it("is offered between OpenAI and Gemini only when the daemon reports its state", () => {
+    const { unmount } = render(<ProviderPickerForm value={VALUE} onChange={() => {}} />);
+    fireEvent.click(screen.getByText("Ollama"));
+    expect(screen.queryByText("ChatGPT plan")).toBeNull();
+    unmount();
+
+    render(<ProviderPickerForm value={VALUE} onChange={() => {}} chatgpt={{ signed_in: false }} />);
+    fireEvent.click(screen.getByText("Ollama"));
+    const html = document.body.innerHTML;
+    const at = (label) => html.lastIndexOf(">" + label + "<");
+    expect(at("OpenAI")).toBeLessThan(at("ChatGPT plan"));
+    expect(at("ChatGPT plan")).toBeLessThan(at("Gemini"));
+  });
+
+  it("says what selecting it does, and who is signed in once it is", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<ProviderPickerForm value={VALUE} onChange={onChange} chatgpt={{ signed_in: false }} />);
+    fireEvent.click(screen.getByText("Ollama"));
+    fireEvent.click(screen.getByText("ChatGPT plan"));
+    expect(onChange).toHaveBeenCalledWith({ id: "chatgpt-plan" });
+
+    const form = (chatgpt, extra = {}) => <ProviderPickerForm value={{ id: "chatgpt-plan" }} onChange={onChange} chatgpt={chatgpt} {...extra} />;
+    rerender(form({ signed_in: false }));
+    expect(screen.getByText("Opens your browser to sign in.")).toBeTruthy();
+    expect(screen.queryByPlaceholderText("paste API key")).toBeNull();
+    expect(screen.queryByText("Manage usage")).toBeNull();
+
+    rerender(form({ signed_in: false }, { signingIn: true }));
+    expect(screen.getByText("Waiting for your browser…")).toBeTruthy();
+
+    rerender(form({ signed_in: false, plan_declined: true }));
+    expect(screen.getByText("Plan use was declined. Sign in again to allow it.")).toBeTruthy();
+
+    rerender(form(SIGNED));
+    const account = screen.getByLabelText("ChatGPT account");
+    expect(account.value).toBe("a@example.com");
+    expect(account.readOnly).toBe(true);
+    expect(account.disabled).toBe(false);
+    expect(screen.getByText("Manage usage")).toBeTruthy();
+    expect(screen.queryByText(/models/)).toBeNull();
+    expect(screen.queryByText("Opens your browser to sign in.")).toBeNull();
+  });
+
+  it("hints its state and needs no key to be valid", () => {
+    expect(providerHint("chatgpt-plan", { chatgpt: { signed_in: false } })).toBe("needs sign-in");
+    expect(providerHint("chatgpt-plan", { chatgpt: SIGNED })).toBe("4 models · a@example.com");
+    expect(providerHint("chatgpt-plan", { chatgpt: { signed_in: false, plan_declined: true } })).toBe("plan use declined");
+    expect(isProviderValueValid({ id: "chatgpt-plan" })).toBe(true);
+  });
+
+  it("signs in through the app and confirms plan use the first time", async () => {
+    h.invoke.mockReset();
+    h.invoke.mockResolvedValueOnce({ signed_in: true, email: "a@example.com", first_sign_in: true });
+    expect(await applyProvider("work", { id: "chatgpt-plan" })).toBe("You're using your ChatGPT plan · a@example.com");
+    expect(h.invoke.mock.calls).toEqual([["chatgpt_sign_in", { profile: "work" }]]);
+
+    h.invoke.mockResolvedValueOnce({ signed_in: true, email: "a@example.com", first_sign_in: false });
+    expect(await applyProvider("work", { id: "chatgpt-plan" })).toBe("Signed in as a@example.com");
+
+    h.invoke.mockResolvedValueOnce({ signed_in: false, plan_declined: true });
+    await expect(applyProvider("work", { id: "chatgpt-plan" })).rejects.toThrow("Plan use was declined. Sign in again to allow it.");
   });
 });
 

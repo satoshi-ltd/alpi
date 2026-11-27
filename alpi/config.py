@@ -896,10 +896,12 @@ def resolve_model(
     ollama_eps = {c.get("name"): c for c in cfg.providers.get("ollama", [])}
     if head in ollama_eps:
         ep = ollama_eps[head]
+        from alpi.providers.ollama import _root, litellm_id
+        # Ollama's /v1 endpoint cannot set the context size; drop_params because its native route rejects OpenAI-only ones.
         local: dict[str, Any] = {
-            "model": f"openai/{rest}",
-            "api_base": ep.get("url", "").rstrip("/") + "/v1",
-            "api_key": "dummy",
+            "model": litellm_id(rest),
+            "api_base": _root(ep.get("url", "")),
+            "drop_params": True,
         }
         if include_reasoning and is_default_model and cfg.model_reasoning.effort:
             from alpi.providers.reasoning import merge_into_kwargs, reasoning_kwargs
@@ -909,6 +911,8 @@ def resolve_model(
         return local
 
     out: dict[str, Any] = {"model": model_str}
+    if head == "chatgpt-plan":
+        out["chatgpt_home"] = str(cfg.home)
     env_var = _CLOUD_API_KEY_ENV.get(head)
     if env_var:
         from alpi.home import read_profile_env

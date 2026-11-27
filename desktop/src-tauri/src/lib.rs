@@ -2474,6 +2474,153 @@ async fn alp_call_async_for(
     .map(|_| ())
 }
 
+fn chatgpt_query_value<'a>(target: &'a str, name: &str) -> Option<&'a str> {
+    let query = target.split_once('?').map(|(_, q)| q).unwrap_or("");
+    query.split('&').find_map(|pair| {
+        let (key, value) = pair.split_once('=')?;
+        (key == name).then_some(value)
+    })
+}
+
+fn is_chatgpt_auth_url(url: &str) -> bool {
+    let Some(rest) = url.strip_prefix("https://auth.openai.com/") else {
+        return false;
+    };
+    !url.chars().any(|c| c.is_control() || c.is_whitespace()) && !rest.is_empty()
+}
+
+fn chatgpt_callback_matches(target: &str, state: &str) -> bool {
+    let path = target.split('?').next().unwrap_or("");
+    !state.is_empty() && path == "/auth/callback" && chatgpt_query_value(target, "state") == Some(state)
+}
+
+const CHATGPT_SIGN_IN_CANCELLED: &str = "sign-in cancelled";
+
+static CHATGPT_SIGN_IN: std::sync::Mutex<Option<std::sync::Arc<std::sync::atomic::AtomicBool>>> = std::sync::Mutex::new(None);
+
+fn chatgpt_new_attempt() -> std::sync::Arc<std::sync::atomic::AtomicBool> {
+    let flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    // One wait at a time: a new attempt ends the previous one, which would otherwise hold the port and answer a stale browser tab.
+    if let Some(previous) = CHATGPT_SIGN_IN.lock().unwrap_or_else(|e| e.into_inner()).replace(flag.clone()) {
+        previous.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+    flag
+}
+
+#[tauri::command]
+fn chatgpt_sign_in_cancel() {
+    if let Some(flag) = CHATGPT_SIGN_IN.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+        flag.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+fn chatgpt_wait_for_callback(
+    listener: std::net::TcpListener,
+    state: &str,
+    deadline: std::time::Instant,
+    cancelled: &std::sync::atomic::AtomicBool,
+) -> Result<String, String> {
+    use std::io::{Read, Write};
+    listener.set_nonblocking(true).map_err(|e| e.to_string())?;
+    loop {
+        if cancelled.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err(CHATGPT_SIGN_IN_CANCELLED.into());
+        }
+        if std::time::Instant::now() > deadline {
+            return Err("Sign-in timed out. Try again.".into());
+        }
+        let mut stream = match listener.accept() {
+            Ok((stream, _)) => stream,
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                continue;
+            }
+            Err(e) => return Err(e.to_string()),
+        };
+        // Bounded in time and size: a client that sends nothing costs five seconds, never the whole wait.
+        let _ = stream.set_nonblocking(false);
+        let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(5)));
+        let started = std::time::Instant::now();
+        let mut head: Vec<u8> = Vec::new();
+        let mut buf = [0u8; 4096];
+        while !head.windows(2).any(|w| w == b"\r\n") && head.len() < 65536 && started.elapsed().as_secs() < 5 {
+            match stream.read(&mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => head.extend_from_slice(&buf[..n]),
+            }
+        }
+        let head = String::from_utf8_lossy(&head).into_owned();
+        let target = head.lines().next().and_then(|line| line.split_whitespace().nth(1)).unwrap_or("").to_string();
+        let ours = chatgpt_callback_matches(&target, state);
+        let (status, text) = if !ours {
+            ("400 Bad Request", "This is not the sign-in alpi is waiting for.")
+        } else if chatgpt_query_value(&target, "error").is_some() {
+            ("200 OK", "The sign-in was not completed. Go back to alpi.")
+        } else {
+            ("200 OK", "You can close this tab and go back to alpi, which is finishing the sign-in.")
+        };
+        let body = format!("<!doctype html><title>alpi</title><p>{text}</p>");
+        let _ = stream.write_all(
+            format!("HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes(),
+        );
+        if ours {
+            return Ok(target);
+        }
+    }
+}
+
+#[tauri::command]
+async fn chatgpt_sign_in(profile: String, connection_id: Option<String>) -> Result<serde_json::Value, String> {
+    off_main(move || {
+        // One connection for the whole attempt: the answer must reach the daemon that holds its secret, even if the user switches meanwhile.
+        let cid = connection_id.unwrap_or_else(host_client::active_connection_id);
+        let cancelled = chatgpt_new_attempt();
+        // The browser answers to this machine's loopback, so the app listens and hands the answer to the daemon, local or remote.
+        let listener = std::net::TcpListener::bind(("127.0.0.1", 1455))
+            .or_else(|_| std::net::TcpListener::bind(("127.0.0.1", 0)))
+            .map_err(|e| format!("could not open a local port for the sign-in: {e}"))?;
+        let port = listener.local_addr().map_err(|e| e.to_string())?.port();
+        let begun = host_client::call_for(&cid, "host.providers.chatgpt_begin", serde_json::json!({"profile": profile, "port": port}))?;
+        let url = begun.get("url").and_then(|v| v.as_str()).ok_or("the daemon returned no sign-in address")?.to_string();
+        // The daemon names the address and the app opens it: only OpenAI's sign-in may be opened on its word.
+        if !is_chatgpt_auth_url(&url) {
+            return Err("the daemon returned an address that is not OpenAI's sign-in".to_string());
+        }
+        let state = chatgpt_query_value(&url, "state").unwrap_or("").to_string();
+        tauri_plugin_opener::open_url(&url, None::<&str>).map_err(|e| format!("could not open the browser: {e}"))?;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(300);
+        let target = chatgpt_wait_for_callback(listener, &state, deadline, &cancelled)?;
+        // Sent once and given time: the daemon talks to OpenAI inside it, and a second send would find the attempt spent.
+        host_client::call_for_update(
+            &cid,
+            "host.providers.chatgpt_finish",
+            serde_json::json!({"profile": profile, "callback": format!("http://127.0.0.1:{port}{target}")}),
+        )
+    })
+    .await?
+}
+
+async fn chatgpt_call(
+    method: &'static str, params: serde_json::Value, connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    off_main(move || {
+        let cid = connection_id.unwrap_or_else(host_client::active_connection_id);
+        host_client::call_for_update(&cid, method, params)
+    })
+    .await?
+}
+
+#[tauri::command]
+async fn chatgpt_sign_out(profile: String, connection_id: Option<String>) -> Result<serde_json::Value, String> {
+    // An app sign-out forgets the registration too, so the next sign-in may use another ChatGPT account.
+    chatgpt_call("host.providers.chatgpt_logout", serde_json::json!({"profile": profile, "forget": true}), connection_id).await
+}
+
+#[tauri::command]
+async fn chatgpt_status(profile: String, connection_id: Option<String>) -> Result<serde_json::Value, String> {
+    chatgpt_call("host.providers.chatgpt_status", serde_json::json!({"profile": profile}), connection_id).await
+}
+
 #[tauri::command]
 async fn provider_set_key(
     profile: String, key: String, value: String, connection_id: Option<String>,
@@ -4255,6 +4402,10 @@ pub fn run() {
             activity_list,
             profile_create,
             profile_delete,
+            chatgpt_sign_in,
+            chatgpt_sign_in_cancel,
+            chatgpt_sign_out,
+            chatgpt_status,
             provider_set_key,
             provider_unset_key,
             provider_add_ollama,
@@ -4794,5 +4945,99 @@ mod workgroup_create_tests {
         let mut keys: Vec<&String> = params.as_object().unwrap().keys().collect();
         keys.sort();
         assert_eq!(keys, vec!["members", "name", "profile"]);
+    }
+}
+
+#[cfg(test)]
+mod chatgpt_callback_tests {
+    use super::{chatgpt_callback_matches, chatgpt_query_value, chatgpt_wait_for_callback, is_chatgpt_auth_url};
+    use std::io::{Read, Write};
+
+    #[test]
+    fn only_the_answer_that_carries_this_attempts_state_matches() {
+        assert!(chatgpt_callback_matches("/auth/callback?code=c&state=S1&client_id=x", "S1"));
+        assert!(!chatgpt_callback_matches("/auth/callback?code=c&state=other", "S1"));
+        assert!(!chatgpt_callback_matches("/auth/callback?code=c&xstate=S1", "S1"));
+        assert!(!chatgpt_callback_matches("/other?state=S1", "S1"));
+        assert!(!chatgpt_callback_matches("/auth/callback", "S1"));
+        assert!(!chatgpt_callback_matches("/auth/callback?state=", ""));
+        assert_eq!(chatgpt_query_value("https://auth.openai.com/a?x=1&state=abc-_9", "state"), Some("abc-_9"));
+    }
+
+    #[test]
+    fn the_listener_ignores_strangers_and_returns_the_real_answer() {
+        let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let browser = std::thread::spawn(move || {
+            let ask = |target: &str| {
+                let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+                stream.write_all(format!("GET {target} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n").as_bytes()).unwrap();
+                let mut reply = String::new();
+                let _ = stream.read_to_string(&mut reply);
+                reply
+            };
+            let forged = ask("/auth/callback?code=evil&state=forged");
+            let real = ask("/auth/callback?code=c&state=S1&client_id=oaiapp_1");
+            (forged, real)
+        });
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        let target = chatgpt_wait_for_callback(listener, "S1", deadline, &std::sync::atomic::AtomicBool::new(false)).unwrap();
+        let (forged, real) = browser.join().unwrap();
+        assert_eq!(target, "/auth/callback?code=c&state=S1&client_id=oaiapp_1");
+        assert!(forged.starts_with("HTTP/1.1 400") && real.starts_with("HTTP/1.1 200"));
+    }
+
+    #[test]
+    fn only_openais_sign_in_address_may_be_opened() {
+        assert!(is_chatgpt_auth_url("https://auth.openai.com/api/accounts/authorize?state=s"));
+        for bad in [
+            "https://auth.openai.com/", "https://auth.openai.com.evil.test/x", "http://auth.openai.com/x", "file:///Applications/x.app",
+            "smb://host/share", "https://auth.openai.com/a b", "https://auth.openai.com/a\nb", "",
+        ] {
+            assert!(!is_chatgpt_auth_url(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn an_answer_that_arrives_in_pieces_is_read_whole() {
+        let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let browser = std::thread::spawn(move || {
+            let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+            stream.write_all(b"GET /auth/callback?code=").unwrap();
+            stream.flush().unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(150));
+            let long = "c".repeat(12000);
+            stream.write_all(format!("{long}&state=S1&client_id=oaiapp_1 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n").as_bytes()).unwrap();
+            let mut reply = String::new();
+            let _ = stream.read_to_string(&mut reply);
+            reply
+        });
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        let target = chatgpt_wait_for_callback(listener, "S1", deadline, &std::sync::atomic::AtomicBool::new(false)).unwrap();
+        assert!(target.ends_with("&state=S1&client_id=oaiapp_1") && target.len() > 12000);
+        assert!(browser.join().unwrap().starts_with("HTTP/1.1 200"));
+    }
+
+    #[test]
+    fn the_wait_ends_at_its_deadline() {
+        let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(300);
+        assert!(chatgpt_wait_for_callback(listener, "S1", deadline, &std::sync::atomic::AtomicBool::new(false)).is_err());
+    }
+
+    #[test]
+    fn a_cancelled_wait_ends_at_once_and_a_new_attempt_cancels_the_one_before() {
+        let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let first = super::chatgpt_new_attempt();
+        let second = super::chatgpt_new_attempt();
+        assert!(first.load(std::sync::atomic::Ordering::SeqCst) && !second.load(std::sync::atomic::Ordering::SeqCst));
+        let started = std::time::Instant::now();
+        let deadline = started + std::time::Duration::from_secs(60);
+        let waited = chatgpt_wait_for_callback(listener, "S1", deadline, &first);
+        assert_eq!(waited.unwrap_err(), super::CHATGPT_SIGN_IN_CANCELLED);
+        assert!(started.elapsed() < std::time::Duration::from_secs(2));
+        super::chatgpt_sign_in_cancel();
+        assert!(second.load(std::sync::atomic::Ordering::SeqCst));
     }
 }

@@ -156,13 +156,22 @@ depends on your VRAM budget. Choose from current Qwen-coder, Gemma,
 codestral, or Mistral families. Expect more prompt sensitivity than
 cloud frontier models and tighter context windows.
 
+On an Ollama endpoint alpi asks for the context size itself on every request
+and budgets against the same number: the `PARAMETER num_ctx` of the model's
+Modelfile when it has one, otherwise the model's maximum capped at 32,768
+tokens. A model whose Modelfile sets nothing therefore runs at 32K even if it
+supports 128K or more; to give it a larger window, create a model with
+`PARAMETER num_ctx <size>` (`ollama create`) and select that one. alpi's own
+prompt and tool list take several thousand tokens, so a model limited to 4K or
+8K cannot run a profile.
+
 For privacy-constrained work that needs more headroom than your
 hardware allows, consider an open-weight cloud model like
 `nvidia/nemotron-3-super-120b-a12b` (256K) or
 `deepseek/deepseek-v4-pro-0813` (1M) — not local, but no proprietary
 frontier dependency.
 
-### Native routes for Anthropic and OpenAI
+### Native routes
 
 If you have ANTHROPIC_API_KEY or OPENAI_API_KEY, you can use native
 routes instead of the OpenRouter aliases. Native usually means lower
@@ -176,7 +185,24 @@ latency and one less layer to break.
 | Anthropic | `anthropic/claude-haiku-5.5` | `claude-haiku-5-5` |
 | OpenAI | `openai/gpt-6.2-astra` | `gpt-6.2-astra` |
 | OpenAI | `openai/gpt-6.2-sol` | `gpt-6.2-sol` |
+| OpenAI | `openai/gpt-6.1-terra` | `gpt-6.1-terra` |
 | OpenAI | `openai/gpt-6-luna` | `gpt-6-luna` |
+
+With GEMINI_API_KEY the pickers offer `gemini/gemini-4-carbon` (Google's
+strongest reasoning model), `gemini/gemini-4-neon`, `gemini/gemini-4-hydrogen`
+(everyday coding and agent work) and `gemini/gemini-3.5-flash-lite` (cheap,
+high volume), all with a 1M window; `model_reasoning.effort` sets their
+thinking level. With GROQ_API_KEY they offer
+`groq/openai/gpt-oss-120b` and `groq/openai/gpt-oss-20b`, 131K each. Read
+against Google's and Groq's model and deprecation pages on 2026-11-27: Gemini
+2.0 Flash is shut down, Gemini 2.5 Pro and 2.5 Flash shut down on 2026-12-01
+and Google then answers those ids with a different model, and the Llama, Qwen,
+DeepSeek and Kimi ids Groq used to serve are gone. A profile pinned to one of
+them needs a new model.
+
+With a ChatGPT sign-in (`alpi chatgpt login`, see [CONFIG.md](CONFIG.md#chatgpt-plan)) the pickers also offer
+the models of that ChatGPT plan as `chatgpt-plan/<model>`; they run against the plan's limits instead of an API
+key, and alpi records them at no cost.
 
 Claude refuses a forced tool call whenever it is thinking: always on Fable,
 Opus 5.5 and Sonnet 5.5, and on any current Claude model with an effort set. alpi
@@ -200,9 +226,13 @@ alpi never changes a profile's configured model; switch it yourself with
 Prompt caching is transparent and best-effort. Every supported provider and
 model still runs when caching is unavailable: alpi asks LiteLLM for an explicit
 cache marker only when that model reports support, and otherwise sends the
-normal request. OpenRouter routes additionally receive a hashed, stable
-conversation `session_id` to improve routing affinity; raw profile, session,
-peer, schedule, and workgroup identifiers are never sent.
+normal request. A direct OpenAI model at OpenAI's own endpoint and a direct
+Gemini model get no marker, because both cache a stable prefix by themselves:
+on OpenAI the marker would switch that off, and on Gemini it would create a
+separately billed cache object before every call. OpenRouter routes
+additionally receive a hashed, stable conversation `session_id` to improve
+routing affinity; raw profile, session, peer, schedule, and workgroup
+identifiers are never sent.
 
 Telemetry varies by provider and model. A reported zero is a measured cache
 miss; missing cache fields are `no provider cache data`, not a fabricated zero.
@@ -283,17 +313,17 @@ Three files, three jobs:
 - `alpi/providers/openrouter_models.yaml` maps every OpenRouter id to a safe
   input limit.
 - `alpi/providers/native_models.yaml` holds LiteLLM's public price-map entry
-  (window, prices, vision, tool and reasoning flags) for every curated OpenAI
-  and Anthropic model and every newer native chat model the installed
-  LiteLLM's bundled map lacks. alpi registers each entry LiteLLM does not know
+  (window, prices, vision, tool and reasoning flags) for every curated OpenAI,
+  Anthropic, Google and Groq model and every newer OpenAI or Anthropic chat
+  model the installed LiteLLM's bundled map lacks. alpi registers each entry LiteLLM does not know
   when it loads it, and LiteLLM runs on the map it ships
   (`LITELLM_LOCAL_MODEL_COST_MAP` defaults to true; set it to `False` to
   download the latest at each start), so a curated model newer than the
   installed LiteLLM keeps its window, cost and images, and a blocked download
   never touches startup.
 - `alpi/providers/curated_models.yaml` is the hand-picked picker list
-  (OpenRouter, OpenAI, Anthropic), edited by hand and mirrored in
-  `mobile/src/lib/curatedModels.js`.
+  (OpenRouter, OpenAI, Anthropic, Google, Groq), edited by hand; its OpenAI and
+  Anthropic lists are mirrored in `mobile/src/lib/curatedModels.js`.
 
 `python3 scripts/refresh_models.py` regenerates the first two (from
 `https://openrouter.ai/api/v1/models` and LiteLLM's price map; each keeps its
@@ -315,6 +345,6 @@ endpoint for its usage order, restricted to models that accept tools:
 
 Usage shows what to evaluate, not which model calls tools best.
 
-Anthropic and OpenAI move to their newest models in the curated list; older
-ids stay out of the pickers. The ordering parameters are not part of
+Anthropic, OpenAI, Google and Groq move to their newest models in the curated
+list; older ids stay out of the pickers. The ordering parameters are not part of
 OpenRouter's documented API, so check the result looks like a usage ranking.

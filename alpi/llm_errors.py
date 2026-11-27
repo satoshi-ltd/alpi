@@ -104,8 +104,31 @@ def _classify_request_error(text: str, status: int | None) -> str:
     return "bad_request"
 
 
+_PLAN_LIMIT = "subscription_sharing_usage_limit_exceeded"
+_PLAN_SIGN_IN = frozenset({"not_signed_in", "subscription_sharing_invalid_user"})
+
+
+def names_timeout(chain: list[BaseException]) -> bool:
+    return bool({type(item).__name__ for item in chain} & _TIMEOUT_NAMES) or any(isinstance(item, TimeoutError) for item in chain)
+
+
+def _plan_error(chain: list[BaseException]) -> BaseException | None:
+    return next((item for item in chain if type(item).__name__ in ("PlanError", "NotSignedIn") and hasattr(item, "retryable")), None)
+
+
 def classify(exc: BaseException) -> str:
     chain = _chain(exc)
+    plan = _plan_error(chain)
+    if plan is not None:
+        code = getattr(plan, "code", "")
+        if code == _PLAN_LIMIT:
+            return "insufficient_credit"
+        if code in _PLAN_SIGN_IN or getattr(plan, "status_code", None) == 401:
+            return "auth"
+        if code == "rate_limit_exceeded":
+            return "rate_limited"
+        if getattr(plan, "retryable", False) and not names_timeout(chain):
+            return "provider_unavailable"
     names = {type(item).__name__ for item in chain}
     status = _status(chain)
     text = " ".join(_text(item) for item in chain)
@@ -148,4 +171,8 @@ def classify(exc: BaseException) -> str:
 
 def explain(exc: BaseException) -> Explained:
     code = classify(exc)
+    plan = _plan_error(_chain(exc))
+    if plan is not None and code in ("insufficient_credit", "auth"):
+        # The generic sentences name an API key and credit; a plan needs the usage page or the sign-in command.
+        return Explained(code=code, message=" ".join(str(redact(_text(plan))).split())[:DETAIL_MAX_CHARS], detail=_detail(exc))
     return Explained(code=code, message=MESSAGES[code], detail=_detail(exc))

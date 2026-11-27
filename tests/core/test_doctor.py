@@ -1020,3 +1020,29 @@ def test_a_check_that_crashes_reports_itself_instead_of_the_report(tmp_path: Pat
 
     assert files.status == "warn"
     assert "record exploded" in files.detail
+
+
+def test_the_key_a_model_needs_is_named_for_groq_and_none_for_a_chatgpt_plan(tmp_path: Path) -> None:
+    from alpi import config as cfg_mod
+
+    cfg = cfg_mod.Config(home=tmp_path, model="groq/openai/gpt-oss-120b")
+    assert doctor._provider_api_key_var(cfg) == "GROQ_API_KEY"
+    cfg.model = "chatgpt-plan/gpt-6.2-sol"
+    assert doctor._provider_api_key_var(cfg) is None
+
+
+def test_a_plan_model_is_checked_for_its_sign_in_not_for_a_key(tmp_path: Path) -> None:
+    import json
+    import time
+
+    from alpi.providers import chatgpt
+
+    _write_cfg(tmp_path, model="chatgpt-plan/gpt-6.2-sol")
+    _write_env(tmp_path)
+    rows = {c.name: c for c in doctor.run_all(tmp_path, "default") if c.group == "Model"}
+    assert rows["ChatGPT sign-in"].status == "fail" and "alpi chatgpt login" in rows["ChatGPT sign-in"].detail and "API key" not in rows
+
+    chatgpt.record_path(tmp_path).parent.mkdir(parents=True, exist_ok=True)
+    chatgpt.record_path(tmp_path).write_text(json.dumps({"email": "a@example.com", "refresh_token": "r", "access_token": "a", "saved_at": time.time(), "expires_in": 3600, "scopes": [chatgpt.PLAN_SCOPE]}))
+    rows = {c.name: c for c in doctor.run_all(tmp_path, "default") if c.group == "Model"}
+    assert (rows["ChatGPT sign-in"].status, rows["ChatGPT sign-in"].detail) == ("ok", "a@example.com")

@@ -13,6 +13,7 @@ import { nextSheetValue } from '../../lib/sheet-value';
 import { useOllamaModels } from '../../hooks/useDaemonData';
 import { useEndpoint } from '../../lib/EndpointContext';
 import { noteFor } from '../../lib/curatedModels';
+import { modelProvider } from '../../lib/modelLabel';
 import { VOICE_SHORTLIST } from '../../lib/voices';
 import {
   currentlyPlayingVoice,
@@ -262,7 +263,7 @@ export function ModelSheet({
   }, [profileModels, ollama.data, ollamaServers, exclude]);
 
   // ollama/* first (local before cloud) matches desktop ProviderPickerForm order.
-  const KNOWN_ORDER = ['anthropic', 'openai', 'openrouter', 'gemini'];
+  const KNOWN_ORDER = ['anthropic', 'openai', 'openrouter', 'gemini', 'groq'];
   const allKeys = Object.keys(groups);
   const ollamaCats = allKeys.filter((k) => k.startsWith('ollama/')).sort();
   const knownCloud = KNOWN_ORDER.filter((k) => allKeys.includes(k));
@@ -340,7 +341,7 @@ export function ModelSheet({
         ) : (
           cats.map((cat) => (
             <View key={cat}>
-              <SectionHeader>{cat}</SectionHeader>
+              <SectionHeader>{cat.startsWith('ollama/') ? cat : modelProvider(`${cat}/x`) || cat}</SectionHeader>
               {groups[cat].map((m, i) => {
                 const tag = noteFor(m);
                 const labelText = m.includes('/') ? m.split('/').slice(1).join('/') : m;

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import contextlib
+import contextvars
+import json
 import time
 from dataclasses import dataclass
 from typing import Iterable
@@ -12,10 +15,12 @@ from alpi.providers.base import ModelInfo, Provider
 
 DEFAULT_URL = "http://localhost:11434"
 
-_IS_OLLAMA_CACHE: dict[str, bool] = {}
 _NUM_CTX_CACHE: dict[tuple[str, str], int] = {}
+_NUM_CTX_MISS: dict[tuple[str, str], float] = {}
+_TURN_SIZES: contextvars.ContextVar[dict[tuple[str, str], int] | None] = contextvars.ContextVar("alpi_ollama_turn_sizes", default=None)
 _THINKING_CACHE: dict[tuple[str, str], tuple[bool, float]] = {}
 _THINKING_MISS_TTL = 30.0
+_NUM_CTX_MISS_TTL = 30.0
 _DEFAULT_NUM_CTX = 32768
 
 
@@ -77,30 +82,36 @@ def _root(base_url: str) -> str:
     return url
 
 
-def is_ollama(base_url: str) -> bool:
-    if not base_url:
-        return False
-    if base_url in _IS_OLLAMA_CACHE:
-        return _IS_OLLAMA_CACHE[base_url]
-    ok = False
+@contextlib.contextmanager
+def one_size_per_turn():
+    token = _TURN_SIZES.set({})
     try:
-        with httpx.Client(timeout=1.0) as client:
-            r = client.get(_root(base_url) + "/api/tags")
-            ok = r.status_code == 200 and "models" in (r.json() or {})
-    except Exception:
-        ok = False
-    _IS_OLLAMA_CACHE[base_url] = ok
-    return ok
+        yield
+    finally:
+        _TURN_SIZES.reset(token)
 
 
 def resolve_num_ctx(base_url: str, model: str) -> int:
-    key = (base_url, model)
+    key = (_root(base_url), model)
+    turn = _TURN_SIZES.get()
+    if turn is None:
+        return _num_ctx(key)
+    # The compaction check and the request of one turn must agree, even when a failed lookup recovers between them.
+    if key not in turn:
+        turn[key] = _num_ctx(key)
+    return turn[key]
+
+
+def _num_ctx(key: tuple[str, str]) -> int:
+    model = key[1]
     if key in _NUM_CTX_CACHE:
         return _NUM_CTX_CACHE[key]
+    if time.monotonic() - _NUM_CTX_MISS.get(key, float("-inf")) < _NUM_CTX_MISS_TTL:
+        return _DEFAULT_NUM_CTX
     value = _DEFAULT_NUM_CTX
     try:
         with httpx.Client(timeout=2.0) as client:
-            r = client.post(_root(base_url) + "/api/show", json={"name": model})
+            r = client.post(key[0] + "/api/show", json={"name": model})
             r.raise_for_status()
             data = r.json() or {}
         params = data.get("parameters", "") or ""
@@ -113,10 +124,13 @@ def resolve_num_ctx(base_url: str, model: str) -> int:
             info = data.get("model_info", {}) or {}
             for k, v in info.items():
                 if k.endswith(".context_length") and isinstance(v, int):
-                    value = v
+                    # The model's maximum is a memory budget the host may not have; only a Modelfile num_ctx goes past the default.
+                    value = min(v, _DEFAULT_NUM_CTX)
                     break
     except Exception:
-        pass
+        # Never pinned: the size is sent to the server, so a guess kept for the process would outlive the outage.
+        _NUM_CTX_MISS[key] = time.monotonic()
+        return _DEFAULT_NUM_CTX
     _NUM_CTX_CACHE[key] = value
     return value
 
@@ -136,3 +150,40 @@ def supports_thinking(base_url: str, model: str) -> bool:
         pass
     _THINKING_CACHE[key] = (value, time.monotonic())
     return value
+
+
+def litellm_id(model: str) -> str:
+    from alpi.llm import litellm_ready
+    litellm = litellm_ready()
+    full = f"ollama_chat/{model}"
+    # LiteLLM asks localhost:11434 about an unlisted Ollama model on every capability check and call, and register_model asks too.
+    litellm.model_cost.setdefault(full, {
+        "litellm_provider": "ollama_chat", "mode": "chat",
+        "input_cost_per_token": 0.0, "output_cost_per_token": 0.0,
+    })
+    return full
+
+
+def _wire_call(call: dict) -> dict:
+    function = dict(call["function"]) if isinstance(call.get("function"), dict) else {}
+    arguments = function.get("arguments")
+    try:
+        parsed = arguments if isinstance(arguments, dict) else json.loads(arguments or "")
+    except (TypeError, ValueError):
+        parsed = None
+    function["arguments"] = json.dumps(parsed) if isinstance(parsed, dict) else "{}"
+    return {**call, "type": "function", "function": function}
+
+
+def call_kwargs(kwargs: dict) -> dict:
+    model = str(kwargs.get("model") or "")
+    base = kwargs.get("api_base")
+    if not base or not model.startswith("ollama_chat/"):
+        return kwargs
+    # LiteLLM's Ollama route parses every stored tool call and fails the request on one that is not a typed JSON object.
+    messages = [
+        {**m, "tool_calls": [_wire_call(c) for c in m["tool_calls"] if isinstance(c, dict)]}
+        if isinstance(m, dict) and isinstance(m.get("tool_calls"), list) and m["tool_calls"] else m
+        for m in kwargs.get("messages") or []
+    ]
+    return {**kwargs, "messages": messages, "num_ctx": resolve_num_ctx(base, model.split("/", 1)[1])}

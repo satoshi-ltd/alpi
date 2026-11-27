@@ -67,3 +67,10 @@ def test_remove_openrouter_model(monkeypatch, tmp_path: Path) -> None:
         cli.main, ["providers", "remove-openrouter-model", "nope/x"]
     )
     assert miss.exit_code != 0
+
+
+def test_an_empty_key_name_never_resolves_to_the_provider_that_has_no_key() -> None:
+    from alpi import model_selector
+
+    assert model_selector.model_prefix_for_env_key("") == ""
+    assert model_selector.model_prefix_for_env_key("GEMINI_API_KEY") == "gemini"

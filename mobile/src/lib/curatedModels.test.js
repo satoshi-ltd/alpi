@@ -42,7 +42,7 @@ describe('openai catalog', () => {
   const ids = CURATED_BY_PROVIDER.openai.map((m) => m.id);
 
   it('is the newest GPT-6 family, not the superseded GPT-6 and GPT-6.1 tiers', () => {
-    expect(ids).toEqual(['gpt-6.2-astra', 'gpt-6.2-sol', 'gpt-6-luna']);
+    expect(ids).toEqual(['gpt-6.2-astra', 'gpt-6.2-sol', 'gpt-6.1-terra', 'gpt-6-luna']);
   });
 });
 

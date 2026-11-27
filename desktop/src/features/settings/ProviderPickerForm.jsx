@@ -3,10 +3,26 @@ import { invoke } from "@tauri-apps/api/core";
 import { ActionLink, Eyebrow, Field } from "../../primitives/index.js";
 import Dropdown from "../../primitives/Dropdown.jsx";
 import { PAID_PROVIDERS } from "./util.js";
+import { openExternal } from "../../lib/openExternal.js";
 import styles from "./ProviderPickerForm.module.css";
 
 // Ordered by how often a profile actually needs them, not alphabetically.
-const PROVIDER_ORDER = ["ollama", "openrouter", "anthropic", "openai", "gemini"];
+const PROVIDER_ORDER = ["ollama", "openrouter", "anthropic", "openai", "chatgpt-plan", "gemini", "groq"];
+export const CHATGPT_PLAN = { id: "chatgpt-plan", label: "ChatGPT plan" };
+export const CHATGPT_USAGE_URL = "https://chatgpt.com/settings/usage";
+export const SIGN_IN_CANCELLED = "sign-in cancelled";
+const PLAN_DECLINED = "Plan use was declined. Sign in again to allow it.";
+
+// A daemon error reaches the app as "alp <code>: <name> — <what happened>"; people only need the last part.
+export function daemonMessage(error) {
+  const text = String(error?.message ?? error ?? "").replace(/^Error:\s*/, "");
+  const at = text.lastIndexOf(" — ");
+  return at >= 0 ? text.slice(at + 3) : text;
+}
+
+export function signInCancelled(error) {
+  return String(error?.message ?? error ?? "").includes(SIGN_IN_CANCELLED);
+}
 
 function plural(n, word) {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -16,7 +32,9 @@ const PROVIDER_OPTIONS = PROVIDER_ORDER.map(
   (id) =>
     id === "ollama"
       ? { id: "ollama", label: "Ollama" }
-      : PAID_PROVIDERS.find((p) => p.id === id),
+      : id === CHATGPT_PLAN.id
+        ? CHATGPT_PLAN
+        : PAID_PROVIDERS.find((p) => p.id === id),
 ).filter(Boolean);
 
 export function providerHint(
@@ -27,11 +45,17 @@ export function providerHint(
     providerCatalog,
     ollamaModelCount = 0,
     ollamaEndpointCount = 0,
+    chatgpt,
   } = {},
 ) {
   if (id === "ollama") {
     if (!ollamaEndpointCount) return "local · no API key";
     return `local · ${plural(ollamaModelCount, "model")}`;
+  }
+  if (id === CHATGPT_PLAN.id) {
+    if (chatgpt?.signed_in) return [plural(chatgpt.models ?? 0, "model"), chatgpt.email || "signed in"].join(" · ");
+    if (chatgpt?.plan_declined) return "plan use declined";
+    return "needs sign-in";
   }
   const meta = PAID_PROVIDERS.find((p) => p.id === id);
   if (!meta) return "";
@@ -50,6 +74,7 @@ export function defaultProviderValue() {
 
 export function isProviderValueValid(value, { configuredEnvs } = {}) {
   if (!value) return false;
+  if (value.id === CHATGPT_PLAN.id) return true;
   if (value.id === "ollama") {
     const name = (value.name || "").trim();
     const url = (value.url || "").trim();
@@ -69,6 +94,12 @@ export async function applyProvider(profile, value, { currentModel } = {}) {
     const url = value.url.trim().replace(/\/$/, "");
     await invoke("provider_add_ollama", { profile, name, url });
     return `Ollama @${name} added`;
+  }
+  if (value.id === CHATGPT_PLAN.id) {
+    const out = await invoke("chatgpt_sign_in", { profile });
+    if (!out?.signed_in) throw new Error(PLAN_DECLINED);
+    const who = out.email || "your account";
+    return out.first_sign_in ? `You're using your ChatGPT plan · ${who}` : `Signed in as ${who}`;
   }
   const meta = PAID_PROVIDERS.find((p) => p.id === value.id);
   const trimmedKey = (value.keyValue || "").trim();
@@ -108,16 +139,24 @@ export default function ProviderPickerForm({
   ollamaModelCount = 0,
   ollamaEndpointCount = 0,
   providerCatalog,
+  chatgpt,
+  signingIn = false,
 }) {
   const [manualModel, setManualModel] = useState(false);
   const v = value ?? defaultProviderValue();
   const isOllama = v.id === "ollama";
   const isOpenRouter = v.id === "openrouter";
-  const meta = !isOllama ? PAID_PROVIDERS.find((p) => p.id === v.id) : null;
+  const isChatGPT = v.id === CHATGPT_PLAN.id;
+  const meta = !isOllama && !isChatGPT ? PAID_PROVIDERS.find((p) => p.id === v.id) : null;
+  // A daemon that predates the sign-in sends no state for it, and the option stays out.
+  const options = PROVIDER_OPTIONS.filter((p) => p.id !== CHATGPT_PLAN.id || chatgpt != null);
 
   function pick(id) {
+    if (signingIn) return;
     if (id === "ollama") {
       onChange({ id: "ollama", name: "", url: "http://localhost:11434" });
+    } else if (id === CHATGPT_PLAN.id) {
+      onChange({ id });
     } else {
       onChange({ id, keyValue: "", model: id === "openrouter" ? "" : undefined });
     }
@@ -130,7 +169,7 @@ export default function ProviderPickerForm({
   return (
     <div className={styles.root}>
       <Dropdown
-        trigger={{ label: PROVIDER_OPTIONS.find((p) => p.id === v.id)?.label ?? "Provider" }}
+        trigger={{ label: options.find((p) => p.id === v.id)?.label ?? "Provider" }}
         direction="down"
         align="left"
         width={260}
@@ -139,7 +178,7 @@ export default function ProviderPickerForm({
       >
         {({ close }) => (
           <>
-            {PROVIDER_OPTIONS.map((p) => (
+            {options.map((p) => (
               <Dropdown.Row
                 key={p.id}
                 onClick={() => {
@@ -152,6 +191,7 @@ export default function ProviderPickerForm({
                   providerCatalog,
                   ollamaModelCount,
                   ollamaEndpointCount,
+                  chatgpt,
                 })}
                 active={p.id === v.id}
               >
@@ -162,10 +202,24 @@ export default function ProviderPickerForm({
         )}
       </Dropdown>
 
-      {isOllama ? (
+      {isChatGPT ? (
+        chatgpt?.signed_in ? (
+          <div className={styles.field}>
+            <span className={styles.labelRow}>
+              <Eyebrow>Account</Eyebrow>
+              <ActionLink onClick={() => openExternal(CHATGPT_USAGE_URL).catch(() => {})}>Manage usage</ActionLink>
+            </span>
+            <Field value={chatgpt.email || "Signed in"} readOnly aria-label="ChatGPT account" />
+          </div>
+        ) : (
+          <p className={styles.note}>
+            {signingIn ? "Waiting for your browser…" : chatgpt?.plan_declined ? PLAN_DECLINED : "Opens your browser to sign in."}
+          </p>
+        )
+      ) : isOllama ? (
         <div className={styles.grid}>
           <div className={styles.field}>
-            <Eyebrow>NAME</Eyebrow>
+            <Eyebrow>Name</Eyebrow>
             <Field
               value={v.name ?? ""}
               onChange={(e) => patch({ name: e.target.value.toLowerCase() })}
@@ -187,7 +241,7 @@ export default function ProviderPickerForm({
       ) : (
         <>
           <div className={styles.field}>
-            <Eyebrow>{meta.env}</Eyebrow>
+            <Eyebrow>API key</Eyebrow>
             <Field
               type="password"
               value={v.keyValue ?? ""}
@@ -204,7 +258,7 @@ export default function ProviderPickerForm({
           {isOpenRouter && (
             <div className={styles.field}>
               <span className={styles.labelRow}>
-                <Eyebrow>MODEL</Eyebrow>
+                <Eyebrow>Model</Eyebrow>
                 {savedOpenRouterModels.length > 0 && (
                   <ActionLink onClick={() => {
                     setManualModel((on) => !on);

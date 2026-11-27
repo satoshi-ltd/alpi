@@ -208,7 +208,7 @@ export function PublicRouteField({ onLoadingChange = null }) {
         {mounted && (
           <div className={`${closing ? "anim-menu-out" : "anim-menu"} ${styles.popover} ${styles.networkPopover}`} inert={closing || undefined}>
             <div className={styles.field}>
-              <Eyebrow as="label">public WSS route</Eyebrow>
+              <Eyebrow as="label">Public WSS route</Eyebrow>
               <Field
                 className={styles.input}
                 value={value}
@@ -363,7 +363,7 @@ export function NetworkAddressField({ profile, onSaved, onLoadingChange = null }
         {open && (
           <div className={styles.popover}>
             <div className={styles.field}>
-              <Eyebrow as="label">port</Eyebrow>
+              <Eyebrow as="label">Port</Eyebrow>
               <Field
                 className={styles.input}
                 value={port}
@@ -454,7 +454,7 @@ export function PairingNameField({ onLoadingChange = null }) {
         {open && (
           <div className={styles.popover}>
             <div className={styles.field}>
-              <Eyebrow as="label">instance name</Eyebrow>
+              <Eyebrow as="label">Instance name</Eyebrow>
               <Field
                 className={styles.input}
                 value={name}

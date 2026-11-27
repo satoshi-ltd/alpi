@@ -90,11 +90,11 @@ function McpDetailModal({ profile, connectionId, mcp, onClose, onRemoved }) {
   return (
     <Modal title={`MCP · ${mcp.name}`} onClose={onClose} closeButton>
       <div className={styles.field}>
-        <Eyebrow as="label">command</Eyebrow>
+        <Eyebrow as="label">Command</Eyebrow>
         <span className={styles.mono}>{mcp.command || "No command"}</span>
       </div>
       <div className={styles.field}>
-        <Eyebrow as="label">args</Eyebrow>
+        <Eyebrow as="label">Args</Eyebrow>
         <span className={styles.mono}>
           {(mcp.args ?? []).length === 0
             ? EMPTY.mcpArgs.title
@@ -102,7 +102,7 @@ function McpDetailModal({ profile, connectionId, mcp, onClose, onRemoved }) {
         </span>
       </div>
       <div className={styles.field}>
-        <Eyebrow as="label">env</Eyebrow>
+        <Eyebrow as="label">Env</Eyebrow>
         <span className={styles.inlineRow}>
           {(mcp.env_keys ?? []).length === 0 ? (
             <span className={styles.muted}>{EMPTY.mcpEnv.title}</span>
@@ -115,7 +115,7 @@ function McpDetailModal({ profile, connectionId, mcp, onClose, onRemoved }) {
       </div>
       <div className={styles.field}>
         <Eyebrow as="label">
-          tools{Array.isArray(tools) && tools.length ? ` · ${tools.length}` : ""}
+          Tools{Array.isArray(tools) && tools.length ? ` · ${tools.length}` : ""}
         </Eyebrow>
         {tools === null ? (
           <span className={styles.muted}>handshaking with server…</span>
@@ -203,7 +203,7 @@ function McpAddModal({ profile, connectionId, existingNames, onClose, onSaved })
         <code>GITHUB_TOKEN=ghp_…</code>.
       </div>
       <div className={styles.field}>
-        <Eyebrow as="label">name</Eyebrow>
+        <Eyebrow as="label">Name</Eyebrow>
         <Field
           className={`${styles.input} ${styles.inputFull}`}
           value={name}
@@ -221,7 +221,7 @@ function McpAddModal({ profile, connectionId, existingNames, onClose, onSaved })
         )}
       </div>
       <div className={styles.field}>
-        <Eyebrow as="label">command</Eyebrow>
+        <Eyebrow as="label">Command</Eyebrow>
         <Field
           className={`${styles.input} ${styles.inputFull}`}
           value={command}
@@ -231,7 +231,7 @@ function McpAddModal({ profile, connectionId, existingNames, onClose, onSaved })
         />
       </div>
       <div className={styles.field}>
-        <Eyebrow as="label">args</Eyebrow>
+        <Eyebrow as="label">Args</Eyebrow>
         <Field
           className={`${styles.input} ${styles.inputFull}`}
           value={args}
@@ -241,7 +241,7 @@ function McpAddModal({ profile, connectionId, existingNames, onClose, onSaved })
         />
       </div>
       <div className={styles.field}>
-        <Eyebrow as="label">env (KEY=VALUE per line)</Eyebrow>
+        <Eyebrow as="label">Env (KEY=VALUE per line)</Eyebrow>
         <Textarea
           className={`${styles.textarea} ${styles.inputFull}`}
           rows={3}

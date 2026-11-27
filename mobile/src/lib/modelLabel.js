@@ -1,1 +1,1 @@
-export { modelLabel, modelProvider } from "../../../common/modelLabel.mjs";
+export { modelLabel, modelProvider, runsOnPlan } from "../../../common/modelLabel.mjs";

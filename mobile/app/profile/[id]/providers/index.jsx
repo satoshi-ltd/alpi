@@ -10,6 +10,7 @@ import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useBack } from '../../../../src/hooks/useBack';
 import { useOllamaModels } from '../../../../src/hooks/useDaemonData';
 import { useProfile } from '../../../../src/hooks/useSubject';
+import { chatgptRow } from '../../../../src/lib/chatgptPlan';
 import { CLOUD_PROVIDERS } from '../../../../src/lib/providers';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 import { SkeletonBar } from '../../../../src/components/SkeletonBar';
@@ -25,6 +26,7 @@ export default function ProvidersList() {
   const providerKeys = profile?.provider_keys ?? [];
   const ollamas = profile?.provider_ollama ?? [];
   const keySet = new Set(providerKeys.map((k) => k.env));
+  const chatgpt = chatgptRow(profile?.provider_chatgpt);
 
   // Models are prefixed `<ollama-name>/<model:tag>` (alpi/host/device_state.py::_ollama_models). Build a per-server count map so each row can label its reachable count without re-fetching.
   const modelsByName = useMemo(() => {
@@ -95,6 +97,17 @@ export default function ProvidersList() {
                   value={set ? <Pill tone="on">set</Pill> : <Pill off>not set</Pill>}
                   onPress={() => router.push(`/profile/${id}/providers/${p.id}`)}
                 />
+                {p.id === 'openai' && chatgpt ? (
+                  <>
+                    <RowSeparator />
+                    <Row
+                      label="ChatGPT plan"
+                      helper={chatgpt.helper}
+                      value={chatgpt.on ? <Pill tone="on">{chatgpt.pill}</Pill> : <Pill off>{chatgpt.pill}</Pill>}
+                      onPress={() => router.push(`/profile/${id}/providers/chatgpt`)}
+                    />
+                  </>
+                ) : null}
               </View>
             );
           })}

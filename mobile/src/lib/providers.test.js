@@ -9,6 +9,7 @@ describe('CLOUD_PROVIDERS', () => {
       ['openai', 'OpenAI', 'OPENAI_API_KEY', 'sk-…', 'platform.openai.com'],
       ['openrouter', 'OpenRouter', 'OPENROUTER_API_KEY', 'sk-or-…', 'openrouter.ai'],
       ['gemini', 'Gemini', 'GEMINI_API_KEY', 'AIza…', 'aistudio.google.com'],
+      ['groq', 'Groq', 'GROQ_API_KEY', 'gsk_…', 'console.groq.com'],
     ]);
   });
 });

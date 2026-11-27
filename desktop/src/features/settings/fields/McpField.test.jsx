@@ -42,12 +42,12 @@ describe("McpField — every daemon call is scoped to the connection", () => {
     const profile = { name: "work", mcps: [{ name: "fs", command: "uvx", args: [], env_keys: [] }] };
     render(<McpField profile={profile} connectionId={CONN} onSaved={() => {}} />);
     await act(async () => { fireEvent.click(screen.getByText("fs")); });
-    expect(screen.getByText("command")).toBeInTheDocument();
+    expect(screen.getByText("Command")).toBeInTheDocument();
 
     const closeBtn = screen.getByRole("button", { name: "Close" });
     expect(closeBtn).not.toHaveTextContent("Close");
     await act(async () => { fireEvent.click(closeBtn); });
-    expect(screen.queryByText("command")).toBeNull();
+    expect(screen.queryByText("Command")).toBeNull();
   });
 
   it("mcp_add carries connectionId", async () => {

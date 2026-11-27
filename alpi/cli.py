@@ -1066,6 +1066,96 @@ def _require_workspace(h: Path) -> None:
         )
 
 
+@main.group("chatgpt")
+def chatgpt_group() -> None:
+    """Use a ChatGPT plan for this profile's model requests (Sign in with ChatGPT)."""
+
+
+@chatgpt_group.command("login")
+@click.option("--no-browser", is_flag=True, help="Print the sign-in address instead of opening a browser.")
+@click.option("--paste", is_flag=True, help="For a machine without a browser: open the address anywhere, then paste the address it ends on.")
+@click.pass_context
+def chatgpt_login(ctx: click.Context, no_browser: bool, paste: bool) -> None:
+    """Continue with ChatGPT: sign in from this machine's browser and save the credential for this profile."""
+    from alpi import model_selector
+    from alpi.providers import chatgpt
+
+    if paste:
+        attempt = chatgpt.begin(ctx.obj["home"], chatgpt.CALLBACK_PORT)
+        click.echo("Open this address in a browser on any device and sign in:")
+        click.echo(attempt.shown_url)
+        click.echo("The browser ends on a page that does not load (http://127.0.0.1:…/auth/callback?…). That is expected.")
+        answer = click.prompt("Paste the whole address it ended on", hide_input=False)
+        try:
+            chatgpt.finish(ctx.obj["home"], attempt, chatgpt.pasted_callback(answer))
+        except chatgpt.PlanError as exc:
+            raise click.ClickException(str(exc)) from exc
+    elif not model_selector.sign_in_with_chatgpt(ctx.obj["home"], open_browser=not no_browser):
+        raise SystemExit(1)
+    model = chatgpt.give_a_model(ctx.obj["home"])
+    if model:
+        click.echo(f"model set to {model}")
+    _chatgpt_status(ctx.obj["home"])
+
+
+@chatgpt_group.command("status")
+@click.option("--refresh", is_flag=True, help="Ask ChatGPT for the account's current model list.")
+@click.pass_context
+def chatgpt_status(ctx: click.Context, refresh: bool) -> None:
+    """Show the saved ChatGPT sign-in and the models its plan offers."""
+    from alpi.providers import chatgpt
+
+    if refresh:
+        try:
+            rows = chatgpt.refresh_models(ctx.obj["home"])
+        except chatgpt.PlanError as exc:
+            raise click.ClickException(str(exc)) from exc
+        if not rows:
+            click.echo("ChatGPT did not return a model list; showing the last one saved.")
+    _chatgpt_status(ctx.obj["home"])
+
+
+@chatgpt_group.command("logout")
+@click.option("--forget", is_flag=True, help="Also delete the registration, so the next sign-in registers alpi again.")
+@click.pass_context
+def chatgpt_logout(ctx: click.Context, forget: bool) -> None:
+    """End the ChatGPT session of this profile and delete its tokens."""
+    from alpi.providers import chatgpt
+
+    if not chatgpt.load(ctx.obj["home"]):
+        click.echo("not signed in")
+        return
+    had_session = bool(chatgpt.load(ctx.obj["home"]).get("refresh_token"))
+    revoked = chatgpt.logout(ctx.obj["home"], forget=forget)
+    click.echo("signed out; the tokens are deleted from this machine" if had_session else "no session was open; the registration is " + ("deleted" if forget else "kept"))
+    from alpi import config as cfg_mod
+
+    cfg = cfg_mod.load(ctx.obj["home"])
+    if cfg.model.startswith(chatgpt.PREFIX + "/"):
+        cfg.model = ""
+        cfg_mod.save(cfg)
+        click.echo("this profile's model ran on the plan and is now unset; pick one with `alpi setup`")
+    if not revoked:
+        click.echo(f"OpenAI did not confirm the revocation. Disconnect alpi in ChatGPT settings: {chatgpt.USAGE_URL}")
+
+
+def _chatgpt_status(profile_home: Path) -> None:
+    from alpi.providers import chatgpt
+
+    record = chatgpt.load(profile_home)
+    if not chatgpt.signed_in(profile_home):
+        saved = f" (last account: {record['email']})" if record.get("email") else ""
+        click.echo(f"not signed in{saved}. Run `alpi chatgpt login`.")
+        return
+    click.echo(f"Using ChatGPT plan · {record.get('email') or 'account without an email'}")
+    click.echo(f"Manage usage: {chatgpt.USAGE_URL}")
+    rows = chatgpt.models(profile_home)
+    for row in rows:
+        click.echo(f"  {chatgpt.PREFIX}/{row['slug']}  {row['display_name']}")
+    if not rows:
+        click.echo("  no models listed; run `alpi chatgpt status --refresh`")
+
+
 @main.group()
 def daemon() -> None:
     """The alpi daemon — one supervisor for every profile under ``~/.alpi``."""

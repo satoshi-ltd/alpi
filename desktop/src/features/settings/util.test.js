@@ -41,6 +41,16 @@ describe("providerPills", () => {
     ]);
   });
 
+  it("shows the ChatGPT plan only while it is signed in", () => {
+    const keys = { provider_keys: [{ env: "OPENAI_API_KEY" }] };
+    expect(providerPills({ ...keys, provider_chatgpt: { signed_in: true, email: "a@example.com" } })).toEqual([
+      { label: "openai", error: null },
+      { label: "chatgpt", error: null },
+    ]);
+    expect(providerPills({ ...keys, provider_chatgpt: { signed_in: false } })).toEqual([{ label: "openai", error: null }]);
+    expect(providerPills(keys)).toEqual([{ label: "openai", error: null }]);
+  });
+
   it("attaches the failure detail to the matching ollama pill only", () => {
     const profile = {
       provider_keys: [{ env: "OPENROUTER_API_KEY" }],

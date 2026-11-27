@@ -29,11 +29,24 @@ describe("modelProvider", () => {
     expect(modelProvider("ollama_chat/llama3:8b")).toBe("Ollama");
     expect(modelProvider("groq/llama-4")).toBe("Groq");
     expect(modelProvider("gemini/gemini-4-neon")).toBe("Google");
+    expect(modelProvider("chatgpt-plan/gpt-6.2-sol")).toBe("ChatGPT plan");
   });
 
   it("shows an unknown prefix as written and nothing for a bare name", () => {
     expect(modelProvider("bedrock/anthropic.claude-opus-5-5")).toBe("bedrock");
     expect(modelProvider("gpt-oss:20b")).toBe("");
     expect(modelProvider(null)).toBe("");
+  });
+});
+
+describe("runsOnPlan", () => {
+  it("is true only for a model of the ChatGPT plan", async () => {
+    const { PLAN_BUDGET_HINT, runsOnPlan } = await import("./modelLabel.js");
+    expect(runsOnPlan("chatgpt-plan/gpt-6.2-sol")).toBe(true);
+    expect(runsOnPlan(" ChatGPT-Plan/gpt-6-luna")).toBe(true);
+    for (const model of ["openai/gpt-6.2-sol", "openrouter/openai/gpt-6.2-sol", "chatgpt-plan", "", null, undefined]) {
+      expect(runsOnPlan(model)).toBe(false);
+    }
+    expect(PLAN_BUDGET_HINT).toBe("ChatGPT plan turns are not counted.");
   });
 });

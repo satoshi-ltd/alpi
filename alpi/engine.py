@@ -446,7 +446,9 @@ class Engine:
         run_id: str | None = None,
     ) -> None:
         """Run one serialized turn and bind its execution context."""
-        with self._turn_lock:
+        from alpi.providers.ollama import one_size_per_turn
+
+        with self._turn_lock, one_size_per_turn():
             self._run_turn_serialized(
                 user_text, emit, source=source,
                 persist_inflight=persist_inflight, attachments=attachments,

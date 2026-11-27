@@ -559,13 +559,13 @@ export default function WorkgroupView({
       {banners}
       {awaitingRun && !knownChain && (
         <div className={styles.pipeline} data-testid="pipeline-loading">
-          <Eyebrow className={styles.pipelineLabel}>pipeline</Eyebrow>
+          <Eyebrow className={styles.pipelineLabel}>Pipeline</Eyebrow>
           <PipelinePlaceholder count={declared[0]?.phases.length} label="Loading the pipeline" />
         </div>
       )}
       {shownChips && (
         <div className={styles.pipeline} data-testid="pipeline-strip" data-pending={pendingChain ? "" : undefined}>
-          <Eyebrow className={styles.pipelineLabel}>pipeline</Eyebrow>
+          <Eyebrow className={styles.pipelineLabel}>Pipeline</Eyebrow>
           <PipelineStages
             chips={shownChips}
             profileOf={profileOf}

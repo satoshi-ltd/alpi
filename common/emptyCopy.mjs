@@ -1,5 +1,5 @@
 export const EMPTY = {
-  providers: { title: "No providers yet", hint: "Add an API key or a local Ollama to pick models." },
+  providers: { title: "No providers yet", hint: "Add a provider to pick models." },
   models: { title: "No models yet", hint: "Add a provider first." },
   email: { title: "No email accounts yet", hint: "Connect one so the agent can read and send mail." },
   mcp: { title: "No MCP servers yet", hint: "Add one to give the agent external tools." },

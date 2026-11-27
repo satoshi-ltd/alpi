@@ -248,6 +248,23 @@ not reach.
   process environment, so profiles supervised by one daemon cannot leak
   credentials into each other.
 
+- **ChatGPT plan sign-in.** A profile that signs in with ChatGPT keeps its
+  OAuth tokens in `secrets/chatgpt.json` (0600), inside the `secrets/` area
+  the file tools and the terminal's path checks never open. The macOS sandbox
+  denies reading, writing and renaming it, in the root home and in every
+  profile, when the home is the default `~/.alpi`; with another home name, and
+  on Linux (whose sandbox binds the whole home), only the application guards
+  stand between a command and the file, as with `.env`.
+  `secrets/` is git-ignored in the config repository. The ID token is
+  verified against OpenAI's published keys before tokens are saved, a
+  returning sign-in may not change the account or the registration, and
+  access and refresh tokens never appear in an address or a log. The sign-in
+  address the browser opens can carry the previous ID token as a hint; the
+  copy alpi prints leaves it out, and neither is logged.
+  The profile's requests go to `api.openai.com` with that token and
+  `store: false`. Anyone who can read the file can spend the plan until the
+  owner disconnects alpi in ChatGPT settings.
+
 - **ALP envelope binding.** Beyond signature and replay checks, the
   receiver pins `alp.to` to its own identity and the caller pins the
   response's `alp.from` and `id` to the request, so a trusted peer cannot

@@ -113,3 +113,40 @@ async def test_status_line_keeps_the_diamond_without_truecolor(tui_profile_home,
         await pilot.pause()
         assert app.status_line.plain.startswith("◆ ")
         assert list_row.row_text("m", "", width=4, active=True, accent="#fff").plain.startswith("◆ ")
+
+
+def test_the_header_asks_for_each_model_window_once(tui_home, monkeypatch) -> None:
+    from alpi import ctx_window
+
+    asked: list[str] = []
+    monkeypatch.setattr(ctx_window, "resolve", lambda home, cfg, model: asked.append(model) or 8192)
+    app = AlpiApp(home_dir=tui_home)
+
+    sizes = [app._resolve_ctx_window(model) for model in ("box/a", "box/a", "box/b", "box/a")]
+
+    assert sizes == [8192] * 4 and asked == ["box/a", "box/b"]
+
+
+def _model_warnings(app, monkeypatch) -> list[str]:
+    shown: list[str] = []
+    monkeypatch.setattr("alpi.tui.app.ErrorLine", lambda text: text)
+    monkeypatch.setattr(app, "_mount_message", shown.append)
+    app._maybe_warn_model()
+    return shown
+
+
+def test_a_gemini_or_groq_model_with_its_key_raises_no_warning(tui_home, monkeypatch) -> None:
+    (tui_home / ".env").write_text("GEMINI_API_KEY=g\nGROQ_API_KEY=k\n")
+    app = AlpiApp(home_dir=tui_home)
+    for model in ("gemini/gemini-4-carbon", "groq/openai/gpt-oss-120b"):
+        app.cfg.model = model
+        assert _model_warnings(app, monkeypatch) == [], model
+
+
+def test_a_plan_model_without_a_sign_in_says_how_to_sign_in(tui_home, monkeypatch) -> None:
+    app = AlpiApp(home_dir=tui_home)
+    app.cfg.model = "chatgpt-plan/gpt-6.2-sol"
+
+    shown = _model_warnings(app, monkeypatch)
+
+    assert len(shown) == 1 and "alpi chatgpt login" in shown[0]

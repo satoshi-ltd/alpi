@@ -145,7 +145,8 @@ async def _model_ctx_window(
     from alpi import config as cfg_mod
     from alpi import ctx_window
     cfg = cfg_mod.load(home)
-    return {"ctx_window": int(ctx_window.resolve(home, cfg, model))}
+    # An Ollama model asks its server, with a timeout, on the first call and after a failed one.
+    return {"ctx_window": int(await asyncio.to_thread(ctx_window.resolve, home, cfg, model))}
 
 
 __all__ = ["register"]

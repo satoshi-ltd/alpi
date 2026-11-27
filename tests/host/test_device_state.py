@@ -1667,9 +1667,24 @@ def test_provider_catalog_counts_curated_models_per_key() -> None:
     assert all(k.endswith("_API_KEY") for k in catalog)
 
 
-def test_provider_catalog_reports_zero_for_a_provider_alpi_curates_nothing_for() -> None:
+def test_every_key_delivers_the_models_the_catalog_promises_under_the_id_litellm_routes(tmp_path: Path) -> None:
+    from alpi import providers
+
     catalog = host_device_state._provider_catalog()
-    assert catalog["GEMINI_API_KEY"] == 0
+    home = _bootstrap(tmp_path / "h")
+    cfg = cfg_mod.load(home)
+    cfg.model = ""
+    for provider in providers.builtin():
+        if not provider.api_key_env:
+            continue
+        (home / ".env").write_text(f"{provider.api_key_env}=test\n")
+        offered = host_device_state._models(cfg, home)
+        curated = host_device_state._curated_ids_for(provider.name)
+        assert len(curated) == catalog[provider.api_key_env] > 0, provider.name
+        assert [m for m in offered if m in curated] == curated, provider.name
+        if provider.name != "openrouter":
+            assert offered == [m.id for m in provider.list_models()], provider.name
+    assert host_device_state._curated_ids_for("google")[0] == "gemini/gemini-4-carbon"
 
 
 @pytest.mark.asyncio
@@ -2233,3 +2248,40 @@ async def test_clearing_a_broken_tier_model_removes_it(
     })
     assert resp.get("result", {}).get("ok") is True, resp
     assert "tiers" not in (home / "config.yaml").read_text()
+
+
+def test_a_groq_key_counts_as_a_provider_and_reaches_the_apps(tmp_path: Path) -> None:
+    home = _bootstrap(tmp_path / "h")
+    (home / ".env").write_text("GROQ_API_KEY=gsk_test_1234567890\n")
+    cfg = cfg_mod.load(home)
+    cfg.providers = {}
+    cfg.model = ""
+
+    assert [k["env"] for k in host_device_state._provider_keys(home)] == ["GROQ_API_KEY"]
+    assert host_device_state._has_any_provider(home, cfg)
+    assert host_device_state._models(cfg, home) == ["groq/openai/gpt-oss-120b", "groq/openai/gpt-oss-20b"]
+
+
+def test_a_chatgpt_sign_in_counts_as_a_provider_and_lists_its_models(tmp_path: Path) -> None:
+    import json
+    import time
+
+    from alpi.providers import chatgpt
+
+    home = _bootstrap(tmp_path / "h")
+    cfg = cfg_mod.load(home)
+    cfg.providers = {}
+    cfg.model = "chatgpt-plan/gpt-6.2-sol"
+    (home / ".env").write_text("")
+    assert host_device_state._models(cfg, home) == [] and not host_device_state._has_any_provider(home, cfg)
+
+    chatgpt.record_path(home).parent.mkdir(parents=True, exist_ok=True)
+    chatgpt.record_path(home).write_text(json.dumps({
+        "client_id": "oaiapp_1", "refresh_token": "rt", "access_token": "at", "saved_at": time.time(), "expires_in": 3600,
+        "scopes": ["chatgpt.tokens.use.direct"],
+        "models": [{"slug": "gpt-6.2-sol", "display_name": "GPT-6.2 Sol"}, {"slug": "gpt-6-luna", "display_name": "GPT-6 Luna"}],
+    }))
+
+    assert host_device_state._models(cfg, home) == ["chatgpt-plan/gpt-6.2-sol", "chatgpt-plan/gpt-6-luna"]
+    assert host_device_state._has_any_provider(home, cfg)
+    assert "" not in host_device_state._provider_catalog()

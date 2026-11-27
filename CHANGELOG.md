@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.19.47 — 2026-11-27 — run a profile on your ChatGPT plan, and every provider gets the request it reads
+
+- **New: use your ChatGPT plan instead of an API key.** Sign in with OpenAI's Sign in with ChatGPT from the console (`alpi chatgpt login`, or `alpi setup → Model → ChatGPT plan`), from the desktop app or from the phone; the plan's models then appear in every picker as `chatgpt-plan/<model>`. Requests count against the plan, with no cost in alpi's ledger, and a reached limit says so and points at ChatGPT's usage settings. On a machine without a browser, `alpi chatgpt login --paste` finishes with the address the browser ends on. `alpi chatgpt status` and `logout` show and end it. An OpenAI API key keeps working as before.
+- **Ollama models run with the context size alpi plans for.** Before, Ollama ignored the size alpi sent and ran the model at the server's default (often 4,096 tokens), cutting a longer prompt without an error. alpi now asks for the `num_ctx` of the model's Modelfile, or the model's maximum capped at 32,768 tokens when the Modelfile sets none, and uses one size for a whole turn. Give a model a larger window with `PARAMETER num_ctx` in a Modelfile. Ollama uses more memory than before, in line with that size.
+- **Gemini and Groq work as listed.** Reasoning effort is now sent to direct Gemini models and the apps show its selector; a direct Gemini call stops creating a separately billed cache before each request. Both lists offer models that exist (Gemini 4 Carbon, Neon and Hydrogen and Gemini 3.5 Flash-Lite; Groq GPT-OSS 120B and 20B), the apps list them once the key is set, and the OpenAI list gains GPT-6.1 Terra. Gemini 2.0 Flash is shut down, Gemini 2.5 Pro and 2.5 Flash shut down on 2026-12-01, and Groq no longer serves the models alpi listed: a profile pinned to one needs a new model.
+- **A direct OpenAI model is asked not to store the response.** A turn with a reasoning effort and tools goes through OpenAI's Responses API, which keeps each response for at least 30 days unless told otherwise.
+- **Direct Anthropic and Gemini conversations carry no filler.** A step that only called tools was sent with a placeholder sentence (Anthropic) or an empty part (Gemini) where its text would be, on every later request of the conversation; it is now sent as it is.
+
 ## v0.19.46 — 2026-11-27 — struck-through text stays struck in a PDF
 
 - `~~text~~` in a document made with `pdf` is now drawn with a line through it, in paragraphs, headings and tables. Before it printed like the text around it, so a quote such as `Price: ~~100 €~~ 75 €` lost which price was the old one.

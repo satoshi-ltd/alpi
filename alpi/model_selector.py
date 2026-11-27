@@ -310,9 +310,13 @@ def _pick_provider(cfg: cfg_mod.Config) -> Provider | None:
         parts = []
         if p.api_key_env and p.has_key(env):
             parts.append("key saved")
+        elif not p.api_key_env and p.has_key(env):
+            parts.append("signed in")
         parts.append(p.description)
         if p.api_key_env and not p.has_key(env):
             parts.append("[key needed]")
+        elif not p.api_key_env and not p.has_key(env):
+            parts.append("[sign-in needed]")
         cloud.append((p.display, " · ".join(parts), p, p.name == active_head))
 
     manage: list[tuple[str, str, Any, bool]] = []
@@ -364,6 +368,8 @@ def _pick_provider(cfg: cfg_mod.Config) -> Provider | None:
 
 
 def _pick_model(provider: Provider, cfg: cfg_mod.Config) -> str | None:
+    if not provider.api_key_env and not isinstance(provider, prov_mod.OllamaProvider) and not provider.has_key():
+        return None
     ui.dim(f"Fetching models from {provider.display}…")
     models = provider.list_models()
 
@@ -428,12 +434,48 @@ def _prompt_custom_model(provider: Provider, current: str) -> str | None:
 def _ensure_key(cfg: cfg_mod.Config, provider: Provider) -> None:
     from alpi.home import effective_profile_env
     env = effective_profile_env(cfg.home)
+    if provider.name == "chatgpt-plan":
+        if not provider.has_key(env):
+            sign_in_with_chatgpt(cfg.home)
+        return
     if not provider.api_key_env or provider.has_key(env):
         return
     value = ui.password(f"Enter {provider.api_key_env} for {provider.display}:")
     if not value:
         return
     _append_env(cfg.env_path, provider.api_key_env, value)
+
+
+def sign_in_with_chatgpt(home, *, open_browser: bool = True) -> bool:
+    from alpi.providers import chatgpt
+
+    import click
+
+    ui.dim(
+        "Continue with ChatGPT: your browser opens to sign in and let alpi use your ChatGPT plan." if open_browser
+        else "Continue with ChatGPT: open this address in a browser on this machine to sign in and let alpi use your ChatGPT plan."
+    )
+
+    def show(url: str) -> None:
+        if open_browser:
+            ui.dim("If it does not open, visit:")
+        # Unwrapped: a terminal library that breaks the line makes the address uncopyable.
+        click.echo(url)
+
+    try:
+        record = chatgpt.login(home, show=show, open_browser=open_browser)
+    except chatgpt.PlanError as exc:
+        ui.fail(str(exc))
+        return False
+    if chatgpt.PLAN_SCOPE not in record.get("scopes", []):
+        ui.fail("signed in, but ChatGPT plan usage was not allowed; sign in again and accept it, or use an API key")
+        return False
+    who = record.get("email") or "your account"
+    if record.get("first_sign_in"):
+        ui.ok(f"You're using your ChatGPT plan ({who}). Requests from this profile count against it; manage usage at {chatgpt.USAGE_URL}")
+    else:
+        ui.ok(f"signed in to ChatGPT as {who}")
+    return True
 
 
 def _add_ollama_connection(cfg: cfg_mod.Config):
@@ -492,7 +534,7 @@ def _remove_env_key(env_path: Path, key: str) -> None:
 
 def model_prefix_for_env_key(key: str) -> str:
     for p in prov_mod.builtin():
-        if p.api_key_env == key:
+        if key and p.api_key_env == key:
             return p.model_prefix or p.name
     return ""
 

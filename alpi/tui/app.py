@@ -231,11 +231,15 @@ class AlpiApp(App):
         from alpi.home import effective_profile_env
         env = effective_profile_env(self.cfg.home)
         for p in prov_mod.builtin():
-            if p.name == head:
+            if (p.model_prefix or p.name) == head:
                 if p.api_key_env and not p.has_key(env):
                     self._mount_message(ErrorLine(
                         f"model `{model}` needs {p.api_key_env} — "
                         f"not set. Run `alpi setup` to add the key."
+                    ))
+                elif not p.api_key_env and not p.has_key(env):
+                    self._mount_message(ErrorLine(
+                        f"model `{model}` needs a ChatGPT sign-in. Run `alpi chatgpt login`."
                     ))
                 return
         ollamas = self.cfg.providers.get("ollama", []) or []
@@ -1196,7 +1200,11 @@ class AlpiApp(App):
     def _resolve_ctx_window(self, model: str) -> int:
         from alpi import ctx_window
 
-        return ctx_window.resolve(self.home, self.cfg, model)
+        # Runs on the UI thread at every header refresh; an unreachable Ollama server would cost its timeout each time the lookup is retried.
+        known = self.__dict__.setdefault("_ctx_windows", {})
+        if model not in known:
+            known[model] = ctx_window.resolve(self.home, self.cfg, model)
+        return known[model]
 
     def _mount_message(self, widget) -> None:
         self.query_one("#chat", VerticalScroll).mount(widget)

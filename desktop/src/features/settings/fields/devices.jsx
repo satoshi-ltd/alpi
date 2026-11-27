@@ -271,7 +271,7 @@ function DeviceDetailPopover({
       }}
     >
       <div className={styles.field}>
-        <Eyebrow as="label">label</Eyebrow>
+        <Eyebrow as="label">Label</Eyebrow>
         <Field
           className={`${styles.input} ${styles.inputFull}`}
           type="text"
@@ -282,7 +282,7 @@ function DeviceDetailPopover({
         />
       </div>
       <div className={styles.field}>
-        <Eyebrow as="label">role</Eyebrow>
+        <Eyebrow as="label">Role</Eyebrow>
         <span>
           <Chip size="sm">{role}</Chip>
           {canManage && (
@@ -304,11 +304,11 @@ function DeviceDetailPopover({
         </span>
       </div>
       <div className={styles.field}>
-        <Eyebrow as="label">token id</Eyebrow>
+        <Eyebrow as="label">Token ID</Eyebrow>
         <span className={styles.mono}>…{device.token_id}</span>
       </div>
       <div className={styles.field}>
-        <Eyebrow as="label">last seen</Eyebrow>
+        <Eyebrow as="label">Last seen</Eyebrow>
         <span>{formatLastSeen(device.last_seen)}</span>
       </div>
       <DialogFooter

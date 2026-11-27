@@ -6,7 +6,7 @@ import { navigateMenu } from "../lib/menuNavigation.js";
 import { I } from "./icons.jsx";
 import Tip from "./Tip.jsx";
 import { fmtTok } from "../lib/format.js";
-import { modelLabel } from "../lib/modelLabel.js";
+import { modelLabel, modelProvider } from "../lib/modelLabel.js";
 import useExit from "../hooks/useExit.js";
 import styles from "./ModelPicker.module.css";
 
@@ -95,7 +95,7 @@ export default function ModelPicker({
             {Object.entries(models).map(([provider, list]) => (
               <div key={provider} role="group" aria-label={provider}>
                 <div role="presentation" className={`eyebrow ${styles.modelPickerEyebrow}`}>
-                  {provider}
+                  {modelProvider(`${provider}/x`) || provider}
                 </div>
                 {list.map((m) => {
                   const sel = picked === m.id;

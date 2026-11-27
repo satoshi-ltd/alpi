@@ -23,13 +23,13 @@ def normalise_effort(value: Any) -> str:
     return ""
 
 
-# Direct providers without a curated YAML catalog (google/deepseek/xai) — we fall back to regex. OpenAI + Anthropic are catalog-driven: the YAML is the source of truth, the regex below is the safety net for custom-typed model strings the user enters via the wizard's "custom model" prompt.
+# Direct providers whose catalog carries no reasoning flag (gemini/deepseek/xai) — we fall back to regex. OpenAI + Anthropic are catalog-driven: the YAML is the source of truth, the regex below is the safety net for custom-typed model strings the user enters via the wizard's "custom model" prompt.
 _DIRECT_PATTERNS: tuple[re.Pattern, ...] = (
     re.compile(r"^openai/o[1-9](?:[._-]|$)"),
     re.compile(r"^openai/gpt-(?:[5-9]|[1-9]\d)(?:[.-]|$)"),
     # Thinking starts at Claude 3.7 (hence 3-[7-9]); all 4.x+ and the 5 family qualify.
     re.compile(r"^anthropic/claude-(?:[4-9]|3-[7-9]|(?:sonnet|opus|haiku|fable|mythos)-[4-9])"),
-    re.compile(r"^google/gemini-2\.[5-9]"),
+    re.compile(r"^gemini/gemini-(?!.*(?:image|tts|live|audio|transcribe|computer-use|embedding))(?:(?:2\.[5-9]|[3-9]|[1-9]\d)(?:[.-]|$)|(?:pro|flash|flash-lite)-latest$)"),
     re.compile(r"^deepseek/.*r1"),
     re.compile(r"^xai/grok-(?:3|4)-reasoning"),
 )
@@ -62,6 +62,8 @@ def supports_reasoning(model: str, providers: dict[str, Any] | None = None) -> b
             return supports_thinking(entry.get("url", ""), rest)
     if m.startswith("openrouter/"):
         return True
+    if m.startswith("chatgpt-plan/"):
+        m = "openai/" + m.split("/", 1)[1]
     if "/" in m:
         provider, model_id = m.split("/", 1)
         if provider in _CATALOG_PROVIDERS:
@@ -78,7 +80,7 @@ def supports_reasoning(model: str, providers: dict[str, Any] | None = None) -> b
 def reasoning_kwargs(model: str, effort: str, providers: dict[str, Any] | None = None) -> dict[str, Any]:
     """Return the kwargs to merge into the litellm call for `model` + `effort`.
 
-    Empty effort or unsupported model → empty dict (no param sent). The caller must merge this into its own kwargs without overwriting nested keys like `extra_body.options.num_ctx`.
+    Empty effort or unsupported model → empty dict (no param sent). The caller must merge this into its own kwargs without overwriting nested keys like `extra_body.provider`.
     """
     eff = normalise_effort(effort)
     if not eff or not supports_reasoning(model, providers):
@@ -89,7 +91,7 @@ def reasoning_kwargs(model: str, effort: str, providers: dict[str, Any] | None =
 
 
 def merge_into_kwargs(base: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:
-    """Deep-merge `extra` into `base`, with `extra_body` recursed one level deep so an Ollama num_ctx and a reasoning entry can coexist."""
+    """Deep-merge `extra` into `base`, with `extra_body` recursed one level deep so OpenRouter's provider list and a reasoning entry can coexist."""
     out = dict(base)
     for key, val in extra.items():
         if key == "extra_body" and isinstance(val, dict) and isinstance(out.get("extra_body"), dict):

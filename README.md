@@ -41,9 +41,10 @@ The design goal is sovereignty:
   No discovery service, no shared account, no central broker.
 - **Honest provider boundaries.** alpi does not reverse-engineer
   ChatGPT Plus, Claude Pro, Claude Code, or other first-party
-  subscription clients. If a vendor publishes an official third-party
-  OAuth flow, alpi can adopt it. Until then, users pay per-token API
-  access through their own keys.
+  subscription clients. Where a vendor publishes an official third-party
+  flow, alpi uses it: a profile can run on your ChatGPT plan through
+  OpenAI's Sign in with ChatGPT. Everywhere else you pay per-token API
+  access through your own keys.
 
 ## What ships today
 

@@ -3,6 +3,8 @@ from __future__ import annotations
 import importlib
 from pathlib import Path
 
+import pytest
+
 from alpi.providers.base import ModelInfo, Provider
 from alpi.providers import curated, google, openrouter
 
@@ -44,14 +46,40 @@ def test_provider_has_key_accepts_explicit_env(monkeypatch) -> None:
     assert provider.has_key() is True
 
 
-def test_google_list_models_is_static() -> None:
-    provider = google.Google()
-    models = provider.list_models()
-    assert [m.id for m in models] == [
-        "gemini/gemini-2.5-pro",
-        "gemini/gemini-2.5-flash",
-        "gemini/gemini-2.0-flash",
+def test_google_and_groq_offer_the_curated_models_under_their_litellm_prefix() -> None:
+    from alpi.providers import groq
+
+    assert [m.id for m in google.Google().list_models()] == [
+        "gemini/gemini-4-carbon", "gemini/gemini-4-neon", "gemini/gemini-4-hydrogen", "gemini/gemini-3.5-flash-lite",
     ]
+    assert [m.id for m in groq.Groq().list_models()] == ["groq/openai/gpt-oss-120b", "groq/openai/gpt-oss-20b"]
+    assert all(m.note for m in google.Google().list_models() + groq.Groq().list_models())
+
+
+def test_every_model_a_keyed_provider_offers_has_a_window_price_and_tools() -> None:
+    import alpi.llm  # noqa: F401
+    import litellm
+
+    from alpi import providers
+
+    for provider in providers.builtin():
+        if provider.name == "openrouter" or not provider.api_key_env:
+            continue
+        for model in provider.list_models():
+            info = litellm.model_cost.get(model.id) or litellm.model_cost.get(model.id.split("/", 1)[1])
+            assert info, model.id
+            assert info.get("max_input_tokens", 0) >= 100_000 and info.get("input_cost_per_token", 0) > 0, model.id
+            assert info.get("supports_function_calling"), model.id
+
+
+def test_the_curated_google_and_groq_models_are_in_alpi_native_catalogue() -> None:
+    from alpi.providers.curated import load_curated
+    from alpi.providers.native import catalogue
+
+    native = catalogue()
+    for provider, prefix in (("google", "gemini/"), ("groq", "groq/")):
+        for entry in load_curated(provider):
+            assert native.get(prefix + entry["id"], {}).get("max_input_tokens", 0) >= 100_000, entry["id"]
 
 
 def test_openrouter_list_models_reads_config(monkeypatch, tmp_path: Path) -> None:
@@ -160,25 +188,72 @@ class _FakeClient:
         return _FakeResp(self.show)
 
 
-def test_ollama_is_ollama_and_resolve_num_ctx(monkeypatch) -> None:
-    fake = _FakeClient(
-        tags={"models": [{"name": "llama3"}]},
-        show={"parameters": "num_ctx 8192\n"},
-    )
+def test_ollama_resolve_num_ctx_reads_the_modelfile_value(monkeypatch) -> None:
+    fake = _FakeClient(show={"parameters": "num_ctx 8192\n"})
     monkeypatch.setattr(ollama.httpx, "Client", lambda timeout=0: fake)
-    ollama._IS_OLLAMA_CACHE.clear()
-    ollama._NUM_CTX_CACHE.clear()
+    monkeypatch.setattr(ollama, "_NUM_CTX_CACHE", {})
 
-    assert ollama.is_ollama("http://localhost:11434/v1") is True
     assert ollama.resolve_num_ctx("http://localhost:11434/v1", "llama3") == 8192
+    assert fake.calls == [("post", "http://localhost:11434/api/show", {"name": "llama3"})]
 
 
-def test_ollama_is_ollama_fail_open(monkeypatch) -> None:
-    fake = _FakeClient(fail=True)
+@pytest.mark.parametrize(("show", "expected"), [
+    ({"model_info": {"qwen3_5.context_length": 262144}}, 32768),
+    ({"model_info": {"tiny.context_length": 8192}}, 8192),
+    ({"parameters": "num_ctx 131072", "model_info": {"big.context_length": 262144}}, 131072),
+    ({}, 32768),
+])
+def test_ollama_asks_for_the_model_maximum_only_when_the_modelfile_says_so(monkeypatch, show, expected) -> None:
+    monkeypatch.setattr(ollama.httpx, "Client", lambda timeout=0: _FakeClient(show=show))
+    monkeypatch.setattr(ollama, "_NUM_CTX_CACHE", {})
+
+    assert ollama.resolve_num_ctx("http://box:11434", "m") == expected
+
+
+def test_ollama_context_size_is_one_answer_for_every_spelling_of_the_server_url(monkeypatch) -> None:
+    fake = _FakeClient(show={"parameters": "num_ctx 8192"})
     monkeypatch.setattr(ollama.httpx, "Client", lambda timeout=0: fake)
-    ollama._IS_OLLAMA_CACHE.clear()
+    monkeypatch.setattr(ollama, "_NUM_CTX_CACHE", {})
 
-    assert ollama.is_ollama("http://localhost:11434") is False
+    sizes = {ollama.resolve_num_ctx(url, "m") for url in ("http://box:11434/v1", "http://box:11434/", "http://box:11434")}
+
+    assert sizes == {8192} and len(fake.calls) == 1
+
+
+def test_ollama_context_size_is_not_pinned_to_the_guess_made_while_the_server_was_down(monkeypatch) -> None:
+    now = [1000.0]
+    monkeypatch.setattr(ollama.time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(ollama, "_NUM_CTX_CACHE", {})
+    monkeypatch.setattr(ollama, "_NUM_CTX_MISS", {})
+    down = _FakeClient(fail=True)
+    monkeypatch.setattr(ollama.httpx, "Client", lambda timeout=0: down)
+    assert ollama.resolve_num_ctx("http://box:11434", "m") == 32768
+    assert ollama.resolve_num_ctx("http://box:11434", "m") == 32768
+    assert len(down.calls) == 1
+
+    up = _FakeClient(show={"parameters": "num_ctx 8192"})
+    monkeypatch.setattr(ollama.httpx, "Client", lambda timeout=0: up)
+    now[0] += ollama._NUM_CTX_MISS_TTL - 1
+    assert ollama.resolve_num_ctx("http://box:11434", "m") == 32768 and up.calls == []
+    now[0] += 2
+    assert ollama.resolve_num_ctx("http://box:11434", "m") == 8192
+
+
+def test_a_turn_keeps_the_size_it_first_resolved_even_when_the_server_comes_back(monkeypatch) -> None:
+    now = [1000.0]
+    monkeypatch.setattr(ollama.time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(ollama, "_NUM_CTX_CACHE", {})
+    monkeypatch.setattr(ollama, "_NUM_CTX_MISS", {})
+    monkeypatch.setattr(ollama.httpx, "Client", lambda timeout=0: _FakeClient(fail=True))
+
+    with ollama.one_size_per_turn():
+        budget = ollama.resolve_num_ctx("http://box:11434/v1", "m")
+        monkeypatch.setattr(ollama.httpx, "Client", lambda timeout=0: _FakeClient(show={"parameters": "num_ctx 8192"}))
+        now[0] += ollama._NUM_CTX_MISS_TTL + 1
+        sent = ollama.call_kwargs({"model": "ollama_chat/m", "api_base": "http://box:11434", "messages": []})["num_ctx"]
+
+    assert (budget, sent) == (32768, 32768)
+    assert ollama.resolve_num_ctx("http://box:11434", "m") == 8192
 
 
 def test_ollama_supports_thinking_reads_the_capabilities_list(monkeypatch) -> None:
@@ -218,7 +293,7 @@ def test_the_curated_anthropic_and_openai_lists_are_the_current_models() -> None
     from alpi.providers.curated import load_curated
 
     assert [m["id"] for m in load_curated("anthropic")] == ["claude-fable-5-2", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"]
-    assert [m["id"] for m in load_curated("openai")] == ["gpt-6.2-astra", "gpt-6.2-sol", "gpt-6-luna"]
+    assert [m["id"] for m in load_curated("openai")] == ["gpt-6.2-astra", "gpt-6.2-sol", "gpt-6.1-terra", "gpt-6-luna"]
     for provider in ("anthropic", "openai"):
         assert all(m.get("reasoning") is True for m in load_curated(provider)), provider
 

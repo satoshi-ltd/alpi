@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.10.21 — 2026-11-27 — sign in with ChatGPT, and Groq in Providers
+
+- Providers and New profile offer **ChatGPT plan** next to OpenAI: Continue with ChatGPT opens your browser, and the profile then runs on your ChatGPT plan instead of an API key. It works with a daemon on this machine or on another one, and the wait can be cancelled. Once signed in, the form shows the account, Manage usage and Sign out.
+- Providers offers Groq: add its key from the app, and its models appear in the model picker. Before, the key could only be set from the console.
+- Labels in dialogs and settings read the same way everywhere, in sentence case ("Name", "Saved recipes", "TCP port"); they used to mix capitals and lower case.
+- The model picker offers GPT-6.1 Terra and groups plan models under "ChatGPT plan"; on a plan profile, Budget says that plan turns are not counted.
+- Needs alpi ≥ 0.19.47.
+
 ## v0.10.20 — 2026-11-26 — the Active filter says what it holds
 
 - The Workgroups filter that lists what is working together with what needs you is now called Active. It was called Working, the same word as the group of workgroups that are actually working, so its count read as if all of them were.

@@ -123,3 +123,42 @@ def test_engine_does_not_compact_when_under_threshold(monkeypatch, tmp_path: Pat
     kinds = [e.kind for e in events]
     assert "auto_compact" not in kinds, kinds
     assert summary_called["n"] == 0
+
+
+def test_a_turn_budgets_and_sends_one_ollama_context_size(monkeypatch, tmp_path: Path) -> None:
+    import importlib
+
+    ollama = importlib.import_module("alpi.providers.ollama")
+    home = tmp_path / "h"
+    home.mkdir()
+    monkeypatch.setattr("alpi.engine._maybe_load_mcps", lambda _cfg: [])
+    monkeypatch.setattr(Engine, "_build_system_prompt", lambda self: "you are alpi")
+    monkeypatch.setattr("alpi.ledger.check", lambda *a, **kw: None)
+    monkeypatch.setattr("alpi.ledger.record", lambda *a, **kw: None)
+    answers = iter([32768, 8192, 8192])
+    monkeypatch.setattr(ollama, "_num_ctx", lambda key: next(answers))
+    sent: list[int] = []
+
+    def fake_stream(messages, tools, **kwargs):
+        sent.append(ollama.call_kwargs(kwargs)["num_ctx"])
+        yield {"text_delta": "ok"}
+        yield {"final": True, "input_tokens": 10, "output_tokens": 5, "cost_usd": 0.0, "tool_calls": []}
+
+    monkeypatch.setattr("alpi.llm.stream", fake_stream)
+    budgets: list[int] = []
+    real_should = __import__("alpi.compaction", fromlist=["should_compact"]).should_compact
+    monkeypatch.setattr(
+        "alpi.compaction.should_compact",
+        lambda messages, extra, window, policy: budgets.append(window) or real_should(messages, extra, window, policy),
+    )
+
+    from alpi.config import Config, ToolsConfig
+    cfg = Config(
+        home=home, model="box/qwen3:8b", tools=ToolsConfig(max_steps_per_turn=2), raw={},
+        providers={"ollama": [{"name": "box", "url": "http://box:11434"}]},
+    )
+    engine = Engine(home=home, cfg=cfg)
+    engine.run_turn("hi", lambda event: None)
+
+    assert budgets and set(budgets) == {32768} and sent == [32768]
+    assert ollama._TURN_SIZES.get() is None

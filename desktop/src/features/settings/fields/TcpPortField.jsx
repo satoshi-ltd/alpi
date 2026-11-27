@@ -79,7 +79,7 @@ export function TcpPortField({ profile, onSaved }) {
       {open && (
         <div className={styles.popover}>
           <div className={styles.field}>
-            <Eyebrow as="label">tcp port</Eyebrow>
+            <Eyebrow as="label">TCP port</Eyebrow>
             <Field
               className={styles.input}
               value={port}

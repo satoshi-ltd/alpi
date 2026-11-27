@@ -21,6 +21,8 @@ import { shortPubkey } from "../lib/pubkey.js";
 import { isComposing } from "../lib/composition.js";
 import { CAP_CHOICES, DEFAULT_WAIT_SECONDS, WAIT_CHOICES, capLabel, waitLabel } from "../../../common/runLimits.mjs";
 
+const sentenceCase = (text) => String(text ?? "").replace(/^./, (first) => first.toUpperCase());
+
 export default function CreateWorkgroupModal({
   open,
   profiles = [],
@@ -250,7 +252,7 @@ export default function CreateWorkgroupModal({
       <div className={styles.body}>
         <div className={styles.field}>
           <div className={styles.recipeHead}>
-            <Eyebrow>HUB</Eyebrow>
+            <Eyebrow>Hub</Eyebrow>
             <div className={styles.recipeActions}>
               {isRecipe && (
                 <Chip
@@ -310,7 +312,7 @@ export default function CreateWorkgroupModal({
               </Dropdown>
               {savedRecipes.length > 0 && (
                 <div className={styles.savedRecipes}>
-                  <Eyebrow>SAVED RECIPES</Eyebrow>
+                  <Eyebrow>Saved recipes</Eyebrow>
                   <div className={styles.chips}>
                     {savedRecipes.map((recipe) => (
                       <Chip
@@ -330,7 +332,7 @@ export default function CreateWorkgroupModal({
 
         {!isRecipe && (
           <div className={styles.field}>
-            <Eyebrow>NAME</Eyebrow>
+            <Eyebrow>Name</Eyebrow>
             <Field
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -346,7 +348,7 @@ export default function CreateWorkgroupModal({
 
         {!isRecipe && (
           <div className={styles.field}>
-            <Eyebrow>MEMBERS — PEERS OF @{profileLabel(hubProfile)}</Eyebrow>
+            <Eyebrow>Members — peers of @{profileLabel(hubProfile)}</Eyebrow>
             <div className={styles.chips}>
               {peers.map((p) => {
                 const local = profiles.find((x) => x.name === p.id);
@@ -376,7 +378,7 @@ export default function CreateWorkgroupModal({
           <div className={styles.field}>
             <div className={styles.limits}>
               <div className={styles.field}>
-                <Eyebrow>WAITS FOR MEMBERS</Eyebrow>
+                <Eyebrow>Waits for members</Eyebrow>
                 <Dropdown
                   trigger={{ label: `${waitLabel(waitSeconds ?? DEFAULT_WAIT_SECONDS)}, then the round goes on` }}
                   direction="down"
@@ -404,7 +406,7 @@ export default function CreateWorkgroupModal({
                 </Dropdown>
               </div>
               <div className={styles.field}>
-                <Eyebrow>SPEND CAP</Eyebrow>
+                <Eyebrow>Spend cap</Eyebrow>
                 <Dropdown
                   trigger={{ label: capLabel(budgetUsd) }}
                   direction="down"
@@ -438,7 +440,7 @@ export default function CreateWorkgroupModal({
         )}
 
         <div className={styles.field}>
-          <Eyebrow>BRIEFING</Eyebrow>
+          <Eyebrow>Briefing</Eyebrow>
           <Textarea
             className={`ds-field ${styles.growCap}`}
             rows={3}
@@ -450,7 +452,7 @@ export default function CreateWorkgroupModal({
 
         {isRecipe && recipePipelineKeys.length > 0 && (
           <div className={styles.field}>
-            <Eyebrow>PIPELINES</Eyebrow>
+            <Eyebrow>Pipelines</Eyebrow>
             <div className={styles.recipePipelines}>
               {Object.entries(recipePipelines).map(([key, phases]) => (
                 <div key={key} className={styles.recipePipeline}>
@@ -477,7 +479,7 @@ export default function CreateWorkgroupModal({
 
         {isRecipe && Object.entries(declaredParams).map(([k, spec]) => (
           <div className={styles.field} key={`param-${k}`}>
-            <Eyebrow>{k.toUpperCase()}</Eyebrow>
+            <Eyebrow>{sentenceCase(k)}</Eyebrow>
             <Field
               value={paramValues[k] || ""}
               onChange={(e) =>
@@ -491,7 +493,7 @@ export default function CreateWorkgroupModal({
 
         {isRecipe && Object.entries(declaredInputs).map(([k, spec]) => (
           <div className={styles.field} key={`input-${k}`}>
-            <Eyebrow>{(spec.label || k).toUpperCase()}{spec.required ? "" : " (OPTIONAL)"}</Eyebrow>
+            <Eyebrow>{sentenceCase(spec.label || k)}{spec.required ? "" : " (optional)"}</Eyebrow>
             <Textarea
               className={`ds-field ${styles.growCap}`}
               rows={4}

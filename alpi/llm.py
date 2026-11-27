@@ -6,6 +6,7 @@ import queue
 import random
 import threading
 import time
+import uuid
 from dataclasses import dataclass
 from typing import Any
 
@@ -185,6 +186,50 @@ def _with_openrouter_extras(kwargs: dict[str, Any], model: str) -> dict[str, Any
     return out
 
 
+_DROPS_EMPTY_TOOL_TEXT = ("anthropic/", "gemini/")
+
+
+def _without_empty_tool_turn_text(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {**m, "content": None}
+        if isinstance(m, dict) and m.get("role") == "assistant" and m.get("tool_calls")
+        and isinstance(m.get("content"), str) and not m["content"].strip()
+        else m
+        for m in messages
+    ]
+
+
+def _is_openai_direct(kwargs: dict[str, Any]) -> bool:
+    from alpi.prompt_cache import _is_openai_endpoint, _provider_of
+    return _provider_of(str(kwargs.get("model") or "")) == "openai" and _is_openai_endpoint(kwargs.get("api_base"))
+
+
+def _takes_effort(model: str) -> bool:
+    import litellm
+    provider, _, name = model.partition("/")
+    try:
+        return "reasoning_effort" in (litellm.get_supported_openai_params(model=name, custom_llm_provider=provider) or [])
+    except Exception:  # noqa: BLE001
+        return True
+
+
+def _provider_bound(kwargs: dict[str, Any]) -> dict[str, Any]:
+    from alpi.providers.ollama import call_kwargs
+    model = str(kwargs.get("model") or "")
+    if model.startswith(_PLAN_PREFIX):
+        return kwargs
+    out = call_kwargs(kwargs)
+    if model.startswith("gemini/") and out.get("reasoning_effort") and not _takes_effort(model):
+        out = {k: v for k, v in out.items() if k != "reasoning_effort"}
+    if model.startswith(_DROPS_EMPTY_TOOL_TEXT):
+        # LiteLLM turns an empty assistant text into a placeholder sentence on Anthropic and an empty part on Gemini.
+        out = {**out, "messages": _without_empty_tool_turn_text(out.get("messages") or [])}
+    if _is_openai_direct(out):
+        # LiteLLM moves a reasoning call with tools to /v1/responses, which stores the response unless told not to.
+        out = {"store": False, **out}
+    return out
+
+
 _OR_PRICING: "dict[str, tuple[float, float]] | None" = None
 _OR_PRICING_RETRY_AT: float = 0.0
 
@@ -242,8 +287,13 @@ def _usage_cost(resp) -> float | None:
         return None
 
 
+_PLAN_PREFIX = "chatgpt-plan/"
+
+
 def _compute_cost_detail(resp, model: str) -> tuple[float, str]:
     """Source tags feed the billing reconciliation: only "provider" is the endpoint's own figure; "litellm" and "table" are cache-blind list-price arithmetic. The value and the label must come from the SAME field — usage.cost is the provider evidence and wins; _hidden_params.response_cost alone is litellm's own stamp for any mapped model."""
+    if str(model).startswith(_PLAN_PREFIX):
+        return 0.0, "plan"
     c = _usage_cost(resp)
     if c is not None:
         # Only OpenRouter is asked for usage cost on the wire; LiteLLM stamps its own list-price figure on every other streamed response.
@@ -294,6 +344,9 @@ def is_free_model(model: str) -> bool:
 def _is_transient_single(exc: Exception) -> bool:
     if isinstance(exc, (ProviderStalled, ProviderStreamDeadline)):
         return True
+    if hasattr(exc, "retryable") and type(exc).__name__ in ("PlanError", "NotSignedIn"):
+        # A plan limit answers 429 and a refused sign-in 401: neither improves by asking again.
+        return bool(exc.retryable)
     name = type(exc).__name__
     code = getattr(exc, "status_code", None)
     # A 4xx (bad request / auth / not-found) is permanent; 429 is the rate-limit exception.
@@ -460,7 +513,7 @@ def _iter_with_watchdog(
         cancelled.set()
 
 
-def _normalize_chunk(chunk, tool_calls_accum: dict) -> dict | None:
+def _normalize_chunk(chunk, tool_calls_accum: dict, whole_calls: bool = False) -> dict | None:
     if not getattr(chunk, "choices", None):
         return None
     choice = chunk.choices[0]
@@ -477,7 +530,8 @@ def _normalize_chunk(chunk, tool_calls_accum: dict) -> dict | None:
         )
         raw_tcs = getattr(delta, "tool_calls", None) or []
         for tc in raw_tcs:
-            idx = getattr(tc, "index", 0) or 0
+            # Ollama streams each call whole, one per chunk, and LiteLLM numbers them from 0 inside every chunk.
+            idx = len(tool_calls_accum) if whole_calls else getattr(tc, "index", 0) or 0
             entry = tool_calls_accum.setdefault(idx, {"id": "", "name": "", "arguments": ""})
             if getattr(tc, "id", None):
                 entry["id"] = tc.id
@@ -487,6 +541,8 @@ def _normalize_chunk(chunk, tool_calls_accum: dict) -> dict | None:
                     entry["name"] += fn.name
                 if getattr(fn, "arguments", None):
                     entry["arguments"] += fn.arguments
+            if whole_calls and not entry["id"]:
+                entry["id"] = f"call_{uuid.uuid4().hex[:24]}"
             tc_deltas.append(entry)
     return {
         "text_delta": text_delta,
@@ -578,20 +634,12 @@ def stream(
         kwargs["tool_choice"] = "auto"
     if api_base:
         kwargs["api_base"] = api_base
-        from alpi.providers.ollama import is_ollama, resolve_num_ctx
-        if is_ollama(api_base):
-            raw_model = model.split("/", 1)[1] if "/" in model else model
-            kwargs["extra_body"] = {
-                "options": {
-                    "num_ctx": resolve_num_ctx(api_base, raw_model),
-                },
-            }
     if api_key:
         kwargs["api_key"] = api_key
     if extra:
-        # Deep-merge so reasoning's extra_body coexists with Ollama's options.num_ctx.
         from alpi.providers.reasoning import merge_into_kwargs
         kwargs = merge_into_kwargs(kwargs, extra)
+    kwargs = _provider_bound(kwargs)
 
     first_byte = float(getattr(rt, "first_byte_timeout_s", DEFAULT_FIRST_BYTE_TIMEOUT_S))
     idle = float(getattr(rt, "stream_idle_timeout_s", DEFAULT_STREAM_IDLE_TIMEOUT_S))
@@ -630,14 +678,18 @@ def stream(
         first_delta_at: float | None = None
         finish_reason: str | None = None
         try:
-            stream_iter = _completion_silenced(attempt_kwargs)
+            if str(model).startswith(_PLAN_PREFIX):
+                from alpi.providers import chatgpt_responses
+                stream_iter = chatgpt_responses.stream(attempt_kwargs)
+            else:
+                stream_iter = _completion_silenced(attempt_kwargs)
             for chunk in _iter_with_watchdog(
                 stream_iter, first_byte, idle, max_duration, absolute_deadline,
             ):
                 last_chunk = chunk
                 served_provider = served_provider or getattr(chunk, "provider", None)
                 gen_id = gen_id or getattr(chunk, "id", None)
-                norm = _normalize_chunk(chunk, tool_calls_accum)
+                norm = _normalize_chunk(chunk, tool_calls_accum, str(kwargs.get("model") or "").startswith("ollama_chat/"))
                 if norm is None:
                     continue
                 finish_reason = norm.get("finish_reason") or finish_reason
@@ -711,6 +763,17 @@ def complete(
     if extra:
         from alpi.providers.reasoning import merge_into_kwargs
         kwargs = merge_into_kwargs(kwargs, extra)
+    kwargs = _provider_bound(kwargs)
+
+    if str(model).startswith(_PLAN_PREFIX):
+        from alpi.providers import chatgpt_responses
+        done = chatgpt_responses.complete(kwargs)
+        return Completion(
+            content=done["content"], tool_calls=done["tool_calls"],
+            input_tokens=done["usage"].prompt_tokens, output_tokens=done["usage"].completion_tokens,
+            cost_usd=0.0, raw=done, cached_tokens=_cached_tokens(done["usage"]), cost_source="plan",
+            generation_id=done["id"] or None, provider="chatgpt-plan", finish_reason=done["finish_reason"],
+        )
 
     # Don't redirect FDs here — _silence_litellm() at import time warmed up
     # the provider cache, so no more "Provider List" banners. Redirecting

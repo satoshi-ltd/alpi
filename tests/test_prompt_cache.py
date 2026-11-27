@@ -285,6 +285,8 @@ def test_cache_kwargs_targets_index_zero_not_role(monkeypatch) -> None:
         ("openai/gpt-6-luna", False),
         ("openai/gpt-5", False),
         ("gpt-5", False),
+        ("gemini/gemini-4-carbon", False),
+        ("gemini/gemini-3.5-flash-lite", False),
         ("anthropic/claude-sonnet-5-5", True),
         ("openrouter/anthropic/claude-sonnet-5-5", True),
         ("openrouter/deepseek/deepseek-v4.1-flash", True),

@@ -5,8 +5,10 @@ import { useNotify } from "../primitives/Notification.jsx";
 import { isValidProfileName, RESERVED_PROFILE_NAMES } from "../lib/profile-display.js";
 import ProviderPickerForm, {
   applyProvider,
+  daemonMessage,
   defaultProviderValue,
   isProviderValueValid,
+  signInCancelled,
 } from "./settings/ProviderPickerForm.jsx";
 import styles from "./CreateProfileModal.module.css";
 import { isComposing } from "../lib/composition.js";
@@ -29,6 +31,23 @@ export default function CreateProfileModal({
     setBusy(false);
   }, [open]);
 
+  // A daemon that predates the ChatGPT sign-in rejects the verb, and the option stays out.
+  const [chatgpt, setChatgpt] = useState(null);
+  const probeProfile = existingNames[0];
+  useEffect(() => {
+    if (!open || !probeProfile) return undefined;
+    let cancelled = false;
+    setChatgpt(null);
+    invoke("chatgpt_status", { profile: probeProfile })
+      .then(() => {
+        if (!cancelled) setChatgpt({ signed_in: false });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [open, probeProfile]);
+
   const trimmed = name.trim();
   const reserved = RESERVED_PROFILE_NAMES.includes(trimmed);
   const errorId = useId();
@@ -47,11 +66,16 @@ export default function CreateProfileModal({
         const msg = await applyProvider(trimmed, providerValue);
         notify({ message: `Profile @${trimmed} created · ${msg}`, variant: "success" });
       } catch (e) {
-        notify({
-          message: `Profile @${trimmed} created but provider step failed: ${String(e)}`,
-          variant: "error",
-          duration: 6000,
-        });
+        const plan = providerValue.id === "chatgpt-plan";
+        notify(plan && signInCancelled(e)
+          ? { message: `Profile @${trimmed} created. Sign in from its Providers.`, variant: "success" }
+          : {
+            message: plan
+              ? `Profile @${trimmed} created. Sign-in failed: ${daemonMessage(e)}`
+              : `Profile @${trimmed} created but provider step failed: ${String(e)}`,
+            variant: "error",
+            duration: 6000,
+          });
       }
       onCreated?.(trimmed);
     } catch (e) {
@@ -82,7 +106,7 @@ export default function CreateProfileModal({
     <Modal open title="New profile" onClose={onClose} closeOnBackdrop={!dirty && !busy} width="var(--modal-md)">
       <div className={styles.body}>
         <div className={styles.field}>
-          <Eyebrow>NAME</Eyebrow>
+          <Eyebrow>Name</Eyebrow>
           <Field
             value={name}
             onChange={(e) => setName(e.target.value.toLowerCase())}
@@ -104,17 +128,20 @@ export default function CreateProfileModal({
         </div>
 
         <div className={styles.field}>
-          <Eyebrow>PROVIDER · PICK ONE TO START</Eyebrow>
+          <Eyebrow>Provider</Eyebrow>
           <ProviderPickerForm
             value={providerValue}
             onChange={setProviderValue}
+            chatgpt={chatgpt ?? undefined}
+            signingIn={busy && providerValue.id === "chatgpt-plan"}
           />
         </div>
 
         <div className={styles.footer}>
           <DialogFooter
-            onCancel={onClose}
-            primaryLabel="Create"
+            onCancel={busy && providerValue.id === "chatgpt-plan" ? () => invoke("chatgpt_sign_in_cancel").catch(() => {}) : onClose}
+            cancelWhileLoading={busy && providerValue.id === "chatgpt-plan"}
+            primaryLabel={providerValue.id === "chatgpt-plan" ? "Continue with ChatGPT" : "Create"}
             primaryDisabled={!canSubmit}
             primaryLoading={busy}
             onPrimary={submit}

@@ -275,7 +275,8 @@ def vision_status(model: str) -> str:
     try:
         from alpi.llm import litellm_ready
         litellm = litellm_ready()
-        return "yes" if litellm.supports_vision(model=model) else "no"
+        from alpi.providers.chatgpt import capability_id
+        return "yes" if litellm.supports_vision(model=capability_id(model)) else "no"
     except Exception:  # noqa: BLE001
         return "unknown"
 
@@ -289,7 +290,8 @@ def model_context_tokens(model: str) -> int | None:
     try:
         from alpi.llm import litellm_ready
         litellm = litellm_ready()
-        n = litellm.get_model_info(model=model).get("max_input_tokens")
+        from alpi.providers.chatgpt import capability_id
+        n = litellm.get_model_info(model=capability_id(model)).get("max_input_tokens")
         return int(n) if n else None
     except Exception:  # noqa: BLE001 — unmapped model / litellm error → caller falls back
         return None

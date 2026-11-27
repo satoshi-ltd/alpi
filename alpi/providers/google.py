@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from alpi.providers.base import ModelInfo, Provider
+from alpi.providers.curated import load_curated
 
 
 class Google(Provider):
@@ -11,9 +12,7 @@ class Google(Provider):
     description = "Gemini models"
 
     def list_models(self) -> list[ModelInfo]:
-        ids = [
-            "gemini-2.5-pro",
-            "gemini-2.5-flash",
-            "gemini-2.0-flash",
+        return [
+            ModelInfo(id=f"gemini/{m['id']}", display=m["id"], note=m.get("note", ""))
+            for m in load_curated("google")
         ]
-        return [ModelInfo(id=f"gemini/{m}", display=m) for m in ids]

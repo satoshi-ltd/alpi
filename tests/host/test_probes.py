@@ -299,6 +299,29 @@ async def test_peers_ping_resolves_colocated_profile_by_pubkey(
 
 
 @pytest.mark.asyncio
+async def test_model_ctx_window_is_resolved_off_the_event_loop(short_tmp: Path, monkeypatch) -> None:
+    import threading
+
+    from alpi import ctx_window
+
+    home = short_tmp / "alpi"
+    home.mkdir()
+    monkeypatch.setattr(probes, "_resolve_home", lambda profile: home)
+    seen: list[int] = []
+
+    def resolve(home, cfg, model):
+        seen.append(threading.get_ident())
+        return 8192
+
+    monkeypatch.setattr(ctx_window, "resolve", resolve)
+
+    out = await probes._model_ctx_window({"profile": "default", "model": "box/qwen3:8b"}, None)
+
+    assert out == {"ctx_window": 8192}
+    assert seen and seen[0] != threading.get_ident()
+
+
+@pytest.mark.asyncio
 async def test_model_ctx_window_returns_int(short_tmp: Path, monkeypatch) -> None:
     home = short_tmp / "h"
     home.mkdir()

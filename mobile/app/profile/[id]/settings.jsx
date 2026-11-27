@@ -25,7 +25,7 @@ import { TextPrompt } from '../../../src/components/TextPrompt';
 import { UsageChart } from '../../../src/components/UsageChart';
 import { useBack } from '../../../src/hooks/useBack';
 import { usePullRefresh } from '../../../src/hooks/usePullRefresh';
-import { modelLabel } from '../../../src/lib/modelLabel';
+import { modelLabel, runsOnPlan } from '../../../src/lib/modelLabel';
 import { profileLabel } from '../../../src/lib/profileName';
 import { copyText } from '../../../src/lib/clipboard';
 import { useToast } from '../../../src/components/Toast';
@@ -123,8 +123,9 @@ export function providerLabels(profile) {
   const cloud = (profile?.provider_keys ?? []).map((k) =>
     String(k?.env ?? k ?? '').replace(/_API_KEY$/, '').toLowerCase(),
   );
+  const chatgpt = profile?.provider_chatgpt?.signed_in ? ['chatgpt'] : [];
   const ollama = (profile?.provider_ollama ?? []).map((o) => `ollama/${o.name}`);
-  return [...cloud, ...ollama].filter(Boolean);
+  return [...cloud, ...chatgpt, ...ollama].filter(Boolean);
 }
 
 export function pipelineLimitLabel(limit) {
@@ -498,7 +499,7 @@ export default function ProfileSettings() {
           <RowSeparator />
           <Row
             label="Budget"
-            helper="daily spend cap"
+            helper={runsOnPlan(profile.model) ? 'daily spend cap · plan turns not counted' : 'daily spend cap'}
             value={budgetValue}
             onPress={() => setSheet('budget')}
           />
