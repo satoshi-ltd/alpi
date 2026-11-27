@@ -154,7 +154,11 @@ Output attachments (MM.2):
 - Knowledge pages live under `<workspace>/knowledge/`; Markdown is the source of
   truth and `<home>/knowledge.sqlite` is a rebuildable derived index.
 - `knowledge(action="search", query, k=5)` returns synthesized pages for
-  compiled durable concepts/projects/people/sources. One bundle is indexed at a
+  compiled durable concepts/projects/people/sources. Each result's `updated_at`
+  (`YYYY-MM-DD`, empty when the page's date is not ISO) is the page's frontmatter
+  date: when the page was last written, or the source's date when a sync or an
+  import sets it (pages ingested or maintained here get the write time). When an
+  answer rests on an old page, say its date. One bundle is indexed at a
   time: a `path` the index was not built for yields no results and a hint naming
   the indexed bundle, never another bundle's pages. Send `action` and `query`,
   adding `k` or `path` only if needed; the ingest flags are not for search. A

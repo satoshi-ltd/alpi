@@ -1121,6 +1121,41 @@ def test_search_knowledge_finds_by_fts(tmp_home: Path, tmp_path: Path, stub_embe
     assert any(r["path"] == "concepts/polaris.md" for r in results)
 
 
+def test_search_results_carry_the_date_of_the_page_source(tmp_home: Path, tmp_path: Path, stub_embedder, monkeypatch) -> None:
+    root = _bundle(tmp_path)
+    kb.index_knowledge(tmp_home, root)
+    by_words = kb.search_knowledge(tmp_home, "Polaris", k=5)
+    by_meaning = kb.search_knowledge(tmp_home, "React components migration", k=5)
+    for results in (by_words, by_meaning):
+        hit = next(r for r in results if r["path"] == "concepts/polaris.md")
+        assert hit["updated_at"] == "2026-07-01"
+    real = kb._normalized_lower_better
+    calls = []
+
+    def words_only(values):
+        calls.append(1)
+        return {} if len(calls) == 1 else real(values)
+
+    monkeypatch.setattr(kb, "_normalized_lower_better", words_only)
+    words_hit = next(r for r in kb.search_knowledge(tmp_home, "Polaris", k=5) if r["path"] == "concepts/polaris.md")
+    assert words_hit["updated_at"] == "2026-07-01"
+    monkeypatch.setattr(kb, "_normalized_lower_better", real)
+    page = root / "concepts" / "polaris.md"
+    page.write_text(page.read_text().replace('updated_at: "2026-07-01T00:00:00Z"', 'updated_at: "2024-01-30T00:00:00Z"'))
+    summary = kb.index_knowledge(tmp_home, root)
+    assert summary["added_chunks"] == 0
+    hit = next(r for r in kb.search_knowledge(tmp_home, "Polaris", k=5) if r["path"] == "concepts/polaris.md")
+    assert hit["updated_at"] == "2024-01-30"
+
+
+def test_a_page_date_that_is_not_iso_comes_back_empty_not_cut() -> None:
+    assert kb._iso_day("2026-09-14T04:19:00Z") == "2026-09-14"
+    assert kb._iso_day(" 2026-09-14 ") == "2026-09-14"
+    assert kb._iso_day("2026-09-14T23:30:00-05:00") == "2026-09-14"
+    for odd in ("September 14, 2026", "14/09/2026", "2026-9-14", "", None):
+        assert kb._iso_day(odd) == "", odd
+
+
 def test_search_knowledge_finds_by_embedding(tmp_home: Path, tmp_path: Path, stub_embedder) -> None:
     root = _bundle(tmp_path)
     kb.index_knowledge(tmp_home, root)

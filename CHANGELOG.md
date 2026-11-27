@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.19.49 — 2026-11-27 — knowledge search says how old each page is
+
+- Every result of `knowledge(action="search")` now carries `updated_at`, the page's date as `YYYY-MM-DD` (empty when the page's date is not an ISO date). Before, the agent saw a page's date only after opening it, so it could answer from a page written years ago without knowing.
+- The date is the page's frontmatter `updated_at`: the date its sync or import gave it, or the time alpi last wrote it. The tool tells the agent to say the date when an answer rests on an old page.
+
 ## v0.19.48 — 2026-11-27 — signing out ends a pending ChatGPT sign-in
 
 - Signing out of ChatGPT from an app also ends a sign-in that was still waiting for its answer, so an address pasted afterwards is refused instead of signing the profile back in.

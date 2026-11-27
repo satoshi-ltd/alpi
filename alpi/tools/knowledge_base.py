@@ -772,6 +772,14 @@ def _page_links(conn: sqlite3.Connection, path: str) -> list[str]:
     ]
 
 
+def _iso_day(value: object) -> str:
+    text = str(value or "").strip()
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).date().isoformat()
+    except ValueError:
+        return ""
+
+
 def _row_result(
     conn: sqlite3.Connection,
     row: sqlite3.Row,
@@ -786,6 +794,7 @@ def _row_result(
         "title": row["title"],
         "type": row["type"],
         "tags": tags,
+        "updated_at": _iso_day(row["updated_at"]),
         "snippet": str(row["content"])[:_MAX_SNIPPET],
         "score": float(score),
         "links": _page_links(conn, row["path"]),
@@ -840,7 +849,7 @@ def search_knowledge(
 
         qvec = embedder.embed([query])[0]
         rows = conn.execute(
-            "SELECT f.path, f.title, f.type, f.tags, c.content, v.distance "
+            "SELECT f.path, f.title, f.type, f.tags, f.updated_at, c.content, v.distance "
             "FROM okf_vec v JOIN okf_chunks c ON c.id = v.chunk_id "
             "JOIN okf_files f ON f.id = c.file_id "
             "WHERE v.embedding MATCH ? AND k = ? ORDER BY v.distance",
@@ -861,7 +870,7 @@ def search_knowledge(
         if fts:
             try:
                 fts_rows = conn.execute(
-                    "SELECT f.path, f.title, f.type, f.tags, c.content, bm25(okf_fts) AS rank "
+                    "SELECT f.path, f.title, f.type, f.tags, f.updated_at, c.content, bm25(okf_fts) AS rank "
                     "FROM okf_fts JOIN okf_chunks c ON c.id = okf_fts.rowid "
                     "JOIN okf_files f ON f.id = c.file_id "
                     "WHERE okf_fts MATCH ? ORDER BY rank LIMIT ?",
@@ -1410,7 +1419,9 @@ class Knowledge(Tool):
         "Work with the user's workspace knowledge wiki. Actions: search durable "
         "Markdown pages, ingest a source file into synthesized Markdown "
         "without saving the raw source, maintain pages explicitly, lint the "
-        "bundle, or rebuild the derived SQLite index. Use alpi_knowledge "
+        "bundle, or rebuild the derived SQLite index. A search result's "
+        "`updated_at` is the page's date (a synced or imported page carries its "
+        "source's); say it when an answer rests on an old page. Use alpi_knowledge "
         "instead for questions about alpi itself."
     )
     action_parameters = {
