@@ -380,12 +380,6 @@ failing test that settles it; if the test cannot be made to fail, the entry is d
   accept: the tool description, [CONFIG.md](CONFIG.md), [SECURITY.md](SECURITY.md) and the knowledge reference say
   the text leaves the machine and to whom; a profile with `allow_network: false` does not offer the tool.
 
-- **EDIT.ATOMIC** — `edit_file` does what its description says
-  `bug · alpi · agent · low`
-  note: read. The description promises a `.bak`; none is written, and the write is not atomic
-  (`tools/edit_file.py:76`).
-  accept: the description matches the tool; an edit interrupted mid-write leaves the old file whole.
-
 - **WG.SELF-DECLARED** — A workgroup budget counts what was spent, not what the poster says
   `bug · alpi · agent · low`
   note: read. A post carries the cost its author declares and the lifetime budget is checked when the post arrives,
@@ -1171,6 +1165,20 @@ Each entry is written to be worked without that report:
   accept: each site either scrubs or is shown not to receive agent or tool text; a post carrying a lone surrogate
   reaches a peer with a valid signature, and a `--once` turn whose tool output holds one prints its events; tests
   drive the ALP client and server, the CLI line and a provider-bound message.
+
+### Found shipping alpi 0.19.51
+
+- **WRITE.FILE-IDENTITY** — `write_file` keeps what the file is when it overwrites one
+  `bug · alpi · agent · normal`
+  note: `tools/write_file.py` replaces an existing file through a temporary sibling without the care `edit_file`
+  takes since 0.19.51. Measured on macOS: the mode is reset to the umask (0755 and 0600 both become 0644), a
+  read-only file is replaced, another hard link keeps the old content, and nothing is flushed to disk. Read in the
+  code: no fallback when the replacement is refused (a single-file container mount), no owner kept, an
+  `OSError` escapes as an exception, and so does `UnicodeDecodeError` when the file being overwritten is not
+  UTF-8, which makes such a file impossible to overwrite.
+  accept: overwriting keeps owner, mode and the other hard links, refuses a file the process may not write, falls
+  back in place where `edit_file` does, and reports every failure as a tool result; `edit_file` and `write_file`
+  share that write path.
 
 ### Found shipping alpi 0.19.50
 

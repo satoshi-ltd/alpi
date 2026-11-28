@@ -24,6 +24,8 @@ def lint_content(path: Path | str, content: str) -> str | None:
             json.loads(content)
         except json.JSONDecodeError as e:
             return f"JSON parse error at line {e.lineno} col {e.colno}: {e.msg}"
+        except RecursionError:
+            return "JSON parse error: nested too deeply"
         return None
 
     if suffix in (".yaml", ".yml"):
@@ -39,6 +41,10 @@ def lint_content(path: Path | str, content: str) -> str | None:
             mark = getattr(e, "problem_mark", None)
             loc = f" at line {mark.line + 1}" if mark else ""
             return f"YAML parse error{loc}: {getattr(e, 'problem', e)}"
+        except (ValueError, AttributeError, IndexError) as e:
+            return f"YAML value error: {e}"
+        except RecursionError:
+            return "YAML parse error: nested too deeply"
         return None
 
     if suffix == ".toml":

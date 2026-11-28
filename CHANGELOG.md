@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.19.51 — 2026-11-28 — interrupted edits leave the original file intact
+
+- `edit_file` now replaces the file atomically, so a failure or interruption before replacement leaves the original intact, also on a full disk. It keeps the file's permissions and owner and no longer promises a `.bak` file it never made.
+- A file with Windows or mixed line endings keeps them after an edit, and a multi-line match works whatever endings the file uses. Before, every line of the file was rewritten with Unix endings.
+- A file that cannot be replaced that way is edited in place as before: one with other hard links, extended attributes or ACLs, one mounted on its own into a container, one in a directory that takes no new files, or one whose owner alpi cannot keep.
+- A binary file, a directory, a file alpi may not write or a YAML value the parser rejects (an impossible date) is refused with its reason instead of a crash.
+
 ## v0.19.50 — 2026-11-27 — the agent knows which pairing codes the phone takes
 
 - Asked about pairing, the agent now says that the phone refuses a scanned QR that carries a device token, and what to do instead: paste the pairing JSON into the app or make a fresh one-time code on the host. It no longer suggests scanning an old QR again.

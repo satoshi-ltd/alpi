@@ -113,3 +113,12 @@ def test_yaml_a_broken_document_after_valid_ones_is_not_masked_by_them():
     content = "a: 1\n---\nb: 2\n---\nc: [unclosed\n"
     err = lint_content("deploy.yml", content)
     assert err is not None and err.startswith("YAML parse error")
+
+
+
+def test_a_value_the_loader_cannot_build_is_a_lint_error_not_a_crash():
+    for content in ("when: 2001-13-45\n", "v: !!timestamp nope\n", "v: !!int ''\n"):
+        err = lint_content("plan.yaml", content)
+        assert err is not None and "YAML value error" in err, content
+    assert "nested too deeply" in lint_content("deep.yaml", "[" * 3000 + "]" * 3000)
+    assert "nested too deeply" in lint_content("deep.json", "[" * 100_000 + "]" * 100_000)
